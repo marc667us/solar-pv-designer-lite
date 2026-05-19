@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Installation Method Report — Solar PV Off-Grid System</title>
+<style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #12121f; color: #dde3ec;
+      font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px;
+      line-height: 1.65; padding: 0 0 60px;
+    }
+    header {
+      background: #f5a623; color: #1a1000; padding: 22px 40px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    header h1 { font-size: 22px; font-weight: 700; }
+    header .meta { font-size: 12px; text-align: right; opacity: .75; }
+    nav {
+      background: #1c1c30; padding: 14px 40px;
+      border-bottom: 1px solid #3a3a5c; position: sticky; top: 0; z-index: 10;
+    }
+    nav ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+    nav a { color: #4fc3f7; text-decoration: none; font-size: 12px; }
+    nav a:hover { color: #f5a623; }
+    main { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+    section { margin-bottom: 52px; }
+    h2 {
+      font-size: 17px; font-weight: 700; color: #f5a623;
+      border-left: 4px solid #f5a623; padding-left: 12px;
+      margin-bottom: 18px;
+    }
+    h3 { font-size: 13px; font-weight: 700; color: #4fc3f7;
+         margin: 18px 0 8px; text-transform: uppercase; letter-spacing: .05em; }
+    p { margin-bottom: 10px; color: #b0bec5; }
+    .tools ul { margin-left: 22px; }
+    .tools li { color: #90a4ae; margin-bottom: 4px; font-size: 13px; }
+    .steps ol { margin-left: 22px; }
+    .steps li { color: #b0bec5; margin-bottom: 8px; font-size: 13px;
+                border-left: 2px solid #3a3a5c; padding-left: 10px; }
+    .steps li strong { color: #dde3ec; }
+    .diagram {
+      background: #12121f; border: 1px solid #3a3a5c; border-radius: 8px;
+      padding: 16px; margin: 20px 0; overflow-x: auto;
+    }
+    .diagram figcaption {
+      text-align: center; font-size: 11px; color: #607585;
+      margin-top: 8px; font-style: italic;
+    }
+    .warn {
+      background: #1a1000; border-left: 4px solid #f5a623;
+      padding: 12px 16px; border-radius: 4px; margin-bottom: 12px;
+    }
+    .warn p { color: #ffd54f; margin: 0; font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    th { background: #1c1c30; color: #f5a623; padding: 8px 12px;
+         text-align: left; font-size: 12px; border: 1px solid #3a3a5c; }
+    td { padding: 8px 12px; font-size: 12px; border: 1px solid #2a2a42;
+         color: #b0bec5; }
+    tr:nth-child(even) td { background: #1a1a2e; }
+    .tag {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: 10px; font-weight: 700; margin-right: 4px;
+    }
+    .tag-dc  { background: #2a1800; color: #f5a623; border: 1px solid #f5a623; }
+    .tag-ac  { background: #082030; color: #4fc3f7; border: 1px solid #4fc3f7; }
+    .tag-pe  { background: #082010; color: #66bb6a; border: 1px solid #66bb6a; }
+    .tag-bat { background: #082028; color: #4db6ac; border: 1px solid #4db6ac; }
+    footer {
+      text-align: center; color: #505075; font-size: 11px; padding-top: 24px;
+      border-top: 1px solid #2a2a42;
+    }
+    .region-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;
+    }
+    .region-card {
+      background: #1c1c30; border: 1px solid #3a3a5c; border-radius: 8px;
+      padding: 16px 20px;
+    }
+    .region-card h3 { margin-bottom: 10px; }
+    .region-card table { margin: 0; }
+    .region-card td { border: none; padding: 4px 10px 4px 0; font-size: 12px; }
+    .region-card td:first-child { color: #607585; white-space: nowrap; }
+    .region-card td:last-child  { color: #dde3ec; font-weight: 600; }
+    .badge {
+      display: inline-block; padding: 2px 10px; border-radius: 10px;
+      font-size: 11px; font-weight: 700;
+    }
+    .badge-poor     { background: #3a1010; color: #ef5350; border: 1px solid #ef5350; }
+    .badge-verypoor { background: #2a0808; color: #ff1744; border: 1px solid #ff1744; }
+    .badge-fair     { background: #2a2200; color: #ffd54f; border: 1px solid #ffd54f; }
+    .badge-good     { background: #0a2a0a; color: #66bb6a; border: 1px solid #66bb6a; }
+    .issue-list { list-style: none; margin: 6px 0 0; padding: 0; }
+    .issue-list li { color: #ef5350; font-size: 12px; padding: 3px 0;
+                     border-bottom: 1px solid #2a2a42; }
+    .issue-list li::before { content: "• "; color: #ef5350; }
+    </style>
+</head>
+<body>
+<header>
+  <h1>&#9728; Installation Method Report</h1>
+  <div class="meta">
+    Solar PV Off-Grid System &nbsp;|&nbsp; Greater Accra, Ghana<br>
+    69.44 kWp &nbsp;/&nbsp; 312.50 kWh &nbsp;/&nbsp; 93.75 kW<br>
+    BS 7671:2018 (18th Edition) &nbsp;|&nbsp; 2026-04-10
+  </div>
+</header>
+<nav><ul><li><a href="#region">0A — Regional Context</a></li>
+<li><a href="#overview">0 — System Architecture</a></li>
+<li><a href="#item4">4 — Mounting Structure</a></li>
+<li><a href="#item1">1 — PV Modules</a></li>
+<li><a href="#item5">5 — DC Combiner Box</a></li>
+<li><a href="#item2">2 — Hybrid Inverter</a></li>
+<li><a href="#item3">3 — Battery Bank</a></li>
+<li><a href="#item11">11 — Earthing</a></li>
+<li><a href="#item9">9 — AC Board</a></li>
+<li><a href="#commission">15 — Commissioning</a></li>
+<li><a href="#safety">H&S Notes</a></li></ul></nav>
+<main>
+
+<section id="region">
+  <h2>Section 0A — Regional Context &amp; Site Conditions</h2>
+  <p>The following solar resource and grid reliability data informed the system
+  design for <strong>Greater Accra</strong>.  The grid reliability figures
+  justify the selection of an off-grid / hybrid solar PV system as the primary
+  power source for this installation.</p>
+  <div class="region-grid">
+    <div class="region-card">
+      <h3>Solar Resource</h3>
+      <table><tbody>
+        <tr><td>Region</td><td>Greater Accra</td></tr>
+        <tr><td>Capital</td><td>Accra</td></tr>
+        <tr><td>Climate</td><td>Tropical Savanna (Aw)</td></tr>
+        <tr><td>Peak Sun Hours</td><td>4.8 h/day</td></tr>
+        <tr><td>Annual GHI</td><td>1752 kWh/m²/yr</td></tr>
+        <tr><td>Avg. Temperature</td><td>27.8 °C</td></tr>
+        <tr><td>Temp Derating</td><td>1.0000</td></tr>
+        <tr><td>Eff. Efficiency</td><td>0.7500</td></tr>
+        <tr><td>Rec. Tilt Angle</td><td>6° (fixed)</td></tr>
+        <tr><td>Solar Rating</td><td>Moderate</td></tr>
+      </tbody></table>
+    </div>
+    <div class="region-card">
+      <h3>Grid &amp; Power Reliability</h3>
+      <table><tbody>
+        <tr><td>Utility</td><td>ECG — Accra East/West Districts</td></tr>
+        <tr><td>Daily Outage</td><td>4–8 hrs/day</td></tr>
+        <tr><td>Grid Coverage</td><td>82%</td></tr>
+        <tr><td>Reliability</td><td><span class="badge badge-fair">Fair</span></td></tr>
+      </tbody></table>
+      <h3 style="margin-top:12px;">Key Issues</h3>
+      <ul class="issue-list"><li>Recurrent load shedding (dumsor)</li><li>Voltage fluctuations during peak hours</li><li>High commercial connection fees</li></ul>
+    </div>
+  </div>
+  <div class="warn">
+    <p>&#9888;&#65039; Site Note: Coastal humidity and low marine cloud cover reduce effective irradiance. Two rainy seasons. Good year-round sunshine between seasons.</p>
+  </div>
+</section>
+
+<section id="overview">
+  <h2>Section 0 — Overall System Architecture</h2>
+  <p>The diagram below shows the complete power flow of the
+  <strong>69.44 kWp</strong> off-grid solar PV system — from the PV array
+  through the DC combiner box and hybrid inverter to the battery bank and AC
+  distribution board.  All wiring shall comply with
+  <strong>BS&nbsp;7671:2018</strong> (18th&nbsp;Edition).</p>
+  <figure class="diagram">
+    <svg xmlns="http://www.w3.org/2000/svg" width="820" height="520" viewBox="0 0 820 520" style="max-width:100%;height:auto;display:block;margin:12px auto">
+  <defs>
+  <marker id="aw" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#dde3ec"/></marker>
+  <marker id="ao" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#f5a623"/></marker>
+  <marker id="ab" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4fc3f7"/></marker>
+  <marker id="ag" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#66bb6a"/></marker>
+  <marker id="at" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4db6ac"/></marker>
+  <marker id="ay" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#ffd54f"/></marker>
+</defs>
+  <rect width="820" height="520" fill="#12121f" rx="10"/>
+  <text x="410" y="42" font-size="14" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">OVERALL SYSTEM ARCHITECTURE — POWER FLOW</text>
+  <rect x="25" y="100" width="115" height="220" rx="6" fill="#222242" stroke="#f5a623" stroke-width="2" opacity="1"/>
+<text x="82" y="120" font-size="12" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">PV ARRAY</text>
+<text x="82" y="136" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">69.44 kWp</text>
+<text x="82" y="152" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">174 × 400 Wp</text>
+<text x="82" y="168" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Monocrystalline</text>
+  <rect x="35" y="158" width="95" height="34" rx="3" fill="#182838" stroke="#4fc3f7" stroke-width="1" opacity="1"/>
+<line x1="67" y1="158" x2="67" y2="192" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="99" y1="158" x2="99" y2="192" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="35" y1="175" x2="130" y2="175" stroke="#4fc3f7" stroke-width="0.5"/>
+<rect x="35" y="206" width="95" height="34" rx="3" fill="#182838" stroke="#4fc3f7" stroke-width="1" opacity="1"/>
+<line x1="67" y1="206" x2="67" y2="240" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="99" y1="206" x2="99" y2="240" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="35" y1="223" x2="130" y2="223" stroke="#4fc3f7" stroke-width="0.5"/>
+<rect x="35" y="254" width="95" height="34" rx="3" fill="#182838" stroke="#4fc3f7" stroke-width="1" opacity="1"/>
+<line x1="67" y1="254" x2="67" y2="288" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="99" y1="254" x2="99" y2="288" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="35" y1="271" x2="130" y2="271" stroke="#4fc3f7" stroke-width="0.5"/>
+  <rect x="205" y="155" width="110" height="95" rx="6" fill="#222242" stroke="#ffd54f" stroke-width="2" opacity="1"/>
+<text x="260" y="175" font-size="12" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DC COMBINER</text>
+<text x="260" y="191" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">String Box</text>
+<text x="260" y="207" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Fuses + SPD</text>
+  <rect x="380" y="70" width="150" height="260" rx="6" fill="#222242" stroke="#f5a623" stroke-width="2" opacity="1"/>
+<text x="455" y="90" font-size="12" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">HYBRID INVERTER</text>
+<text x="455" y="106" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">93.75 kW</text>
+<text x="455" y="122" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">MPPT Charger</text>
+<text x="455" y="138" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Bat Charger</text>
+<text x="455" y="154" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DC/AC Inverter</text>
+<text x="455" y="170" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">230 V  50 Hz</text>
+  <rect x="598" y="105" width="130" height="145" rx="6" fill="#222242" stroke="#4fc3f7" stroke-width="2" opacity="1"/>
+<text x="663" y="125" font-size="12" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">AC BOARD</text>
+<text x="663" y="141" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">MCB + RCCB</text>
+<text x="663" y="157" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">30 mA RCD</text>
+<text x="663" y="173" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Type II SPD</text>
+  <rect x="380" y="380" width="150" height="105" rx="6" fill="#222242" stroke="#4db6ac" stroke-width="2" opacity="1"/>
+<text x="455" y="400" font-size="12" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BATTERY BANK</text>
+<text x="455" y="416" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">312.50 kWh</text>
+<text x="455" y="432" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">131 × 2.4 kWh</text>
+<text x="455" y="448" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">LiFePO4  48 V</text>
+  <rect x="598" y="320" width="130" height="155" rx="6" fill="#222242" stroke="#4fc3f7" stroke-width="2" opacity="1"/>
+<text x="663" y="340" font-size="12" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">LOADS</text>
+<text x="663" y="356" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Lighting</text>
+<text x="663" y="372" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Socket Outlets</text>
+<text x="663" y="388" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">AC / HVAC</text>
+  <line x1="140" y1="210" x2="205" y2="210" stroke="#f5a623" stroke-width="2" marker-end="url(#ao)"/>
+<text x="172" y="202" font-size="10" fill="#f5a623" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DC 6mm²</text>
+  <line x1="315" y1="215" x2="380" y2="215" stroke="#f5a623" stroke-width="2" marker-end="url(#ao)"/>
+  <line x1="530" y1="210" x2="598" y2="210" stroke="#4fc3f7" stroke-width="2" marker-end="url(#ab)"/>
+<text x="564" y="202" font-size="10" fill="#4fc3f7" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">AC 10mm²</text>
+  <line x1="469" y1="330" x2="469" y2="380" stroke="#f5a623" stroke-width="2" marker-end="url(#ao)"/>
+  <line x1="441" y1="380" x2="441" y2="330" stroke="#4db6ac" stroke-width="2" marker-end="url(#at)"/>
+  <text x="477" y="355" font-size="9" fill="#f5a623" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Charge</text>
+  <text x="433" y="355" font-size="9" fill="#4db6ac" text-anchor="end" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Discharge</text>
+  <line x1="663" y1="250" x2="663" y2="320" stroke="#4fc3f7" stroke-width="2" marker-end="url(#ab)"/>
+  <line x1="390" y1="330" x2="390" y2="492" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+<line x1="608" y1="250" x2="608" y2="492" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+<line x1="390" y1="492" x2="608" y2="492" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+<text x="499" y="506" font-size="9" fill="#66bb6a" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">PE — Protective Earth Bus</text>
+  <rect x="700" y="390" width="110" height="106" rx="4" fill="#1c1c30" stroke="#3a3a5c" stroke-width="1" opacity="1"/>
+<text x="755" y="402" font-size="9" fill="#505075" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">LEGEND</text>
+<line x1="708" y1="412" x2="732" y2="412" stroke="#f5a623" stroke-width="2"/>
+<text x="736" y="416" font-size="9" fill="#f5a623" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DC + / PV</text>
+<line x1="708" y1="430" x2="732" y2="430" stroke="#607585" stroke-width="2"/>
+<text x="736" y="434" font-size="9" fill="#607585" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DC −</text>
+<line x1="708" y1="448" x2="732" y2="448" stroke="#4fc3f7" stroke-width="2"/>
+<text x="736" y="452" font-size="9" fill="#4fc3f7" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">AC supply</text>
+<line x1="708" y1="466" x2="732" y2="466" stroke="#4db6ac" stroke-width="2"/>
+<text x="736" y="470" font-size="9" fill="#4db6ac" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Battery</text>
+<line x1="708" y1="484" x2="732" y2="484" stroke="#66bb6a" stroke-width="2" stroke-dasharray="5,3"/>
+<text x="736" y="488" font-size="9" fill="#66bb6a" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Earth PE</text>
+</svg>
+    <figcaption>Fig 0 — System power-flow block diagram
+    (<span class="tag tag-dc">DC+</span>
+     <span class="tag tag-ac">AC</span>
+     <span class="tag tag-bat">Battery</span>
+     <span class="tag tag-pe">Earth PE</span>)</figcaption>
+  </figure>
+</section>
+
+<section id="item4">
+  <h2>Item 4 — PV Mounting Structure</h2>
+  <h3>Narrative</h3>
+  <p>Aluminium mounting rails and stainless-steel brackets are fixed to the roof to carry the 174 PV modules.  The structure is pitched at 10°–15° (optimal for Ghana's ~6°N latitude) for maximum irradiance and self-cleaning.  All fixings shall be stainless steel or hot-dip galvanised.</p>
+  <figure class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="780" height="400" viewBox="0 0 780 400" style="max-width:100%;height:auto;display:block;margin:12px auto">
+  <defs>
+  <marker id="aw" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#dde3ec"/></marker>
+  <marker id="ao" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#f5a623"/></marker>
+  <marker id="ab" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4fc3f7"/></marker>
+  <marker id="ag" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#66bb6a"/></marker>
+  <marker id="at" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4db6ac"/></marker>
+  <marker id="ay" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#ffd54f"/></marker>
+</defs>
+  <rect width="780" height="400" fill="#12121f" rx="10"/>
+  <text x="390" y="32" font-size="14" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">MOUNTING STRUCTURE — ROOF CROSS-SECTION</text>
+  <polygon points="60,250 700,150 700,380 60,380" fill="#1a1a28" stroke="none"/>
+  <line x1="60" y1="250" x2="700" y2="150" stroke="#9aacbc" stroke-width="3"/>
+  <text x="380" y="280" font-size="10" fill="#505075" text-anchor="middle" font-weight="normal" font-style="italic" font-family="Segoe UI,Arial,sans-serif">ROOF SURFACE  (10°–15° tilt)</text>
+  <rect x="272" y="223" width="18" height="90" rx="3" fill="#3a2a1a" stroke="#806040" stroke-width="1.5" opacity="1"/>
+<text x="280" y="325" font-size="9" fill="#806040" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Rafter</text>
+  <rect x="274" y="197" width="14" height="20" rx="2" fill="#404060" stroke="#9aacbc" stroke-width="1.5" opacity="1"/>
+<text x="280" y="189" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">L-Foot + Gasket</text>
+  <rect x="200" y="177" width="200" height="14" rx="3" fill="#505080" stroke="#9aacbc" stroke-width="1.5" opacity="1"/>
+<text x="340" y="169" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Aluminium Rail</text>
+  <rect x="250" y="174" width="10" height="20" rx="1" fill="#707090" stroke="#9aacbc" stroke-width="1" opacity="1"/>
+<rect x="302" y="174" width="10" height="20" rx="1" fill="#707090" stroke="#9aacbc" stroke-width="1" opacity="1"/>
+  <rect x="190" y="145" width="86" height="36" rx="3" fill="#1a2838" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+<line x1="218" y1="145" x2="218" y2="181" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="247" y1="145" x2="247" y2="181" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="190" y1="163" x2="276" y2="163" stroke="#4fc3f7" stroke-width="0.5"/>
+<text x="233" y="137" font-size="9" fill="#4fc3f7" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">PV Module  400 Wp</text>
+  <rect x="316" y="145" width="86" height="36" rx="3" fill="#1a2838" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+<line x1="344" y1="145" x2="344" y2="181" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="373" y1="145" x2="373" y2="181" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="316" y1="163" x2="402" y2="163" stroke="#4fc3f7" stroke-width="0.5"/>
+  <circle cx="380" cy="183" r="5" fill="#66bb6a" stroke="#66bb6a" stroke-width="1"/>
+<line x1="380" y1="183" x2="380" y2="295" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="4,3"/>
+<text x="392" y="223" font-size="9" fill="#66bb6a" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Earth Bond</text>
+  <circle cx="233" cy="181" r="4" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<line x1="233" y1="185" x2="233" y2="205" stroke="#f5a623" stroke-width="1.5"/>
+<text x="242" y="199" font-size="8" fill="#f5a623" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">MC4</text>
+  <line x1="233" y1="125" x2="233" y2="145" stroke="#dde3ec" stroke-width="1.5" marker-end="url(#aw)"/>
+<text x="233" y="119" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Module frame & glass</text>
+  <text x="130" y="268" font-size="11" fill="#ffd54f" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">10°–15°</text>
+<text x="130" y="282" font-size="9" fill="#ffd54f" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">tilt</text>
+</svg><figcaption>Fig 4 — Mounting structure roof cross-section</figcaption></figure>
+  <div class="tools"><h3>Tools Required</h3><ul><li>Tape measure and chalk line</li><li>Spirit level (600 mm min.)</li><li>Drill with 10 mm and 12 mm masonry/metal bits</li><li>Angle grinder (rail cutting)</li><li>Spanner/socket set (M8, M10, M12)</li><li>Torque wrench (12–16 Nm)</li><li>Safety harness and fall-arrest lanyard</li></ul></div>
+  <div class="steps"><h3>Step-by-Step Procedure</h3><ol><li><strong>Roof survey.</strong> Check rafter/purlin spacing, roofing material and load-bearing capacity.</li><li><strong>Mark layout.</strong> Use chalk line.  Maintain ≥ 300 mm clearance from roof edges.</li><li><strong>Locate fixing points</strong> directly above rafters.  Space brackets at ≤ 1 200 mm centres.</li><li><strong>Drill pilot holes.</strong> Fit roof hooks or L-feet with EPDM gaskets.  Seal against water ingress.</li><li><strong>Mount aluminium rails.</strong> Level with spirit level.  Torque all bolts to spec.</li><li><strong>Fit clamps</strong> (end and mid) loosely along rail, ready for panels.</li><li><strong>Attach earth bonding lug</strong> to each rail section.  Run continuous earth conductor.</li></ol></div>
+</section>
+
+<section id="item1">
+  <h2>Item 1 — Solar PV Modules (174 × 400 Wp)</h2>
+  <h3>Narrative</h3>
+  <p>174 monocrystalline 400 Wp modules are mounted on the pre-installed aluminium rail system and connected in two series strings: String A (87 panels) and String B (87 panels). All modules face true south (azimuth 180°) for Ghana's latitude.</p>
+  <figure class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="820" height="360" viewBox="0 0 820 360" style="max-width:100%;height:auto;display:block;margin:12px auto">
+  <defs>
+  <marker id="aw" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#dde3ec"/></marker>
+  <marker id="ao" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#f5a623"/></marker>
+  <marker id="ab" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4fc3f7"/></marker>
+  <marker id="ag" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#66bb6a"/></marker>
+  <marker id="at" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4db6ac"/></marker>
+  <marker id="ay" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#ffd54f"/></marker>
+</defs>
+  <rect width="820" height="360" fill="#12121f" rx="10"/>
+  <text x="410" y="30" font-size="14" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">PV STRING WIRING  (174 MODULES — 2 STRINGS)</text>
+  <text x="75" y="66" font-size="11" fill="#f5a623" text-anchor="start" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">String A  (87 panels in series)</text>
+<rect x="87" y="80" width="90" height="52" rx="4" fill="#182838" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+<line x1="117" y1="80" x2="117" y2="132" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="147" y1="80" x2="147" y2="132" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="87" y1="106" x2="177" y2="106" stroke="#4fc3f7" stroke-width="0.5"/>
+<text x="132" y="146" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">P1</text>
+<circle cx="87" cy="106" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<circle cx="177" cy="106" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+<line x1="177" y1="106" x2="191" y2="106" stroke="#dde3ec" stroke-width="1.5"/>
+<rect x="191" y="80" width="90" height="52" rx="4" fill="#182838" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+<line x1="221" y1="80" x2="221" y2="132" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="251" y1="80" x2="251" y2="132" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="191" y1="106" x2="281" y2="106" stroke="#4fc3f7" stroke-width="0.5"/>
+<text x="236" y="146" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">P2</text>
+<circle cx="191" cy="106" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<circle cx="281" cy="106" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+<line x1="281" y1="106" x2="295" y2="106" stroke="#dde3ec" stroke-width="1.5"/>
+<rect x="295" y="80" width="90" height="52" rx="4" fill="#182838" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+<line x1="325" y1="80" x2="325" y2="132" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="355" y1="80" x2="355" y2="132" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="295" y1="106" x2="385" y2="106" stroke="#4fc3f7" stroke-width="0.5"/>
+<text x="340" y="146" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">P3</text>
+<circle cx="295" cy="106" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<circle cx="385" cy="106" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+<line x1="385" y1="106" x2="399" y2="106" stroke="#dde3ec" stroke-width="1.5"/>
+<rect x="399" y="80" width="90" height="52" rx="4" fill="#182838" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+<line x1="429" y1="80" x2="429" y2="132" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="459" y1="80" x2="459" y2="132" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="399" y1="106" x2="489" y2="106" stroke="#4fc3f7" stroke-width="0.5"/>
+<text x="444" y="146" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">P4</text>
+<circle cx="399" cy="106" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<circle cx="489" cy="106" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+<line x1="489" y1="106" x2="503" y2="106" stroke="#dde3ec" stroke-width="1.5"/>
+<rect x="503" y="80" width="90" height="52" rx="4" fill="#182838" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+<line x1="533" y1="80" x2="533" y2="132" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="563" y1="80" x2="563" y2="132" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="503" y1="106" x2="593" y2="106" stroke="#4fc3f7" stroke-width="0.5"/>
+<text x="548" y="146" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">P5</text>
+<circle cx="503" cy="106" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<circle cx="593" cy="106" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+<text x="617" y="110" font-size="10" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">… +82 more</text>
+<line x1="563" y1="106" x2="643" y2="106" stroke="#f5a623" stroke-width="1.5"/>
+  <text x="75" y="196" font-size="11" fill="#ffd54f" text-anchor="start" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">String B  (87 panels in series)</text>
+<rect x="87" y="210" width="90" height="52" rx="4" fill="#182838" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+<line x1="117" y1="210" x2="117" y2="262" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="147" y1="210" x2="147" y2="262" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="87" y1="236" x2="177" y2="236" stroke="#4fc3f7" stroke-width="0.5"/>
+<text x="132" y="276" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">P1</text>
+<circle cx="87" cy="236" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<circle cx="177" cy="236" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+<line x1="177" y1="236" x2="191" y2="236" stroke="#dde3ec" stroke-width="1.5"/>
+<rect x="191" y="210" width="90" height="52" rx="4" fill="#182838" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+<line x1="221" y1="210" x2="221" y2="262" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="251" y1="210" x2="251" y2="262" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="191" y1="236" x2="281" y2="236" stroke="#4fc3f7" stroke-width="0.5"/>
+<text x="236" y="276" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">P2</text>
+<circle cx="191" cy="236" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<circle cx="281" cy="236" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+<line x1="281" y1="236" x2="295" y2="236" stroke="#dde3ec" stroke-width="1.5"/>
+<rect x="295" y="210" width="90" height="52" rx="4" fill="#182838" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+<line x1="325" y1="210" x2="325" y2="262" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="355" y1="210" x2="355" y2="262" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="295" y1="236" x2="385" y2="236" stroke="#4fc3f7" stroke-width="0.5"/>
+<text x="340" y="276" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">P3</text>
+<circle cx="295" cy="236" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<circle cx="385" cy="236" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+<line x1="385" y1="236" x2="399" y2="236" stroke="#dde3ec" stroke-width="1.5"/>
+<rect x="399" y="210" width="90" height="52" rx="4" fill="#182838" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+<line x1="429" y1="210" x2="429" y2="262" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="459" y1="210" x2="459" y2="262" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="399" y1="236" x2="489" y2="236" stroke="#4fc3f7" stroke-width="0.5"/>
+<text x="444" y="276" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">P4</text>
+<circle cx="399" cy="236" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<circle cx="489" cy="236" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+<line x1="489" y1="236" x2="503" y2="236" stroke="#dde3ec" stroke-width="1.5"/>
+<rect x="503" y="210" width="90" height="52" rx="4" fill="#182838" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+<line x1="533" y1="210" x2="533" y2="262" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="563" y1="210" x2="563" y2="262" stroke="#4fc3f7" stroke-width="0.5"/>
+<line x1="503" y1="236" x2="593" y2="236" stroke="#4fc3f7" stroke-width="0.5"/>
+<text x="548" y="276" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">P5</text>
+<circle cx="503" cy="236" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<circle cx="593" cy="236" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+<text x="617" y="240" font-size="10" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">… +82 more</text>
+<line x1="563" y1="236" x2="643" y2="236" stroke="#f5a623" stroke-width="1.5"/>
+  <rect x="683" y="70" width="120" height="210" rx="6" fill="#222242" stroke="#ffd54f" stroke-width="2" opacity="1"/>
+<text x="743" y="90" font-size="12" fill="#ffd54f" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DC COMBINER</text>
+<text x="743" y="106" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">String A fuse</text>
+<text x="743" y="122" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">String B fuse</text>
+<text x="743" y="138" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">SPD</text>
+<text x="743" y="154" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DC MCBs</text>
+<text x="743" y="170" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">→ Inverter</text>
+  <line x1="653" y1="106" x2="683" y2="130" stroke="#f5a623" stroke-width="2" marker-end="url(#ao)"/>
+  <line x1="653" y1="236" x2="683" y2="190" stroke="#ffd54f" stroke-width="2" marker-end="url(#ay)"/>
+  <text x="50" y="110" font-size="10" fill="#f5a623" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">(+)</text>
+<text x="50" y="240" font-size="10" fill="#ffd54f" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">(+)</text>
+  <rect x="30" y="290" width="260" height="55" rx="4" fill="#1c1c30" stroke="#3a3a5c" stroke-width="1" opacity="1"/>
+<text x="160" y="306" font-size="9" fill="#505075" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">MC4 CONNECTOR DETAIL</text>
+<circle cx="80" cy="325" r="7" fill="#1c1c30" stroke="#f5a623" stroke-width="2"/>
+<circle cx="110" cy="325" r="7" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+<line x1="87" y1="325" x2="103" y2="325" stroke="#f5a623" stroke-width="2"/>
+<text x="95" y="338" font-size="8" fill="#f5a623" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Male (+)</text>
+<circle cx="170" cy="325" r="7" fill="#1c1c30" stroke="#607585" stroke-width="2"/>
+<circle cx="200" cy="325" r="7" fill="#607585" stroke="#607585" stroke-width="1"/>
+<line x1="177" y1="325" x2="193" y2="325" stroke="#607585" stroke-width="2"/>
+<text x="185" y="338" font-size="8" fill="#607585" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Female (−)</text>
+<text x="155" y="305" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Lock with MC4 spanner until audible click</text>
+</svg><figcaption>Fig 1 — PV string wiring (174 modules in 2 series strings)</figcaption></figure>
+  <div class="tools"><h3>Tools Required</h3><ul><li>Insulated gloves (voltage-rated)</li><li>MC4 assembly and crimping tool</li><li>MC4 spanner</li><li>Digital multimeter (DC V and A)</li><li>Clamp meter</li><li>Torque wrench</li><li>UV-resistant cable ties and labels</li></ul></div>
+  <div class="steps"><h3>Step-by-Step Procedure</h3><ol><li><strong>Isolate all DC sources</strong> before handling modules.</li><li><strong>Lift module onto rail</strong> using two persons.  Never stand on the glass face.</li><li><strong>Slide end-clamps and mid-clamps</strong> onto module frames.  Hand-tighten.</li><li><strong>Check level and alignment.</strong> Torque clamp bolts to 10–14 Nm.</li><li><strong>Connect MC4 leads in series</strong> within each string: (+) of Module N → (−) of Module N+1.</li><li><strong>Measure Voc of each string</strong> before connecting to combiner.  Expected: String A ≈ 4176–4350 V,  String B ≈ 4176–4350 V.</li><li><strong>Route string cables</strong> in UV-resistant trunking along rail.  Secure every 400 mm.</li><li><strong>Label cables</strong> at both ends: STRING A (+/−), STRING B (+/−).</li></ol></div>
+</section>
+
+<section id="item5">
+  <h2>Item 5 — DC Combiner / String Box</h2>
+  <h3>Narrative</h3>
+  <p>The DC combiner box aggregates the two PV strings into a single DC output to the inverter.  It contains string fuses (15 A per string), a DC SPD, and DC MCBs in an IP65 weatherproof enclosure mounted at the base of the roof.</p>
+  <figure class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="700" height="420" viewBox="0 0 700 420" style="max-width:100%;height:auto;display:block;margin:12px auto">
+  <defs>
+  <marker id="aw" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#dde3ec"/></marker>
+  <marker id="ao" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#f5a623"/></marker>
+  <marker id="ab" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4fc3f7"/></marker>
+  <marker id="ag" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#66bb6a"/></marker>
+  <marker id="at" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4db6ac"/></marker>
+  <marker id="ay" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#ffd54f"/></marker>
+</defs>
+  <rect width="700" height="420" fill="#12121f" rx="10"/>
+  <text x="350" y="30" font-size="14" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DC COMBINER BOX — INTERNAL WIRING</text>
+  <rect x="60" y="55" width="580" height="320" rx="8" fill="#1c1c30" stroke="#ffd54f" stroke-width="2.5" opacity="1"/>
+  <text x="350" y="75" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="italic" font-family="Segoe UI,Arial,sans-serif">IP65 Weatherproof Enclosure</text>
+  <rect x="55" y="120" width="12" height="30" rx="2" fill="#607585" stroke="#9aacbc" stroke-width="1" opacity="1"/>
+  <rect x="55" y="200" width="12" height="30" rx="2" fill="#607585" stroke="#9aacbc" stroke-width="1" opacity="1"/>
+  <rect x="55" y="290" width="12" height="14" rx="2" fill="#66bb6a" stroke="#66bb6a" stroke-width="1" opacity="1"/>
+  <rect x="633" y="195" width="12" height="30" rx="2" fill="#f5a623" stroke="#f5a623" stroke-width="1" opacity="1"/>
+  <text x="42" y="140" font-size="8" fill="#f5a623" text-anchor="end" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Str A</text>
+  <text x="42" y="220" font-size="8" fill="#ffd54f" text-anchor="end" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Str B</text>
+  <text x="42" y="300" font-size="8" fill="#66bb6a" text-anchor="end" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Earth</text>
+  <text x="650" y="215" font-size="8" fill="#f5a623" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DC Out</text>
+  <rect x="250" y="108" width="260" height="16" rx="3" fill="#3a2800" stroke="#f5a623" stroke-width="2" opacity="1"/>
+<text x="380" y="119" font-size="9" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">(+) POSITIVE BUSBAR</text>
+  <rect x="250" y="208" width="260" height="16" rx="3" fill="#1a1a1a" stroke="#607585" stroke-width="2" opacity="1"/>
+<text x="380" y="219" font-size="9" fill="#607585" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">(−) NEGATIVE BUSBAR</text>
+  <rect x="390" y="140" width="50" height="68" rx="4" fill="#222242" stroke="#ef5350" stroke-width="2" opacity="1"/>
+<text x="415" y="154" font-size="10" fill="#ef5350" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">SPD</text>
+<text x="415" y="168" font-size="8" fill="#ef5350" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Type II</text>
+<text x="415" y="182" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BS EN</text>
+<text x="415" y="196" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">61643</text>
+<line x1="415" y1="140" x2="415" y2="124" stroke="#ef5350" stroke-width="1.5"/>
+<line x1="415" y1="208" x2="415" y2="208" stroke="#ef5350" stroke-width="1.5"/>
+  <circle cx="415" cy="198" r="5" fill="#66bb6a" stroke="#66bb6a" stroke-width="1"/>
+<text x="425" y="202" font-size="7" fill="#66bb6a" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">OK</text>
+  <rect x="480" y="145" width="48" height="58" rx="4" fill="#222242" stroke="#f5a623" stroke-width="2" opacity="1"/>
+<text x="504" y="159" font-size="9" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DC MCB</text>
+<text x="504" y="173" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">63A</text>
+<text x="504" y="187" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">500 V DC</text>
+  <rect x="140" y="115" width="60" height="28" rx="3" fill="#1c1c30" stroke="#f5a623" stroke-width="1.5" opacity="1"/>
+<text x="170" y="133" font-size="10" fill="#f5a623" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Fuse 15A</text>
+  <rect x="140" y="195" width="60" height="28" rx="3" fill="#1c1c30" stroke="#ffd54f" stroke-width="1.5" opacity="1"/>
+<text x="170" y="213" font-size="10" fill="#ffd54f" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Fuse 15A</text>
+  <text x="170" y="105" font-size="9" fill="#f5a623" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">String A</text>
+  <text x="170" y="185" font-size="9" fill="#ffd54f" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">String B</text>
+  <line x1="200" y1="129" x2="250" y2="116" stroke="#f5a623" stroke-width="1.5"/>
+<line x1="67" y1="135" x2="140" y2="129" stroke="#f5a623" stroke-width="1.5"/>
+<line x1="200" y1="209" x2="250" y2="216" stroke="#ffd54f" stroke-width="1.5"/>
+<line x1="67" y1="215" x2="140" y2="209" stroke="#ffd54f" stroke-width="1.5"/>
+<line x1="67" y1="240" x2="250" y2="216" stroke="#607585" stroke-width="1.5"/>
+<line x1="67" y1="260" x2="250" y2="224" stroke="#607585" stroke-width="1.5"/>
+<line x1="510" y1="116" x2="504" y2="145" stroke="#f5a623" stroke-width="1.5"/>
+<line x1="504" y1="203" x2="504" y2="216" stroke="#f5a623" stroke-width="1.5"/>
+<line x1="510" y1="216" x2="633" y2="210" stroke="#607585" stroke-width="1.5"/>
+<line x1="67" y1="297" x2="350" y2="297" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="4,3"/>
+<line x1="350" y1="297" x2="415" y2="218" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="4,3"/>
+</svg><figcaption>Fig 5 — DC combiner box internal wiring schematic</figcaption></figure>
+  <div class="tools"><h3>Tools Required</h3><ul><li>Screwdrivers (flathead and Pozidriv)</li><li>Wire strippers and crimping tool</li><li>Multimeter (DC voltage)</li><li>Drill with 20–25 mm knockout punch</li><li>Cable gland spanner</li><li>Insulated terminal screwdriver</li></ul></div>
+  <div class="steps"><h3>Step-by-Step Procedure</h3><ol><li><strong>Select mounting position</strong> sheltered from direct rain at the roof base.</li><li><strong>Fix enclosure</strong> to wall with stainless rawl-bolts.  Door faces down or sideways.</li><li><strong>Knock out cable entry holes.</strong> Fit cable glands for each string and DC output cable.</li><li><strong>Mount busbar, fuses, SPD, and MCBs</strong> on DIN rail per manufacturer diagram.</li><li><strong>Verify all DC sources are isolated.</strong>  Connect String A (+) and B (+) to fuse inputs.  Connect String A (−) and B (−) to negative busbar.</li><li><strong>Connect SPD</strong> between positive busbar and earth.</li><li><strong>Run DC main 6mm² cable</strong> from output busbars through trunking to inverter DC input.</li><li><strong>Label enclosure:</strong> 'DANGER: HIGH DC VOLTAGE — DO NOT OPEN UNDER LOAD'.</li></ol></div>
+</section>
+
+<section id="item2">
+  <h2>Item 2 — Hybrid Inverter / Charger (93.75 kW)</h2>
+  <h3>Narrative</h3>
+  <p>The 93.75 kW hybrid inverter/charger is wall-mounted indoors near the battery bank (≤ 1.5 m battery cable run) on a solid wall rated to carry ≥ 25 kg.  It contains an MPPT controller, battery charger, DC/AC inverter, and auto-transfer switch.</p>
+  <figure class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="740" height="480" viewBox="0 0 740 480" style="max-width:100%;height:auto;display:block;margin:12px auto">
+  <defs>
+  <marker id="aw" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#dde3ec"/></marker>
+  <marker id="ao" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#f5a623"/></marker>
+  <marker id="ab" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4fc3f7"/></marker>
+  <marker id="ag" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#66bb6a"/></marker>
+  <marker id="at" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4db6ac"/></marker>
+  <marker id="ay" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#ffd54f"/></marker>
+</defs>
+  <rect width="740" height="480" fill="#12121f" rx="10"/>
+  <text x="370" y="30" font-size="14" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">HYBRID INVERTER — TERMINAL CONNECTION DIAGRAM</text>
+  <rect x="220" y="80" width="300" height="300" rx="8" fill="#222242" stroke="#f5a623" stroke-width="2.5" opacity="1"/>
+<text x="370" y="102" font-size="13" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">HYBRID INVERTER</text>
+<text x="370" y="120" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">93.75 kW  415/230V  50 Hz</text>
+<rect x="236" y="134" width="268" height="44" rx="4" fill="#1c1c30" stroke="#3a3a5c" stroke-width="1" opacity="1"/>
+<text x="370" y="154" font-size="9" fill="#4fc3f7" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">MPPT SOLAR CHARGE CONTROLLER</text>
+<text x="370" y="168" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DC Input 60–150 V  /  Max PV Current</text>
+<rect x="236" y="186" width="268" height="44" rx="4" fill="#1c1c30" stroke="#3a3a5c" stroke-width="1" opacity="1"/>
+<text x="370" y="206" font-size="9" fill="#4db6ac" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BATTERY CHARGER</text>
+<text x="370" y="220" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">48 V DC  /  Constant Current/Voltage</text>
+<rect x="236" y="238" width="268" height="44" rx="4" fill="#1c1c30" stroke="#3a3a5c" stroke-width="1" opacity="1"/>
+<text x="370" y="258" font-size="9" fill="#4fc3f7" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DC / AC INVERTER</text>
+<text x="370" y="272" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Pure Sine Wave  /  ≥ 95% Efficiency</text>
+<rect x="236" y="290" width="268" height="44" rx="4" fill="#1c1c30" stroke="#3a3a5c" stroke-width="1" opacity="1"/>
+<text x="370" y="310" font-size="9" fill="#ffd54f" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">AUTO TRANSFER SWITCH</text>
+<text x="370" y="324" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Grid / Generator / Battery priority</text>
+<text x="370" y="365" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">LCD Display  ·  BMS Port  ·  RS485</text>
+  <rect x="280" y="40" width="24" height="40" rx="3" fill="#2a1800" stroke="#f5a623" stroke-width="1.5" opacity="1"/>
+<rect x="320" y="40" width="24" height="40" rx="3" fill="#1a1a1a" stroke="#607585" stroke-width="1.5" opacity="1"/>
+<text x="292" y="36" font-size="9" fill="#f5a623" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">(+)</text>
+<text x="332" y="36" font-size="9" fill="#607585" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">(−)</text>
+<text x="300" y="26" font-size="10" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">PV DC INPUT</text>
+<line x1="292" y1="-10" x2="292" y2="40" stroke="#f5a623" stroke-width="2" marker-end="url(#ao)"/>
+<text x="302" y="15" font-size="10" fill="#f5a623" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">From Combiner</text>
+<line x1="332" y1="-10" x2="332" y2="40" stroke="#607585" stroke-width="2" marker-end="url(#aw)"/>
+  <rect x="175" y="220" width="40" height="24" rx="3" fill="#2a1800" stroke="#4db6ac" stroke-width="1.5" opacity="1"/>
+<rect x="175" y="256" width="40" height="24" rx="3" fill="#1a1a1a" stroke="#607585" stroke-width="1.5" opacity="1"/>
+<text x="195" y="232" font-size="9" fill="#4db6ac" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BAT(+)</text>
+<text x="195" y="268" font-size="9" fill="#607585" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BAT(−)</text>
+<text x="195" y="208" font-size="10" fill="#4db6ac" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BATTERY</text>
+<line x1="90" y1="232" x2="175" y2="232" stroke="#4db6ac" stroke-width="2" marker-end="url(#at)"/>
+<text x="132" y="224" font-size="10" fill="#4db6ac" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">16mm²</text>
+<line x1="90" y1="268" x2="175" y2="268" stroke="#607585" stroke-width="2" marker-end="url(#aw)"/>
+<text x="75" y="232" font-size="9" fill="#4db6ac" text-anchor="end" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BAT+</text>
+<text x="75" y="268" font-size="9" fill="#607585" text-anchor="end" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BAT−</text>
+  <rect x="525" y="190" width="40" height="24" rx="3" fill="#182030" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+<rect x="525" y="224" width="40" height="24" rx="3" fill="#182030" stroke="#9aacbc" stroke-width="1.5" opacity="1"/>
+<rect x="525" y="258" width="40" height="24" rx="3" fill="#182030" stroke="#66bb6a" stroke-width="1.5" opacity="1"/>
+<text x="545" y="202" font-size="10" fill="#4fc3f7" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">L</text>
+<text x="545" y="236" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">N</text>
+<text x="545" y="270" font-size="10" fill="#66bb6a" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">PE</text>
+<text x="545" y="178" font-size="10" fill="#4fc3f7" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">AC OUTPUT</text>
+<line x1="565" y1="202" x2="670" y2="202" stroke="#4fc3f7" stroke-width="2" marker-end="url(#ab)"/>
+<text x="617" y="194" font-size="10" fill="#4fc3f7" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">10mm²</text>
+<line x1="565" y1="236" x2="670" y2="236" stroke="#dde3ec" stroke-width="2" marker-end="url(#aw)"/>
+<line x1="565" y1="270" x2="670" y2="270" stroke="#66bb6a" stroke-width="2" marker-end="url(#ag)"/>
+<text x="680" y="202" font-size="9" fill="#4fc3f7" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">→ AC Board L</text>
+<text x="680" y="236" font-size="9" fill="#9aacbc" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">→ AC Board N</text>
+<text x="680" y="270" font-size="9" fill="#66bb6a" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">→ Earth Bar PE</text>
+  <rect x="400" y="385" width="60" height="30" rx="3" fill="#1c1c30" stroke="#505075" stroke-width="1.5" opacity="1" stroke-dasharray="4,2"/>
+<text x="430" y="404" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">GRID IN (opt.)</text>
+<line x1="430" y1="415" x2="430" y2="450" stroke="#505075" stroke-width="1.5" stroke-dasharray="4,3"/>
+<text x="430" y="462" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Grid / Generator</text>
+  <rect x="30" y="400" width="320" height="60" rx="5" fill="#1c1c30" stroke="#3a3a5c" stroke-width="1" opacity="1"/>
+<text x="190" y="415" font-size="9" fill="#ffd54f" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">KEY SETTINGS AFTER POWER-ON</text>
+<text x="190" y="430" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Battery Type: LiFePO4  ·  Capacity: set to system kWh</text>
+<text x="190" y="444" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Charge V: 58.4V  ·  Cut-off: 44V  ·  AC: 230V 50Hz</text>
+</svg><figcaption>Fig 2 — Hybrid inverter terminal connection diagram</figcaption></figure>
+  <div class="tools"><h3>Tools Required</h3><ul><li>Drill (M8 masonry bit)</li><li>Spirit level</li><li>Rawl plugs and M8 stainless bolts</li><li>Insulated screwdrivers and spanner set</li><li>Multimeter</li><li>Torque wrench</li><li>Laptop / smartphone for inverter configuration software</li></ul></div>
+  <div class="steps"><h3>Step-by-Step Procedure</h3><ol><li><strong>Mark wall fixing positions</strong> from the mounting template.  Minimum 500 mm from floor, 300 mm from any obstruction.</li><li><strong>Drill, fit rawl plugs, mount bracket/back-plate.</strong>  Verify level.  Hang inverter.</li><li><strong>Connect PV DC input terminals:</strong> (+) from combiner (+) output; (−) from combiner (−).  Check polarity with multimeter.</li><li><strong>Connect battery terminals:</strong> (+) red 16mm², (−) black 16mm².  Connect (−) first, then (+).</li><li><strong>Connect AC output (L, N, PE)</strong> using 10mm² cable to the AC distribution board.</li><li><strong>Power on and configure:</strong> Battery type = LiFePO4; Capacity = 312.5 kWh; Charge V = 58.4 V; Low cut-off = 44 V; AC = 230 V 50 Hz.</li><li><strong>Monitor display</strong> for correct PV charging current and battery voltage.</li></ol></div>
+</section>
+
+<section id="item3">
+  <h2>Item 3 — Battery Units (131 × 2.4 kWh LiFePO4)</h2>
+  <h3>Narrative</h3>
+  <p>131 LiFePO4 battery units (each 2.4 kWh, 48 V) are installed in the battery rack and wired in parallel to give 312.50 kWh total.  Each unit has an integrated BMS for over-charge, over-discharge, short-circuit and temperature protection.</p>
+  <figure class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="760" height="340" viewBox="0 0 760 340" style="max-width:100%;height:auto;display:block;margin:12px auto">
+  <defs>
+  <marker id="aw" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#dde3ec"/></marker>
+  <marker id="ao" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#f5a623"/></marker>
+  <marker id="ab" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4fc3f7"/></marker>
+  <marker id="ag" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#66bb6a"/></marker>
+  <marker id="at" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4db6ac"/></marker>
+  <marker id="ay" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#ffd54f"/></marker>
+</defs>
+  <rect width="760" height="340" fill="#12121f" rx="10"/>
+  <text x="380" y="30" font-size="13" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BATTERY BANK — PARALLEL WIRING  (131 × 2.4 kWh = 312.50 kWh)</text>
+  <rect x="15" y="62" width="610" height="14" rx="3" fill="#2a1800" stroke="#f5a623" stroke-width="2" opacity="1"/>
+<text x="320" y="72" font-size="9" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">(+) POSITIVE BUS — 48 V</text>
+  <rect x="15" y="230" width="610" height="14" rx="3" fill="#1a1a1a" stroke="#607585" stroke-width="2" opacity="1"/>
+<text x="320" y="240" font-size="9" fill="#607585" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">(−) NEGATIVE BUS</text>
+  <rect x="30" y="86" width="100" height="100" rx="5" fill="#222242" stroke="#4db6ac" stroke-width="2" opacity="1"/>
+  <text x="80" y="102" font-size="9" fill="#4db6ac" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BATTERY</text>
+  <text x="80" y="116" font-size="10" fill="#dde3ec" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">2.4 kWh</text>
+  <text x="80" y="132" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">LiFePO4</text>
+  <text x="80" y="146" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">48 V DC</text>
+  <text x="80" y="162" font-size="9" fill="#66bb6a" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BMS</text>
+  <line x1="80" y1="86" x2="80" y2="86" stroke="#f5a623" stroke-width="2"/>
+  <line x1="80" y1="186" x2="80" y2="230" stroke="#607585" stroke-width="2"/>
+  <circle cx="80" cy="86" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+  <circle cx="80" cy="186" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+  <rect x="150" y="86" width="100" height="100" rx="5" fill="#222242" stroke="#4db6ac" stroke-width="2" opacity="1"/>
+  <text x="200" y="102" font-size="9" fill="#4db6ac" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BATTERY</text>
+  <text x="200" y="116" font-size="10" fill="#dde3ec" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">2.4 kWh</text>
+  <text x="200" y="132" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">LiFePO4</text>
+  <text x="200" y="146" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">48 V DC</text>
+  <text x="200" y="162" font-size="9" fill="#66bb6a" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BMS</text>
+  <line x1="200" y1="86" x2="200" y2="86" stroke="#f5a623" stroke-width="2"/>
+  <line x1="200" y1="186" x2="200" y2="230" stroke="#607585" stroke-width="2"/>
+  <circle cx="200" cy="86" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+  <circle cx="200" cy="186" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+  <rect x="270" y="86" width="100" height="100" rx="5" fill="#222242" stroke="#4db6ac" stroke-width="2" opacity="1"/>
+  <text x="320" y="102" font-size="9" fill="#4db6ac" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BATTERY</text>
+  <text x="320" y="116" font-size="10" fill="#dde3ec" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">2.4 kWh</text>
+  <text x="320" y="132" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">LiFePO4</text>
+  <text x="320" y="146" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">48 V DC</text>
+  <text x="320" y="162" font-size="9" fill="#66bb6a" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BMS</text>
+  <line x1="320" y1="86" x2="320" y2="86" stroke="#f5a623" stroke-width="2"/>
+  <line x1="320" y1="186" x2="320" y2="230" stroke="#607585" stroke-width="2"/>
+  <circle cx="320" cy="86" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+  <circle cx="320" cy="186" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+  <rect x="390" y="86" width="100" height="100" rx="5" fill="#222242" stroke="#4db6ac" stroke-width="2" opacity="1"/>
+  <text x="440" y="102" font-size="9" fill="#4db6ac" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BATTERY</text>
+  <text x="440" y="116" font-size="10" fill="#dde3ec" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">2.4 kWh</text>
+  <text x="440" y="132" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">LiFePO4</text>
+  <text x="440" y="146" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">48 V DC</text>
+  <text x="440" y="162" font-size="9" fill="#66bb6a" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BMS</text>
+  <line x1="440" y1="86" x2="440" y2="86" stroke="#f5a623" stroke-width="2"/>
+  <line x1="440" y1="186" x2="440" y2="230" stroke="#607585" stroke-width="2"/>
+  <circle cx="440" cy="86" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+  <circle cx="440" cy="186" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+  <rect x="510" y="86" width="100" height="100" rx="5" fill="#222242" stroke="#4db6ac" stroke-width="2" opacity="1"/>
+  <text x="560" y="102" font-size="9" fill="#4db6ac" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BATTERY</text>
+  <text x="560" y="116" font-size="10" fill="#dde3ec" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">2.4 kWh</text>
+  <text x="560" y="132" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">LiFePO4</text>
+  <text x="560" y="146" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">48 V DC</text>
+  <text x="560" y="162" font-size="9" fill="#66bb6a" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BMS</text>
+  <line x1="560" y1="86" x2="560" y2="86" stroke="#f5a623" stroke-width="2"/>
+  <line x1="560" y1="186" x2="560" y2="230" stroke="#607585" stroke-width="2"/>
+  <circle cx="560" cy="86" r="6" fill="#f5a623" stroke="#f5a623" stroke-width="1"/>
+  <circle cx="560" cy="186" r="6" fill="#607585" stroke="#607585" stroke-width="1"/>
+  <text x="560" y="208" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">(+126 more)</text>
+  <line x1="624" y1="79" x2="710" y2="79" stroke="#f5a623" stroke-width="2" marker-end="url(#ao)"/>
+<text x="667" y="71" font-size="10" fill="#f5a623" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">→ INV BAT(+)</text>
+<line x1="624" y1="237" x2="710" y2="237" stroke="#607585" stroke-width="2" marker-end="url(#aw)"/>
+<text x="667" y="229" font-size="10" fill="#607585" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">→ INV BAT(−)</text>
+<text x="715" y="79" font-size="9" fill="#f5a623" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">16mm²  Red</text>
+<text x="715" y="237" font-size="9" fill="#607585" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">16mm²  Black</text>
+  <text x="380" y="320" font-size="10" fill="#ffd54f" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Connect (−) first, then (+).  All units must be same SOC (±5%) before linking.</text>
+</svg><figcaption>Fig 3 — Battery bank parallel wiring (131 units)</figcaption></figure>
+  <div class="tools"><h3>Tools Required</h3><ul><li>Insulated screwdrivers and spanners</li><li>Insulated gloves (≥ 1000 V rated)</li><li>Multimeter (DC voltage)</li><li>Torque wrench (8–12 Nm for terminal bolts)</li><li>Anti-static wrist strap</li></ul></div>
+  <div class="steps"><h3>Step-by-Step Procedure</h3><ol><li><strong>Confirm inverter battery switch is OFF.</strong>  Verify with multimeter.</li><li><strong>Check SOC</strong> of each unit.  All units must be within ±5% SOC before linking.</li><li><strong>Place Battery Unit 1</strong> (bottom position).  Connect BMS CAN/RS485 cable if required.</li><li><strong>Stack remaining units</strong> per manufacturer stacking order.</li><li><strong>Connect inter-unit busbars:</strong> (+) rail to (+) rail, (−) rail to (−) rail (parallel).  Torque to 8–12 Nm.</li><li><strong>Connect main battery cable:</strong> 16mm² red BAT(+) → inverter; 16mm² black BAT(−) → inverter.  Connect (−) FIRST, (+) LAST.</li><li><strong>Measure total bank voltage.</strong>  Expected: 48–54 V DC.</li></ol></div>
+</section>
+
+<section id="item11">
+  <h2>Item 11 — Earthing Rod & Bonding Cable (BS 7430)</h2>
+  <h3>Narrative</h3>
+  <p>A copper-clad steel earth electrode (≥ 1.2 m × 14 mm dia.) is driven into the ground outside the building.  A 10mm² green/yellow copper bonding cable connects the earth rod to the main earth bar, and from there to all metalwork — inverter, battery rack, module frames, combiner box, and cable trunking.  Target: earth resistance ≤ 5 Ω.</p>
+  <figure class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="760" height="500" viewBox="0 0 760 500" style="max-width:100%;height:auto;display:block;margin:12px auto">
+  <defs>
+  <marker id="aw" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#dde3ec"/></marker>
+  <marker id="ao" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#f5a623"/></marker>
+  <marker id="ab" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4fc3f7"/></marker>
+  <marker id="ag" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#66bb6a"/></marker>
+  <marker id="at" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4db6ac"/></marker>
+  <marker id="ay" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#ffd54f"/></marker>
+</defs>
+  <rect width="760" height="500" fill="#12121f" rx="10"/>
+  <text x="380" y="30" font-size="14" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">EARTHING & BONDING SYSTEM  (BS 7430 / BS 7671)</text>
+  <line x1="40" y1="330" x2="720" y2="330" stroke="#9aacbc" stroke-width="2.5"/>
+<text x="380" y="346" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="italic" font-family="Segoe UI,Arial,sans-serif">GROUND LEVEL</text>
+<line x1="40" y1="330" x2="52" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="58" y1="330" x2="70" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="76" y1="330" x2="88" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="94" y1="330" x2="106" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="112" y1="330" x2="124" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="130" y1="330" x2="142" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="148" y1="330" x2="160" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="166" y1="330" x2="178" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="184" y1="330" x2="196" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="202" y1="330" x2="214" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="220" y1="330" x2="232" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="238" y1="330" x2="250" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="256" y1="330" x2="268" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="274" y1="330" x2="286" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="292" y1="330" x2="304" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="310" y1="330" x2="322" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="328" y1="330" x2="340" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="346" y1="330" x2="358" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="364" y1="330" x2="376" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="382" y1="330" x2="394" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="400" y1="330" x2="412" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="418" y1="330" x2="430" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="436" y1="330" x2="448" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="454" y1="330" x2="466" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="472" y1="330" x2="484" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="490" y1="330" x2="502" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="508" y1="330" x2="520" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="526" y1="330" x2="538" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="544" y1="330" x2="556" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="562" y1="330" x2="574" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="580" y1="330" x2="592" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="598" y1="330" x2="610" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="616" y1="330" x2="628" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="634" y1="330" x2="646" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="652" y1="330" x2="664" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="670" y1="330" x2="682" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="688" y1="330" x2="700" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="706" y1="330" x2="718" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="724" y1="330" x2="736" y2="342" stroke="#505075" stroke-width="1"/>
+<line x1="742" y1="330" x2="754" y2="342" stroke="#505075" stroke-width="1"/>
+  <rect x="115" y="330" width="10" height="130" rx="2" fill="#b07830" stroke="#d0a050" stroke-width="1.5" opacity="1"/>
+<text x="120" y="475" font-size="9" fill="#d0a050" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Earth Rod</text>
+<text x="120" y="488" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Cu-clad 14mm</text>
+<text x="120" y="500" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">≥ 1.2 m deep</text>
+<rect x="85" y="390" width="80" height="28" rx="3" fill="#1c1c30" stroke="#66bb6a" stroke-width="1" opacity="1"/>
+<text x="120" y="403" font-size="9" fill="#66bb6a" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">R ≤ 5 Ω</text>
+<text x="120" y="415" font-size="8" fill="#66bb6a" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">target</text>
+  <line x1="120" y1="330" x2="120" y2="280" stroke="#66bb6a" stroke-width="2.5"/>
+<line x1="120" y1="280" x2="300" y2="280" stroke="#66bb6a" stroke-width="2.5"/>
+<text x="210" y="268" font-size="8" fill="#66bb6a" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">10mm² green/yellow</text>
+  <rect x="300" y="260" width="80" height="36" rx="4" fill="#1a3020" stroke="#66bb6a" stroke-width="2" opacity="1"/>
+<text x="340" y="273" font-size="9" fill="#66bb6a" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">MAIN</text>
+<text x="340" y="286" font-size="9" fill="#66bb6a" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">EARTH BAR</text>
+  <rect x="370" y="100" width="350" height="200" rx="6" fill="none" stroke="#3a3a5c" stroke-width="1" opacity="1" stroke-dasharray="6,4"/>
+  <text x="545" y="95" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="italic" font-family="Segoe UI,Arial,sans-serif">BUILDING INTERIOR</text>
+  <rect x="400" y="130" width="80" height="50" rx="5" fill="#222242" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+  <text x="440" y="148" font-size="8" fill="#4fc3f7" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">PV MODULE</text>
+  <text x="440" y="162" font-size="8" fill="#4fc3f7" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">FRAMES</text>
+  <rect x="500" y="130" width="80" height="50" rx="5" fill="#222242" stroke="#ffd54f" stroke-width="1.5" opacity="1"/>
+  <text x="540" y="148" font-size="8" fill="#ffd54f" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DC COMBINER</text>
+  <text x="540" y="162" font-size="8" fill="#ffd54f" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BOX</text>
+  <rect x="600" y="130" width="80" height="50" rx="5" fill="#222242" stroke="#4db6ac" stroke-width="1.5" opacity="1"/>
+  <text x="640" y="148" font-size="8" fill="#4db6ac" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BATTERY</text>
+  <text x="640" y="162" font-size="8" fill="#4db6ac" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">RACK</text>
+  <rect x="400" y="220" width="80" height="50" rx="5" fill="#222242" stroke="#f5a623" stroke-width="1.5" opacity="1"/>
+  <text x="440" y="238" font-size="8" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">HYBRID</text>
+  <text x="440" y="252" font-size="8" fill="#f5a623" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">INVERTER</text>
+  <rect x="500" y="220" width="80" height="50" rx="5" fill="#222242" stroke="#4fc3f7" stroke-width="1.5" opacity="1"/>
+  <text x="540" y="238" font-size="8" fill="#4fc3f7" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">AC DIST.</text>
+  <text x="540" y="252" font-size="8" fill="#4fc3f7" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BOARD</text>
+  <rect x="600" y="220" width="80" height="50" rx="5" fill="#222242" stroke="#9aacbc" stroke-width="1.5" opacity="1"/>
+  <text x="640" y="238" font-size="8" fill="#9aacbc" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">CABLE</text>
+  <text x="640" y="252" font-size="8" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">TRUNKING</text>
+  <line x1="440" y1="180" x2="440" y2="278" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="440" y1="278" x2="380" y2="278" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="540" y1="180" x2="540" y2="278" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="540" y1="278" x2="380" y2="278" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="640" y1="180" x2="640" y2="278" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="640" y1="278" x2="380" y2="278" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="440" y1="270" x2="440" y2="278" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="440" y1="278" x2="380" y2="278" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="540" y1="270" x2="540" y2="278" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="540" y1="278" x2="380" y2="278" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="640" y1="270" x2="640" y2="278" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="640" y1="278" x2="380" y2="278" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <circle cx="120" cy="325" r="7" fill="#1c1c30" stroke="#ffd54f" stroke-width="2"/>
+<text x="132" y="318" font-size="9" fill="#ffd54f" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Test point  (earth resistance test here)</text>
+</svg><figcaption>Fig 11 — Earthing and bonding system (BS 7430 / BS 7671)</figcaption></figure>
+  <div class="tools"><h3>Tools Required</h3><ul><li>Earth rod driving tool or sledgehammer</li><li>Earth rod clamp / compression connector</li><li>Spade (for excavation)</li><li>Earth resistance tester (Megger fall-of-potential)</li><li>Crimping tool (for cable lugs)</li><li>Insulated screwdrivers</li></ul></div>
+  <div class="steps"><h3>Step-by-Step Procedure</h3><ol><li><strong>Select location</strong> ≥ 1 m from building foundation, in moist shaded soil if possible.</li><li><strong>Drive earth rod</strong> vertically to full depth.  If rock is met, angle at max 45°.</li><li><strong>Expose rod top</strong> 300 mm above ground or install in a buried inspection pit.</li><li><strong>Fit earth rod clamp</strong> and crimp cable lug onto 10mm² bonding cable.</li><li><strong>Route bonding cable</strong> into building via sealed conduit sleeve.  Terminate on main earth bar in DB.</li><li><strong>Run bonding conductors</strong> from earth bar to: inverter chassis, battery rack frame, DC combiner box, PV module frames (via rail lug), cable trunking.</li><li><strong>Measure earth resistance</strong> (fall-of-potential, BS 7430).  If &gt; 5 Ω, drive a second rod 3 m away and link in parallel.</li></ol></div>
+</section>
+
+<section id="item9">
+  <h2>Item 9 — AC MCB + RCCB (BS EN 60898 / BS EN 61008)</h2>
+  <h3>Narrative</h3>
+  <p>The AC distribution board contains a Type B MCB (overcurrent protection) and a 30 mA RCCB (earth leakage / shock protection) downstream of the inverter AC output.  The RCCB protects the entire AC installation against earth fault.</p>
+  <figure class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="680" height="480" viewBox="0 0 680 480" style="max-width:100%;height:auto;display:block;margin:12px auto">
+  <defs>
+  <marker id="aw" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#dde3ec"/></marker>
+  <marker id="ao" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#f5a623"/></marker>
+  <marker id="ab" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4fc3f7"/></marker>
+  <marker id="ag" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#66bb6a"/></marker>
+  <marker id="at" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#4db6ac"/></marker>
+  <marker id="ay" viewBox="0 0 8 6" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0,0 8,3 0,6" fill="#ffd54f"/></marker>
+</defs>
+  <rect width="680" height="480" fill="#12121f" rx="10"/>
+  <text x="340" y="30" font-size="14" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">AC DISTRIBUTION BOARD — INTERNAL LAYOUT</text>
+  <rect x="60" y="55" width="560" height="380" rx="8" fill="#1c1c30" stroke="#4fc3f7" stroke-width="2.5" opacity="1"/>
+  <text x="340" y="72" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="italic" font-family="Segoe UI,Arial,sans-serif">Consumer Unit / Distribution Board  (surface-mount, IP4X)</text>
+  <rect x="90" y="95" width="500" height="8" rx="2" fill="#404040" stroke="#9aacbc" stroke-width="1" opacity="1"/>
+<text x="560" y="95" font-size="8" fill="#505075" text-anchor="start" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">DIN Rail</text>
+  <rect x="55" y="120" width="12" height="26" rx="2" fill="#4fc3f7" stroke="#4fc3f7" stroke-width="1" opacity="1"/>
+<rect x="55" y="155" width="12" height="26" rx="2" fill="#9aacbc" stroke="#9aacbc" stroke-width="1" opacity="1"/>
+<rect x="55" y="190" width="12" height="26" rx="2" fill="#66bb6a" stroke="#66bb6a" stroke-width="1" opacity="1"/>
+<text x="50" y="136" font-size="9" fill="#4fc3f7" text-anchor="end" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">L</text>
+<text x="50" y="171" font-size="9" fill="#9aacbc" text-anchor="end" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">N</text>
+<text x="50" y="206" font-size="9" fill="#66bb6a" text-anchor="end" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">PE</text>
+<text x="45" y="108" font-size="8" fill="#505075" text-anchor="end" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">FROM</text>
+<text x="45" y="118" font-size="8" fill="#505075" text-anchor="end" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">INVERTER</text>
+  <rect x="100" y="100" width="100" height="140" rx="6" fill="#222242" stroke="#f5a623" stroke-width="2.5" opacity="1"/>
+<text x="150" y="118" font-size="13" fill="#f5a623" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">RCCB</text>
+<text x="150" y="136" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">30 mA</text>
+<text x="150" y="152" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">2-Pole</text>
+<text x="150" y="166" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BS EN</text>
+<text x="150" y="180" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">61008</text>
+<rect x="130" y="192" width="40" height="20" rx="3" fill="#2a0000" stroke="#ef5350" stroke-width="1.5" opacity="1"/>
+<text x="150" y="205" font-size="8" fill="#ef5350" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">TEST</text>
+<text x="150" y="230" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="italic" font-family="Segoe UI,Arial,sans-serif">↑ test monthly</text>
+  <rect x="220" y="100" width="72" height="140" rx="5" fill="#222242" stroke="#4fc3f7" stroke-width="2" opacity="1"/>
+  <text x="256" y="118" font-size="10" fill="#4fc3f7" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">MCB 1</text>
+  <text x="256" y="134" font-size="9" fill="#dde3ec" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Lighting</text>
+  <text x="256" y="150" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">20A</text>
+  <text x="256" y="165" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Type B</text>
+  <text x="256" y="180" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BS EN</text>
+  <text x="256" y="194" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">60898</text>
+  <rect x="300" y="100" width="72" height="140" rx="5" fill="#222242" stroke="#4fc3f7" stroke-width="2" opacity="1"/>
+  <text x="336" y="118" font-size="10" fill="#4fc3f7" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">MCB 2</text>
+  <text x="336" y="134" font-size="9" fill="#dde3ec" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Sockets</text>
+  <text x="336" y="150" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">32A</text>
+  <text x="336" y="165" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Type B</text>
+  <text x="336" y="180" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BS EN</text>
+  <text x="336" y="194" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">60898</text>
+  <rect x="380" y="100" width="72" height="140" rx="5" fill="#222242" stroke="#4fc3f7" stroke-width="2" opacity="1"/>
+  <text x="416" y="118" font-size="10" fill="#4fc3f7" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">MCB 3</text>
+  <text x="416" y="134" font-size="9" fill="#dde3ec" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Spare</text>
+  <text x="416" y="150" font-size="10" fill="#9aacbc" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">20A</text>
+  <text x="416" y="165" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Type B</text>
+  <text x="416" y="180" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">BS EN</text>
+  <text x="416" y="194" font-size="8" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">60898</text>
+  <rect x="90" y="265" width="500" height="16" rx="3" fill="#182030" stroke="#9aacbc" stroke-width="1.5" opacity="1"/>
+<text x="340" y="275" font-size="9" fill="#9aacbc" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">NEUTRAL BAR (N)</text>
+  <rect x="90" y="305" width="500" height="16" rx="3" fill="#0a2010" stroke="#66bb6a" stroke-width="1.5" opacity="1"/>
+<text x="340" y="315" font-size="9" fill="#66bb6a" text-anchor="middle" font-weight="bold" font-style="normal" font-family="Segoe UI,Arial,sans-serif">EARTH BAR (PE)  →  to earth rod</text>
+  <line x1="67" y1="133" x2="100" y2="125" stroke="#4fc3f7" stroke-width="2"/>
+<line x1="67" y1="168" x2="100" y2="158" stroke="#9aacbc" stroke-width="1.5"/>
+<line x1="67" y1="203" x2="90" y2="310" stroke="#66bb6a" stroke-width="1.5" stroke-dasharray="4,3"/>
+<line x1="200" y1="120" x2="220" y2="120" stroke="#4fc3f7" stroke-width="2"/>
+<line x1="150" y1="240" x2="150" y2="265" stroke="#9aacbc" stroke-width="1.5"/>
+<line x1="256" y1="240" x2="256" y2="265" stroke="#9aacbc" stroke-width="1"/>
+<line x1="336" y1="240" x2="336" y2="265" stroke="#9aacbc" stroke-width="1"/>
+<line x1="416" y1="240" x2="416" y2="265" stroke="#9aacbc" stroke-width="1"/>
+  <line x1="256" y1="321" x2="256" y2="375" stroke="#4fc3f7" stroke-width="1.5" marker-end="url(#ab)"/>
+<line x1="336" y1="321" x2="336" y2="375" stroke="#4fc3f7" stroke-width="1.5" marker-end="url(#ab)"/>
+<line x1="416" y1="321" x2="416" y2="375" stroke="#4fc3f7" stroke-width="1.5" marker-end="url(#ab)"/>
+<text x="256" y="387" font-size="9" fill="#4fc3f7" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Lighting</text>
+<text x="336" y="387" font-size="9" fill="#4fc3f7" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Sockets</text>
+<text x="416" y="387" font-size="9" fill="#4fc3f7" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Spare</text>
+  <rect x="90" y="390" width="500" height="34" rx="4" fill="#1c1c30" stroke="#3a3a5c" stroke-width="1" opacity="1"/>
+<text x="340" y="405" font-size="9" fill="#ffd54f" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">After installation: press TEST button — RCCB must trip within 300 ms.</text>
+<text x="340" y="420" font-size="9" fill="#505075" text-anchor="middle" font-weight="normal" font-style="normal" font-family="Segoe UI,Arial,sans-serif">Use RCD tester to verify at 30 mA, 50 mA, 100 mA.  Reset and confirm hold.</text>
+</svg><figcaption>Fig 9 — AC distribution board internal layout</figcaption></figure>
+  <div class="tools"><h3>Tools Required</h3><ul><li>Flathead and Pozidriv screwdrivers</li><li>Insulated terminal screwdriver</li><li>Wire strippers</li><li>Drill (for DB wall fixing)</li><li>Multimeter and RCD tester</li></ul></div>
+  <div class="steps"><h3>Step-by-Step Procedure</h3><ol><li><strong>Mount DB board</strong> on wall at ≥ 1.5 m from finished floor level.  Use spirit level.</li><li><strong>Snap RCCB and MCBs</strong> onto DIN rail.  RCCB goes first (incoming side).</li><li><strong>Connect incoming AC cable</strong> (L, N, PE) from inverter: L → RCCB line input; N → neutral bar; PE → earth bar.</li><li><strong>Link RCCB output L to MCB input.</strong>  Connect MCB outputs to final circuit cables.</li><li><strong>Fit board cover and labels.</strong></li><li><strong>Energise and test RCCB</strong> with TEST button.  Must trip within 300 ms.  Use RCD tester to verify trip at 30 mA, 50 mA, 100 mA.</li></ol></div>
+</section>
+
+<section id="commission">
+  <h2>Section 15 — Commissioning Sequence</h2>
+  <p>Follow this sequence strictly after all hardware is installed.
+  Do <strong>not</strong> skip steps or reverse the order.</p>
+  <table>
+    <tr><th>#</th><th>Test / Action</th><th>Pass Criterion</th></tr>
+    <tr><td>1</td><td>Visual inspection — fixings, labels, polarity marks</td><td>All secure, correctly labelled</td></tr>
+    <tr><td>2</td><td>IR test — DC circuits (500 V megger)</td><td>≥ 1 MΩ</td></tr>
+    <tr><td>3</td><td>IR test — AC circuits (500 V megger)</td><td>≥ 1 MΩ</td></tr>
+    <tr><td>4</td><td>Earth continuity — all bonded metalwork</td><td>≤ 0.1 Ω</td></tr>
+    <tr><td>5</td><td>Earth electrode resistance</td><td>≤ 5 Ω</td></tr>
+    <tr><td>6</td><td>Polarity check — all DC terminals</td><td>Correct (+/−)</td></tr>
+    <tr><td>7</td><td>Measure PV string Voc before connecting combiner</td><td>Within ±10% of calc. value</td></tr>
+    <tr><td>8</td><td>Connect battery to inverter — verify powers up</td><td>Display active, no fault</td></tr>
+    <tr><td>9</td><td>Connect PV strings — verify MPPT charging starts</td><td>Positive charge current shown</td></tr>
+    <tr><td>10</td><td>Measure AC output voltage</td><td>230 V ± 2%</td></tr>
+    <tr><td>11</td><td>Test RCCB with TEST button and RCD tester</td><td>Trips &lt; 300 ms at 30 mA</td></tr>
+    <tr><td>12</td><td>Load test (connect known load)</td><td>Stable AC output, no tripping</td></tr>
+    <tr><td>13</td><td>1-hour loaded run — monitor all temperatures</td><td>No over-temperature alarms</td></tr>
+    <tr><td>14</td><td>Record all test results in commissioning logbook</td><td>Signed and dated</td></tr>
+    <tr><td>15</td><td>Issue test certificate and O&amp;M manual to client</td><td>Handed over</td></tr>
+  </table>
+</section>
+
+<section id="safety">
+  <h2>Health &amp; Safety</h2>
+  <div class="warn"><p>⚡ PV modules produce voltage in daylight even when disconnected.
+  Always treat module leads as <strong>LIVE</strong>.  Use insulated gloves.</p></div>
+  <div class="warn"><p>🔋 Batteries can deliver very high short-circuit currents.
+  <strong>Never short battery terminals.</strong>  Remove jewellery before working on batteries.</p></div>
+  <div class="warn"><p>🏗️ Roof work requires fall-arrest equipment and a trained second person.</p></div>
+  <div class="warn"><p>📋 All electrical work must be carried out by a qualified electrician and
+  inspected before energising.  Comply with Ghana LI 1816 and BS 7671:2018.</p></div>
+</section>
+</main>
+<footer>
+  <p>Generated by Solar PV Designer Lite &nbsp;·&nbsp; Ghana Off-Grid System &nbsp;·&nbsp; BS 7671:2018</p>
+</footer>
+</body>
+</html>

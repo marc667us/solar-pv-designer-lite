@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+{% block title %}Client Prospecting Agent — SolarPro{% endblock %}
+
+{% block content %}
+
+<!-- Header -->
+<div class="rounded-3 p-4 mb-4" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1040 60%,#0f1a22 100%);border:1px solid #2e1e5a;position:relative;overflow:hidden">
+  <div style="position:absolute;top:-40px;right:-40px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(167,139,250,.08) 0%,transparent 70%);pointer-events:none"></div>
+  <div style="position:absolute;bottom:-30px;left:40px;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,rgba(245,158,11,.05) 0%,transparent 70%);pointer-events:none"></div>
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+    <div class="d-flex align-items-center gap-3">
+      <div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#7c3aed,#a78bfa);display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;flex-shrink:0;box-shadow:0 4px 20px rgba(167,139,250,.3)">
+        <i class="bi bi-robot"></i>
+      </div>
+      <div>
+        <div class="d-flex align-items-center gap-2">
+          <h4 class="fw-black mb-0" style="letter-spacing:-.3px">Client Prospecting Agent</h4>
+          {% if has_ai %}
+          <span class="badge" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;font-size:10px;padding:3px 8px">AI POWERED</span>
+          {% else %}
+          <span class="badge" style="background:#1e1e3a;color:#9090c0;font-size:10px;padding:3px 8px">TEMPLATE MODE</span>
+          {% endif %}
+        </div>
+        <div class="text-secondary" style="font-size:13px">AI-powered prospect finder · Solar client targeting · Auto-save to CRM</div>
+      </div>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin_leads') }}" class="btn btn-outline-info btn-sm px-3">
+        <i class="bi bi-person-lines-fill me-1"></i>View CRM
+      </a>
+    </div>
+  </div>
+</div>
+
+{% if not has_ai %}
+<div class="alert mb-4" style="background:#1a1a0a;border:1px solid #44440a;color:#fde047;font-size:13px">
+  <i class="bi bi-info-circle me-2"></i>
+  <strong>AI mode not active.</strong> Add <code>ANTHROPIC_API_KEY=your_key</code> to your <code>.env</code> file for Claude AI-powered prospect generation. Currently using smart template-based generation.
+</div>
+{% endif %}
+
+<!-- KPI strip -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-robot me-1"></i>Agent Mode</div>
+      <div class="kpi-value" style="font-size:15px">{{ 'Claude AI' if has_ai else 'Template' }}</div>
+      <div class="kpi-unit">{{ 'claude-haiku-4-5' if has_ai else 'smart rules' }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-people me-1"></i>Saved Prospects</div>
+      <div class="kpi-value">{{ total_saved }}</div>
+      <div class="kpi-unit">added to CRM</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-lightning me-1"></i>Max Per Run</div>
+      <div class="kpi-value">12</div>
+      <div class="kpi-unit">prospects</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-clock-history me-1"></i>Rate Limit</div>
+      <div class="kpi-value">20</div>
+      <div class="kpi-unit">runs per hour</div>
+    </div>
+  </div>
+</div>
+
+<!-- Main layout -->
+<div style="display:grid;grid-template-columns:320px 1fr;gap:20px;align-items:start">
+
+  <!-- LEFT: Criteria form -->
+  <div style="position:sticky;top:80px">
+    <div class="solar-card p-4">
+      <div class="section-head"><i class="bi bi-sliders me-1"></i>Target Criteria</div>
+
+      <form id="agentForm">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+        <div class="mb-3">
+          <label class="form-label" style="font-size:12px;color:#9090c0;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Country / Region</label>
+          <input type="text" name="country" id="fCountry" placeholder="e.g. Ghana, Nigeria, Kenya…"
+            class="form-control form-control-sm" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:13px"
+            value="">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" style="font-size:12px;color:#9090c0;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Sector</label>
+          <select name="sector" id="fSector" class="form-select form-select-sm" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:13px">
+            <option value="Commercial">Commercial</option>
+            <option value="Industrial">Industrial</option>
+            <option value="Residential">Residential</option>
+            <option value="Government / Schools">Government / Schools</option>
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" style="font-size:12px;color:#9090c0;font-weight:700;text-transform:uppercase;letter-spacing:.4px">System Size Range</label>
+          <select name="system_kw" id="fSize" class="form-select form-select-sm" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:13px">
+            <option value="1-10">1 – 10 kW (Small)</option>
+            <option value="10-50" selected>10 – 50 kW (Medium)</option>
+            <option value="50-200">50 – 200 kW (Large)</option>
+            <option value="200-1000">200 kW – 1 MW (Industrial)</option>
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" style="font-size:12px;color:#9090c0;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Budget Range</label>
+          <select name="budget" id="fBudget" class="form-select form-select-sm" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:13px">
+            <option value="$2,000-$15,000">$2k – $15k</option>
+            <option value="$10,000-$50,000" selected>$10k – $50k</option>
+            <option value="$50,000-$200,000">$50k – $200k</option>
+            <option value="$200,000-$1,000,000">$200k – $1M</option>
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" style="font-size:12px;color:#9090c0;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Special Focus <span style="color:#6868a0">(optional)</span></label>
+          <input type="text" name="focus" id="fFocus" placeholder="e.g. hospitals, cold storage, schools…"
+            class="form-control form-control-sm" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:13px">
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label" style="font-size:12px;color:#9090c0;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Prospects to Generate</label>
+          <div class="d-flex align-items-center gap-2">
+            <input type="range" name="count" id="fCount" min="4" max="12" value="8" class="form-range flex-grow-1" style="accent-color:#a78bfa">
+            <span class="fw-bold" style="color:#a78bfa;min-width:24px;text-align:right" id="countVal">8</span>
+          </div>
+        </div>
+
+        <button type="button" class="btn w-100 fw-bold" id="runBtn"
+          style="background:linear-gradient(135deg,#7c3aed,#a78bfa);border:none;color:#fff;padding:10px">
+          <i class="bi bi-play-circle me-2"></i>Run Agent
+        </button>
+      </form>
+    </div>
+
+    <!-- Tips card -->
+    <div class="solar-card p-3 mt-3">
+      <div class="section-head" style="font-size:11px"><i class="bi bi-lightbulb me-1"></i>Tips</div>
+      <div style="font-size:11px;color:#6868a0;line-height:1.7">
+        <div class="mb-1"><i class="bi bi-check-circle me-1 text-warning"></i>Be specific with country for better results</div>
+        <div class="mb-1"><i class="bi bi-check-circle me-1 text-warning"></i>Use Special Focus for niche targeting</div>
+        <div class="mb-1"><i class="bi bi-check-circle me-1 text-warning"></i>Save top prospects directly to CRM</div>
+        <div><i class="bi bi-check-circle me-1 text-warning"></i>Saved prospects appear in Leads CRM</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Results -->
+  <div>
+
+    <!-- Initial / waiting state -->
+    <div id="emptyState" class="solar-card p-5 text-center">
+      <div style="width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#7c3aed22,#a78bfa22);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px">
+        <i class="bi bi-robot" style="color:#a78bfa"></i>
+      </div>
+      <div class="fw-bold mb-2" style="font-size:16px">Agent Ready</div>
+      <div class="text-secondary" style="font-size:13px;max-width:320px;margin:0 auto">
+        Set your target criteria and click <strong>Run Agent</strong> to generate prospect profiles.
+      </div>
+    </div>
+
+    <!-- Loading state -->
+    <div id="loadingState" class="solar-card p-5 text-center d-none">
+      <div style="width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#7c3aed,#a78bfa);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;animation:pulse 1.5s infinite">
+        <i class="bi bi-robot" style="font-size:30px;color:#fff"></i>
+      </div>
+      <div class="fw-bold mb-2" style="font-size:16px;color:#a78bfa">Agent Working…</div>
+      <div class="text-secondary" style="font-size:13px">Analysing market, generating prospect profiles…</div>
+      <div class="mt-3">
+        <div class="spinner-border spinner-border-sm" style="color:#a78bfa"></div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="resultsState" class="d-none">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+          <span class="fw-black" style="font-size:16px" id="resultsCount"></span>
+          <span class="text-secondary ms-2" style="font-size:12px" id="resultsSource"></span>
+        </div>
+        <button class="btn btn-sm px-3" style="background:#1e1e3a;border:1px solid #2e2e50;color:#9090c0;font-size:12px" onclick="saveAll()">
+          <i class="bi bi-download me-1"></i>Save All to CRM
+        </button>
+      </div>
+      <div id="prospectGrid" class="row g-3"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Saved Prospects History -->
+{% if saved_leads %}
+<div class="solar-card p-4 mt-4">
+  <div class="section-head"><i class="bi bi-clock-history me-1"></i>Previously Saved Prospects ({{ total_saved }} total)</div>
+  <div class="table-responsive">
+    <table class="table align-middle" style="font-size:12px">
+      <thead>
+        <tr style="border-color:#1e1e3a">
+          <th style="color:#6868a0;font-size:10px;font-weight:700;text-transform:uppercase">Company</th>
+          <th style="color:#6868a0;font-size:10px;font-weight:700;text-transform:uppercase">Contact</th>
+          <th style="color:#6868a0;font-size:10px;font-weight:700;text-transform:uppercase">Country</th>
+          <th style="color:#6868a0;font-size:10px;font-weight:700;text-transform:uppercase">Interest</th>
+          <th style="color:#6868a0;font-size:10px;font-weight:700;text-transform:uppercase">Status</th>
+          <th style="color:#6868a0;font-size:10px;font-weight:700;text-transform:uppercase">Saved</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lead in saved_leads %}
+        <tr style="border-color:#1e1e3a">
+          <td class="fw-bold">{{ lead.company or '—' }}</td>
+          <td class="text-secondary">{{ lead.name }}</td>
+          <td class="text-secondary">{{ lead.country or '—' }}</td>
+          <td><span class="badge" style="background:#1e1e3a;color:#9090c0;font-size:10px">{{ lead.interest }}</span></td>
+          <td>
+            {% set sc = {'new':'#fde047','contacted':'#7dd3fc','qualified':'#6fcf97','lost':'#f87171'} %}
+            <span class="badge" style="background:{{ sc.get(lead.status,'#9090c0') }}22;color:{{ sc.get(lead.status,'#9090c0') }};font-size:10px">{{ lead.status }}</span>
+          </td>
+          <td class="text-secondary">{{ lead.created_at[:10] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<style>
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+@media(max-width:991px){
+  div[style*="grid-template-columns:320px"]{grid-template-columns:1fr !important}
+  div[style*="position:sticky"]{position:static !important}
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CSRF = "{{ csrf_token() }}";
+
+// Range counter
+document.getElementById('fCount').addEventListener('input', function(){
+  document.getElementById('countVal').textContent = this.value;
+});
+
+// Priority colours
+const PRIO = {high:'#f87171', medium:'#fde047', low:'#86efac'};
+const PRIO_BG = {high:'#f8717120', medium:'#fde04720', low:'#86efac20'};
+
+let currentProspects = [];
+
+document.getElementById('runBtn').addEventListener('click', runAgent);
+
+async function runAgent(){
+  const form = document.getElementById('agentForm');
+  const data = new FormData(form);
+
+  document.getElementById('emptyState').classList.add('d-none');
+  document.getElementById('resultsState').classList.add('d-none');
+  document.getElementById('loadingState').classList.remove('d-none');
+  document.getElementById('runBtn').disabled = true;
+
+  try {
+    const resp = await fetch("{{ url_for('admin_agent_run') }}", {
+      method: 'POST',
+      body: data
+    });
+    const json = await resp.json();
+
+    document.getElementById('loadingState').classList.add('d-none');
+    document.getElementById('runBtn').disabled = false;
+
+    if(!json.ok){ alert('Agent error: ' + (json.error || 'Unknown')); return; }
+
+    currentProspects = json.prospects;
+    renderProspects(json.prospects, json.source);
+  } catch(e){
+    document.getElementById('loadingState').classList.add('d-none');
+    document.getElementById('runBtn').disabled = false;
+    alert('Request failed: ' + e.message);
+  }
+}
+
+function renderProspects(prospects, source){
+  const grid = document.getElementById('prospectGrid');
+  grid.innerHTML = '';
+  document.getElementById('resultsCount').textContent = prospects.length + ' prospects found';
+  document.getElementById('resultsSource').textContent = source === 'claude' ? '(Claude AI)' : '(Template)';
+  document.getElementById('resultsState').classList.remove('d-none');
+
+  prospects.forEach((p, i) => {
+    const prio = p.priority || 'medium';
+    const col = PRIO[prio] || '#9090c0';
+    const bg  = PRIO_BG[prio] || '#9090c020';
+    const kw  = p.estimated_kw || 0;
+    const usd = (p.estimated_usd || 0).toLocaleString();
+
+    grid.innerHTML += `
+    <div class="col-md-6" id="card-${i}">
+      <div class="h-100 rounded-3 p-4" style="background:#0a0a14;border-left:3px solid ${col};border-right:1px solid #1e1e3a;border-top:1px solid #1e1e3a;border-bottom:1px solid #1e1e3a">
+
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div style="flex:1;min-width:0">
+            <div class="fw-black" style="font-size:14px">${p.company_name}</div>
+            <div style="font-size:11px;color:#9090c0">${p.type}</div>
+          </div>
+          <span class="ms-2 badge flex-shrink-0" style="background:${bg};color:${col};font-size:10px;font-weight:800;text-transform:uppercase">${prio}</span>
+        </div>
+
+        <!-- Location + sizes -->
+        <div class="d-flex gap-3 mb-3" style="font-size:11px;color:#6868a0">
+          <span><i class="bi bi-geo-alt me-1"></i>${p.location}</span>
+          <span><i class="bi bi-lightning me-1"></i>${kw} kW</span>
+          <span><i class="bi bi-currency-dollar me-1"></i>$${usd}</span>
+        </div>
+
+        <!-- Pain points -->
+        <div class="mb-2 d-flex flex-wrap gap-1">
+          ${(p.pain_points||[]).map(pp=>`<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#1e1e3a;color:#9090c0">${pp}</span>`).join('')}
+        </div>
+
+        <!-- Pitch -->
+        <div class="mb-3 p-2 rounded" style="background:#0f0f1e;border:1px solid #1e1e3a;font-size:12px;color:#c8c8e8;line-height:1.5">
+          <i class="bi bi-chat-quote me-1" style="color:#a78bfa"></i>${p.pitch}
+        </div>
+
+        <!-- Decision maker + strategy -->
+        <div class="mb-3" style="font-size:11px;color:#6868a0">
+          <div class="mb-1"><i class="bi bi-person-badge me-1 text-warning"></i><strong style="color:#c8c8e8">Decision maker:</strong> ${p.decision_maker}</div>
+          <div><i class="bi bi-send me-1 text-info"></i><strong style="color:#c8c8e8">Strategy:</strong> ${p.contact_strategy}</div>
+        </div>
+
+        <!-- Save button -->
+        <button class="btn btn-sm w-100 save-btn" id="save-${i}" onclick="saveLead(${i})"
+          style="background:#a78bfa22;border:1px solid #a78bfa44;color:#a78bfa;font-size:12px;font-weight:700">
+          <i class="bi bi-plus-circle me-1"></i>Save to CRM
+        </button>
+      </div>
+    </div>`;
+  });
+}
+
+async function saveLead(i){
+  const p = currentProspects[i];
+  const btn = document.getElementById('save-' + i);
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+
+  const fd = new FormData();
+  fd.append('_csrf', CSRF);
+  fd.append('name', p.decision_maker || p.company_name);
+  fd.append('company', p.company_name);
+  fd.append('country', p.location);
+  fd.append('interest', p.type);
+  fd.append('notes', p.pitch + ' | Strategy: ' + p.contact_strategy);
+
+  const resp = await fetch("{{ url_for('admin_agent_save') }}", {method:'POST', body:fd});
+  const json = await resp.json();
+
+  if(json.ok){
+    btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Saved to CRM';
+    btn.style.background = '#6fcf9722';
+    btn.style.borderColor = '#6fcf9744';
+    btn.style.color = '#6fcf97';
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = json.error === 'Already saved'
+      ? '<i class="bi bi-check-circle me-1"></i>Already in CRM'
+      : '<i class="bi bi-exclamation me-1"></i>Error — retry';
+    if(json.error === 'Already saved'){ btn.style.color='#fde047'; }
+  }
+}
+
+async function saveAll(){
+  for(let i = 0; i < currentProspects.length; i++){
+    const btn = document.getElementById('save-' + i);
+    if(btn && !btn.disabled){
+      await saveLead(i);
+      await new Promise(r => setTimeout(r, 150));
+    }
+  }
+}
+</script>
+{% endblock %}

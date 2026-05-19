@@ -1,0 +1,126 @@
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.8.175:5000
+Press CTRL+C to quit
+127.0.0.1 - - [16/May/2026 16:19:43] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [16/May/2026 16:19:46] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:19:59] "GET /login HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:20:06] "POST /login HTTP/1.1" 302 -
+127.0.0.1 - - [16/May/2026 16:20:09] "GET /dashboard HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:20:36] "GET /project/3/location HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:20:51] "POST /project/3/location HTTP/1.1" 302 -
+127.0.0.1 - - [16/May/2026 16:20:54] "GET /project/3/loads HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:21:08] "POST /project/3/loads HTTP/1.1" 302 -
+127.0.0.1 - - [16/May/2026 16:21:11] "GET /project/3/results HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:21:34] "GET /project/3/report/installation HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:23:07] "GET /project/3/report/installation/pdf HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:48:48] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [16/May/2026 16:48:50] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:49:31] "GET /login HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:49:40] "POST /login HTTP/1.1" 302 -
+127.0.0.1 - - [16/May/2026 16:49:43] "GET /dashboard HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:49:56] "GET /project/3/location HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:50:49] "POST /project/3/location HTTP/1.1" 302 -
+127.0.0.1 - - [16/May/2026 16:50:52] "GET /project/3/loads HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:51:01] "POST /project/3/loads HTTP/1.1" 302 -
+[2026-05-16 16:51:03,682] ERROR in app: Exception on /project/3/results [GET]
+Traceback (most recent call last):
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\USER\Desktop\solar-pv-designer-lite\web_app.py", line 106, in decorated
+    return f(*args, **kwargs)
+  File "C:\Users\USER\Desktop\solar-pv-designer-lite\web_app.py", line 926, in project_results
+    return render_template("results.html", user=current_user(),
+                           project=project, d=project["data"],
+                           r=project["data"]["results"])
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\templating.py", line 151, in render_template
+    return _render(app, template, context)
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\templating.py", line 132, in _render
+    rv = template.render(context)
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\jinja2\environment.py", line 1295, in render
+    self.environment.handle_exception()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\jinja2\environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\USER\Desktop\solar-pv-designer-lite\templates\results.html", line 1, in top-level template code
+    {% extends "base.html" %}
+  File "C:\Users\USER\Desktop\solar-pv-designer-lite\templates\base.html", line 94, in top-level template code
+    {% block content %}{% endblock %}
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\Desktop\solar-pv-designer-lite\templates\results.html", line 65, in block 'content'
+    {% for url,icon,label,desc in [
+    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py", line 1121, in url_for
+    return self.handle_url_build_error(error, endpoint, values)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py", line 1110, in url_for
+    rv = url_adapter.build(  # type: ignore[union-attr]
+        endpoint,
+    ...<3 lines>...
+        force_external=_external,
+    )
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\werkzeug\routing\map.py", line 901, in build
+    raise BuildError(endpoint, values, method, self)
+werkzeug.routing.exceptions.BuildError: Could not build url for endpoint 'export_pdf_workplan' with values ['pid']. Did you mean 'export_pdf_economic' instead?
+127.0.0.1 - - [16/May/2026 16:51:03] "GET /project/3/results HTTP/1.1" 500 -
+127.0.0.1 - - [16/May/2026 16:51:14] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:51:23] "GET /dashboard HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:51:31] "GET /project/3/location HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:51:38] "POST /project/3/location HTTP/1.1" 302 -
+127.0.0.1 - - [16/May/2026 16:51:41] "GET /project/3/loads HTTP/1.1" 200 -
+127.0.0.1 - - [16/May/2026 16:51:49] "POST /project/3/loads HTTP/1.1" 302 -
+[2026-05-16 16:51:52,198] ERROR in app: Exception on /project/3/results [GET]
+Traceback (most recent call last):
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\USER\Desktop\solar-pv-designer-lite\web_app.py", line 106, in decorated
+    return f(*args, **kwargs)
+  File "C:\Users\USER\Desktop\solar-pv-designer-lite\web_app.py", line 926, in project_results
+    return render_template("results.html", user=current_user(),
+                           project=project, d=project["data"],
+                           r=project["data"]["results"])
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\templating.py", line 151, in render_template
+    return _render(app, template, context)
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\templating.py", line 132, in _render
+    rv = template.render(context)
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\jinja2\environment.py", line 1295, in render
+    self.environment.handle_exception()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\jinja2\environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "C:\Users\USER\Desktop\solar-pv-designer-lite\templates\results.html", line 1, in top-level template code
+    {% extends "base.html" %}
+  File "C:\Users\USER\Desktop\solar-pv-designer-lite\templates\base.html", line 94, in top-level template code
+    {% block content %}{% endblock %}
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\Desktop\solar-pv-designer-lite\templates\results.html", line 65, in block 'content'
+    {% for url,icon,label,desc in [
+    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py", line 1121, in url_for
+    return self.handle_url_build_error(error, endpoint, values)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\flask\app.py", line 1110, in url_for
+    rv = url_adapter.build(  # type: ignore[union-attr]
+        endpoint,
+    ...<3 lines>...
+        force_external=_external,
+    )
+  File "C:\Users\USER\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\werkzeug\routing\map.py", line 901, in build
+    raise BuildError(endpoint, values, method, self)
+werkzeug.routing.exceptions.BuildError: Could not build url for endpoint 'export_pdf_workplan' with values ['pid']. Did you mean 'export_pdf_economic' instead?
+127.0.0.1 - - [16/May/2026 16:51:52] "GET /project/3/results HTTP/1.1" 500 -

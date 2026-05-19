@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}User Management — SolarPro Admin{% endblock %}
+
+{% block extra_head %}
+<style>
+  .plan-chip{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:800;
+    text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+  .user-row{transition:.1s}
+  .user-row:hover{background:rgba(255,255,255,.025)}
+  .user-row.hidden{display:none}
+  .avatar-circle{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:13px;font-weight:900;flex-shrink:0}
+  .proj-bar{height:4px;border-radius:2px;background:#1e1e3a;overflow:hidden;margin-top:3px;min-width:40px}
+  .proj-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--solar-gold),#fbbf24);transition:.4s}
+  .action-select{background:#0f0f22;border:1px solid #2a2a5a;color:#d0d0e8;
+    border-radius:6px;padding:3px 6px;font-size:11px;width:120px}
+  .action-select:focus{outline:none;border-color:#f59e0b66}
+  .filter-bar{background:#0f0f22;border:1px solid #1e1e3a;border-radius:10px;padding:12px 16px;margin-bottom:20px}
+  .search-input{background:#0a0a1a;border:1px solid #2a2a5a;border-radius:8px;
+    padding:7px 12px;color:#d0d0e8;font-size:13px;width:260px}
+  .search-input:focus{outline:none;border-color:#f59e0b66}
+  .plan-filter-btn{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;
+    border:1px solid transparent;cursor:pointer;transition:.15s;background:transparent;color:#6868a0}
+  .plan-filter-btn.active{color:#f0f0f8;background:rgba(255,255,255,.08);border-color:#2a2a5a}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% set total = users|length %}
+{% set paid  = users|selectattr('plan','in',['basic','professional','enterprise'])|list|length %}
+{% set free_ = users|selectattr('plan','equalto','free')|list|length + users|selectattr('plan','none')|list|length %}
+{% set admins= users|selectattr('is_admin')|list|length %}
+{% set max_proj = users|map(attribute='proj_count')|max if users else 1 %}
+
+<!-- Header -->
+<div class="report-header mb-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <a href="{{ url_for('admin_dashboard') }}" class="text-secondary small text-decoration-none">
+          <i class="bi bi-shield me-1"></i>Admin
+        </a>
+        <span class="text-secondary">/</span>
+        <span class="text-warning small fw-bold">Users</span>
+      </div>
+      <div class="report-title"><i class="bi bi-people-fill me-2"></i>User Management</div>
+      <div class="text-secondary mt-1">Manage plans, roles, and accounts</div>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Dashboard
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- KPI strip -->
+<div class="row g-3 mb-4">
+  {% for icon,color,lbl,val in [
+    ('bi-people-fill',       '#0ea5e9', 'Total Users',   total),
+    ('bi-person-check-fill', '#22c55e', 'Paid',          paid),
+    ('bi-person-fill',       '#6868a0', 'Free',          free_),
+    ('bi-shield-fill',       '#f59e0b', 'Admins',        admins),
+    ('bi-folder-fill',       '#a78bfa', 'Total Projects',users|sum(attribute='proj_count')),
+  ] %}
+  <div class="col-6 col-md">
+    <div class="kpi-card text-center p-3">
+      <div style="font-size:18px;color:{{ color }}"><i class="bi {{ icon }}"></i></div>
+      <div class="kpi-label mt-1" style="font-size:9px">{{ lbl }}</div>
+      <div class="kpi-value" style="font-size:18px">{{ val }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar d-flex align-items-center gap-3 flex-wrap">
+  <input type="text" id="userSearch" class="search-input" placeholder="Search username, email, name…"
+         oninput="filterUsers()">
+  <div class="d-flex gap-1 flex-wrap ms-auto" id="planFilters">
+    <button class="plan-filter-btn active" data-plan="all" onclick="setPlanFilter(this)">All</button>
+    {% for p,color in [('free','#6868a0'),('basic','#22c55e'),('professional','#0ea5e9'),('enterprise','#f59e0b'),('disabled','#ef4444')] %}
+    <button class="plan-filter-btn" data-plan="{{ p }}" onclick="setPlanFilter(this)"
+            style="color:{{ color }}">{{ p|title }}</button>
+    {% endfor %}
+  </div>
+  <span id="userCount" class="text-secondary small">{{ total }} users</span>
+</div>
+
+<!-- Users table -->
+<div class="solar-card p-0" style="overflow:hidden">
+  <div class="table-responsive">
+    <table class="table table-sm mb-0" style="font-size:12px">
+      <thead>
+        <tr style="border-color:#1e1e3a;background:#0a0a1a">
+          <th style="padding:12px 16px;color:#6868a0;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.5px">User</th>
+          <th style="color:#6868a0;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.5px">Email</th>
+          <th style="color:#6868a0;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.5px">Location</th>
+          <th style="color:#6868a0;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.5px">Plan</th>
+          <th style="color:#6868a0;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.5px">Projects</th>
+          <th style="color:#6868a0;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.5px">Joined</th>
+          <th style="color:#6868a0;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.5px">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="userTableBody">
+      {% set plan_colors = {'free':'#6868a0','demo':'#a78bfa','basic':'#22c55e','professional':'#0ea5e9','enterprise':'#f59e0b','disabled':'#ef4444'} %}
+      {% set avatar_palettes = ['#0ea5e9','#22c55e','#f59e0b','#a78bfa','#ef4444','#06b6d4','#84cc16','#f97316'] %}
+      {% for u in users %}
+      {% set plan = (u.plan or 'free')|lower %}
+      {% set pc   = plan_colors.get(plan, '#6868a0') %}
+      {% set av   = avatar_palettes[loop.index0 % avatar_palettes|length] %}
+      {% set proj_pct = ([u.proj_count, max_proj]|min / [max_proj,1]|max * 100)|int %}
+      <tr class="user-row" style="border-color:#1e1e3a"
+          data-plan="{{ plan }}"
+          data-search="{{ (u.username ~ ' ' ~ (u.email or '') ~ ' ' ~ (u.name or '') ~ ' ' ~ (u.company or ''))|lower }}">
+        <td style="padding:10px 16px">
+          <div class="d-flex align-items-center gap-2">
+            <div class="avatar-circle" style="background:{{ av }}18;border:1px solid {{ av }}44;color:{{ av }}">
+              {{ u.username[0]|upper }}
+            </div>
+            <div>
+              <div class="fw-bold" style="color:#e0e0f0">
+                {{ u.username }}
+                {% if u.is_admin %}
+                <i class="bi bi-shield-fill ms-1" style="font-size:9px;color:#f59e0b" title="Admin"></i>
+                {% endif %}
+              </div>
+              {% if u.name or u.company %}
+              <div class="text-secondary" style="font-size:10px">{{ u.name or '' }}{% if u.name and u.company %} · {% endif %}{{ u.company or '' }}</div>
+              {% endif %}
+            </div>
+          </div>
+        </td>
+        <td style="padding:10px 8px">
+          <a href="mailto:{{ u.email }}" class="text-info text-decoration-none" style="font-size:11px">{{ u.email }}</a>
+        </td>
+        <td class="text-secondary" style="font-size:11px">{{ u.country or '—' }}</td>
+        <td>
+          <span class="plan-chip" style="background:{{ pc }}18;color:{{ pc }};border:1px solid {{ pc }}33">
+            {{ plan|upper }}
+          </span>
+        </td>
+        <td>
+          <div class="fw-bold" style="color:#d0d0e8">{{ u.proj_count }}</div>
+          <div class="proj-bar" style="width:50px">
+            <div class="proj-fill" style="width:{{ proj_pct }}%"></div>
+          </div>
+        </td>
+        <td class="text-secondary" style="font-size:11px">{{ u.created_at[:10] if u.created_at else '—' }}</td>
+        <td style="padding:8px">
+          <div class="d-flex gap-1 align-items-center flex-wrap">
+            <!-- Change plan -->
+            <form method="POST" class="d-flex gap-1 align-items-center">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <input type="hidden" name="uid" value="{{ u.id }}">
+              <input type="hidden" name="action" value="set_plan">
+              <select name="plan" class="action-select">
+                {% for p in ['free','demo','basic','professional','enterprise','disabled'] %}
+                <option value="{{ p }}" {% if plan==p %}selected{% endif %}>{{ p|title }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-sm py-0 px-2"
+                      style="font-size:10px;background:#f59e0b18;border:1px solid #f59e0b44;color:#f59e0b">
+                Set
+              </button>
+            </form>
+            <!-- Toggle admin -->
+            <form method="POST">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <input type="hidden" name="uid" value="{{ u.id }}">
+              <input type="hidden" name="action" value="toggle_admin">
+              <button type="submit" class="btn btn-sm py-0 px-2" title="{{ 'Remove admin' if u.is_admin else 'Make admin' }}"
+                      style="font-size:11px;{% if u.is_admin %}background:#f59e0b22;border:1px solid #f59e0b44;color:#f59e0b{% else %}background:#1e1e3a;border:1px solid #2a2a5a;color:#6868a0{% endif %}">
+                <i class="bi bi-shield{% if u.is_admin %}-fill{% endif %}"></i>
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="text-center text-secondary py-5">No users registered yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- No results message -->
+<div id="noResults" class="text-center text-secondary py-5 small" style="display:none">
+  <i class="bi bi-search d-block mb-2" style="font-size:28px;opacity:.3"></i>
+  No users match your search.
+</div>
+
+<script>
+let activePlan = 'all';
+
+function filterUsers() {
+  const q    = document.getElementById('userSearch').value.toLowerCase();
+  const rows = document.querySelectorAll('#userTableBody .user-row');
+  let visible = 0;
+  rows.forEach(r => {
+    const matchPlan   = activePlan === 'all' || r.dataset.plan === activePlan;
+    const matchSearch = !q || r.dataset.search.includes(q);
+    const show = matchPlan && matchSearch;
+    r.classList.toggle('hidden', !show);
+    if (show) visible++;
+  });
+  document.getElementById('userCount').textContent = visible + ' user' + (visible !== 1 ? 's' : '');
+  document.getElementById('noResults').style.display = visible === 0 ? '' : 'none';
+}
+
+function setPlanFilter(btn) {
+  document.querySelectorAll('.plan-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activePlan = btn.dataset.plan;
+  filterUsers();
+}
+</script>
+
+{% endblock %}

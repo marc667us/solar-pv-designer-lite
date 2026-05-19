@@ -1,0 +1,525 @@
+{% extends "base.html" %}
+{% block title %}Location — {{ project.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── Form controls ── */
+  .form-ctrl{background:#0a0a1a;border:1px solid #2a2a5a;border-radius:8px;
+    color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px;transition:.2s;
+    -webkit-appearance:none}
+  .form-ctrl:focus{outline:none;border-color:#f59e0b66;background:#080816}
+  .form-ctrl option{background:#0f0f22}
+  .form-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+    color:#5a5a8a;margin-bottom:6px;display:block}
+
+  /* ── Section divider ── */
+  .form-section{margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid #111128}
+  .form-section:last-of-type{border-bottom:none;margin-bottom:0;padding-bottom:0}
+  .form-section-head{font-size:11px;font-weight:800;text-transform:uppercase;
+    letter-spacing:.6px;color:#4a4a7a;margin-bottom:14px;
+    display:flex;align-items:center;gap:7px}
+  .form-section-head i{font-size:13px}
+
+  /* ── Mounting cards ── */
+  .mount-card{cursor:pointer;border:1px solid #1e1e3a;border-radius:10px;
+    padding:12px 10px;text-align:center;background:#0a0a18;transition:.15s;
+    position:relative;display:block;width:100%}
+  .mount-card:hover{border-color:#2a2a5a;background:#0f0f22}
+  .mount-card.selected{border-color:#f59e0b66;background:rgba(245,158,11,.07)}
+  .mount-card input{display:none}
+
+  /* ── Globe panel ── */
+  .globe-panel{background:#070714;border:1px solid #1e1e3a;border-radius:14px;
+    overflow:hidden;position:relative;margin-bottom:16px}
+
+  /* ── Solar resource card ── */
+  .solar-res-card{background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px;
+    padding:18px;margin-bottom:16px;display:none}
+  .res-row{display:flex;justify-content:space-between;align-items:center;
+    padding:7px 0;border-bottom:1px solid #0d0d20;font-size:12px}
+  .res-row:last-child{border-bottom:none}
+  .res-lbl{color:#4a4a7a;font-weight:600;text-transform:uppercase;letter-spacing:.4px;font-size:10px}
+  .res-val{color:#d0d0e8;font-weight:700}
+
+  .psh-bar{height:6px;border-radius:3px;background:#1e1e3a;overflow:hidden;margin-top:8px}
+  .psh-fill{height:100%;border-radius:3px;transition:.5s}
+
+  /* ── Progress stepper ── */
+  .step-wrap{display:flex;align-items:center;gap:0;margin-bottom:24px}
+  .step-item{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700}
+  .step-num{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:11px;font-weight:900;flex-shrink:0}
+  .step-conn{flex:1;height:2px;min-width:30px;border-radius:1px}
+
+  /* ── Coverage badges ── */
+  .cov-badge{display:inline-block;padding:3px 9px;border-radius:6px;font-size:10px;
+    font-weight:600;background:#1e1e3a;color:#5a5a8a;border:1px solid #252545;margin:2px}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% set d = project.data %}
+
+<!-- ── Breadcrumb ─────────────────────────────────────────────────── -->
+<div class="d-flex align-items-center gap-2 mb-4 flex-wrap">
+  <a href="{{ url_for('dashboard') }}" class="text-secondary small text-decoration-none">
+    <i class="bi bi-grid-3x3-gap me-1"></i>Dashboard
+  </a>
+  <span class="text-secondary">/</span>
+  <span class="text-warning small fw-bold text-truncate" style="max-width:200px">{{ project.name }}</span>
+  <span class="text-secondary">/</span>
+  <span class="text-secondary small">Location</span>
+</div>
+
+<!-- ── Progress stepper ─────────────────────────────────────────── -->
+<div class="step-wrap mb-4">
+  <div class="step-item">
+    <div class="step-num" style="background:#f59e0b;color:#000">1</div>
+    <span style="color:#f59e0b">Location</span>
+  </div>
+  <div class="step-conn mx-2" style="background:linear-gradient(90deg,#f59e0b55,#1e1e3a)"></div>
+  <div class="step-item">
+    <div class="step-num" style="background:#1e1e3a;border:1px solid #2a2a5a;color:#4a4a7a">2</div>
+    <span style="color:#3a3a6a">Loads</span>
+  </div>
+  <div class="step-conn mx-2" style="background:#1e1e3a"></div>
+  <div class="step-item">
+    <div class="step-num" style="background:#1e1e3a;border:1px solid #2a2a5a;color:#4a4a7a">3</div>
+    <span style="color:#3a3a6a">Results</span>
+  </div>
+</div>
+
+<!-- ── Two-column layout ─────────────────────────────────────────── -->
+<div class="row g-4">
+
+  <!-- ── LEFT: Form ─────────────────────────────────────────────── -->
+  <div class="col-lg-7">
+    <div style="background:#0f0f22;border:1px solid #1e1e3a;border-radius:16px;padding:24px">
+
+      <div class="d-flex align-items-center gap-2 mb-4">
+        <div style="width:38px;height:38px;border-radius:10px;background:#f59e0b18;
+             border:1px solid #f59e0b33;display:flex;align-items:center;justify-content:center">
+          <i class="bi bi-geo-alt-fill" style="color:#f59e0b;font-size:16px"></i>
+        </div>
+        <div>
+          <div class="fw-black" style="font-size:15px;color:#f0f0f8">Location &amp; System Config</div>
+          <div class="text-secondary" style="font-size:11px">Step 1 of 3 — solar resource data loaded automatically</div>
+        </div>
+      </div>
+
+      <form method="POST" id="locForm">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+        <!-- ── Location ── -->
+        <div class="form-section">
+          <div class="form-section-head">
+            <i class="bi bi-globe2" style="color:#f59e0b"></i>Site Location
+          </div>
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-lbl">Country</label>
+              <select name="country" id="countrySelect" class="form-ctrl" required onchange="loadRegions()">
+                <option value="">— Select Country —</option>
+                {% for c in countries %}
+                <option {% if d.get('country')==c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-lbl">Region / State</label>
+              <select name="region" id="regionSelect" class="form-ctrl" required onchange="loadSolarData()">
+                <option value="">— Select Region —</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Electrical ── -->
+        <div class="form-section">
+          <div class="form-section-head">
+            <i class="bi bi-lightning-charge-fill" style="color:#0ea5e9"></i>Electrical Configuration
+          </div>
+          <div class="row g-3">
+            <div class="col-4">
+              <label class="form-lbl">System Type</label>
+              <select name="system_type" class="form-ctrl">
+                {% for v,lbl in [('off-grid','Off-Grid'),('hybrid','Hybrid'),('grid-tied','Grid-Tied')] %}
+                <option value="{{ v }}" {% if d.get('system_type','off-grid')==v %}selected{% endif %}>{{ lbl }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-4">
+              <label class="form-lbl">AC Phase</label>
+              <select name="phase" class="form-ctrl">
+                <option value="single" {% if d.get('phase','single')=='single' %}selected{% endif %}>Single-Phase 230V</option>
+                <option value="three"  {% if d.get('phase')=='three' %}selected{% endif %}>Three-Phase 415V</option>
+              </select>
+            </div>
+            <div class="col-4">
+              <label class="form-lbl">DC Bus Voltage</label>
+              <select name="voltage" class="form-ctrl">
+                {% for v in [24, 48, 96] %}
+                <option value="{{ v }}" {% if d.get('voltage', 48)==v %}selected{% endif %}>{{ v }}V DC</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Economics & Battery ── -->
+        <div class="form-section">
+          <div class="form-section-head">
+            <i class="bi bi-battery-charging" style="color:#22c55e"></i>Storage &amp; Economics
+          </div>
+          <div class="row g-3">
+            <div class="col-4">
+              <label class="form-lbl">Autonomy (days)</label>
+              <input name="autonomy" type="number" min="1" max="5"
+                     value="{{ d.get('autonomy', 1) }}" class="form-ctrl"/>
+            </div>
+            <div class="col-8">
+              <label class="form-lbl">
+                Electricity Tariff
+                <span id="currLabel" class="ms-1" style="color:#f59e0b;font-weight:800">(local/kWh)</span>
+              </label>
+              <input name="tariff" id="tariffInput" type="number" step="0.001" min="0"
+                     value="{{ d.get('tariff', '') }}" class="form-ctrl"
+                     placeholder="Auto-filled when region is selected"/>
+            </div>
+            <div class="col-6">
+              <label class="form-lbl">Battery Chemistry</label>
+              <select name="chemistry" class="form-ctrl">
+                {% for c in battery_chemistries %}
+                <option value="{{ c }}" {% if d.get('chemistry','LiFePO4')==c %}selected{% endif %}>
+                  {% if c=='LiFePO4' %}LiFePO4 — Lithium Iron Phosphate
+                  {% elif c=='NMC' %}NMC — Nickel Manganese Cobalt
+                  {% else %}LTO — Lithium Titanate (Industrial){% endif %}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-lbl">PV Panel Wattage</label>
+              <select name="panel_wp" class="form-ctrl">
+                {% for wp in panel_options %}
+                <option value="{{ wp }}" {% if d.get('panel_wp', 400)==wp %}selected{% endif %}>{{ wp }} Wp Mono PERC</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Mounting type ── -->
+        <div class="form-section">
+          <div class="form-section-head">
+            <i class="bi bi-house-fill" style="color:#a78bfa"></i>Mounting Type
+          </div>
+          {% set mt = d.get('mounting_type', 'rooftop_pitched') %}
+          <div class="row g-2" id="mountingCards">
+            {% for val,icon,label,desc in [
+              ('rooftop_pitched',  'bi-house-fill',      'Pitched Roof',     'Tile, metal sheet ≥10°'),
+              ('rooftop_flat',     'bi-building',         'Flat Roof',        'Ballast frames on slab'),
+              ('rooftop_metal',    'bi-layout-wtf',       'Metal Sheet',      'IBR / corrugated iron'),
+              ('rooftop_membrane', 'bi-square-fill',      'Membrane Roof',    'Waterproof lightweight'),
+              ('ground_fixed',     'bi-grid-1x2-fill',    'Ground-Fixed',     'Concrete footings, fixed'),
+              ('ground_tracking',  'bi-arrow-repeat',     'Tracking',         'Single-axis +15–25% yield'),
+            ] %}
+            <div class="col-6 col-md-4">
+              <label class="mount-card {% if mt==val %}selected{% endif %}"
+                     onclick="selectMount('{{ val }}', this)">
+                <input type="radio" name="mounting_type" value="{{ val }}"
+                       {% if mt==val %}checked{% endif %}>
+                <i class="bi {{ icon }} d-block mb-1"
+                   style="font-size:22px;color:{% if mt==val %}#f59e0b{% else %}#6868a0{% endif %}"></i>
+                <div class="fw-bold" style="font-size:11px;color:{% if mt==val %}#f59e0b{% else %}#c0c0d8{% endif %}">
+                  {{ label }}
+                </div>
+                <div class="text-secondary" style="font-size:9px;line-height:1.4;margin-top:2px">{{ desc }}</div>
+                {% if mt==val %}
+                <div style="position:absolute;top:6px;right:6px;width:16px;height:16px;border-radius:50%;
+                     background:#f59e0b;display:flex;align-items:center;justify-content:center">
+                  <i class="bi bi-check" style="font-size:10px;color:#000;font-weight:900"></i>
+                </div>
+                {% endif %}
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-solar w-100 mt-2" style="padding:12px;font-size:14px;font-weight:800">
+          <i class="bi bi-lightning-charge me-2"></i>Save &amp; Enter Loads
+          <i class="bi bi-arrow-right ms-2"></i>
+        </button>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- ── RIGHT: Globe + Solar data ──────────────────────────────── -->
+  <div class="col-lg-5">
+
+    <!-- Globe -->
+    <div class="globe-panel">
+      <div id="globeViz" style="width:100%;height:300px"></div>
+      <div id="globeOverlay"
+           style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+                  background:rgba(0,0,0,.6);backdrop-filter:blur(6px);
+                  border:1px solid #f59e0b44;border-radius:20px;
+                  padding:5px 16px;font-size:11px;color:#f59e0b;
+                  letter-spacing:.4px;pointer-events:none;white-space:nowrap;max-width:90%">
+        <i class="bi bi-globe me-1"></i>
+        <span id="globeLabel">Select a country &amp; region</span>
+      </div>
+    </div>
+
+    <!-- Solar resource data -->
+    <div class="solar-res-card" id="solarDataCard">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-sun-fill" style="color:#f59e0b;font-size:16px"></i>
+        <span class="fw-bold" style="font-size:13px;color:#f0d080">Solar Resource Data</span>
+        <span id="regionBadge" class="ms-auto badge"
+              style="background:#f59e0b18;color:#f59e0b;border:1px solid #f59e0b33;font-size:10px"></span>
+      </div>
+      <!-- PSH visual bar -->
+      <div id="pshBlock" class="mb-3 p-3 rounded" style="background:#080816;border:1px solid #1e1e3a">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="res-lbl">Peak Sun Hours</span>
+          <span id="pshVal" class="fw-black" style="font-size:18px"></span>
+        </div>
+        <div class="psh-bar">
+          <div id="pshFill" class="psh-fill"></div>
+        </div>
+        <div id="pshRating" class="mt-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px"></div>
+      </div>
+      <div id="solarInfo"></div>
+    </div>
+
+    <!-- Coverage list -->
+    <div style="background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px;padding:18px">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-geo-fill" style="color:#0ea5e9;font-size:13px"></i>
+        <span class="fw-bold" style="font-size:12px;color:#c0c0e0">{{ countries|length }} Countries Covered</span>
+      </div>
+      <div>
+        {% for c in countries %}
+        <span class="cov-badge">{{ c }}</span>
+        {% endfor %}
+      </div>
+      <div class="text-secondary mt-3" style="font-size:10px;line-height:1.6">
+        <i class="bi bi-database me-1"></i>Solar data from NASA POWER / PVGIS · Updated annually
+      </div>
+    </div>
+
+  </div><!-- /right col -->
+</div><!-- /row -->
+
+<script>
+function selectMount(val, el) {
+  document.querySelectorAll('.mount-card').forEach(c => {
+    c.classList.remove('selected');
+    const ic = c.querySelector('i.bi:not(.bi-check)');
+    const lb = c.querySelector('.fw-bold');
+    const ck = c.querySelector('.bi-check')?.parentElement;
+    if (ic) ic.style.color = '#6868a0';
+    if (lb) lb.style.color = '#c0c0d8';
+    if (ck) ck.remove();
+  });
+  el.classList.add('selected');
+  const ic = el.querySelector('i.bi');
+  const lb = el.querySelector('.fw-bold');
+  if (ic) ic.style.color = '#f59e0b';
+  if (lb) lb.style.color = '#f59e0b';
+  el.querySelector('input[type=radio]').checked = true;
+  // add check dot
+  const dot = document.createElement('div');
+  dot.innerHTML = '<i class="bi bi-check" style="font-size:10px;color:#000;font-weight:900"></i>';
+  dot.style.cssText = 'position:absolute;top:6px;right:6px;width:16px;height:16px;border-radius:50%;background:#f59e0b;display:flex;align-items:center;justify-content:center';
+  el.appendChild(dot);
+}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+<script>
+const globalData = {{ global_data|tojson }};
+
+let rotation  = [0, -20];
+let targetRot = null;
+let marker    = null;
+let landGeo   = null;
+
+function drawFrame() {
+  const canvas = document.getElementById('globeCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const sc = Math.min(W, H) * 0.42;
+
+  const proj = d3.geoOrthographic()
+    .scale(sc).translate([W/2, H/2])
+    .rotate(rotation).clipAngle(90);
+  const geo = d3.geoPath(proj, ctx);
+
+  ctx.clearRect(0, 0, W, H);
+
+  /* Atmosphere glow */
+  const ag = ctx.createRadialGradient(W/2,H/2,sc*.88,W/2,H/2,sc*1.24);
+  ag.addColorStop(0,'rgba(245,158,11,.18)'); ag.addColorStop(1,'rgba(7,7,30,0)');
+  ctx.beginPath(); ctx.arc(W/2,H/2,sc*1.24,0,Math.PI*2);
+  ctx.fillStyle=ag; ctx.fill();
+
+  /* Ocean */
+  ctx.beginPath(); geo({type:'Sphere'});
+  ctx.fillStyle='#07071e'; ctx.fill();
+
+  /* Graticule */
+  ctx.beginPath(); geo(d3.geoGraticule()());
+  ctx.strokeStyle='rgba(245,158,11,.06)'; ctx.lineWidth=0.4; ctx.stroke();
+
+  /* Land */
+  if (landGeo) {
+    ctx.beginPath(); geo(landGeo);
+    ctx.fillStyle='#151538'; ctx.fill();
+    ctx.strokeStyle='rgba(245,158,11,.65)'; ctx.lineWidth=0.6; ctx.stroke();
+  }
+
+  /* Border */
+  ctx.beginPath(); geo({type:'Sphere'});
+  ctx.strokeStyle='rgba(245,158,11,.4)'; ctx.lineWidth=1.8; ctx.stroke();
+
+  /* Marker */
+  if (marker) {
+    const cLon=-rotation[0]*Math.PI/180, cLat=-rotation[1]*Math.PI/180;
+    const mLon=marker.lon*Math.PI/180,   mLat=marker.lat*Math.PI/180;
+    const cosD=Math.sin(cLat)*Math.sin(mLat)+Math.cos(cLat)*Math.cos(mLat)*Math.cos(mLon-cLon);
+    if (cosD > 0) {
+      const [mx,my]=proj([marker.lon,marker.lat]);
+      const mc=marker.saved?'#22c55e':'#f59e0b';
+      const mg=ctx.createRadialGradient(mx,my,0,mx,my,28);
+      mg.addColorStop(0,mc+'99'); mg.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.beginPath(); ctx.arc(mx,my,28,0,Math.PI*2);
+      ctx.fillStyle=mg; ctx.fill();
+      ctx.beginPath(); ctx.arc(mx,my,7,0,Math.PI*2);
+      ctx.fillStyle=mc; ctx.fill();
+      ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+      /* Pulse ring */
+      ctx.beginPath(); ctx.arc(mx,my,14,0,Math.PI*2);
+      ctx.strokeStyle=mc+'66'; ctx.lineWidth=2; ctx.stroke();
+    }
+  }
+}
+
+function tick() {
+  if (targetRot) {
+    let dl=targetRot[0]-rotation[0], dp=targetRot[1]-rotation[1];
+    while(dl>180)dl-=360; while(dl<-180)dl+=360;
+    if(Math.abs(dl)<0.25&&Math.abs(dp)<0.25){rotation=[...targetRot];targetRot=null;}
+    else{rotation[0]+=dl*0.06;rotation[1]+=dp*0.06;}
+  } else {
+    rotation[0]=(rotation[0]+0.2)%360;
+  }
+  drawFrame();
+  requestAnimationFrame(tick);
+}
+
+function initGlobe() {
+  const wrap=document.getElementById('globeViz');
+  const canvas=document.createElement('canvas');
+  canvas.id='globeCanvas';
+  canvas.style.cssText='width:100%;height:100%;display:block;';
+  canvas.width=wrap.clientWidth||600;
+  canvas.height=wrap.clientHeight||300;
+  wrap.innerHTML=''; wrap.appendChild(canvas);
+  new ResizeObserver(()=>{
+    canvas.width=wrap.clientWidth;
+    canvas.height=wrap.clientHeight||300;
+  }).observe(wrap);
+  tick();
+  fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json')
+    .then(r=>r.json()).then(w=>{landGeo=topojson.feature(w,w.objects.land);})
+    .catch(()=>{});
+}
+
+function flyToLocation(lat,lon,label,saved){
+  marker={lat,lon,saved:!!saved};
+  targetRot=[-lon,-lat];
+  document.getElementById('globeLabel').textContent=
+    '\u{1F4CD} '+label+'  |  '+lat.toFixed(2)+'°, '+lon.toFixed(2)+'°';
+}
+
+function loadRegions(){
+  const country=document.getElementById('countrySelect').value;
+  const sel=document.getElementById('regionSelect');
+  sel.innerHTML='<option value="">— Select Region —</option>';
+  document.getElementById('solarDataCard').style.display='none';
+  if(!country) return;
+  const regions=Object.keys(globalData[country]?.regions||{});
+  regions.forEach(r=>{
+    const o=document.createElement('option'); o.value=r; o.textContent=r;
+    sel.appendChild(o);
+  });
+  if(regions.length===1){sel.value=regions[0]; loadSolarData();}
+}
+
+function loadSolarData(){
+  const country=document.getElementById('countrySelect').value;
+  const region =document.getElementById('regionSelect').value;
+  if(!country||!region) return;
+  const cd=globalData[country];
+  const rd=cd?.regions?.[region];
+  if(!rd) return;
+
+  const card=document.getElementById('solarDataCard');
+  card.style.display='block';
+  document.getElementById('tariffInput').value=cd.tariff;
+  document.getElementById('currLabel').textContent=`(${cd.currency}/kWh)`;
+  document.getElementById('regionBadge').textContent=`${region}, ${country}`;
+
+  /* PSH rating */
+  const psh=rd.psh;
+  const rating=psh>=6?'Excellent':psh>=5.5?'Very Good':psh>=5?'Good':psh>=4?'Moderate':'Low';
+  const color=psh>=6?'#f59e0b':psh>=5.5?'#fbbf24':psh>=5?'#22c55e':psh>=4?'#0ea5e9':'#6868a0';
+  document.getElementById('pshVal').textContent=psh+' h/day';
+  document.getElementById('pshVal').style.color=color;
+  document.getElementById('pshFill').style.cssText=`width:${Math.min(psh/8*100,100)}%;background:${color}`;
+  document.getElementById('pshRating').textContent=rating;
+  document.getElementById('pshRating').style.color=color;
+
+  const derating=(1-Math.max(0,(rd.temp-25)*0.004)).toFixed(4);
+  document.getElementById('solarInfo').innerHTML=`
+    <div class="res-row"><span class="res-lbl">Avg. Ambient Temp</span><span class="res-val">${rd.temp} °C</span></div>
+    <div class="res-row"><span class="res-lbl">Temp Derating Factor</span><span class="res-val">${derating}</span></div>
+    <div class="res-row"><span class="res-lbl">Electricity Tariff</span><span class="res-val">${cd.symbol} ${cd.tariff}/kWh</span></div>
+    <div class="res-row"><span class="res-lbl">Currency</span><span class="res-val">${cd.currency}</span></div>
+    <div class="res-row"><span class="res-lbl">Est. Install Cost</span><span class="res-val">$${cd.cost_usd_kwp}/kWp</span></div>
+    <div class="res-row"><span class="res-lbl">Coordinates</span><span class="res-val">${rd.lat}°N, ${rd.lon}°E</span></div>
+  `;
+  flyToLocation(rd.lat,rd.lon,`${region}, ${country}`,false);
+}
+
+document.getElementById('locForm').addEventListener('submit',function(){
+  const country=document.getElementById('countrySelect').value;
+  const region =document.getElementById('regionSelect').value;
+  if(country&&region){
+    const rd=globalData[country]?.regions?.[region];
+    if(rd) flyToLocation(rd.lat,rd.lon,`${region}, ${country}`,true);
+  }
+});
+
+window.addEventListener('DOMContentLoaded',()=>{
+  initGlobe();
+  const country=document.getElementById('countrySelect').value;
+  if(country){
+    loadRegions();
+    {% if project.data.get('region') %}
+    document.getElementById('regionSelect').value={{ project.data.get('region','')|tojson }};
+    loadSolarData();
+    {% endif %}
+  }
+});
+</script>
+{% endblock %}

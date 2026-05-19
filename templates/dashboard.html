@@ -1,0 +1,453 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — SolarPro Global{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── Header ── */
+  .dash-header{background:linear-gradient(135deg,#0d0d20 0%,#131330 60%,#0a0a1c 100%);
+    border:1px solid #1e1e3a;border-radius:18px;padding:28px 32px;margin-bottom:28px;
+    position:relative;overflow:hidden}
+  .dash-header::before{content:'';position:absolute;top:-60px;right:-60px;width:220px;height:220px;
+    border-radius:50%;background:radial-gradient(circle,var(--solar-gold-faint) 0%,transparent 70%)}
+  .usage-track{height:6px;border-radius:3px;background:#1e1e3a;overflow:hidden;margin-top:6px}
+  .usage-fill{height:100%;border-radius:3px;
+    background:linear-gradient(90deg,var(--solar-gold),var(--solar-orange));transition:.5s}
+  .usage-fill.warn{background:linear-gradient(90deg,#f97316,#ef4444)}
+
+  /* ── KPI ── */
+  .kpi-tile{background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px;
+    padding:18px;text-align:center;transition:.15s}
+  .kpi-tile:hover{border-color:#2a2a4a}
+
+  /* ── Quick actions ── */
+  .qa-tile{background:#0f0f22;border:1px solid #1e1e3a;border-radius:12px;
+    padding:16px 18px;text-decoration:none;display:flex;align-items:center;gap:12px;
+    transition:.15s;color:#e2e2f0}
+  .qa-tile:hover{color:#f0f0f8;text-decoration:none;border-color:#2a2a5a;
+    transform:translateY(-1px);box-shadow:0 4px 20px rgba(0,0,0,.3)}
+  .qa-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;
+    justify-content:center;font-size:18px;flex-shrink:0}
+
+  /* ── Project cards ── */
+  .project-card{background:#0f0f22;border:1px solid #1e1e3a;border-radius:16px;
+    padding:20px;transition:.2s;height:100%;display:flex;flex-direction:column;
+    position:relative;overflow:hidden}
+  .project-card:hover{border-color:#2a2a5a;box-shadow:0 6px 28px rgba(0,0,0,.35)}
+  .project-card.stage-results{border-left:3px solid #22c55e}
+  .project-card.stage-loads{border-left:3px solid #0ea5e9}
+  .project-card.stage-location{border-left:3px solid #f59e0b}
+  .project-card.stage-new{border-left:3px solid #2a2a5a}
+  .project-card.hidden{display:none}
+
+  /* KPI mini-tiles inside card */
+  .sys-tile{flex:1;text-align:center;padding:8px 4px;border-radius:8px;background:rgba(255,255,255,.03)}
+
+  /* Progress stepper */
+  .step-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;transition:.3s}
+  .step-line{flex:1;height:2px;border-radius:1px}
+  .step-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-top:3px}
+
+  /* Tags */
+  .proj-tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:9px;
+    font-weight:700;background:#1e1e3a;color:#5a5a8a;border:1px solid #252545}
+
+  /* Verdict / bankability chips */
+  .verdict-chip{display:inline-block;padding:2px 8px;border-radius:8px;font-size:9px;
+    font-weight:800;text-transform:uppercase;letter-spacing:.3px}
+
+  /* Filter bar */
+  .filter-bar{background:#0f0f22;border:1px solid #1e1e3a;border-radius:10px;
+    padding:10px 14px;margin-bottom:20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .search-input{background:#080816;border:1px solid #2a2a5a;border-radius:8px;
+    padding:6px 12px;color:#d0d0e8;font-size:12px;flex:1;min-width:160px;max-width:260px}
+  .search-input:focus{outline:none;border-color:#f59e0b55}
+  .stage-btn{padding:4px 12px;border-radius:16px;font-size:10px;font-weight:700;
+    border:1px solid transparent;cursor:pointer;transition:.15s;background:transparent;color:#5a5a8a}
+  .stage-btn:hover{color:#c0c0e0;background:rgba(255,255,255,.04)}
+  .stage-btn.active{background:rgba(255,255,255,.07);border-color:#2a2a5a;color:#e0e0f0}
+
+  /* icon action buttons */
+  .icon-btn{width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+    border-radius:8px;border:1px solid #2a2a5a;background:#1e1e3a;color:#6868a0;
+    text-decoration:none;transition:.15s;flex-shrink:0}
+  .icon-btn:hover{border-color:#4a4a7a;color:#b0b0d0;text-decoration:none}
+  .icon-btn.danger:hover{border-color:#ef444466;color:#ef4444;background:#ef444412}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% set plan_color = '#a78bfa' if plan=='enterprise' else '#0ea5e9' if plan=='professional' else '#22c55e' if plan=='basic' else '#f59e0b' if plan=='demo' else '#6868a0' %}
+{% set plan_icon  = 'bi-star-fill' if plan=='enterprise' else 'bi-lightning-fill' if plan=='professional' else 'bi-check-circle-fill' if plan=='basic' else 'bi-gift-fill' if plan=='demo' else 'bi-person-fill' %}
+{% set proj_limit = limit if limit < 9999 else '∞' %}
+{% set usage_pct  = ([projects|length / limit * 100, 100]|min)|int if limit < 9999 else 5 %}
+{% set first_name = (user.name or user.username).split()[0] %}
+
+<!-- ── Gradient header ────────────────────────────────────────────────── -->
+<div class="dash-header">
+  <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+    <div>
+      <div class="fw-black mb-1" style="font-size:22px;color:#f0f0f8">
+        Welcome back, {{ first_name }}
+      </div>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="badge" style="background:{{ plan_color }}20;color:{{ plan_color }};
+              border:1px solid {{ plan_color }}44;font-size:10px;padding:4px 10px">
+          <i class="bi {{ plan_icon }} me-1"></i>{{ plan|upper }} PLAN
+        </span>
+        <span class="text-secondary small">
+          {{ projects|length }} / {{ proj_limit }} project{{ 's' if limit != 1 }} used
+        </span>
+      </div>
+      {% if limit < 9999 %}
+      <div style="width:200px;margin-top:10px">
+        <div class="usage-track">
+          <div class="usage-fill {% if usage_pct >= 90 %}warn{% endif %}"
+               style="width:{{ usage_pct }}%"></div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    <div class="d-flex gap-2 align-items-start flex-wrap">
+      {% if at_limit %}
+      <a href="{{ url_for('upgrade') }}" class="btn btn-warning fw-bold btn-sm">
+        <i class="bi bi-arrow-up-circle me-1"></i>Upgrade to Add More
+      </a>
+      {% else %}
+      <a href="{{ url_for('project_new') }}" class="btn btn-solar">
+        <i class="bi bi-plus-lg me-1"></i>New Project
+      </a>
+      {% endif %}
+      <a href="{{ url_for('account') }}" class="btn btn-sm"
+         style="background:rgba(255,255,255,.06);border:1px solid #2a2a5a;color:#9090c0">
+        <i class="bi bi-person-circle me-1"></i>Account
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- ── KPI strip ──────────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+  {% for icon,color,lbl,val,unit in [
+    ('bi-folder2-open',        plan_color, 'Projects',     projects|length,         (limit|string ~ ' max') if limit < 9999 else 'Unlimited'),
+    ('bi-sun-fill',            '#f59e0b',  'PV Designed',  total_kwp|string~' kWp', 'solar capacity'),
+    ('bi-battery-charging',    '#22c55e',  'Storage',      total_kwh|string~' kWh', 'battery capacity'),
+    ('bi-headset',             '#0ea5e9',  'Open Tickets', open_tickets,             'awaiting response'),
+    ('bi-envelope-check-fill', '#a78bfa',  'Emails Sent',  emails_sent,              'report deliveries'),
+  ] %}
+  <div class="col-6 col-md">
+    <div class="kpi-tile">
+      <div style="font-size:18px;color:{{ color }};margin-bottom:6px"><i class="bi {{ icon }}"></i></div>
+      <div style="font-size:9px;color:#5050a0;font-weight:700;text-transform:uppercase;letter-spacing:.5px">{{ lbl }}</div>
+      <div style="font-size:20px;font-weight:900;background:linear-gradient(90deg,{{ color }},{{ color }}bb);
+           -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:4px 0">
+        {{ val }}
+      </div>
+      <div style="font-size:10px;color:#3a3a6a">{{ unit }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ── Quick actions ──────────────────────────────────────────────────── -->
+<div class="row g-2 mb-4">
+  {% for href,icon,bg,title,sub in [
+    (url_for('project_new'),  'bi-plus-circle-fill',     '#f59e0b', 'New Project',   'Start a solar design'),
+    (url_for('procurement'),  'bi-truck-front-fill',     '#0ea5e9', 'Procurement',   'Source equipment'),
+    (url_for('tickets'),      'bi-headset',              '#22c55e', 'Support',       'Get help'),
+    (url_for('upgrade'),      'bi-arrow-up-circle-fill', '#a78bfa', 'Upgrade Plan',  'Unlock all features'),
+  ] %}
+  <div class="col-6 col-md-3">
+    <a href="{{ href }}" class="qa-tile h-100">
+      <div class="qa-icon" style="background:{{ bg }}18;border:1px solid {{ bg }}30">
+        <i class="bi {{ icon }}" style="color:{{ bg }}"></i>
+      </div>
+      <div>
+        <div class="fw-bold" style="font-size:13px">{{ title }}</div>
+        <div class="text-secondary" style="font-size:11px">{{ sub }}</div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ── Projects ───────────────────────────────────────────────────────── -->
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div class="section-head mb-0">
+    <i class="bi bi-folder2-open me-2"></i>My Projects
+    {% if projects %}
+    <span class="badge ms-1" style="background:#1e1e3a;color:#6060a0;font-size:10px">
+      {{ projects|length }}
+    </span>
+    {% endif %}
+  </div>
+  {% if not at_limit %}
+  <a href="{{ url_for('project_new') }}" class="btn btn-solar btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>New Project
+  </a>
+  {% endif %}
+</div>
+
+{% if projects %}
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <input type="text" id="projSearch" class="search-input"
+         placeholder="Search projects…" oninput="filterProjects()">
+  <div class="d-flex gap-1 flex-wrap">
+    {% for key,label in [('all','All'),('results','Complete'),('loads','In Progress'),('location','Started'),('new','New')] %}
+    <button class="stage-btn {% if loop.first %}active{% endif %}"
+            data-stage="{{ key }}" onclick="setStageFilter(this)">{{ label }}</button>
+    {% endfor %}
+  </div>
+  <span id="projCount" class="text-secondary ms-auto" style="font-size:11px">
+    {{ projects|length }} project{{ 's' if projects|length != 1 }}
+  </span>
+</div>
+
+<div class="row g-3" id="projectGrid">
+{% for p in projects %}
+
+{% set vc = '#22c55e' if p.verdict=='APPROVED' else '#f59e0b' if p.verdict=='CONDITIONAL' else '#ef4444' if p.verdict=='REJECTED' else '' %}
+{% set bc = '#22c55e' if p.bankability=='BANKABLE' else '#f59e0b' if p.bankability=='MARGINAL' else '#ef4444' if p.bankability=='NOT BANKABLE' else '' %}
+{% set stage_steps = [('location','#f59e0b'),('loads','#0ea5e9'),('results','#22c55e')] %}
+{% set stage_idx   = 0 if p.stage=='location' else 1 if p.stage=='loads' else 2 if p.stage=='results' else -1 %}
+
+<div class="col-md-6 col-xl-4 proj-col"
+     data-stage="{{ p.stage }}"
+     data-search="{{ p.name|lower }} {{ (p.country or '')|lower }} {{ (p.location or '')|lower }}">
+  <div class="project-card stage-{{ p.stage }}">
+
+    <!-- Header row -->
+    <div class="d-flex align-items-start justify-content-between gap-2 mb-3">
+      <div class="flex-grow-1" style="min-width:0">
+        <div class="fw-black text-truncate" style="font-size:15px;color:#f0f0f8">{{ p.name }}</div>
+        <div class="d-flex align-items-center gap-1 mt-1" style="font-size:11px">
+          {% if p.country %}
+          <i class="bi bi-geo-alt-fill" style="color:#f59e0b;font-size:10px"></i>
+          <span class="text-secondary text-truncate">
+            {% if p.location and p.location != p.country %}{{ p.location }}, {% endif %}{{ p.country }}
+          </span>
+          {% else %}
+          <i class="bi bi-geo-alt text-secondary" style="font-size:10px"></i>
+          <span class="text-secondary">Location not set</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="text-end flex-shrink-0">
+        <div style="font-size:10px;color:#3a3a6a;font-weight:700">#{{ p.id }}</div>
+        {% if p.verdict and vc %}
+        <div class="verdict-chip mt-1" style="background:{{ vc }}18;color:{{ vc }};border:1px solid {{ vc }}33">
+          {{ p.verdict }}
+        </div>
+        {% elif p.stage == 'results' %}
+        <div class="verdict-chip mt-1" style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e33">
+          COMPLETE
+        </div>
+        {% elif p.stage == 'loads' %}
+        <div class="verdict-chip mt-1" style="background:#0ea5e918;color:#0ea5e9;border:1px solid #0ea5e933">
+          IN PROGRESS
+        </div>
+        {% elif p.stage == 'location' %}
+        <div class="verdict-chip mt-1" style="background:#f59e0b18;color:#f59e0b;border:1px solid #f59e0b33">
+          STARTED
+        </div>
+        {% else %}
+        <div class="verdict-chip mt-1" style="background:#2a2a5a18;color:#5050a0;border:1px solid #2a2a5a">
+          NEW
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- System KPIs (calculated projects only) -->
+    {% if p.pv_kw > 0 %}
+    <div class="d-flex gap-2 mb-3">
+      {% for lbl,val,unit,col in [
+        ('PV Array', p.pv_kw,   'kWp', '#f59e0b'),
+        ('Battery',  p.bat_kwh, 'kWh', '#22c55e'),
+        ('Inverter', p.inv_kw,  'kW',  '#0ea5e9'),
+      ] %}
+      <div class="sys-tile">
+        <div class="fw-black" style="font-size:16px;color:{{ col }}">{{ val }}</div>
+        <div style="font-size:8px;color:#4a4a7a;font-weight:700;text-transform:uppercase;letter-spacing:.3px">{{ lbl }}</div>
+        <div style="font-size:9px;color:#3a3a6a">{{ unit }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Financial snapshot -->
+    <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
+      {% if p.total_local %}
+      <div style="font-size:12px">
+        <span class="fw-bold" style="color:#f59e0b">{{ p.symbol }}{{ '{:,.0f}'.format(p.total_local) }}</span>
+        <span class="text-secondary ms-1">CAPEX</span>
+      </div>
+      {% endif %}
+      {% if p.payback %}
+      <div style="font-size:12px">
+        <span class="fw-bold" style="color:#0ea5e9">{{ '%.1f'|format(p.payback) }} yr</span>
+        <span class="text-secondary ms-1">payback</span>
+      </div>
+      {% endif %}
+      {% if bc %}
+      <span class="verdict-chip" style="background:{{ bc }}18;color:{{ bc }};border:1px solid {{ bc }}33">
+        {{ p.bankability }}
+      </span>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Progress stepper -->
+    <div class="mb-3">
+      <div class="d-flex align-items-center gap-1 mb-1">
+        {% for step_key, step_color in stage_steps %}
+        {% set done = stage_idx >= loop.index0 %}
+        {% set active = stage_idx == loop.index0 %}
+        <div class="step-dot" style="
+             background:{{ step_color if done else '#1e1e3a' }};
+             box-shadow:{{ '0 0 7px '~step_color if active else 'none' }};
+             border:1px solid {{ step_color~'44' if done else '#2a2a4a' }}"></div>
+        {% if not loop.last %}
+        <div class="step-line" style="background:{{ 'linear-gradient(90deg,'~step_color~','~stage_steps[loop.index0+1][1]~'55)' if done else '#1e1e3a' }}"></div>
+        {% endif %}
+        {% endfor %}
+      </div>
+      <div class="d-flex justify-content-between" style="padding:0 1px">
+        {% for step_key, step_color in stage_steps %}
+        {% set done = stage_idx >= loop.index0 %}
+        <div class="step-label" style="color:{{ step_color if done else '#2a2a5a' }}">
+          {{ step_key|title }}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Tags -->
+    <div class="d-flex gap-1 flex-wrap mb-3">
+      {% if p.system_type %}
+      <span class="proj-tag">{{ p.system_type|replace('-',' ')|title }}</span>
+      {% endif %}
+      {% if p.phase %}
+      <span class="proj-tag">{{ '3-Phase' if p.phase=='three' else '1-Phase' }}</span>
+      {% endif %}
+      {% if p.num_panels %}
+      <span class="proj-tag">{{ p.num_panels }} panels</span>
+      {% endif %}
+    </div>
+
+    <!-- Footer -->
+    <div class="mt-auto pt-3" style="border-top:1px solid #131328">
+      <div class="d-flex align-items-center justify-content-between gap-2">
+        <span class="text-secondary" style="font-size:10px">
+          <i class="bi bi-clock me-1"></i>{{ p.updated }}
+        </span>
+        <div class="d-flex align-items-center gap-1">
+          <a href="{{ url_for('project_location', pid=p.id) }}" class="icon-btn" title="Location">
+            <i class="bi bi-geo-alt" style="font-size:12px"></i>
+          </a>
+          <a href="{{ url_for('project_loads', pid=p.id) }}" class="icon-btn" title="Loads">
+            <i class="bi bi-lightning" style="font-size:12px"></i>
+          </a>
+          {% if p.stage == 'results' %}
+          <a href="{{ url_for('project_results', pid=p.id) }}" class="btn btn-solar btn-sm py-1 px-3 ms-1">
+            <i class="bi bi-bar-chart-fill me-1"></i>Results
+          </a>
+          {% else %}
+          <a href="{{ url_for('project_loads', pid=p.id) }}" class="btn btn-sm py-1 px-3 ms-1"
+             style="background:#f59e0b18;border:1px solid #f59e0b44;color:#f59e0b">
+            <i class="bi bi-play-fill me-1"></i>Continue
+          </a>
+          {% endif %}
+          <form method="POST" action="{{ url_for('project_delete', pid=p.id) }}"
+                onsubmit="return confirm('Delete &quot;{{ p.name }}&quot;? This cannot be undone.')">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button type="submit" class="icon-btn danger" title="Delete">
+              <i class="bi bi-trash" style="font-size:12px"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endfor %}
+</div><!-- /row -->
+
+<!-- No filter results -->
+<div id="noProjects" class="solar-card p-4 text-center" style="display:none">
+  <i class="bi bi-search d-block mb-2" style="font-size:28px;color:#2a2a5a"></i>
+  <div class="text-secondary small">No projects match your filter.</div>
+</div>
+
+<!-- At-limit banner -->
+{% if at_limit and plan != 'enterprise' %}
+<div class="mt-4 p-4 rounded-3 d-flex align-items-center gap-4 flex-wrap"
+     style="background:linear-gradient(135deg,#1a0f00,#120a00);border:1px solid #f59e0b44">
+  <div style="font-size:34px;color:#f59e0b;flex-shrink:0"><i class="bi bi-arrow-up-circle-fill"></i></div>
+  <div class="flex-grow-1">
+    <div class="fw-black mb-1" style="color:#f0d080">Project limit reached</div>
+    <div class="text-secondary small">
+      {{ plan|title }} plan allows {{ limit }} project{{ 's' if limit!=1 }}.
+      Upgrade to <strong style="color:#0ea5e9">Professional</strong> (20 projects, $29/mo) or
+      <strong style="color:#f59e0b">Enterprise</strong> (unlimited, $99/mo).
+    </div>
+  </div>
+  <a href="{{ url_for('upgrade') }}" class="btn btn-solar btn-sm px-4 flex-shrink-0">
+    <i class="bi bi-stars me-1"></i>View Plans
+  </a>
+</div>
+{% endif %}
+
+{% else %}
+<!-- ── Empty state ────────────────────────────────────────────────────── -->
+<div class="solar-card p-5 text-center" style="border-style:dashed;border-color:#2a2a5a">
+  <div style="font-size:64px;margin-bottom:16px;line-height:1;
+       background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));
+       -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
+    <i class="bi bi-sun"></i>
+  </div>
+  <div class="fw-black mb-2" style="font-size:20px;color:#d0d0e8">No projects yet</div>
+  <div class="text-secondary mb-4" style="max-width:380px;margin:0 auto;font-size:13px;line-height:1.7">
+    Create your first solar PV project to run full engineering calculations,
+    generate professional reports, and build a bankable investment proposal.
+  </div>
+  <a href="{{ url_for('project_new') }}" class="btn btn-solar btn-lg px-5">
+    <i class="bi bi-plus-lg me-2"></i>Create First Project
+  </a>
+  <div class="text-secondary mt-3" style="font-size:11px">
+    <i class="bi bi-clock me-1"></i>Typically 5–10 minutes for a complete design
+  </div>
+</div>
+{% endif %}
+
+<script>
+let activeStage = 'all';
+
+function filterProjects() {
+  const q    = document.getElementById('projSearch').value.toLowerCase();
+  const cols = document.querySelectorAll('#projectGrid .proj-col');
+  let visible = 0;
+  cols.forEach(c => {
+    const matchStage  = activeStage === 'all' || c.dataset.stage === activeStage;
+    const matchSearch = !q || c.dataset.search.includes(q);
+    const show = matchStage && matchSearch;
+    c.classList.toggle('hidden', !show);
+    if (show) visible++;
+  });
+  document.getElementById('projCount').textContent =
+    visible + ' project' + (visible !== 1 ? 's' : '');
+  const noP = document.getElementById('noProjects');
+  if (noP) noP.style.display = visible === 0 ? '' : 'none';
+}
+
+function setStageFilter(btn) {
+  document.querySelectorAll('.stage-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeStage = btn.dataset.stage;
+  filterProjects();
+}
+</script>
+
+{% endblock %}

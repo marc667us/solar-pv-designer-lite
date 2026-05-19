@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Solar News Feed — Admin{% endblock %}
+{% block content %}
+<div class="container-xl py-4">
+<div class="d-flex align-items-center gap-3 mb-4">
+  <div style="font-size:32px;color:var(--solar-gold)"><i class="bi bi-newspaper"></i></div>
+  <div>
+    <h4 class="fw-black mb-0">Solar News Feed</h4>
+    <div class="text-secondary small">Manage industry news shown on the landing page</div>
+  </div>
+  <div class="ms-auto">
+    <button class="btn btn-solar btn-sm" data-bs-toggle="modal" data-bs-target="#newPostModal">
+      <i class="bi bi-plus-circle me-1"></i>New Post
+    </button>
+  </div>
+</div>
+
+<!-- New post modal -->
+<div class="modal fade" id="newPostModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content bg-dark border-secondary">
+      <div class="modal-header border-secondary">
+        <h6 class="modal-title">Create News Post</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="create">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small">Title</label>
+            <input type="text" name="title" required class="form-control bg-dark text-light border-secondary">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Category</label>
+            <select name="category" class="form-select bg-dark text-light border-secondary">
+              {% for c in ['industry','technology','market','policy'] %}
+              <option value="{{ c }}">{{ c.title() }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Content</label>
+            <textarea name="content" rows="5" required class="form-control bg-dark text-light border-secondary"></textarea>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="publish" id="pub1" checked>
+            <label class="form-check-label small" for="pub1">Publish immediately</label>
+          </div>
+        </div>
+        <div class="modal-footer border-secondary">
+          <button type="submit" class="btn btn-solar btn-sm">Create Post</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Posts list -->
+<div class="row g-3">
+{% for p in posts %}
+<div class="col-md-6">
+  <div class="solar-card p-4 h-100">
+    <div class="d-flex justify-content-between align-items-start mb-2">
+      <span class="badge bg-dark border small">{{ p.category }}</span>
+      {% if p.is_published %}
+      <span class="badge bg-success">Published</span>
+      {% else %}
+      <span class="badge bg-secondary">Draft</span>
+      {% endif %}
+    </div>
+    <h6 class="fw-bold mb-2">{{ p.title }}</h6>
+    <p class="small text-secondary mb-3">{{ p.content[:200] }}{% if p.content|length > 200 %}…{% endif %}</p>
+    <div class="text-secondary small mb-3">{{ p.created_at[:10] }}</div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-warning btn-sm" data-bs-toggle="modal"
+              data-bs-target="#editModal{{ p.id }}">
+        <i class="bi bi-pencil me-1"></i>Edit
+      </button>
+      <form method="POST" class="d-inline">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="delete">
+        <input type="hidden" name="nid" value="{{ p.id }}">
+        <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Delete this post?')">
+          <i class="bi bi-trash"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal fade" id="editModal{{ p.id }}" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content bg-dark border-secondary">
+      <div class="modal-header border-secondary">
+        <h6 class="modal-title">Edit Post</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="edit">
+        <input type="hidden" name="nid" value="{{ p.id }}">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small">Title</label>
+            <input type="text" name="title" value="{{ p.title }}" required class="form-control bg-dark text-light border-secondary">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Category</label>
+            <select name="category" class="form-select bg-dark text-light border-secondary">
+              {% for c in ['industry','technology','market','policy'] %}
+              <option value="{{ c }}" {% if p.category==c %}selected{% endif %}>{{ c.title() }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Content</label>
+            <textarea name="content" rows="5" required class="form-control bg-dark text-light border-secondary">{{ p.content }}</textarea>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="publish" id="pub{{ p.id }}" {% if p.is_published %}checked{% endif %}>
+            <label class="form-check-label small" for="pub{{ p.id }}">Published</label>
+          </div>
+        </div>
+        <div class="modal-footer border-secondary">
+          <button type="submit" class="btn btn-solar btn-sm">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="col-12 text-center text-secondary py-5">No news posts yet. Create one above.</div>
+{% endfor %}
+</div>
+</div>
+{% endblock %}

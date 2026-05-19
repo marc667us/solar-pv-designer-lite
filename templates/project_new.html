@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}New Project — SolarPro Global{% endblock %}
+{% block content %}
+
+<div class="mb-3">
+  <a href="{{ url_for('dashboard') }}" class="text-secondary small text-decoration-none">
+    <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+  </a>
+</div>
+
+<div class="row g-4">
+
+  <!-- ── Left: Create form ──────────────────────────────────────────────── -->
+  <div class="col-md-{% if sales_data %}5{% else %}6 offset-md-3{% endif %}">
+
+    <div class="solar-card p-4 mb-4">
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <div style="font-size:32px;color:var(--solar-gold)"><i class="bi bi-folder-plus"></i></div>
+        <div>
+          <div class="fw-black fs-5 mb-0">New Solar Project</div>
+          <div class="text-secondary small">Give it a name and we'll walk through the design</div>
+        </div>
+      </div>
+      <form method="POST">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="mb-4">
+          <label class="form-label small fw-bold text-secondary text-uppercase" style="letter-spacing:.5px">
+            Project Name
+          </label>
+          <input name="name" class="form-control form-control-lg bg-dark text-light border-secondary"
+                 placeholder="e.g. Office Building — Lagos" required autofocus/>
+          <div class="form-text text-secondary small mt-2">
+            <i class="bi bi-lightbulb me-1 text-warning"></i>
+            Use a descriptive name — include the site or client for easy reference.
+          </div>
+        </div>
+        <button type="submit" class="btn btn-solar w-100 btn-lg">
+          <i class="bi bi-arrow-right me-2"></i>Create & Set Location
+        </button>
+      </form>
+    </div>
+
+    <!-- Plan info -->
+    {% set plan_color = '#a78bfa' if plan=='enterprise' else '#0ea5e9' if plan=='professional' else '#22c55e' if plan=='basic' else '#f59e0b' if plan=='demo' else '#6868a0' %}
+    <div class="solar-card p-3 mb-4" style="border-color:{{ plan_color }}44">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <span class="badge" style="background:{{ plan_color }}22;color:{{ plan_color }};border:1px solid {{ plan_color }}44">
+            {{ plan|upper }} PLAN
+          </span>
+          <span class="text-secondary small ms-2">
+            {{ count }} / {{ limit if limit < 9999 else '∞' }} project{{ 's' if limit != 1 }} used
+          </span>
+        </div>
+        {% if plan == 'free' %}
+        <a href="{{ url_for('upgrade') }}" class="btn btn-solar btn-sm">
+          <i class="bi bi-stars me-1"></i>Upgrade
+        </a>
+        {% endif %}
+      </div>
+      {% if plan == 'free' %}
+      <div class="text-secondary small mt-2">
+        Free plan: 1 project · Full calculations · Pre-Installation Assessment PDF.
+        <a href="{{ url_for('upgrade') }}" class="text-warning">Upgrade to Professional</a> for 20 projects,
+        all 9 reports, Excel/Word export, and procurement planning.
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Workflow steps -->
+    <div class="solar-card p-4">
+      <div class="section-head mb-3"><i class="bi bi-diagram-3 me-2"></i>What Happens Next</div>
+      {% for n,icon,color,title,desc in [
+        (1,'bi-geo-alt-fill',     '#f59e0b','Set Location',   'Country, region, coordinates — irradiance loaded automatically.'),
+        (2,'bi-lightning-fill',   '#0ea5e9','Enter Loads',    'Add appliances, wattage, and hours of use per day.'),
+        (3,'bi-calculator-fill',  '#22c55e','Run Calculations','PV, battery, inverter sizing + economics in seconds.'),
+        (4,'bi-file-earmark-pdf', '#a78bfa','Download Reports','9 professional PDF reports ready to send to clients or banks.'),
+      ] %}
+      <div class="d-flex gap-3 align-items-start {% if not loop.last %}mb-3 pb-3{% endif %}"
+           {% if not loop.last %}style="border-bottom:1px solid #1e1e3a"{% endif %}>
+        <div style="width:32px;height:32px;border-radius:50%;background:{{ color }}18;
+             border:1px solid {{ color }}44;display:flex;align-items:center;
+             justify-content:center;font-size:12px;font-weight:900;color:{{ color }};flex-shrink:0">
+          {{ n }}
+        </div>
+        <div>
+          <div class="fw-bold small">{{ title }}</div>
+          <div class="text-secondary" style="font-size:12px">{{ desc }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  <!-- ── Right: Sales & Marketing panel (admin only) ───────────────────── -->
+  {% if sales_data %}
+  <div class="col-md-7">
+
+    <!-- Sales KPIs -->
+    <div class="row g-2 mb-3">
+      {% for icon,color,lbl,val in [
+        ('bi-person-plus-fill',   '#ef4444', 'New Leads',    sales_data.new_leads),
+        ('bi-people-fill',        '#f59e0b', 'Total Leads',  sales_data.total_leads),
+        ('bi-envelope-heart-fill','#a78bfa', 'Subscribers',  sales_data.subs),
+        ('bi-person-check-fill',  '#22c55e', 'Paid Users',   sales_data.paid_users),
+        ('bi-cash-stack',         '#0ea5e9', 'Revenue (USD)','$'~(sales_data.total_rev|int)),
+      ] %}
+      <div class="col">
+        <div class="kpi-card text-center p-3">
+          <div style="font-size:16px;color:{{ color }}"><i class="bi {{ icon }}"></i></div>
+          <div class="kpi-label" style="font-size:9px;margin-top:4px">{{ lbl }}</div>
+          <div class="kpi-value" style="font-size:16px">{{ val }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Recent leads -->
+    <div class="solar-card p-4 mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="section-head mb-0">
+          <i class="bi bi-person-lines-fill me-2"></i>Recent Leads
+          {% if sales_data.new_leads %}
+          <span class="badge ms-1" style="background:#ef444422;color:#ef4444;border:1px solid #ef444444;font-size:10px">
+            {{ sales_data.new_leads }} new
+          </span>
+          {% endif %}
+        </div>
+        <a href="{{ url_for('admin_leads') }}" class="btn btn-outline-warning btn-sm" style="font-size:11px">
+          Manage All →
+        </a>
+      </div>
+      {% if sales_data.recent_leads %}
+      {% set sc = {'new':'#ef4444','contacted':'#0ea5e9','qualified':'#f59e0b','converted':'#22c55e','closed':'#6868a0'} %}
+      {% for ld in sales_data.recent_leads %}
+      <div class="d-flex align-items-center gap-3 py-2 {% if not loop.last %}border-bottom{% endif %}"
+           style="border-color:#1e1e3a">
+        <div style="width:34px;height:34px;border-radius:50%;background:#1e1e3a;
+             display:flex;align-items:center;justify-content:center;
+             font-size:13px;font-weight:900;color:#6868a0;flex-shrink:0">
+          {{ ld.name[0]|upper if ld.name else '?' }}
+        </div>
+        <div class="flex-grow-1" style="min-width:0">
+          <div class="small fw-bold text-truncate">{{ ld.name }}</div>
+          <div class="text-secondary" style="font-size:11px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap">
+            {{ ld.email }}{% if ld.company %} · {{ ld.company }}{% endif %}
+          </div>
+        </div>
+        <div class="text-end flex-shrink-0">
+          {% if ld.interest %}
+          <div class="badge bg-dark border" style="font-size:9px;max-width:90px;text-overflow:ellipsis;overflow:hidden">
+            {{ ld.interest[:18] }}
+          </div>
+          {% endif %}
+          {% set color = sc.get(ld.status, '#6868a0') %}
+          <div class="badge mt-1" style="font-size:9px;background:{{ color }}22;color:{{ color }};border:1px solid {{ color }}44">
+            {{ ld.status|title }}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="text-center text-secondary py-3 small">No leads yet — share your landing page to capture enquiries.</div>
+      {% endif %}
+    </div>
+
+    <!-- Quick sales actions -->
+    <div class="solar-card p-4">
+      <div class="section-head mb-3"><i class="bi bi-megaphone me-2"></i>Sales & Marketing Actions</div>
+      <div class="row g-2">
+        {% for href,icon,color,title,sub in [
+          (url_for('admin_sales'),      'bi-graph-up-arrow',    '#22c55e', 'Sales Dashboard',   'Revenue, pipeline & conversions'),
+          (url_for('admin_leads'),      'bi-person-lines-fill', '#f59e0b', 'Manage Leads',      'Update statuses, add notes'),
+          (url_for('admin_news'),       'bi-newspaper',         '#0ea5e9', 'Publish News',      'Add solar industry posts'),
+          (url_for('admin_newsletter'), 'bi-envelope-heart',    '#a78bfa', 'Newsletter',        'View subscribers'),
+          (url_for('admin_codes'),      'bi-key-fill',          '#f59e0b', 'Upgrade Codes',     'Generate promo codes'),
+          (url_for('admin_platform'),   'bi-speedometer2',      '#22c55e', 'Platform Metrics',  'MRR, users, growth'),
+        ] %}
+        <div class="col-6">
+          <a href="{{ href }}" class="d-flex align-items-center gap-2 p-2 rounded text-decoration-none"
+             style="background:rgba(255,255,255,.025);border:1px solid #1e1e3a;transition:.15s"
+             onmouseover="this.style.borderColor='{{ color }}44'" onmouseout="this.style.borderColor='#1e1e3a'">
+            <i class="bi {{ icon }}" style="color:{{ color }};font-size:16px;flex-shrink:0"></i>
+            <div style="min-width:0">
+              <div class="small fw-bold text-truncate">{{ title }}</div>
+              <div class="text-secondary" style="font-size:10px">{{ sub }}</div>
+            </div>
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+  {% endif %}
+  <!-- ── End right panel ──────────────────────────────────────────────── -->
+
+</div>
+{% endblock %}

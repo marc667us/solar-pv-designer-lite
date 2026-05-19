@@ -1,0 +1,467 @@
+{% extends "base.html" %}
+{% block title %}My Account — SolarPro Global{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── Layout ── */
+  .account-layout{display:grid;grid-template-columns:300px 1fr;gap:24px;align-items:start}
+  @media(max-width:860px){.account-layout{grid-template-columns:1fr}}
+
+  /* ── Profile card ── */
+  .profile-avatar{width:64px;height:64px;border-radius:50%;
+    background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));
+    display:flex;align-items:center;justify-content:center;
+    font-size:26px;font-weight:900;color:#000;flex-shrink:0}
+  .profile-meta{display:flex;align-items:center;gap:6px;font-size:11px;
+    color:#5a5a8a;margin-top:4px}
+
+  /* ── Plan badge ── */
+  .plan-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;
+    border-radius:20px;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
+
+  /* ── Usage bar ── */
+  .usage-track{height:8px;border-radius:4px;background:#1e1e3a;overflow:hidden;margin:8px 0}
+  .usage-fill{height:100%;border-radius:4px;
+    background:linear-gradient(90deg,var(--solar-gold),var(--solar-orange));transition:.4s}
+  .usage-fill.danger{background:linear-gradient(90deg,#ef4444,#f97316)}
+
+  /* ── Sidebar card ── */
+  .side-card{background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px;
+    padding:20px;margin-bottom:16px}
+  .side-card-head{font-size:10px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.5px;color:#4a4a7a;margin-bottom:14px}
+
+  /* ── Feature list ── */
+  .feat-row{display:flex;align-items:center;gap:8px;padding:5px 0;
+    font-size:12px;border-bottom:1px solid #111128}
+  .feat-row:last-child{border-bottom:none}
+  .feat-check{color:#22c55e;font-size:11px;flex-shrink:0}
+  .feat-cross{color:#2a2a5a;font-size:11px;flex-shrink:0}
+
+  /* ── Action buttons ── */
+  .act-btn{display:flex;align-items:center;gap:8px;padding:10px 14px;
+    border-radius:10px;font-size:12px;font-weight:700;border:1px solid transparent;
+    cursor:pointer;transition:.15s;text-decoration:none;width:100%;margin-bottom:8px}
+  .act-btn:last-child{margin-bottom:0}
+  .act-btn:hover{text-decoration:none}
+
+  /* ── KPI strip ── */
+  .stat-tile{background:#0f0f22;border:1px solid #1e1e3a;border-radius:12px;
+    padding:18px;text-align:center}
+  .stat-num{font-size:26px;font-weight:900;
+    background:linear-gradient(90deg,var(--solar-gold),#fbbf24);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .stat-lbl{font-size:10px;color:#5050a0;font-weight:700;text-transform:uppercase;
+    letter-spacing:.5px;margin-top:4px}
+
+  /* ── Section cards ── */
+  .section-panel{background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px;
+    overflow:hidden;margin-bottom:20px}
+  .section-panel-head{padding:14px 18px;border-bottom:1px solid #1e1e3a;
+    background:#0a0a1a;display:flex;align-items:center;justify-content:space-between}
+
+  /* ── Payment table ── */
+  .pay-table{width:100%;border-collapse:collapse;font-size:12px}
+  .pay-table th{padding:10px 14px;color:#4a4a7a;font-weight:600;font-size:10px;
+    text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #1e1e3a;
+    background:#080816;text-align:left}
+  .pay-table td{padding:11px 14px;border-bottom:1px solid #111128;vertical-align:middle}
+  .pay-table tr:last-child td{border-bottom:none}
+  .pay-table tr:hover td{background:rgba(255,255,255,.02)}
+
+  .gw-pill{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;
+    font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+  .gw-stripe{background:#6366f118;color:#a5b4fc;border:1px solid #6366f133}
+  .gw-paystack{background:#22c55e18;color:#4ade80;border:1px solid #22c55e33}
+  .gw-manual{background:#6868a018;color:#9090c8;border:1px solid #6868a033}
+
+  .pay-status-success{color:#4ade80}
+  .pay-status-cancelled{color:#f87171}
+  .pay-status-failed{color:#fb923c}
+
+  /* ── Info rows ── */
+  .info-row{display:flex;justify-content:space-between;align-items:center;
+    padding:8px 0;border-bottom:1px solid #111128;font-size:12px}
+  .info-row:last-child{border-bottom:none}
+  .info-lbl{color:#4a4a7a;font-weight:600;text-transform:uppercase;letter-spacing:.4px;font-size:10px}
+  .info-val{color:#c0c0e0;font-weight:600}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% set plan_colors = {'free':'#6868a0','demo':'#a78bfa','basic':'#22c55e','professional':'#0ea5e9','enterprise':'#f59e0b'} %}
+{% set plan_icons  = {'free':'bi-person-fill','demo':'bi-gift-fill','basic':'bi-check-circle-fill','professional':'bi-lightning-fill','enterprise':'bi-star-fill'} %}
+{% set plan_info   = plan_prices.get(plan, {}) %}
+{% set pl_color    = plan_colors.get(plan, '#6868a0') %}
+{% set pl_icon     = plan_icons.get(plan, 'bi-person-fill') %}
+{% set proj_limit  = limit if limit < 9999 else '∞' %}
+{% set usage_pct   = ([proj_count / limit * 100, 100]|min)|int if limit < 9999 else 0 %}
+
+<!-- Page header -->
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
+  <div>
+    <div class="fw-black" style="font-size:21px;color:#f0f0f8">
+      <i class="bi bi-person-circle me-2" style="color:var(--solar-gold)"></i>My Account
+    </div>
+    <div class="text-secondary small mt-1">Manage your profile, plan, and billing</div>
+  </div>
+  <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Dashboard
+  </a>
+</div>
+
+<!-- Two-column layout -->
+<div class="account-layout">
+
+  <!-- ── LEFT sidebar ──────────────────────────────────────────────────── -->
+  <div>
+
+    <!-- Profile -->
+    <div class="side-card">
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <div class="profile-avatar">{{ (user.name or user.username)[0]|upper }}</div>
+        <div style="min-width:0">
+          <div class="fw-black" style="font-size:15px;color:#f0f0f8">
+            {{ user.name or user.username }}
+          </div>
+          <div class="text-secondary" style="font-size:11px">{{ user.email }}</div>
+          {% if user.is_admin %}
+          <div class="mt-1">
+            <span style="font-size:9px;font-weight:800;color:#f59e0b;background:#f59e0b15;
+                  border:1px solid #f59e0b33;padding:2px 7px;border-radius:8px">
+              <i class="bi bi-shield-fill me-1"></i>ADMIN
+            </span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if user.company or user.country %}
+      <div class="mb-3">
+        {% if user.company %}
+        <div class="profile-meta"><i class="bi bi-building"></i>{{ user.company }}</div>
+        {% endif %}
+        {% if user.country %}
+        <div class="profile-meta"><i class="bi bi-geo-alt"></i>{{ user.country }}</div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <div class="info-row">
+        <span class="info-lbl">Member since</span>
+        <span class="info-val">{{ user.created_at[:10] if user.created_at else '—' }}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-lbl">Username</span>
+        <span class="info-val">{{ user.username }}</span>
+      </div>
+    </div>
+
+    <!-- Plan & Usage -->
+    <div class="side-card">
+      <div class="side-card-head"><i class="bi bi-gem me-1"></i>Plan & Usage</div>
+
+      <!-- Plan badge -->
+      <div class="mb-3">
+        <span class="plan-badge" style="background:{{ pl_color }}15;color:{{ pl_color }};border:1px solid {{ pl_color }}33">
+          <i class="bi {{ pl_icon }}"></i>{{ plan_info.get('label', plan|title) }} Plan
+        </span>
+        {% if plan != 'free' %}
+        <span class="ms-2 text-secondary" style="font-size:11px">${{ plan_info.get('usd', 0) }}/mo</span>
+        {% endif %}
+      </div>
+
+      <!-- Usage bar -->
+      <div class="d-flex justify-content-between" style="font-size:11px">
+        <span class="text-secondary">Projects used</span>
+        <span class="fw-bold" style="color:#d0d0e0">{{ proj_count }} / {{ proj_limit }}</span>
+      </div>
+      <div class="usage-track">
+        <div class="usage-fill {% if usage_pct >= 90 %}danger{% endif %}"
+             style="width:{{ usage_pct if limit < 9999 else 8 }}%"></div>
+      </div>
+      {% if usage_pct >= 90 and limit < 9999 %}
+      <div class="text-danger" style="font-size:10px;margin-top:4px">
+        <i class="bi bi-exclamation-triangle me-1"></i>Near project limit — upgrade to add more.
+      </div>
+      {% endif %}
+
+      <!-- Feature list -->
+      {% set all_features = [
+        ('Pre-Installation Assessment', True),
+        ('Full PV/Battery/Inverter Sizing', True),
+        ('AC Cable Sizing (BS 7671)', True),
+        ('BOQ & CAPEX Report', plan != 'free'),
+        ('Economic Analysis (NPV/IRR)', plan != 'free'),
+        ('Energy Impact Report', plan != 'free'),
+        ('Installation Methodology', plan != 'free'),
+        ('Excel / Word Export', plan in ('professional','enterprise')),
+        ('Procurement Planning', plan in ('professional','enterprise')),
+        ('Email Reports to Clients', plan in ('professional','enterprise')),
+        ('Unlimited Projects', plan == 'enterprise'),
+      ] %}
+      <div class="mt-3">
+        {% for feat, enabled in all_features %}
+        <div class="feat-row">
+          {% if enabled %}
+          <i class="bi bi-check-circle-fill feat-check"></i>
+          <span style="color:#a0a0c0">{{ feat }}</span>
+          {% else %}
+          <i class="bi bi-dash-circle feat-cross"></i>
+          <span style="color:#3a3a5a">{{ feat }}</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="side-card">
+      <div class="side-card-head"><i class="bi bi-gear me-1"></i>Account Actions</div>
+
+      <a href="{{ url_for('upgrade') }}" class="act-btn"
+         style="background:{{ pl_color }}15;border-color:{{ pl_color }}33;color:{{ pl_color }}">
+        <i class="bi bi-arrow-up-circle" style="font-size:16px"></i>
+        {% if plan == 'free' %}Upgrade Plan{% else %}Change / Upgrade Plan{% endif %}
+      </a>
+
+      <a href="{{ url_for('tickets') }}" class="act-btn"
+         style="background:#0ea5e910;border-color:#0ea5e930;color:#0ea5e9">
+        <i class="bi bi-headset" style="font-size:16px"></i>
+        Contact Support
+        {% if open_tickets %}
+        <span class="ms-auto badge"
+              style="background:#ef444422;color:#ef4444;border:1px solid #ef444444;font-size:9px">
+          {{ open_tickets }} open
+        </span>
+        {% endif %}
+      </a>
+
+      <a href="{{ url_for('dashboard') }}" class="act-btn"
+         style="background:#1e1e3a;border-color:#2a2a5a;color:#8888b0">
+        <i class="bi bi-folder2-open" style="font-size:16px"></i>My Projects
+      </a>
+
+      {% if plan not in ('free', 'disabled') %}
+      <div style="border-top:1px solid #1e1e3a;margin:12px 0"></div>
+      <form method="POST" action="{{ url_for('account_cancel') }}"
+            onsubmit="return confirm('This will cancel your subscription and revert to the Free plan. Continue?')">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button type="submit" class="act-btn"
+                style="background:#ef444410;border-color:#ef444430;color:#ef4444">
+          <i class="bi bi-x-circle" style="font-size:16px"></i>Cancel Subscription
+        </button>
+      </form>
+      {% endif %}
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <!-- ── RIGHT main ────────────────────────────────────────────────────── -->
+  <div>
+
+    <!-- KPI strip -->
+    <div class="row g-3 mb-4">
+      {% for icon,color,lbl,val in [
+        ('bi-folder-fill',    'var(--solar-gold)', 'Projects',      proj_count),
+        ('bi-ticket-fill',    '#0ea5e9',           'Open Tickets',  open_tickets),
+        ('bi-envelope-fill',  '#a78bfa',           'Emails Sent',   emails_sent),
+        ('bi-cash-stack',     '#22c55e',           'Total Paid',    '$'~(total_paid|int)),
+      ] %}
+      <div class="col-6 col-xl-3">
+        <div class="stat-tile">
+          <div style="font-size:16px;color:{{ color }}"><i class="bi {{ icon }}"></i></div>
+          <div class="stat-num" style="font-size:22px">{{ val }}</div>
+          <div class="stat-lbl">{{ lbl }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Subscription details -->
+    <div class="section-panel">
+      <div class="section-panel-head">
+        <span class="fw-bold" style="font-size:13px;color:#c0c0e0">
+          <i class="bi bi-credit-card me-2" style="color:{{ pl_color }}"></i>Current Subscription
+        </span>
+        <span class="plan-badge" style="background:{{ pl_color }}15;color:{{ pl_color }};
+              border:1px solid {{ pl_color }}33;font-size:10px;padding:3px 10px">
+          <i class="bi {{ pl_icon }} me-1"></i>{{ plan_info.get('label', plan|title) }}
+        </span>
+      </div>
+      <div class="p-4">
+        {% if plan == 'free' %}
+        <div class="d-flex align-items-start gap-3 p-3 rounded mb-3"
+             style="background:#f59e0b08;border:1px solid #f59e0b22">
+          <i class="bi bi-info-circle-fill" style="color:#f59e0b;font-size:16px;margin-top:2px;flex-shrink:0"></i>
+          <div style="font-size:12px;color:#b0a080">
+            You're on the <strong style="color:#f0d080">Free plan</strong> — only the Pre-Installation Site Assessment
+            is available. Upgrade to unlock all 9 reports, Excel export, procurement planning, and more.
+            <a href="{{ url_for('upgrade') }}" class="ms-1 fw-bold" style="color:#f59e0b">Upgrade now →</a>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="row g-0">
+          <div class="col-sm-6">
+            <div class="info-row">
+              <span class="info-lbl">Plan</span>
+              <span class="info-val">{{ plan_info.get('label', plan|title) }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-lbl">Monthly cost</span>
+              <span class="info-val">
+                {% if plan == 'free' %}Free{% else %}<span style="color:var(--solar-gold)">${{ plan_info.get('usd', 0) }}/mo</span>{% endif %}
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-lbl">Status</span>
+              <span class="info-val">
+                {% if plan == 'disabled' %}
+                <span style="color:#ef4444"><i class="bi bi-x-circle-fill me-1"></i>Disabled</span>
+                {% else %}
+                <span style="color:#22c55e"><i class="bi bi-check-circle-fill me-1"></i>Active</span>
+                {% endif %}
+              </span>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="info-row">
+              <span class="info-lbl">Project limit</span>
+              <span class="info-val">{{ proj_limit }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-lbl">Projects used</span>
+              <span class="info-val">{{ proj_count }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-lbl">Billing</span>
+              <span class="info-val">{{ 'Monthly' if plan != 'free' else 'N/A' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3 pt-2" style="border-top:1px solid #111128">
+          <p class="text-secondary mb-0" style="font-size:11px">
+            For billing questions or plan changes contact
+            <a href="mailto:support@solarproglobal.com" class="text-warning text-decoration-none">
+              support@solarproglobal.com
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Payment history -->
+    <div class="section-panel">
+      <div class="section-panel-head">
+        <span class="fw-bold" style="font-size:13px;color:#c0c0e0">
+          <i class="bi bi-receipt me-2" style="color:#22c55e"></i>Payment History
+        </span>
+        {% if payments %}
+        <span class="text-secondary" style="font-size:11px">{{ payments|length }} record{{ 's' if payments|length != 1 }}</span>
+        {% endif %}
+      </div>
+
+      {% if payments %}
+      <div style="overflow-x:auto">
+        <table class="pay-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Plan</th>
+              <th>Amount</th>
+              <th>Gateway</th>
+              <th>Status</th>
+              <th>Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% set plan_colors2 = {'free':'#6868a0','basic':'#22c55e','professional':'#0ea5e9','enterprise':'#f59e0b'} %}
+          {% for pay in payments %}
+          {% set pc2 = plan_colors2.get(pay.plan or 'free', '#6868a0') %}
+          <tr>
+            <td class="text-secondary">{{ pay.created_at[:10] if pay.created_at else '—' }}</td>
+            <td>
+              <span style="font-size:10px;font-weight:800;color:{{ pc2 }};
+                    background:{{ pc2 }}15;border:1px solid {{ pc2 }}30;
+                    padding:2px 7px;border-radius:8px;text-transform:uppercase">
+                {{ pay.plan or '—' }}
+              </span>
+            </td>
+            <td>
+              {% if pay.amount_usd and pay.amount_usd > 0 %}
+              <span style="color:var(--solar-gold);font-weight:700">${{ "%.0f"|format(pay.amount_usd) }}</span>
+              {% else %}
+              <span class="text-secondary">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="gw-pill gw-{{ pay.gateway or 'manual' }}">{{ pay.gateway or 'manual' }}</span>
+            </td>
+            <td>
+              <span class="pay-status-{{ pay.status or 'failed' }}" style="font-size:11px;font-weight:700">
+                <i class="bi bi-{% if pay.status=='success' %}check-circle-fill{% elif pay.status=='cancelled' %}dash-circle-fill{% else %}x-circle-fill{% endif %} me-1"></i>
+                {{ (pay.status or 'failed')|title }}
+              </span>
+            </td>
+            <td class="text-secondary" style="font-size:10px;max-width:110px;
+                overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              {{ pay.reference[:18] if pay.reference else '—' }}
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% else %}
+      <div class="text-center py-5">
+        <i class="bi bi-receipt d-block mb-3" style="font-size:36px;color:#1e1e3a"></i>
+        <div class="text-secondary small mb-3">No payment records yet.</div>
+        {% if plan == 'free' %}
+        <a href="{{ url_for('upgrade') }}" class="btn btn-solar btn-sm px-4">
+          <i class="bi bi-stars me-1"></i>Upgrade to a paid plan
+        </a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Need help -->
+    <div class="section-panel">
+      <div class="section-panel-head">
+        <span class="fw-bold" style="font-size:13px;color:#c0c0e0">
+          <i class="bi bi-question-circle me-2" style="color:#0ea5e9"></i>Need Help?
+        </span>
+      </div>
+      <div class="p-4">
+        <div class="row g-3">
+          {% for href,icon,color,title,sub in [
+            (url_for('tickets'),  'bi-headset',         '#0ea5e9', 'Submit a Ticket',   'Billing, bugs, or technical help'),
+            (url_for('upgrade'),  'bi-arrow-up-circle', pl_color,  'Manage Plan',        'Upgrade, change, or cancel'),
+            (url_for('dashboard'),'bi-folder2-open',    '#f59e0b', 'My Projects',        'View and manage your designs'),
+          ] %}
+          <div class="col-sm-4">
+            <a href="{{ href }}" class="d-flex align-items-center gap-2 p-3 rounded text-decoration-none"
+               style="background:#080816;border:1px solid #1e1e3a;transition:.15s"
+               onmouseover="this.style.borderColor='{{ color }}44'"
+               onmouseout="this.style.borderColor='#1e1e3a'">
+              <i class="bi {{ icon }}" style="font-size:20px;color:{{ color }};flex-shrink:0"></i>
+              <div>
+                <div class="small fw-bold" style="color:#d0d0e0">{{ title }}</div>
+                <div class="text-secondary" style="font-size:10px">{{ sub }}</div>
+              </div>
+            </a>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /right main -->
+
+</div><!-- /account-layout -->
+
+{% endblock %}

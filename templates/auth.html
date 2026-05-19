@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ "Register" if mode=="register" else "Login" }} — SolarPro Global{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+<div class="col-md-5 col-lg-4">
+  <div class="solar-card p-4 mt-4">
+    <div class="text-center mb-4">
+      <div style="font-size:36px">☀️</div>
+      <h4 class="fw-bold mt-2">{{ "Create Account" if mode=="register" else "Welcome Back" }}</h4>
+      <p class="text-secondary small">{{ "Join SolarPro Global — free to start." if mode=="register" else "Sign in to your account." }}</p>
+    </div>
+
+    <form method="POST">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {% if mode == "register" %}
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-secondary">FULL NAME</label>
+        <input name="name" class="form-control" placeholder="Your name" required/>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-secondary">COMPANY (optional)</label>
+        <input name="company" class="form-control" placeholder="Company or organisation"/>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-secondary">COUNTRY</label>
+        <select name="country" class="form-select">
+          <option value="">-- Select --</option>
+          {% for c in countries %}<option>{{ c }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-secondary">SUBSCRIPTION PLAN</label>
+        <select name="plan" class="form-select">
+          <option value="free">Free Trial</option>
+          <option value="pro">Professional ($29/mo)</option>
+          <option value="enterprise">Enterprise ($99/mo)</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-secondary">EMAIL</label>
+        <input name="email" type="email" class="form-control" placeholder="you@company.com" required/>
+      </div>
+      {% endif %}
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-secondary">USERNAME</label>
+        <input name="username" class="form-control" placeholder="username" required autocomplete="username"/>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-secondary">PASSWORD</label>
+        <input name="password" type="password" class="form-control" placeholder="••••••••" required autocomplete="{% if mode=='register' %}new-password{% else %}current-password{% endif %}"/>
+      </div>
+      <button type="submit" class="btn btn-solar w-100 mt-2">
+        {{ "Create Account" if mode=="register" else "Sign In" }}
+      </button>
+    </form>
+
+    <div class="text-center mt-3 small text-secondary">
+      {% if mode == "register" %}
+      Already have an account? <a href="{{ url_for('login') }}" class="text-warning">Sign in</a>
+      {% else %}
+      New user? <a href="{{ url_for('register') }}" class="text-warning">Create account</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+</div>
+{% endblock %}

@@ -1,0 +1,466 @@
+{% extends "base.html" %}
+{% block title %}Load Schedule — {{ project.name }}{% endblock %}
+
+{% block content %}
+{% set d = project.data %}
+
+<!-- Breadcrumb -->
+<div class="mb-3 small">
+  <a href="{{ url_for('dashboard') }}" class="text-secondary">Dashboard</a>
+  <span class="text-secondary mx-2">/</span>
+  <a href="{{ url_for('project_location', pid=project.id) }}" class="text-secondary">{{ project.name }}</a>
+  <span class="text-secondary mx-2">/</span>
+  <span class="text-warning">Load Schedule</span>
+</div>
+
+<!-- Progress Stepper -->
+<div class="d-flex align-items-center mb-4 gap-0" style="max-width:520px">
+  <div class="d-flex flex-column align-items-center">
+    <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#000">1</div>
+    <div class="mt-1" style="font-size:10px;color:#6868a0;font-weight:700;text-transform:uppercase">Location</div>
+  </div>
+  <div style="flex:1;height:2px;background:linear-gradient(90deg,var(--solar-gold),var(--solar-orange));margin-bottom:18px"></div>
+  <div class="d-flex flex-column align-items-center">
+    <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#000;box-shadow:0 0 12px rgba(251,191,36,.5)">2</div>
+    <div class="mt-1" style="font-size:10px;color:var(--solar-gold);font-weight:800;text-transform:uppercase">Loads</div>
+  </div>
+  <div style="flex:1;height:2px;background:#1e1e3a;margin-bottom:18px"></div>
+  <div class="d-flex flex-column align-items-center">
+    <div style="width:32px;height:32px;border-radius:50%;background:#1e1e3a;border:2px solid #2e2e50;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#6868a0">3</div>
+    <div class="mt-1" style="font-size:10px;color:#6868a0;font-weight:700;text-transform:uppercase">Results</div>
+  </div>
+</div>
+
+<!-- KPI Strip -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-geo-alt me-1"></i>Location</div>
+      <div class="kpi-value" style="font-size:15px;line-height:1.2">{{ d.get('region','—') }}</div>
+      <div class="kpi-unit">{{ d.get('country','—') }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-sun me-1"></i>Peak Sun Hours</div>
+      <div class="kpi-value">{{ d.get('psh', 5.0) }}</div>
+      <div class="kpi-unit">h/day</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-thermometer-half me-1"></i>Avg Temperature</div>
+      <div class="kpi-value">{{ d.get('avg_temp', 28) }}</div>
+      <div class="kpi-unit">°C</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-currency-dollar me-1"></i>Electricity Tariff</div>
+      <div class="kpi-value">{{ d.get('symbol','$') }} {{ d.get('tariff', 2.0) }}</div>
+      <div class="kpi-unit">/kWh</div>
+    </div>
+  </div>
+</div>
+
+<!-- Main Layout: Form + Live Summary -->
+<div style="display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start">
+
+  <!-- LEFT: Load Entry Form -->
+  <div>
+
+    <!-- Quick-add presets -->
+    <div class="solar-card p-3 mb-3">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <div class="section-head mb-0"><i class="bi bi-bolt me-1"></i>Quick Add Appliance</div>
+        <span class="text-secondary" style="font-size:11px">Click to add common loads</span>
+      </div>
+      <div class="d-flex flex-wrap gap-2" id="presetBtns">
+        <button type="button" class="btn btn-sm preset-btn" data-cat="Lighting" data-name="LED Bulb" data-w="15" data-q="6" data-h="6" style="background:#1e2a1e;border:1px solid #2d5a2d;color:#6fcf97"><i class="bi bi-lightbulb me-1"></i>LED Bulb</button>
+        <button type="button" class="btn btn-sm preset-btn" data-cat="Lighting" data-name="LED Tube Light" data-w="20" data-q="4" data-h="8" style="background:#1e2a1e;border:1px solid #2d5a2d;color:#6fcf97"><i class="bi bi-lightbulb me-1"></i>LED Tube</button>
+        <button type="button" class="btn btn-sm preset-btn" data-cat="Cooling" data-name="Air Conditioner 1.5HP" data-w="1100" data-q="1" data-h="10" style="background:#1a1a2e;border:1px solid #2a2a55;color:#818cf8"><i class="bi bi-snow me-1"></i>A/C 1.5HP</button>
+        <button type="button" class="btn btn-sm preset-btn" data-cat="Cooling" data-name="Ceiling Fan" data-w="75" data-q="3" data-h="12" style="background:#1a1a2e;border:1px solid #2a2a55;color:#818cf8"><i class="bi bi-wind me-1"></i>Fan</button>
+        <button type="button" class="btn btn-sm preset-btn" data-cat="Appliances" data-name="Refrigerator" data-w="150" data-q="1" data-h="24" style="background:#2a1a1a;border:1px solid #55252a;color:#f87171"><i class="bi bi-box me-1"></i>Fridge</button>
+        <button type="button" class="btn btn-sm preset-btn" data-cat="Appliances" data-name="Washing Machine" data-w="500" data-q="1" data-h="2" style="background:#2a1a1a;border:1px solid #55252a;color:#f87171"><i class="bi bi-droplet me-1"></i>Washer</button>
+        <button type="button" class="btn btn-sm preset-btn" data-cat="Electronics" data-name="TV 43-inch" data-w="120" data-q="1" data-h="6" style="background:#1a221a;border:1px solid #2a452a;color:#86efac"><i class="bi bi-display me-1"></i>TV</button>
+        <button type="button" class="btn btn-sm preset-btn" data-cat="Electronics" data-name="Desktop Computer" data-w="300" data-q="1" data-h="8" style="background:#1a221a;border:1px solid #2a452a;color:#86efac"><i class="bi bi-pc me-1"></i>Desktop PC</button>
+        <button type="button" class="btn btn-sm preset-btn" data-cat="Electronics" data-name="Router/Modem" data-w="15" data-q="1" data-h="24" style="background:#1a221a;border:1px solid #2a452a;color:#86efac"><i class="bi bi-wifi me-1"></i>Router</button>
+        <button type="button" class="btn btn-sm preset-btn" data-cat="Pumps" data-name="Water Pump 0.5HP" data-w="375" data-q="1" data-h="4" style="background:#1a2028;border:1px solid #2a3a50;color:#7dd3fc"><i class="bi bi-droplet-half me-1"></i>Pump 0.5HP</button>
+        <button type="button" class="btn btn-sm preset-btn" data-cat="Office" data-name="Laptop" data-w="65" data-q="2" data-h="8" style="background:#222214;border:1px solid #44440a;color:#fde047"><i class="bi bi-laptop me-1"></i>Laptop</button>
+        <button type="button" class="btn btn-sm preset-btn" data-cat="Office" data-name="Printer" data-w="400" data-q="1" data-h="1" style="background:#222214;border:1px solid #44440a;color:#fde047"><i class="bi bi-printer me-1"></i>Printer</button>
+      </div>
+    </div>
+
+    <!-- Load Table -->
+    <div class="solar-card p-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="section-head mb-0"><i class="bi bi-table me-2"></i>Electrical Load Schedule</div>
+        <button type="button" class="btn btn-solar btn-sm px-3" onclick="addRow()">
+          <i class="bi bi-plus-lg me-1"></i>Add Row
+        </button>
+      </div>
+
+      <form method="POST" id="loadsForm">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+        <div class="table-responsive">
+          <table class="table align-middle mb-3" id="loadsTable" style="font-size:13px">
+            <thead>
+              <tr style="border-color:#1e1e3a">
+                <th style="width:36px;color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px"></th>
+                <th style="color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;min-width:110px">Category</th>
+                <th style="color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Load Name</th>
+                <th style="width:80px;color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">W</th>
+                <th style="width:60px;color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Qty</th>
+                <th style="width:80px;color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Hrs/day</th>
+                <th style="width:90px;color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">kWh/day</th>
+                <th style="width:60px;color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:center">Critical</th>
+                <th style="width:36px"></th>
+              </tr>
+            </thead>
+            <tbody id="loadRows">
+              {% if d.get('loads') %}
+                {% for ld in d.loads %}
+                <tr class="load-row" data-kwh="{{ '%.4f'|format(ld.wattage * ld.quantity * ld.hours / 1000) }}" style="border-color:#1e1e3a">
+                  <td>
+                    <div class="cat-dot" data-cat="{{ ld.category }}" style="width:8px;height:8px;border-radius:50%;background:#6868a0;margin:auto"></div>
+                  </td>
+                  <td>
+                    <select name="load_cat[]" class="form-select form-select-sm cat-sel" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" onchange="updateDot(this)">
+                      {% for cat in categories %}<option {% if cat==ld.category %}selected{% endif %}>{{ cat }}</option>{% endfor %}
+                    </select>
+                  </td>
+                  <td><input name="load_name[]" class="form-control form-control-sm" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="{{ ld.name }}" required/></td>
+                  <td><input name="load_watt[]" type="number" min="0" step="1" class="form-control form-control-sm watt" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="{{ ld.wattage|int }}" onchange="recalc(this)"/></td>
+                  <td><input name="load_qty[]" type="number" min="1" step="1" class="form-control form-control-sm qty" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="{{ ld.quantity|int }}" onchange="recalc(this)"/></td>
+                  <td><input name="load_hours[]" type="number" min="0" max="24" step="0.5" class="form-control form-control-sm hrs" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="{{ ld.hours }}" onchange="recalc(this)"/></td>
+                  <td><span class="text-warning fw-bold kwh-cell" style="font-size:13px">{{ "%.3f"|format(ld.wattage*ld.quantity*ld.hours/1000) }}</span></td>
+                  <td class="text-center">
+                    <input name="load_critical[]" type="checkbox" class="form-check-input crit-check" value="{{ loop.index0 }}" {% if ld.critical %}checked{% endif %} style="border-color:#2e2e50"/>
+                  </td>
+                  <td>
+                    <button type="button" class="btn btn-sm py-0 px-1" style="color:#6868a0;border:none;background:none" onclick="removeRow(this)" title="Remove">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Phase notice -->
+        <div id="phaseNotice" class="d-none mb-3 p-2 rounded" style="background:#1a1a0a;border:1px solid #44440a;font-size:12px;color:#fde047">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          <span id="phaseMsg"></span>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3 pt-3" style="border-top:1px solid #1e1e3a">
+          <div class="text-secondary" style="font-size:11px">
+            <i class="bi bi-info-circle me-1"></i>
+            Σ Daily Energy = Σ (W × Qty × Hrs/day) ÷ 1000
+          </div>
+          <div class="d-flex gap-2">
+            <a href="{{ url_for('project_location', pid=project.id) }}" class="btn btn-outline-secondary btn-sm px-3">
+              <i class="bi bi-arrow-left me-1"></i>Back
+            </a>
+            <button type="submit" class="btn btn-solar px-4" id="submitBtn">
+              <i class="bi bi-calculator me-1"></i>Run Calculations
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- RIGHT: Live Summary Sidebar -->
+  <div style="position:sticky;top:80px">
+
+    <!-- Live Totals -->
+    <div class="solar-card p-4 mb-3">
+      <div class="section-head"><i class="bi bi-lightning-charge me-1"></i>Live Energy Summary</div>
+
+      <div class="mb-3 p-3 rounded text-center" style="background:#0a0a18;border:1px solid #2e2e50">
+        <div style="font-size:11px;color:#6868a0;font-weight:800;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px">Total Daily Energy</div>
+        <div style="font-size:36px;font-weight:900;background:linear-gradient(90deg,var(--solar-gold),#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1" id="totalKwhBig">0.000</div>
+        <div style="font-size:12px;color:#9090c0;margin-top:2px">kWh/day</div>
+      </div>
+
+      <div class="d-flex gap-2 mb-3">
+        <div class="flex-fill p-2 rounded text-center" style="background:#0a0a18;border:1px solid #2e2e50">
+          <div style="font-size:10px;color:#6868a0;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Peak Demand</div>
+          <div class="text-warning fw-bold" style="font-size:18px" id="peakKw">0.00</div>
+          <div style="font-size:10px;color:#6868a0">kW</div>
+        </div>
+        <div class="flex-fill p-2 rounded text-center" style="background:#0a0a18;border:1px solid #2e2e50">
+          <div style="font-size:10px;color:#6868a0;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Critical Loads</div>
+          <div style="font-size:18px;font-weight:900;color:#f87171" id="critKwh">0.000</div>
+          <div style="font-size:10px;color:#6868a0">kWh/day</div>
+        </div>
+      </div>
+
+      <!-- Phase indicator -->
+      <div class="p-2 rounded d-flex align-items-center gap-2" id="phaseBar" style="background:#1a1a2e;border:1px solid #2e2e50">
+        <div id="phaseDot" style="width:10px;height:10px;border-radius:50%;background:#6868a0;flex-shrink:0"></div>
+        <div>
+          <div style="font-size:10px;color:#6868a0;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Auto Phase</div>
+          <div style="font-size:12px;color:#c8c8e8;font-weight:700" id="phaseLabel">Single-phase 230V</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Category Breakdown -->
+    <div class="solar-card p-4 mb-3">
+      <div class="section-head"><i class="bi bi-pie-chart me-1"></i>By Category</div>
+      <div id="catBreakdown" style="font-size:12px">
+        <div class="text-secondary text-center py-2" style="font-size:11px">Add loads to see breakdown</div>
+      </div>
+    </div>
+
+    <!-- Load count & hint -->
+    <div class="solar-card p-3">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <span style="font-size:11px;color:#6868a0;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Load Count</span>
+        <span class="fw-bold text-warning" style="font-size:16px" id="loadCount">0</span>
+      </div>
+      <div class="progress mb-3" style="height:4px;background:#1e1e3a">
+        <div class="progress-bar" id="critPct" style="width:0%;background:linear-gradient(90deg,#f87171,#ef4444)"></div>
+      </div>
+      <div style="font-size:10px;color:#6868a0">
+        <i class="bi bi-check-circle me-1 text-warning"></i>Critical loads backed by battery autonomy<br>
+        <i class="bi bi-info-circle me-1 text-secondary mt-1"></i>Peak &gt; 8 kW triggers 3-phase auto-select
+      </div>
+    </div>
+  </div>
+
+</div><!-- /grid -->
+
+<!-- Hidden row template -->
+<template id="rowTpl">
+  <tr class="load-row" data-kwh="0.800" style="border-color:#1e1e3a">
+    <td>
+      <div class="cat-dot" data-cat="Other" style="width:8px;height:8px;border-radius:50%;background:#9090c0;margin:auto"></div>
+    </td>
+    <td>
+      <select name="load_cat[]" class="form-select form-select-sm cat-sel" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" onchange="updateDot(this)">
+        {% for cat in categories %}<option>{{ cat }}</option>{% endfor %}
+      </select>
+    </td>
+    <td><input name="load_name[]" class="form-control form-control-sm" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" placeholder="Load name" required/></td>
+    <td><input name="load_watt[]" type="number" min="0" step="1" class="form-control form-control-sm watt" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="100" onchange="recalc(this)"/></td>
+    <td><input name="load_qty[]" type="number" min="1" step="1" class="form-control form-control-sm qty" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="1" onchange="recalc(this)"/></td>
+    <td><input name="load_hours[]" type="number" min="0" max="24" step="0.5" class="form-control form-control-sm hrs" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="8" onchange="recalc(this)"/></td>
+    <td><span class="text-warning fw-bold kwh-cell" style="font-size:13px">0.800</span></td>
+    <td class="text-center">
+      <input name="load_critical[]" type="checkbox" class="form-check-input crit-check" style="border-color:#2e2e50"/>
+    </td>
+    <td>
+      <button type="button" class="btn btn-sm py-0 px-1" style="color:#6868a0;border:none;background:none" onclick="removeRow(this)" title="Remove">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </td>
+  </tr>
+</template>
+
+<style>
+/* Responsive: collapse sidebar on smaller screens */
+@media(max-width:991px){
+  div[style*="grid-template-columns:1fr 300px"]{
+    grid-template-columns:1fr !important;
+  }
+  div[style*="position:sticky"]{
+    position:static !important;
+  }
+}
+.load-row:hover{background:rgba(255,255,255,.02)}
+.preset-btn:hover{filter:brightness(1.2);transform:translateY(-1px)}
+.preset-btn{transition:all .15s}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CAT_COLORS = {
+  "Lighting":   "#6fcf97",
+  "Cooling":    "#818cf8",
+  "Appliances": "#f87171",
+  "Electronics":"#86efac",
+  "Pumps":      "#7dd3fc",
+  "Heating":    "#fb923c",
+  "Office":     "#fde047",
+  "Other":      "#9090c0"
+};
+
+function getCatColor(cat){ return CAT_COLORS[cat] || "#9090c0"; }
+
+function updateDot(sel){
+  const dot = sel.closest('tr').querySelector('.cat-dot');
+  if(dot){ dot.style.background = getCatColor(sel.value); dot.dataset.cat = sel.value; }
+  updateSummary();
+}
+
+function addRow(preset=null){
+  const tpl = document.getElementById('rowTpl');
+  const clone = tpl.content.cloneNode(true);
+  const tbody = document.getElementById('loadRows');
+  tbody.appendChild(clone);
+  const row = tbody.querySelectorAll('tr.load-row');
+  const newRow = row[row.length-1];
+
+  // Fix critical checkbox index
+  newRow.querySelector('.crit-check').value = row.length - 1;
+
+  if(preset){
+    newRow.querySelector('.cat-sel').value = preset.cat;
+    newRow.querySelector('input[name="load_name[]"]').value = preset.name;
+    newRow.querySelector('.watt').value = preset.w;
+    newRow.querySelector('.qty').value = preset.q;
+    newRow.querySelector('.hrs').value = preset.h;
+    updateDot(newRow.querySelector('.cat-sel'));
+  } else {
+    updateDot(newRow.querySelector('.cat-sel'));
+  }
+  recalcRow(newRow);
+  updateSummary();
+
+  // Smooth scroll to new row
+  newRow.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function removeRow(btn){
+  btn.closest('tr').remove();
+  updateSummary();
+}
+
+function recalc(el){
+  recalcRow(el.closest('tr'));
+  updateSummary();
+}
+
+function recalcRow(row){
+  const w = parseFloat(row.querySelector('.watt').value) || 0;
+  const q = parseFloat(row.querySelector('.qty').value) || 1;
+  const h = parseFloat(row.querySelector('.hrs').value) || 0;
+  const kwh = (w * q * h) / 1000;
+  row.querySelector('.kwh-cell').textContent = kwh.toFixed(3);
+  row.dataset.kwh = kwh;
+}
+
+function updateSummary(){
+  const rows = document.querySelectorAll('#loadRows tr.load-row');
+  let total = 0, peakW = 0, critKwh = 0;
+  const catTotals = {};
+
+  rows.forEach(row => {
+    const kwh = parseFloat(row.querySelector('.kwh-cell').textContent) || 0;
+    const w = parseFloat(row.querySelector('.watt').value) || 0;
+    const q = parseFloat(row.querySelector('.qty').value) || 1;
+    const cat = (row.querySelector('.cat-dot')?.dataset.cat) || 'Other';
+    const crit = row.querySelector('.crit-check')?.checked;
+
+    total += kwh;
+    peakW += w * q;
+    if(crit) critKwh += kwh;
+    catTotals[cat] = (catTotals[cat] || 0) + kwh;
+  });
+
+  const peakKw = peakW / 1000;
+
+  // Update big total
+  document.getElementById('totalKwhBig').textContent = total.toFixed(3);
+  // Legacy span if any
+  const leg = document.getElementById('totalKwh');
+  if(leg) leg.textContent = total.toFixed(3);
+
+  document.getElementById('peakKw').textContent = peakKw.toFixed(2);
+  document.getElementById('critKwh').textContent = critKwh.toFixed(3);
+  document.getElementById('loadCount').textContent = rows.length;
+
+  // Phase
+  const isThree = peakKw > 8;
+  document.getElementById('phaseLabel').textContent = isThree ? 'Three-phase 415V' : 'Single-phase 230V';
+  document.getElementById('phaseDot').style.background = isThree ? '#818cf8' : '#6fcf97';
+
+  // Phase notice in form
+  const notice = document.getElementById('phaseNotice');
+  const msg = document.getElementById('phaseMsg');
+  if(peakKw > 8){
+    msg.textContent = `Connected peak ${peakKw.toFixed(1)} kW > 8 kW — system will auto-select 3-phase 415V (IEC 60364 / BS 7671).`;
+    notice.classList.remove('d-none');
+  } else {
+    notice.classList.add('d-none');
+  }
+
+  // Critical %
+  const critPct = total > 0 ? Math.min(100, (critKwh / total) * 100) : 0;
+  document.getElementById('critPct').style.width = critPct + '%';
+
+  // Category breakdown
+  const bd = document.getElementById('catBreakdown');
+  if(Object.keys(catTotals).length === 0){
+    bd.innerHTML = '<div class="text-secondary text-center py-2" style="font-size:11px">Add loads to see breakdown</div>';
+    return;
+  }
+  const sorted = Object.entries(catTotals).sort((a,b)=>b[1]-a[1]);
+  bd.innerHTML = sorted.map(([cat, kwh]) => {
+    const pct = total > 0 ? ((kwh/total)*100).toFixed(1) : 0;
+    const col = getCatColor(cat);
+    return `<div class="mb-2">
+      <div class="d-flex justify-content-between mb-1">
+        <span style="color:${col};font-weight:700"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${col};margin-right:5px"></span>${cat}</span>
+        <span style="color:#9090c0">${kwh.toFixed(3)} kWh <span style="color:#6868a0">(${pct}%)</span></span>
+      </div>
+      <div class="progress" style="height:3px;background:#1e1e3a">
+        <div class="progress-bar" style="width:${pct}%;background:${col}"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Preset buttons
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    addRow({
+      cat:  btn.dataset.cat,
+      name: btn.dataset.name,
+      w:    btn.dataset.w,
+      q:    btn.dataset.q,
+      h:    btn.dataset.h
+    });
+  });
+});
+
+// Submit validation
+document.getElementById('loadsForm').addEventListener('submit', e => {
+  const rows = document.querySelectorAll('#loadRows tr.load-row');
+  if(rows.length === 0){
+    e.preventDefault();
+    alert('Please add at least one load before running calculations.');
+    return;
+  }
+  document.getElementById('submitBtn').innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Calculating…';
+  document.getElementById('submitBtn').disabled = true;
+});
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+  // Color existing dots
+  document.querySelectorAll('.cat-sel').forEach(sel => updateDot(sel));
+
+  updateSummary();
+
+  {% if not project.data.get('loads') %}
+  // Default starter loads
+  [
+    {cat:'Lighting',   name:'LED Lights',         w:100,  q:6, h:8},
+    {cat:'Cooling',    name:'Air Conditioner',     w:2000, q:1, h:10},
+    {cat:'Appliances', name:'Refrigerator',        w:150,  q:1, h:24},
+    {cat:'Electronics',name:'TV + Decoder',        w:120,  q:2, h:6},
+    {cat:'Office',     name:'Computers',           w:300,  q:2, h:8},
+  ].forEach(p => addRow(p));
+  updateSummary();
+  {% endif %}
+});
+</script>
+{% endblock %}

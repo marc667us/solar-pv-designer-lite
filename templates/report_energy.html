@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Energy Impact Analysis — {{ project.name }}{% endblock %}
+{% block content %}
+<div class="no-print mb-3 small d-flex align-items-center gap-3 flex-wrap">
+  <a href="{{ url_for('project_results', pid=project.id) }}" class="text-secondary"><i class="bi bi-arrow-left me-1"></i>Results</a>
+  <div class="ms-auto d-flex gap-2">
+    <a href="{{ url_for('export_pdf_energy', pid=project.id) }}" class="btn btn-danger btn-sm">
+      <i class="bi bi-file-earmark-pdf me-1"></i>Export PDF
+    </a>
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer me-1"></i>Print</button>
+  </div>
+</div>
+
+<div class="report-header">
+  <div class="report-title"><i class="bi bi-lightning-charge-fill me-2"></i>Energy Impact Analysis</div>
+  <div class="text-secondary small mt-2">
+    {{ project.name }} &nbsp;|&nbsp; {{ d.region }}, {{ d.country }} &nbsp;|&nbsp;
+    {{ d.system_type|title }} System &nbsp;|&nbsp; {{ d.psh }} PSH &nbsp;|&nbsp; {{ d.currency }}
+  </div>
+</div>
+
+<!-- KPI Strip -->
+<div class="row g-2 mb-4">
+  {% for lbl,val,unit,color in [
+    ("Daily Generation",  r.daily_kwh|fmt(2),           "kWh/day",  "#f59e0b"),
+    ("Annual Generation", (r.daily_kwh*365)|fmt(0),     "kWh/year", "#0ea5e9"),
+    ("Annual Savings",    eco.annual_sav|fmt(0),         d.symbol,   "#22c55e"),
+    ("CO2 Reduction",     eco.co2_yr|fmt(2),             "t/year",   "#a78bfa"),
+    ("Trees Equivalent",  trees_equiv|int,               "trees/yr", "#22c55e"),
+    ("Grid Offset",       "100" if d.system_type=="off-grid" else "80", "%",  "#f59e0b"),
+  ] %}
+  <div class="col-6 col-md-4 col-lg-2">
+    <div class="kpi-card text-center">
+      <div class="kpi-label">{{ lbl }}</div>
+      <div class="kpi-value" style="color:{{ color }};-webkit-text-fill-color:{{ color }}">{{ val }}</div>
+      <div class="kpi-unit">{{ unit }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="row g-3 mb-3">
+<!-- Monthly Generation Table -->
+<div class="col-lg-7">
+  <div class="solar-card p-4 h-100">
+    <div class="section-head"><i class="bi bi-calendar3 me-2"></i>Monthly Energy Generation &amp; Savings</div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th class="text-end">Generation (kWh)</th>
+            <th class="text-end">Utility Offset (%)</th>
+            <th class="text-end">Savings ({{ d.symbol }})</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set annual_kwh = r.daily_kwh * 365 %}
+          {% for m in monthly %}
+          <tr>
+            <td class="fw-bold text-warning">{{ m.month }}</td>
+            <td class="text-end">{{ m.kwh|fmt(1) }}</td>
+            <td class="text-end">
+              <!-- Visual bar -->
+              <div class="d-flex align-items-center justify-content-end gap-2">
+                <div style="width:60px;height:6px;background:#1e1e3a;border-radius:3px;overflow:hidden">
+                  <div style="width:{{ [m.kwh/(annual_kwh/12)*100,100]|min|int }}%;height:100%;background:#f59e0b;border-radius:3px"></div>
+                </div>
+                <span>{{ [m.kwh/(annual_kwh/12)*100,100]|min|int }}%</span>
+              </div>
+            </td>
+            <td class="text-end text-success fw-bold">{{ m.saving|fmt(1) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr class="fw-bold" style="border-top:2px solid #f59e0b44">
+            <td>ANNUAL TOTAL</td>
+            <td class="text-end text-warning">{{ (r.daily_kwh*365)|fmt(0) }} kWh</td>
+            <td class="text-end">—</td>
+            <td class="text-end text-success">{{ d.symbol }} {{ eco.annual_sav|fmt(0) }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Impact Summary -->
+<div class="col-lg-5">
+  <div class="solar-card p-4 mb-3">
+    <div class="section-head"><i class="bi bi-graph-up me-2"></i>Energy Savings Summary</div>
+    <div class="data-row"><span class="lbl">Daily Solar Generation</span><span class="val text-warning">{{ r.daily_kwh|fmt(2) }} kWh/day</span></div>
+    <div class="data-row"><span class="lbl">Annual Solar Generation</span><span class="val">{{ (r.daily_kwh*365)|fmt(0) }} kWh/year</span></div>
+    <div class="data-row">
+      <span class="lbl">Electricity Tariff</span>
+      <span class="val">
+        <strong>{{ d.symbol }} {{ d.tariff }} /kWh</strong>
+        {% if d.utility %}<br><small class="text-secondary" style="font-size:11px">{{ d.utility }}</small>{% endif %}
+        {% if d.tariff_ref %}<br><small class="text-secondary" style="font-size:10px;font-style:italic">{{ d.tariff_ref }}</small>{% endif %}
+      </span>
+    </div>
+    <div class="data-row"><span class="lbl">Gross Annual Savings</span><span class="val">{{ d.symbol }} {{ eco.annual_sav|fmt(0) }}</span></div>
+    <div class="data-row"><span class="lbl">O&amp;M Cost (Year 1)</span><span class="val text-danger">- {{ d.symbol }} {{ eco.om_yr1|fmt(0) }}</span></div>
+    <div class="data-row total"><span class="lbl"><strong>Net Annual Benefit</strong></span><span class="val text-success">{{ d.symbol }} {{ eco.net_yr1|fmt(0) }}</span></div>
+    <div class="data-row"><span class="lbl">Cumulative Savings (10yr)</span><span class="val">{{ d.symbol }} {{ eco.cumul_10|fmt(0) }}</span></div>
+    <div class="data-row"><span class="lbl">Cumulative Savings (25yr)</span><span class="val text-warning">{{ d.symbol }} {{ eco.cumul_25|fmt(0) }}</span></div>
+    <div class="data-row"><span class="lbl">Simple Payback</span><span class="val">{{ eco.payback|fmt(1) }} years</span></div>
+  </div>
+
+  <div class="solar-card p-4">
+    <div class="section-head"><i class="bi bi-tree me-2"></i>Environmental Impact</div>
+    <div class="data-row"><span class="lbl">Annual CO2 Avoided</span>
+      <span class="val" style="color:#a78bfa">{{ eco.co2_yr|fmt(2) }} tonnes</span></div>
+    <div class="data-row"><span class="lbl">25-Year CO2 Avoided</span>
+      <span class="val" style="color:#a78bfa">{{ (eco.co2_yr*25)|fmt(1) }} tonnes</span></div>
+    <div class="data-row"><span class="lbl">Equivalent Trees Planted</span>
+      <span class="val text-success">{{ trees_equiv|int }} trees/year</span></div>
+    <div class="data-row"><span class="lbl">Equivalent Cars Removed</span>
+      <span class="val text-success">{{ cars_equiv }} cars/year</span></div>
+    <div class="data-row"><span class="lbl">Grid Emission Factor</span>
+      <span class="val">0.82 kg CO2/kWh (avg)</span></div>
+    <div class="data-row total"><span class="lbl"><strong>Carbon Status</strong></span>
+      <span class="val" style="color:#22c55e">Carbon Positive</span></div>
+  </div>
+</div>
+</div>
+
+<!-- 25-Year Cash Flow -->
+<div class="solar-card p-4 mb-3">
+  <div class="section-head"><i class="bi bi-bar-chart me-2"></i>25-Year Cumulative Benefit Projection</div>
+  <div class="table-responsive">
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          <th>Year</th><th class="text-end">Gross Saving</th><th class="text-end">O&amp;M</th>
+          <th class="text-end">Net Benefit</th><th class="text-end">Cumulative</th>
+          <th class="text-end">NPV (cumul.)</th><th class="text-center">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cf in eco.cf_rows %}
+        <tr style="{{ 'background:rgba(34,197,94,.05)' if cf.cumul > eco.total_local else '' }}">
+          <td class="fw-bold">{{ cf.yr }}</td>
+          <td class="text-end">{{ d.symbol }} {{ cf.gross|fmt(0) }}</td>
+          <td class="text-end text-secondary">{{ d.symbol }} {{ cf.om|fmt(0) }}</td>
+          <td class="text-end">{{ d.symbol }} {{ cf.net|fmt(0) }}</td>
+          <td class="text-end fw-bold {% if cf.cumul > eco.total_local %}text-success{% elif cf.cumul > 0 %}text-warning{% else %}text-danger{% endif %}">
+            {{ d.symbol }} {{ cf.cumul|fmt(0) }}
+          </td>
+          <td class="text-end text-secondary">{{ d.symbol }} {{ cf.npv_c|fmt(0) }}</td>
+          <td class="text-center">
+            {% if cf.cumul >= eco.total_local %}
+            <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">PAYBACK</span>
+            {% elif cf.yr == eco.payback|int %}
+            <span class="badge" style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44">BREAKEVEN</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}Sales & Marketing — SolarPro Global{% endblock %}
+{% block content %}
+
+<div class="report-header mb-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <div class="report-title"><i class="bi bi-megaphone-fill me-2"></i>Sales & Marketing</div>
+      <div class="text-secondary mt-1">Lead pipeline · Newsletter · Revenue · Platform growth</div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('admin_leads') }}"      class="btn btn-outline-warning btn-sm"><i class="bi bi-person-lines-fill me-1"></i>Manage Leads</a>
+      <a href="{{ url_for('admin_news') }}"        class="btn btn-outline-info btn-sm"><i class="bi bi-newspaper me-1"></i>News Feed</a>
+      <a href="{{ url_for('admin_newsletter') }}"  class="btn btn-outline-secondary btn-sm"><i class="bi bi-envelope-heart me-1"></i>Newsletter</a>
+      <a href="{{ url_for('admin_platform') }}"    class="btn btn-outline-success btn-sm"><i class="bi bi-graph-up-arrow me-1"></i>Platform Metrics</a>
+    </div>
+  </div>
+</div>
+
+<!-- KPI strip -->
+<div class="row g-3 mb-4">
+  {% set total_leads = leads|length %}
+  {% set new_leads = lead_status.get('new', 0) %}
+  {% set converted  = lead_status.get('converted', 0) %}
+  {% set conv_rate  = (converted / total_leads * 100)|round(1) if total_leads else 0 %}
+  {% for icon,color,lbl,val in [
+    ('bi-person-plus-fill',   '#f59e0b', 'Total Leads',        total_leads),
+    ('bi-star-fill',          '#ef4444', 'New / Unworked',     new_leads),
+    ('bi-check-circle-fill',  '#22c55e', 'Converted',          converted),
+    ('bi-percent',            '#0ea5e9', 'Conversion Rate',    conv_rate|string ~ '%'),
+    ('bi-envelope-heart-fill','#a78bfa', 'Newsletter Subs',    subs),
+    ('bi-newspaper',          '#f59e0b', 'Published Articles', news_count),
+    ('bi-cash-stack',         '#22c55e', 'Total Revenue',      '$'~(total_rev|int)),
+  ] %}
+  <div class="col-6 col-md">
+    <div class="kpi-card text-center">
+      <div style="font-size:20px;color:{{ color }}"><i class="bi {{ icon }}"></i></div>
+      <div class="kpi-label mt-1">{{ lbl }}</div>
+      <div class="kpi-value" style="font-size:18px">{{ val }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Lead pipeline + Plan distribution + Monthly signups -->
+<div class="row g-4 mb-4">
+
+  <!-- Lead pipeline funnel -->
+  <div class="col-md-4">
+    <div class="solar-card p-4 h-100">
+      <div class="section-head mb-3"><i class="bi bi-funnel me-1"></i>Lead Pipeline</div>
+      {% set statuses = [
+        ('new',       'New',        '#ef4444'),
+        ('contacted', 'Contacted',  '#f59e0b'),
+        ('qualified', 'Qualified',  '#0ea5e9'),
+        ('converted', 'Converted',  '#22c55e'),
+        ('closed',    'Closed',     '#6868a0'),
+      ] %}
+      {% set max_cnt = lead_status.values()|max if lead_status else 1 %}
+      {% for key, label, color in statuses %}
+      {% set cnt = lead_status.get(key, 0) %}
+      {% set pct = (cnt / max_cnt * 100) if max_cnt else 0 %}
+      <div class="mb-3">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="small fw-bold" style="color:{{ color }}">{{ label }}</span>
+          <span class="small fw-bold">{{ cnt }}</span>
+        </div>
+        <div style="height:8px;background:#1e1e3a;border-radius:4px">
+          <div style="height:100%;width:{{ pct }}%;background:{{ color }};border-radius:4px;transition:.5s"></div>
+        </div>
+      </div>
+      {% endfor %}
+      <div class="mt-3 pt-3" style="border-top:1px solid #1e1e3a">
+        <div class="d-flex justify-content-between small">
+          <span class="text-secondary">Conversion rate</span>
+          <span class="fw-bold" style="color:#22c55e">{{ conv_rate }}%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Plan distribution -->
+  <div class="col-md-4">
+    <div class="solar-card p-4 h-100">
+      <div class="section-head mb-3"><i class="bi bi-pie-chart me-1"></i>Plan Distribution</div>
+      {% set plan_colors = {'free':'#6868a0','demo':'#a78bfa','basic':'#22c55e','professional':'#0ea5e9','enterprise':'#f59e0b','None':'#3a3a5a'} %}
+      {% set total_users = plan_dist.values()|sum %}
+      {% for plan_key, cnt in plan_dist.items() %}
+      {% set color = plan_colors.get(plan_key or 'None', '#6868a0') %}
+      {% set pct = (cnt / total_users * 100)|round(1) if total_users else 0 %}
+      <div class="mb-3">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="small fw-bold" style="color:{{ color }}">{{ (plan_key or 'Free')|title }}</span>
+          <span class="small text-secondary">{{ cnt }} · {{ pct }}%</span>
+        </div>
+        <div style="height:6px;background:#1e1e3a;border-radius:3px">
+          <div style="height:100%;width:{{ pct }}%;background:{{ color }};border-radius:3px"></div>
+        </div>
+      </div>
+      {% else %}
+      <div class="text-secondary small">No users yet.</div>
+      {% endfor %}
+      <div class="mt-3 pt-3" style="border-top:1px solid #1e1e3a">
+        <div class="d-flex justify-content-between small">
+          <span class="text-secondary">Total users</span>
+          <span class="fw-bold">{{ total_users }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Monthly signups -->
+  <div class="col-md-4">
+    <div class="solar-card p-4 h-100">
+      <div class="section-head mb-3"><i class="bi bi-calendar3 me-1"></i>Monthly Signups</div>
+      {% set max_s = monthly_signups|map(attribute='cnt')|max if monthly_signups else 1 %}
+      {% for row in monthly_signups %}
+      {% set pct = (row.cnt / max_s * 100) if max_s else 0 %}
+      <div class="mb-3">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="small text-secondary">{{ row.mo }}</span>
+          <span class="small fw-bold" style="color:var(--solar-gold)">{{ row.cnt }} users</span>
+        </div>
+        <div style="height:5px;background:#1e1e3a;border-radius:3px">
+          <div style="height:100%;width:{{ pct }}%;background:linear-gradient(90deg,var(--solar-gold),#fbbf24);border-radius:3px"></div>
+        </div>
+      </div>
+      {% else %}
+      <div class="text-secondary small">No signup data yet.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Recent leads table -->
+<div class="solar-card p-4 mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="section-head mb-0"><i class="bi bi-person-lines-fill me-2"></i>Recent Leads</div>
+    <a href="{{ url_for('admin_leads') }}" class="btn btn-outline-secondary btn-sm">View All →</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead><tr>
+        <th>Name</th><th>Email</th><th>Company</th><th>Country</th>
+        <th>Interest</th><th>Source</th><th>Status</th><th>Date</th>
+      </tr></thead>
+      <tbody>
+      {% set sc = {'new':'#ef4444','contacted':'#0ea5e9','qualified':'#f59e0b','converted':'#22c55e','closed':'#6868a0'} %}
+      {% for ld in leads[:15] %}
+      <tr>
+        <td class="fw-semibold small">{{ ld.name }}</td>
+        <td class="small"><a href="mailto:{{ ld.email }}" class="text-info">{{ ld.email }}</a></td>
+        <td class="small text-secondary">{{ ld.company or '—' }}</td>
+        <td class="small text-secondary">{{ ld.country or '—' }}</td>
+        <td><span class="badge bg-dark border" style="font-size:10px">{{ ld.interest or '—' }}</span></td>
+        <td class="small text-secondary">{{ ld.source or '—' }}</td>
+        <td>
+          {% set color = sc.get(ld.status, '#6868a0') %}
+          <span class="badge" style="font-size:10px;background:{{ color }}22;color:{{ color }};border:1px solid {{ color }}44">
+            {{ ld.status|title }}
+          </span>
+        </td>
+        <td class="small text-secondary">{{ ld.created_at[:10] if ld.created_at else '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="text-center text-secondary py-4">No leads yet — contact form submissions will appear here.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Recent payments -->
+<div class="solar-card p-4">
+  <div class="section-head mb-3"><i class="bi bi-credit-card me-2"></i>Recent Payments</div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead><tr><th>User</th><th>Email</th><th>Plan</th><th>Gateway</th><th>Amount (USD)</th><th>Date</th></tr></thead>
+      <tbody>
+      {% set plan_colors = {'free':'#6868a0','basic':'#22c55e','professional':'#0ea5e9','enterprise':'#f59e0b'} %}
+      {% for p in payments %}
+      {% set pcolor = plan_colors.get(p.plan or '', '#6868a0') %}
+      <tr>
+        <td class="small fw-semibold">{{ p.username }}</td>
+        <td class="small text-secondary">{{ p.email }}</td>
+        <td>
+          <span class="badge" style="font-size:10px;background:{{ pcolor }}22;color:{{ pcolor }};border:1px solid {{ pcolor }}44">
+            {{ (p.plan or '—')|upper }}
+          </span>
+        </td>
+        <td class="small text-secondary">{{ p.gateway or '—' }}</td>
+        <td class="fw-bold" style="color:var(--solar-green)">${{ p.amount_usd|int }}</td>
+        <td class="small text-secondary">{{ p.created_at[:10] if p.created_at else '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-center text-secondary py-4">No payments yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

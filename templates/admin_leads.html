@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Lead Management{% endblock %}
+{% block content %}
+<div class="container-xl py-4">
+<div class="d-flex align-items-center gap-3 mb-4">
+  <div style="font-size:32px;color:var(--solar-gold)"><i class="bi bi-person-lines-fill"></i></div>
+  <div>
+    <h4 class="fw-black mb-0">Lead Management</h4>
+    <div class="text-secondary small">Track and manage sales inquiries</div>
+  </div>
+  <div class="ms-auto">
+    <a href="{{ url_for('admin_sales') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i>Sales Dashboard
+    </a>
+  </div>
+</div>
+
+<!-- Status filter tabs -->
+<div class="mb-3 d-flex gap-2 flex-wrap">
+  {% for s in ['all','new','contacted','qualified','converted','closed'] %}
+  <a href="?status={{ s }}" class="btn btn-sm {% if status_filter==s %}btn-solar{% else %}btn-outline-secondary{% endif %}">
+    {{ s.title() }}
+  </a>
+  {% endfor %}
+</div>
+
+<div class="solar-card p-0 overflow-hidden">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr>
+        <th class="ps-3">Name</th><th>Email</th><th>Company</th><th>Country</th>
+        <th>Interest</th><th>Status</th><th>Date</th><th class="pe-3">Actions</th>
+      </tr></thead>
+      <tbody>
+      {% for ld in leads %}
+      <tr>
+        <td class="ps-3 fw-semibold">{{ ld.name }}</td>
+        <td><a href="mailto:{{ ld.email }}" class="text-info small">{{ ld.email }}</a></td>
+        <td class="small">{{ ld.company or '—' }}</td>
+        <td class="small">{{ ld.country or '—' }}</td>
+        <td><span class="badge bg-dark border small">{{ ld.interest }}</span></td>
+        <td>
+          {% set sc={'new':'primary','contacted':'info','qualified':'warning','converted':'success','closed':'secondary'} %}
+          <span class="badge bg-{{ sc.get(ld.status,'secondary') }}">{{ ld.status }}</span>
+        </td>
+        <td class="small text-secondary">{{ ld.created_at[:10] }}</td>
+        <td class="pe-3">
+          <button class="btn btn-outline-warning btn-sm" data-bs-toggle="modal"
+                  data-bs-target="#leadModal{{ ld.id }}">
+            <i class="bi bi-pencil"></i>
+          </button>
+        </td>
+      </tr>
+      <!-- Edit modal -->
+      <div class="modal fade" id="leadModal{{ ld.id }}" tabindex="-1">
+        <div class="modal-dialog">
+          <div class="modal-content bg-dark border-secondary">
+            <div class="modal-header border-secondary">
+              <h6 class="modal-title">Edit Lead — {{ ld.name }}</h6>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="update_status">
+              <input type="hidden" name="lid" value="{{ ld.id }}">
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label small">Status</label>
+                  <select name="status" class="form-select form-select-sm bg-dark text-light border-secondary">
+                    {% for s in ['new','contacted','qualified','converted','closed'] %}
+                    <option value="{{ s }}" {% if ld.status==s %}selected{% endif %}>{{ s.title() }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label small">Notes</label>
+                  <textarea name="notes" rows="3" class="form-control form-control-sm bg-dark text-light border-secondary">{{ ld.notes or '' }}</textarea>
+                </div>
+                <div class="small text-secondary mb-2">
+                  <b>Message:</b> {{ ld.message or 'none' }}
+                </div>
+              </div>
+              <div class="modal-footer border-secondary">
+                <button type="submit" class="btn btn-solar btn-sm">Save</button>
+                <form method="POST" class="d-inline ms-2">
+                  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="lid" value="{{ ld.id }}">
+                  <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Delete lead?')">Delete</button>
+                </form>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <tr><td colspan="8" class="text-center text-secondary py-4">No leads found.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
+{% endblock %}

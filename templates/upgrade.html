@@ -1,0 +1,533 @@
+{% extends "base.html" %}
+{% block title %}Upgrade Plan — SolarPro Global{% endblock %}
+
+{% block extra_head %}
+{% if paystack_public_key %}
+<script src="https://js.paystack.co/v1/inline.js"></script>
+{% endif %}
+<style>
+/* Hidden data for JS */
+#csrf_val,#user_email{display:none}
+
+/* Plan cards */
+.plan-card{background:#0f0f22;border:1px solid #1e1e3a;border-radius:16px;
+  padding:28px 24px;position:relative;transition:.2s;display:flex;flex-direction:column}
+.plan-card:hover{transform:translateY(-4px);box-shadow:0 16px 48px rgba(0,0,0,.5)}
+.plan-card.featured{border-width:2px}
+.plan-card.current{opacity:.7}
+.popular-badge{position:absolute;top:-13px;left:50%;transform:translateX(-50%);
+  background:var(--solar-gold);color:#000;font-size:10px;font-weight:900;
+  padding:3px 16px;border-radius:12px;letter-spacing:.5px;white-space:nowrap}
+.plan-price{font-size:42px;font-weight:900;line-height:1}
+.plan-feat{list-style:none;padding:0;margin:0}
+.plan-feat li{font-size:12px;padding:4px 0;color:#9090b8;display:flex;
+  align-items:flex-start;gap:6px;line-height:1.4}
+.plan-feat li i.check{color:#22c55e;flex-shrink:0;margin-top:2px}
+.plan-feat li i.cross{color:#3a3a6a;flex-shrink:0;margin-top:2px}
+.plan-feat li.highlighted{color:#e2e2f0}
+
+/* Comparison table */
+.cmp-table th,.cmp-table td{padding:10px 14px;font-size:12px;border-color:#1e1e3a;vertical-align:middle}
+.cmp-table thead th{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#6868a0}
+.cmp-table .feat-name{color:#a0a0c8;font-weight:600}
+.cmp-table .yes{color:#22c55e;font-size:16px;text-align:center}
+.cmp-table .no{color:#2a2a4a;font-size:16px;text-align:center}
+.cmp-table .val{color:#f59e0b;font-weight:700;text-align:center}
+.cmp-table tr:hover td{background:rgba(255,255,255,.02)}
+
+/* Demo banner */
+.demo-banner{background:linear-gradient(135deg,#13132a,#1a0a2e);
+  border:1px solid #a78bfa44;border-radius:16px;padding:28px 32px;
+  position:relative;overflow:hidden}
+.demo-banner::before{content:'';position:absolute;top:0;left:0;right:0;
+  height:2px;background:linear-gradient(90deg,#a78bfa,#7c3aed,#a78bfa)}
+
+/* Code redemption */
+.code-input{font-family:'Courier New',monospace;letter-spacing:2px;font-size:14px;
+  background:#080814;border-color:#1e1e3a;color:#e2e2f0}
+.code-input:focus{border-color:#a78bfa;box-shadow:0 0 0 3px rgba(167,139,250,.15)}
+
+/* Trust strip */
+.trust-item{text-align:center;padding:16px}
+.trust-icon{font-size:24px;margin-bottom:6px}
+.trust-title{font-size:12px;font-weight:700;color:#c8c8e8}
+.trust-sub{font-size:10px;color:#5a5a90;margin-top:2px}
+
+/* FAQ */
+.faq-item{border-bottom:1px solid #1e1e3a;padding:14px 0}
+.faq-item:last-child{border-bottom:none}
+.faq-q{font-weight:700;font-size:13px;cursor:pointer;display:flex;
+  justify-content:space-between;align-items:center;color:#e2e2f0;user-select:none}
+.faq-q:hover{color:var(--solar-gold)}
+.faq-a{font-size:12px;color:#8888b8;margin-top:8px;line-height:1.7;display:none}
+
+/* Gradient separator */
+.grad-sep{height:1px;background:linear-gradient(90deg,transparent,#1e1e3a 20%,#2e2e5a 50%,#1e1e3a 80%,transparent);margin:48px 0}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Hidden data for JS -->
+<span id="csrf_val"   data-v="{{ csrf_token() }}"></span>
+<span id="user_email" data-v="{{ user.email }}"></span>
+
+<!-- ── Page header ────────────────────────────────────────────────────── -->
+{% set plan_color = '#a78bfa' if current_plan=='enterprise' else '#0ea5e9' if current_plan=='professional' else '#22c55e' if current_plan=='basic' else '#f59e0b' if current_plan=='demo' else '#6868a0' %}
+<div class="text-center mb-5">
+  <div class="mb-2" style="font-size:40px">⚡</div>
+  <h2 class="fw-black mb-2">Upgrade Your Plan</h2>
+  <p class="text-secondary mb-3">
+    You are on the
+    <span class="badge" style="background:{{ plan_color }}22;color:{{ plan_color }};border:1px solid {{ plan_color }}44;padding:4px 10px;font-size:12px">
+      {{ current_plan|upper }}
+    </span>
+    plan &nbsp;·&nbsp; Upgrade anytime &nbsp;·&nbsp; Cancel anytime
+  </p>
+  <div class="d-flex gap-3 justify-content-center flex-wrap" style="font-size:12px">
+    {% for icon,color,text in [
+      ('bi-shield-check-fill','#22c55e','Secure payments via Paystack'),
+      ('bi-arrow-counterclockwise','#0ea5e9','Cancel anytime, no lock-in'),
+      ('bi-folder2-open','#f59e0b','All existing projects preserved'),
+    ] %}
+    <span style="color:{{ color }}"><i class="bi {{ icon }} me-1"></i></span>
+    <span class="text-secondary">{{ text }}</span>
+    {% if not loop.last %}<span class="text-secondary">·</span>{% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+<!-- ── Demo trial banner (free users only) ────────────────────────────── -->
+{% if demo_mode and current_plan == 'free' %}
+<div class="demo-banner mb-5">
+  <div class="row align-items-center g-4">
+    <div class="col-md-2 text-center">
+      <div style="font-size:52px">🚀</div>
+    </div>
+    <div class="col-md-7">
+      <div class="fw-black mb-1" style="font-size:22px;color:#a78bfa">
+        Try Professional Free for 14 Days
+      </div>
+      <p class="text-secondary mb-2" style="font-size:14px">
+        Instantly unlock <strong class="text-light">all Professional features</strong> — no credit card,
+        no payment, no strings. Expires automatically after 14 days.
+      </p>
+      <div class="d-flex flex-wrap gap-2">
+        {% for f in ['20 projects','All 9 reports','Excel & Word export','Procurement planning','Email delivery','Multi-currency BOQ'] %}
+        <span class="badge" style="background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa33;font-size:10px">
+          <i class="bi bi-check me-1"></i>{{ f }}
+        </span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="col-md-3 text-center">
+      <form method="POST" action="{{ url_for('upgrade_demo_activate') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="btn fw-bold w-100 py-3" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;border:none;border-radius:12px;font-size:15px">
+          <i class="bi bi-rocket-takeoff me-2"></i>Activate Free Trial
+        </button>
+        <div class="text-secondary mt-2" style="font-size:10px">No card · No payment · Instant activation</div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Plan cards ──────────────────────────────────────────────────────── -->
+<div class="row g-4 justify-content-center mb-5">
+
+  <!-- Free -->
+  <div class="col-md-3">
+    <div class="plan-card {% if current_plan=='free' %}current{% endif %} h-100">
+      <div class="small fw-bold mb-1" style="color:#6868a0;text-transform:uppercase;letter-spacing:.5px">Free</div>
+      <div class="mb-1">
+        <span class="plan-price text-secondary">$0</span>
+        <span class="text-secondary small">/mo</span>
+      </div>
+      <div class="text-secondary mb-3" style="font-size:10px">Forever free · No card needed</div>
+      <ul class="plan-feat mb-4 flex-grow-1">
+        <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>1 project</li>
+        <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>Full engineering calculations</li>
+        <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>Pre-Installation Assessment PDF</li>
+        <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>Email support</li>
+        <li><i class="bi bi-x-circle cross"></i>Premium PDF reports</li>
+        <li><i class="bi bi-x-circle cross"></i>Excel / Word export</li>
+        <li><i class="bi bi-x-circle cross"></i>Procurement planning</li>
+      </ul>
+      {% if current_plan == 'free' %}
+      <button class="btn btn-outline-secondary w-100" disabled>
+        <i class="bi bi-check-circle me-1"></i>Current Plan
+      </button>
+      {% else %}
+      <div class="text-center text-secondary small">Your default plan</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Paid plans from PLAN_PRICES -->
+  {% for plan_key, pp in plan_prices.items() %}
+  {% set is_current = current_plan == plan_key %}
+  {% set is_popular = plan_key == 'professional' %}
+  {% set color = '#a78bfa' if plan_key=='enterprise' else '#0ea5e9' if plan_key=='professional' else '#22c55e' %}
+  <div class="col-md-3">
+    <div class="plan-card {% if is_popular %}featured{% endif %} {% if is_current %}current{% endif %} h-100"
+         style="{% if is_popular %}border-color:var(--solar-gold){% else %}border-color:{{ color }}44{% endif %}">
+      {% if is_popular %}
+      <span class="popular-badge">⭐ MOST POPULAR</span>
+      {% endif %}
+
+      <div class="small fw-bold mb-1" style="color:{{ color }};text-transform:uppercase;letter-spacing:.5px">
+        {{ pp.label }}
+      </div>
+      <div class="mb-1">
+        <span class="plan-price" style="color:{{ color }}">${{ pp.usd }}</span>
+        <span class="text-secondary small">/mo USD</span>
+      </div>
+      <div class="text-secondary mb-3" style="font-size:10px">
+        per account &middot; monthly &middot; cancel anytime
+      </div>
+
+      <ul class="plan-feat mb-4 flex-grow-1">
+        {% for f in pp.features %}
+        <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>{{ f }}</li>
+        {% endfor %}
+        {% if plan_key == 'professional' %}
+        <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>Word / DOCX export</li>
+        <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>Email report delivery</li>
+        <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>Procurement planning</li>
+        {% endif %}
+        {% if plan_key == 'enterprise' %}
+        <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>Word / DOCX export</li>
+        <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>Email report delivery</li>
+        <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>Procurement planning</li>
+        <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>Priority phone support</li>
+        {% endif %}
+      </ul>
+
+      {% if is_current %}
+      <button class="btn btn-outline-secondary w-100" disabled>
+        <i class="bi bi-check-circle me-1"></i>Current Plan
+      </button>
+      {% else %}
+      <div class="d-grid gap-2">
+
+        {% if paystack_public_key %}
+        <button class="btn fw-bold w-100 py-2"
+                style="background:{% if is_popular %}linear-gradient(135deg,var(--solar-gold),var(--solar-orange)){% else %}{{ color }}{% endif %};color:#000;border-radius:10px"
+                onclick="payWithPaystack('{{ plan_key }}', {{ pp.usd }})">
+          <i class="bi bi-{% if is_popular %}stars{% else %}phone{% endif %} me-2"></i>
+          Pay ${{ pp.usd }}/mo — Card / MoMo
+        </button>
+
+        {% elif stripe_key %}
+        <form method="POST" action="{{ url_for('upgrade_checkout') }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="plan" value="{{ plan_key }}">
+          <input type="hidden" name="gateway" value="stripe">
+          <button class="btn fw-bold w-100 py-2" style="background:{{ color }};color:#000;border-radius:10px">
+            <i class="bi bi-credit-card me-2"></i>Pay ${{ pp.usd }}/mo
+          </button>
+        </form>
+
+        {% elif paystack_key %}
+        <form method="POST" action="{{ url_for('upgrade_checkout') }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="plan" value="{{ plan_key }}">
+          <input type="hidden" name="gateway" value="paystack">
+          <button class="btn fw-bold w-100 py-2" style="background:{{ color }};color:#000;border-radius:10px">
+            <i class="bi bi-phone me-2"></i>Pay ${{ pp.usd }}/mo via MoMo
+          </button>
+        </form>
+
+        {% else %}
+        <a href="mailto:support@solarproglobal.com?subject=Upgrade to {{ pp.label }} Plan"
+           class="btn btn-outline-warning w-100 fw-bold py-2">
+          <i class="bi bi-envelope me-2"></i>Contact to Upgrade
+        </a>
+        <div class="text-center text-secondary" style="font-size:10px">
+          We'll activate your plan within 24 hours
+        </div>
+        {% endif %}
+
+        {% if demo_mode and current_plan == 'free' and plan_key == 'professional' %}
+        <div class="text-center" style="font-size:11px;color:#a78bfa">
+          or <a href="#" style="color:#a78bfa" onclick="document.querySelector('.demo-banner').scrollIntoView({behavior:'smooth'});return false">
+            try Professional free for 14 days ↑
+          </a>
+        </div>
+        {% endif %}
+
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+  {% endfor %}
+
+</div>
+
+<!-- ── Feature comparison table ─────────────────────────────────────── -->
+<div class="grad-sep"></div>
+<div class="text-center mb-4">
+  <h4 class="fw-black mb-1">Full Feature Comparison</h4>
+  <p class="text-secondary small">Every feature — across all plans</p>
+</div>
+
+<div class="solar-card p-0 overflow-hidden mb-5">
+  <div class="table-responsive">
+    <table class="table cmp-table mb-0">
+      <thead>
+        <tr style="background:#080814">
+          <th style="width:35%">Feature</th>
+          <th class="text-center">Free</th>
+          <th class="text-center" style="color:#22c55e">Basic<br><small style="font-size:10px;font-weight:400">$9/mo</small></th>
+          <th class="text-center" style="color:var(--solar-gold);background:rgba(245,158,11,.04)">
+            Professional<br><small style="font-size:10px;font-weight:400">$29/mo</small>
+          </th>
+          <th class="text-center" style="color:#a78bfa">Enterprise<br><small style="font-size:10px;font-weight:400">$99/mo</small></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set Y = '<i class="bi bi-check-circle-fill" style="color:#22c55e"></i>' %}
+        {% set N = '<i class="bi bi-x-circle" style="color:#2a2a4a"></i>' %}
+        {% for section, rows in [
+          ("Projects & Design", [
+            ("Projects",                    "1",     "5",    "20",   "Unlimited"),
+            ("Full engineering calculations",Y,       Y,      Y,      Y),
+            ("BS 7671 / IEC 60364 cable sizing",Y,   Y,      Y,      Y),
+            ("Financial analysis (NPV/IRR)", Y,       Y,      Y,      Y),
+            ("Bankability verdict",          Y,       Y,      Y,      Y),
+            ("Redesign recommendations",     N,       N,      Y,      Y),
+            ("Multi-currency BOQ",           N,       N,      Y,      Y),
+          ]),
+          ("Reports & Exports", [
+            ("Pre-Installation Assessment",  Y,       Y,      Y,      Y),
+            ("All 9 premium PDF reports",    N,       Y,      Y,      Y),
+            ("Excel (.xlsx) export",         N,       Y,      Y,      Y),
+            ("CSV export",                   N,       Y,      Y,      Y),
+            ("Word (.docx) export",          N,       N,      Y,      Y),
+            ("Email report delivery",        N,       N,      Y,      Y),
+            ("White-label / custom branding",N,       N,      N,      Y),
+          ]),
+          ("Procurement", [
+            ("Equipment catalog access",     N,       Y,      Y,      Y),
+            ("Supplier directory",           N,       Y,      Y,      Y),
+            ("Auto procurement plan (BOQ→PO)",N,      N,      Y,      Y),
+          ]),
+          ("Support & Extras", [
+            ("Email support",                Y,       Y,      Y,      Y),
+            ("Priority support",             N,       N,      Y,      Y),
+            ("Dedicated engineer support",   N,       N,      N,      Y),
+            ("API access",                   N,       N,      N,      Y),
+            ("Team / sub-accounts",          N,       N,      N,      Y),
+            ("Annual billing discount (20%)",N,       Y,      Y,      Y),
+          ]),
+        ] %}
+        <tr style="background:#080814">
+          <td colspan="5" class="fw-bold text-uppercase" style="font-size:10px;letter-spacing:.8px;color:#5a5a90;padding:12px 14px 4px">
+            {{ section }}
+          </td>
+        </tr>
+        {% for feat, free_v, basic_v, pro_v, ent_v in rows %}
+        <tr>
+          <td class="feat-name">{{ feat }}</td>
+          {% for v in [free_v, basic_v, pro_v, ent_v] %}
+          <td class="{% if v == Y %}yes{% elif v == N %}no{% else %}val{% endif %}">
+            {{ v|safe }}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Upgrade code + Demo ─────────────────────────────────────────────── -->
+<div class="row g-4 justify-content-center mb-5">
+
+  <!-- Upgrade code -->
+  <div class="col-md-5">
+    <div class="solar-card p-4 h-100">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div style="font-size:28px;color:#f59e0b"><i class="bi bi-key-fill"></i></div>
+        <div>
+          <div class="fw-bold">Have an Upgrade Code?</div>
+          <div class="text-secondary small">Redeem a promo or gifted plan code</div>
+        </div>
+      </div>
+      <form method="POST" action="{{ url_for('upgrade_redeem_code') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="d-flex gap-2">
+          <input type="text" name="code" placeholder="PRO-XXXX-XXXX"
+                 class="form-control code-input flex-grow-1" required
+                 style="background:#080814;border:1px solid #1e1e3a;color:#e2e2f0;border-radius:8px">
+          <button class="btn btn-solar px-4">
+            <i class="bi bi-check2-circle me-1"></i>Redeem
+          </button>
+        </div>
+        <div class="text-secondary mt-2" style="font-size:11px">
+          <i class="bi bi-info-circle me-1"></i>
+          Codes are issued by SolarPro Global. Contact
+          <a href="mailto:support@solarproglobal.com" class="text-warning">support</a> to request one.
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Payment methods -->
+  <div class="col-md-7">
+    <div class="solar-card p-4 h-100">
+      <div class="fw-bold mb-3 text-center">
+        <i class="bi bi-shield-lock-fill me-2 text-success"></i>Accepted Payment Methods
+      </div>
+      <div class="row g-3">
+        {% for icon,color,title,subs in [
+          ('bi-credit-card-2-front-fill','#0ea5e9','Card Payments',
+           ['Visa · Mastercard · Verve','All countries · Billed USD','Powered by Paystack (PCI-DSS L1)']),
+          ('bi-phone-fill','#f59e0b','Mobile Money — West Africa',
+           ['Ghana: MTN · AirtelTigo · Vodafone','Nigeria: MTN · OPay · Airtel','Billed in local currency']),
+          ('bi-phone-fill','#a78bfa','Mobile Money — More Africa',
+           ['Senegal: Orange · Wave · Free','Cameroon: MTN · Orange','Gambia · Liberia via Paystack']),
+        ] %}
+        <div class="col-md-4">
+          <div class="text-center">
+            <div style="font-size:26px;color:{{ color }}" class="mb-2"><i class="bi {{ icon }}"></i></div>
+            <div class="fw-bold small mb-1">{{ title }}</div>
+            {% for s in subs %}
+            <div class="text-secondary" style="font-size:10px">{{ s }}</div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% if not stripe_key and not paystack_key and not paystack_public_key %}
+      <div class="mt-3 p-3 rounded text-center" style="background:rgba(14,165,233,.07);border:1px solid #0ea5e922">
+        <div class="small text-secondary">
+          <i class="bi bi-info-circle me-2 text-info"></i>
+          No payment gateway configured — contact
+          <a href="mailto:support@solarproglobal.com" class="text-warning fw-bold">support@solarproglobal.com</a>
+          to upgrade manually.
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Trust strip ────────────────────────────────────────────────────── -->
+<div class="row g-0 mb-5" style="background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px;overflow:hidden">
+  {% for icon,color,title,sub in [
+    ('bi-arrow-counterclockwise','#22c55e','Cancel Anytime',         'No lock-in. Monthly rolling subscription.'),
+    ('bi-folder2-open',          '#0ea5e9','Data Always Yours',       'All projects preserved on any plan.'),
+    ('bi-shield-fill',           '#a78bfa','PCI-DSS Compliant',       'Paystack Level 1 certified processor.'),
+    ('bi-headset',               '#f59e0b','24-hr Support',           'Email support on all paid plans.'),
+    ('bi-patch-check-fill',      '#22c55e','Engineering Standards',   'BS 7671 · IEC 60364 · NEC · IEEE.'),
+  ] %}
+  <div class="col trust-item">
+    <div class="trust-icon" style="color:{{ color }}"><i class="bi {{ icon }}"></i></div>
+    <div class="trust-title">{{ title }}</div>
+    <div class="trust-sub">{{ sub }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ── FAQ ────────────────────────────────────────────────────────────── -->
+<div class="row justify-content-center mb-5">
+  <div class="col-lg-8">
+    <h4 class="fw-black text-center mb-4">Frequently Asked Questions</h4>
+    <div class="solar-card p-4">
+      {% for q, a in [
+        ("Can I really cancel anytime?",
+         "Yes. Subscriptions are month-to-month with no minimum term. Cancel before your renewal date and you won't be charged again. Your projects remain accessible on the Free plan after cancellation."),
+        ("Is there a free trial?",
+         "Yes — the Free plan is free forever with no credit card required. If DEMO_MODE is enabled (on by default), you can also activate a 14-day Professional trial instantly with no payment."),
+        ("What happens to my data if I downgrade?",
+         "Your project data is always preserved. You simply cannot create new projects above your plan limit. All completed reports and calculations remain fully accessible."),
+        ("Can I upgrade mid-month?",
+         "Yes. Upgrade any time and your new plan is activated immediately. You won't be double-charged — billing starts on your next cycle."),
+        ("Do MoMo payments auto-renew?",
+         "Mobile Money billing is currently manual. Contact support before your renewal date to extend your plan. We'll send a reminder 5 days before expiry."),
+        ("Is there a discount for annual billing?",
+         "Yes — contact support@solarproglobal.com for annual pricing and save up to 20% compared to monthly billing."),
+        ("Is my payment secure?",
+         "Absolutely. Payments are processed by Paystack, a PCI-DSS Level 1 certified payment processor. We never store card details on our servers."),
+        ("What is the Enterprise API?",
+         "Enterprise plan users get API key access to programmatically create projects, retrieve calculation results, and generate reports. Contact support for API documentation and onboarding."),
+        ("Can I get a custom or white-label version?",
+         "Yes — Enterprise plan includes white-label report branding with your company name and logo. For a fully customised platform deployment, contact support@solarproglobal.com for pricing."),
+        ("Which engineering standards are used?",
+         "BS 7671:2018 (UK IET Wiring Regulations), IEC 60364, NEC 2023, IEEE 1547, and MCS. Cable sizing uses the tabulated method with correction factors for temperature, grouping, and installation method."),
+      ] %}
+      <div class="faq-item">
+        <div class="faq-q"
+             onclick="var a=this.nextElementSibling;a.style.display=a.style.display=='block'?'none':'block';this.querySelector('.faq-icon').style.transform=a.style.display=='block'?'rotate(45deg)':''">
+          {{ q }}
+          <i class="bi bi-plus faq-icon" style="font-size:18px;transition:transform .2s;color:var(--solar-gold);flex-shrink:0"></i>
+        </div>
+        <div class="faq-a">{{ a }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ── Final CTA (for free users) ────────────────────────────────────── -->
+{% if current_plan == 'free' %}
+<div class="text-center py-4 mb-4" style="background:radial-gradient(ellipse 50% 80% at 50% 50%,rgba(245,158,11,.05),transparent);border-radius:16px">
+  <div class="fw-black mb-2" style="font-size:20px">Ready to unlock the full platform?</div>
+  <p class="text-secondary small mb-3">
+    Professional at $29/mo gives you everything — 20 projects, 9 reports, Excel, Word, procurement, and email delivery.
+  </p>
+  {% if demo_mode %}
+  <form method="POST" action="{{ url_for('upgrade_demo_activate') }}" class="d-inline me-2">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button class="btn fw-bold px-5 py-2" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;border:none;border-radius:10px">
+      <i class="bi bi-stars me-2"></i>Start 14-Day Free Trial
+    </button>
+  </form>
+  {% endif %}
+  <a href="mailto:support@solarproglobal.com?subject=Upgrade enquiry" class="btn btn-outline-secondary px-4 py-2">
+    <i class="bi bi-envelope me-2"></i>Contact Sales
+  </a>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if paystack_public_key %}
+<script>
+function payWithPaystack(plan, amountUsd) {
+  const email  = document.getElementById('user_email').dataset.v;
+  const csrf   = document.getElementById('csrf_val').dataset.v;
+  const amount = amountUsd * 100; // Paystack: USD cents
+
+  const handler = PaystackPop.setup({
+    key:      '{{ paystack_public_key }}',
+    email:    email,
+    amount:   amount,
+    currency: 'USD',
+    ref:      'pso_' + Math.random().toString(36).substr(2, 9) + Date.now(),
+    metadata: { plan: plan },
+    callback: function(response) {
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '{{ url_for("paystack_verify") }}';
+      [['_csrf', csrf], ['reference', response.reference], ['plan', plan]].forEach(([k, v]) => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden'; inp.name = k; inp.value = v;
+        form.appendChild(inp);
+      });
+      document.body.appendChild(form);
+      form.submit();
+    },
+    onClose: function() {}
+  });
+  handler.openIframe();
+}
+</script>
+{% endif %}
+{% endblock %}

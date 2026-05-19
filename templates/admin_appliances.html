@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Appliance Library — Admin{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+  <div class="d-flex align-items-center gap-2">
+    <a href="{{ url_for('admin_dashboard') }}" class="text-secondary small"><i class="bi bi-shield me-1"></i>Admin</a>
+    <span class="text-secondary mx-1">/</span>
+    <span class="text-warning fw-bold">Appliance Library</span>
+  </div>
+  <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">{{ appliances|length }} appliances</span>
+</div>
+
+<div class="row g-4">
+<!-- Add appliance form -->
+<div class="col-lg-4">
+  <div class="solar-card p-4">
+    <div class="section-head"><i class="bi bi-plus-circle me-2"></i>Add Appliance</div>
+    <form method="POST">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="add">
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-secondary">CATEGORY</label>
+        <select name="category" class="form-select" required>
+          {% for cat in categories %}
+          <option>{{ cat }}</option>
+          {% endfor %}
+          <option value="__new__">+ New Category (type below)</option>
+        </select>
+        <input name="category_new" class="form-control mt-2 d-none" id="newCatInput" placeholder="New category name">
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-secondary">APPLIANCE NAME</label>
+        <input name="name" class="form-control" placeholder="e.g. LED Bulb 15W" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-secondary">DEFAULT WATTAGE (W)</label>
+        <input name="default_watt" type="number" min="1" max="50000" class="form-control" placeholder="e.g. 15" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-secondary">NOTES (optional)</label>
+        <input name="notes" class="form-control" placeholder="e.g. LED type, efficiency class">
+      </div>
+      <button class="btn btn-solar w-100"><i class="bi bi-plus-lg me-1"></i>Add Appliance</button>
+    </form>
+  </div>
+</div>
+
+<!-- Appliance table -->
+<div class="col-lg-8">
+  {% for cat in categories %}
+  <div class="solar-card p-4 mb-3">
+    <div class="section-head mb-2">
+      <i class="bi bi-tag me-2"></i>{{ cat }}
+      <span class="badge ms-2" style="background:#1e1e3a;color:#9090b8;font-size:10px">
+        {{ appliances|selectattr('category','equalto',cat)|list|length }}
+      </span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Name</th><th>Watts</th><th>Notes</th><th></th></tr></thead>
+        <tbody>
+        {% for a in appliances %}
+        {% if a.category == cat %}
+        <tr>
+          <td class="small fw-bold">{{ a.name }}</td>
+          <td class="small"><span class="text-warning">{{ a.default_watt }}W</span></td>
+          <td class="small text-secondary">{{ a.notes or '—' }}</td>
+          <td>
+            <form method="POST" class="d-inline">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="aid" value="{{ a.id }}">
+              <button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="return confirm('Delete {{ a.name }}?')">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+</div>
+
+{% block scripts %}
+<script>
+document.querySelector('select[name="category"]').addEventListener('change', function() {
+  const ni = document.getElementById('newCatInput');
+  if (this.value === '__new__') {
+    ni.classList.remove('d-none');
+    ni.required = true;
+    ni.focus();
+  } else {
+    ni.classList.add('d-none');
+    ni.required = false;
+  }
+});
+document.querySelector('form').addEventListener('submit', function() {
+  const sel = this.querySelector('select[name="category"]');
+  const ni  = document.getElementById('newCatInput');
+  if (sel.value === '__new__' && ni.value.trim()) {
+    sel.innerHTML += `<option value="${ni.value}" selected>${ni.value}</option>`;
+    sel.value = ni.value;
+  }
+});
+</script>
+{% endblock %}
+{% endblock %}

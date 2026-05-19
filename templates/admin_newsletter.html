@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Newsletter Subscribers{% endblock %}
+{% block content %}
+<div class="container-xl py-4">
+<div class="d-flex align-items-center gap-3 mb-4">
+  <div style="font-size:32px;color:var(--solar-gold)"><i class="bi bi-envelope-heart-fill"></i></div>
+  <div>
+    <h4 class="fw-black mb-0">Newsletter Subscribers</h4>
+    <div class="text-secondary small">{{ subs|selectattr('status','eq','active')|list|length }} active subscribers</div>
+  </div>
+  <div class="ms-auto">
+    <a href="{{ url_for('admin_sales') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i>Sales Dashboard
+    </a>
+  </div>
+</div>
+
+<div class="solar-card p-0 overflow-hidden">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr>
+        <th class="ps-3">Email</th><th>Name</th><th>Status</th><th>Subscribed</th><th class="pe-3">Action</th>
+      </tr></thead>
+      <tbody>
+      {% for s in subs %}
+      <tr>
+        <td class="ps-3"><a href="mailto:{{ s.email }}" class="text-info">{{ s.email }}</a></td>
+        <td class="small">{{ s.name or '—' }}</td>
+        <td>
+          {% if s.status=='active' %}
+          <span class="badge bg-success">Active</span>
+          {% else %}
+          <span class="badge bg-secondary">Unsubscribed</span>
+          {% endif %}
+        </td>
+        <td class="small text-secondary">{{ s.created_at[:10] }}</td>
+        <td class="pe-3">
+          {% if s.status=='active' %}
+          <form method="POST" action="{{ url_for('admin_newsletter_unsub', sid=s.id) }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove subscriber?')">
+              <i class="bi bi-x-circle me-1"></i>Remove
+            </button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="text-center text-secondary py-4">No subscribers yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{
+  "admin": {
+    "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+    "role": "admin",
+    "full_name": "System Administrator",
+    "email": "admin@solarpv.gh",
+    "created_at": "2026-01-01",
+    "last_login": null,
+    "designs_run": 0
+  },
+  "kafedzie": {
+    "password": "2f364dfb2d3fe2e0b9e9015d1f781cac818735fd2bde65c0c201563dcf473efa",
+    "role": "user",
+    "full_name": "Kojo Afedzie",
+    "email": "kafedzie@gmail.com",
+    "created_at": "2026-04-13",
+    "last_login": "2026-04-14 13:27",
+    "designs_run": 5
+  }
+}

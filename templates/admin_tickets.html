@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Support Tickets — SolarPro Admin{% endblock %}
+
+{% block extra_head %}
+<style>
+  .status-tab{padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;
+    border:1px solid transparent;cursor:pointer;text-decoration:none;transition:.15s;
+    background:transparent;color:#6868a0;display:inline-flex;align-items:center;gap:5px}
+  .status-tab:hover{background:rgba(255,255,255,.04);color:#d0d0e8;text-decoration:none}
+  .status-tab.active{background:rgba(255,255,255,.08);border-color:#2a2a5a;color:#f0f0f8}
+  .cnt-pill{display:inline-block;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:800;
+    background:rgba(255,255,255,.08)}
+
+  .ticket-card{border:1px solid #1e1e3a;border-radius:12px;padding:16px;transition:.15s;
+    background:rgba(255,255,255,.015)}
+  .ticket-card:hover{background:rgba(255,255,255,.03);border-color:#2a2a5a}
+  .ticket-card.is-open{border-left:3px solid #ef4444}
+  .ticket-card.is-in_progress{border-left:3px solid #f59e0b}
+  .ticket-card.is-answered{border-left:3px solid #0ea5e9}
+  .ticket-card.is-closed,.ticket-card.is-resolved{border-left:3px solid #22c55e}
+
+  .prio-chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:800;
+    text-transform:uppercase;letter-spacing:.4px}
+  .stat-chip{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.3px}
+
+  .avatar-sm{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:11px;font-weight:900;flex-shrink:0}
+
+  .search-input{background:#0a0a1a;border:1px solid #2a2a5a;border-radius:8px;
+    padding:7px 12px;color:#d0d0e8;font-size:13px;width:240px}
+  .search-input:focus{outline:none;border-color:#f59e0b66}
+  .ticket-row.hidden{display:none}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% set sc = {
+  'open':        ('#ef4444', 'bi-exclamation-circle-fill'),
+  'in_progress': ('#f59e0b', 'bi-hourglass-split'),
+  'answered':    ('#0ea5e9', 'bi-chat-dots-fill'),
+  'closed':      ('#22c55e', 'bi-check-circle-fill'),
+  'resolved':    ('#22c55e', 'bi-check-circle-fill'),
+} %}
+{% set pc = {'high': '#ef4444', 'normal': '#f59e0b', 'low': '#6868a0'} %}
+
+<!-- Header -->
+<div class="report-header mb-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <a href="{{ url_for('admin_dashboard') }}" class="text-secondary small text-decoration-none">
+          <i class="bi bi-shield me-1"></i>Admin
+        </a>
+        <span class="text-secondary">/</span>
+        <span class="text-warning small fw-bold">Support Tickets</span>
+      </div>
+      <div class="report-title"><i class="bi bi-ticket-fill me-2"></i>Support Tickets</div>
+      <div class="text-secondary mt-1">View and respond to all user support requests</div>
+    </div>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i>Dashboard
+    </a>
+  </div>
+</div>
+
+<!-- KPI strip -->
+<div class="row g-3 mb-4">
+  {% for key,lbl,icon,color in [
+    ('all',        'Total',       'bi-ticket-fill',         '#6868a0'),
+    ('open',       'Open',        'bi-exclamation-circle-fill','#ef4444'),
+    ('in_progress','In Progress', 'bi-hourglass-split',     '#f59e0b'),
+    ('answered',   'Answered',    'bi-chat-dots-fill',      '#0ea5e9'),
+    ('closed',     'Closed',      'bi-check-circle-fill',   '#22c55e'),
+  ] %}
+  <div class="col-6 col-md">
+    <a href="{{ url_for('admin_tickets', status=key) }}" class="text-decoration-none">
+      <div class="kpi-card text-center p-3" style="{% if status_filter==key %}border-color:{{ color }}44;{% endif %}transition:.15s">
+        <div style="font-size:18px;color:{{ color }}"><i class="bi {{ icon }}"></i></div>
+        <div class="kpi-label mt-1" style="font-size:9px">{{ lbl }}</div>
+        <div class="kpi-value" style="font-size:20px{% if status_filter==key %};color:{{ color }};-webkit-text-fill-color:{{ color }}{% endif %}">
+          {{ counts.get(key, 0) }}
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Filter bar -->
+<div class="d-flex align-items-center gap-3 flex-wrap mb-4"
+     style="background:#0f0f22;border:1px solid #1e1e3a;border-radius:10px;padding:12px 16px">
+  <!-- Status tabs -->
+  <div class="d-flex gap-1 flex-wrap">
+    {% for s,label in [('all','All'),('open','Open'),('in_progress','In Progress'),('answered','Answered'),('closed','Closed')] %}
+    <a href="{{ url_for('admin_tickets', status=s) }}"
+       class="status-tab {% if status_filter==s %}active{% endif %}">
+      {{ label }}
+      <span class="cnt-pill">{{ counts.get(s, 0) }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  <!-- Search -->
+  <div class="ms-auto d-flex align-items-center gap-2">
+    <input type="text" id="ticketSearch" class="search-input" placeholder="Search subject, user…"
+           oninput="filterTickets()">
+    <span id="ticketCount" class="text-secondary small">{{ tickets|length }} ticket{{ 's' if tickets|length != 1 }}</span>
+  </div>
+</div>
+
+<!-- Ticket list -->
+{% if tickets %}
+<div id="ticketList">
+  {% for t in tickets %}
+  {% set s_color, s_icon = sc.get(t.status, ('#6868a0','bi-circle')) %}
+  {% set p_color = pc.get(t.priority, '#6868a0') %}
+  {% set av_colors = ['#0ea5e9','#22c55e','#f59e0b','#a78bfa','#ef4444','#06b6d4'] %}
+  {% set av = av_colors[loop.index0 % av_colors|length] %}
+  <div class="ticket-card mb-3 ticket-row is-{{ t.status }}"
+       data-search="{{ (t.subject ~ ' ' ~ t.username ~ ' ' ~ (t.email or ''))|lower }}">
+    <div class="d-flex align-items-start gap-3">
+
+      <!-- Avatar -->
+      <div class="avatar-sm" style="background:{{ av }}18;border:1px solid {{ av }}44;color:{{ av }}">
+        {{ t.username[0]|upper if t.username else '?' }}
+      </div>
+
+      <!-- Body -->
+      <div class="flex-grow-1" style="min-width:0">
+        <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap mb-1">
+          <div>
+            <span class="fw-bold" style="color:#e0e0f0;font-size:13px">#{{ t.id }} — {{ t.subject }}</span>
+          </div>
+          <div class="d-flex align-items-center gap-2 flex-shrink-0">
+            <!-- Priority -->
+            <span class="prio-chip" style="background:{{ p_color }}18;color:{{ p_color }};border:1px solid {{ p_color }}33">
+              {{ (t.priority or 'normal')|upper }}
+            </span>
+            <!-- Status -->
+            <span class="stat-chip" style="background:{{ s_color }}18;color:{{ s_color }};border:1px solid {{ s_color }}33">
+              <i class="bi {{ s_icon }} me-1" style="font-size:9px"></i>{{ t.status|upper|replace('_',' ') }}
+            </span>
+          </div>
+        </div>
+
+        <!-- User + timestamps -->
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+          <div class="d-flex align-items-center gap-1">
+            <i class="bi bi-person-fill" style="font-size:10px;color:#6868a0"></i>
+            <span class="small fw-semibold" style="color:#9090c0">{{ t.username }}</span>
+            {% if t.email %}
+            <span class="text-secondary" style="font-size:10px">· <a href="mailto:{{ t.email }}" class="text-info text-decoration-none">{{ t.email }}</a></span>
+            {% endif %}
+          </div>
+          <div class="d-flex gap-3 text-secondary" style="font-size:10px">
+            <span><i class="bi bi-clock me-1"></i>Opened {{ t.created_at[:16].replace('T',' ') if t.created_at else '—' }}</span>
+            <span><i class="bi bi-arrow-clockwise me-1"></i>Updated {{ t.updated_at[:16].replace('T',' ') if t.updated_at else '—' }}</span>
+          </div>
+        </div>
+
+        <!-- Message preview -->
+        {% if t.message %}
+        <div class="mt-2 text-secondary" style="font-size:11px;line-height:1.5;
+             background:#0a0a1a;border-radius:6px;padding:8px 10px;border:1px solid #1e1e3a">
+          {{ t.message[:200] }}{% if t.message|length > 200 %}…{% endif %}
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- CTA -->
+      <div class="flex-shrink-0">
+        <a href="{{ url_for('admin_ticket_detail', tid=t.id) }}"
+           class="btn btn-sm"
+           style="background:#f59e0b18;border:1px solid #f59e0b44;color:#f59e0b;font-size:11px;white-space:nowrap">
+          <i class="bi bi-reply me-1"></i>Reply
+        </a>
+      </div>
+
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- No search results -->
+<div id="noResults" class="solar-card p-5 text-center" style="display:none">
+  <i class="bi bi-search d-block mb-3" style="font-size:36px;color:#2a2a5a"></i>
+  <div class="fw-bold mb-1">No tickets match your search</div>
+  <div class="text-secondary small">Try a different keyword or clear the filter.</div>
+</div>
+
+{% else %}
+<!-- Empty state -->
+<div class="solar-card p-5 text-center">
+  <i class="bi bi-check-circle-fill d-block mb-3" style="font-size:48px;color:#22c55e44"></i>
+  <div class="fw-bold fs-5 mb-2">
+    {% if status_filter == 'all' %}No tickets yet{% else %}No {{ status_filter|replace('_',' ') }} tickets{% endif %}
+  </div>
+  <div class="text-secondary small mb-4">
+    {% if status_filter == 'all' %}
+    When users submit support requests they'll appear here.
+    {% else %}
+    No tickets with this status. <a href="{{ url_for('admin_tickets') }}" class="text-warning">View all tickets.</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<script>
+function filterTickets() {
+  const q    = document.getElementById('ticketSearch').value.toLowerCase();
+  const rows = document.querySelectorAll('#ticketList .ticket-row');
+  let visible = 0;
+  rows.forEach(r => {
+    const show = !q || r.dataset.search.includes(q);
+    r.classList.toggle('hidden', !show);
+    if (show) visible++;
+  });
+  document.getElementById('ticketCount').textContent =
+    visible + ' ticket' + (visible !== 1 ? 's' : '');
+  const noRes = document.getElementById('noResults');
+  if (noRes) noRes.style.display = visible === 0 ? '' : 'none';
+}
+</script>
+
+{% endblock %}

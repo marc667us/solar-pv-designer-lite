@@ -1,0 +1,1062 @@
+==============================================================================
+  INSTALLATION METHOD REPORT
+  Solar PV Off-Grid System
+==============================================================================
+  Project   : Solar PV Off-Grid System
+  Location  : Ghana — Greater Accra  (Accra)
+  Standard  : BS 7671:2018 (18th Edition)
+  PV Array  : 69.44 kWp  (174 x 400 Wp modules)
+  Battery   : 312.50 kWh  (131 x 2.4 kWh units)
+  Inverter  : 93.75 kW Hybrid Inverter/Charger
+  Date      : 2026-04-10
+==============================================================================
+
+  This report describes the method of installation for each item in
+  the Bill of Quantities (BoQ).  It includes installation narratives,
+  step-by-step procedures, tools required, and installation diagrams.
+  All work shall comply with BS 7671:2018 and manufacturer instructions.
+
+==============================================================================
+  SECTION 0A — REGIONAL CONTEXT & SITE CONDITIONS
+==============================================================================
+
+  Understanding the installation site's solar resource, climate, and grid
+  reliability is essential for safe and optimised system installation.
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  SOLAR RESOURCE SUMMARY                                             │
+  ├─────────────────────────────────────────────────────────────────────┤
+  │  Region              : Greater Accra                                 │
+  │  Capital City        : Accra                                         │
+  │  Climate Zone        : Tropical Savanna (Aw)                         │
+  │  Peak Sun Hours      : 4.8 h/day                                     │
+  │  Annual GHI          : 1752 kWh/m²/yr                                │
+  │  Avg. Temperature    : 27.8 °C (annual)                              │
+  │  Temp Derating Factor: 1.0000  (panel loss above 25 °C STC)       │
+  │  Effective Efficiency: 0.7500  (system eff × temp derating)       │
+  │  Recommended Tilt    : 6° fixed, face equator                        │
+  │  Rainy Season        : Apr – Jul, Sep – Oct                          │
+  │  Solar Rating        : Moderate                                      │
+  └─────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  GRID & POWER RELIABILITY                                           │
+  ├─────────────────────────────────────────────────────────────────────┤
+  │  Distribution Utility: ECG — Accra East/West Districts               │
+  │  Est. Daily Outage   : 4–8 hrs/day                                   │
+  │  Grid Coverage       : 82%                                           │
+  │  Reliability Rating  : Fair                                          │
+  ├─────────────────────────────────────────────────────────────────────┤
+  │  Key Grid Issues:                                                   │
+  │    • Recurrent load shedding (dumsor)                                │
+  │    • Voltage fluctuations during peak hours                          │
+  │    • High commercial connection fees                                 │
+  └─────────────────────────────────────────────────────────────────────┘
+
+  INSTALLATION NOTES FOR THIS REGION:
+  Coastal humidity and low marine cloud cover reduce effective irradiance. Two rainy seasons. Good year-round sunshine between seasons.
+
+  The poor grid reliability above justifies an off-grid / hybrid solar
+  system as the primary or backup power supply for this installation.
+
+==============================================================================
+  SECTION 0 — OVERALL SYSTEM ARCHITECTURE DIAGRAM
+==============================================================================
+
+  The diagram below shows the complete power flow of the system,
+  from PV array through to AC loads.
+
+  ┌──────────────────────────────────────────────────────────────┐
+  │                    PV ARRAY ON ROOF                         │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+  │  │ Panel 1  │  │ Panel 2  │  │ Panel 3  │  │ Panel .. │   │
+  │  │  400 Wp  │  │  400 Wp  │  │  400 Wp  │  │  400 Wp  │   │
+  │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
+  │       └─────────────┴──────────────┴─────────────┘         │
+  │                         │ DC (String cables)                │
+  └─────────────────────────┼──────────────────────────────────┘
+                            │
+                     ┌──────▼──────┐
+                     │  DC COMBINER│  ← SPD (DC side)
+                     │  STRING BOX │
+                     └──────┬──────┘
+                            │ DC Cable 6mm²
+                     ┌──────▼──────────────────┐
+                     │   HYBRID INVERTER        │
+                     │   CHARGER / MPPT         │◄─── Battery Bank
+                     │   93.75 kW              │     (131 units)
+                     └──────┬──────────────────┘
+                            │ AC Cable 10mm²
+                     ┌──────▼──────┐
+                     │  AC MCB +   │  ← SPD (AC side)
+                     │  RCCB BOARD │
+                     └──────┬──────┘
+                            │
+                  ┌─────────┴──────────┐
+                  │                    │
+           ┌──────▼──────┐    ┌────────▼────────┐
+           │  LIGHTING   │    │  SOCKET OUTLETS │
+           │   CIRCUIT   │    │    CIRCUIT      │
+           └─────────────┘    └─────────────────┘
+
+  NOTE: Earth conductor runs from earth rod to all metalwork,
+        module frames, inverter chassis, battery rack, and DB board.
+
+==============================================================================
+  ITEM 4 — PV MOUNTING STRUCTURE
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  Aluminium mounting rails and brackets are fixed to the roof structure
+  to carry the PV modules.  The structure must be designed for Ghana's
+  wind and rain loads, pitched at the optimal tilt angle (10°–15° for
+  Ghana's latitude of ~6°N) to maximise irradiance and self-cleaning.
+  All fixings shall be stainless steel or hot-dip galvanised to prevent
+  corrosion in the tropical climate.
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Tape measure and chalk line
+    • Spirit level (600 mm minimum)
+    • Drill with 10 mm and 12 mm masonry/metal bits
+    • Angle grinder (for rail cutting)
+    • Spanner set and socket set (M8, M10, M12)
+    • Torque wrench (set to manufacturer spec, typically 12–16 Nm)
+    • Safety harness and fall-arrest lanyard
+    • Roof anchor point or scaffold
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  Carry out a roof survey.  Check rafter/purlin spacing,
+           roofing material, load-bearing capacity, and slope.
+
+  Step 2.  Mark the panel layout on the roof using a chalk line.
+           Maintain a minimum 300 mm clearance from roof edges.
+
+  Step 3.  Locate and mark roof fixing points directly above rafters
+           or purlins.  Space rail brackets at ≤ 1,200 mm centres.
+
+  Step 4.  Drill pilot holes.  Fit roof hooks or L-feet brackets with
+           EPDM gaskets or sealant to prevent water ingress.
+
+  Step 5.  Bolt the aluminium rails onto the brackets.  Level each
+           rail with a spirit level.  Torque all bolts to spec.
+
+  Step 6.  Fit end-clamps and mid-clamps loosely along the rail,
+           ready to receive the panel frames.
+
+  Step 7.  Attach the earth bonding lug to each rail section.
+           Run the continuous earth conductor through the lugs.
+
+  Step 8.  Inspect all fixings before placing panels.
+
+  MOUNTING STRUCTURE DIAGRAM
+  --------------------------------------------------
+
+         ROOF SLOPE (10°–15° tilt toward south / equator)
+         ───────────────────────────────────────────────►
+
+         ┌──────────────────────────────────────────────┐  ← Rail (Al extrusion)
+         │  [Clamp]──[Panel Frame]──[Clamp]──[Panel]   │
+         │     │                      │                 │
+         │  [Bracket]            [Bracket]             │
+         │     │                      │                 │
+  ───────┼─────┼──────────────────────┼─────────────────┼── ROOF SURFACE
+         │  [Rafter]            [Rafter]                │
+
+  CROSS-SECTION (single bracket):
+
+       Panel frame
+         │
+    ─────┤ Mid-clamp
+         ├──── Al Rail ─────────────────
+         │
+         └── L-foot bracket
+               │
+        ───────┼──────  Roof surface
+               │  EPDM seal
+               └── Bolt into rafter
+
+==============================================================================
+  ITEM 1 — SOLAR PV MODULES (400 Wp EACH)
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  174 monocrystalline PV modules, each rated at 400 Wp, are mounted
+  on the pre-installed aluminium rail system.  Modules are connected in
+  strings using MC4 connectors and UV-resistant 6mm² solar cable.
+  The 174 modules are arranged in two strings: String A (87 panels)
+  and String B (87 panels) connected in series to raise the string
+  voltage into the MPPT inverter's operating window (~80–160 V DC).
+  All modules must face true south (azimuth 180°) for Ghana's location.
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Insulated gloves (voltage-rated)
+    • MC4 assembly tool / MC4 crimping tool
+    • MC4 spanner (spanners for locking MC4 connectors)
+    • Digital multimeter (DC voltage and current measurement)
+    • Clamp meter (for string current measurement)
+    • Torque wrench (for module clamp bolts)
+    • Rubber mallet
+    • Cable ties and UV-resistant labels
+    • Permanent marker for labelling polarity
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  Before handling any module, confirm all DC isolators and
+           the inverter are switched OFF.
+
+  Step 2.  Lift module onto the rail.  NEVER step on the glass face.
+           Use two persons for each module on the roof.
+
+  Step 3.  Slide end-clamps onto the outer module frame edge and
+           mid-clamps between adjacent modules.  Hand-tighten only.
+
+  Step 4.  Check all modules are level and correctly aligned.
+           Torque all clamp bolts to manufacturer specification
+           (typically 10–14 Nm).  Do not over-torque.
+
+  Step 5.  Connect module MC4 leads in series within each string:
+           (+) of Module N connects to (−) of Module N+1.
+           Leave the open ends of each string disconnected.
+
+  Step 6.  Measure open-circuit voltage (Voc) of each string
+           with a multimeter before connecting to the combiner.
+           Expected Voc per string: ~4176–4350 V (String A),
+           ~4176–4350 V (String B).
+           If Voc reads 0 V or reversed, recheck polarity.
+
+  Step 7.  Route string cables neatly in cable trunking along the
+           rail or down the roof edge to the combiner box.
+           Secure cables every 400 mm with UV-resistant cable ties.
+
+  Step 8.  Label each string cable at both ends: 'STRING A (+)',
+           'STRING A (−)', 'STRING B (+)', 'STRING B (−)'.
+
+  PANEL STRING WIRING DIAGRAM
+  --------------------------------------------------
+
+  STRING A (87 panels in series):
+
+   [+]──┐                                             ┌──[−]
+   P1   │  [+]──┐              ┌──[−]  P87   │
+  ──────┤  P2   ├── ... ───── ─┤  P87  ├──────
+        └──[−]  │              │  [+]──┘
+                └──[−]  [+]───┘
+         │                                             │
+        (+) to Combiner Box                    (−) to Combiner Box
+
+  STRING B (87 panels in series):
+
+   [+]──┐                                             ┌──[−]
+   P1   │  [+]──┐              ┌──[−]  P87   │
+  ──────┤  P2   ├── ... ────── ┤  P87  ├──────
+        └──[−]  │              │  [+]──┘
+                └──[−]  [+]───┘
+         │                                             │
+        (+) to Combiner Box                    (−) to Combiner Box
+
+  MC4 CONNECTOR DETAIL:
+
+    Male MC4   ──────●═══════════●──────  Female MC4
+                     ↑           ↑
+               (+) locking    (−) locking
+                 connector     connector
+    Lock with MC4 spanner after seating (audible click).
+
+==============================================================================
+  ITEM 5 — DC COMBINER / STRING BOX
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  The DC combiner box aggregates the two PV strings into a single
+  DC output fed to the inverter.  It contains string fuses (one per
+  string) and a DC surge protection device (SPD) to protect against
+  lightning-induced voltage transients.  It is mounted at the base
+  of the roof, at the transition from rooftop to indoor wiring,
+  in a weatherproof (IP65) enclosure.
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Screwdrivers (flathead and Pozidriv)
+    • Wire strippers and crimping tool
+    • Multimeter (DC voltage)
+    • Drill with 20–25 mm knockout punch or hole saw
+    • Cable gland spanner
+    • Insulated terminal screwdriver
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  Select a mounting position sheltered from direct rain
+           at the roof base or on an exterior wall, shaded if possible.
+
+  Step 2.  Fix the enclosure to the wall with stainless steel rawl-bolts.
+           Ensure the enclosure door faces downward or sideways
+           (never upward) to prevent water pooling at the seal.
+
+  Step 3.  Knock out cable entry holes.  Fit cable glands for each
+           incoming string cable and the outgoing DC main cable.
+
+  Step 4.  Mount the busbar, string fuses (15A, BS 88), and SPD
+           inside the enclosure per the manufacturer's diagram.
+
+  Step 5.  All DC wiring still disconnected — verify with multimeter.
+           Connect String A (+) and String B (+) to the fuse inputs.
+           Connect String A (−) and String B (−) to the negative busbar.
+
+  Step 6.  Connect the fuse outputs to the positive busbar.
+           Connect the SPD between the positive busbar and earth.
+
+  Step 7.  Run the DC main cable (6mm²) from the output busbars
+           through trunking to the inverter DC input.
+           Leave inverter end disconnected until inverter is installed.
+
+  Step 8.  Close the enclosure.  Label: 'DC COMBINER BOX –
+           DANGER: HIGH DC VOLTAGE. DO NOT OPEN UNDER LOAD.'
+
+  DC COMBINER BOX INTERNAL WIRING DIAGRAM
+  --------------------------------------------------
+
+  ┌─────────────────────────────────────────────────────────┐
+  │           DC COMBINER BOX (IP65 Enclosure)              │
+  │                                                         │
+  │  STRING A (+) ──── [Fuse 15A] ──┐                      │
+  │                                  ├── (+) Busbar ────────┼──► To Inverter (+)
+  │  STRING B (+) ──── [Fuse 15A] ──┘                      │
+  │                                        │                │
+  │                                      [SPD]              │
+  │                                        │                │
+  │  STRING A (−) ──────────────────────── (−) Busbar ─────┼──► To Inverter (−)
+  │  STRING B (−) ──────────────────────────────────────────┤
+  │                                        │                │
+  │                                      [Earth] ───────────┼──► Earth bar
+  └─────────────────────────────────────────────────────────┘
+
+==============================================================================
+  ITEM 6 — DC CABLE 6mm² (UV-RESISTANT)
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  UV-resistant, double-insulated 6mm² DC solar cable (rated 1000 V DC,
+  XLPE insulation, tinned copper conductors) is used for all DC wiring
+  from module MC4 leads to the combiner box, and from the combiner box
+  to the inverter DC input.  Red/positive and black/negative cores are
+  kept segregated and clearly labelled throughout.
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Cable reel stand
+    • Cable cutters
+    • Wire strippers (for 6mm²)
+    • MC4 crimping tool and MC4 contacts
+    • Cable trunking/conduit bending spring or bender
+    • Drill and fish tape (for threading through walls)
+    • UV-resistant cable tie gun
+    • Permanent marker and cable labels
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  Measure and cut cable runs for each string, allowing
+           200–300 mm extra at each end for terminations.
+
+  Step 2.  Route cables inside UV-resistant trunking or conduit
+           on the roof surface.  Fix trunking every 600 mm.
+
+  Step 3.  Where cables pass through roof or wall penetrations,
+           use fire-rated conduit sleeves.  Seal with fire mastic.
+
+  Step 4.  Strip 12 mm of insulation at the MC4 connector end.
+           Crimp the MC4 contact onto the conductor.
+           Insert into the MC4 housing and click until locked.
+
+  Step 5.  Strip 15 mm of insulation at the combiner box end.
+           Insert into correct terminal and torque to spec.
+
+  Step 6.  Label each cable run at both ends with polarity (+/−)
+           and circuit identifier (e.g. 'STR-A POS').
+
+  Step 7.  Perform continuity check and insulation resistance test
+           (≥ 1 MOhm at 500 V DC) before energising.
+
+  DC CABLE ROUTING DIAGRAM
+  --------------------------------------------------
+
+   ROOF SURFACE
+   ─────────────────────────────────────────────────────────────
+   [Panel] ─── MC4 ─── [Trunking on rail] ─── MC4 ─── [Panel]
+                            │
+                     (string cables drop)
+                            │
+   WALL / SOFFIT ───────────┼─────────────────────────────────
+                            │ (conduit sleeve through roof/wall)
+                            │
+                     [Combiner Box]
+                            │
+                    (6mm² DC main cable)
+                            │
+                     [Inverter DC Input]
+
+  CABLE INSTALLATION CROSS-SECTION:
+
+      ┌──────────────────────┐
+      │   UV Trunking Lid    │
+      ├──────────────────────┤
+      │ (+) RED 6mm² cable  │
+      │ (−) BLK 6mm² cable  │
+      └──────────────────────┘
+              │
+       Fixed to rail or
+       roof surface
+       every 600 mm
+
+==============================================================================
+  ITEM 12 — BATTERY ENCLOSURE / RACK
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  The battery rack houses all LiFePO4 battery units in a ventilated
+  enclosure in a cool, dry indoor location — ideally a dedicated utility
+  room or shaded corner away from direct sunlight.  Batteries must be
+  positioned below the inverter for short, low-resistance cabling.
+  The rack must be secured to the wall or floor to prevent tipping.
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Drill with rawl-plug bit
+    • Spirit level
+    • Spanner set
+    • Wall fixings (M8 stainless bolts / rawl bolts)
+    • Measuring tape
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  Choose a location with natural or forced ventilation.
+           Minimum 300 mm clearance on all sides of the rack.
+           The location must be accessible for maintenance.
+
+  Step 2.  Mark fixing hole positions on the wall/floor.
+           Check with a spirit level that the base plate is level.
+
+  Step 3.  Drill and fit rawl bolts.  Secure the rack firmly.
+           Shake the empty rack to confirm it is stable.
+
+  Step 4.  Fit the battery units into the rack following the
+           manufacturer's stacking order (heaviest at the bottom).
+           Do NOT connect battery terminals yet.
+
+  Step 5.  Install inter-battery bus bars or cable links as supplied
+           by the manufacturer for the intended series/parallel config.
+
+  Step 6.  Apply ventilation grilles or drill vent holes at top and
+           bottom of the enclosure for convective airflow.
+
+  BATTERY RACK LAYOUT DIAGRAM
+  --------------------------------------------------
+
+       ┌──────────────────────────────┐
+       │      BATTERY ENCLOSURE       │
+       │  ┌────────────────────────┐  │◄── Vent (top)
+       │  │  Battery Unit 131        │  │
+       │  ├────────────────────────┤  │
+       │  │      ...               │  │
+       │  ├────────────────────────┤  │
+       │  │  Battery Unit 2        │  │
+       │  ├────────────────────────┤  │
+       │  │  Battery Unit 1        │  │◄── Vent (bottom)
+       │  └────────────────────────┘  │
+       │   (+)────────────── (−)       │
+       │    │                  │        │
+       └────┼──────────────────┼────────┘
+            │                  │
+     To Inverter (+)     To Inverter (−)
+     (16mm² red)         (16mm² black)
+
+==============================================================================
+  ITEM 3 — BATTERY UNITS (2.4 kWh LIFEPO4 EACH)
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  131 LiFePO4 battery units (each 2.4 kWh, 48V nominal) are
+  installed in the battery rack and wired in parallel to give a combined
+  capacity of 312.50 kWh at 48V DC.  Each unit has an integrated
+  Battery Management System (BMS) that provides over-charge, over-discharge,
+  short-circuit, and temperature protection.
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Insulated screwdrivers and spanners
+    • Insulated gloves (rated ≥ 1000V)
+    • Multimeter (DC voltage measurement)
+    • Torque wrench (for terminal bolts)
+    • Anti-static wrist strap
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  Confirm the inverter battery switch is OFF and no DC
+           circuit breaker is closed.  Verify with multimeter.
+
+  Step 2.  Check each battery unit's state of charge (SOC) with the
+           built-in indicator or BMS display.  All units should be
+           at the same SOC (±5%) before parallel connection.
+
+  Step 3.  Place Battery Unit 1 in the rack (bottom position).
+           Connect the BMS communication cable (CAN/RS485) if used.
+
+  Step 4.  Repeat for remaining units.  Stack in order per mfr spec.
+
+  Step 5.  Connect inter-unit busbars: (+) rail to (+) rail,
+           (−) rail to (−) rail (parallel configuration).
+           Torque terminal bolts to manufacturer spec (typically 8–12 Nm).
+
+  Step 6.  Connect the main battery cable: 16mm² red from battery (+)
+           bank to inverter battery (+); 16mm² black from battery (−)
+           to inverter battery (−).  CONNECT (−) FIRST, (+) LAST.
+
+  Step 7.  Measure total bank voltage with multimeter.
+           Expected: 48–54 V DC for 131 units in parallel.
+
+  Step 8.  Do not close the inverter battery breaker until the
+           inverter is fully installed and configured.
+
+  BATTERY PARALLEL WIRING DIAGRAM
+  --------------------------------------------------
+
+  48V DC BUS BAR
+
+  (+) ────┬────────┬────────┬────── ... ────┬──── To Inverter (+)
+          │        │        │               │
+       [Bat 1]  [Bat 2]  [Bat 3]  ...  [Bat 131]
+          │        │        │               │
+  (−) ────┴────────┴────────┴────── ... ────┴──── To Inverter (−)
+
+  Each battery unit = 2.4 kWh / 48V LiFePO4 with integrated BMS.
+  Total bank = 312.50 kWh at 48V DC.
+
+==============================================================================
+  ITEM 2 — HYBRID INVERTER / CHARGER
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  The 93.75 kW hybrid inverter/charger is the heart of the system.
+  It houses an MPPT charge controller (accepting PV DC input), a
+  battery charger, and a DC-to-AC inverter, all in one unit.  It
+  is wall-mounted indoors near the battery bank (≤ 1.5 m battery
+  cable run) in a ventilated location.  The inverter must be mounted
+  vertically on a solid wall that can bear ≥ 25 kg.
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Drill (with M8 masonry bit)
+    • Spirit level
+    • Rawl plugs and M8 bolts (stainless)
+    • Insulated screwdrivers and spanner set
+    • Multimeter
+    • Torque wrench
+    • Laptop or smartphone with inverter configuration software
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  Mark wall fixing positions from the mounting template
+           supplied with the inverter.  Ensure the unit will be
+           ≥ 500 mm from the floor and ≥ 300 mm from any obstruction.
+
+  Step 2.  Drill holes, fit rawl plugs, and mount the inverter
+           bracket/back-plate.  Verify level.  Hang the inverter unit.
+
+  Step 3.  Connect DC PV INPUT terminals:  (+) from combiner box
+           positive output; (−) from combiner box negative output.
+           Tighten to terminal torque spec.  Check polarity with meter.
+
+  Step 4.  Connect BATTERY terminals: (+) red 16mm², (−) black 16mm²
+           from battery bank.  Connect (−) first, then (+).
+           Tighten to spec.  Measure battery voltage on display.
+
+  Step 5.  Connect AC OUTPUT terminals: L (line), N (neutral), PE (earth)
+           using 10mm² cable to the AC distribution board.
+           Tighten to spec.
+
+  Step 6.  If a grid-input (GRID IN) port is present, connect the
+           utility supply line for auto-charging backup (optional).
+
+  Step 7.  Power on the inverter.  Navigate the settings menu:
+           a) Set battery type to LiFePO4 (Li-Fe).
+          b) Set battery capacity to 312.5 kWh.
+           c) Set charge voltage to 58.4 V (LiFePO4 full charge).
+           d) Set low-battery cut-off to 44 V (80% DoD).
+           e) Set AC output frequency to 50 Hz, voltage 230 V.
+           f) Set MPPT voltage window per PV string Voc readings.
+
+  Step 8.  Monitor display for correct PV charging current and
+           battery voltage.  Confirm AC output on voltmeter.
+
+  INVERTER CONNECTION DIAGRAM
+  --------------------------------------------------
+
+                        ┌───────────────────────────────┐
+   PV (+) ─────────────►│  PV INPUT (+)                 │
+   PV (−) ─────────────►│  PV INPUT (−)    MPPT         │
+                        │                  CHARGER       │
+   BAT (+) ◄────────────│  BAT (+)                      │
+   BAT (−) ◄────────────│  BAT (−)         BATTERY      │
+                        │                  CHARGER       │
+   AC-OUT (L) ─────────►│  AC OUT (L)                   │
+   AC-OUT (N) ─────────►│  AC OUT (N)      DC/AC        │
+   AC-OUT (PE)─────────►│  AC OUT (PE)     INVERTER     │
+                        │                               │
+   [Optional]           │  AC IN (grid)                 │
+   GRID ───────────────►│  AC IN (L/N/PE)               │
+                        └───────────────────────────────┘
+                                   │
+                              LCD Display
+                              & Settings
+
+==============================================================================
+  ITEM 7 — AC CABLE 10mm²
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  10mm² single-core copper XLPE-insulated cable (BS 5467 / BS 6724)
+  is used for all AC wiring between the inverter AC output terminals
+  and the AC distribution board (MCB/RCCB board).  Three conductors
+  are required: Line (brown), Neutral (blue), Protective Earth (green/
+  yellow).  The cable must be routed in metal trunking or conduit,
+  segregated from DC wiring.
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Cable cutters
+    • Wire strippers (for 10mm²)
+    • Conduit bender or metal trunking
+    • Fish tape
+    • Screwdrivers and insulated terminal screwdriver
+    • Cable identification sleeves (brown, blue, green/yellow)
+    • Multimeter
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  Confirm inverter AC output is isolated (OFF).
+
+  Step 2.  Measure the cable run from inverter to distribution board.
+           Cut three 10mm² single cores (L, N, PE) to length plus
+           300 mm each end for terminations.
+
+  Step 3.  Sleeve cable ends with correct colour identification
+           sleeves: brown (L), blue (N), green/yellow (PE).
+
+  Step 4.  Route cable in metal trunking or conduit, physically
+           separated from DC cable runs by at least 50 mm.
+
+  Step 5.  Strip 15 mm insulation and fit bootlace ferrules before
+           inserting into inverter AC terminals.  Torque to spec.
+
+  Step 6.  Run cable to the distribution board.  Terminate in the
+           correct MCB and neutral/earth bars.  Torque to spec.
+
+  Step 7.  Insulation resistance test: ≥ 1 MOhm between conductors
+           and earth at 500 V before energising.
+
+  AC CABLE ROUTING DIAGRAM
+  --------------------------------------------------
+
+   [Inverter AC Out]
+        │ L (brown)  ──────────────────────────────►
+        │ N (blue)   ──────────────────────────────►  [AC MCB
+        │ PE (grn/yel)─────────────────────────────►   Board]
+        │
+        └─ All 3 cores in metal trunking / conduit
+           Minimum 50 mm separation from DC runs
+
+==============================================================================
+  ITEM 8 — DC CIRCUIT BREAKERS (BS EN 60947-2)
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  DC-rated miniature circuit breakers (MCBs) are installed to provide
+  overcurrent and short-circuit protection on the DC side.  Two are
+  fitted at the combiner box output (one on each string, if not already
+  fused), and two at the inverter DC input to allow safe isolation for
+  maintenance.  DC MCBs must be rated for DC voltage (not AC MCBs,
+  which cannot safely interrupt DC arc).
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Flathead screwdriver
+    • DIN rail cutter
+    • Wire strippers and crimping tool
+    • Insulated terminal screwdriver
+    • Multimeter
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  Confirm all DC sources (PV strings, battery) are isolated.
+
+  Step 2.  Cut DIN rail to length and fix inside the enclosure.
+
+  Step 3.  Snap the DC MCBs onto the DIN rail.
+           Verify the voltage and current rating label on each MCB:
+           minimum 500 V DC, current rated ≥ 1.25 × string Isc.
+
+  Step 4.  Wire the incoming DC cable into the MCB input (top)
+           and the outgoing cable from the MCB output (bottom).
+           Torque terminals to 2.5–3.5 Nm.
+
+  Step 5.  Label each MCB: 'STRING A DC', 'STRING B DC', etc.
+
+  Step 6.  Test operation: switch MCB off and verify no voltage
+           passes downstream with multimeter.
+
+  DC CIRCUIT BREAKER DIAGRAM
+  --------------------------------------------------
+
+   String (+) ────[DC MCB]──── To Inverter PV(+)
+   String (−) ─────────────── To Inverter PV(−)
+                   │
+               DIN Rail in
+              IP65 Enclosure
+
+   MCB must be DC-rated (marked with ─── not ∿)
+   AC MCBs MUST NOT be used in DC circuits.
+
+==============================================================================
+  ITEM 9 — AC MCB + RCCB (BS EN 60898 / BS EN 61008)
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  The AC distribution board contains a Type B MCB (for overcurrent
+  protection) and a 30mA RCCB (Residual Current Circuit Breaker, for
+  earth leakage/shock protection).  These are mounted in a consumer
+  unit / distribution board downstream of the inverter AC output.
+  The RCCB protects the entire AC installation against earth fault.
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Flathead screwdriver and Pozidriv screwdriver
+    • Insulated terminal screwdriver
+    • Wire strippers
+    • Drill (for DB board wall fixing)
+    • Multimeter and RCD tester
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  Mount the distribution board (DB) on the wall at ≥ 1.5 m
+           height from the finished floor level.  Use spirit level.
+
+  Step 2.  Snap RCCB and MCB(s) onto DIN rail in the DB.
+           RCCB goes first (incoming side), MCBs on outgoing circuits.
+
+  Step 3.  Connect incoming AC 10mm² cable (L, N, PE) from inverter:
+           L ─► RCCB Line input
+           N ─► Neutral bar
+           PE ─► Earth bar
+
+  Step 4.  Link RCCB output L to MCB input.
+           Connect MCB outputs to final circuit cables (lighting, sockets).
+
+  Step 5.  Fit the board cover and labels.
+
+  Step 6.  Energise the board and test the RCCB with the TEST button.
+           RCCB must trip within 300 ms.  Reset and verify it holds.
+           Use an RCD tester to verify trip at 30mA, 50mA, 100mA.
+
+  AC DISTRIBUTION BOARD DIAGRAM
+  --------------------------------------------------
+
+   FROM INVERTER
+       │ L ──────────────────────────────────────────────────┐
+       │                                                      │
+       ├─ L ──► [RCCB 30mA] ──► [MCB 1 - Lighting]  ──► L1  │
+       │                    └──► [MCB 2 - Sockets]   ──► L2  │
+       │                    └──► [MCB 3 - spare]             │
+       │                                                      │
+       ├─ N ──► Neutral Bar ──────────────────────────────── N│
+       │                                                      │
+       └─ PE ─► Earth Bar ───────────────────────────────── PE│
+                                                       (to earth rod)
+
+==============================================================================
+  ITEM 10 — SURGE PROTECTION DEVICE (SPD) (BS EN 61643)
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  Two SPDs are installed: one Type II SPD on the DC side (inside the
+  combiner box) and one Type II SPD on the AC side (inside the DB board).
+  SPDs protect against transient over-voltages caused by lightning
+  strikes or switching surges on the PV array and AC distribution.
+  Ghana has a high lightning occurrence rate; SPD installation is
+  mandatory for system protection.
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Flathead screwdriver
+    • Insulated terminal screwdriver
+    • Multimeter
+    • DIN rail snap-in tool
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  Snap the SPD module onto the DIN rail inside the enclosure.
+
+  Step 2.  DC SPD wiring (combiner box):
+           Connect SPD terminal L+ to positive busbar.
+           Connect SPD terminal L− to negative busbar.
+           Connect SPD earth terminal to enclosure earth bar.
+
+  Step 3.  AC SPD wiring (DB board):
+           Connect SPD terminal L to the AC line busbar.
+           Connect SPD terminal N to neutral bar.
+           Connect SPD earth terminal to earth bar.
+
+  Step 4.  Inspect the SPD status indicator window.  Green = healthy.
+           Red or absent window = SPD has operated and must be replaced.
+
+  Step 5.  Label SPD: 'SURGE PROTECTION — DO NOT REMOVE UNDER LOAD.'
+
+  SPD CONNECTION DIAGRAM
+  --------------------------------------------------
+
+  DC SIDE (in Combiner Box):         AC SIDE (in DB Board):
+
+  (+) Bus ─────┐                     AC Line ─────┐
+               ├──[SPD]──┐                        ├──[SPD]──┐
+  (−) Bus ─────┘         │           Neutral ──────┘         │
+                         │                                    │
+                       [Earth]                              [Earth]
+                         │                                    │
+                    Earth Bar                            Earth Bar
+
+==============================================================================
+  ITEM 11 — EARTHING ROD & BONDING CABLE (BS 7430)
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  A copper-clad steel earth electrode (minimum 1.2 m long, 14 mm dia.)
+  is driven into the ground outside the building to provide a low-
+  resistance earth path.  A 10mm² green/yellow copper bonding cable
+  connects the earth rod to the main earth bar in the DB board, and
+  to all metalwork: inverter chassis, battery rack, module frames,
+  combiner box, and cable trunking.  Ghana's soil conductivity is
+  generally good; target earth resistance ≤ 5 Ohms.
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Earth rod driving tool or sledgehammer and driving head
+    • Hacksaw or angle grinder (for rod length trimming)
+    • Earth rod clamp / compression connector
+    • Spade or bar (for excavation trench to rod)
+    • Earth resistance tester (Megger or similar)
+    • Crimping tool (for cable lugs)
+    • Insulated screwdrivers
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  Select a location ≥ 1 m from the building foundation,
+           in moist soil if possible (shaded area, near drain run-off).
+
+  Step 2.  Drive the earth rod vertically into the ground to its
+           full depth using the driving tool.  If the rod meets rock,
+           install at a 45° angle (max) or use multiple rods.
+
+  Step 3.  Expose the top of the rod (300 mm above ground or in a
+           buried inspection pit / earth test point box).
+
+  Step 4.  Fit the earth rod clamp onto the rod head.
+           Crimp a cable lug onto the 10mm² bonding cable and bolt
+           it to the rod clamp.  Torque to clamp manufacturer spec.
+
+  Step 5.  Route the bonding cable into the building via a sealed
+           conduit sleeve.  Terminate on the main earth bar in the DB.
+
+  Step 6.  Run bonding conductors from the earth bar to:
+           − Inverter chassis earth terminal
+           − Battery rack frame
+           − DC combiner box enclosure
+           − All PV module frames (via rail earth lug)
+           − Cable trunking / conduit runs
+
+  Step 7.  Measure earth electrode resistance with an earth resistance
+           tester (fall-of-potential method, BS 7430).
+           If > 5 Ohms: drive a second rod 3 m away and link in parallel.
+
+  EARTHING SYSTEM DIAGRAM
+  --------------------------------------------------
+
+   PV FRAMES ─── Earth Lug ─── Rail ─────────────────────────┐
+                                                               │
+   Combiner Box ──── Earth terminal ───────────────────────── ┤
+                                                               │
+   Battery Rack ──── Frame bond ────────────────────────────  ┤
+                                                               │
+   Inverter Chassis ─ Earth terminal ──────────────────────── ┤
+                                                               │
+                                                         Main Earth Bar
+                                                               │
+                                                          (in DB Board)
+                                                               │
+                                                     10mm² green/yellow
+                                                               │
+                                             ┌─────────────────┘
+                                             │
+   GROUND LEVEL ─────────────────────────────┼─────────────────
+                                             │
+                                          [Earth Rod]
+                                          (≥1.2 m deep)
+                                          Cu-clad steel
+                                          14mm dia.
+
+==============================================================================
+  ITEM 13 — CABLE TRUNKING & CONDUIT (BS EN 61386)
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  PVC or metal cable trunking and conduit is installed throughout to
+  mechanically protect all cables, to maintain segregation between
+  DC and AC wiring, and to present a neat, professional installation.
+  On the roof, UV-resistant trunking is used.  Indoors, standard PVC
+  mini-trunking or galvanised steel trunking is acceptable.
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Hacksaw or trunking cutters
+    • Mitre box (for neat corner cuts)
+    • Drill and rawl plugs
+    • Spirit level and chalk line
+    • Screwdrivers
+    • Cable pulling fish tape
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  Plan the trunking routes on paper before cutting any material.
+           Mark the route on the wall with a chalk line.
+
+  Step 2.  Fix trunking base/back at 600 mm intervals with screws
+           into rawl-plugged holes.  Keep trunking level and plumb.
+
+  Step 3.  Cut trunking to length with a hacksaw or cutters.
+           Use a mitre box for 45° and 90° internal/external corners.
+
+  Step 4.  DC trunking and AC trunking must be in separate runs.
+           Minimum 50 mm separation between DC and AC trunking.
+           Label each trunking run: 'DC ONLY' or 'AC ONLY'.
+
+  Step 5.  Lay cables in trunking before fitting the lid.
+           Do not exceed 40% fill capacity of the trunking section.
+
+  Step 6.  Clip the trunking lid onto the base.  Ensure all lids
+           are seated and clipped at every joint.
+
+  TRUNKING SEGREGATION DIAGRAM
+  --------------------------------------------------
+
+   WALL SURFACE
+   │
+   ├── [DC TRUNKING] ─── red 6mm² (+), black 6mm² (−), earth
+   │    (label: DC ONLY — DANGER LIVE DC VOLTAGE)
+   │
+   │    (minimum 50 mm gap)
+   │
+   └── [AC TRUNKING] ─── brown 10mm² (L), blue 10mm² (N), grn/yel (PE)
+        (label: AC ONLY — 230V AC)
+
+==============================================================================
+  ITEM 14 — MISCELLANEOUS FIXINGS & HARDWARE
+==============================================================================
+
+  NARRATIVE
+  --------------------------------------------------
+  This item covers all minor fixings, connectors, and consumables
+  required to complete the installation to a professional standard.
+  These include cable labels, cable ties, ferrules, wall plugs,
+  warning labels, wire markers, conduit fittings, and touch-up paint.
+
+  TOOLS REQUIRED
+  --------------------------------------------------
+    • Cable tie gun
+    • Label printer or permanent markers
+    • Crimping tool (for ferrules)
+
+  STEP-BY-STEP INSTALLATION
+  --------------------------------------------------
+  Step 1.  After all primary installations are complete, conduct a
+           walk-through to identify any unsecured cables or open entries.
+
+  Step 2.  Secure all cables in trunking with cable ties every 300 mm
+           in vertical runs and every 600 mm in horizontal runs.
+
+  Step 3.  Fit bootlace ferrules to all stranded conductors entering
+           screw terminals to prevent strand splaying.
+
+  Step 4.  Apply warning labels at all hazardous points:
+           − 'DANGER: HIGH DC VOLTAGE — DO NOT TOUCH' at combiner box
+           − 'CAUTION: DUAL SUPPLY' at the inverter
+           − 'BATTERY ROOM — NO NAKED FLAMES' near battery rack
+           − Circuit identification labels on every MCB in the DB
+
+  Step 5.  Seal all wall/roof penetrations with fire-rated mastic.
+
+  Step 6.  Apply touch-up paint to any drill holes or cut metalwork
+           to prevent corrosion.
+
+==============================================================================
+  SECTION 15 — COMMISSIONING SEQUENCE
+==============================================================================
+
+  Follow this sequence after all hardware is installed.
+  Do NOT skip steps or reverse the order.
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │  COMMISSIONING CHECKLIST                                        │
+  ├──────┬──────────────────────────────────────────────────────────┤
+  │  1.  │ Visual inspection — all fixings, labels, polarity marks   │
+  │  2.  │ Insulation resistance test (IR): all DC circuits ≥ 1 MOhm│
+  │  3.  │ Insulation resistance test (IR): all AC circuits ≥ 1 MOhm│
+  │  4.  │ Earth continuity: all bonded metalwork ≤ 0.1 Ohm         │
+  │  5.  │ Earth electrode resistance ≤ 5 Ohms                      │
+  │  6.  │ Polarity check: verify (+)/(−) on all DC terminals        │
+  │  7.  │ Measure PV string Voc before connecting to combiner       │
+  │  8.  │ Connect battery to inverter — verify inverter powers up   │
+  │  9.  │ Connect PV strings — verify MPPT charging begins          │
+  │ 10.  │ Measure AC output voltage (target: 230 V ± 2%)           │
+  │ 11.  │ Test RCCB operation with TEST button and RCD tester       │
+  │ 12.  │ Load test: connect a known load, verify stable AC output  │
+  │ 13.  │ Run system for 1 hour under load — check all temperatures │
+  │ 14.  │ Record all test results in the commissioning logbook      │
+  │ 15.  │ Issue test certificate and hand over O&M manual to client │
+  └──────┴──────────────────────────────────────────────────────────┘
+
+==============================================================================
+  HEALTH & SAFETY NOTES
+==============================================================================
+
+  • PV modules produce voltage in daylight even when disconnected.
+    Always treat module leads as LIVE.  Use insulated gloves.
+
+  • Batteries store large amounts of energy and can deliver very
+    high short-circuit currents.  Never short battery terminals.
+    Remove jewellery, watches, and rings before working on batteries.
+
+  • Work on the roof requires a competent roofer/electrician with
+    appropriate fall-arrest equipment and a trained second person.
+
+  • All electrical work must be carried out by a qualified electrician
+    and inspected before energising.
+
+  • Comply with Ghana's Electrical Wiring Regulations (LI 1816) and
+    BS 7671:2018 (18th Edition IET Wiring Regulations).
+
+==============================================================================
+  End of Installation Method Report
+==============================================================================

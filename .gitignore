@@ -1,0 +1,31 @@
+# Sensitive
+.env
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+tunnel_*.log
+flask_*.log
+cf_*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Legacy desktop builds (not needed for web app)
+dist/
+dist2/
+dist3/
+build/
+*.spec
+*.zip
+
+# Temp / editor
+.vscode/
+.idea/
+*.tmp
+Thumbs.db

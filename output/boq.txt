@@ -1,0 +1,44 @@
+BILL OF QUANTITIES (BoQ)
+==============================================================================================
+Project  : Solar PV Off-Grid System
+Location : Ghana
+Standard : BS 7671:2018 (18th Edition)
+Voltage  : 415/230V AC, 50 Hz
+Date     : 2026-04-10
+==============================================================================================
+
+Currency : GHS (Ghanaian Cedi)
+Rates    : Basic Rate = market supply cost (Ghana, April 2026)
+         : Total Rate = Basic Rate x 1.20 (incl. delivery,
+         :              handling, contractor overhead & profit)
+
+No.  Description                            Qty Unit    Basic Rate   Total Rate   Amount (GHS)
+----------------------------------------------------------------------------------------------
+1    Solar PV Modules (400 Wp each)         174 No.       1,600.00     1,920.00     334,080.00
+2    Hybrid Inverter (93.8kW, 415/230V)       1 No.      12,000.00    14,400.00      14,400.00
+3    Battery Units (2.4 kWh LiFePO4 each)   131 No.       3,800.00     4,560.00     597,360.00
+4    PV Mounting Structure (rail + clamps)   174 No.         280.00       336.00      58,464.00
+5    DC Combiner / String Box (4-string)      1 No.         700.00       840.00         840.00
+6    DC Cable 6mm² (UV-resistant solar cable)    50 m            18.00        21.60       1,080.00
+7    AC Cable 10mm²                          20 m            19.00        22.80         456.00
+8    DC Circuit Breakers (BS EN 60947-2)      4 No.          55.00        66.00         264.00
+9    AC MCB + RCCB (BS EN 60898 / 61008)      2 No.         220.00       264.00         528.00
+10   Surge Protection Device SPD (BS EN 61643)     2 No.         350.00       420.00         840.00
+11   Earthing Rod & Bonding Cable (BS 7430)     1 Set         450.00       540.00         540.00
+12   Battery Enclosure / Rack                 1 No.         750.00       900.00         900.00
+13   Cable Trunking & Conduit (BS EN 61386)     1 Lot         900.00     1,080.00       1,080.00
+14   Miscellaneous Fixings & Hardware         1 Lot         600.00       720.00         720.00
+----------------------------------------------------------------------------------------------
+     GRAND TOTAL (GHS)                                                            1,011,552.00
+
+  Total PV Capacity : 69.44 kWp
+  Total Battery     : 312.50 kWh
+  Inverter Rating   : 93.75 kW
+
+Note: Basic rates from Ghana market research (April 2026).
+      Panel: 1,600 GHS / 400Wp (Jinko/JA/LONGi class, landed incl. duty+VAT).
+      Battery: 3,800 GHS / 2.4 kWh LiFePO4 (Pylontech class).
+      Inverter: 4,500–12,000 GHS scaled by kW rating.
+      Quantities subject to detailed design review.
+      All prices exclude site-specific VAT adjustments.
+      Subject to contractor quotation and site survey confirmation.

@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Manage Suppliers{% endblock %}
+{% block content %}
+<div class="container-xl py-4">
+<div class="d-flex align-items-center gap-3 mb-4">
+  <div style="font-size:32px;color:var(--solar-gold)"><i class="bi bi-building-gear"></i></div>
+  <div>
+    <h4 class="fw-black mb-0">Supplier Directory</h4>
+    <div class="text-secondary small">Manage equipment suppliers and vendor relationships</div>
+  </div>
+  <div class="ms-auto">
+    <button class="btn btn-solar btn-sm" data-bs-toggle="modal" data-bs-target="#addSupModal">
+      <i class="bi bi-plus-circle me-1"></i>Add Supplier
+    </button>
+  </div>
+</div>
+
+<!-- Add Supplier Modal -->
+<div class="modal fade" id="addSupModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content bg-dark border-secondary">
+      <div class="modal-header border-secondary">
+        <h6 class="modal-title">Add Supplier</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="add">
+        <div class="modal-body row g-3">
+          <div class="col-md-6">
+            <label class="form-label small">Company Name *</label>
+            <input type="text" name="name" required class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">Country</label>
+            <input type="text" name="country" class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">Contact Name</label>
+            <input type="text" name="contact_name" class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">Phone</label>
+            <input type="text" name="phone" class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">Email</label>
+            <input type="email" name="email" class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">Website</label>
+            <input type="text" name="website" class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+          <div class="col-md-8">
+            <label class="form-label small">Categories (comma-separated)</label>
+            <input type="text" name="categories" placeholder="PV Modules,Inverters,Batteries" class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Rating (1-5)</label>
+            <input type="number" name="rating" value="5" min="1" max="5" class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Lead Time (days)</label>
+            <input type="number" name="lead_time_days" value="30" class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Payment Terms</label>
+            <input type="text" name="payment_terms" value="TT 30 days" class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+          <div class="col-12">
+            <label class="form-label small">Notes</label>
+            <textarea name="notes" rows="2" class="form-control form-control-sm bg-dark text-light border-secondary"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer border-secondary">
+          <button type="submit" class="btn btn-solar btn-sm">Add Supplier</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="solar-card p-0 overflow-hidden">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr>
+        <th class="ps-3">Name</th><th>Country</th><th>Categories</th>
+        <th>Email</th><th>Lead Time</th><th>Rating</th><th class="pe-3">Actions</th>
+      </tr></thead>
+      <tbody>
+      {% for s in suppliers %}
+      <tr class="{% if not s.is_active %}opacity-50{% endif %}">
+        <td class="ps-3 fw-semibold">{{ s.name }}</td>
+        <td class="small">{{ s.country or '—' }}</td>
+        <td>
+          {% for cat in (s.categories or '').split(',') if cat.strip() %}
+          <span class="badge bg-dark border me-1" style="font-size:10px">{{ cat.strip() }}</span>
+          {% endfor %}
+        </td>
+        <td class="small"><a href="mailto:{{ s.email }}" class="text-info">{{ s.email or '—' }}</a></td>
+        <td class="small">{{ s.lead_time_days }}d</td>
+        <td class="text-warning small">{{ '★' * s.rating }}</td>
+        <td class="pe-3">
+          <button class="btn btn-outline-warning btn-sm" data-bs-toggle="modal"
+                  data-bs-target="#editSup{{ s.id }}">
+            <i class="bi bi-pencil"></i>
+          </button>
+          <form method="POST" class="d-inline ms-1">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="sid" value="{{ s.id }}">
+            <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Deactivate supplier?')">
+              <i class="bi bi-x"></i>
+            </button>
+          </form>
+        </td>
+      </tr>
+      <!-- Edit modal per supplier -->
+      <div class="modal fade" id="editSup{{ s.id }}" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content bg-dark border-secondary">
+            <div class="modal-header border-secondary">
+              <h6 class="modal-title">Edit — {{ s.name }}</h6>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="edit">
+              <input type="hidden" name="sid" value="{{ s.id }}">
+              <div class="modal-body row g-3">
+                <div class="col-md-6"><label class="form-label small">Name</label>
+                  <input type="text" name="name" value="{{ s.name }}" required class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+                <div class="col-md-6"><label class="form-label small">Country</label>
+                  <input type="text" name="country" value="{{ s.country or '' }}" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+                <div class="col-md-6"><label class="form-label small">Email</label>
+                  <input type="email" name="email" value="{{ s.email or '' }}" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+                <div class="col-md-6"><label class="form-label small">Phone</label>
+                  <input type="text" name="phone" value="{{ s.phone or '' }}" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+                <div class="col-md-8"><label class="form-label small">Categories</label>
+                  <input type="text" name="categories" value="{{ s.categories or '' }}" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+                <div class="col-md-4"><label class="form-label small">Lead Time (days)</label>
+                  <input type="number" name="lead_time_days" value="{{ s.lead_time_days }}" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+                <div class="col-md-6"><label class="form-label small">Payment Terms</label>
+                  <input type="text" name="payment_terms" value="{{ s.payment_terms or '' }}" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+                <div class="col-md-6"><label class="form-label small">Rating</label>
+                  <input type="number" name="rating" value="{{ s.rating }}" min="1" max="5" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+                <div class="col-12"><label class="form-label small">Notes</label>
+                  <textarea name="notes" rows="2" class="form-control form-control-sm bg-dark text-light border-secondary">{{ s.notes or '' }}</textarea></div>
+              </div>
+              <div class="modal-footer border-secondary">
+                <button type="submit" class="btn btn-solar btn-sm">Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <tr><td colspan="7" class="text-center text-secondary py-4">No suppliers yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
+{% endblock %}

@@ -1,0 +1,1134 @@
+{% extends "base.html" %}
+{% block title %}Installation Diagrams — {{ project.name }}{% endblock %}
+{% block extra_head %}
+<style>
+  .diag-wrap{background:#07071a;border:1px solid #1e1e3a;border-radius:14px;overflow:hidden;margin-bottom:28px}
+  .diag-head{background:rgba(255,255,255,.03);padding:14px 20px;border-bottom:1px solid #1e1e3a;display:flex;align-items:center;gap:10px}
+  .diag-head .num{background:linear-gradient(135deg,#f59e0b,#ea580c);color:#000;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;flex-shrink:0}
+  .diag-head .ttl{font-size:15px;font-weight:800}
+  .diag-body{padding:0}
+  .notes-panel{background:#0a0a18;border-top:1px solid #1e1e3a;padding:18px 24px}
+  .note-item{display:flex;gap:10px;margin-bottom:10px;font-size:13px}
+  .note-item .dot{color:#f59e0b;flex-shrink:0;font-weight:900;margin-top:1px}
+  .note-item .txt{color:#a0a0c0;line-height:1.55}
+  .note-item .txt strong{color:#e0e0f8}
+  svg text{font-family:'Segoe UI',system-ui,sans-serif}
+  .legend-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px;color:#9090c0}
+  .legend-line{height:3px;width:32px;border-radius:2px;flex-shrink:0}
+</style>
+{% endblock %}
+{% block content %}
+
+<div class="no-print mb-3 d-flex align-items-center gap-3 flex-wrap">
+  <a href="{{ url_for('project_results', pid=project.id) }}" class="text-secondary small"><i class="bi bi-arrow-left me-1"></i>Results</a>
+  <div class="ms-auto d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('export_pdf_installation', pid=project.id) }}" class="btn btn-danger btn-sm">
+      <i class="bi bi-file-earmark-pdf me-1"></i>Diagrams PDF
+    </a>
+    <a href="{{ url_for('export_pdf_workplan', pid=project.id) }}" class="btn btn-solar btn-sm">
+      <i class="bi bi-file-earmark-ruled me-1"></i>Work Plan PDF
+    </a>
+    <a href="{{ url_for('export_pdf_staffing', pid=project.id) }}" class="btn btn-outline-info btn-sm">
+      <i class="bi bi-people-fill me-1"></i>Staffing Plan PDF
+    </a>
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer me-1"></i>Print All</button>
+  </div>
+</div>
+
+<div class="report-header mb-4">
+  <div class="report-title"><i class="bi bi-diagram-3-fill me-2"></i>Installation Methodology &amp; Wiring Diagrams</div>
+  <div class="text-secondary small mt-2">
+    {{ project.name }} &nbsp;|&nbsp; {{ d.region }}, {{ d.country }} &nbsp;|&nbsp;
+    {{ r.pv_kw|fmt(2) }} kWp · {{ r.bat_kwh|fmt(2) }} kWh · {{ r.inv_kw|fmt(1) }} kW &nbsp;|&nbsp;
+    {{ d.system_type|title }} System · {{ d.phase|title }} Phase · {{ d.voltage }}V DC
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="solar-card p-3 mb-4">
+  <div class="section-head mb-2">Wire Colour Code (BS 7671 / IEC 60364)</div>
+  <div class="d-flex flex-wrap gap-4">
+    {% for color,label in [("#ef4444","DC Positive (+)"),("#3b82f6","DC Negative (−)"),
+      ("#d97706","AC Line / Phase"),("#9ca3af","AC Neutral"),
+      ("#22c55e","Protective Earth (PE)"),("#8b5cf6","Battery Circuit"),
+      ("#94a3b8","Structural / Conduit")] %}
+    <div class="legend-row"><div class="legend-line" style="background:{{ color }}"></div>{{ label }}</div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- ══ MOUNTING TYPE METHODOLOGY ══ -->
+{% set mt = d.get('mounting_type','rooftop_pitched') %}
+{% if mt == 'rooftop_pitched' %}
+  {% set mt_title = "Pitched / Sloped Roof Mount" %}
+  {% set mt_icon  = "bi-house-fill" %}
+  {% set mt_color = "#f59e0b" %}
+  {% set mt_steps = [
+    ("Structural Survey", "Verify rafter/purlin spacing and load capacity. Mark rafter lines on roof surface. Confirm roof pitch and calculate optimal panel rows with ≥ 150 mm air gap under modules."),
+    ("Mounting Rail Installation", "Fix L-foot brackets to rafters at ≤ 1200 mm centres using M8 SS coach bolts. Apply EPDM rubber seal and UV silicone to every penetration. Run aluminium T-rails along roof slope."),
+    ("Panel Layout & Clamping", "Install panels in portrait rows per layout drawing. Use mid-clamps at ≤ 400 mm centres and end-clamps at 100–150 mm from panel edge. Torque to 20 Nm (manufacturer spec)."),
+    ("DC Wiring & Conduit", "Route 6 mm² TÜV DC cables through metallic conduit fixed to rails. Connect MC4 pairs per string layout. Label each string +/− at combiner box."),
+    ("Weatherproofing & Inspection", "Inspect all penetrations with water test. Confirm 600 mm clearance from all roof edges. Fit bird-proofing mesh around array perimeter."),
+  ] %}
+{% elif mt == 'rooftop_flat' %}
+  {% set mt_title = "Flat Roof Ballast Mount (Concrete Slab)" %}
+  {% set mt_icon  = "bi-building" %}
+  {% set mt_color = "#0ea5e9" %}
+  {% set mt_steps = [
+    ("Structural Survey", "Verify slab load rating (allow 20–25 kg/m²). Check waterproofing membrane condition. Survey edge parapets for wind load compliance per BS EN 1991-1-4."),
+    ("Row Spacing Layout", "Calculate inter-row spacing for ≤ 2% shading at winter solstice sun angle. Mark rows on roof. Minimum 1 m walkway around perimeter and between rows."),
+    ("Ballast Frame Installation", "Place pre-fabricated aluminium ballast trays at tilt angle 10–15°. No roof penetrations required. Add HDPE protection pads under each base foot. Apply ballast blocks (concrete or paver) per wind uplift calculation."),
+    ("Panel Installation", "Slide panels into tray clamps. Engage locking clips. Confirm tilt angle with digital level. Bond all frames to earth busbar via 6 mm² GY cable."),
+    ("DC Wiring", "Route cables in UV-resistant cable trays across roof. Avoid ponding water areas. Fix conduit at ≤ 500 mm centres. Run to roof penetration point using gland and sealant."),
+  ] %}
+{% elif mt == 'rooftop_metal' %}
+  {% set mt_title = "Metal Sheet Roof Mount (IBR / Corrugated)" %}
+  {% set mt_icon  = "bi-layout-wtf" %}
+  {% set mt_color = "#a78bfa" %}
+  {% set mt_steps = [
+    ("Structural Survey", "Inspect purlins for rust and adequate gauge. Confirm purlin centres. Check sheet condition — replace corroded sheets before mounting. Mark purlin positions below sheets."),
+    ("Hook / Seam Clamp Installation", "For IBR (Inverted Box Rib): use non-penetrating rib clamps clamped to the raised rib — no drilling required. For corrugated sheet: use L-bracket through sheet with EPDM washer and stainless dome-head screw; apply butyl sealant under bracket foot."),
+    ("Rail Alignment", "Fix aluminium rails across purlins at correct spacing. Level rails using shims. Confirm rail twist < 1° per metre."),
+    ("Panel Clamping", "Install panels in landscape orientation where possible (reduces wind uplift on metal roof). Apply mid- and end-clamps per manufacturer spec. Torque check after 24 hours."),
+    ("Bonding & Weathering", "Bond all metal roof components and panel frames to main earth busbar. Check all sheet penetrations with sealant. Inspect from inside roof space for daylight ingress."),
+  ] %}
+{% elif mt == 'rooftop_membrane' %}
+  {% set mt_title = "Membrane / Green Roof Mount (Lightweight Ballast)" %}
+  {% set mt_icon  = "bi-square-fill" %}
+  {% set mt_color = "#22c55e" %}
+  {% set mt_steps = [
+    ("Membrane Condition Survey", "Inspect waterproof membrane (EPDM/TPO/bitumen) for cracks, blisters, or bubbling. Any repair must be completed and cured before mounting. Verify structural slab below can accept minimum 15 kg/m² ballast load."),
+    ("Protection Layer", "Lay 5 mm HDPE protection mat over entire array footprint to prevent membrane puncture by frame feet."),
+    ("Ballast Frame Placement", "Use aerodynamic low-profile plastic/aluminium trays designed for membrane roofs — no penetrations. Calculate ballast mass from wind speed zoning per BS EN 1991-1-4. Minimum tilt angle 5° for self-cleaning."),
+    ("Panel Installation & Bonding", "Lower panels onto trays. Snap-lock or clamp as per frame system. Bond all frames to a floating earth ring connected to earth spike at roof parapet."),
+    ("Cable Management", "Route DC cables in UV-rated conduit weighted with ballast blocks. Keep cables clear of drainage paths. Inspection access path maintained throughout array."),
+  ] %}
+{% elif mt == 'ground_fixed' %}
+  {% set mt_title = "Ground-Fixed Mount (Concrete Footing)" %}
+  {% set mt_icon  = "bi-grid-1x2-fill" %}
+  {% set mt_color = "#f87171" %}
+  {% set mt_steps = [
+    ("Site Preparation", "Clear and level array footprint (allow 4 m² per panel). Mark column grid per structural layout. Confirm no underground services in excavation zone via service search."),
+    ("Foundation Excavation & Casting", "Excavate 600 mm deep × 400 mm dia. column pits at 3–4 m centres (per structural design). Fix M16 HD anchor bolts in shutter. Cast with C25/30 concrete. Cure minimum 3 days before loading."),
+    ("Steel Frame Erection", "Fix galvanised steel posts (100×100 RHS or 90 mm CHS) to anchor bolts. Plumb and align all columns. Bolt cross-purlin members. Weld or clamp top rails at design tilt angle (latitude ± 5°)."),
+    ("Panel Installation", "Lift panels onto top rail using panel handlers — avoid walking on panels. Apply mid/end clamps. Ground each panel frame with 6 mm² GY bonding cable to common earth strip along base frame."),
+    ("DC Wiring & Earthing", "Route string cables in IP67 UV conduit buried 600 mm below grade in armoured conduit. Install earth rod at each end of array. Connect array earth ring to main earth busbar via 16 mm² GY cable."),
+  ] %}
+{% else %}
+  {% set mt_title = "Ground-Fixed with Single-Axis Tracking" %}
+  {% set mt_icon  = "bi-arrow-repeat" %}
+  {% set mt_color = "#0ea5e9" %}
+  {% set mt_steps = [
+    ("Site Survey & Grading", "Carry out full topographic survey. Grade site to ≤ 2% slope. Compact sub-base to 95% Proctor. Confirm bearing capacity ≥ 100 kN/m² for driven pile foundations."),
+    ("Foundation & Pile Installation", "Drive 3 m galvanised steel piles (100 mm dia.) to refusal using hydraulic pile driver. Cap piles with baseplate and tolerance shim. Grid spacing per tracker manufacturer layout."),
+    ("Tracker Structure Erection", "Assemble torque tube sections on ground. Lift into pillow-block bearings. Align all tube sections to within 2 mm/m. Install drive motor and actuation arm at mid-span."),
+    ("Panel Stringing on Tracker", "Mount panels in landscape orientation on tracker rails. Follow N–S string wiring (east panels +, west panels −) per MPPT channel design."),
+    ("Tracker Control & Communication", "Connect tracker motor to central controller. Set morning/evening stow position. Commission tracking algorithm — verify east-to-west sweep. Install SCADA/data logger for performance monitoring."),
+  ] %}
+{% endif %}
+
+<div class="solar-card p-4 mb-4" style="border-left:4px solid {{ mt_color }}">
+  <div class="section-head mb-3">
+    <i class="bi {{ mt_icon }} me-2" style="color:{{ mt_color }}"></i>
+    Mounting Method: {{ mt_title }}
+    &nbsp;
+    <span class="badge" style="font-size:10px;background:{{ mt_color }}22;color:{{ mt_color }};border:1px solid {{ mt_color }}44">
+      {{ r.num_panels }} panels · {{ r.pv_kw|fmt(2) }} kWp
+    </span>
+  </div>
+  <div class="row g-3">
+    {% for step_title, step_desc in mt_steps %}{% set step_num = loop.index %}
+    <div class="col-md-6">
+      <div class="d-flex gap-3 p-3 rounded h-100" style="background:#0a0a18;border:1px solid #1e1e3a">
+        <div style="width:32px;height:32px;background:{{ mt_color }}22;border:2px solid {{ mt_color }}44;
+                    border-radius:50%;display:flex;align-items:center;justify-content:center;
+                    flex-shrink:0;font-weight:900;font-size:13px;color:{{ mt_color }}">{{ step_num }}</div>
+        <div>
+          <div class="fw-bold mb-1" style="color:{{ mt_color }};font-size:13px">{{ step_title }}</div>
+          <div class="text-secondary small" style="font-size:11px;line-height:1.55">{{ step_desc }}</div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════
+   DIAGRAM 1 — COMPLETE SYSTEM SINGLE-LINE DIAGRAM
+   ═══════════════════════════════════════════════════════════════ #}
+<div class="diag-wrap">
+  <div class="diag-head">
+    <div class="num">1</div>
+    <div class="ttl">Complete System Single-Line Wiring Diagram</div>
+  </div>
+  <div class="diag-body">
+    <svg viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;background:#07071a">
+
+      {# ── PV STRINGS ── #}
+      {% for s in range([num_strings, 4]|min) %}
+      {% set sy = 40 + s * 110 %}
+      {% set panels = last_str_panels if s == num_strings-1 else pps %}
+      {# Panel symbol: grid of cells #}
+      <rect x="18" y="{{ sy }}" width="72" height="50" rx="4" fill="#0f172a" stroke="#f59e0b" stroke-width="1.5"/>
+      <line x1="18" y1="{{ sy+17 }}" x2="90" y2="{{ sy+17 }}" stroke="#f59e0b" stroke-width="0.5"/>
+      <line x1="18" y1="{{ sy+33 }}" x2="90" y2="{{ sy+33 }}" stroke="#f59e0b" stroke-width="0.5"/>
+      <line x1="42" y1="{{ sy }}" x2="42" y2="{{ sy+50 }}" stroke="#f59e0b" stroke-width="0.5"/>
+      <line x1="66" y1="{{ sy }}" x2="66" y2="{{ sy+50 }}" stroke="#f59e0b" stroke-width="0.5"/>
+      <text x="54" y="{{ sy-6 }}" text-anchor="middle" fill="#94a3b8" font-size="10">STR {{ s+1 }}</text>
+      <text x="54" y="{{ sy+66 }}" text-anchor="middle" fill="#6b7280" font-size="9">{{ panels }}×400Wp</text>
+      {# DC+ out of panel #}
+      <line x1="90" y1="{{ sy+16 }}" x2="110" y2="{{ sy+16 }}" stroke="#ef4444" stroke-width="2"/>
+      {# DC− out of panel #}
+      <line x1="90" y1="{{ sy+34 }}" x2="110" y2="{{ sy+34 }}" stroke="#3b82f6" stroke-width="2"/>
+      {# Connect to combiner vertical bus #}
+      <line x1="110" y1="{{ sy+16 }}" x2="118" y2="{{ sy+16 }}" stroke="#ef4444" stroke-width="2"/>
+      <line x1="110" y1="{{ sy+34 }}" x2="118" y2="{{ sy+34 }}" stroke="#3b82f6" stroke-width="2"/>
+      {% endfor %}
+      {% if num_strings > 4 %}
+      <text x="54" y="490" text-anchor="middle" fill="#6b7280" font-size="11">... +{{ num_strings-4 }} more</text>
+      {% endif %}
+
+      {# ── COMBINER BOX ── #}
+      <rect x="118" y="20" width="80" height="{% if num_strings <= 3 %}{{ 20 + num_strings*110 }}{% else %}460{% endif %}" rx="6" fill="#0f172a" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <text x="158" y="14" text-anchor="middle" fill="#64748b" font-size="10" font-weight="700">DC COMBINER</text>
+      {# String fuses #}
+      {% for s in range([num_strings, 4]|min) %}
+      {% set sy = 40 + s * 110 %}
+      <rect x="124" y="{{ sy+10 }}" width="20" height="12" rx="2" fill="#1e293b" stroke="#fbbf24" stroke-width="1"/>
+      <text x="134" y="{{ sy+19 }}" text-anchor="middle" fill="#fbbf24" font-size="7">F</text>
+      <rect x="124" y="{{ sy+28 }}" width="20" height="12" rx="2" fill="#1e293b" stroke="#60a5fa" stroke-width="1"/>
+      <text x="134" y="{{ sy+37 }}" text-anchor="middle" fill="#60a5fa" font-size="7">F</text>
+      {# Connect fuse to vertical bus #}
+      <line x1="144" y1="{{ sy+16 }}" x2="170" y2="{{ sy+16 }}" stroke="#ef4444" stroke-width="1.5"/>
+      <line x1="144" y1="{{ sy+34 }}" x2="170" y2="{{ sy+34 }}" stroke="#3b82f6" stroke-width="1.5"/>
+      {% endfor %}
+      {# DC SPD in combiner #}
+      <rect x="148" y="28" width="22" height="22" rx="3" fill="#1e293b" stroke="#a78bfa" stroke-width="1.2"/>
+      <text x="159" y="42" text-anchor="middle" fill="#a78bfa" font-size="8" font-weight="700">SPD</text>
+      {# Vertical DC busbars #}
+      <line x1="170" y1="30" x2="170" y2="{{ 30 + [num_strings,4]|min * 110 }}" stroke="#ef4444" stroke-width="2.5"/>
+      <line x1="176" y1="30" x2="176" y2="{{ 30 + [num_strings,4]|min * 110 }}" stroke="#3b82f6" stroke-width="2.5"/>
+
+      {# ── DC MAIN ISOLATOR ── #}
+      <rect x="218" y="150" width="52" height="70" rx="5" fill="#0f172a" stroke="#64748b" stroke-width="1.5"/>
+      <text x="244" y="144" text-anchor="middle" fill="#64748b" font-size="10" font-weight="700">DC ISO</text>
+      <line x1="228" y1="165" x2="262" y2="165" stroke="#ef4444" stroke-width="2"/>
+      <line x1="228" y1="185" x2="262" y2="185" stroke="#3b82f6" stroke-width="2"/>
+      <line x1="228" y1="205" x2="262" y2="205" stroke="#22c55e" stroke-width="2"/>
+      <text x="244" y="228" text-anchor="middle" fill="#6b7280" font-size="9">3-POLE</text>
+      {# Wires combiner → isolator #}
+      <line x1="198" y1="{% if num_strings==1 %}56{% else %}166{% endif %}" x2="218" y2="165" stroke="#ef4444" stroke-width="2"/>
+      <line x1="198" y1="{% if num_strings==1 %}74{% else %}174{% endif %}" x2="218" y2="185" stroke="#3b82f6" stroke-width="2"/>
+
+      {# ── SURGE PROTECTION (DC) ── #}
+      <rect x="218" y="94" width="52" height="36" rx="4" fill="#1e293b" stroke="#a78bfa" stroke-width="1.2"/>
+      <text x="244" y="107" text-anchor="middle" fill="#a78bfa" font-size="8" font-weight="700">DC SPD</text>
+      <text x="244" y="120" text-anchor="middle" fill="#6b7280" font-size="8">Type 2</text>
+
+      {# ── HYBRID INVERTER/CHARGER ── #}
+      <rect x="296" y="80" width="130" height="280" rx="8" fill="#0c1829" stroke="#0ea5e9" stroke-width="2"/>
+      <text x="361" y="72" text-anchor="middle" fill="#0ea5e9" font-size="11" font-weight="900">HYBRID INVERTER</text>
+      <text x="361" y="116" text-anchor="middle" fill="#38bdf8" font-size="10" font-weight="700">DC INPUT</text>
+      <text x="361" y="130" text-anchor="middle" fill="#94a3b8" font-size="9">MPPT Charge Controller</text>
+      <line x1="270" y1="165" x2="296" y2="165" stroke="#ef4444" stroke-width="2"/>
+      <line x1="270" y1="185" x2="296" y2="185" stroke="#3b82f6" stroke-width="2"/>
+      <line x1="270" y1="205" x2="296" y2="205" stroke="#22c55e" stroke-width="2"/>
+      {# Inverter body details #}
+      <rect x="310" y="140" width="32" height="18" rx="3" fill="#1e3a5f" stroke="#38bdf8" stroke-width="1"/>
+      <text x="326" y="152" text-anchor="middle" fill="#38bdf8" font-size="8">MPPT</text>
+      <rect x="350" y="140" width="60" height="18" rx="3" fill="#1e3a5f" stroke="#38bdf8" stroke-width="1"/>
+      <text x="380" y="152" text-anchor="middle" fill="#38bdf8" font-size="8">{{ r.inv_kw|fmt(1) }} kW</text>
+      <line x1="316" y1="210" x2="406" y2="210" stroke="#1e3a5f" stroke-width="1"/>
+      <text x="361" y="230" text-anchor="middle" fill="#38bdf8" font-size="10" font-weight="700">AC OUTPUT</text>
+      <text x="361" y="244" text-anchor="middle" fill="#94a3b8" font-size="9">{{ v_ac }}V / 50Hz / {{ d.phase|title }} Ph</text>
+      <line x1="316" y1="256" x2="406" y2="256" stroke="#1e3a5f" stroke-width="1"/>
+      <text x="361" y="276" text-anchor="middle" fill="#8b5cf6" font-size="10" font-weight="700">BATTERY PORT</text>
+      <text x="361" y="290" text-anchor="middle" fill="#94a3b8" font-size="9">{{ d.voltage }}V DC</text>
+      {# Inverter border glow #}
+      <rect x="296" y="80" width="130" height="280" rx="8" fill="none" stroke="#0ea5e9" stroke-width="1" opacity="0.3"/>
+
+      {# ── BATTERY BANK ── #}
+      <rect x="296" y="390" width="130" height="90" rx="6" fill="#0f0f22" stroke="#8b5cf6" stroke-width="2"/>
+      <text x="361" y="384" text-anchor="middle" fill="#8b5cf6" font-size="11" font-weight="900">BATTERY BANK</text>
+      {# Battery cells symbol #}
+      {% for b in range([r.num_bat, 4]|min) %}
+      <rect x="{{ 306 + b*28 }}" y="402" width="22" height="36" rx="3" fill="#1e1e3a" stroke="#7c3aed" stroke-width="1.2"/>
+      <line x1="{{ 306 + b*28 + 11 }}" y1="402" x2="{{ 306 + b*28 + 11 }}" y2="396" stroke="#ef4444" stroke-width="2"/>
+      <line x1="{{ 306 + b*28 + 11 }}" y1="438" x2="{{ 306 + b*28 + 11 }}" y2="444" stroke="#3b82f6" stroke-width="2"/>
+      {% endfor %}
+      <text x="361" y="455" text-anchor="middle" fill="#8b5cf6" font-size="9">{{ r.num_bat }}×{{ r.unit_bat_kwh|fmt(2) }}kWh LiFePO₄</text>
+      <text x="361" y="468" text-anchor="middle" fill="#6b7280" font-size="9">{{ r.bat_kwh|fmt(1) }} kWh Total</text>
+      {# Battery fuse #}
+      <rect x="326" y="368" width="20" height="14" rx="2" fill="#1e293b" stroke="#fbbf24" stroke-width="1"/>
+      <text x="336" y="378" text-anchor="middle" fill="#fbbf24" font-size="7">FUSE</text>
+      {# Battery wires to inverter #}
+      <line x1="361" y1="360" x2="361" y2="382" stroke="#8b5cf6" stroke-width="2"/>
+      <line x1="361" y1="390" x2="361" y2="382" stroke="#8b5cf6" stroke-width="2.5"/>
+
+      {# ── AC OUTPUT WIRES ── #}
+      <line x1="426" y1="220" x2="470" y2="220" stroke="#d97706" stroke-width="2"/>
+      <line x1="426" y1="230" x2="470" y2="230" stroke="#9ca3af" stroke-width="2"/>
+      <line x1="426" y1="240" x2="470" y2="240" stroke="#22c55e" stroke-width="2"/>
+
+      {# ── AC SPD ── #}
+      <rect x="470" y="196" width="44" height="60" rx="4" fill="#1e293b" stroke="#a78bfa" stroke-width="1.2"/>
+      <text x="492" y="222" text-anchor="middle" fill="#a78bfa" font-size="9" font-weight="700">AC</text>
+      <text x="492" y="234" text-anchor="middle" fill="#a78bfa" font-size="9" font-weight="700">SPD</text>
+      <text x="492" y="246" text-anchor="middle" fill="#6b7280" font-size="8">T2</text>
+      {# wires through SPD #}
+      <line x1="514" y1="220" x2="530" y2="220" stroke="#d97706" stroke-width="2"/>
+      <line x1="514" y1="230" x2="530" y2="230" stroke="#9ca3af" stroke-width="2"/>
+      <line x1="514" y1="240" x2="530" y2="240" stroke="#22c55e" stroke-width="2"/>
+
+      {# ── MAIN AC DISTRIBUTION BOARD ── #}
+      <rect x="530" y="120" width="100" height="290" rx="6" fill="#071018" stroke="#0ea5e9" stroke-width="1.5"/>
+      <text x="580" y="114" text-anchor="middle" fill="#0ea5e9" font-size="11" font-weight="900">MAIN AC DB</text>
+      {# Incoming RCCB #}
+      <rect x="542" y="132" width="76" height="32" rx="3" fill="#1e3a5f" stroke="#38bdf8" stroke-width="1.2"/>
+      <text x="580" y="149" text-anchor="middle" fill="#38bdf8" font-size="9" font-weight="700">RCCB 30mA</text>
+      <text x="580" y="160" text-anchor="middle" fill="#94a3b8" font-size="8">{{ r.ac_cables[0].breaker_a }}A</text>
+      {# Busbar #}
+      <rect x="570" y="170" width="20" height="4" rx="1" fill="#d97706"/>
+      <rect x="570" y="180" width="20" height="4" rx="1" fill="#9ca3af"/>
+      <rect x="570" y="190" width="20" height="4" rx="1" fill="#22c55e"/>
+      <text x="548" y="188" text-anchor="end" fill="#6b7280" font-size="8">BUSBAR</text>
+      {# MCBs for each circuit #}
+      {% set circuits = [("Lighting","bi-lightbulb","#fbbf24"),
+                         ("Sockets","bi-plug","#60a5fa"),
+                         ("Air Con","bi-thermometer","#34d399"),
+                         ("Pumps","bi-droplet","#a78bfa"),
+                         ("Office","bi-pc-display","#f87171")] %}
+      {% for i,(label,icon,col) in enumerate(circuits) %}
+      {% set cy = 204 + i*36 %}
+      <rect x="542" y="{{ cy }}" width="76" height="28" rx="3" fill="#0f172a" stroke="{{ col }}" stroke-width="1"/>
+      <text x="580" y="{{ cy+12 }}" text-anchor="middle" fill="{{ col }}" font-size="9" font-weight="700">MCB {{ i+1 }}</text>
+      <text x="580" y="{{ cy+22 }}" text-anchor="middle" fill="#6b7280" font-size="8">{{ label }} 16A</text>
+      {# Wire to sub-circuit #}
+      <line x1="630" y1="{{ cy+14 }}" x2="660" y2="{{ cy+14 }}" stroke="{{ col }}" stroke-width="1.5"/>
+      <text x="664" y="{{ cy+18 }}" fill="{{ col }}" font-size="9">{{ label }}</text>
+      {% endfor %}
+
+      {# ── EARTH SYSTEM ── #}
+      <line x1="200" y1="500" x2="820" y2="500" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="510" y="515" text-anchor="middle" fill="#22c55e" font-size="9">PROTECTIVE EARTH BUSBAR (BS 7430)</text>
+      {# Earth rods symbol #}
+      <line x1="480" y1="500" x2="480" y2="526" stroke="#22c55e" stroke-width="2"/>
+      <line x1="468" y1="526" x2="492" y2="526" stroke="#22c55e" stroke-width="2.5"/>
+      <line x1="472" y1="530" x2="488" y2="530" stroke="#22c55e" stroke-width="2"/>
+      <line x1="476" y1="534" x2="484" y2="534" stroke="#22c55e" stroke-width="1.5"/>
+      <text x="480" y="520" text-anchor="middle" fill="#6b7280" font-size="8">EARTH ROD</text>
+      {# Earth drops from equipment #}
+      <line x1="244" y1="220" x2="244" y2="500" stroke="#22c55e" stroke-width="1" stroke-dasharray="3,3"/>
+      <line x1="361" y1="360" x2="361" y2="500" stroke="#22c55e" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+      <line x1="580" y1="410" x2="580" y2="500" stroke="#22c55e" stroke-width="1" stroke-dasharray="3,3"/>
+
+      {# ── LABELS / ANNOTATIONS ── #}
+      <text x="54" y="10" text-anchor="middle" fill="#f59e0b" font-size="11" font-weight="900">PV ARRAY</text>
+      <text x="54" y="22" text-anchor="middle" fill="#94a3b8" font-size="9">{{ r.pv_kw|fmt(2) }} kWp</text>
+      <text x="158" y="500" text-anchor="middle" fill="#64748b" font-size="9">Combiner</text>
+
+      {# Cable size labels on main runs #}
+      <text x="250" y="160" text-anchor="middle" fill="#ef4444" font-size="8">DC+</text>
+      <text x="250" y="194" text-anchor="middle" fill="#3b82f6" font-size="8">DC−</text>
+      <text x="455" y="216" text-anchor="middle" fill="#d97706" font-size="8">L</text>
+      <text x="455" y="228" text-anchor="middle" fill="#9ca3af" font-size="8">N</text>
+      <text x="455" y="240" text-anchor="middle" fill="#22c55e" font-size="8">PE</text>
+
+      {# Wire size annotation #}
+      {% if r.ac_cables %}
+      <rect x="430" y="244" width="36" height="14" rx="2" fill="#1e1e3a" stroke="#64748b" stroke-width="0.8"/>
+      <text x="448" y="254" text-anchor="middle" fill="#94a3b8" font-size="8">{{ r.ac_cables[0].cable_size_mm2 }}mm²</text>
+      {% endif %}
+    </svg>
+  </div>
+  <div class="notes-panel">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="note-item"><span class="dot">①</span><span class="txt"><strong>PV Array →  Combiner Box:</strong> Each string wired with 6mm² UV-resistant DC solar cable (TÜV certified). Individual string fuses rated at 1.25 × Isc protect against reverse current. DC SPD (Type 2) inside combiner protects against lightning-induced transients.</span></div>
+        <div class="note-item"><span class="dot">②</span><span class="txt"><strong>DC Isolator:</strong> 3-pole DC-rated isolator (≥ 1.25 × Voc) provides safe disconnection of PV array from inverter for maintenance. Must be DC-rated — AC isolators must not be used on DC circuits.</span></div>
+        <div class="note-item"><span class="dot">③</span><span class="txt"><strong>Hybrid Inverter/Charger:</strong> Converts DC from PV and battery to AC mains supply. Built-in MPPT controller optimises PV harvest. Battery charger maintains charge using grid or generator when solar is insufficient.</span></div>
+      </div>
+      <div class="col-md-6">
+        <div class="note-item"><span class="dot">④</span><span class="txt"><strong>Battery Bank:</strong> {{ r.num_bat }} × {{ r.unit_bat_kwh|fmt(2) }} kWh compact LiFePO₄ unit{{ 's' if r.num_bat > 1 else '' }} ({{ r.bat_kwh|fmt(1) }} kWh total) connected to inverter battery port. Battery fuse sized at 1.25 × max charge current. Mounted in ventilated, shaded enclosure — minimum 300 mm clearance from walls and ceiling.</span></div>
+        <div class="note-item"><span class="dot">⑤</span><span class="txt"><strong>AC SPD + Main DB:</strong> Type 2 AC SPD on incoming to DB. RCCB (30mA) on incomer protects against earth faults. Individual MCBs protect each final circuit. All per BS 7671:2018 Chapter 41 (Protective Measures).</span></div>
+        <div class="note-item"><span class="dot">⑥</span><span class="txt"><strong>Earthing System:</strong> TT earthing arrangement. Copper earth rod ≥ 2.4m driven vertically, electrode resistance ≤ 10Ω (BS 7430). All metalwork bonded — inverter chassis, battery rack, DB enclosure, panel frames.</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════
+   DIAGRAM 2 — PV STRING CONFIGURATION
+   ═══════════════════════════════════════════════════════════════ #}
+<div class="diag-wrap">
+  <div class="diag-head">
+    <div class="num">2</div>
+    <div class="ttl">PV Array String Configuration &amp; Roof Layout</div>
+  </div>
+  <div class="diag-body">
+    <svg viewBox="0 0 960 360" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;background:#07071a">
+
+      {# ── ROOF OUTLINE ── #}
+      <rect x="20" y="20" width="560" height="320" rx="8" fill="#0a0f1a" stroke="#334155" stroke-width="1.5"/>
+      <text x="300" y="14" text-anchor="middle" fill="#64748b" font-size="11" font-weight="700">ROOF / MOUNTING SURFACE (TOP VIEW)</text>
+
+      {# ── PANEL GRID ── #}
+      {% set panel_w = 52 %}
+      {% set panel_h = 36 %}
+      {% set gap = 8 %}
+      {% set margin = 30 %}
+      {% set cols = pps %}
+      {% set rows = num_strings %}
+      {% for row in range(rows) %}
+      {% for col in range(cols if row < num_strings-1 else last_str_panels) %}
+      {% set px = margin + col*(panel_w+gap) + 10 %}
+      {% set py = margin + row*(panel_h+gap) + 14 %}
+      <rect x="{{ px }}" y="{{ py }}" width="{{ panel_w }}" height="{{ panel_h }}" rx="3"
+            fill="#0f172a" stroke="#f59e0b" stroke-width="1.2"/>
+      {# Cell lines #}
+      <line x1="{{ px + panel_w//3 }}" y1="{{ py }}" x2="{{ px + panel_w//3 }}" y2="{{ py+panel_h }}" stroke="#f59e0b" stroke-width="0.4" opacity="0.5"/>
+      <line x1="{{ px + 2*panel_w//3 }}" y1="{{ py }}" x2="{{ px + 2*panel_w//3 }}" y2="{{ py+panel_h }}" stroke="#f59e0b" stroke-width="0.4" opacity="0.5"/>
+      <line x1="{{ px }}" y1="{{ py + panel_h//2 }}" x2="{{ px+panel_w }}" y2="{{ py + panel_h//2 }}" stroke="#f59e0b" stroke-width="0.4" opacity="0.5"/>
+      {# Panel label #}
+      <text x="{{ px + panel_w//2 }}" y="{{ py + panel_h//2 + 3 }}" text-anchor="middle" fill="#94a3b8" font-size="7">400W</text>
+      {# Series connection between panels in string #}
+      {% if col < (cols if row < num_strings-1 else last_str_panels) - 1 %}
+      <line x1="{{ px + panel_w }}" y1="{{ py + 8 }}" x2="{{ px + panel_w + gap }}" y2="{{ py + 8 }}" stroke="#ef4444" stroke-width="1.5"/>
+      <line x1="{{ px + panel_w }}" y1="{{ py + panel_h - 8 }}" x2="{{ px + panel_w + gap }}" y2="{{ py + panel_h - 8 }}" stroke="#3b82f6" stroke-width="1.5"/>
+      {% endif %}
+      {% endfor %}
+      {# String label #}
+      <text x="{{ margin + 10 - 6 }}" y="{{ margin + 14 + row*(panel_h+gap) + panel_h//2 + 4 }}" text-anchor="end" fill="#60a5fa" font-size="9" font-weight="700">S{{ row+1 }}</text>
+      {# String output to combiner #}
+      {% set end_x = margin + 10 + (cols if row < num_strings-1 else last_str_panels)*(panel_w+gap) - gap %}
+      <line x1="{{ end_x }}" y1="{{ margin + 14 + row*(panel_h+gap) + 8 }}" x2="{{ end_x + 14 }}" y2="{{ margin + 14 + row*(panel_h+gap) + 8 }}" stroke="#ef4444" stroke-width="1.5"/>
+      <line x1="{{ end_x }}" y1="{{ margin + 14 + row*(panel_h+gap) + panel_h-8 }}" x2="{{ end_x + 14 }}" y2="{{ margin + 14 + row*(panel_h+gap) + panel_h-8 }}" stroke="#3b82f6" stroke-width="1.5"/>
+      {% endfor %}
+
+      {# ── TILT DIRECTION ARROW ── #}
+      <text x="300" y="340" text-anchor="middle" fill="#64748b" font-size="10">▼ South / Equator-facing (optimal tilt)</text>
+
+      {# ── CLEARANCE ANNOTATIONS ── #}
+      <line x1="20" y1="20" x2="20" y2="340" stroke="#334155" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="15" y="190" text-anchor="middle" fill="#475569" font-size="9" transform="rotate(-90,15,190)">600mm min clearance (edge)</text>
+      <line x1="580" y1="20" x2="580" y2="340" stroke="#334155" stroke-width="1" stroke-dasharray="3,3"/>
+
+      {# ── SPECS PANEL (right) ── #}
+      <rect x="612" y="20" width="330" height="310" rx="8" fill="#0a0f1a" stroke="#1e293b" stroke-width="1"/>
+      <text x="777" y="40" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="800">ARRAY SPECIFICATIONS</text>
+
+      {% for y,lbl,val in [
+        (65,"Total Panels", r.num_panels|string + " modules"),
+        (90,"Panels per String", pps|string + " in series"),
+        (115,"Number of Strings", num_strings|string + " parallel"),
+        (140,"Total Array Size", r.pv_kw|fmt(2) + " kWp"),
+        (165,"Panel Rating", "400 Wp (TOPCon/PERC)"),
+        (190,"String Voc (est.)", (pps*24)|string + " V (24V/panel)"),
+        (215,"MPPT Voltage Range", "60–145 V (inverter spec)"),
+        (240,"String Isc (est.)", "10–12 A typical"),
+        (265,"DC Cable (strings)", "6 mm² UV solar cable"),
+        (290,"DC Cable (main)", "10 mm² to isolator"),
+        (315,"Tilt Angle", "10–15° min (self-cleaning)"),
+      ] %}
+      <text x="625" y="{{ y }}" fill="#6b7280" font-size="10">{{ lbl }}</text>
+      <text x="930" y="{{ y }}" text-anchor="end" fill="#e2e8f0" font-size="10" font-weight="700">{{ val }}</text>
+      <line x1="620" y1="{{ y+4 }}" x2="940" y2="{{ y+4 }}" stroke="#1e293b" stroke-width="0.5"/>
+      {% endfor %}
+    </svg>
+  </div>
+  <div class="notes-panel">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="note-item"><span class="dot">①</span><span class="txt"><strong>Series Wiring:</strong> Panels within each string are connected in series (+ terminal of one panel to − terminal of the next). This multiplies voltage while keeping current the same. String voltage = {{ pps }} panels × ~24V Voc ≈ {{ pps*24 }}V — within MPPT range.</span></div>
+        <div class="note-item"><span class="dot">②</span><span class="txt"><strong>Parallel Strings:</strong> {{ num_strings }} strings are connected in parallel at the combiner box. Parallel connection multiplies current while voltage remains the same. Total array Isc ≈ {{ num_strings }} × 10A = {{ num_strings*10 }}A DC.</span></div>
+      </div>
+      <div class="col-md-6">
+        <div class="note-item"><span class="dot">③</span><span class="txt"><strong>Mounting Clearances:</strong> Maintain ≥ 600mm from all roof edges (wind uplift). Allow ≥ 150mm gap under panels for airflow (reduces temperature and improves output). Inter-row shading distance = panel height × tan(elevation angle).</span></div>
+        <div class="note-item"><span class="dot">④</span><span class="txt"><strong>Orientation:</strong> Face panels toward the equator (south in northern hemisphere, north in southern hemisphere). Use region-specific tilt angle from solar data. Avoid shading from 09:00–15:00 (peak generation window).</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════
+   DIAGRAM 3 — AC DISTRIBUTION BOARD LAYOUT
+   ═══════════════════════════════════════════════════════════════ #}
+<div class="diag-wrap">
+  <div class="diag-head">
+    <div class="num">3</div>
+    <div class="ttl">AC Distribution Board — Internal Arrangement &amp; Circuit Schedule</div>
+  </div>
+  <div class="diag-body">
+    <svg viewBox="0 0 960 400" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;background:#07071a">
+
+      {# ── DB CABINET OUTLINE ── #}
+      <rect x="40" y="30" width="440" height="340" rx="10" fill="#07101a" stroke="#0ea5e9" stroke-width="2"/>
+      <rect x="40" y="30" width="440" height="30" rx="10" fill="#0f2035" stroke="#0ea5e9" stroke-width="2"/>
+      <text x="260" y="50" text-anchor="middle" fill="#38bdf8" font-size="13" font-weight="900">MAIN AC DISTRIBUTION BOARD</text>
+
+      {# ── INCOMING FROM INVERTER ── #}
+      <text x="100" y="82" fill="#94a3b8" font-size="10" font-weight="700">INCOMING (from Inverter)</text>
+      <line x1="70" y1="70" x2="70" y2="95" stroke="#d97706" stroke-width="3"/>
+      <line x1="82" y1="70" x2="82" y2="95" stroke="#9ca3af" stroke-width="3"/>
+      <line x1="94" y1="70" x2="94" y2="95" stroke="#22c55e" stroke-width="3"/>
+      <text x="68" y="110" text-anchor="middle" fill="#d97706" font-size="8">L</text>
+      <text x="80" y="110" text-anchor="middle" fill="#9ca3af" font-size="8">N</text>
+      <text x="92" y="110" text-anchor="middle" fill="#22c55e" font-size="8">PE</text>
+
+      {# ── RCCB INCOMER ── #}
+      <rect x="58" y="112" width="90" height="52" rx="5" fill="#0f2035" stroke="#38bdf8" stroke-width="1.5"/>
+      <text x="103" y="130" text-anchor="middle" fill="#38bdf8" font-size="10" font-weight="900">RCCB</text>
+      <text x="103" y="144" text-anchor="middle" fill="#94a3b8" font-size="9">{{ r.ac_cables[0].breaker_a }}A / 30mA</text>
+      <text x="103" y="156" text-anchor="middle" fill="#6b7280" font-size="8">BS EN 61008 Type A</text>
+
+      {# ── PHASE BUSBAR ── #}
+      <rect x="58" y="175" width="400" height="8" rx="2" fill="#d97706" opacity="0.8"/>
+      <rect x="58" y="188" width="400" height="8" rx="2" fill="#9ca3af" opacity="0.8"/>
+      <rect x="58" y="201" width="400" height="8" rx="2" fill="#22c55e" opacity="0.8"/>
+      <text x="50" y="182" text-anchor="end" fill="#d97706" font-size="9" font-weight="700">L</text>
+      <text x="50" y="196" text-anchor="end" fill="#9ca3af" font-size="9" font-weight="700">N</text>
+      <text x="50" y="209" text-anchor="end" fill="#22c55e" font-size="9" font-weight="700">PE</text>
+      <text x="260" y="172" text-anchor="middle" fill="#64748b" font-size="9">PHASE BUSBAR</text>
+      <text x="260" y="215" text-anchor="middle" fill="#64748b" font-size="9">NEUTRAL BUSBAR</text>
+
+      {# RCCB connects to busbars #}
+      <line x1="82" y1="164" x2="82" y2="175" stroke="#d97706" stroke-width="2"/>
+      <line x1="94" y1="164" x2="94" y2="188" stroke="#9ca3af" stroke-width="2"/>
+      <line x1="106" y1="164" x2="106" y2="201" stroke="#22c55e" stroke-width="2"/>
+
+      {# ── FINAL CIRCUIT MCBs ── #}
+      {% set cable_colors = ["#fbbf24","#60a5fa","#34d399","#a78bfa","#f87171","#fb923c"] %}
+      {% set circuit_names = ["Lighting","Power Sockets","Air Conditioning","Water Pump","Office Equip.","Spare"] %}
+      {% set mcb_ratings = ["10A","16A","32A","16A","16A","—"] %}
+
+      {% for i in range(6) %}
+      {% set cx = 72 + i * 72 %}
+      {% set col = cable_colors[i] %}
+      {# Drop from busbar to MCB #}
+      <line x1="{{ cx }}" y1="183" x2="{{ cx }}" y2="230" stroke="{{ col }}" stroke-width="1.5"/>
+      <line x1="{{ cx+8 }}" y1="196" x2="{{ cx+8 }}" y2="230" stroke="#9ca3af" stroke-width="1.5"/>
+      {# MCB box #}
+      <rect x="{{ cx - 12 }}" y="230" width="36" height="54" rx="4" fill="#0f172a" stroke="{{ col }}" stroke-width="1.5"/>
+      <text x="{{ cx + 6 }}" y="246" text-anchor="middle" fill="{{ col }}" font-size="8" font-weight="900">MCB</text>
+      <text x="{{ cx + 6 }}" y="258" text-anchor="middle" fill="#e2e8f0" font-size="9" font-weight="700">{{ mcb_ratings[i] }}</text>
+      <rect x="{{ cx - 4 }}" y="260" width="20" height="8" rx="1" fill="{{ col }}" opacity="0.3"/>
+      <text x="{{ cx + 6 }}" y="273" text-anchor="middle" fill="#6b7280" font-size="7">{{ "BS EN 60898" if i < 5 else "" }}</text>
+      {# Output cable from MCB #}
+      {% if i < 5 %}
+      <line x1="{{ cx + 6 }}" y1="284" x2="{{ cx + 6 }}" y2="310" stroke="{{ col }}" stroke-width="2"/>
+      <line x1="{{ cx + 14 }}" y1="284" x2="{{ cx + 14 }}" y2="310" stroke="#9ca3af" stroke-width="1.5"/>
+      <line x1="{{ cx - 2 }}" y1="284" x2="{{ cx - 2 }}" y2="310" stroke="#22c55e" stroke-width="1.5"/>
+      {# Circuit label #}
+      <text x="{{ cx + 6 }}" y="328" text-anchor="middle" fill="{{ col }}" font-size="8" font-weight="700">{{ circuit_names[i] }}</text>
+      {# Cable size #}
+      {% if r.ac_cables and i < r.ac_cables|length %}
+      <text x="{{ cx + 6 }}" y="340" text-anchor="middle" fill="#475569" font-size="7">{{ r.ac_cables[-1].cable_size_mm2 if i>=1 else r.ac_cables[0].cable_size_mm2 }}mm²</text>
+      {% endif %}
+      {% endif %}
+      {% endfor %}
+
+      {# ── SPD inside DB ── #}
+      <rect x="380" y="230" width="50" height="54" rx="4" fill="#1e293b" stroke="#a78bfa" stroke-width="1.2"/>
+      <text x="405" y="252" text-anchor="middle" fill="#a78bfa" font-size="9" font-weight="700">SPD</text>
+      <text x="405" y="264" text-anchor="middle" fill="#6b7280" font-size="8">Type 2</text>
+      <text x="405" y="276" text-anchor="middle" fill="#6b7280" font-size="8">BS EN 61643</text>
+      <line x1="405" y1="230" x2="405" y2="188" stroke="#a78bfa" stroke-width="1.2" stroke-dasharray="3,2"/>
+
+      {# ── RIGHT SIDE SPECS ── #}
+      <rect x="510" y="30" width="430" height="340" rx="10" fill="#07101a" stroke="#1e293b" stroke-width="1"/>
+      <text x="725" y="58" text-anchor="middle" fill="#94a3b8" font-size="12" font-weight="800">CIRCUIT SCHEDULE</text>
+
+      {% for i,(cname, crating, ccable, cload, ctype) in enumerate([
+        ("Incoming (Inverter AC out)", r.ac_cables[0].breaker_a|string+"A RCCB", r.ac_cables[0].cable_size_mm2|string+"mm²", r.inv_kw|fmt(1)+" kW", "Incomer"),
+        ("Lighting & Emergency", "10A MCB", "1.5mm²", "~1.0 kW", "Final"),
+        ("Power Sockets", "16A MCB", "2.5mm²", "~2.0 kW", "Final"),
+        ("Air Conditioning", "32A MCB", r.ac_cables[-1].cable_size_mm2|string+"mm²", "~3.5 kW", "Final"),
+        ("Water / Borehole Pump", "16A MCB", "2.5mm²", "~1.5 kW", "Final"),
+        ("Office Equipment", "16A MCB", "2.5mm²", "~1.5 kW", "Final"),
+        ("AC SPD", "—", "4mm²", "—", "Protection"),
+      ]) %}
+      {% set ry = 72 + i * 40 %}
+      <rect x="522" y="{{ ry }}" width="408" height="34" rx="3" fill="{{ '#0f2035' if i==0 else '#0a0f1a' }}" stroke="#1e293b" stroke-width="0.8"/>
+      <text x="528" y="{{ ry+12 }}" fill="{{ '#38bdf8' if i==0 else '#e2e8f0' }}" font-size="10" font-weight="{{ '700' if i==0 else '400' }}">{{ i+1 if i>0 else '—' }}</text>
+      <text x="548" y="{{ ry+12 }}" fill="{{ '#38bdf8' if i==0 else cable_colors[i-1] if i>0 and i<=6 else '#e2e8f0' }}" font-size="10">{{ cname }}</text>
+      <text x="528" y="{{ ry+26 }}" fill="#64748b" font-size="9">{{ ctype }}</text>
+      <text x="755" y="{{ ry+19 }}" text-anchor="middle" fill="#94a3b8" font-size="10">{{ crating }}</text>
+      <text x="845" y="{{ ry+19 }}" text-anchor="middle" fill="#f59e0b" font-size="10">{{ ccable }}</text>
+      <text x="918" y="{{ ry+19 }}" text-anchor="end" fill="#6b7280" font-size="9">{{ cload }}</text>
+      {% endfor %}
+
+      <text x="755" y="65" text-anchor="middle" fill="#475569" font-size="9">Protection</text>
+      <text x="845" y="65" text-anchor="middle" fill="#475569" font-size="9">Cable</text>
+      <text x="918" y="65" text-anchor="end" fill="#475569" font-size="9">Load</text>
+    </svg>
+  </div>
+  <div class="notes-panel">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="note-item"><span class="dot">①</span><span class="txt"><strong>RCCB (Residual Current Circuit Breaker):</strong> 30mA sensitivity on incoming supply protects against earth faults and electric shock. Type A detects both AC and pulsating DC residual currents. Mandatory per BS 7671 Regulation 415.1.</span></div>
+      </div>
+      <div class="col-md-4">
+        <div class="note-item"><span class="dot">②</span><span class="txt"><strong>MCB Ratings:</strong> Each final circuit protected by MCB rated to match cable ampacity. Lighting: 10A / 1.5mm². Sockets: 16A / 2.5mm². Air conditioning: 32A / {{ r.ac_cables[-1].cable_size_mm2 if r.ac_cables else "6" }}mm². Discrimination maintained — incomer trips last.</span></div>
+      </div>
+      <div class="col-md-4">
+        <div class="note-item"><span class="dot">③</span><span class="txt"><strong>AC SPD (Surge Protection Device):</strong> Type 2 SPD (BS EN 61643) connected between phase and earth inside the DB. Protects downstream equipment from voltage surges. Connection cable ≤ 0.5m to minimise lead inductance and maximise clamping effectiveness.</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════
+   DIAGRAM 4 — PHYSICAL SITE LAYOUT
+   ═══════════════════════════════════════════════════════════════ #}
+<div class="diag-wrap">
+  <div class="diag-head">
+    <div class="num">4</div>
+    <div class="ttl">Physical Site Layout — Equipment Placement &amp; Cable Routes</div>
+  </div>
+  <div class="diag-body">
+    <svg viewBox="0 0 960 420" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;background:#07071a">
+
+      {# ── BUILDING OUTLINE ── #}
+      <rect x="30" y="30" width="600" height="360" rx="6" fill="#0a0f1a" stroke="#334155" stroke-width="1.5"/>
+      <text x="330" y="24" text-anchor="middle" fill="#64748b" font-size="11" font-weight="700">BUILDING — SITE PLAN (NOT TO SCALE)</text>
+
+      {# ── ROOF ZONE ── #}
+      <rect x="50" y="50" width="560" height="200" rx="4" fill="#0d1829" stroke="#1e3a5f" stroke-width="1" stroke-dasharray="6,3"/>
+      <text x="330" y="44" text-anchor="middle" fill="#1e3a5f" font-size="10">ROOF ZONE</text>
+
+      {# ── PV PANELS ON ROOF ── #}
+      {% for row in range([num_strings,3]|min) %}
+      {% for col in range([pps,6]|min) %}
+      {% set px = 70 + col*82 %}
+      {% set py = 65 + row*56 %}
+      <rect x="{{ px }}" y="{{ py }}" width="72" height="42" rx="3" fill="#0f172a" stroke="#f59e0b" stroke-width="1.2"/>
+      <line x1="{{ px+24 }}" y1="{{ py }}" x2="{{ px+24 }}" y2="{{ py+42 }}" stroke="#f59e0b" stroke-width="0.4" opacity="0.4"/>
+      <line x1="{{ px+48 }}" y1="{{ py }}" x2="{{ px+48 }}" y2="{{ py+42 }}" stroke="#f59e0b" stroke-width="0.4" opacity="0.4"/>
+      <line x1="{{ px }}" y1="{{ py+21 }}" x2="{{ px+72 }}" y2="{{ py+21 }}" stroke="#f59e0b" stroke-width="0.4" opacity="0.4"/>
+      {% endfor %}
+      {% endfor %}
+      <text x="330" y="225" text-anchor="middle" fill="#f59e0b" font-size="10" font-weight="700">☀ PV ARRAY — {{ r.pv_kw|fmt(2) }} kWp ({{ r.num_panels }} panels)</text>
+
+      {# ── DC CABLE ROUTE (roof to equipment room) ── #}
+      <line x1="330" y1="250" x2="330" y2="290" stroke="#ef4444" stroke-width="2.5" stroke-dasharray="8,4"/>
+      <line x1="334" y1="250" x2="334" y2="290" stroke="#3b82f6" stroke-width="2.5" stroke-dasharray="8,4"/>
+      <text x="345" y="272" fill="#94a3b8" font-size="9">DC cables in metallic conduit</text>
+      <text x="345" y="283" fill="#94a3b8" font-size="9">(6mm² UV solar cable)</text>
+
+      {# ── EQUIPMENT ROOM ── #}
+      <rect x="220" y="290" width="220" height="90" rx="6" fill="#0f1a2a" stroke="#0ea5e9" stroke-width="1.5"/>
+      <text x="330" y="310" text-anchor="middle" fill="#0ea5e9" font-size="11" font-weight="900">EQUIPMENT ROOM</text>
+
+      {# Inverter ── #}
+      <rect x="235" y="318" width="60" height="46" rx="4" fill="#1e3a5f" stroke="#38bdf8" stroke-width="1.2"/>
+      <text x="265" y="334" text-anchor="middle" fill="#38bdf8" font-size="8" font-weight="700">INVERTER</text>
+      <text x="265" y="346" text-anchor="middle" fill="#94a3b8" font-size="8">{{ r.inv_kw|fmt(1) }}kW</text>
+      <text x="265" y="358" text-anchor="middle" fill="#94a3b8" font-size="7">wall-mounted</text>
+
+      {# Battery ── #}
+      <rect x="310" y="318" width="60" height="46" rx="4" fill="#1e1e3a" stroke="#8b5cf6" stroke-width="1.2"/>
+      <text x="340" y="334" text-anchor="middle" fill="#8b5cf6" font-size="8" font-weight="700">BATTERY</text>
+      <text x="340" y="346" text-anchor="middle" fill="#94a3b8" font-size="8">{{ r.bat_kwh|fmt(1) }}kWh</text>
+      <text x="340" y="358" text-anchor="middle" fill="#94a3b8" font-size="7">on rack</text>
+
+      {# DB panel ── #}
+      <rect x="385" y="318" width="42" height="46" rx="4" fill="#071018" stroke="#0ea5e9" stroke-width="1.2"/>
+      <text x="406" y="334" text-anchor="middle" fill="#0ea5e9" font-size="8" font-weight="700">MAIN</text>
+      <text x="406" y="346" text-anchor="middle" fill="#0ea5e9" font-size="8" font-weight="700">DB</text>
+      <text x="406" y="358" text-anchor="middle" fill="#6b7280" font-size="7">flush/surface</text>
+
+      {# Battery wire ── #}
+      <line x1="295" y1="342" x2="310" y2="342" stroke="#8b5cf6" stroke-width="1.5"/>
+      {# DC to inverter #}
+      <line x1="265" y1="318" x2="265" y2="295" stroke="#ef4444" stroke-width="1.5"/>
+      <line x1="269" y1="318" x2="269" y2="295" stroke="#3b82f6" stroke-width="1.5"/>
+      {# AC from inverter to DB ── #}
+      <line x1="375" y1="342" x2="385" y2="342" stroke="#d97706" stroke-width="2"/>
+
+      {# ── AC CABLE ROUTES TO LOADS ── #}
+      <line x1="427" y1="342" x2="490" y2="342" stroke="#d97706" stroke-width="2"/>
+      <line x1="490" y1="295" x2="490" y2="390" stroke="#d97706" stroke-width="2"/>
+      <text x="500" y="300" fill="#fbbf24" font-size="9">→ Lighting</text>
+      <text x="500" y="320" fill="#60a5fa" font-size="9">→ Sockets</text>
+      <text x="500" y="340" fill="#34d399" font-size="9">→ Air Con</text>
+      <text x="500" y="360" fill="#a78bfa" font-size="9">→ Pumps</text>
+      <text x="500" y="380" fill="#f87171" font-size="9">→ Office</text>
+
+      {# ── EARTH ELECTRODE ── #}
+      <line x1="160" y1="340" x2="100" y2="380" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <line x1="85" y1="380" x2="115" y2="380" stroke="#22c55e" stroke-width="2.5"/>
+      <line x1="89" y1="386" x2="111" y2="386" stroke="#22c55e" stroke-width="2"/>
+      <line x1="93" y1="392" x2="107" y2="392" stroke="#22c55e" stroke-width="1.5"/>
+      <text x="100" y="374" text-anchor="middle" fill="#22c55e" font-size="9">EARTH ROD</text>
+      <text x="100" y="407" text-anchor="middle" fill="#6b7280" font-size="8">≥ 2.4m depth</text>
+
+      {# ── LEGEND AREA ── #}
+      <rect x="640" y="30" width="300" height="360" rx="8" fill="#07101a" stroke="#1e293b" stroke-width="1"/>
+      <text x="790" y="52" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="800">INSTALLATION NOTES</text>
+      {% for y,txt in [
+        (75,"☀  PV panels face equator at optimal tilt"),
+        (100,"⚡  Combiner box at top of cable route"),
+        (125,"🔌  DC cables in metallic conduit / tray"),
+        (150,"🏠  Equipment room: ventilated, shaded"),
+        (175,"🔋  Battery: ≥300mm clearance all sides"),
+        (200,"⚙  Inverter: wall-mounted at eye level"),
+        (225,"📋  DB: max 1.8m from floor to top"),
+        (250,"🟢  Earth rod: ≥2m from building"),
+        (275,"📐  All cable bends: ≥6× cable diameter"),
+        (300,"🔒  All equipment: IP54 min outdoors"),
+        (325,"⚠  Label all cables at both ends"),
+        (350,"📝  Test & commission before energising"),
+      ] %}
+      <text x="656" y="{{ y }}" fill="#6b7280" font-size="10">{{ txt }}</text>
+      {% endfor %}
+
+      {# Dimension annotations #}
+      <text x="330" y="388" text-anchor="middle" fill="#334155" font-size="9">← 600mm min clearance to roof edge →</text>
+    </svg>
+  </div>
+  <div class="notes-panel">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <div class="note-item"><span class="dot">①</span><span class="txt"><strong>Equipment Room:</strong> House inverter, batteries, and DB in a ventilated, shaded, lockable room. Ambient temperature ≤ 40°C. Minimum 300mm clearance around all equipment for cooling and maintenance access.</span></div>
+      </div>
+      <div class="col-md-3">
+        <div class="note-item"><span class="dot">②</span><span class="txt"><strong>Cable Routing:</strong> All DC cables run in metallic conduit or cable tray from roof to equipment room. Segregate DC cables from AC cables (separate conduits or ≥ 50mm separation). Label at both ends and at every junction.</span></div>
+      </div>
+      <div class="col-md-3">
+        <div class="note-item"><span class="dot">③</span><span class="txt"><strong>Battery Installation:</strong> Batteries on purpose-built steel rack, bolted to floor or wall. Ensure ventilation (hydrogen gas risk in VRLA; LiFePO₄ has low risk but still ventilate). No ignition sources nearby. Fire extinguisher within 5m.</span></div>
+      </div>
+      <div class="col-md-3">
+        <div class="note-item"><span class="dot">④</span><span class="txt"><strong>Earthing &amp; Bonding:</strong> Single earth rod ≥ 2.4m, ≥ 2m from building. Test resistance ≤ 10Ω (BS 7430). Bond all metalwork — panel frames, inverter chassis, battery rack, DB enclosure — to earth bar with minimum 6mm² green/yellow cable.</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════
+   MATERIAL & EQUIPMENT SCHEDULE
+   ═══════════════════════════════════════════════════════════════ #}
+<div class="diag-wrap mt-2">
+  <div class="diag-head">
+    <div class="num" style="background:linear-gradient(135deg,#0ea5e9,#0284c7)">5</div>
+    <div class="ttl">Material &amp; Equipment Schedule</div>
+  </div>
+  <div class="p-4">
+    <p class="text-secondary small mb-3">
+      Complete list of all materials, equipment, and consumables required for this installation.
+      Quantities are calculated from the engineering design. All equipment must be sourced from
+      approved suppliers and inspected on delivery before installation commences.
+    </p>
+
+    {# PV Array Materials #}
+    <div class="section-head mt-2"><i class="bi bi-sun-fill me-2"></i>1 — PV Array &amp; Mounting</div>
+    <div class="table-responsive mb-3">
+      <table class="table table-sm">
+        <thead><tr><th>#</th><th>Description</th><th>Specification</th><th class="text-center">Qty</th><th>Unit</th><th>Remarks</th></tr></thead>
+        <tbody>
+          <tr><td>1.1</td><td class="fw-bold">Solar PV Panels</td><td>{{ r.panel_wp if r.panel_wp else 400 }} Wp Monocrystalline PERC, Tier 1, Voc ≈ 24 V</td><td class="text-center text-warning fw-bold">{{ r.num_panels }}</td><td>Modules</td><td>{{ r.inv_brand.split(',')[0] if r.inv_brand else "Tier 1 brand" }} or equivalent</td></tr>
+          <tr><td>1.2</td><td class="fw-bold">Aluminium Mounting Rails</td><td>40×40 mm anodised aluminium, roof-compatible</td><td class="text-center text-warning fw-bold">{{ (r.num_panels * 1.2)|int }}</td><td>m (linear)</td><td>Includes 20% overlap allowance</td></tr>
+          <tr><td>1.3</td><td class="fw-bold">Mid &amp; End Clamps</td><td>Stainless steel SS304, compatible with panel frame</td><td class="text-center text-warning fw-bold">{{ r.num_panels * 4 }}</td><td>Sets</td><td>2 mid + 2 end per panel</td></tr>
+          <tr><td>1.4</td><td class="fw-bold">Roof Mounting Brackets / L-Feet</td><td>Galvanised steel or aluminium, tilt-adjustable</td><td class="text-center text-warning fw-bold">{{ (r.num_panels * 1.5)|int }}</td><td>No.</td><td>Spacing ≤ 1.2 m along rail</td></tr>
+          <tr><td>1.5</td><td class="fw-bold">DC Solar Cable</td><td>6 mm² TÜV-certified UV-resistant PV cable, red &amp; black</td><td class="text-center text-warning fw-bold">{{ (r.num_panels * 8)|int }}</td><td>m</td><td>String runs + loop allowance</td></tr>
+          <tr><td>1.6</td><td class="fw-bold">MC4 Connectors</td><td>IP67, 1000 VDC rated, TÜV certified</td><td class="text-center text-warning fw-bold">{{ r.num_panels * 4 }}</td><td>Pairs</td><td>Male + female per panel end</td></tr>
+          <tr><td>1.7</td><td class="fw-bold">DC Main Cable (Combiner → Inverter)</td><td>10 mm² DC solar cable, red &amp; black</td><td class="text-center text-warning fw-bold">30</td><td>m</td><td>Allow for routing in conduit</td></tr>
+          <tr><td>1.8</td><td class="fw-bold">Earthing Cable for Panel Frames</td><td>6 mm² green/yellow, single core</td><td class="text-center text-warning fw-bold">{{ (r.num_panels * 3)|int }}</td><td>m</td><td>Continuous bond across all frames</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    {# DC Protection & Combiner #}
+    <div class="section-head"><i class="bi bi-shield-fill me-2"></i>2 — DC Combiner &amp; Protection</div>
+    <div class="table-responsive mb-3">
+      <table class="table table-sm">
+        <thead><tr><th>#</th><th>Description</th><th>Specification</th><th class="text-center">Qty</th><th>Unit</th><th>Remarks</th></tr></thead>
+        <tbody>
+          <tr><td>2.1</td><td class="fw-bold">DC Combiner Box</td><td>IP65, {{ [num_strings, 4]|min }}-string input, DIN rail, lockable</td><td class="text-center text-warning fw-bold">1</td><td>No.</td><td>Mount at top of cable route</td></tr>
+          <tr><td>2.2</td><td class="fw-bold">String Fuses</td><td>DC PV fuse 10A, 1000 VDC (1.25 × Isc)</td><td class="text-center text-warning fw-bold">{{ num_strings * 2 }}</td><td>No.</td><td>1 per pole per string</td></tr>
+          <tr><td>2.3</td><td class="fw-bold">DC Surge Protection Device (SPD)</td><td>Type 2, 1000 VDC, IEC 61643-31</td><td class="text-center text-warning fw-bold">1</td><td>No.</td><td>Inside combiner box</td></tr>
+          <tr><td>2.4</td><td class="fw-bold">DC Main Isolator</td><td>3-pole DC-rated, ≥ 1.25 × Voc, lockable</td><td class="text-center text-warning fw-bold">1</td><td>No.</td><td>Must be DC-rated — NOT AC type</td></tr>
+          <tr><td>2.5</td><td class="fw-bold">Metallic Cable Conduit (DC run)</td><td>20 mm steel conduit with fittings</td><td class="text-center text-warning fw-bold">25</td><td>m</td><td>Roof to equipment room</td></tr>
+          <tr><td>2.6</td><td class="fw-bold">Cable Trunking / Tray (DC)</td><td>50×50 mm galvanised steel tray</td><td class="text-center text-warning fw-bold">10</td><td>m</td><td>Equipment room horizontal runs</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    {# Inverter & Battery #}
+    <div class="section-head"><i class="bi bi-battery-charging me-2"></i>3 — Inverter, Battery &amp; MPPT</div>
+    <div class="table-responsive mb-3">
+      <table class="table table-sm">
+        <thead><tr><th>#</th><th>Description</th><th>Specification</th><th class="text-center">Qty</th><th>Unit</th><th>Remarks</th></tr></thead>
+        <tbody>
+          <tr><td>3.1</td><td class="fw-bold">Hybrid Inverter / Charger</td><td>{{ r.inv_kw|fmt(1) }} kW, {{ d.voltage }}V DC, {{ "415V 3-ph" if d.phase=="three" else "230V 1-ph" }}, built-in MPPT {{ r.mppt_a }}A</td><td class="text-center text-warning fw-bold">1</td><td>No.</td><td>{{ r.inv_brand.split(',')[0] if r.inv_brand else "Victron / Growatt / Deye" }}</td></tr>
+          <tr><td>3.2</td><td class="fw-bold">Lithium Battery Units</td><td>{{ r.unit_bat_kwh|fmt(2) }} kWh {{ r.chemistry if r.chemistry else "LiFePO4" }}, {{ d.voltage }}V, with built-in BMS</td><td class="text-center text-warning fw-bold">{{ r.num_bat }}</td><td>No.</td><td>Total {{ r.bat_kwh|fmt(1) }} kWh — {{ r.chem_brands.split(',')[0] if r.chem_brands else "Pylontech/Dyness" }}</td></tr>
+          <tr><td>3.3</td><td class="fw-bold">Battery Rack / Steel Frame</td><td>Purpose-built, powder-coated, capacity for {{ r.num_bat }} units</td><td class="text-center text-warning fw-bold">{{ ((r.num_bat + 1) // 2) }}</td><td>No.</td><td>Wall-anchored, ≥ 300mm clearance</td></tr>
+          <tr><td>3.4</td><td class="fw-bold">Battery DC Fuse</td><td>ANL fuse, 1.25 × max charge current, {{ d.voltage }}V DC</td><td class="text-center text-warning fw-bold">{{ r.num_bat }}</td><td>No.</td><td>One per battery unit</td></tr>
+          <tr><td>3.5</td><td class="fw-bold">Battery DC Cable</td><td>25 mm² flexible welding cable, red &amp; black</td><td class="text-center text-warning fw-bold">{{ r.num_bat * 4 }}</td><td>m</td><td>Short runs battery → inverter</td></tr>
+          <tr><td>3.6</td><td class="fw-bold">BMS Communication Cable</td><td>RS485 / CAN bus data cable per manufacturer spec</td><td class="text-center text-warning fw-bold">{{ r.num_bat }}</td><td>Cables</td><td>Daisy-chained between units</td></tr>
+          <tr><td>3.7</td><td class="fw-bold">Inverter Wall Bracket</td><td>Heavy-duty steel, rated for inverter weight + 50%</td><td class="text-center text-warning fw-bold">1</td><td>Set</td><td>Min 500mm clearance above floor</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    {# AC Distribution #}
+    <div class="section-head"><i class="bi bi-lightning-fill me-2"></i>4 — AC Distribution &amp; Protection</div>
+    <div class="table-responsive mb-3">
+      <table class="table table-sm">
+        <thead><tr><th>#</th><th>Description</th><th>Specification</th><th class="text-center">Qty</th><th>Unit</th><th>Remarks</th></tr></thead>
+        <tbody>
+          <tr><td>4.1</td><td class="fw-bold">Main AC Distribution Board</td><td>{{ "18-way" if d.phase=="single" else "12-way 3-ph" }}, IP40 surface/flush, with busbar</td><td class="text-center text-warning fw-bold">1</td><td>No.</td><td>Top ≤ 1.8m from FFL</td></tr>
+          <tr><td>4.2</td><td class="fw-bold">RCCB (Incomer)</td><td>{{ r.ac_cables[0].breaker_a if r.ac_cables else 63 }}A, 30mA, Type A, BS EN 61008</td><td class="text-center text-warning fw-bold">1</td><td>No.</td><td>Earth fault protection on incomer</td></tr>
+          <tr><td>4.3</td><td class="fw-bold">MCB — Lighting Circuit</td><td>10A, Type B, 6kA, BS EN 60898</td><td class="text-center text-warning fw-bold">2</td><td>No.</td><td>1 per lighting circuit</td></tr>
+          <tr><td>4.4</td><td class="fw-bold">MCB — Socket Circuits</td><td>16A, Type B, 6kA, BS EN 60898</td><td class="text-center text-warning fw-bold">3</td><td>No.</td><td>Ring or radial as designed</td></tr>
+          <tr><td>4.5</td><td class="fw-bold">MCB — Air Conditioning</td><td>32A, Type C, 6kA, BS EN 60898</td><td class="text-center text-warning fw-bold">1</td><td>No.</td><td>Dedicated circuit per AC unit</td></tr>
+          <tr><td>4.6</td><td class="fw-bold">MCB — Pumps / Motors</td><td>16A, Type C, 6kA, BS EN 60898</td><td class="text-center text-warning fw-bold">2</td><td>No.</td><td>Type C for motor starting surge</td></tr>
+          <tr><td>4.7</td><td class="fw-bold">AC Surge Protection Device (SPD)</td><td>Type 2, 230/415V, BS EN 61643-11</td><td class="text-center text-warning fw-bold">1</td><td>No.</td><td>Connect cable ≤ 0.5m</td></tr>
+          {% for c in r.ac_cables %}
+          <tr><td>4.{{ loop.index + 7 }}</td><td class="fw-bold">AC Cable — {{ c.circuit }}</td><td>{{ c.cable_size_mm2 }} mm² Cu XLPE/PVC, {{ "3-core" if d.phase=="single" else "5-core" }}</td><td class="text-center text-warning fw-bold">{{ (c.length_m if c.length_m else 20) + 5 }}</td><td>m</td><td>{{ c.breaker_a }}A breaker, VD {{ c.vd_percent }}%</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {# Earthing & Sundries #}
+    <div class="section-head"><i class="bi bi-plug-fill me-2"></i>5 — Earthing, Bonding &amp; Sundries</div>
+    <div class="table-responsive mb-3">
+      <table class="table table-sm">
+        <thead><tr><th>#</th><th>Description</th><th>Specification</th><th class="text-center">Qty</th><th>Unit</th><th>Remarks</th></tr></thead>
+        <tbody>
+          <tr><td>5.1</td><td class="fw-bold">Copper Earth Rod</td><td>16 mm dia., 2.4 m long, copper-bonded steel</td><td class="text-center text-warning fw-bold">2</td><td>No.</td><td>2 rods in parallel if soil is dry</td></tr>
+          <tr><td>5.2</td><td class="fw-bold">Earth Rod Driver &amp; Clamp</td><td>Brass earth clamp, stainless hardware</td><td class="text-center text-warning fw-bold">2</td><td>Sets</td><td>One per rod</td></tr>
+          <tr><td>5.3</td><td class="fw-bold">Earth Busbar</td><td>50A copper busbar, 10-way, with cover</td><td class="text-center text-warning fw-bold">1</td><td>No.</td><td>Equipment room — all earths terminate here</td></tr>
+          <tr><td>5.4</td><td class="fw-bold">Main Earthing Conductor</td><td>16 mm² green/yellow single core</td><td class="text-center text-warning fw-bold">15</td><td>m</td><td>Earth rod to busbar</td></tr>
+          <tr><td>5.5</td><td class="fw-bold">Bonding Cables</td><td>6 mm² green/yellow single core</td><td class="text-center text-warning fw-bold">40</td><td>m</td><td>All metalwork bonding</td></tr>
+          <tr><td>5.6</td><td class="fw-bold">Cable Labels (PVC)</td><td>Self-laminating, permanent marker/printed</td><td class="text-center text-warning fw-bold">200</td><td>No.</td><td>Label both ends of every cable</td></tr>
+          <tr><td>5.7</td><td class="fw-bold">Cable Ties &amp; Cleats</td><td>UV-resistant nylon, assorted sizes</td><td class="text-center text-warning fw-bold">1</td><td>Box</td><td>200 per box</td></tr>
+          <tr><td>5.8</td><td class="fw-bold">Warning Labels &amp; Safety Signs</td><td>DANGER — Solar PV, CAUTION — Battery Voltage, etc.</td><td class="text-center text-warning fw-bold">1</td><td>Set</td><td>BS EN 60445 compliant</td></tr>
+          <tr><td>5.9</td><td class="fw-bold">Gland Plates &amp; Cable Glands</td><td>IP65 cable glands, assorted M20–M32</td><td class="text-center text-warning fw-bold">20</td><td>No.</td><td>All enclosure cable entries</td></tr>
+          <tr><td>5.10</td><td class="fw-bold">Sealant &amp; Waterproofing</td><td>Silicone sealant, UV-resistant</td><td class="text-center text-warning fw-bold">4</td><td>Tubes</td><td>All roof penetrations must be sealed</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    {# Test Equipment #}
+    <div class="section-head"><i class="bi bi-tools me-2"></i>6 — Test &amp; Commissioning Equipment</div>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>#</th><th>Instrument</th><th>Purpose</th><th>Standard</th></tr></thead>
+        <tbody>
+          <tr><td>6.1</td><td class="fw-bold">Insulation Resistance Tester (Megger)</td><td>Test cable insulation integrity before energising</td><td>IEC 60364-6: ≥ 1 MΩ</td></tr>
+          <tr><td>6.2</td><td class="fw-bold">Earth Electrode Resistance Tester</td><td>Measure earth rod resistance after driving</td><td>BS 7430: ≤ 10 Ω</td></tr>
+          <tr><td>6.3</td><td class="fw-bold">Clamp Earth Tester</td><td>Non-invasive earth continuity check</td><td>BS 7671 Chapter 61</td></tr>
+          <tr><td>6.4</td><td class="fw-bold">Digital Multimeter (1000V DC rated)</td><td>String Voc, polarity, battery voltage</td><td>CAT III 1000V</td></tr>
+          <tr><td>6.5</td><td class="fw-bold">DC Clamp Meter (1000V / 60A DC)</td><td>String Isc, battery current</td><td>CAT III 600V</td></tr>
+          <tr><td>6.6</td><td class="fw-bold">RCD Tester</td><td>Verify trip time ≤ 40ms at rated fault current</td><td>BS EN 61008</td></tr>
+          <tr><td>6.7</td><td class="fw-bold">Voltage Drop Tester</td><td>Verify VD ≤ 3% under full load</td><td>BS 7671 App 4</td></tr>
+          <tr><td>6.8</td><td class="fw-bold">Thermal Imaging Camera</td><td>Identify hot spots in connections and panels post-commissioning</td><td>IEC 62446-3</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════
+   APPROACH TO INSTALLATION WORK & PROGRAMME
+   ═══════════════════════════════════════════════════════════════ #}
+<div class="diag-wrap mt-2">
+  <div class="diag-head">
+    <div class="num" style="background:linear-gradient(135deg,#22c55e,#15803d)">6</div>
+    <div class="ttl">Approach to Installation Work &amp; Programme</div>
+  </div>
+  <div class="p-4">
+    <p class="text-secondary small mb-4">
+      The installation follows a structured seven-phase methodology aligned with BS 7671:2018,
+      IEC 60364, and IEC 62446. Each phase has defined entry criteria, activities, deliverables,
+      and sign-off before the next phase begins. No phase is skipped regardless of programme pressure.
+    </p>
+
+    {# Method statement #}
+    <div class="section-head"><i class="bi bi-diagram-2-fill me-2"></i>Method Statement &amp; Sequence of Work</div>
+    <div class="row g-3 mb-4">
+      {% for phase,color,days,icon,activities,outputs in [
+        ("Phase 1: Mobilisation & Site Preparation","#0ea5e9","Days 1–2","bi-truck",
+          ["Deliver and inventory all equipment on site","Set up site compound, secure storage for panels and batteries","Install temporary power supply and lighting for working area","Brief all site staff on HSE plan and emergency procedures","Prepare access routes for roof work — scaffold or MEWP","Mark out equipment room layout and cable routes on floor plan"],
+          ["Signed delivery notes / goods received notes","Site induction records","HSE risk assessment and method statement signed"]),
+        ("Phase 2: Civil & Structural Works","#f59e0b","Days 2–4","bi-bricks",
+          ["Install roof mounting brackets / L-feet at designed spacing","Assemble and level aluminium mounting rails","Verify rail alignment and tilt angle with inclinometer","Core through roof/walls for DC cable entry — seal immediately","Prepare cable routes: fix conduit supports and tray brackets","Install metallic conduit from roof penetration to equipment room"],
+          ["Roof structural load check by engineer (if required)","Waterproofing test of all penetrations","As-installed conduit route sketch"]),
+        ("Phase 3: PV Panel Installation","Days 4–6","#a78bfa","bi-sun-fill",
+          ["Install panels row by row from bottom to top of array","Secure with mid and end clamps — torque to manufacturer spec","Connect panels in series strings with MC4 connectors","Install string fuses in combiner box — verify rating","Run and label DC string cables in conduit to combiner","Tape and seal all MC4 connections; cable-tie neatly to rails"],
+          ["String cable labels installed at both ends","String fuse ratings recorded in test schedule","Visual inspection record — no cracked panels or damaged frames"]),
+        ("Phase 4: Equipment Room Fit-Out","Days 5–7","bi-building","#38bdf8",
+          ["Fix inverter wall bracket and mount inverter — level and secure","Assemble battery rack and anchor to floor or wall","Install batteries on rack — connect in parallel per manufacturer wiring diagram","Connect BMS communication cables and configure settings","Fix DC isolator and AC distribution board at correct heights","Install earth busbar and run main earthing conductor to earth rod(s)"],
+          ["Inverter mounting inspection record","Battery connection torque check record","Equipment room layout photo"]),
+        ("Phase 5: DC &amp; AC Wiring","Days 7–9","bi-plug-fill","#f59e0b",
+          ["Run DC main cable from combiner to inverter DC input","Connect DC cables to inverter — double-check polarity before connecting","Run battery DC cables — connect with correct ANL fuse","Wire AC output from inverter to main DB incomer","Install and connect RCCB, MCBs, and SPD inside DB","Run all AC final circuit cables in appropriate containment","Label all cables at both ends and at every junction box"],
+          ["Wiring diagram marked up as-installed","Cable schedule updated with actual lengths","All labels checked and confirmed"]),
+        ("Phase 6: Earthing, Bonding &amp; Pre-commissioning Tests","Days 9–10","bi-lightning-fill","#22c55e",
+          ["Drive earth rod(s) to minimum 2.4m depth","Connect main earthing conductor from rod to earth busbar","Bond all metalwork: panel frames, inverter, battery rack, DB enclosure","Test earth electrode resistance (must be ≤ 10 Ω before proceeding)","Insulation resistance test — all circuits ≥ 1 MΩ at 500V DC","Continuity test — all earth and bonding conductors ≤ 0.1 Ω","Polarity check on all DC strings before energising inverter"],
+          ["Earth resistance test certificate","IR test schedule — all circuits passed","Polarity check record signed by two technicians"]),
+        ("Phase 7: Commissioning, Testing &amp; Handover","Days 10–12","bi-check-circle-fill","#34d399",
+          ["Energise inverter — verify AC output voltage and frequency","Test MPPT tracking — confirm PV generation on inverter display","RCD trip time test — must be ≤ 40ms at rated current","MCB overload test — each circuit individually","Voltage drop test under full load — all circuits ≤ 3%","7-day performance monitoring — generation vs design target","Issue Installation Completion Certificate and O&M documentation","Conduct client handover training session"],
+          ["Commissioning test schedule — all results recorded","7-day monitoring log","Signed Installation Completion Certificate","O&M manual and warranty documents issued to client"]),
+      ] %}
+      <div class="col-12">
+        <div class="solar-card p-3" style="border-left:3px solid {{ color }}">
+          <div class="d-flex align-items-start gap-3">
+            <div style="min-width:36px;height:36px;border-radius:50%;background:{{ color }}22;border:2px solid {{ color }}44;
+                        display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <i class="bi {{ icon }}" style="color:{{ color }};font-size:14px"></i>
+            </div>
+            <div class="flex-grow-1">
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <div class="fw-bold" style="color:{{ color }}">{{ phase }}</div>
+                <span class="badge" style="background:{{ color }}22;color:{{ color }};border:1px solid {{ color }}44;
+                      font-size:10px;white-space:nowrap">{{ days }}</span>
+              </div>
+              <div class="row g-2">
+                <div class="col-md-7">
+                  <div style="font-size:11px;font-weight:800;color:#6868a0;text-transform:uppercase;
+                              letter-spacing:.5px;margin-bottom:6px">Activities</div>
+                  {% for act in activities %}
+                  <div class="d-flex gap-2 mb-1">
+                    <span style="color:{{ color }};flex-shrink:0;font-size:12px">›</span>
+                    <span class="text-secondary" style="font-size:12px">{{ act }}</span>
+                  </div>
+                  {% endfor %}
+                </div>
+                <div class="col-md-5">
+                  <div style="font-size:11px;font-weight:800;color:#6868a0;text-transform:uppercase;
+                              letter-spacing:.5px;margin-bottom:6px">Phase Outputs / Sign-off</div>
+                  {% for out in outputs %}
+                  <div class="d-flex gap-2 mb-1">
+                    <span style="color:#22c55e;flex-shrink:0;font-size:12px">✓</span>
+                    <span class="text-secondary" style="font-size:12px">{{ out }}</span>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {# Programme / Gantt-style table #}
+    <div class="section-head"><i class="bi bi-calendar-week me-2"></i>Installation Programme Summary</div>
+    <div class="table-responsive mb-3">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Phase</th><th>Activity</th><th class="text-center">Start</th>
+            <th class="text-center">End</th><th class="text-center">Duration</th>
+            <th class="text-center">D1</th><th class="text-center">D2</th><th class="text-center">D3</th>
+            <th class="text-center">D4</th><th class="text-center">D5</th><th class="text-center">D6</th>
+            <th class="text-center">D7</th><th class="text-center">D8</th><th class="text-center">D9</th>
+            <th class="text-center">D10</th><th class="text-center">D11</th><th class="text-center">D12</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set bar = "█" %}
+          {% set empty = "·" %}
+          {% for ph,act,s,e,col in [
+            ("1","Mobilisation & Site Prep",1,2,"#0ea5e9"),
+            ("2","Civil & Structural Works",2,4,"#f59e0b"),
+            ("3","PV Panel Installation",4,6,"#a78bfa"),
+            ("4","Equipment Room Fit-Out",5,7,"#38bdf8"),
+            ("5","DC & AC Wiring",7,9,"#f59e0b"),
+            ("6","Earthing & Pre-comm. Tests",9,10,"#22c55e"),
+            ("7","Commissioning & Handover",10,12,"#34d399"),
+          ] %}
+          <tr>
+            <td class="fw-bold" style="color:{{ col }}">Ph {{ ph }}</td>
+            <td style="font-size:12px">{{ act }}</td>
+            <td class="text-center" style="font-size:11px">Day {{ s }}</td>
+            <td class="text-center" style="font-size:11px">Day {{ e }}</td>
+            <td class="text-center fw-bold" style="color:{{ col }}">{{ e - s + 1 }} days</td>
+            {% for d in range(1, 13) %}
+            <td class="text-center" style="font-size:14px;color:{{ col if s <= d <= e else '#1e1e3a' }}">
+              {{ bar if s <= d <= e else empty }}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="notes-panel rounded" style="background:#0a0a18;border:1px solid #1e1e3a;padding:14px 20px">
+      <div class="row g-2 small text-secondary">
+        <div class="col-md-4"><i class="bi bi-info-circle me-1 text-warning"></i><strong class="text-light">Total Programme:</strong> 12 working days (weather-permitting)</div>
+        <div class="col-md-4"><i class="bi bi-exclamation-triangle me-1 text-warning"></i><strong class="text-light">Weather hold:</strong> No roof work in rain, lightning, or wind &gt; 25 mph</div>
+        <div class="col-md-4"><i class="bi bi-clock me-1 text-warning"></i><strong class="text-light">Working hours:</strong> 07:30–17:30 Mon–Fri; 07:30–13:00 Sat (if required)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════
+   STAFFING PLAN
+   ═══════════════════════════════════════════════════════════════ #}
+<div class="diag-wrap mt-2">
+  <div class="diag-head">
+    <div class="num" style="background:linear-gradient(135deg,#a78bfa,#7c3aed)">7</div>
+    <div class="ttl">Staffing Plan &amp; Responsibilities</div>
+  </div>
+  <div class="p-4">
+    <p class="text-secondary small mb-4">
+      All personnel are qualified, experienced, and hold valid certification for their roles.
+      The project is managed by a designated Project Engineer who is responsible for technical quality,
+      programme, safety, and client communication throughout the installation.
+    </p>
+
+    {# Org chart / roles #}
+    <div class="section-head"><i class="bi bi-people-fill me-2"></i>Project Team &amp; Roles</div>
+    <div class="row g-3 mb-4">
+      {% for role,count,color,icon,quals,duties in [
+        ("Project Engineer / Site Manager",1,"#0ea5e9","bi-person-badge-fill",
+          ["BEng Electrical Engineering (or equivalent)","17th/18th Edition BS 7671 Wiring Regulations","Solar PV System Design certification (MCS or equivalent)","IOSH Managing Safely / CSCS Gold Card"],
+          ["Overall technical and programme responsibility","Prepare and maintain risk assessments and method statements","Approve all test results and sign off each phase","Client liaison and progress reporting","Escalate any design queries or site issues to design team","Sign and issue Installation Completion Certificate"]),
+        ("Senior Electrical Technician",1,"#f59e0b","bi-tools",
+          ["City &amp; Guilds 2365 / NVQ Level 3 Electrical Installation","18th Edition BS 7671 (2391 Inspection &amp; Testing)","ECS Gold Card / Solar PV installation card","Working at Height certification"],
+          ["Lead all electrical installation activities","Perform and record all pre-commissioning and commissioning tests","Wire and terminate AC distribution board and all circuits","Configure inverter and battery management system settings","Verify all cable sizes and protection device ratings against design","Mentor and supervise electrical apprentice on site"]),
+        ("Electrical Apprentice / Assistant",1,"#a78bfa","bi-person-fill",
+          ["NVQ Level 2 Electrical Installation (or working toward)","Basic Working at Height awareness","Manual Handling certificate","CSCS Green Card"],
+          ["Assist senior technician with wiring and termination","Cable pulling, routing, and containment installation","Cable labelling and tidying","Material handling and tool management","Record keeping — update material schedule as items are installed","First aider (if certificated)"]),
+        ("Structural / Civil Technician",1,"#22c55e","bi-hammer",
+          ["Experience in rooftop / ground-mount PV mounting systems","Working at Height — PASMA / IPAF (if MEWP used)","Manual Handling certificate","CSCS Card"],
+          ["Assess roof structure for load-bearing capacity","Install mounting brackets, rails, and panel clamps","Ensure correct tilt angle and orientation to design spec","Waterproof all roof penetrations — responsible for weathertightness","Install metallic conduit and cable tray from roof to equipment room","Assist with panel installation and cleaning after fixing"]),
+        ("HSE Officer (part-time / shared)",1,"#f87171","bi-shield-fill",
+          ["NEBOSH General Certificate or equivalent","Accident investigation experience","First Aid at Work certificate"],
+          ["Conduct daily toolbox talks (15 min each morning)","Inspect PPE and access equipment before use","Maintain site accident/near-miss log","Ensure compliance with risk assessment and method statement","Coordinate with client on site access and security","Emergency response coordinator"]),
+      ] %}
+      <div class="col-md-6">
+        <div class="solar-card p-3 h-100" style="border-color:{{ color }}33">
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <div style="width:48px;height:48px;border-radius:50%;background:{{ color }}18;border:2px solid {{ color }}44;
+                        display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <i class="bi {{ icon }}" style="color:{{ color }};font-size:20px"></i>
+            </div>
+            <div>
+              <div class="fw-bold" style="color:{{ color }}">{{ role }}</div>
+              <span class="badge" style="background:{{ color }}18;color:{{ color }};border:1px solid {{ color }}33;font-size:10px">
+                {{ count }} person{{ 's' if count > 1 else '' }}
+              </span>
+            </div>
+          </div>
+          <div class="row g-2">
+            <div class="col-6">
+              <div style="font-size:11px;font-weight:800;color:#6868a0;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Qualifications</div>
+              {% for q in quals %}
+              <div class="d-flex gap-2 mb-1">
+                <span style="color:{{ color }};flex-shrink:0;font-size:11px;margin-top:1px">›</span>
+                <span class="text-secondary" style="font-size:11px">{{ q }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="col-6">
+              <div style="font-size:11px;font-weight:800;color:#6868a0;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Key Duties</div>
+              {% for d_item in duties %}
+              <div class="d-flex gap-2 mb-1">
+                <span style="color:#22c55e;flex-shrink:0;font-size:11px;margin-top:1px">✓</span>
+                <span class="text-secondary" style="font-size:11px">{{ d_item }}</span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {# Staffing by phase #}
+    <div class="section-head"><i class="bi bi-calendar-check me-2"></i>Staff Deployment by Phase</div>
+    <div class="table-responsive mb-3">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Phase</th><th>Activity</th><th>Days</th>
+            <th class="text-center">Proj. Engineer</th>
+            <th class="text-center">Sr. Technician</th>
+            <th class="text-center">Apprentice</th>
+            <th class="text-center">Civil Tech.</th>
+            <th class="text-center">HSE Officer</th>
+            <th class="text-center">Total on Site</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ph,act,days,pe,st,ap,ci,hse,total in [
+            ("1","Mobilisation & Site Prep","1–2","✓","✓","✓","✓","✓","5"),
+            ("2","Civil & Structural Works","2–4","✓ (part)","—","✓","✓","✓ (part)","3–4"),
+            ("3","PV Panel Installation","4–6","✓","✓","✓","✓","✓ (part)","4–5"),
+            ("4","Equipment Room Fit-Out","5–7","✓","✓","✓","—","—","3"),
+            ("5","DC & AC Wiring","7–9","✓","✓","✓","—","—","3"),
+            ("6","Earthing & Testing","9–10","✓","✓","✓","—","✓ (part)","3–4"),
+            ("7","Commissioning & Handover","10–12","✓","✓","✓","—","—","3"),
+          ] %}
+          <tr>
+            <td class="fw-bold text-warning">Ph {{ ph }}</td>
+            <td style="font-size:12px">{{ act }}</td>
+            <td style="font-size:11px;color:#6868a0">Days {{ days }}</td>
+            <td class="text-center" style="color:{{ '#22c55e' if pe=='✓' else '#f59e0b' if '(' in pe else '#4a4a7a' }}">{{ pe }}</td>
+            <td class="text-center" style="color:{{ '#22c55e' if st=='✓' else '#f59e0b' if '(' in st else '#4a4a7a' }}">{{ st }}</td>
+            <td class="text-center" style="color:{{ '#22c55e' if ap=='✓' else '#f59e0b' if '(' in ap else '#4a4a7a' }}">{{ ap }}</td>
+            <td class="text-center" style="color:{{ '#22c55e' if ci=='✓' else '#f59e0b' if '(' in ci else '#4a4a7a' }}">{{ ci }}</td>
+            <td class="text-center" style="color:{{ '#22c55e' if hse=='✓' else '#f59e0b' if '(' in hse else '#4a4a7a' }}">{{ hse }}</td>
+            <td class="text-center fw-bold text-warning">{{ total }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {# HSE & PPE #}
+    <div class="section-head"><i class="bi bi-shield-check me-2"></i>Health, Safety &amp; PPE Requirements</div>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="notes-panel rounded" style="background:#0a0a18;border:1px solid #1e1e3a;padding:16px 20px">
+          <div style="font-size:11px;font-weight:800;color:#f87171;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>Mandatory PPE — All Personnel
+          </div>
+          {% for item in ["Safety helmet (EN 397) — all roof and overhead work",
+            "Safety boots with steel toe cap and anti-slip sole (EN ISO 20345)",
+            "High-visibility vest or jacket (EN ISO 20471 Class 2)",
+            "Safety glasses / goggles when drilling, cutting, or working with chemicals",
+            "Electrical insulated gloves (EN 60903) when working on live or partially live equipment",
+            "Full body harness (EN 361) for all work at height &gt; 2m",
+            "Anti-static wrist strap when handling inverter electronics or BMS boards"] %}
+          <div class="d-flex gap-2 mb-1">
+            <span style="color:#f87171;flex-shrink:0">›</span>
+            <span class="text-secondary" style="font-size:12px">{{ item }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="notes-panel rounded" style="background:#0a0a18;border:1px solid #1e1e3a;padding:16px 20px">
+          <div style="font-size:11px;font-weight:800;color:#22c55e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">
+            <i class="bi bi-check-circle-fill me-1"></i>Site Safety Procedures
+          </div>
+          {% for item in ["Daily toolbox talk before work commences — attendance signed",
+            "Written risk assessment and method statement on site at all times",
+            "Permit to work required before any work on energised equipment",
+            "Two-person rule — no solo working on roof or on electrical equipment",
+            "All access equipment inspected daily — defective equipment tagged out",
+            "Emergency evacuation plan posted at site entrance",
+            "First aid kit and fire extinguisher (CO₂ for electrical fires) on site at all times",
+            "Incident reporting — any near-miss must be reported within 2 hours"] %}
+          <div class="d-flex gap-2 mb-1">
+            <span style="color:#22c55e;flex-shrink:0">✓</span>
+            <span class="text-secondary" style="font-size:12px">{{ item }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="solar-card p-4 text-center small text-secondary mt-2">
+  Diagrams are schematic — not to exact scale. All installations must comply with BS 7671:2018, IEC 60364, IEC 62305, and applicable local regulations.
+  Engage a qualified electrical contractor for final installation and commissioning.
+</div>
+
+{% endblock %}

@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+{% block title %}Procurement Centre — SolarPro{% endblock %}
+
+{% block content %}
+
+<!-- Header -->
+<div class="rounded-3 p-4 mb-4" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1030 60%,#0f1a22 100%);border:1px solid #1e1e3a;position:relative;overflow:hidden">
+  <div style="position:absolute;top:-40px;right:-40px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,rgba(245,158,11,.08) 0%,transparent 70%);pointer-events:none"></div>
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+    <div class="d-flex align-items-center gap-3">
+      <div style="width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));display:flex;align-items:center;justify-content:center;font-size:22px;color:#000;flex-shrink:0">
+        <i class="bi bi-truck-front-fill"></i>
+      </div>
+      <div>
+        <h4 class="fw-black mb-0" style="letter-spacing:-.3px">Procurement Centre</h4>
+        <div class="text-secondary" style="font-size:13px">Verified supplier directory · Equipment catalog · Global sourcing</div>
+      </div>
+    </div>
+    {% if user.is_admin %}
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('procurement_suppliers') }}" class="btn btn-outline-warning btn-sm px-3">
+        <i class="bi bi-building me-1"></i>Manage Suppliers
+      </a>
+      <a href="{{ url_for('procurement_catalog') }}" class="btn btn-outline-info btn-sm px-3">
+        <i class="bi bi-box-seam me-1"></i>Manage Catalog
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- KPI Strip -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-building me-1"></i>Active Suppliers</div>
+      <div class="kpi-value">{{ suppliers|length }}</div>
+      <div class="kpi-unit">verified partners</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-box-seam me-1"></i>Catalog Items</div>
+      <div class="kpi-value">{{ catalog|length }}</div>
+      <div class="kpi-unit">products listed</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-tags me-1"></i>Categories</div>
+      <div class="kpi-value">{{ categories|length }}</div>
+      <div class="kpi-unit">equipment types</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-star-fill me-1"></i>Avg Rating</div>
+      {% set avg_r = (suppliers | map(attribute='rating') | list | sum / suppliers|length) if suppliers else 0 %}
+      <div class="kpi-value">{{ "%.1f"|format(avg_r) }}</div>
+      <div class="kpi-unit">out of 5 stars</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="solar-card p-0 overflow-hidden">
+  <div style="background:#0a0a14;border-bottom:1px solid #1e1e3a;padding:0 1.5rem">
+    <ul class="nav" id="procTabs" style="gap:4px;padding-top:8px">
+      <li class="nav-item">
+        <button class="nav-link active px-3 py-2" data-bs-toggle="tab" data-bs-target="#tab-suppliers" style="font-size:13px;font-weight:700;border-radius:8px 8px 0 0;border:none;background:none;color:#9090c0">
+          <i class="bi bi-building me-1"></i>Suppliers
+          <span class="ms-1 badge rounded-pill" style="background:#1e1e3a;color:#9090c0;font-size:10px">{{ suppliers|length }}</span>
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link px-3 py-2" data-bs-toggle="tab" data-bs-target="#tab-catalog" style="font-size:13px;font-weight:700;border-radius:8px 8px 0 0;border:none;background:none;color:#9090c0">
+          <i class="bi bi-box-seam me-1"></i>Equipment Catalog
+          <span class="ms-1 badge rounded-pill" style="background:#1e1e3a;color:#9090c0;font-size:10px">{{ catalog|length }}</span>
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <div class="tab-content p-4">
+
+    <!-- ── Suppliers Tab ── -->
+    <div class="tab-pane fade show active" id="tab-suppliers">
+
+      <!-- Search + filter bar -->
+      <div class="d-flex gap-2 mb-4 flex-wrap align-items-center">
+        <div class="position-relative flex-grow-1" style="max-width:360px">
+          <i class="bi bi-search position-absolute" style="left:10px;top:50%;transform:translateY(-50%);color:#6868a0;font-size:12px"></i>
+          <input type="text" id="supSearch" placeholder="Search suppliers, countries, categories…"
+            class="form-control form-control-sm"
+            style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;padding-left:30px;font-size:13px"
+            oninput="filterSuppliers()">
+        </div>
+        <div class="d-flex flex-wrap gap-1" id="supCatFilters">
+          <button type="button" class="btn btn-sm sup-cat-btn active-cat px-3" data-cat="all"
+            style="background:#1e1e3a;border:1px solid #2e2e50;color:#c8c8e8;font-size:11px;font-weight:700;border-radius:20px" onclick="filterSuppliers(this)">
+            All
+          </button>
+          {%- set ns = namespace(seen=[]) -%}
+          {%- for s in suppliers -%}
+            {%- if s.categories -%}
+              {%- for c in s.categories.split(',') -%}
+                {%- if c.strip() and c.strip() not in ns.seen -%}
+                  {%- set ns.seen = ns.seen + [c.strip()] -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {% for cat in ns.seen | sort %}
+          <button type="button" class="btn btn-sm sup-cat-btn px-3" data-cat="{{ cat }}"
+            style="background:#0a0a18;border:1px solid #2e2e50;color:#9090c0;font-size:11px;font-weight:700;border-radius:20px" onclick="filterSuppliers(this)">
+            {{ cat }}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="row g-3" id="supplierGrid">
+        {% for s in suppliers %}
+        <div class="col-md-6 col-lg-4 sup-card"
+          data-name="{{ s.name|lower }}"
+          data-country="{{ (s.country or '')|lower }}"
+          data-cats="{{ s.categories|lower }}">
+          <div class="h-100 rounded-3 p-4" style="background:#0a0a14;border:1px solid #1e1e3a;transition:border-color .2s" onmouseover="this.style.borderColor='#2e2e50'" onmouseout="this.style.borderColor='#1e1e3a'">
+
+            <!-- Header row -->
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <div style="flex:1;min-width:0">
+                <div class="fw-black" style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.name }}</div>
+                <div class="text-secondary" style="font-size:11px">
+                  <i class="bi bi-geo-alt me-1"></i>{{ s.country or 'International' }}
+                </div>
+              </div>
+              <div class="ms-2 flex-shrink-0" style="text-align:right">
+                <div style="color:var(--solar-gold);font-size:12px;letter-spacing:1px">
+                  {% for i in range(s.rating) %}★{% endfor %}{% for i in range(5 - s.rating) %}<span style="color:#2e2e50">★</span>{% endfor %}
+                </div>
+                <div style="font-size:10px;color:#6868a0">{{ s.rating }}/5</div>
+              </div>
+            </div>
+
+            <!-- Category chips -->
+            {% if s.categories %}
+            <div class="mb-3 d-flex flex-wrap gap-1">
+              {% for cat in s.categories.split(',') %}
+              <span class="cat-chip" data-cat="{{ cat.strip() }}" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:12px;background:#1e1e3a;color:#9090c0;border:1px solid #2e2e50">{{ cat.strip() }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Contact details -->
+            <div class="mb-3" style="font-size:12px">
+              {% if s.contact_name %}<div class="mb-1 text-secondary"><i class="bi bi-person me-1"></i>{{ s.contact_name }}</div>{% endif %}
+              {% if s.email %}<div class="mb-1"><i class="bi bi-envelope me-1" style="color:#6868a0"></i><a href="mailto:{{ s.email }}" class="text-info">{{ s.email }}</a></div>{% endif %}
+              {% if s.phone %}<div class="mb-1 text-secondary"><i class="bi bi-telephone me-1"></i>{{ s.phone }}</div>{% endif %}
+              {% if s.website %}<div><i class="bi bi-globe me-1" style="color:#6868a0"></i><a href="https://{{ s.website }}" target="_blank" rel="noopener" class="text-info">{{ s.website }}</a></div>{% endif %}
+            </div>
+
+            <!-- Footer -->
+            <div class="pt-2 d-flex gap-3" style="border-top:1px solid #1e1e3a;font-size:11px;color:#6868a0">
+              <span title="Lead time"><i class="bi bi-clock me-1 text-warning"></i>{{ s.lead_time_days }}d lead</span>
+              <span title="Payment terms"><i class="bi bi-credit-card me-1 text-info"></i>{{ s.payment_terms }}</span>
+            </div>
+
+          </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+          <div class="text-center py-5" style="color:#6868a0">
+            <i class="bi bi-building" style="font-size:40px;display:block;margin-bottom:12px;opacity:.3"></i>
+            No active suppliers yet.
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- No results state -->
+      <div id="supNoResults" class="d-none text-center py-5" style="color:#6868a0">
+        <i class="bi bi-search" style="font-size:32px;display:block;margin-bottom:10px;opacity:.3"></i>
+        No suppliers match your search.
+      </div>
+
+    </div><!-- /suppliers tab -->
+
+    <!-- ── Equipment Catalog Tab ── -->
+    <div class="tab-pane fade" id="tab-catalog">
+
+      <!-- Filter bar -->
+      <div class="d-flex gap-2 mb-4 flex-wrap align-items-center">
+        <div class="position-relative flex-grow-1" style="max-width:360px">
+          <i class="bi bi-search position-absolute" style="left:10px;top:50%;transform:translateY(-50%);color:#6868a0;font-size:12px"></i>
+          <input type="text" id="catSearch" placeholder="Search equipment, brands, specs…"
+            class="form-control form-control-sm"
+            style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;padding-left:30px;font-size:13px"
+            oninput="filterCatalog()">
+        </div>
+        <div class="d-flex flex-wrap gap-1" id="catCatFilters">
+          <button type="button" class="btn btn-sm cat-filt-btn active-cat px-3" data-cat="all"
+            style="background:#1e1e3a;border:1px solid #2e2e50;color:#c8c8e8;font-size:11px;font-weight:700;border-radius:20px" onclick="filterCatalog(this)">
+            All
+          </button>
+          {% for cat in categories %}
+          <button type="button" class="btn btn-sm cat-filt-btn px-3" data-cat="{{ cat }}"
+            style="background:#0a0a18;border:1px solid #2e2e50;font-size:11px;font-weight:700;border-radius:20px;color:#9090c0" onclick="filterCatalog(this)">
+            {{ cat }}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Category groups -->
+      {% for cat in categories %}
+      <div class="cat-group mb-5" data-group="{{ cat }}">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <div class="cat-icon" data-cat="{{ cat }}" style="width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0"></div>
+          <div class="section-head mb-0 pb-0 border-0" style="font-size:12px">{{ cat }}</div>
+          <div class="flex-grow-1" style="height:1px;background:#1e1e3a"></div>
+          <span style="font-size:11px;color:#6868a0">{{ catalog | selectattr('category','equalto',cat) | list | length }} item{{ 's' if (catalog | selectattr('category','equalto',cat) | list | length) != 1 }}</span>
+        </div>
+        <div class="row g-3">
+          {% for item in catalog if item.category == cat %}
+          <div class="col-md-6 col-lg-4 cat-item"
+            data-name="{{ item.name|lower }}"
+            data-brand="{{ (item.brand or '')|lower }}"
+            data-spec="{{ (item.spec or '')|lower }}"
+            data-cat="{{ item.category }}">
+            <div class="h-100 rounded-3 p-3" style="background:#0a0a14;border-left:3px solid transparent;border-right:1px solid #1e1e3a;border-top:1px solid #1e1e3a;border-bottom:1px solid #1e1e3a;transition:all .2s" data-cat-border="{{ item.category }}">
+              <!-- Name + brand -->
+              <div class="fw-bold mb-1" style="font-size:13px;color:#e2e2f0">{{ item.name }}</div>
+              {% if item.brand %}
+              <div class="mb-1" style="font-size:11px;color:#9090c0">
+                <span class="fw-700">{{ item.brand }}</span>{% if item.model %} · {{ item.model }}{% endif %}
+              </div>
+              {% endif %}
+              {% if item.spec %}
+              <div class="mb-2" style="font-size:11px;color:#6868a0;line-height:1.4">{{ item.spec }}</div>
+              {% endif %}
+
+              <!-- Price + supplier row -->
+              <div class="d-flex justify-content-between align-items-center mt-2 pt-2" style="border-top:1px solid #1e1e3a">
+                <div>
+                  <span class="fw-black" style="font-size:16px;color:var(--solar-gold)">${{ item.price_usd|int }}</span>
+                  <span style="font-size:11px;color:#6868a0">/ {{ item.unit }}</span>
+                </div>
+                <div class="text-end" style="font-size:11px;color:#6868a0">
+                  {% if item.sup_name %}<div>{{ item.sup_name }}</div>{% endif %}
+                  <div><i class="bi bi-clock me-1"></i>{{ item.lead_time_days }}d</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <div class="text-center py-5" style="color:#6868a0">
+        <i class="bi bi-box-seam" style="font-size:40px;display:block;margin-bottom:12px;opacity:.3"></i>
+        No catalog items yet.
+      </div>
+      {% endfor %}
+
+      <div id="catNoResults" class="d-none text-center py-5" style="color:#6868a0">
+        <i class="bi bi-search" style="font-size:32px;display:block;margin-bottom:10px;opacity:.3"></i>
+        No items match your search.
+      </div>
+
+    </div><!-- /catalog tab -->
+
+  </div><!-- /tab-content -->
+</div><!-- /solar-card -->
+
+<style>
+.nav-link.active{
+  background:rgba(245,158,11,.12)!important;
+  color:var(--solar-gold)!important;
+  border-bottom:2px solid var(--solar-gold)!important;
+}
+.nav-link.active .badge{background:rgba(245,158,11,.2)!important;color:var(--solar-gold)!important}
+.active-cat{
+  background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange))!important;
+  color:#000!important;
+  border-color:transparent!important;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Category colour map ──────────────────────────────────────
+const CAT_CFG = {
+  "PV Modules":  { color:"#fde047", icon:"bi-sun-fill",         bg:"rgba(253,224,71,.12)" },
+  "Batteries":   { color:"#fb923c", icon:"bi-battery-charging", bg:"rgba(251,146,60,.12)" },
+  "Inverters":   { color:"#818cf8", icon:"bi-lightning-charge", bg:"rgba(129,140,248,.12)" },
+  "MPPT":        { color:"#7dd3fc", icon:"bi-arrow-repeat",     bg:"rgba(125,211,252,.12)" },
+  "Cables":      { color:"#6fcf97", icon:"bi-bezier2",          bg:"rgba(111,207,151,.12)" },
+  "Protection":  { color:"#f87171", icon:"bi-shield-check",     bg:"rgba(248,113,113,.12)" },
+  "Earthing":    { color:"#86efac", icon:"bi-reception-4",      bg:"rgba(134,239,172,.12)" },
+};
+function getCfg(cat){ return CAT_CFG[cat] || { color:"#9090c0", icon:"bi-box", bg:"rgba(144,144,192,.12)" }; }
+
+// Apply colours to category icons and item border-left
+document.querySelectorAll('.cat-icon').forEach(el => {
+  const cfg = getCfg(el.dataset.cat);
+  el.style.background = cfg.bg;
+  el.innerHTML = `<i class="bi ${cfg.icon}" style="color:${cfg.color}"></i>`;
+});
+document.querySelectorAll('[data-cat-border]').forEach(el => {
+  const cfg = getCfg(el.dataset.catBorder);
+  el.style.borderLeftColor = cfg.color;
+});
+document.querySelectorAll('.cat-chip').forEach(el => {
+  const cfg = getCfg(el.dataset.cat);
+  el.style.color = cfg.color;
+  el.style.background = cfg.bg;
+  el.style.borderColor = cfg.color + '33';
+});
+// Category filter buttons get colour tint on hover
+document.querySelectorAll('[data-cat]').forEach(btn => {
+  if(!btn.classList.contains('cat-filt-btn') && !btn.classList.contains('sup-cat-btn')) return;
+  if(btn.dataset.cat === 'all') return;
+  const cfg = getCfg(btn.dataset.cat);
+  btn.addEventListener('mouseenter', () => { if(!btn.classList.contains('active-cat')) btn.style.color = cfg.color; });
+  btn.addEventListener('mouseleave', () => { if(!btn.classList.contains('active-cat')) btn.style.color = '#9090c0'; });
+});
+
+// ── Supplier filter ──────────────────────────────────────────
+let activeSupCat = 'all';
+
+function filterSuppliers(btn){
+  if(btn){ activeSupCat = btn.dataset.cat; }
+  const q = (document.getElementById('supSearch').value || '').toLowerCase();
+  const cards = document.querySelectorAll('.sup-card');
+  let visible = 0;
+  cards.forEach(card => {
+    const matchCat = activeSupCat === 'all' || (card.dataset.cats && card.dataset.cats.includes(activeSupCat.toLowerCase()));
+    const matchQ = !q || card.dataset.name.includes(q) || card.dataset.country.includes(q) || (card.dataset.cats && card.dataset.cats.includes(q));
+    const show = matchCat && matchQ;
+    card.classList.toggle('d-none', !show);
+    if(show) visible++;
+  });
+  document.getElementById('supNoResults').classList.toggle('d-none', visible > 0);
+  // Update active button
+  if(btn){
+    document.querySelectorAll('.sup-cat-btn').forEach(b => {
+      b.classList.remove('active-cat');
+      b.style.background = '#0a0a18';
+      b.style.color = '#9090c0';
+    });
+    btn.classList.add('active-cat');
+    btn.style.background = '';
+    btn.style.color = '';
+  }
+}
+
+// ── Catalog filter ───────────────────────────────────────────
+let activeCatFilt = 'all';
+
+function filterCatalog(btn){
+  if(btn){ activeCatFilt = btn.dataset.cat; }
+  const q = (document.getElementById('catSearch').value || '').toLowerCase();
+
+  const groups = document.querySelectorAll('.cat-group');
+  let anyVisible = false;
+
+  groups.forEach(group => {
+    const groupCat = group.dataset.group;
+    const groupMatch = activeCatFilt === 'all' || activeCatFilt === groupCat;
+    const items = group.querySelectorAll('.cat-item');
+    let groupVisible = 0;
+    items.forEach(item => {
+      const matchCat = activeCatFilt === 'all' || item.dataset.cat === activeCatFilt;
+      const matchQ = !q || item.dataset.name.includes(q) || item.dataset.brand.includes(q) || item.dataset.spec.includes(q);
+      const show = matchCat && matchQ;
+      item.classList.toggle('d-none', !show);
+      if(show) groupVisible++;
+    });
+    const showGroup = groupMatch && groupVisible > 0;
+    group.classList.toggle('d-none', !showGroup);
+    if(showGroup) anyVisible = true;
+  });
+
+  document.getElementById('catNoResults').classList.toggle('d-none', anyVisible);
+
+  if(btn){
+    document.querySelectorAll('.cat-filt-btn').forEach(b => {
+      b.classList.remove('active-cat');
+      b.style.background = '#0a0a18';
+      b.style.color = '#9090c0';
+    });
+    btn.classList.add('active-cat');
+    btn.style.background = '';
+    btn.style.color = '';
+  }
+}
+</script>
+{% endblock %}

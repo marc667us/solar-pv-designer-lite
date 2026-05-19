@@ -1,0 +1,41 @@
+SOLAR PV SYSTEM DESIGN REPORT
+============================================================
+Project  : Solar PV Off-Grid System
+Location : Ghana
+Date     : 2026-04-10
+Tool     : Solar PV Designer Lite
+============================================================
+
+1. LOAD SUMMARY
+----------------------------------------
+  Lighting Load : 50.00 kWh/day
+  Socket Load   : 80.00 kWh/day
+  AC Load       : 120.00 kWh/day
+  Total Load    : 250.00 kWh/day
+
+2. DESIGN ASSUMPTIONS
+----------------------------------------
+  Location              : Ghana
+  Peak Sun Hours        : 5 h/day
+  System Efficiency     : 0.75 (75%)
+  Battery DoD           : 80%
+  Autonomy              : 1 day
+  DC System Voltage     : 48V
+
+3. SIZING RESULTS
+----------------------------------------
+  PV Array Size         : 69.44 kWp
+  No. of PV Modules     : 174 x 400 Wp modules
+  Battery Capacity      : 312.50 kWh
+  No. of Battery Units  : 131 x 2.4 kWh units
+  Inverter Size         : 93.75 kW
+
+4. OUTPUT FILES
+----------------------------------------
+  output/report.txt
+  output/boq.txt
+  output/pv_master_technical_specification.txt
+  output/installation_method_report.txt
+
+============================================================
+End of Report

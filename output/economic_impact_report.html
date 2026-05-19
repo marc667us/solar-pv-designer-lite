@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>PV Solar Economic Impact Report</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#06060f;color:#e8e8f8;font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.65;padding:0}
+  .wrap{max-width:1060px;margin:0 auto;padding:32px 24px 64px}
+  .rpt-header{background:linear-gradient(135deg,#0f0f24,#131340);border:1px solid #1e1e40;border-radius:16px;padding:28px 32px;margin-bottom:24px;position:relative;overflow:hidden}
+  .rpt-header::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#f59e0b,#38bdf8,#a78bfa)}
+  .rpt-title{font-size:24px;font-weight:900;letter-spacing:-0.5px;background:linear-gradient(90deg,#f2f2fd 30%,#fbbf24 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .rpt-meta{color:#8888b8;font-size:13px;margin-top:6px}
+  .verdict{background:rgba(251,191,36,0.09);border:1px solid rgba(251,191,36,0.35);border-left:5px solid #fbbf24;border-radius:14px;padding:22px 26px;margin-bottom:24px}
+  .verdict-top{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+  .verdict-badge{font-size:13px;font-weight:900;padding:6px 18px;border-radius:20px;background:#fbbf2422;color:#fbbf24;border:1px solid #fbbf2466;letter-spacing:0.5px;text-transform:uppercase}
+  .verdict-detail{color:#c8c8e8;font-size:14px;line-height:1.65}
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:24px}
+  .kpi{background:#0f0f22;border:1px solid #1e1e40;border-radius:12px;padding:15px 17px}
+  .kpi-lbl{font-size:10px;color:#6868a0;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px}
+  .kpi-val{font-size:21px;font-weight:900;letter-spacing:-0.8px;background:linear-gradient(90deg,#f59e0b,#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .kpi-unit{font-size:11px;color:#6868a0;margin-top:2px}
+  .sec{background:#0f0f22;border:1px solid #1e1e40;border-radius:14px;overflow:hidden;margin-bottom:18px}
+  .sec-head{background:rgba(255,255,255,0.03);padding:13px 20px;border-bottom:1px solid #1e1e40;display:flex;align-items:center;gap:10px}
+  .sec-num{background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#07070e;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;flex-shrink:0}
+  .sec-title{font-size:15px;font-weight:800}
+  .sec-body{padding:18px 20px}
+  .dr{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(255,255,255,0.025);border-radius:8px;font-size:13px;margin-bottom:7px}
+  .dr:last-child{margin-bottom:0}
+  .dr .lbl{color:#9090c0} .dr .val{font-weight:700;color:#f2f2fd}
+  .dr.total{background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2)}
+  .dr.total .val{color:#fbbf24;font-size:15px}
+  .gate-row{background:rgba(52,211,153,0.07);border:1px solid rgba(52,211,153,0.2);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;display:flex;justify-content:space-between}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:9px 12px;background:rgba(255,255,255,0.04);border-bottom:1px solid #1e1e40;color:#8888b8;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px}
+  td{padding:8px 12px;border-bottom:1px solid rgba(21,21,46,0.85);color:#c8c8e8;vertical-align:top}
+  tr:last-child td{border-bottom:none} tr:hover td{background:rgba(255,255,255,0.02)}
+  .env-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .env-card{background:rgba(52,211,153,0.07);border:1px solid rgba(52,211,153,0.2);border-radius:12px;padding:16px;text-align:center}
+  .env-val{font-size:26px;font-weight:900;color:#34d399;letter-spacing:-1px;margin-bottom:4px}
+  .env-lbl{font-size:12px;color:#6868a0;font-weight:600}
+  .assum{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  @media(max-width:560px){.assum{grid-template-columns:1fr}}
+  .foot{text-align:center;color:#4a4a80;font-size:12px;margin-top:32px;padding-top:18px;border-top:1px solid #1a1a38}
+  @media print{body{background:#fff;color:#000}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="rpt-header">
+    <div class="rpt-title">☀ PV Solar Economic Impact Report</div>
+    <div class="rpt-meta">
+      Region: <strong style="color:#fbbf24">Greater Accra</strong> &nbsp;|&nbsp;
+      System: <strong style="color:#38bdf8">2.64 kWp · 11.88 kWh · 3.56 kW</strong> &nbsp;|&nbsp;
+      Tool: Solar PV Designer Lite
+    </div>
+  </div>
+
+  <!-- Verdict -->
+  <div class="verdict">
+    <div class="verdict-top">
+      <span style="font-size:30px">⚠️</span>
+      <span class="verdict-badge">PROJECT CONDITIONAL</span>
+      <span style="font-size:12px;color:#6868a0">5-Year Payback Gate: 8 yrs &nbsp;|&nbsp; 8-Year Conditional Gate: 12 yrs</span>
+    </div>
+    <div class="verdict-detail">Project payback of 9.5 years exceeds the 5-year threshold but remains within the 8-year conditional range. Project may be approved subject to conditions below.</div>
+    <div style='margin-top:12px'><div style='font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:#9090c0;margin-bottom:8px'>Conditions / Actions Required</div><div style='display:flex;gap:8px;font-size:13px;color:#c8c8e8;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:7px;margin-bottom:5px'><span style='color:#fbbf24;flex-shrink:0'>•</span>Payback (9.5 yrs) exceeds 5-yr target — review system sizing or seek competitive supply quotes to reduce capital cost.</div><div style='display:flex;gap:8px;font-size:13px;color:#c8c8e8;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:7px;margin-bottom:5px'><span style='color:#fbbf24;flex-shrink:0'>•</span>Obtain at least 3 contractor quotes to validate BoQ cost estimates.</div><div style='display:flex;gap:8px;font-size:13px;color:#c8c8e8;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:7px;margin-bottom:5px'><span style='color:#fbbf24;flex-shrink:0'>•</span>Conduct formal energy audit to confirm daily load figures.</div></div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-lbl">Total Investment</div><div class="kpi-val">GHS 60k</div><div class="kpi-unit">capital cost</div></div>
+    <div class="kpi"><div class="kpi-lbl">Simple Payback</div><div class="kpi-val" style="-webkit-text-fill-color:#fbbf24;color:#fbbf24">9.5 yrs</div><div class="kpi-unit">vs 5-yr threshold</div></div>
+    <div class="kpi"><div class="kpi-lbl">Annual Saving (Yr 1)</div><div class="kpi-val">GHS 6.3k</div><div class="kpi-unit">net of O&amp;M</div></div>
+    <div class="kpi"><div class="kpi-lbl">25-Yr Net Gain</div><div class="kpi-val">GHS 657k</div><div class="kpi-unit">cumulative</div></div>
+    <div class="kpi"><div class="kpi-lbl">NPV (25yr @ 12%)</div><div class="kpi-val">GHS 63k</div><div class="kpi-unit">net present value</div></div>
+    <div class="kpi"><div class="kpi-lbl">ROI (25yr)</div><div class="kpi-val">1092%</div><div class="kpi-unit">return on investment</div></div>
+    <div class="kpi"><div class="kpi-lbl">High Risks</div><div class="kpi-val" style="-webkit-text-fill-color:#f87171;color:#f87171">6</div><div class="kpi-unit">items need attention</div></div>
+    <div class="kpi"><div class="kpi-lbl">CO₂ Avoided/yr</div><div class="kpi-val" style="-webkit-text-fill-color:#34d399;color:#34d399">1.4t</div><div class="kpi-unit">tonnes CO₂</div></div>
+  </div>
+
+  <!-- 1 Investment -->
+  <div class="sec">
+    <div class="sec-head"><div class="sec-num">1</div><div class="sec-title">System Investment Summary</div></div>
+    <div class="sec-body">
+      <div class="dr"><span class="lbl">Equipment Cost</span><span class="val">GHS 52,800.00</span></div>
+      <div class="dr"><span class="lbl">Installation Labour (18%)</span><span class="val">GHS 7,392.00</span></div>
+      <div class="dr total"><span class="lbl"><strong>TOTAL CAPITAL INVESTMENT</strong></span><span class="val">GHS 60,192.00</span></div>
+    </div>
+  </div>
+
+  <!-- 2 Utility baseline -->
+  <div class="sec">
+    <div class="sec-head"><div class="sec-num">2</div><div class="sec-title">Current Utility Cost Baseline</div></div>
+    <div class="sec-body">
+      <div class="dr"><span class="lbl">Daily Energy Demand</span><span class="val">9.50 kWh/day</span></div>
+      <div class="dr"><span class="lbl">Annual Energy Demand</span><span class="val">3,468 kWh/year</span></div>
+      <div class="dr"><span class="lbl">ECG Residential Tariff</span><span class="val">GHS 2.00 /kWh</span></div>
+      <div class="dr"><span class="lbl">Annual Utility Bill (current)</span><span class="val">GHS 6,935.00</span></div>
+      <div class="dr total"><span class="lbl"><strong>Monthly Utility Bill</strong></span><span class="val">GHS 577.92 /month</span></div>
+    </div>
+  </div>
+
+  <!-- 3 Savings -->
+  <div class="sec">
+    <div class="sec-head"><div class="sec-num">3</div><div class="sec-title">Solar Savings — Year 1</div></div>
+    <div class="sec-body">
+      <div class="dr"><span class="lbl">Annual Bill Avoided</span><span class="val">GHS 6,935.00</span></div>
+      <div class="dr"><span class="lbl">Annual O&amp;M Cost</span><span class="val">GHS 601.92</span></div>
+      <div class="dr total"><span class="lbl"><strong>Net Annual Saving</strong></span><span class="val">GHS 6,333.08</span></div>
+      <div class="dr total"><span class="lbl"><strong>Net Monthly Saving</strong></span><span class="val">GHS 527.76 /month</span></div>
+    </div>
+  </div>
+
+  <!-- 4 Financial viability -->
+  <div class="sec">
+    <div class="sec-head"><div class="sec-num">4</div><div class="sec-title">Financial Viability &amp; Approval Gates</div></div>
+    <div class="sec-body">
+      <div class="gate-row"><span style="color:#9090c0">✅ APPROVED gate (≤ 5 yrs)</span><span style="color:#34d399;font-weight:700">5.0 years</span></div>
+      <div class="gate-row" style="background:rgba(251,191,36,0.06);border-color:rgba(251,191,36,0.2)"><span style="color:#9090c0">⚠️ CONDITIONAL gate (≤ 8 yrs)</span><span style="color:#fbbf24;font-weight:700">8.0 years</span></div>
+      <div class="dr" style="margin-top:12px"><span class="lbl">Simple Payback Period</span><span class="val" style="color:#fbbf24">9.5 years &nbsp;→&nbsp; CONDITIONAL</span></div>
+      <div class="dr"><span class="lbl">Discounted Payback (NPV = 0)</span><span class="val">Year 7</span></div>
+      <div class="dr"><span class="lbl">10-Year Cumulative Net Savings</span><span class="val">GHS 109,877</span></div>
+      <div class="dr"><span class="lbl">20-Year Cumulative Net Savings</span><span class="val">GHS 387,597</span></div>
+      <div class="dr"><span class="lbl">25-Year Cumulative Net Savings</span><span class="val">GHS 657,273</span></div>
+      <div class="dr total"><span class="lbl"><strong>NPV (25yr @ 12% discount)</strong></span><span class="val">GHS 62,873</span></div>
+      <div class="dr total"><span class="lbl"><strong>ROI (25yr)</strong></span><span class="val">1092%</span></div>
+    </div>
+  </div>
+
+  <!-- 5 Cash flow -->
+  <div class="sec">
+    <div class="sec-head"><div class="sec-num">5</div><div class="sec-title">25-Year Cash Flow Projection</div></div>
+    <div class="sec-body" style="overflow-x:auto;padding:0">
+      <table>
+        <thead><tr><th>Year</th><th>Gross Saving</th><th>O&amp;M Cost</th><th>Net Saving</th><th>Cumulative</th><th>NPV Cumulative</th></tr></thead>
+        <tbody><tr>
+          <td>1</td><td>GHS 7,590</td><td>GHS 632</td>
+          <td>GHS 6,958</td>
+          <td style="color:#f87171;font-weight:700">GHS -53,234</td>
+          <td>GHS -53,979</td></tr><tr>
+          <td>2</td><td>GHS 8,308</td><td>GHS 664</td>
+          <td>GHS 7,644</td>
+          <td style="color:#f87171;font-weight:700">GHS -45,590</td>
+          <td>GHS -47,885</td></tr><tr>
+          <td>3</td><td>GHS 9,093</td><td>GHS 697</td>
+          <td>GHS 8,396</td>
+          <td style="color:#f87171;font-weight:700">GHS -37,194</td>
+          <td>GHS -41,909</td></tr><tr>
+          <td>4</td><td>GHS 9,952</td><td>GHS 732</td>
+          <td>GHS 9,220</td>
+          <td style="color:#f87171;font-weight:700">GHS -27,973</td>
+          <td>GHS -36,050</td></tr><tr>
+          <td>5</td><td>GHS 10,892</td><td>GHS 768</td>
+          <td>GHS 10,124</td>
+          <td style="color:#f87171;font-weight:700">GHS -17,849</td>
+          <td>GHS -30,305</td></tr><tr>
+          <td>6</td><td>GHS 11,922</td><td>GHS 807</td>
+          <td>GHS 11,115</td>
+          <td style="color:#f87171;font-weight:700">GHS -6,734</td>
+          <td>GHS -24,674</td></tr><tr style="background:rgba(52,211,153,0.1);font-weight:700">
+          <td>7</td><td>GHS 13,048</td><td>GHS 847</td>
+          <td>GHS 12,201</td>
+          <td style="color:#34d399;font-weight:700">GHS 5,467 ◄</td>
+          <td>GHS -19,154</td></tr><tr>
+          <td>8</td><td>GHS 14,281</td><td>GHS 889</td>
+          <td>GHS 13,392</td>
+          <td style="color:#34d399;font-weight:700">GHS 18,860</td>
+          <td>GHS -13,745</td></tr><tr>
+          <td>9</td><td>GHS 15,631</td><td>GHS 934</td>
+          <td>GHS 14,697</td>
+          <td style="color:#34d399;font-weight:700">GHS 33,557</td>
+          <td>GHS -8,445</td></tr><tr>
+          <td>10</td><td>GHS 17,108</td><td>GHS 980</td>
+          <td>GHS 16,128</td>
+          <td style="color:#34d399;font-weight:700">GHS 49,685</td>
+          <td>GHS -3,253</td></tr><tr>
+          <td>11</td><td>GHS 18,725</td><td>GHS 1,029</td>
+          <td>GHS 17,695</td>
+          <td style="color:#34d399;font-weight:700">GHS 67,380</td>
+          <td>GHS 1,834</td></tr><tr>
+          <td>12</td><td>GHS 20,494</td><td>GHS 1,081</td>
+          <td>GHS 19,413</td>
+          <td style="color:#34d399;font-weight:700">GHS 86,793</td>
+          <td>GHS 6,817</td></tr><tr>
+          <td>13</td><td>GHS 22,431</td><td>GHS 1,135</td>
+          <td>GHS 21,296</td>
+          <td style="color:#34d399;font-weight:700">GHS 108,090</td>
+          <td>GHS 11,698</td></tr><tr>
+          <td>14</td><td>GHS 24,551</td><td>GHS 1,192</td>
+          <td>GHS 23,359</td>
+          <td style="color:#34d399;font-weight:700">GHS 131,449</td>
+          <td>GHS 16,477</td></tr><tr>
+          <td>15</td><td>GHS 26,871</td><td>GHS 1,251</td>
+          <td>GHS 25,620</td>
+          <td style="color:#34d399;font-weight:700">GHS 157,068</td>
+          <td>GHS 21,158</td></tr><tr>
+          <td>16</td><td>GHS 29,410</td><td>GHS 1,314</td>
+          <td>GHS 28,096</td>
+          <td style="color:#34d399;font-weight:700">GHS 185,165</td>
+          <td>GHS 25,741</td></tr><tr>
+          <td>17</td><td>GHS 32,190</td><td>GHS 1,380</td>
+          <td>GHS 30,810</td>
+          <td style="color:#34d399;font-weight:700">GHS 215,975</td>
+          <td>GHS 30,228</td></tr><tr>
+          <td>18</td><td>GHS 35,231</td><td>GHS 1,449</td>
+          <td>GHS 33,783</td>
+          <td style="color:#34d399;font-weight:700">GHS 249,757</td>
+          <td>GHS 34,622</td></tr><tr>
+          <td>19</td><td>GHS 38,561</td><td>GHS 1,521</td>
+          <td>GHS 37,040</td>
+          <td style="color:#34d399;font-weight:700">GHS 286,797</td>
+          <td>GHS 38,922</td></tr><tr>
+          <td>20</td><td>GHS 42,205</td><td>GHS 1,597</td>
+          <td>GHS 40,608</td>
+          <td style="color:#34d399;font-weight:700">GHS 327,405</td>
+          <td>GHS 43,132</td></tr><tr>
+          <td>21</td><td>GHS 46,193</td><td>GHS 1,677</td>
+          <td>GHS 44,516</td>
+          <td style="color:#34d399;font-weight:700">GHS 371,921</td>
+          <td>GHS 47,252</td></tr><tr>
+          <td>22</td><td>GHS 50,558</td><td>GHS 1,761</td>
+          <td>GHS 48,798</td>
+          <td style="color:#34d399;font-weight:700">GHS 420,719</td>
+          <td>GHS 51,285</td></tr><tr>
+          <td>23</td><td>GHS 55,336</td><td>GHS 1,849</td>
+          <td>GHS 53,487</td>
+          <td style="color:#34d399;font-weight:700">GHS 474,206</td>
+          <td>GHS 55,232</td></tr><tr>
+          <td>24</td><td>GHS 60,565</td><td>GHS 1,941</td>
+          <td>GHS 58,624</td>
+          <td style="color:#34d399;font-weight:700">GHS 532,830</td>
+          <td>GHS 59,094</td></tr><tr>
+          <td>25</td><td>GHS 66,289</td><td>GHS 2,038</td>
+          <td>GHS 64,251</td>
+          <td style="color:#34d399;font-weight:700">GHS 597,081</td>
+          <td>GHS 62,873</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 6 Risk register -->
+  <div class="sec">
+    <div class="sec-head"><div class="sec-num">6</div><div class="sec-title">Risk Register — Probability × Impact Matrix</div></div>
+    <div class="sec-body" style="overflow-x:auto;padding:0">
+      <table>
+        <thead><tr><th>Category</th><th>Risk</th><th>Detail</th><th style="text-align:center">P</th><th style="text-align:center">I</th><th style="text-align:center">Score</th><th style="text-align:center">Level</th><th>Mitigation</th></tr></thead>
+        <tbody>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Financial</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Capital cost overrun</td>
+          <td style="color:#9090c0;font-size:12px">Contractor quotes may exceed BoQ estimate by 10–20%.</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;color:#c8c8e8">3</td>
+          <td style="text-align:center;font-weight:800;color:#f87171">6</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#f87171;border:1px solid #f8717140">HIGH</span></td>
+          <td style="color:#9090c0;font-size:12px">Obtain minimum 3 contractor quotes; include 15% contingency in budget.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Financial</span></td>
+          <td style="font-weight:600;color:#e8e8f8">USD/GHS currency exposure</td>
+          <td style="color:#9090c0;font-size:12px">PV modules and inverters are priced in USD; GHS depreciation raises cost.</td>
+          <td style="text-align:center;color:#c8c8e8">3</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;font-weight:800;color:#f87171">6</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#f87171;border:1px solid #f8717140">HIGH</span></td>
+          <td style="color:#9090c0;font-size:12px">Lock in equipment prices at contract signing; consider forward purchase.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Financial</span></td>
+          <td style="font-weight:600;color:#e8e8f8">ECG tariff reduction or subsidy</td>
+          <td style="color:#9090c0;font-size:12px">Government subsidy or tariff freeze would reduce bill savings.</td>
+          <td style="text-align:center;color:#c8c8e8">1</td>
+          <td style="text-align:center;color:#c8c8e8">3</td>
+          <td style="text-align:center;font-weight:800;color:#fbbf24">3</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#fbbf24;border:1px solid #fbbf2440">MEDIUM</span></td>
+          <td style="color:#9090c0;font-size:12px">Sensitivity analysis shows payback remains <8 yrs even at tariff −20%.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Financial</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Load falls below design level</td>
+          <td style="color:#9090c0;font-size:12px">If actual consumption is lower than modelled, savings and payback extend.</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;font-weight:800;color:#fbbf24">4</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#fbbf24;border:1px solid #fbbf2440">MEDIUM</span></td>
+          <td style="color:#9090c0;font-size:12px">Conduct thorough energy audit; design for actual measured load, not estimates.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Technical</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Panel degradation faster than modelled</td>
+          <td style="color:#9090c0;font-size:12px">Dust, soiling, or micro-cracking may accelerate output loss beyond 0.5%/yr.</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;font-weight:800;color:#fbbf24">4</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#fbbf24;border:1px solid #fbbf2440">MEDIUM</span></td>
+          <td style="color:#9090c0;font-size:12px">Schedule biannual cleaning; use panels with >25-yr linear power warranty.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Technical</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Inverter failure before warranty period</td>
+          <td style="color:#9090c0;font-size:12px">Inverter MTBF is typically 10–15 years; replacement cost ~GHS 7,200.</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;color:#c8c8e8">3</td>
+          <td style="text-align:center;font-weight:800;color:#f87171">6</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#f87171;border:1px solid #f8717140">HIGH</span></td>
+          <td style="color:#9090c0;font-size:12px">Select inverter with minimum 5-yr warranty; budget inverter replacement at year 12.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Technical</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Battery capacity fade</td>
+          <td style="color:#9090c0;font-size:12px">LiFePO₄ batteries degrade to ~80% capacity after 2,000–3,000 cycles.</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;font-weight:800;color:#fbbf24">4</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#fbbf24;border:1px solid #fbbf2440">MEDIUM</span></td>
+          <td style="color:#9090c0;font-size:12px">Specify rated cycle life >3,000; avoid deep discharge; monitor BMS data.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Technical</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Shading / soiling losses higher than assumed</td>
+          <td style="color:#9090c0;font-size:12px">Unplanned tree growth, construction, or dust may reduce generation by 5–15%.</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;font-weight:800;color:#fbbf24">4</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#fbbf24;border:1px solid #fbbf2440">MEDIUM</span></td>
+          <td style="color:#9090c0;font-size:12px">Conduct pre-installation shading survey; maintain 10% generation margin.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Technical</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Lightning / surge damage</td>
+          <td style="color:#9090c0;font-size:12px">Greater Accra experiences significant lightning activity during wet season.</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;color:#c8c8e8">3</td>
+          <td style="text-align:center;font-weight:800;color:#f87171">6</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#f87171;border:1px solid #f8717140">HIGH</span></td>
+          <td style="color:#9090c0;font-size:12px">Install IEC 62305 lightning protection and BS EN 61643 surge protection devices.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Regulatory</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Changes to net metering or solar policy</td>
+          <td style="color:#9090c0;font-size:12px">EC Ghana may revise net metering framework, affecting grid-export value.</td>
+          <td style="text-align:center;color:#c8c8e8">1</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;font-weight:800;color:#34d399">2</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#34d399;border:1px solid #34d39940">LOW</span></td>
+          <td style="color:#9090c0;font-size:12px">Design system for self-consumption; avoid dependency on export tariff income.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Regulatory</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Import duty increase on solar equipment</td>
+          <td style="color:#9090c0;font-size:12px">Ghana government may revise import tariffs on PV modules or batteries.</td>
+          <td style="text-align:center;color:#c8c8e8">1</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;font-weight:800;color:#34d399">2</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#34d399;border:1px solid #34d39940">LOW</span></td>
+          <td style="color:#9090c0;font-size:12px">Purchase equipment before duty changes; lock in supply chain agreements.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Regulatory</span></td>
+          <td style="font-weight:600;color:#e8e8f8">ECG grid improvement reducing outage hours</td>
+          <td style="color:#9090c0;font-size:12px">If grid reliability improves significantly, battery backup value diminishes.</td>
+          <td style="text-align:center;color:#c8c8e8">1</td>
+          <td style="text-align:center;color:#c8c8e8">1</td>
+          <td style="text-align:center;font-weight:800;color:#34d399">1</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#34d399;border:1px solid #34d39940">LOW</span></td>
+          <td style="color:#9090c0;font-size:12px">System still delivers bill reduction; battery value is secondary benefit.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Operational</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Skilled maintenance unavailable locally</td>
+          <td style="color:#9090c0;font-size:12px">Remote regions may lack qualified PV technicians for rapid fault response.</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;font-weight:800;color:#fbbf24">4</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#fbbf24;border:1px solid #fbbf2440">MEDIUM</span></td>
+          <td style="color:#9090c0;font-size:12px">Include service contract with installer; train site operator in basic maintenance.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Operational</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Load growth exceeding system capacity</td>
+          <td style="color:#9090c0;font-size:12px">If energy demand grows >20%, system will under-deliver on savings.</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;font-weight:800;color:#fbbf24">4</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#fbbf24;border:1px solid #fbbf2440">MEDIUM</span></td>
+          <td style="color:#9090c0;font-size:12px">Design with 15% capacity headroom; include expansion provision in mounting.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Operational</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Theft or vandalism of outdoor equipment</td>
+          <td style="color:#9090c0;font-size:12px">Panels, cables, and combiner boxes are exposed to theft risk.</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;color:#c8c8e8">3</td>
+          <td style="text-align:center;font-weight:800;color:#f87171">6</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#f87171;border:1px solid #f8717140">HIGH</span></td>
+          <td style="color:#9090c0;font-size:12px">Install anti-theft panel clamps, lockable enclosures, and site security.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Climate</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Rainy season generation shortfall</td>
+          <td style="color:#9090c0;font-size:12px">Ghana wet season (Apr–Jul, Sep–Nov) reduces irradiance by up to 30%.</td>
+          <td style="text-align:center;color:#c8c8e8">3</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;font-weight:800;color:#f87171">6</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#f87171;border:1px solid #f8717140">HIGH</span></td>
+          <td style="color:#9090c0;font-size:12px">Size battery for 1-day autonomy; annual generation model uses average PSH.</td>
+        </tr>
+        <tr>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(56,189,248,0.12);color:#7dd3fc">Climate</span></td>
+          <td style="font-weight:600;color:#e8e8f8">Harmattan dust accumulation</td>
+          <td style="color:#9090c0;font-size:12px">Northern regions face heavy dust deposition (Nov–Mar), reducing output.</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;color:#c8c8e8">2</td>
+          <td style="text-align:center;font-weight:800;color:#fbbf24">4</td>
+          <td style="text-align:center"><span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(0,0,0,0.3);color:#fbbf24;border:1px solid #fbbf2440">MEDIUM</span></td>
+          <td style="color:#9090c0;font-size:12px">Schedule monthly panel cleaning during Harmattan; tilt panels ≥15° for self-cleaning.</td>
+        </tr></tbody>
+      </table>
+      <div style="padding:12px 18px;font-size:12px;color:#6868a0">
+        P = Probability &nbsp;|&nbsp; I = Impact &nbsp;|&nbsp; 1=Low · 2=Medium · 3=High &nbsp;|&nbsp; Score = P × I &nbsp;|&nbsp; ≥6 = HIGH · 3–4 = MEDIUM · ≤2 = LOW
+      </div>
+    </div>
+  </div>
+
+  <!-- 7 Sensitivity -->
+  <div class="sec">
+    <div class="sec-head"><div class="sec-num">7</div><div class="sec-title">Sensitivity Analysis — Tariff Scenarios</div></div>
+    <div class="sec-body" style="padding:0">
+      <table>
+        <thead><tr><th>Scenario</th><th>Tariff Rate</th><th>Simple Payback</th><th>Decision</th></tr></thead>
+        <tbody><tr>
+          <td>Tariff +20%</td><td>GHS 2.40 /kWh</td>
+          <td style="color:#34d399;font-weight:800">7.8 yrs</td>
+          <td><span style="font-size:11px;font-weight:800;padding:2px 10px;border-radius:20px;background:#34d39922;color:#34d399;border:1px solid #34d39944">APPROVED</span></td></tr><tr>
+          <td>Tariff +10%</td><td>GHS 2.20 /kWh</td>
+          <td style="color:#fbbf24;font-weight:800">8.6 yrs</td>
+          <td><span style="font-size:11px;font-weight:800;padding:2px 10px;border-radius:20px;background:#fbbf2422;color:#fbbf24;border:1px solid #fbbf2444">CONDITIONAL</span></td></tr><tr style="background:rgba(245,158,11,0.07);font-weight:700">
+          <td>Base case</td><td>GHS 2.00 /kWh</td>
+          <td style="color:#fbbf24;font-weight:800">9.5 yrs</td>
+          <td><span style="font-size:11px;font-weight:800;padding:2px 10px;border-radius:20px;background:#fbbf2422;color:#fbbf24;border:1px solid #fbbf2444">CONDITIONAL</span></td></tr><tr>
+          <td>Tariff −10%</td><td>GHS 1.80 /kWh</td>
+          <td style="color:#fbbf24;font-weight:800">10.7 yrs</td>
+          <td><span style="font-size:11px;font-weight:800;padding:2px 10px;border-radius:20px;background:#fbbf2422;color:#fbbf24;border:1px solid #fbbf2444">CONDITIONAL</span></td></tr><tr>
+          <td>Tariff −20%</td><td>GHS 1.60 /kWh</td>
+          <td style="color:#f87171;font-weight:800">12.2 yrs</td>
+          <td><span style="font-size:11px;font-weight:800;padding:2px 10px;border-radius:20px;background:#f8717122;color:#f87171;border:1px solid #f8717144">REJECTED</span></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 8 Environmental -->
+  <div class="sec">
+    <div class="sec-head"><div class="sec-num">8</div><div class="sec-title">Environmental Impact</div></div>
+    <div class="sec-body">
+      <div class="env-grid">
+        <div class="env-card"><div class="env-val">1.39t</div><div class="env-lbl">CO₂ avoided per year</div></div>
+        <div class="env-card"><div class="env-val">35t</div><div class="env-lbl">CO₂ avoided over 25 years</div></div>
+        <div class="env-card"><div class="env-val">3,468</div><div class="env-lbl">kWh clean energy per year</div></div>
+        <div class="env-card"><div class="env-val">1,560</div><div class="env-lbl">equivalent trees planted</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9 Assumptions -->
+  <div class="sec">
+    <div class="sec-head"><div class="sec-num">9</div><div class="sec-title">Key Assumptions</div></div>
+    <div class="sec-body">
+      <div class="assum">
+        <div class="dr"><span class="lbl">ECG Tariff</span><span class="val">GHS 2.00 /kWh</span></div>
+        <div class="dr"><span class="lbl">Tariff Escalation</span><span class="val">10% / year</span></div>
+        <div class="dr"><span class="lbl">Discount Rate</span><span class="val">12%</span></div>
+        <div class="dr"><span class="lbl">O&amp;M Cost</span><span class="val">1.0% of capital/yr</span></div>
+        <div class="dr"><span class="lbl">Panel Degradation</span><span class="val">0.5% / year</span></div>
+        <div class="dr"><span class="lbl">System Lifetime</span><span class="val">25 years</span></div>
+        <div class="dr"><span class="lbl">Approval Gate</span><span class="val">≤ 8 yrs payback</span></div>
+        <div class="dr"><span class="lbl">Conditional Gate</span><span class="val">≤ 12 yrs payback</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Solar PV Designer Lite &nbsp;|&nbsp; Ghana &nbsp;|&nbsp; BS 7671:2018 &nbsp;|&nbsp;
+    Rates: Ghana market data (April 2026). Subject to detailed design and site survey.
+  </div>
+</div>
+</body>
+</html>

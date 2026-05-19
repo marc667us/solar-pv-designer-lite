@@ -1,0 +1,5 @@
+Pseudo-terminal will not be allocated because stdin is not a terminal.
+[32mForwarding HTTP traffic from https://b0baaf0663cdd920-154-161-10-244.serveousercontent.com
+[0m[33mPort forwarding for b0baaf0663cdd920-154-161-10-244.serveousercontent.com expired
+[0mRead from remote host serveo.net: Connection reset by peer
+client_loop: send disconnect: Connection reset by peer

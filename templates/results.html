@@ -1,0 +1,648 @@
+{% extends "base.html" %}
+{% block title %}Results — {{ project.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── Header ── */
+  .results-header{background:linear-gradient(135deg,#0d0d20 0%,#131330 60%,#0a0a1c 100%);
+    border:1px solid #1e1e3a;border-radius:18px;padding:28px 32px;margin-bottom:24px;
+    position:relative;overflow:hidden}
+  .results-header::before{content:'';position:absolute;top:-60px;right:-60px;width:220px;height:220px;
+    border-radius:50%;background:radial-gradient(circle,var(--solar-gold-faint) 0%,transparent 70%)}
+
+  /* ── Verdict badge ── */
+  .verdict-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 20px;
+    border-radius:30px;font-size:13px;font-weight:900;letter-spacing:.4px;text-transform:uppercase}
+
+  /* ── KPI tiles ── */
+  .kpi-tile{background:#0f0f22;border:1px solid #1e1e3a;border-radius:12px;
+    padding:14px 12px;text-align:center}
+  .kpi-tile-val{font-size:20px;font-weight:900;line-height:1.1;margin:4px 0}
+  .kpi-tile-lbl{font-size:9px;color:#5050a0;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+  .kpi-tile-unit{font-size:10px;color:#3a3a6a;margin-top:2px}
+
+  /* ── Economics strip ── */
+  .eco-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+  @media(max-width:640px){.eco-strip{grid-template-columns:repeat(2,1fr)}}
+  .eco-cell{background:#0a0a18;border:1px solid #1e1e3a;border-radius:10px;padding:12px 14px}
+  .eco-lbl{font-size:9px;color:#4a4a7a;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+  .eco-val{font-size:18px;font-weight:900;line-height:1}
+  .eco-sub{font-size:10px;color:#3a3a6a;margin-top:3px}
+
+  /* ── System spec strip ── */
+  .spec-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px}
+  @media(max-width:760px){.spec-strip{grid-template-columns:repeat(2,1fr)}}
+  .spec-tile{background:#0a0a18;border:1px solid #1e1e3a;border-radius:12px;padding:14px 16px;position:relative}
+  .spec-accent{position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:12px 0 0 12px}
+  .spec-lbl{font-size:9px;color:#4a4a7a;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+  .spec-val{font-size:17px;font-weight:900;color:#e8e8f8;line-height:1.1}
+  .spec-sub{font-size:10px;color:#3a3a6a;margin-top:4px;line-height:1.4}
+  .spec-badge{display:inline-block;padding:1px 6px;border-radius:6px;font-size:9px;
+    font-weight:800;text-transform:uppercase;margin-top:4px}
+
+  /* ── Verdict card ── */
+  .verdict-card{border-radius:14px;padding:20px 24px;margin-bottom:20px}
+
+  /* ── Recommendations ── */
+  .rec-card{background:#0f0f22;border-radius:10px;padding:14px;height:100%;
+    border:1px solid #1e1e3a;transition:.15s}
+  .rec-card:hover{border-color:#2a2a5a}
+
+  /* ── Report tiles ── */
+  .report-tile{background:#0f0f22;border:1px solid #1e1e3a;border-radius:12px;
+    padding:16px;display:flex;gap:12px;align-items:flex-start;transition:.2s;
+    text-decoration:none;cursor:pointer;color:inherit;height:100%}
+  .report-tile:hover{border-color:var(--hc,#f59e0b);color:inherit;
+    box-shadow:0 4px 18px rgba(0,0,0,.35);text-decoration:none}
+  .report-tile.locked{opacity:.48;filter:grayscale(40%)}
+  .report-tile.locked:hover{opacity:.65;border-color:#2e2e5a}
+  .tile-icon{width:42px;height:42px;border-radius:10px;display:flex;
+    align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+
+  /* ── Export bar ── */
+  .export-bar{background:#0a0a18;border:1px solid #1e1e3a;border-radius:12px;
+    padding:14px 18px;margin-bottom:24px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .export-divider{width:1px;height:24px;background:#1e1e3a;margin:0 4px}
+
+  /* ── Load table ── */
+  .load-table{width:100%;border-collapse:collapse;font-size:12px}
+  .load-table th{padding:10px 12px;color:#4a4a7a;font-weight:600;font-size:10px;
+    text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #1e1e3a;
+    background:#080816;text-align:left}
+  .load-table td{padding:10px 12px;border-bottom:1px solid #111128;vertical-align:middle}
+  .load-table tr:last-child td{border-bottom:none}
+  .load-table tr:hover td{background:rgba(255,255,255,.02)}
+  .load-table tfoot td{border-top:2px solid #1e1e3a;border-bottom:none;
+    font-weight:700;background:#0a0a18}
+
+  .cat-badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:9px;
+    font-weight:700;text-transform:uppercase;background:#1e1e3a;color:#5a5a8a;border:1px solid #252545}
+
+  /* Report group header */
+  .report-group-head{font-size:10px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.6px;color:#4a4a7a;margin:20px 0 10px;
+    display:flex;align-items:center;gap:8px}
+  .report-group-head::after{content:'';flex:1;height:1px;background:#1e1e3a}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% set eco      = r.economics %}
+{% set is_free  = (user.plan or 'free')|lower == 'free' %}
+{% set v_ac     = 415 if d.phase == 'three' else 230 %}
+{% set sym      = d.symbol or '$' %}
+{% set vc       = eco.v_color %}
+{% set approved = eco.verdict == 'APPROVED' %}
+{% set bankable = eco.bankability == 'BANKABLE' %}
+{% set verdict_icon = '✅' if approved else '⚠️' if eco.verdict=='CONDITIONAL' else '❌' %}
+
+<!-- ── Breadcrumb ───────────────────────────────────────────────────────── -->
+<div class="d-flex align-items-center gap-2 mb-4 flex-wrap no-print">
+  <a href="{{ url_for('dashboard') }}" class="text-secondary small text-decoration-none">
+    <i class="bi bi-grid-3x3-gap me-1"></i>Dashboard
+  </a>
+  <span class="text-secondary">/</span>
+  <span class="text-secondary small">{{ project.name }}</span>
+  <span class="text-secondary">/</span>
+  <span class="text-warning small fw-bold">Results</span>
+  <div class="ms-auto d-flex gap-2">
+    <a href="{{ url_for('project_location', pid=project.id) }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-geo-alt me-1"></i>Location
+    </a>
+    <a href="{{ url_for('project_loads', pid=project.id) }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-pencil me-1"></i>Edit Loads
+    </a>
+    {% if not is_free %}
+    <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-outline-warning btn-sm">
+      <i class="bi bi-envelope-arrow-up me-1"></i>Email Reports
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── Results header ────────────────────────────────────────────────── -->
+<div class="results-header mb-4">
+  <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+    <div style="position:relative;z-index:1">
+      <div class="fw-black mb-2" style="font-size:22px;color:#f0f0f8;line-height:1.2">
+        {{ project.name }}
+      </div>
+      <div class="d-flex gap-3 flex-wrap" style="font-size:12px">
+        {% if d.location or d.country %}
+        <span class="text-secondary">
+          <i class="bi bi-geo-alt-fill me-1" style="color:#f59e0b"></i>
+          {{ d.location or '' }}{% if d.location and d.country %}, {% endif %}{{ d.country or '' }}
+        </span>
+        {% endif %}
+        <span class="text-secondary">
+          <i class="bi bi-lightning-charge-fill me-1" style="color:{{ '#a78bfa' if d.phase=='three' else '#0ea5e9' }}"></i>
+          {{ '3-Phase 415V' if d.phase=='three' else 'Single-Phase 230V' }} · {{ d.voltage }}V DC
+        </span>
+        <span class="text-secondary">
+          <i class="bi bi-sun-fill me-1" style="color:#f59e0b"></i>
+          {{ d.irr or '—' }} kWh/m²/day
+        </span>
+        {% if d.system_type %}
+        <span class="badge" style="background:#f59e0b18;color:#f59e0b;border:1px solid #f59e0b33;font-size:10px">
+          {{ d.system_type|replace('-',' ')|title }} System
+        </span>
+        {% endif %}
+        {% if d.mounting_type %}
+        <span class="badge" style="background:#0ea5e918;color:#0ea5e9;border:1px solid #0ea5e933;font-size:10px">
+          {{ d.mounting_type|replace('_',' ')|title }}
+        </span>
+        {% endif %}
+      </div>
+    </div>
+    <!-- Verdict -->
+    <div class="text-center flex-shrink-0" style="position:relative;z-index:1">
+      <div style="font-size:36px;line-height:1;margin-bottom:8px">{{ verdict_icon }}</div>
+      <div class="verdict-badge" style="background:{{ vc }}18;color:{{ vc }};border:1px solid {{ vc }}44">
+        <i class="bi bi-{% if approved %}check-circle-fill{% elif eco.verdict=='CONDITIONAL' %}exclamation-triangle-fill{% else %}x-circle-fill{% endif %}"></i>
+        {{ eco.verdict }}
+      </div>
+      <div class="mt-2" style="font-size:11px;color:{% if bankable %}#22c55e{% elif eco.bankability=='MARGINAL' %}#f59e0b{% else %}#ef4444{% endif %}">
+        <i class="bi bi-bank me-1"></i>{{ eco.bankability }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 8-KPI strip ─────────────────────────────────────────────────── -->
+<div class="row g-2 mb-4">
+  {% for lbl,val,unit,color in [
+    ('Daily Load',   r.daily_kwh|fmt,       'kWh/day',         '#f59e0b'),
+    ('PV Array',     r.pv_kw|fmt,           'kWp',             '#0ea5e9'),
+    ('Panels',       r.num_panels,          '× '~r.panel_wp~'Wp','#a78bfa'),
+    ('Battery',      r.bat_kwh|fmt,         'kWh',             '#22c55e'),
+    ('Inverter',     r.inv_kw|fmt,          'kW',              '#f59e0b'),
+    ('System Cost',  eco.total_local|fmt(0),sym,               '#f87171'),
+    ('Payback',      eco.payback|fmt(1),    'years',           vc),
+    ('NPV 25yr',     eco.npv|fmt(0),        sym,               '#22c55e'),
+  ] %}
+  <div class="col-6 col-md-3 col-lg">
+    <div class="kpi-tile">
+      <div class="kpi-tile-lbl">{{ lbl }}</div>
+      <div class="kpi-tile-val" style="background:linear-gradient(135deg,{{ color }},{{ color }}99);
+           -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
+        {{ val }}
+      </div>
+      <div class="kpi-tile-unit">{{ unit }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ── Verdict card ───────────────────────────────────────────────── -->
+<div class="verdict-card mb-4" style="background:linear-gradient(135deg,{{ vc }}0d,{{ vc }}06);border:1px solid {{ vc }}33;border-left:4px solid {{ vc }}">
+  <div class="d-flex align-items-start gap-4 flex-wrap">
+    <div class="flex-grow-1">
+      <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <span class="verdict-badge" style="background:{{ vc }}18;color:{{ vc }};border:1px solid {{ vc }}44;font-size:11px;padding:5px 14px">
+          <i class="bi bi-{% if approved %}check-circle-fill{% elif eco.verdict=='CONDITIONAL' %}exclamation-triangle-fill{% else %}x-circle-fill{% endif %}"></i>
+          PROJECT {{ eco.verdict }}
+        </span>
+        <span style="font-size:10px;font-weight:800;color:{% if bankable %}#22c55e{% elif eco.bankability=='MARGINAL' %}#f59e0b{% else %}#ef4444{% endif %};
+              background:{% if bankable %}#22c55e{% elif eco.bankability=='MARGINAL' %}#f59e0b{% else %}#ef4444{% endif %}18;
+              border:1px solid {% if bankable %}#22c55e{% elif eco.bankability=='MARGINAL' %}#f59e0b{% else %}#ef4444{% endif %}33;
+              padding:4px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.3px">
+          <i class="bi bi-bank me-1"></i>{{ eco.bankability }}
+        </span>
+      </div>
+      <!-- Economics metrics -->
+      <div class="eco-strip">
+        {% for lbl,val,sub in [
+          ('Payback',  eco.payback|fmt(1)~' yr',                                 'Simple payback period'),
+          ('NPV 25yr', sym~' '~(eco.npv|fmt(0)),                                 'Net present value'),
+          ('IRR',      ('%.1f'|format(eco.irr_pct)~'%') if eco.irr_pct else 'N/A','Internal rate of return'),
+          ('DSCR',     ('%.2f'|format(eco.dscr)) if eco.dscr is defined else 'N/A','Debt service cover ratio'),
+        ] %}
+        <div class="eco-cell">
+          <div class="eco-lbl">{{ lbl }}</div>
+          <div class="eco-val" style="color:#e0e0f8">{{ val }}</div>
+          <div class="eco-sub">{{ sub }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      <!-- Verdict reasons -->
+      {% if eco.verdict_reasons %}
+      <ul class="mb-0 small text-secondary" style="padding-left:1.2rem;line-height:1.8">
+        {% for reason in eco.verdict_reasons %}<li>{{ reason }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% if not approved or not bankable %}
+    <div class="flex-shrink-0">
+      <button class="btn fw-bold px-4"
+              style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#000;border:none"
+              onclick="var el=document.getElementById('recommended-design');el.classList.remove('d-none');el.scrollIntoView({behavior:'smooth',block:'start'})">
+        <i class="bi bi-tools me-1"></i>Recommended Design
+      </button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── Recommended design ─────────────────────────────────────────── -->
+{% if not approved or not bankable %}
+<div id="recommended-design" class="d-none solar-card p-4 mb-4" style="border-color:#f59e0b55">
+  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <div class="section-head mb-0">
+      <i class="bi bi-tools me-2" style="color:#f59e0b"></i>Recommended Design Changes
+      {% if recommendations %}
+      <span class="badge ms-1" style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;font-size:10px">
+        {{ recommendations|length }} action{{ 's' if recommendations|length > 1 }}
+      </span>
+      {% endif %}
+    </div>
+    <a href="{{ url_for('report_economic', pid=project.id) }}" class="btn btn-outline-warning btn-sm">
+      <i class="bi bi-graph-up-arrow me-1"></i>Full Economic Report
+    </a>
+  </div>
+  {% if recommendations %}
+  <div class="row g-3">
+    {% for rec in recommendations %}
+    <div class="col-md-6">
+      <div class="rec-card" style="border-color:{{ rec.color }}33">
+        <div class="d-flex gap-2 mb-2">
+          <i class="bi {{ rec.icon }}" style="font-size:18px;color:{{ rec.color }};flex-shrink:0;margin-top:2px"></i>
+          <div>
+            <div class="fw-bold small" style="color:{{ rec.color }}">{{ rec.title }}</div>
+            <div class="d-flex gap-1 mt-1">
+              <span class="badge" style="font-size:9px;
+                background:{{ '#ef444418' if rec.priority==1 else '#f59e0b18' if rec.priority==2 else '#1e1e3a' }};
+                color:{{ '#ef4444' if rec.priority==1 else '#f59e0b' if rec.priority==2 else '#6868a0' }}">
+                {{ 'HIGH' if rec.priority==1 else 'MEDIUM' if rec.priority==2 else 'ADVISORY' }}
+              </span>
+              <span class="badge" style="font-size:9px;background:#1e1e3a;color:#5a5a8a">{{ rec.category }}</span>
+            </div>
+          </div>
+        </div>
+        <p class="text-secondary mb-2" style="font-size:12px;line-height:1.6">{{ rec.action }}</p>
+        <div class="p-2 rounded" style="background:{{ rec.color }}0d;border:1px solid {{ rec.color }}22;font-size:11px">
+          <strong style="color:{{ rec.color }}">Impact:</strong>
+          <span class="text-secondary"> {{ rec.impact }}</span>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-secondary small mb-0">Re-run the project calculations to generate design recommendations.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- ── System specification strip ────────────────────────────────── -->
+<div class="section-head mb-3"><i class="bi bi-cpu me-2"></i>System Specification</div>
+<div class="spec-strip mb-4">
+
+  <!-- PV Array -->
+  <div class="spec-tile">
+    <div class="spec-accent" style="background:#f59e0b"></div>
+    <div class="spec-lbl"><i class="bi bi-sun-fill me-1" style="color:#f59e0b"></i>PV Array</div>
+    <div class="spec-val">{{ r.pv_kw|fmt }} kWp</div>
+    <div class="spec-sub">{{ r.num_panels }} × {{ r.panel_wp }} Wp Mono PERC</div>
+    <span class="spec-badge" style="background:#f59e0b15;color:#f59e0b;border:1px solid #f59e0b30">
+      {{ r.temp_derating|fmt(0) if r.temp_derating is defined else '—' }}% temp derating
+    </span>
+  </div>
+
+  <!-- Battery -->
+  <div class="spec-tile">
+    <div class="spec-accent" style="background:#22c55e"></div>
+    <div class="spec-lbl"><i class="bi bi-battery-charging me-1" style="color:#22c55e"></i>Battery Bank</div>
+    <div class="spec-val">{{ r.bat_kwh|fmt }} kWh</div>
+    <div class="spec-sub">{{ r.num_bat }} × {{ r.unit_bat_kwh|fmt(1) }} kWh · {{ r.chem_name }}</div>
+    <span class="spec-badge" style="background:#22c55e15;color:#22c55e;border:1px solid #22c55e30">
+      {{ r.chem_dod if r.chem_dod is defined else '—' }}% DoD · {{ r.chem_life if r.chem_life is defined else '—' }}yr life
+    </span>
+  </div>
+
+  <!-- Inverter -->
+  <div class="spec-tile">
+    <div class="spec-accent" style="background:#0ea5e9"></div>
+    <div class="spec-lbl"><i class="bi bi-plug-fill me-1" style="color:#0ea5e9"></i>Inverter / Charger</div>
+    <div class="spec-val">{{ r.inv_kw|fmt }} kW</div>
+    <div class="spec-sub">{{ r.inv_brand }} · {{ '3-Phase' if d.phase=='three' else 'Single-Phase' }} {{ v_ac }}V / 50 Hz</div>
+    <span class="spec-badge" style="background:#0ea5e915;color:#0ea5e9;border:1px solid #0ea5e930">
+      {{ d.voltage }}V DC bus
+    </span>
+  </div>
+
+  <!-- MPPT -->
+  <div class="spec-tile">
+    <div class="spec-accent" style="background:#a78bfa"></div>
+    <div class="spec-lbl"><i class="bi bi-sliders me-1" style="color:#a78bfa"></i>Charge Controller</div>
+    <div class="spec-val">{{ r.mppt_a|fmt(0) }} A</div>
+    <div class="spec-sub">MPPT · Temp-corrected sizing</div>
+    <span class="spec-badge" style="background:#a78bfa15;color:#a78bfa;border:1px solid #a78bfa30">
+      {{ d.voltage }}V DC · BS 7671
+    </span>
+  </div>
+
+  <!-- Peak load -->
+  <div class="spec-tile">
+    <div class="spec-accent" style="background:#f59e0b"></div>
+    <div class="spec-lbl"><i class="bi bi-lightning-charge-fill me-1" style="color:#f59e0b"></i>Peak Load</div>
+    <div class="spec-val">{{ r.peak_kw|fmt(2) }} kW</div>
+    <div class="spec-sub">{{ '3-Phase' if d.phase=='three' else 'Single-Phase' }} connected load</div>
+    <span class="spec-badge" style="background:#f59e0b15;color:#f59e0b;border:1px solid #f59e0b30">
+      {{ v_ac }}V / 50 Hz AC
+    </span>
+  </div>
+
+  <!-- Daily energy -->
+  <div class="spec-tile">
+    <div class="spec-accent" style="background:#22c55e"></div>
+    <div class="spec-lbl"><i class="bi bi-calendar3 me-1" style="color:#22c55e"></i>Daily Energy</div>
+    <div class="spec-val">{{ r.daily_kwh|fmt }} kWh</div>
+    <div class="spec-sub">After autonomy factor applied</div>
+    <span class="spec-badge" style="background:#22c55e15;color:#22c55e;border:1px solid #22c55e30">
+      {{ (r.daily_kwh * 365)|fmt(0) }} kWh/year
+    </span>
+  </div>
+
+</div>
+
+<!-- ── Export bar ─────────────────────────────────────────────────── -->
+<div class="export-bar no-print">
+  <span class="small fw-bold text-secondary me-1">Export:</span>
+  {% if is_free %}
+  {% for icon,lbl in [('bi-file-earmark-excel','Excel'),('bi-filetype-csv','CSV'),('bi-file-earmark-word','Word')] %}
+  <a href="{{ url_for('upgrade') }}" class="btn btn-sm btn-outline-secondary opacity-50" title="Upgrade to export">
+    <i class="bi {{ icon }} me-1"></i>{{ lbl }}<i class="bi bi-lock-fill ms-1" style="font-size:9px;color:#f59e0b"></i>
+  </a>
+  {% endfor %}
+  <div class="export-divider"></div>
+  <a href="{{ url_for('upgrade') }}" class="btn btn-warning btn-sm fw-bold">
+    <i class="bi bi-stars me-1"></i>Unlock All Exports
+  </a>
+  {% else %}
+  <a href="{{ url_for('export_excel', pid=project.id) }}" class="btn btn-sm"
+     style="background:#22c55e18;border:1px solid #22c55e44;color:#22c55e">
+    <i class="bi bi-file-earmark-excel me-1"></i>Excel
+  </a>
+  <a href="{{ url_for('export_csv', pid=project.id) }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-filetype-csv me-1"></i>CSV
+  </a>
+  <a href="{{ url_for('export_docx', pid=project.id) }}" class="btn btn-sm"
+     style="background:#0ea5e918;border:1px solid #0ea5e944;color:#0ea5e9">
+    <i class="bi bi-file-earmark-word me-1"></i>Word
+  </a>
+  <div class="export-divider"></div>
+  <a href="{{ url_for('project_procurement', pid=project.id) }}" class="btn btn-sm fw-bold"
+     style="background:#a78bfa18;border:1px solid #a78bfa44;color:#a78bfa">
+    <i class="bi bi-box-seam me-1"></i>Procurement Plan
+  </a>
+  <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-sm fw-bold"
+     style="background:#f59e0b18;border:1px solid #f59e0b44;color:#f59e0b">
+    <i class="bi bi-envelope-arrow-up me-1"></i>Email to Client
+  </a>
+  {% endif %}
+</div>
+
+<!-- ── Reports ─────────────────────────────────────────────────────── -->
+{% if is_free %}
+<div class="d-flex align-items-center gap-3 p-3 rounded mb-3 no-print"
+     style="background:#22c55e08;border:1px solid #22c55e33">
+  <i class="bi bi-info-circle-fill" style="color:#22c55e;font-size:18px;flex-shrink:0"></i>
+  <div class="small flex-grow-1" style="color:#a0c8a0">
+    <strong style="color:#4ade80">Free plan</strong> — Pre-Installation Assessment is available.
+    <a href="{{ url_for('upgrade') }}" class="fw-bold text-warning ms-1">Upgrade to unlock all 9 reports →</a>
+  </div>
+</div>
+{% endif %}
+
+<!-- Engineering reports -->
+<div class="report-group-head"><i class="bi bi-tools me-1"></i>Engineering Reports</div>
+<div class="row g-3 mb-2">
+
+  <div class="col-md-6 col-lg-4">
+    <a href="{{ url_for('report_inspection', pid=project.id) }}" class="report-tile" style="--hc:#22c55e">
+      <div class="tile-icon" style="background:#22c55e18;border:1px solid #22c55e33">
+        <i class="bi bi-clipboard2-check-fill" style="color:#22c55e"></i>
+      </div>
+      <div>
+        <div class="fw-bold mb-1" style="font-size:13px">
+          Pre-Installation Assessment
+          <span class="badge ms-1" style="font-size:9px;background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">FREE</span>
+        </div>
+        <div class="text-secondary" style="font-size:11px">Site feasibility, structural &amp; financial consultation</div>
+        <div class="mt-2" style="font-size:10px;color:#22c55e;font-weight:700">PDF · Available now</div>
+      </div>
+    </a>
+  </div>
+
+  {% set eng_reports = [
+    ('report_pv',          'bi-sun-fill',              '#f59e0b', 'PV System Design',       'Panel, battery, inverter & charge controller sizing'),
+    ('report_boq',         'bi-list-check',            '#0ea5e9', 'Bill of Quantities',     'BOQ, BOM, and CAPEX with unit rates'),
+    ('report_cable',       'bi-plug-fill',             '#a78bfa', 'AC Cable Sizing',        'BS 7671 cable selection with voltage drop'),
+    ('report_installation','bi-diagram-3-fill',        '#0ea5e9', 'Installation Diagrams',  'System layout, wiring & device connections'),
+  ] %}
+
+  {% if is_free %}
+  {% for _,icon,color,label,desc in eng_reports %}
+  <div class="col-md-6 col-lg-4">
+    <a href="{{ url_for('upgrade') }}" class="report-tile locked" style="--hc:#2a2a5a">
+      <div class="tile-icon" style="background:#1e1e3a;position:relative">
+        <i class="bi {{ icon }}" style="color:#3a3a6a"></i>
+        <i class="bi bi-lock-fill" style="position:absolute;top:-4px;right:-4px;font-size:10px;color:#f59e0b"></i>
+      </div>
+      <div>
+        <div class="fw-bold mb-1 text-secondary" style="font-size:13px">{{ label }}</div>
+        <div class="text-secondary" style="font-size:11px">{{ desc }}</div>
+        <div class="mt-2" style="font-size:10px;color:#f59e0b;font-weight:700"><i class="bi bi-stars me-1"></i>Basic plan +</div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+  {% else %}
+  {% for route,icon,color,label,desc in eng_reports %}
+  <div class="col-md-6 col-lg-4">
+    <a href="{{ url_for(route, pid=project.id) }}" class="report-tile" style="--hc:{{ color }}">
+      <div class="tile-icon" style="background:{{ color }}18;border:1px solid {{ color }}33">
+        <i class="bi {{ icon }}" style="color:{{ color }}"></i>
+      </div>
+      <div>
+        <div class="fw-bold mb-1" style="font-size:13px">{{ label }}</div>
+        <div class="text-secondary" style="font-size:11px">{{ desc }}</div>
+        <div class="mt-2" style="font-size:10px;color:{{ color }};font-weight:700">PDF · Click to generate</div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+</div>
+
+<!-- Financial reports -->
+<div class="report-group-head"><i class="bi bi-graph-up-arrow me-1"></i>Financial Reports</div>
+<div class="row g-3 mb-2">
+  {% set fin_reports = [
+    ('report_economic', 'bi-graph-up-arrow',        '#22c55e', 'Economic Analysis',      '25-year NPV, IRR, payback & risk assessment'),
+    ('report_energy',   'bi-lightning-charge-fill', '#f59e0b', 'Energy Impact Analysis', 'Monthly generation, CO₂ reduction, utility offset'),
+    ('report_proposal', 'bi-file-earmark-text-fill','#f59e0b', 'Full Proposal',          'Combined technical and financial proposal'),
+  ] %}
+  {% if is_free %}
+  {% for _,icon,color,label,desc in fin_reports %}
+  <div class="col-md-6 col-lg-4">
+    <a href="{{ url_for('upgrade') }}" class="report-tile locked" style="--hc:#2a2a5a">
+      <div class="tile-icon" style="background:#1e1e3a;position:relative">
+        <i class="bi {{ icon }}" style="color:#3a3a6a"></i>
+        <i class="bi bi-lock-fill" style="position:absolute;top:-4px;right:-4px;font-size:10px;color:#f59e0b"></i>
+      </div>
+      <div>
+        <div class="fw-bold mb-1 text-secondary" style="font-size:13px">{{ label }}</div>
+        <div class="text-secondary" style="font-size:11px">{{ desc }}</div>
+        <div class="mt-2" style="font-size:10px;color:#f59e0b;font-weight:700"><i class="bi bi-stars me-1"></i>Basic plan +</div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+  {% else %}
+  {% for route,icon,color,label,desc in fin_reports %}
+  <div class="col-md-6 col-lg-4">
+    <a href="{{ url_for(route, pid=project.id) }}" class="report-tile" style="--hc:{{ color }}">
+      <div class="tile-icon" style="background:{{ color }}18;border:1px solid {{ color }}33">
+        <i class="bi {{ icon }}" style="color:{{ color }}"></i>
+      </div>
+      <div>
+        <div class="fw-bold mb-1" style="font-size:13px">{{ label }}</div>
+        <div class="text-secondary" style="font-size:11px">{{ desc }}</div>
+        <div class="mt-2" style="font-size:10px;color:{{ color }};font-weight:700">PDF · Click to generate</div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+
+<!-- Project documentation -->
+<div class="report-group-head"><i class="bi bi-file-earmark-ruled me-1"></i>Project Documentation</div>
+<div class="row g-3 mb-4">
+  {% set doc_reports = [
+    ('export_pdf_workplan','bi-file-earmark-ruled','#a78bfa','Installation Work Plan','12-day programme, material schedule, HSE plan'),
+    ('export_pdf_staffing','bi-people-fill',       '#22c55e','Staffing Plan',         'Project team, deployment, PPE schedule'),
+  ] %}
+  {% if is_free %}
+  {% for _,icon,color,label,desc in doc_reports %}
+  <div class="col-md-6 col-lg-4">
+    <a href="{{ url_for('upgrade') }}" class="report-tile locked" style="--hc:#2a2a5a">
+      <div class="tile-icon" style="background:#1e1e3a;position:relative">
+        <i class="bi {{ icon }}" style="color:#3a3a6a"></i>
+        <i class="bi bi-lock-fill" style="position:absolute;top:-4px;right:-4px;font-size:10px;color:#f59e0b"></i>
+      </div>
+      <div>
+        <div class="fw-bold mb-1 text-secondary" style="font-size:13px">{{ label }}</div>
+        <div class="text-secondary" style="font-size:11px">{{ desc }}</div>
+        <div class="mt-2" style="font-size:10px;color:#f59e0b;font-weight:700"><i class="bi bi-stars me-1"></i>Basic plan +</div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+  {% else %}
+  {% for route,icon,color,label,desc in doc_reports %}
+  <div class="col-md-6 col-lg-4">
+    <a href="{{ url_for(route, pid=project.id) }}" class="report-tile" style="--hc:{{ color }}">
+      <div class="tile-icon" style="background:{{ color }}18;border:1px solid {{ color }}33">
+        <i class="bi {{ icon }}" style="color:{{ color }}"></i>
+      </div>
+      <div>
+        <div class="fw-bold mb-1" style="font-size:13px">{{ label }}</div>
+        <div class="text-secondary" style="font-size:11px">{{ desc }}</div>
+        <div class="mt-2" style="font-size:10px;color:{{ color }};font-weight:700">PDF · Click to generate</div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <!-- Modify & Recalculate -->
+  <div class="col-md-6 col-lg-4">
+    <a href="{{ url_for('project_loads', pid=project.id) }}" class="report-tile"
+       style="border-style:dashed;--hc:#2a2a5a">
+      <div class="tile-icon" style="background:#1e1e3a">
+        <i class="bi bi-pencil-fill" style="color:#6060a0"></i>
+      </div>
+      <div>
+        <div class="fw-bold mb-1 text-secondary" style="font-size:13px">Modify &amp; Recalculate</div>
+        <div class="text-secondary" style="font-size:11px">Edit load schedule and re-run all calculations</div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<!-- ── Load schedule ──────────────────────────────────────────────── -->
+<div class="solar-card p-0" style="overflow:hidden">
+  <div class="d-flex align-items-center justify-content-between p-4 pb-0 mb-3">
+    <div class="section-head mb-0"><i class="bi bi-lightning me-2"></i>Load Schedule</div>
+    <div class="d-flex align-items-center gap-3">
+      <span class="text-secondary small">{{ d.loads|length }} appliance{{ 's' if d.loads|length != 1 }}</span>
+      <a href="{{ url_for('project_loads', pid=project.id) }}" class="btn btn-sm"
+         style="font-size:11px;background:#1e1e3a;border:1px solid #2a2a5a;color:#8888b0">
+        <i class="bi bi-pencil me-1"></i>Edit
+      </a>
+    </div>
+  </div>
+  <div style="overflow-x:auto;padding:0 0 4px">
+    <table class="load-table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Load / Appliance</th>
+          <th>Watts</th>
+          <th>Qty</th>
+          <th>Hrs/Day</th>
+          <th style="color:#f59e0b">kWh/Day</th>
+          <th>Priority</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% set cat_colors = {
+        'Lighting':'#f59e0b','Cooling':'#0ea5e9','Appliances':'#22c55e',
+        'Electronics':'#a78bfa','Pumps':'#06b6d4','Heating':'#ef4444',
+        'Office':'#8b5cf6','Other':'#6868a0'
+      } %}
+      {% for ld in d.loads %}
+      {% set kwh = (ld.wattage * ld.quantity * ld.hours / 1000) %}
+      {% set cc  = cat_colors.get(ld.category, '#6868a0') %}
+      <tr>
+        <td>
+          <span class="cat-badge" style="background:{{ cc }}15;color:{{ cc }};border-color:{{ cc }}30">
+            {{ ld.category }}
+          </span>
+        </td>
+        <td class="fw-semibold" style="color:#d0d0e8">{{ ld.name }}</td>
+        <td class="text-secondary">{{ ld.wattage|int }}</td>
+        <td class="text-secondary">{{ ld.quantity|int }}</td>
+        <td class="text-secondary">{{ ld.hours }}</td>
+        <td class="fw-bold" style="color:#f59e0b">{{ kwh|fmt(3) }}</td>
+        <td>
+          {% if ld.critical %}
+          <span style="font-size:9px;font-weight:800;color:#ef4444;
+                background:#ef444415;border:1px solid #ef444430;padding:2px 6px;border-radius:6px">
+            CRITICAL
+          </span>
+          {% else %}
+          <span class="text-secondary" style="font-size:10px">Normal</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="5" class="text-end text-secondary" style="font-size:11px;padding-right:16px">
+            DAILY TOTAL
+          </td>
+          <td style="color:#f59e0b;font-size:17px;font-weight:900">{{ r.daily_kwh|fmt(3) }} kWh</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

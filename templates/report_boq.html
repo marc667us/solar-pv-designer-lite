@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}BOQ — {{ project.name }}{% endblock %}
+{% block content %}
+<div class="no-print mb-3 d-flex gap-3 align-items-center flex-wrap">
+  <a href="{{ url_for('project_results', pid=project.id) }}" class="text-secondary small"><i class="bi bi-arrow-left me-1"></i>Results</a>
+  <div class="ms-auto d-flex gap-2">
+    <a href="{{ url_for('export_pdf_boq', pid=project.id) }}" class="btn btn-danger btn-sm">
+      <i class="bi bi-file-earmark-pdf me-1"></i>Export PDF
+    </a>
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer me-1"></i>Print</button>
+  </div>
+</div>
+
+<div class="report-header">
+  <div class="report-title"><i class="bi bi-list-check me-2"></i>Bill of Quantities (BOQ) &amp; CAPEX</div>
+  <div class="text-secondary small mt-2">
+    {{ project.name }} &nbsp;|&nbsp; {{ d.region }}, {{ d.country }} &nbsp;|&nbsp;
+    {{ r.pv_kw|fmt(2) }} kWp · {{ r.bat_kwh|fmt(2) }} kWh · {{ r.inv_kw|fmt(1) }} kW &nbsp;|&nbsp;
+    Currency: {{ d.currency }}
+  </div>
+</div>
+
+<div class="solar-card p-0 mb-4">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>No.</th><th>Description</th><th>Specification</th>
+          <th>Qty</th><th>Unit</th>
+          <th class="text-end">Basic Rate ({{ d.symbol }})</th>
+          <th class="text-end">Total Rate ({{ d.symbol }})</th>
+          <th class="text-end">Amount ({{ d.symbol }})</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in r.boq_rows %}
+        <tr>
+          <td class="text-secondary">{{ row.no }}</td>
+          <td class="fw-semibold">{{ row.desc }}</td>
+          <td class="text-secondary small">{{ row.spec }}</td>
+          <td>{{ row.qty }}</td>
+          <td class="text-secondary">{{ row.unit }}</td>
+          <td class="text-end">{{ row.basic|fmt(2) }}</td>
+          <td class="text-end">{{ row.total_r|fmt(2) }}</td>
+          <td class="text-end fw-bold text-warning">{{ row.amount|fmt(2) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="fw-black" style="background:rgba(245,158,11,.07)">
+          <td colspan="7" class="text-end text-warning">GRAND TOTAL ({{ d.symbol }})</td>
+          <td class="text-end text-warning fs-5">{{ r.boq_grand|fmt(2) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="solar-card p-4">
+      <div class="section-head">CAPEX Breakdown</div>
+      {% set eco = r.economics %}
+      <div class="data-row"><span class="lbl">Equipment Supply</span><span class="val">{{ d.symbol }} {{ eco.equip_local|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Installation (18%)</span><span class="val">{{ d.symbol }} {{ eco.install_local|fmt(0) }}</span></div>
+      <div class="data-row total"><span class="lbl"><strong>Total CAPEX</strong></span><span class="val">{{ d.symbol }} {{ eco.total_local|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Contingency (10%)</span><span class="val">{{ d.symbol }} {{ (eco.total_local*0.1)|fmt(0) }}</span></div>
+      <div class="data-row total"><span class="lbl"><strong>Budget (incl. contingency)</strong></span><span class="val">{{ d.symbol }} {{ (eco.total_local*1.1)|fmt(0) }}</span></div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="solar-card p-4">
+      <div class="section-head">System Summary</div>
+      <div class="data-row"><span class="lbl">PV Capacity</span><span class="val">{{ r.pv_kw|fmt(2) }} kWp</span></div>
+      <div class="data-row"><span class="lbl">Battery Storage</span><span class="val">{{ r.bat_kwh|fmt(2) }} kWh</span></div>
+      <div class="data-row"><span class="lbl">Inverter</span><span class="val">{{ r.inv_kw|fmt(1) }} kW</span></div>
+      <div class="data-row"><span class="lbl">Standard</span><span class="val">BS 7671 / IEC 60364</span></div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="solar-card p-4">
+      <div class="section-head">BOQ Notes</div>
+      <ul class="list-unstyled small text-secondary mb-0">
+        <li class="mb-1">• Rates: Total Rate = Basic × 1.20 (delivery + OH&P)</li>
+        <li class="mb-1">• Quantities subject to detailed design review</li>
+        <li class="mb-1">• Cable lengths are estimated — confirm on site</li>
+        <li class="mb-1">• Subject to contractor quotation and site survey</li>
+        <li>• Excludes site-specific VAT/duties</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

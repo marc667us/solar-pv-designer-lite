@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}PV Design Report — {{ project.name }}{% endblock %}
+{% block content %}
+<div class="no-print mb-3 small d-flex gap-3">
+  <a href="{{ url_for('project_results', pid=project.id) }}" class="text-secondary"><i class="bi bi-arrow-left me-1"></i>Results</a>
+  <button onclick="window.print()" class="btn btn-outline-secondary btn-sm ms-auto"><i class="bi bi-printer me-1"></i>Print</button>
+</div>
+
+<div class="report-header">
+  <div class="report-title">&#9728; PV System Design Report</div>
+  <div class="text-secondary small mt-2">
+    {{ project.name }} &nbsp;|&nbsp; {{ d.region }}, {{ d.country }} &nbsp;|&nbsp;
+    {{ d.system_type|title }} System &nbsp;|&nbsp; {{ d.phase|title }} Phase &nbsp;|&nbsp; {{ d.voltage }}V DC
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  {% for lbl,val,unit in [
+    ("Daily Demand",    r.daily_kwh|fmt(3),                     "kWh/day"),
+    ("PV Array",        r.pv_kw|fmt(3),                         "kWp"),
+    ("No. of Panels",   r.num_panels,                           "× " ~ r.panel_wp ~ " Wp"),
+    ("Battery Total",   r.bat_kwh|fmt(1),                       "kWh"),
+    ("Battery Units",   r.num_bat,                              "× " ~ r.unit_bat_kwh|fmt(2) ~ " kWh"),
+    ("Inverter",        r.inv_kw|fmt(2),                        "kW"),
+    ("MPPT Rating",     r.mppt_a,                               "A"),
+  ] %}
+  <div class="col-6 col-md-4 col-lg-3">
+    <div class="kpi-card text-center">
+      <div class="kpi-label">{{ lbl }}</div>
+      <div class="kpi-value">{{ val }}</div>
+      <div class="kpi-unit">{{ unit }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="row g-3">
+<div class="col-lg-6">
+  <!-- 1. Design Inputs -->
+  <div class="solar-card p-4 mb-3">
+    <div class="section-head">1. Design Inputs</div>
+    <div class="data-row"><span class="lbl">Location</span><span class="val">{{ d.region }}, {{ d.country }}</span></div>
+    <div class="data-row"><span class="lbl">Peak Sun Hours (PSH)</span><span class="val">{{ d.psh }} h/day</span></div>
+    <div class="data-row"><span class="lbl">Avg Ambient Temperature</span><span class="val">{{ d.avg_temp }} °C</span></div>
+    <div class="data-row"><span class="lbl">Temp Derating Factor</span><span class="val">{{ r.temp_derating|fmt(4) }}</span></div>
+    <div class="data-row"><span class="lbl">System Efficiency (BOS)</span><span class="val">75%</span></div>
+    <div class="data-row"><span class="lbl">Effective Efficiency</span><span class="val">{{ ((0.75*r.temp_derating)*100)|fmt(1) }}%</span></div>
+    <div class="data-row"><span class="lbl">Daily Energy Demand</span><span class="val">{{ r.daily_kwh|fmt(3) }} kWh/day</span></div>
+    <div class="data-row"><span class="lbl">Autonomy</span><span class="val">{{ d.autonomy }} day(s)</span></div>
+    <div class="data-row"><span class="lbl">System Voltage (DC)</span><span class="val">{{ d.voltage }} V</span></div>
+    <div class="data-row"><span class="lbl">System Type</span><span class="val">{{ d.system_type|title }}</span></div>
+  </div>
+
+  <!-- 2. PV Array -->
+  <div class="solar-card p-4 mb-3">
+    <div class="section-head">2. PV Array Sizing — Monocrystalline PERC</div>
+    <div class="data-row"><span class="lbl">Formula</span><span class="val">PV (kWp) = E / (PSH × η)</span></div>
+    <div class="data-row"><span class="lbl">PV Array Required</span><span class="val">{{ r.pv_kw|fmt(3) }} kWp</span></div>
+    <div class="data-row"><span class="lbl">Panel Technology</span><span class="val">Monocrystalline PERC, IEC 61215</span></div>
+    <div class="data-row"><span class="lbl">Panel Rating</span><span class="val">{{ r.panel_wp }} Wp</span></div>
+    <div class="data-row"><span class="lbl">Module Efficiency</span><span class="val">21–23%</span></div>
+    <div class="data-row"><span class="lbl">Temp Coefficient (Pmax)</span><span class="val">-0.35 %/°C</span></div>
+    <div class="data-row"><span class="lbl">Warranty</span><span class="val">12 yr product / 25 yr linear power</span></div>
+    <div class="data-row"><span class="lbl">Recommended Brands</span><span class="val" style="font-size:11px">JinkoSolar, LONGi, Canadian Solar, Trina, JA Solar</span></div>
+    <div class="data-row total"><span class="lbl"><strong>No. of Panels Required</strong></span><span class="val">{{ r.num_panels }} modules</span></div>
+    <div class="data-row"><span class="lbl">Annual Generation</span><span class="val">{{ (r.daily_kwh*365)|fmt(0) }} kWh/year</span></div>
+  </div>
+</div>
+
+<div class="col-lg-6">
+  <!-- 3. Battery -->
+  <div class="solar-card p-4 mb-3">
+    <div class="section-head">3. Battery Storage — {{ r.chemistry }}</div>
+    <div class="data-row"><span class="lbl">Chemistry</span><span class="val">{{ r.chem_name }}</span></div>
+    <div class="data-row"><span class="lbl">Formula</span><span class="val">B = (E × Days) / (DoD × η_bat)</span></div>
+    <div class="data-row"><span class="lbl">Depth of Discharge (DoD)</span><span class="val">{{ (r.chem_dod*100)|fmt(0) }}%</span></div>
+    <div class="data-row"><span class="lbl">Battery Efficiency (η_bat)</span><span class="val">{{ (r.chem_dod*100)|fmt(0) }}% round-trip</span></div>
+    <div class="data-row"><span class="lbl">Cycle Life</span><span class="val">{{ r.chem_cycles }}</span></div>
+    <div class="data-row"><span class="lbl">Design Lifetime</span><span class="val">{{ r.chem_life }}</span></div>
+    <div class="data-row"><span class="lbl">Unit Size</span><span class="val">{{ r.unit_bat_kwh|fmt(2) }} kWh compact unit</span></div>
+    <div class="data-row total"><span class="lbl"><strong>No. of Battery Units</strong></span><span class="val">{{ r.num_bat }} unit{{ 's' if r.num_bat>1 else '' }}</span></div>
+    <div class="data-row"><span class="lbl">Total Storage</span><span class="val">{{ r.bat_kwh|fmt(1) }} kWh</span></div>
+    <div class="data-row"><span class="lbl">Recommended Brands</span><span class="val" style="font-size:11px">{{ r.chem_brands }}</span></div>
+    <div class="data-row"><span class="lbl">BMS</span><span class="val">Integrated (overcharge, over-discharge, thermal)</span></div>
+  </div>
+
+  <!-- 4. Inverter -->
+  <div class="solar-card p-4 mb-3">
+    <div class="section-head">4. Hybrid Inverter / Charger</div>
+    <div class="data-row"><span class="lbl">Peak Demand Factor</span><span class="val">30% of daily kWh</span></div>
+    <div class="data-row"><span class="lbl">Safety Factor</span><span class="val">1.25×</span></div>
+    <div class="data-row total"><span class="lbl"><strong>Inverter Rating</strong></span><span class="val">{{ r.inv_kw|fmt(2) }} kW</span></div>
+    <div class="data-row"><span class="lbl">Type</span><span class="val">Hybrid MPPT (Solar / Battery / Grid)</span></div>
+    <div class="data-row"><span class="lbl">AC Output</span><span class="val">{{ d.phase|title }} Phase {{ "415" if d.phase=="three" else "230" }}V 50 Hz</span></div>
+    <div class="data-row"><span class="lbl">Recommended</span><span class="val" style="font-size:11px">{{ r.inv_brand }}</span></div>
+  </div>
+
+  <!-- 5. MPPT & Protection -->
+  <div class="solar-card p-4">
+    <div class="section-head">5. MPPT Charge Controller &amp; Protection</div>
+    <div class="data-row"><span class="lbl">Controller Type</span><span class="val">MPPT (Maximum Power Point Tracking)</span></div>
+    <div class="data-row"><span class="lbl">PV Array Power</span><span class="val">{{ r.pv_kw|fmt(2) }} kWp</span></div>
+    <div class="data-row"><span class="lbl">DC Bus Voltage</span><span class="val">{{ d.voltage }} V</span></div>
+    <div class="data-row total"><span class="lbl"><strong>MPPT Rating</strong></span><span class="val">{{ r.mppt_a }} A</span></div>
+    <div class="data-row"><span class="lbl">Recommended</span><span class="val">Victron BlueSolar / Epever Tracer BN</span></div>
+    <div class="data-row"><span class="lbl">DC Protection</span><span class="val">String fuses + DC-rated MCB 1000 V</span></div>
+    <div class="data-row"><span class="lbl">AC Protection</span><span class="val">RCCB 30 mA + MCBs + SPD Type 2</span></div>
+    <div class="data-row"><span class="lbl">Earthing</span><span class="val">TT system — BS 7430 / IEC 60364-4-41</span></div>
+    <div class="data-row"><span class="lbl">Lightning</span><span class="val">IEC 62305 SPD Type 2, all circuits</span></div>
+  </div>
+</div>
+</div>
+
+<div class="solar-card p-4 mt-3">
+  <div class="section-head">6. Installation Notes</div>
+  <div class="row g-3">
+    {% for note in [
+      ("Roof Load","Verify structural capacity ≥ 15 kg/m² before installation (IEC 61215)."),
+      ("Panel Tilt","Use region-optimised tilt. For equatorial regions: ≈ latitude angle."),
+      ("Ventilation","≥ 150 mm clearance around inverter and ≥ 300 mm around batteries."),
+      ("Battery Safety","LiFePO4 — no off-gassing, but install in cool, dry, ventilated area."),
+      ("DC Cabling","UV-resistant 6 mm² twin-core solar cable, colour-coded to IEC 60364."),
+      ("Commissioning","Measure Voc, Isc, insulation resistance, earth continuity — log results."),
+    ] %}
+    <div class="col-md-4">
+      <div class="data-row h-100"><span class="lbl">{{ note[0] }}</span><span class="val small text-start">{{ note[1] }}</span></div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

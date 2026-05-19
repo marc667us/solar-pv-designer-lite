@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Upgrade Codes — Admin{% endblock %}
+{% block content %}
+<div class="container-xl py-4">
+<div class="d-flex align-items-center gap-3 mb-4">
+  <div style="font-size:32px;color:var(--solar-gold)"><i class="bi bi-key-fill"></i></div>
+  <div>
+    <h4 class="fw-black mb-0">Upgrade Codes</h4>
+    <div class="text-secondary small">Generate one-time codes to activate paid plans — no payment required</div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Generate form -->
+  <div class="col-md-4">
+    <div class="solar-card p-4">
+      <div class="section-head mb-3">Generate New Code</div>
+      <form method="POST">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="create">
+        <div class="mb-3">
+          <label class="form-label small text-secondary">Plan</label>
+          <select name="plan" class="form-select form-select-sm bg-dark text-light border-secondary">
+            {% for k,v in plan_prices.items() %}
+            <option value="{{ k }}">{{ v.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-secondary">Duration (days)</label>
+          <input type="number" name="duration_days" value="30" min="1" max="365" class="form-control form-control-sm bg-dark text-light border-secondary">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-secondary">Max Uses</label>
+          <input type="number" name="max_uses" value="1" min="1" max="100" class="form-control form-control-sm bg-dark text-light border-secondary">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-secondary">Code expires in (days)</label>
+          <input type="number" name="expires_in_days" value="90" min="1" class="form-control form-control-sm bg-dark text-light border-secondary">
+        </div>
+        <button class="btn btn-solar btn-sm w-100">Generate Code</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Code list -->
+  <div class="col-md-8">
+    <div class="solar-card p-4">
+      <div class="section-head mb-3">Active Codes</div>
+      {% if codes %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr>
+            <th>Code</th><th>Plan</th><th>Duration</th><th>Uses</th><th>Expires</th><th></th>
+          </tr></thead>
+          <tbody>
+          {% for c in codes %}
+          <tr>
+            <td><code class="text-warning fs-6">{{ c.code }}</code></td>
+            <td><span class="badge bg-secondary">{{ c.plan }}</span></td>
+            <td>{{ c.duration_days }} days</td>
+            <td>{{ c.uses }}/{{ c.max_uses }}</td>
+            <td class="small text-secondary">{{ c.expires_at[:10] if c.expires_at else '—' }}</td>
+            <td>
+              <form method="POST" class="d-inline">
+                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="cid" value="{{ c.id }}">
+                <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Delete this code?')">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-secondary small">No codes generated yet.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+</div>
+{% endblock %}

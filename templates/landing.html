@@ -1,0 +1,625 @@
+{% extends "base.html" %}
+{% block title %}SolarPro Global — Intelligent PV System Design Platform{% endblock %}
+
+{% block extra_head %}
+<style>
+/* Landing-page only styles */
+.hero-bg{background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(245,158,11,.08) 0%,transparent 70%)}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.1);
+  border:1px solid rgba(245,158,11,.25);color:#f59e0b;padding:4px 14px;border-radius:20px;
+  font-size:12px;font-weight:700;letter-spacing:.3px;margin-bottom:20px}
+.stat-strip{background:linear-gradient(135deg,#0f0f22,#13133a);border:1px solid #1e1e3a;
+  border-radius:16px;padding:24px 32px}
+.stat-num{font-size:28px;font-weight:900;background:linear-gradient(90deg,var(--solar-gold),#fbbf24);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1}
+.stat-lbl{font-size:11px;color:#6868a0;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+.feature-icon-box{width:52px;height:52px;border-radius:12px;display:flex;align-items:center;
+  justify-content:center;font-size:22px;flex-shrink:0}
+.step-num{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:900;flex-shrink:0}
+.step-connector{flex:1;height:1px;background:linear-gradient(90deg,#1e1e3a,var(--solar-gold),#1e1e3a);margin:0 8px}
+.report-pill{display:inline-flex;align-items:center;gap:6px;background:#0f0f22;
+  border:1px solid #1e1e3a;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:600;
+  color:#c8c8e8;transition:.2s}
+.report-pill:hover{border-color:var(--solar-gold);color:var(--solar-gold)}
+.country-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;
+  background:#0f0f22;border:1px solid #1e1e3a;border-radius:6px;font-size:11px;
+  color:#9090b8;font-weight:600}
+.plan-card-land{background:#0f0f22;border:1px solid #1e1e3a;border-radius:16px;padding:28px;
+  position:relative;transition:.2s}
+.plan-card-land:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.plan-card-land.featured{border-color:var(--solar-gold);border-width:2px}
+.use-case-card{background:#0f0f22;border:1px solid #1e1e3a;border-radius:12px;
+  padding:20px;transition:.2s;height:100%}
+.use-case-card:hover{border-color:#2e2e5a}
+.faq-item{border-bottom:1px solid #1e1e3a;padding:16px 0}
+.faq-item:last-child{border-bottom:none}
+.faq-q{font-weight:700;font-size:14px;cursor:pointer;display:flex;justify-content:space-between;
+  align-items:center;color:#e2e2f0}
+.faq-q:hover{color:var(--solar-gold)}
+.faq-a{font-size:13px;color:#8888b8;margin-top:8px;line-height:1.7;display:none}
+.section-label{font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
+  color:#f59e0b;margin-bottom:8px}
+.gradient-divider{height:1px;background:linear-gradient(90deg,transparent,#1e1e3a 20%,#2e2e5a 50%,#1e1e3a 80%,transparent);margin:56px 0}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ═══════════════════════════════════════════════════════════════ HERO ══ -->
+<div class="hero-bg text-center py-5 mb-5">
+  <div class="hero-badge">
+    <i class="bi bi-stars"></i> Free to start · No credit card required
+  </div>
+  <h1 class="fw-black mb-3" style="font-size:clamp(2rem,5vw,3.2rem);letter-spacing:-.5px;
+    background:linear-gradient(135deg,#f2f2fd 20%,var(--solar-gold) 55%,var(--solar-blue));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.15">
+    Intelligent Global<br>PV Solar Design Platform
+  </h1>
+  <p class="lead text-secondary mb-4 mx-auto" style="max-width:640px;font-size:1.05rem">
+    Complete solar engineering in one platform — PV sizing, AC cable design, financial modelling,
+    BOQ generation, and bankable proposals. Built for professionals across 22 countries.
+  </p>
+  <div class="d-flex gap-3 justify-content-center flex-wrap mb-5">
+    {% if user %}
+    <a href="{{ url_for('dashboard') }}" class="btn btn-solar btn-lg px-5">
+      <i class="bi bi-grid-3x3-gap me-2"></i>Go to Dashboard
+    </a>
+    <a href="{{ url_for('project_new') }}" class="btn btn-outline-secondary btn-lg px-4">
+      <i class="bi bi-plus-circle me-2"></i>New Project
+    </a>
+    {% else %}
+    <a href="{{ url_for('register') }}" class="btn btn-solar btn-lg px-5">
+      <i class="bi bi-rocket-takeoff me-2"></i>Start Free — No Card Needed
+    </a>
+    <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg px-4">Login</a>
+    {% endif %}
+  </div>
+
+  <!-- Stats strip -->
+  <div class="stat-strip">
+    <div class="row g-3 justify-content-center">
+      {% for num,lbl in [
+        ('22+','Countries'),
+        ('9','Engineering Reports'),
+        ('BS 7671','Standards Compliant'),
+        ('100%','Free to Try'),
+        ('25yr','Financial Horizon'),
+        ('Open','Source Stack'),
+      ] %}
+      <div class="col-6 col-md-2">
+        <div class="stat-num">{{ num }}</div>
+        <div class="stat-lbl">{{ lbl }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="gradient-divider"></div>
+
+<!-- ══════════════════════════════════════════════════ FEATURE SHOWCASE ══ -->
+<div class="text-center mb-4">
+  <div class="section-label"><i class="bi bi-cpu me-1"></i>Platform Capabilities</div>
+  <h2 class="fw-black mb-2">Everything a Solar Engineer Needs</h2>
+  <p class="text-secondary" style="max-width:520px;margin:0 auto;font-size:14px">
+    From site survey to bankable report — the full engineering workflow in a single platform.
+  </p>
+</div>
+
+<div class="row g-3 mb-5">
+  {% set features = [
+    ("bi-sun-fill",              "#f59e0b", "PV Array Sizing",
+     "Panel count, string configuration, temperature derating, tilt & azimuth correction. Supports monocrystalline, polycrystalline and thin-film."),
+    ("bi-battery-charging-fill", "#22c55e", "Battery & Storage",
+     "Lithium-ion and lead-acid sizing, days of autonomy, depth-of-discharge planning, charge controller selection."),
+    ("bi-lightning-charge-fill", "#0ea5e9", "AC Cable Sizing",
+     "BS 7671 / IEC 60364 cable selection for all circuits — voltage drop, thermal rating, conduit fill, loop impedance."),
+    ("bi-graph-up-arrow",        "#a78bfa", "Financial Engineering",
+     "25-year NPV, IRR, DSCR, payback period, loan modelling, sensitivity analysis, and bankability verdict."),
+    ("bi-list-check",            "#f59e0b", "BOQ Generation",
+     "Automated bill of quantities with unit rates in 22 local currencies. Equipment schedule, CAPEX summary, BOM."),
+    ("bi-file-earmark-text-fill","#0ea5e9", "Proposal Automation",
+     "Technical and financial proposals with site details, system overview, economics, and appendices — print-ready PDF."),
+    ("bi-truck",                 "#22c55e", "Procurement Planning",
+     "Auto-match BOQ items to supplier catalog. Grouped purchase orders, lead-time scheduling, RFQ identification."),
+    ("bi-envelope-arrow-up",     "#a78bfa", "Email Report Delivery",
+     "Send PDF reports directly to clients, banks, or installers. Email history log with delivery status tracking."),
+    ("bi-shield-check-fill",     "#f59e0b", "Protection Design",
+     "Breaker sizing, SPD selection, earthing system design, lightning protection zoning, arc-fault coordination."),
+  ] %}
+  {% for icon, color, title, desc in features %}
+  <div class="col-md-6 col-lg-4">
+    <div class="solar-card p-4 h-100 d-flex gap-3">
+      <div class="feature-icon-box flex-shrink-0" style="background:{{ color }}18;border:1px solid {{ color }}33">
+        <i class="bi {{ icon }}" style="color:{{ color }}"></i>
+      </div>
+      <div>
+        <div class="fw-bold mb-1" style="font-size:14px">{{ title }}</div>
+        <p class="text-secondary mb-0" style="font-size:12px;line-height:1.6">{{ desc }}</p>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="gradient-divider"></div>
+
+<!-- ══════════════════════════════════════════════════ HOW IT WORKS ══════ -->
+<div class="text-center mb-4">
+  <div class="section-label"><i class="bi bi-diagram-3 me-1"></i>Workflow</div>
+  <h2 class="fw-black mb-2">How It Works</h2>
+  <p class="text-secondary" style="font-size:14px">Six steps from site details to a bankable proposal</p>
+</div>
+
+<div class="row g-3 mb-3">
+  {% for n,icon,color,title,desc in [
+    (1,'bi-geo-alt-fill',     '#f59e0b','Set Location',      'Select country, region, and GPS coordinates. The platform auto-loads solar irradiance, temperature data, and local tariff rates.'),
+    (2,'bi-lightning-fill',   '#0ea5e9','Enter Loads',       'Add your load schedule — appliances, wattage, hours per day, and critical flag. Use the appliance library or enter manually.'),
+    (3,'bi-sun-fill',         '#22c55e','PV & Battery Design','The engine sizes the PV array, battery bank, inverter, and charge controller with full derating and safety margins.'),
+    (4,'bi-plug-fill',        '#a78bfa','AC Cable Sizing',   'Every AC circuit is sized to BS 7671 / IEC 60364 — cable cross-section, voltage drop, thermal check, and protective device coordination.'),
+    (5,'bi-graph-up-arrow',   '#f59e0b','Economics & Bankability','25-year NPV, IRR, payback, DSCR, and loan model. Automatic bankability verdict with improvement recommendations.'),
+    (6,'bi-file-earmark-pdf', '#0ea5e9','Generate Reports',  'Export 9 professional reports: PV design, BOQ, cable sizing, economic analysis, installation plan, staffing, and full proposal.'),
+  ] %}
+  <div class="col-md-4">
+    <div class="solar-card p-4 h-100">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num" style="background:{{ color }}22;color:{{ color }};border:1px solid {{ color }}44">{{ n }}</div>
+        <div class="feature-icon-box" style="width:40px;height:40px;font-size:18px;background:{{ color }}12;border:1px solid {{ color }}22">
+          <i class="bi {{ icon }}" style="color:{{ color }}"></i>
+        </div>
+        <div class="fw-bold" style="font-size:14px">{{ title }}</div>
+      </div>
+      <p class="text-secondary mb-0" style="font-size:12px;line-height:1.7">{{ desc }}</p>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Workflow arrow strip -->
+<div class="solar-card p-3 mb-5 d-flex flex-wrap justify-content-center align-items-center gap-2 text-center">
+  {% for step in ["📍 Location","⚡ Loads","☀ PV Design","🔌 AC Cables","📊 Economics","📄 Reports"] %}
+  <div class="px-3 py-2 rounded fw-bold small" style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);color:#f59e0b">
+    {{ step }}
+  </div>
+  {% if not loop.last %}<span class="text-secondary d-none d-md-inline">→</span>{% endif %}
+  {% endfor %}
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="gradient-divider"></div>
+
+<!-- ══════════════════════════════════════════════════ REPORT OUTPUTS ════ -->
+<div class="text-center mb-4">
+  <div class="section-label"><i class="bi bi-file-earmark-text me-1"></i>Outputs</div>
+  <h2 class="fw-black mb-2">9 Professional Engineering Reports</h2>
+  <p class="text-secondary" style="font-size:14px;max-width:500px;margin:0 auto">
+    Every report is export-ready as PDF, with Excel and Word options on paid plans.
+  </p>
+</div>
+
+<div class="solar-card p-4 mb-5">
+  <div class="row g-3">
+    {% for icon,color,name,fmt in [
+      ('bi-clipboard2-check-fill', '#22c55e',  'Pre-Installation Assessment',       'FREE · PDF'),
+      ('bi-sun-fill',              '#f59e0b',  'PV System Design Report',           'PDF'),
+      ('bi-list-check',            '#0ea5e9',  'Bill of Quantities (BOQ)',           'PDF · Excel'),
+      ('bi-plug-fill',             '#a78bfa',  'AC Cable Sizing Report',             'PDF'),
+      ('bi-graph-up-arrow',        '#f59e0b',  'Economic Analysis (25yr)',           'PDF'),
+      ('bi-lightning-charge-fill', '#22c55e',  'Energy Impact Analysis',             'PDF'),
+      ('bi-diagram-3-fill',        '#0ea5e9',  'Installation Diagrams',              'PDF'),
+      ('bi-file-earmark-ruled',    '#a78bfa',  'Installation Work Plan',             'PDF'),
+      ('bi-file-earmark-text-fill','#f59e0b',  'Full Technical & Financial Proposal','PDF · Word · Email'),
+    ] %}
+    <div class="col-md-6 col-lg-4">
+      <div class="d-flex align-items-center gap-3 p-2 rounded" style="background:rgba(255,255,255,.025)">
+        <i class="bi {{ icon }} fs-5 flex-shrink-0" style="color:{{ color }}"></i>
+        <div class="flex-grow-1">
+          <div class="small fw-semibold">{{ name }}</div>
+          <div style="font-size:10px;color:#5a5a90;font-weight:700;letter-spacing:.3px">{{ fmt }}</div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="text-center mt-3">
+    <span class="badge me-1" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;font-size:10px">PDF</span>
+    <span class="badge me-1" style="background:#0ea5e922;color:#0ea5e9;border:1px solid #0ea5e944;font-size:10px">Excel (Basic+)</span>
+    <span class="badge me-1" style="background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44;font-size:10px">Word / DOCX (Basic+)</span>
+    <span class="badge"     style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;font-size:10px">Email delivery (Basic+)</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="gradient-divider"></div>
+
+<!-- ════════════════════════════════════════════════ WHO IS IT FOR ═══════ -->
+<div class="text-center mb-4">
+  <div class="section-label"><i class="bi bi-people me-1"></i>Use Cases</div>
+  <h2 class="fw-black mb-2">Built for Solar Professionals</h2>
+</div>
+
+<div class="row g-3 mb-5">
+  {% for icon,color,role,desc,bullets in [
+    ('bi-person-workspace',   '#f59e0b','Solar Engineers & Designers',
+     'Cut design time from days to minutes.',
+     ['Automated sizing & derating','Standards-compliant cable schedule','Print-ready technical reports']),
+    ('bi-building',           '#0ea5e9','EPC Contractors',
+     'Win more bids with professional proposals.',
+     ['BOQ with local unit rates','Installation work programme','Staffing & PPE schedule']),
+    ('bi-bank2',              '#22c55e','Banks & Financial Institutions',
+     'Assess solar loan applications with confidence.',
+     ['25-yr NPV & IRR analysis','DSCR & bankability verdict','Formal bankability report PDF']),
+    ('bi-briefcase-fill',     '#a78bfa','Consultants & Project Developers',
+     'Deliver multi-project feasibility at scale.',
+     ['Multi-project dashboard','20 projects on Professional plan','Multi-currency economics']),
+    ('bi-building-check',     '#f59e0b','ESCOs & Energy Auditors',
+     'Bundle solar into wider energy audits.',
+     ['Utility tariff integration','CO₂ offset calculations','Energy impact 25-yr model']),
+    ('bi-mortarboard-fill',   '#0ea5e9','Training Institutions',
+     'Teach real-world solar engineering.',
+     ['Free plan for students','Standards-traceable outputs','Progressive workflow']),
+  ] %}
+  <div class="col-md-6 col-lg-4">
+    <div class="use-case-card">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="feature-icon-box" style="background:{{ color }}18;border:1px solid {{ color }}33">
+          <i class="bi {{ icon }}" style="color:{{ color }}"></i>
+        </div>
+        <div>
+          <div class="fw-bold" style="font-size:13px">{{ role }}</div>
+          <div class="text-secondary" style="font-size:11px">{{ desc }}</div>
+        </div>
+      </div>
+      <ul class="list-unstyled mb-0" style="font-size:12px">
+        {% for b in bullets %}
+        <li class="mb-1 text-secondary"><i class="bi bi-check2 me-2" style="color:{{ color }}"></i>{{ b }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="gradient-divider"></div>
+
+<!-- ═══════════════════════════════════════════ GLOBAL COVERAGE ══════════ -->
+<div class="text-center mb-4">
+  <div class="section-label"><i class="bi bi-globe me-1"></i>Global Coverage</div>
+  <h2 class="fw-black mb-2">22 Countries · Local Tariffs · Local Currencies</h2>
+  <p class="text-secondary" style="font-size:14px">
+    Solar irradiance data, utility tariff rates, and currency conversion built in for every region.
+  </p>
+</div>
+
+<div class="solar-card p-4 mb-5">
+  {% set regions = [
+    ("West Africa",  "#f59e0b", ["Ghana","Nigeria","Senegal","Cameroon","Gambia","Liberia","Sierra Leone","Ivory Coast"]),
+    ("East Africa",  "#22c55e", ["Kenya","Tanzania","Ethiopia","Rwanda","Uganda"]),
+    ("Middle East",  "#0ea5e9", ["Saudi Arabia","UAE","Egypt"]),
+    ("Europe",       "#a78bfa", ["United Kingdom","Germany"]),
+    ("Asia-Pacific", "#f59e0b", ["India","Australia"]),
+  ] %}
+  <div class="row g-4">
+    {% for region, color, countries_list in regions %}
+    <div class="col-md-6 col-lg">
+      <div class="small fw-bold mb-2" style="color:{{ color }};text-transform:uppercase;letter-spacing:.5px;font-size:10px">
+        <i class="bi bi-geo-alt-fill me-1"></i>{{ region }}
+      </div>
+      <div class="d-flex flex-wrap gap-1">
+        {% for c in countries_list %}
+        <span class="country-chip">{{ c }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="text-center mt-4 small text-secondary">
+    <i class="bi bi-info-circle me-1"></i>
+    All regions include local utility tariff rates, currency symbols, and solar irradiance data.
+    More countries added regularly.
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="gradient-divider"></div>
+
+<!-- ═════════════════════════════════════════════ SUBSCRIPTION PLANS ═════ -->
+<div class="text-center mb-4">
+  <div class="section-label"><i class="bi bi-tag me-1"></i>Pricing</div>
+  <h2 class="fw-black mb-2">Simple, Transparent Pricing</h2>
+  <p class="text-secondary" style="font-size:14px">Start free. Upgrade when you need more.</p>
+</div>
+
+<div class="row g-4 justify-content-center mb-5">
+  {% for plan,price,color,popular,feats in [
+    ("Free",         "$0",  "#6868a0", false,
+     ["1 project","Full engineering calculations","Pre-Installation Assessment PDF","Standards-compliant outputs","Email support"]),
+    ("Professional", "$29", "#f59e0b", true,
+     ["20 projects","All 9 premium reports","Excel, Word & CSV export","Procurement planning","Email report delivery","Priority support","Multi-currency BOQ"]),
+    ("Enterprise",   "$99", "#0ea5e9", false,
+     ["Unlimited projects","White-label reports","API access","Custom branding","Dedicated engineer support","Team accounts","Custom integrations"]),
+  ] %}
+  <div class="col-md-4">
+    <div class="plan-card-land {% if popular %}featured{% endif %}">
+      {% if popular %}
+      <div class="position-absolute top-0 start-50 translate-middle">
+        <span class="badge" style="background:var(--solar-gold);color:#000;font-size:10px;font-weight:800;padding:4px 14px;border-radius:12px">
+          MOST POPULAR
+        </span>
+      </div>
+      {% endif %}
+      <div class="small fw-bold mb-1" style="color:{{ color }};text-transform:uppercase;letter-spacing:.5px">{{ plan }}</div>
+      <div class="mb-3">
+        <span style="font-size:38px;font-weight:900;color:{{ color }};line-height:1">{{ price }}</span>
+        <span class="text-secondary small">/month USD</span>
+      </div>
+      <ul class="list-unstyled mb-4" style="font-size:13px">
+        {% for f in feats %}
+        <li class="mb-2 d-flex align-items-center gap-2">
+          <i class="bi bi-check-circle-fill flex-shrink-0" style="color:{{ color }}"></i>
+          <span class="text-secondary">{{ f }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if user %}
+      <a href="{{ url_for('upgrade') }}" class="btn w-100 fw-bold"
+         style="background:{{ color }}22;color:{{ color }};border:1px solid {{ color }}44">
+        Manage Plan
+      </a>
+      {% else %}
+      <a href="{{ url_for('register') }}" class="btn w-100 fw-bold"
+         style="background:{% if popular %}var(--solar-gold){% else %}{{ color }}22{% endif %};
+                color:{% if popular %}#000{% else %}{{ color }}{% endif %};
+                border:1px solid {{ color }}44">
+        {% if popular %}Get Started — Free Trial{% else %}Get Started{% endif %}
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Payment methods -->
+<div class="solar-card p-4 mb-5">
+  <div class="text-center mb-3">
+    <span class="small fw-bold text-secondary text-uppercase" style="letter-spacing:.5px;font-size:11px">
+      <i class="bi bi-shield-lock-fill me-1 text-success"></i>Accepted Payment Methods
+    </span>
+  </div>
+  <div class="row g-3">
+    <div class="col-md-4">
+      <div class="d-flex align-items-start gap-3">
+        <div style="font-size:26px;color:#0ea5e9;flex-shrink:0"><i class="bi bi-credit-card-2-front-fill"></i></div>
+        <div>
+          <div class="fw-bold small mb-1">Credit / Debit Card</div>
+          <div class="text-secondary small">Visa · Mastercard · Verve<br>All countries · Billed in USD</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="d-flex align-items-start gap-3">
+        <div style="font-size:26px;color:#f59e0b;flex-shrink:0"><i class="bi bi-phone-fill"></i></div>
+        <div>
+          <div class="fw-bold small mb-1">Mobile Money — West Africa</div>
+          <div class="text-secondary small">
+            <span class="country-chip">Ghana</span> MTN · AirtelTigo · Vodafone<br>
+            <span class="country-chip">Nigeria</span> MTN · OPay · Airtel
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="d-flex align-items-start gap-3">
+        <div style="font-size:26px;color:#a78bfa;flex-shrink:0"><i class="bi bi-phone-fill"></i></div>
+        <div>
+          <div class="fw-bold small mb-1">Mobile Money — More Africa</div>
+          <div class="text-secondary small">
+            Senegal · Cameroon · Gambia · Liberia<br>via Paystack
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="text-secondary small text-center mt-3 mb-0">
+    <i class="bi bi-info-circle me-1"></i>
+    MoMo is billed in local currency at current exchange rate.
+    Contact <strong>support@solarproglobal.com</strong> to activate.
+  </p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="gradient-divider"></div>
+
+<!-- ═══════════════════════════════════════════════════ NEWS FEED ════════ -->
+{% if news_posts %}
+<div class="mb-5">
+  <div class="text-center mb-4">
+    <div class="section-label"><i class="bi bi-newspaper me-1"></i>Industry News</div>
+    <h2 class="fw-black mb-2">Solar Industry Insights</h2>
+  </div>
+  <div class="row g-3">
+    {% for post in news_posts %}
+    <div class="col-md-4">
+      <div class="solar-card p-4 h-100" style="transition:.2s" onmouseover="this.style.borderColor='#2e2e5a'" onmouseout="this.style.borderColor='#1e1e3a'">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <span class="badge" style="font-size:10px;background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44">
+            {{ post.category or 'News' }}
+          </span>
+          <span class="text-secondary" style="font-size:11px">{{ post.created_at[:10] if post.created_at else '' }}</span>
+        </div>
+        <div class="fw-bold mb-2" style="font-size:14px;line-height:1.4">{{ post.title }}</div>
+        <p class="text-secondary mb-0" style="font-size:12px;line-height:1.6">
+          {{ post.content[:180] }}{% if post.content|length > 180 %}…{% endif %}
+        </p>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+<div class="gradient-divider"></div>
+{% endif %}
+
+<!-- ═══════════════════════════════════════════════════════ FAQ ══════════ -->
+<div class="row justify-content-center mb-5">
+  <div class="col-lg-8">
+    <div class="text-center mb-4">
+      <div class="section-label"><i class="bi bi-question-circle me-1"></i>FAQ</div>
+      <h2 class="fw-black mb-2">Frequently Asked Questions</h2>
+    </div>
+    <div class="solar-card p-4">
+      {% for q,a in [
+        ("Is it really free to start?",
+         "Yes. The Free plan gives you 1 project with full engineering calculations and a Pre-Installation Assessment PDF — no credit card required. Upgrade any time for more projects and premium reports."),
+        ("Do I need to install anything?",
+         "No. SolarPro Global is fully browser-based. Works on any device — desktop, tablet, or mobile. Nothing to install or configure."),
+        ("Which engineering standards does it follow?",
+         "BS 7671:2018 (UK), IEC 60364, NEC 2023, and IEEE best practices. Cable sizing follows the tabulated method with correction factors for ambient temperature, grouping, and installation method."),
+        ("Can I use it for off-grid and hybrid systems?",
+         "Yes. The platform supports grid-connected, standalone off-grid, and hybrid system types. Battery bank, inverter, and charge controller sizing adapt to the selected system type."),
+        ("What export formats are available?",
+         "All plans: PDF reports. Basic and above: Excel (.xlsx), CSV, and Word (.docx). Email delivery to clients and banks is available on paid plans."),
+        ("How does the procurement module work?",
+         "The platform auto-maps your BOQ items to the equipment catalog using category matching — solar panels, inverters, batteries, cabling, and protection. It groups items by supplier for purchase order generation and flags items that need an RFQ."),
+        ("Can I white-label the reports?",
+         "Yes, on the Enterprise plan. Reports can be customised with your company name, logo, and branding. Contact support to set this up."),
+        ("What happens to my projects if I downgrade?",
+         "Your project data is always preserved. On the Free plan you cannot create new projects above the limit, but existing data remains accessible."),
+      ] %}
+      <div class="faq-item">
+        <div class="faq-q" onclick="var a=this.nextElementSibling;a.style.display=a.style.display=='block'?'none':'block';this.querySelector('.faq-icon').style.transform=a.style.display=='block'?'rotate(45deg)':''">
+          {{ q }}
+          <i class="bi bi-plus faq-icon" style="font-size:18px;transition:transform .2s;color:var(--solar-gold)"></i>
+        </div>
+        <div class="faq-a">{{ a }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="gradient-divider"></div>
+
+<!-- ═════════════════════════════════════════ CONTACT + NEWSLETTER ═══════ -->
+<div class="row g-4 mb-5">
+
+  <!-- Contact / lead form -->
+  <div class="col-md-6">
+    <div class="solar-card p-4 h-100">
+      <div class="section-label mb-1"><i class="bi bi-chat-dots me-1"></i>Contact Us</div>
+      <h4 class="fw-black mb-1">Talk to a Solar Engineer</h4>
+      <p class="text-secondary small mb-4">Demo requests, enterprise pricing, or general questions — we respond within 24 hours.</p>
+      <form method="POST" action="{{ url_for('contact_lead') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="row g-2 mb-2">
+          <div class="col-6">
+            <input type="text" name="name" placeholder="Your name *" required
+                   class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+          <div class="col-6">
+            <input type="email" name="email" placeholder="Email address *" required
+                   class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-6">
+            <input type="text" name="company" placeholder="Company / Organisation"
+                   class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+          <div class="col-6">
+            <input type="text" name="phone" placeholder="Phone (optional)"
+                   class="form-control form-control-sm bg-dark text-light border-secondary">
+          </div>
+        </div>
+        <select name="interest" class="form-select form-select-sm bg-dark text-light border-secondary mb-2">
+          <option value="">Area of interest…</option>
+          <option value="Demo request">Demo request</option>
+          <option value="Professional plan">Professional plan — $29/mo</option>
+          <option value="Enterprise plan">Enterprise plan — $99/mo</option>
+          <option value="Custom integration">Custom integration / API</option>
+          <option value="Training">Training &amp; onboarding</option>
+          <option value="General enquiry">General enquiry</option>
+        </select>
+        <textarea name="message" rows="3" placeholder="Tell us about your project or question…"
+                  class="form-control form-control-sm bg-dark text-light border-secondary mb-3"></textarea>
+        <input type="hidden" name="source" value="landing">
+        <button class="btn btn-solar w-100">
+          <i class="bi bi-send-fill me-2"></i>Send Message
+        </button>
+        <div class="text-secondary text-center mt-2" style="font-size:11px">
+          <i class="bi bi-lock-fill me-1"></i>Your information is never shared with third parties.
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Newsletter + trust -->
+  <div class="col-md-6 d-flex flex-column gap-3">
+
+    <!-- Newsletter card -->
+    <div class="solar-card p-4 flex-grow-1">
+      <div class="section-label mb-1"><i class="bi bi-envelope-heart me-1"></i>Newsletter</div>
+      <h4 class="fw-black mb-1">Stay Ahead in Solar</h4>
+      <p class="text-secondary small mb-4">
+        Engineering insights, product updates, industry news, and solar market analysis —
+        delivered weekly. No spam, unsubscribe any time.
+      </p>
+      <form method="POST" action="{{ url_for('newsletter_subscribe') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="text" name="name" placeholder="Your name (optional)"
+               class="form-control form-control-sm bg-dark text-light border-secondary mb-2">
+        <input type="email" name="email" placeholder="Email address *" required
+               class="form-control form-control-sm bg-dark text-light border-secondary mb-3">
+        <button class="btn btn-solar w-100">
+          <i class="bi bi-envelope-heart-fill me-2"></i>Subscribe — Free
+        </button>
+      </form>
+    </div>
+
+    <!-- Trust signals -->
+    <div class="solar-card p-4">
+      <div class="row g-3 text-center">
+        {% for icon,color,title,sub in [
+          ('bi-shield-check-fill','#22c55e','Standards Compliant','BS 7671 · IEC · NEC · IEEE'),
+          ('bi-globe','#0ea5e9','Global Platform','22 countries · local data'),
+          ('bi-lock-fill','#a78bfa','Secure & Private','Your data stays yours'),
+          ('bi-stars','#f59e0b','Free to Start','No card required'),
+        ] %}
+        <div class="col-6">
+          <div style="font-size:24px;color:{{ color }}" class="mb-1"><i class="bi {{ icon }}"></i></div>
+          <div class="fw-bold small">{{ title }}</div>
+          <div class="text-secondary" style="font-size:10px">{{ sub }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ FINAL CTA ════════════════════════ -->
+{% if not user %}
+<div class="text-center py-5 mb-4" style="background:radial-gradient(ellipse 60% 80% at 50% 50%,rgba(245,158,11,.06),transparent);border-radius:24px">
+  <div class="mb-2" style="font-size:48px">☀️</div>
+  <h2 class="fw-black mb-3" style="background:linear-gradient(90deg,var(--solar-gold),var(--solar-blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
+    Ready to Design Your First Project?
+  </h2>
+  <p class="text-secondary mb-4" style="max-width:480px;margin:0 auto;font-size:14px">
+    Join solar professionals across 22 countries using SolarPro Global to deliver bankable,
+    standards-compliant solar designs.
+  </p>
+  <a href="{{ url_for('register') }}" class="btn btn-solar btn-lg px-5 me-3">
+    <i class="bi bi-rocket-takeoff me-2"></i>Start Free Today
+  </a>
+  <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg px-4">Login</a>
+  <div class="text-secondary mt-3" style="font-size:12px">
+    Free forever · No credit card · Full engineering calculations
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

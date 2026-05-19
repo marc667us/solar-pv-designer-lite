@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Email Reports — {{ project.name }}{% endblock %}
+{% block content %}
+<div class="container-xl py-4">
+
+<div class="report-header mb-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <div class="report-title"><i class="bi bi-envelope-arrow-up me-2"></i>Email Reports</div>
+      <div class="text-secondary mt-1">{{ project.name }} · Send PDF reports to clients, banks, or installers</div>
+    </div>
+    <a href="{{ url_for('project_results', pid=project.id) }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i>Back to Results
+    </a>
+  </div>
+</div>
+
+{% if not smtp_ok %}
+<div class="alert alert-warning border-warning mb-4" style="background:rgba(245,158,11,.08);border-radius:10px">
+  <div class="d-flex align-items-start gap-3">
+    <i class="bi bi-exclamation-triangle-fill text-warning mt-1"></i>
+    <div>
+      <div class="fw-bold mb-1">SMTP not configured — add to your .env file to enable email sending</div>
+      <div class="small text-secondary">
+        <code>SMTP_HOST=smtp.gmail.com</code><br>
+        <code>SMTP_PORT=587</code><br>
+        <code>SMTP_USER=you@gmail.com</code><br>
+        <code>SMTP_PASS=your_app_password</code><br>
+        <code>SMTP_FROM=you@gmail.com</code><br>
+        Any free SMTP works — Gmail, Outlook, Brevo, Mailgun free tier.
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="row g-4">
+  <!-- Send form -->
+  <div class="col-md-7">
+    <div class="solar-card p-4">
+      <div class="section-head mb-3">Send Report</div>
+      <form method="POST">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="mb-3">
+          <label class="form-label small text-secondary">Report to Send</label>
+          <select name="report" class="form-select form-select-sm bg-dark text-light border-secondary">
+            {% for label, url in report_options %}
+            <option value="{{ label }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text text-secondary small">Note: Include the download link in your email body — PDFs are generated on demand.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-secondary">Recipients <span class="text-warning">*</span></label>
+          <input type="text" name="recipients" placeholder="client@example.com, bank@example.com"
+                 class="form-control form-control-sm bg-dark text-light border-secondary" required>
+          <div class="form-text text-secondary small">Separate multiple addresses with commas.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-secondary">Subject</label>
+          <input type="text" name="subject" value="Solar Project Report — {{ project.name }}"
+                 class="form-control form-control-sm bg-dark text-light border-secondary">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-secondary">Message Body</label>
+          <textarea name="body" rows="5" class="form-control form-control-sm bg-dark text-light border-secondary"
+            placeholder="Dear Client,
+
+Please find the solar project report for {{ project.name }} attached.
+
+System Summary:
+• PV Array: {{ r.results.pv_kw|round(2) }} kWp
+• Battery: {{ r.results.bat_kwh|round(1) }} kWh
+• System Cost: {{ d.symbol }} {{ r.results.economics.total_local|int|format(',') }}
+• Payback: {{ r.results.economics.payback|round(1) }} years
+
+Regards,
+SolarPro Global"></textarea>
+        </div>
+        <button type="submit" class="btn btn-solar w-100" {% if not smtp_ok %}disabled{% endif %}>
+          <i class="bi bi-send-fill me-2"></i>Send Email
+        </button>
+        {% if not smtp_ok %}
+        <div class="text-center small text-warning mt-2">Configure SMTP in .env to enable sending.</div>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+
+  <!-- Report links + log -->
+  <div class="col-md-5">
+    <div class="solar-card p-4 mb-3">
+      <div class="section-head mb-3">Available Reports</div>
+      {% for label, report_url in report_options %}
+      <a href="{{ report_url }}" target="_blank"
+         class="d-flex align-items-center gap-2 mb-2 text-decoration-none p-2 rounded"
+         style="background:rgba(255,255,255,.03);border:1px solid #1e1e3a">
+        <i class="bi bi-file-earmark-pdf text-warning"></i>
+        <span class="small">{{ label }}</span>
+        <i class="bi bi-download ms-auto text-secondary" style="font-size:11px"></i>
+      </a>
+      {% endfor %}
+    </div>
+
+    {% if logs %}
+    <div class="solar-card p-4">
+      <div class="section-head mb-3">Email History</div>
+      {% for log in logs %}
+      <div class="mb-2 p-2 rounded" style="background:rgba(255,255,255,.03);border:1px solid #1e1e3a;font-size:12px">
+        <div class="d-flex justify-content-between">
+          <span class="text-secondary">{{ log.created_at[:16] }}</span>
+          <span class="badge {% if log.status=='sent' %}bg-success{% else %}bg-danger{% endif %}">{{ log.status }}</span>
+        </div>
+        <div class="text-secondary mt-1">To: {{ log.recipients }}</div>
+        {% if log.error_msg %}
+        <div class="text-danger mt-1">{{ log.error_msg[:80] }}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+</div>
+{% endblock %}

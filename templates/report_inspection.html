@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% block title %}Pre-Installation Site Assessment — {{ project.name }}{% endblock %}
+{% block extra_head %}
+<style>
+  /* Custom styled checkboxes */
+  .chk-cell { text-align:center; vertical-align:middle; }
+  .chk-wrap { display:inline-flex; align-items:center; justify-content:center; }
+  .chk-box {
+    appearance:none; -webkit-appearance:none;
+    width:22px; height:22px; border-radius:4px; cursor:pointer;
+    transition:all .15s; position:relative; flex-shrink:0;
+  }
+  .chk-yes  { border:2px solid #22c55e; background:transparent; }
+  .chk-no   { border:2px solid #ef4444; background:transparent; }
+  .chk-na   { border:2px solid #6868a0; background:transparent; }
+  .chk-yes:checked  { background:#22c55e; border-color:#22c55e; }
+  .chk-no:checked   { background:#ef4444; border-color:#ef4444; }
+  .chk-na:checked   { background:#6868a0; border-color:#6868a0; }
+  .chk-box:checked::after {
+    content:''; position:absolute;
+    left:5px; top:2px; width:7px; height:11px;
+    border:2px solid #fff; border-top:none; border-left:none;
+    transform:rotate(45deg);
+  }
+  .chk-box:hover { opacity:.75; transform:scale(1.1); }
+  /* Highlight whole row when something checked */
+  tr.row-yes { background:rgba(34,197,94,.06) !important; }
+  tr.row-no  { background:rgba(239,68,68,.06)  !important; }
+  tr.row-na  { background:rgba(104,104,160,.06) !important; }
+  /* Print: show checked state clearly */
+  @media print {
+    .chk-box { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="no-print mb-3 d-flex align-items-center gap-3 flex-wrap">
+  <a href="{{ url_for('project_results', pid=project.id) }}" class="text-secondary small"><i class="bi bi-arrow-left me-1"></i>Results</a>
+  <div class="ms-auto d-flex gap-2 align-items-center">
+    <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;font-size:10px">
+      <i class="bi bi-unlock-fill me-1"></i>FREE — No upgrade required
+    </span>
+    <a href="{{ url_for('export_pdf_inspection', pid=project.id) }}" class="btn btn-danger btn-sm">
+      <i class="bi bi-file-earmark-pdf me-1"></i>Export PDF
+    </a>
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer me-1"></i>Print</button>
+  </div>
+</div>
+
+<div class="report-header mb-4">
+  <div class="report-title"><i class="bi bi-clipboard2-pulse-fill me-2"></i>Pre-Installation Site Assessment</div>
+  <div class="text-secondary small mt-1" style="font-size:12px">
+    Technical Feasibility Consultation — Prepared for prospective client prior to installation commitment
+  </div>
+  <div class="text-secondary small mt-2">
+    {{ project.name }} &nbsp;|&nbsp; {{ d.region }}, {{ d.country }} &nbsp;|&nbsp;
+    {{ d.system_type|title }} System &nbsp;|&nbsp; {{ r.pv_kw|fmt(2) }} kWp · {{ r.bat_kwh|fmt(2) }} kWh · {{ r.inv_kw|fmt(1) }} kW
+  </div>
+</div>
+
+<!-- Purpose Banner -->
+<div class="solar-card p-3 mb-4 d-flex align-items-start gap-3" style="border-left:4px solid #22c55e;background:rgba(34,197,94,.04)">
+  <i class="bi bi-info-circle-fill fs-5 text-success mt-1"></i>
+  <div>
+    <div class="fw-bold text-success mb-1">Purpose of this Assessment</div>
+    <div class="text-secondary small">
+      This Pre-Installation Site Assessment is a complimentary technical consultation report generated from your load schedule.
+      It identifies site requirements, structural considerations, electrical prerequisites, and financial indicators to help
+      you make an informed decision before committing to a solar installation. An on-site survey by a qualified engineer
+      is recommended before final design and procurement.
+    </div>
+  </div>
+</div>
+
+<!-- Project Info -->
+<div class="solar-card p-4 mb-3">
+  <div class="section-head"><i class="bi bi-info-circle me-2"></i>Proposed System Overview</div>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="data-row"><span class="lbl">Client / Site Name</span><span class="val">{{ project.name }}</span></div>
+      <div class="data-row"><span class="lbl">Location</span><span class="val">{{ d.region }}, {{ d.country }}</span></div>
+      <div class="data-row"><span class="lbl">System Type</span><span class="val">{{ d.system_type|title }}</span></div>
+      <div class="data-row"><span class="lbl">Phase Configuration</span><span class="val">{{ d.phase|title }}-Phase {{ '415V' if d.phase=='three' else '230V' }}</span></div>
+      <div class="data-row"><span class="lbl">DC Bus Voltage</span><span class="val">{{ d.voltage }}V</span></div>
+    </div>
+    <div class="col-md-6">
+      <div class="data-row"><span class="lbl">PV Array (proposed)</span><span class="val">{{ r.pv_kw|fmt(2) }} kWp ({{ r.num_panels }} × {{ r.panel_wp|default(400) }} Wp)</span></div>
+      <div class="data-row"><span class="lbl">Battery Storage</span><span class="val">{{ r.bat_kwh|fmt(2) }} kWh — {{ r.num_bat }} × {{ r.chemistry }}</span></div>
+      <div class="data-row"><span class="lbl">Inverter Rating</span><span class="val">{{ r.inv_kw|fmt(1) }} kW</span></div>
+      <div class="data-row"><span class="lbl">Daily Energy Demand</span><span class="val">{{ r.daily_kwh|fmt(2) }} kWh/day</span></div>
+      <div class="data-row"><span class="lbl">Est. System Cost</span><span class="val">{{ d.symbol }} {{ r.economics.total_local|fmt(0) }}</span></div>
+    </div>
+    <div class="col-12">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label small fw-bold text-secondary">CONSULTANT / ENGINEER</label>
+          <div class="p-2 rounded" style="background:#0f0f22;border:1px solid #1e1e3a;min-height:36px"></div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-bold text-secondary">ASSESSMENT DATE</label>
+          <div class="p-2 rounded" style="background:#0f0f22;border:1px solid #1e1e3a;min-height:36px"></div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small fw-bold text-secondary">SITE VISIT DATE (if applicable)</label>
+          <div class="p-2 rounded" style="background:#0f0f22;border:1px solid #1e1e3a;min-height:36px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% macro check_table(section_num, title, icon, color, items) %}
+<div class="solar-card p-4 mb-3" style="border-left:4px solid {{ color }}">
+  <div class="section-head mb-3">
+    <i class="bi {{ icon }} me-2" style="color:{{ color }}"></i>{{ section_num }}. {{ title }}
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0">
+      <thead>
+        <tr>
+          <th style="width:50px">#</th>
+          <th>Assessment Item</th>
+          <th class="text-center" style="width:80px">Yes</th>
+          <th class="text-center" style="width:80px">No</th>
+          <th class="text-center" style="width:80px">N/A</th>
+          <th>Notes / Findings</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for i, item in items %}
+        {% set row_id = "r" ~ section_num ~ "_" ~ i %}
+        <tr id="tr_{{ row_id }}">
+          <td class="text-secondary small">{{ section_num }}.{{ i }}</td>
+          <td class="small">{{ item }}</td>
+          <td class="chk-cell">
+            <div class="chk-wrap">
+              <input type="checkbox" class="chk-box chk-yes"
+                     id="yes_{{ row_id }}" data-row="{{ row_id }}" data-val="yes"
+                     onclick="pickOne(this)">
+            </div>
+          </td>
+          <td class="chk-cell">
+            <div class="chk-wrap">
+              <input type="checkbox" class="chk-box chk-no"
+                     id="no_{{ row_id }}" data-row="{{ row_id }}" data-val="no"
+                     onclick="pickOne(this)">
+            </div>
+          </td>
+          <td class="chk-cell">
+            <div class="chk-wrap">
+              <input type="checkbox" class="chk-box chk-na"
+                     id="na_{{ row_id }}" data-row="{{ row_id }}" data-val="na"
+                     onclick="pickOne(this)">
+            </div>
+          </td>
+          <td style="min-width:180px">
+            <input type="text" class="form-control form-control-sm"
+                   style="background:transparent;border:none;border-bottom:1px solid #2a2a4a;
+                          border-radius:0;color:#ccc;font-size:12px;padding:2px 4px"
+                   placeholder="notes…">
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endmacro %}
+
+{{ check_table(1, "Site Suitability & Solar Resource", "bi-sun-fill", "#f59e0b", [
+  (1, "Site is in " ~ d.region ~ ", " ~ d.country ~ " — adequate solar irradiance for PV generation (≥ 4 PSH/day)"),
+  (2, "Roof/ground area is sufficient for " ~ r.num_panels ~ " panels (approx. " ~ (r.num_panels * 2)|int ~ " m² minimum)"),
+  (3, "Panel orientation achievable — south/equator-facing surface available"),
+  (4, "No permanent shading obstruction between 9 am–3 pm (buildings, trees, towers)"),
+  (5, "Roof pitch is ≥ 10° or flat roof with ballast tilting available"),
+  (6, "No planned construction or tree growth that could cause future shading"),
+  (7, "Access to roof/ground area is safe and adequate for installation and maintenance"),
+]) }}
+
+{{ check_table(2, "Structural & Roof / Ground Assessment", "bi-building", "#0ea5e9", [
+  (1, "Roof structure type identified (concrete slab / IBR sheet / clay tile / asphalt / flat membrane)"),
+  (2, "Roof/structure age assessed — condition acceptable for 25-year system life"),
+  (3, "Structural load capacity estimated — can support PV array weight (approx. " ~ ((r.num_panels * 20)|int) ~ " kg)"),
+  (4, "For ground mount: land area " ~ ((r.num_panels * 4)|int) ~ " m² available; ground level and stable"),
+  (5, "Existing roof penetrations, skylights, or services do not conflict with proposed array footprint"),
+  (6, "Roof waterproofing and membrane in acceptable condition prior to panel installation"),
+  (7, "No asbestos-containing materials identified in roof structure"),
+]) }}
+
+{{ check_table(3, "Existing Electrical Infrastructure", "bi-lightning-fill", "#22c55e", [
+  (1, "Existing main distribution board (MDB) identified and accessible"),
+  (2, "MDB has spare capacity / ways for new solar incomer and sub-circuits"),
+  (3, "Existing earthing / earth rod present — condition and resistance unknown (test required)"),
+  (4, "Current utility connection is " ~ ('3-phase 415V' if d.phase=='three' else 'single-phase 230V') ~ " — matches proposed system"),
+  (5, "Available space for inverter, battery bank, and new DB within equipment room"),
+  (6, "Equipment room is dry, secure, and ventilated — suitable for battery/inverter installation"),
+  (7, "Cable routing path from roof/array to equipment room identified — length and obstructions noted"),
+  (8, "Existing wiring condition checked — no overloaded circuits or visible faults before proceeding"),
+]) }}
+
+{{ check_table(4, "Load & Energy Demand Validation", "bi-speedometer2", "#a78bfa", [
+  (1, "Daily energy demand of " ~ r.daily_kwh|fmt(2) ~ " kWh/day verified against actual utility bills"),
+  (2, "Peak connected load of " ~ r.peak_kw|fmt(2) ~ " kW confirmed — no large motor loads omitted"),
+  (3, "Critical loads (medical, refrigeration, security) identified and noted for backup priority"),
+  (4, "Load profile is consistent daily — no major seasonal variation expected"),
+  (5, "Future load growth in next 3–5 years estimated and factored into system sizing"),
+  (6, "High-draw appliances (A/C, pumps, welders) confirmed compatible with " ~ r.inv_kw|fmt(1) ~ " kW inverter"),
+]) }}
+
+{{ check_table(5, "Financial & Contractual Feasibility", "bi-cash-coin", "#f59e0b", [
+  (1, "Client aware of estimated system cost: " ~ d.symbol ~ " " ~ r.economics.total_local|fmt(0)),
+  (2, "Estimated payback period of " ~ r.economics.payback|fmt(1) ~ " years is acceptable to client"),
+  (3, "Funding source confirmed (cash / loan / lease / PPA)"),
+  (4, "VAT / import duties on equipment have been considered in budget"),
+  (5, "Client understands O&M obligations (panel cleaning, battery checks, annual inspection)"),
+  (6, "Grid connection / utility approval required — application process understood"),
+  (7, "Building permit for roof mounting / ground installation required — investigated"),
+]) }}
+
+{{ check_table(6, "Grid Connection & Regulatory", "bi-diagram-3-fill", "#0ea5e9", [
+  (1, "Utility grid connection available at site — " ~ d.get('utility', d.country ~ ' national grid') if d.get else ''),
+  (2, "Net metering / feed-in tariff policy investigated for " ~ d.country),
+  (3, "Anti-islanding protection required — inverter has built-in function"),
+  (4, "Local electrical installation code compliance confirmed (BS 7671 / IEC 60364 / national standard)"),
+  (5, "Building/planning authority notified of proposed installation (if required)"),
+  (6, "Grid synchronisation and protection relay settings understood for hybrid/grid-tied systems"),
+]) }}
+
+{{ check_table(7, "Health, Safety & Access", "bi-shield-check-fill", "#ef4444", [
+  (1, "Safe roof access route confirmed — scaffolding / MEWP required (noted)"),
+  (2, "Electrical isolation procedure for existing installation possible before work begins"),
+  (3, "No asbestos, hazardous materials, or restricted zones on site"),
+  (4, "Emergency services access to site is adequate"),
+  (5, "Client / building occupants can remain during installation or temporary relocation required"),
+  (6, "Fire risk assessed — battery room has adequate ventilation and CO₂ extinguisher provision"),
+]) }}
+
+<!-- Recommendation Summary -->
+<div class="solar-card p-4 mb-3" style="border-left:4px solid #f59e0b">
+  <div class="section-head"><i class="bi bi-clipboard2-check-fill me-2" style="color:#f59e0b"></i>Consultant Recommendation</div>
+  <div class="row g-3 mt-1">
+    <div class="col-md-4">
+      <div class="fw-bold small text-secondary mb-2">OVERALL SITE FEASIBILITY</div>
+      <div class="d-flex flex-column gap-2">
+        {% for verdict_label, verdict_color, verdict_id in [
+          ("FEASIBLE — proceed to detailed design", "#22c55e", "v_feasible"),
+          ("FEASIBLE WITH CONDITIONS — address items above", "#f59e0b", "v_conditional"),
+          ("NOT FEASIBLE — major constraints identified", "#ef4444", "v_notfeasible")
+        ] %}
+        <label class="d-flex align-items-center gap-2" style="cursor:pointer">
+          <input type="checkbox" class="chk-box"
+                 id="{{ verdict_id }}"
+                 style="border:2px solid {{ verdict_color }};width:22px;height:22px;border-radius:4px"
+                 onclick="pickVerdict(this)"
+                 data-color="{{ verdict_color }}">
+          <span class="small" style="color:{{ verdict_color }}">{{ verdict_label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="col-md-8">
+      <div class="fw-bold small text-secondary mb-1">NEXT STEPS / CONDITIONS</div>
+      {% for i in range(4) %}
+      <input type="text" class="form-control form-control-sm mb-1"
+             style="background:transparent;border:none;border-bottom:1px solid #2a2a4a;
+                    border-radius:0;color:#ccc;font-size:12px"
+             placeholder="Enter condition or next step…">
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Sign-off -->
+<div class="solar-card p-4 mb-3">
+  <div class="section-head"><i class="bi bi-pen-fill me-2"></i>Assessment Sign-Off</div>
+  <div class="row g-4">
+    <div class="col-md-4">
+      <div class="fw-bold small text-secondary mb-1">SOLAR CONSULTANT / ENGINEER</div>
+      <div style="border-bottom:2px solid #2a2a4a;min-height:48px"></div>
+      <div class="text-secondary small mt-1">Name: ________________________________</div>
+      <div class="text-secondary small mt-1">Qualification: _________________________</div>
+      <div class="text-secondary small mt-1">Date: __________________________________</div>
+    </div>
+    <div class="col-md-4">
+      <div class="fw-bold small text-secondary mb-1">CLIENT / SITE OWNER</div>
+      <div style="border-bottom:2px solid #2a2a4a;min-height:48px"></div>
+      <div class="text-secondary small mt-1">Name: ________________________________</div>
+      <div class="text-secondary small mt-1">Contact: _______________________________</div>
+      <div class="text-secondary small mt-1">Date: __________________________________</div>
+    </div>
+    <div class="col-md-4">
+      <div class="fw-bold small text-secondary mb-1">DISCLAIMER</div>
+      <div class="text-secondary" style="font-size:10px;line-height:1.5">
+        This pre-installation assessment is based on the load schedule provided and does not
+        substitute for a full on-site survey. Final system design, structural approval, and
+        electrical certification must be carried out by a qualified engineer. SolarPro Global
+        accepts no liability for decisions made solely on the basis of this report.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="solar-card p-3 text-center text-secondary small">
+  Pre-Installation Site Assessment generated by SolarPro Global · Free Consultation Service · BS 7671:2018 · IEC 60364 · IEC 62446-1
+</div>
+
+<script>
+function pickOne(el) {
+  const row = el.dataset.row;
+  const val = el.dataset.val;
+  const tr  = document.getElementById('tr_' + row);
+  ['yes','no','na'].forEach(v => {
+    const cb = document.getElementById(v + '_' + row);
+    if (cb && cb !== el) cb.checked = false;
+  });
+  tr.classList.remove('row-yes','row-no','row-na');
+  if (el.checked) tr.classList.add('row-' + val);
+}
+
+function pickVerdict(el) {
+  ['v_feasible','v_conditional','v_notfeasible'].forEach(id => {
+    const cb = document.getElementById(id);
+    if (cb && cb !== el) {
+      cb.checked = false;
+      cb.style.background = 'transparent';
+    }
+  });
+  if (el.checked) {
+    el.style.background = el.dataset.color;
+  } else {
+    el.style.background = 'transparent';
+  }
+}
+</script>
+{% endblock %}

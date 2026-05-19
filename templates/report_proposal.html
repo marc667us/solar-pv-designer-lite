@@ -1,0 +1,728 @@
+{% extends "base.html" %}
+{% block title %}Full Proposal — {{ project.name }}{% endblock %}
+{% block extra_head %}
+<style>
+  .prop-section{background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px;padding:28px 32px;margin-bottom:24px}
+  .prop-section-head{font-size:11px;font-weight:900;color:#6868a0;text-transform:uppercase;letter-spacing:.8px;
+    margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #1e1e3a;display:flex;align-items:center;gap:8px}
+  .part-head{background:linear-gradient(135deg,#0f0f22,#13133a);border:1px solid #1e1e3a;border-radius:12px;
+    padding:14px 20px;margin-bottom:20px;display:flex;align-items:center;gap:12px}
+  .part-head .part-num{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-weight:900;font-size:14px;flex-shrink:0}
+  .explain-box{background:rgba(14,165,233,0.07);border:1px solid rgba(14,165,233,0.20);border-radius:10px;
+    padding:14px 18px;margin-bottom:14px;font-size:13px;line-height:1.65;color:#a0c4e8}
+  .explain-box .head{font-weight:800;color:#38bdf8;font-size:12px;text-transform:uppercase;
+    letter-spacing:.5px;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+  .highlight-box{background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25);
+    border-radius:10px;padding:14px 18px;margin-bottom:14px;font-size:13px;color:#d4b483}
+  .highlight-box .head{font-weight:800;color:#f59e0b;font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+  .green-box{background:rgba(34,197,94,0.07);border:1px solid rgba(34,197,94,0.22);
+    border-radius:10px;padding:14px 18px;margin-bottom:14px;font-size:13px;color:#86efac}
+  .green-box .head{font-weight:800;color:#22c55e;font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+  .component-card{background:#07071a;border:1px solid #1e1e3a;border-radius:12px;padding:20px;height:100%}
+  .component-icon{font-size:32px;margin-bottom:10px}
+  .component-title{font-weight:900;font-size:14px;margin-bottom:4px;color:#e2e2f0}
+  .component-sub{font-size:11px;color:#f59e0b;font-weight:700;margin-bottom:10px}
+  .component-desc{font-size:12px;color:#8888b8;line-height:1.6}
+  .spec-chip{display:inline-block;background:#1e1e3a;border:1px solid #2e2e4a;border-radius:6px;
+    padding:3px 10px;font-size:11px;color:#c0c0e0;margin:2px}
+  .check-item{display:flex;gap:10px;margin-bottom:8px;font-size:13px}
+  .check-item .icon{color:#22c55e;flex-shrink:0;font-size:14px;margin-top:1px}
+  .check-item .txt{color:#9090c0;line-height:1.5}
+  .check-item .txt strong{color:#e2e2f0}
+  .timeline-step{display:flex;gap:14px;margin-bottom:16px}
+  .timeline-num{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#ea580c);
+    color:#000;font-weight:900;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+  .stamp{display:inline-flex;align-items:center;gap:8px;padding:8px 20px;border-radius:30px;font-weight:900;font-size:13px;letter-spacing:.5px}
+  @media print{.no-print{display:none!important}}
+</style>
+{% endblock %}
+{% block content %}
+{% set eco = r.economics %}
+
+<div class="no-print mb-3 d-flex align-items-center gap-3 flex-wrap">
+  <a href="{{ url_for('project_results', pid=project.id) }}" class="text-secondary small"><i class="bi bi-arrow-left me-1"></i>Results</a>
+  <div class="ms-auto d-flex gap-2">
+    <button onclick="window.print()" class="btn btn-solar btn-sm"><i class="bi bi-printer me-1"></i>Print Proposal</button>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════ COVER #}
+<div class="report-header mb-4" style="padding:36px 40px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
+    <div>
+      <div style="font-size:11px;color:#f59e0b;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">
+        <i class="bi bi-sun-fill me-1"></i> SolarPro Global · Intelligent PV Design Platform
+      </div>
+      <div class="report-title" style="font-size:28px;margin-bottom:6px">
+        Solar PV System Proposal
+      </div>
+      <div style="font-size:17px;font-weight:700;color:#c8c8e8;margin-bottom:12px">{{ project.name }}</div>
+      <div class="text-secondary small">
+        <i class="bi bi-geo-alt me-1"></i>{{ d.region }}, {{ d.country }}
+        &nbsp;&nbsp;<i class="bi bi-calendar3 me-1"></i>Prepared {{ "now" }}
+        &nbsp;&nbsp;<i class="bi bi-shield-check me-1"></i>BS 7671 · IEC 60364 · IEEE
+      </div>
+    </div>
+    <div class="text-end">
+      <div class="stamp" style="background:{{ eco.v_color }}18;border:2px solid {{ eco.v_color }}66;color:{{ eco.v_color }};margin-bottom:8px">
+        <i class="bi bi-{{ 'check-circle-fill' if eco.verdict=='APPROVED' else 'exclamation-triangle-fill' if eco.verdict=='CONDITIONAL' else 'x-circle-fill' }}"></i>
+        PROJECT {{ eco.verdict }}
+      </div>
+      <div class="stamp" style="background:{{ eco.bank_color }}18;border:2px solid {{ eco.bank_color }}44;color:{{ eco.bank_color }}">
+        <i class="bi bi-bank me-1"></i>{{ eco.bankability }}
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ══ EXECUTIVE SUMMARY ══ #}
+<div class="prop-section mb-4" style="border-color:#f59e0b44">
+  <div class="prop-section-head" style="color:#f59e0b;border-color:#f59e0b22">
+    <i class="bi bi-file-earmark-text-fill"></i>Executive Summary
+  </div>
+  <p style="color:#c8c8e8;line-height:1.75;font-size:14px;margin-bottom:16px">
+    This document presents a complete technical and financial proposal for a
+    <strong class="text-warning">{{ r.pv_kw|fmt(2) }} kWp {{ d.system_type|title }} Solar PV System</strong>
+    to be installed at <strong class="text-warning">{{ d.region }}, {{ d.country }}</strong>.
+    The system has been engineered to meet a daily energy demand of
+    <strong class="text-warning">{{ r.daily_kwh|fmt(2) }} kWh/day</strong> using the latest
+    photovoltaic technology, lithium battery storage, and a high-efficiency hybrid inverter.
+  </p>
+  <div class="row g-2 mb-3">
+    {% for lbl,val,unit,color in [
+      ("PV Array",    r.pv_kw|fmt(2),         "kWp",       "#f59e0b"),
+      ("No. Panels",  r.num_panels,            "× modules", "#0ea5e9"),
+      ("Battery",     r.bat_kwh|fmt(2),        "kWh",       "#22c55e"),
+      ("Inverter",    r.inv_kw|fmt(1),         "kW",        "#a78bfa"),
+      ("Payback",     eco.payback|fmt(1),      "years",     eco.v_color),
+      ("System Cost", eco.total_local|fmt(0),  d.symbol,    "#f87171"),
+    ] %}
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="kpi-card text-center">
+        <div class="kpi-label">{{ lbl }}</div>
+        <div class="kpi-value" style="color:{{ color }};-webkit-text-fill-color:{{ color }}">{{ val }}</div>
+        <div class="kpi-unit">{{ unit }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="explain-box" style="margin-bottom:0">
+    <div class="head"><i class="bi bi-lightbulb-fill"></i>What this proposal covers</div>
+    This proposal is divided into three parts: <strong style="color:#e2e2f0">Part A — Technical Design</strong>
+    explains each component of the solar system, why it was selected, and how it works.
+    <strong style="color:#e2e2f0">Part B — Financial Analysis</strong> presents the investment cost,
+    savings projections, loan structure, and 25-year return on investment.
+    <strong style="color:#e2e2f0">Part C — Project Delivery</strong> covers the installation methodology,
+    testing, and commissioning plan.
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════ PART A #}
+<div class="part-head">
+  <div class="part-num" style="background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff">A</div>
+  <div>
+    <div style="font-weight:900;font-size:16px;color:#38bdf8">PART A — TECHNICAL PROPOSAL</div>
+    <div class="text-secondary small">Engineering design, component selection &amp; system specifications</div>
+  </div>
+</div>
+
+{# A1 — Site & Solar Resource #}
+<div class="prop-section">
+  <div class="prop-section-head"><i class="bi bi-geo-alt-fill"></i>A1. Site Assessment &amp; Solar Resource</div>
+  <div class="row g-3">
+    <div class="col-lg-5">
+      <div class="data-row"><span class="lbl">Location</span><span class="val">{{ d.region }}, {{ d.country }}</span></div>
+      <div class="data-row"><span class="lbl">Peak Sun Hours (PSH)</span><span class="val text-warning">{{ d.psh }} h/day</span></div>
+      <div class="data-row"><span class="lbl">Average Ambient Temp</span><span class="val">{{ d.avg_temp }}°C</span></div>
+      <div class="data-row"><span class="lbl">Temp Derating Factor</span><span class="val">{{ (1-([((d.avg_temp-25)*0.004), 0]|max))|round(4) }}</span></div>
+      <div class="data-row"><span class="lbl">Electricity Tariff</span><span class="val">{{ d.symbol }}{{ d.tariff }}/kWh</span></div>
+      <div class="data-row"><span class="lbl">Install Cost Benchmark</span><span class="val">${{ d.cost_usd_kwp }}/kWp</span></div>
+      <div class="data-row"><span class="lbl">System Type</span><span class="val">{{ d.system_type|title }}</span></div>
+      <div class="data-row"><span class="lbl">Autonomy</span><span class="val">{{ d.autonomy }} day(s)</span></div>
+    </div>
+    <div class="col-lg-7">
+      <div class="explain-box">
+        <div class="head"><i class="bi bi-sun"></i>What is Peak Sun Hours (PSH)?</div>
+        Peak Sun Hours (PSH) is the number of hours per day when sunlight intensity averages
+        1,000 W/m² — the standard used to measure solar panel output. At {{ d.region }}, the PSH
+        is <strong style="color:#e2e2f0">{{ d.psh }} hours/day</strong>.
+        {% if d.psh >= 6 %}This is an <strong style="color:#f59e0b">Excellent</strong> solar resource — among the best globally.
+        {% elif d.psh >= 5 %}This is a <strong style="color:#66bb6a">Good</strong> solar resource, suitable for economical PV.
+        {% else %}This is a <strong style="color:#4fc3f7">Moderate</strong> solar resource. System sizing accounts for this.
+        {% endif %}
+      </div>
+      <div class="explain-box" style="margin-bottom:0">
+        <div class="head"><i class="bi bi-thermometer-half"></i>Why does temperature matter?</div>
+        Solar panels produce slightly less power when they are hot. At {{ d.avg_temp }}°C average ambient
+        temperature, the panels operate at approximately {{ d.avg_temp + 20 }}°C surface temperature,
+        causing a temperature derating of about
+        <strong style="color:#e2e2f0">{{ ([(d.avg_temp - 25) * 0.35, 0]|max)|round(1) }}%</strong>
+        from their rated output. The system has been sized to compensate for this loss.
+      </div>
+    </div>
+  </div>
+</div>
+
+{# A2 — Load Analysis #}
+<div class="prop-section">
+  <div class="prop-section-head"><i class="bi bi-lightning-charge-fill"></i>A2. Electrical Load Analysis</div>
+  <div class="explain-box mb-3">
+    <div class="head"><i class="bi bi-calculator"></i>How is the system size determined?</div>
+    The solar system is sized based on the total daily electrical energy consumption at the site.
+    Every electrical appliance is listed with its power rating (in Watts), the number of units, and
+    how many hours per day it runs. Multiplying these gives the daily energy in kWh (kilowatt-hours).
+    The solar array, battery bank, and inverter are then sized to meet this demand reliably.
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          <th>Category</th><th>Appliance / Load</th>
+          <th class="text-center">Power (W)</th><th class="text-center">Qty</th>
+          <th class="text-center">Hours/day</th><th class="text-end">kWh/day</th>
+          <th class="text-center">Critical?</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ld in d.loads %}
+        <tr>
+          <td><span class="badge bg-dark border border-secondary" style="font-size:10px">{{ ld.category }}</span></td>
+          <td class="fw-bold">{{ ld.name }}</td>
+          <td class="text-center">{{ ld.wattage|int }} W</td>
+          <td class="text-center">{{ ld.quantity|int }}</td>
+          <td class="text-center">{{ ld.hours }} h</td>
+          <td class="text-end fw-bold text-warning">{{ ((ld.wattage*ld.quantity*ld.hours)/1000)|fmt(3) }}</td>
+          <td class="text-center">{% if ld.critical %}<span class="badge bg-danger" style="font-size:10px">Yes</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="fw-bold" style="border-top:2px solid #f59e0b44">
+          <td colspan="5">TOTAL DAILY ENERGY DEMAND</td>
+          <td class="text-end text-warning fs-6">{{ r.daily_kwh|fmt(3) }} kWh</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <div class="highlight-box" style="margin-bottom:0">
+    <div class="head"><i class="bi bi-info-circle"></i>What this means</div>
+    The site consumes <strong style="color:#e2e2f0">{{ r.daily_kwh|fmt(2) }} kWh of electricity every day</strong>,
+    equivalent to {{ (r.daily_kwh * 365)|int|string }} kWh per year. The solar system will generate this
+    amount from sunlight, replacing energy that would otherwise be purchased from the utility grid or a diesel generator.
+  </div>
+</div>
+
+{# A3 — Component-by-Component Explanation #}
+<div class="prop-section">
+  <div class="prop-section-head"><i class="bi bi-grid-3x3-gap-fill"></i>A3. System Components — What Each Part Does</div>
+
+  <div class="row g-3 mb-3">
+
+    {# Solar Panels #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card">
+        <div class="component-icon">☀️</div>
+        <div class="component-title">Solar PV Panels</div>
+        <div class="component-sub">{{ r.num_panels }} × {{ r.panel_wp if r.panel_wp else 400 }} Wp Monocrystalline PERC</div>
+        <div class="component-desc mb-3">
+          Solar panels (photovoltaic modules) convert sunlight directly into DC electricity using
+          semiconductor cells made of silicon. When photons from sunlight hit the silicon, they knock
+          electrons loose, creating an electric current. Modern <strong style="color:#c8c8e8">Monocrystalline PERC</strong>
+          panels are the most efficient and durable technology available, converting 21–23% of sunlight
+          into electricity and lasting 25+ years.
+        </div>
+        <div>
+          <span class="spec-chip">{{ r.pv_kw|fmt(2) }} kWp total</span>
+          <span class="spec-chip">{{ r.panel_wp if r.panel_wp else 400 }} Wp each</span>
+          <span class="spec-chip">Tier 1 manufacturer</span>
+          <span class="spec-chip">25-yr warranty</span>
+          <span class="spec-chip">21–23% efficiency</span>
+          <span class="spec-chip">-0.35%/°C temp coeff</span>
+        </div>
+      </div>
+    </div>
+
+    {# Battery #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card">
+        <div class="component-icon">🔋</div>
+        <div class="component-title">Battery Energy Storage</div>
+        <div class="component-sub">{{ r.num_bat }} × {{ r.unit_bat_kwh|fmt(2) }} kWh {{ r.chem_name if r.chem_name else "LiFePO4" }}</div>
+        <div class="component-desc mb-3">
+          The battery bank stores excess solar energy generated during the day and releases it at night
+          or during cloudy periods. <strong style="color:#c8c8e8">{{ r.chem_name if r.chem_name else "LiFePO4 (Lithium Iron Phosphate)" }}</strong>
+          batteries are the safest and most durable lithium battery chemistry available. Unlike old
+          lead-acid batteries, they charge faster, last over {{ r.chem_cycles if r.chem_cycles else 4000 }} charge
+          cycles ({{ r.chem_life if r.chem_life else 12 }}+ years), and can discharge to
+          {{ ((r.chem_dod if r.chem_dod else 0.9)*100)|int }}% of their capacity without damage.
+          The {{ d.autonomy }}-day autonomy design means the system can power the site for
+          {{ d.autonomy }} full day(s) with no solar input at all.
+        </div>
+        <div>
+          <span class="spec-chip">{{ r.bat_kwh|fmt(2) }} kWh total</span>
+          <span class="spec-chip">{{ r.num_bat }} units</span>
+          <span class="spec-chip">{{ ((r.chem_dod if r.chem_dod else 0.9)*100)|int }}% DoD</span>
+          <span class="spec-chip">{{ r.chem_cycles if r.chem_cycles else "4,000+" }} cycles</span>
+          <span class="spec-chip">{{ r.chem_life if r.chem_life else "12" }}yr lifetime</span>
+          <span class="spec-chip">Built-in BMS</span>
+        </div>
+      </div>
+    </div>
+
+    {# Inverter #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card">
+        <div class="component-icon">⚡</div>
+        <div class="component-title">Hybrid Inverter / Charger</div>
+        <div class="component-sub">{{ r.inv_kw|fmt(1) }} kW · {{ d.phase|title }}-Phase {{ "415" if d.phase=="three" else "230" }}V</div>
+        <div class="component-desc mb-3">
+          The inverter is the "brain" of the solar system. It performs three essential functions:
+          (1) <strong style="color:#c8c8e8">Inversion</strong> — converts DC electricity from the solar panels and
+          batteries into standard AC electricity ({{ "415V three-phase" if d.phase=="three" else "230V single-phase" }})
+          that your appliances use; (2) <strong style="color:#c8c8e8">Charging</strong> — manages charging of the
+          battery bank from solar panels and/or the grid; (3) <strong style="color:#c8c8e8">Transfer switching</strong> —
+          seamlessly switches between solar, battery, and grid power with no interruption to your loads.
+          Recommended brands: {{ r.inv_brand if r.inv_brand else "Victron, Growatt, Deye" }}.
+        </div>
+        <div>
+          <span class="spec-chip">{{ r.inv_kw|fmt(1) }} kW output</span>
+          <span class="spec-chip">{{ d.voltage }}V DC input</span>
+          <span class="spec-chip">{{ "415V 3-ph" if d.phase=="three" else "230V 1-ph" }} output</span>
+          <span class="spec-chip">≥95% efficiency</span>
+          <span class="spec-chip">Pure sine wave</span>
+        </div>
+      </div>
+    </div>
+
+    {# MPPT Charge Controller #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card">
+        <div class="component-icon">🎯</div>
+        <div class="component-title">MPPT Charge Controller</div>
+        <div class="component-sub">{{ r.mppt_a if r.mppt_a else "—" }} A · Maximum Power Point Tracking</div>
+        <div class="component-desc mb-3">
+          The MPPT (Maximum Power Point Tracking) charge controller is built into the hybrid inverter.
+          It continuously monitors the solar panels and adjusts the electrical load to extract the
+          <strong style="color:#c8c8e8">maximum possible power</strong> at all times, regardless of
+          changing sunlight conditions. Without MPPT, panels might only deliver 70–80% of their potential
+          output. With MPPT, efficiency improves by <strong style="color:#c8c8e8">10–30%</strong> compared
+          to older PWM controllers, especially on partly cloudy days. It also protects the battery from
+          overcharging and ensures safe, efficient charging.
+        </div>
+        <div>
+          <span class="spec-chip">{{ r.mppt_a if r.mppt_a else "—" }} A rating</span>
+          <span class="spec-chip">{{ d.voltage }}V DC bus</span>
+          <span class="spec-chip">10–30% gain vs PWM</span>
+          <span class="spec-chip">Overcharge protection</span>
+        </div>
+      </div>
+    </div>
+
+    {# DC Combiner / Protection #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card">
+        <div class="component-icon">🔌</div>
+        <div class="component-title">DC Combiner &amp; Protection</div>
+        <div class="component-sub">String Fuses · DC Isolator · DC SPD</div>
+        <div class="component-desc mb-3">
+          The DC combiner box connects all solar panel strings together before sending power to the
+          inverter. It contains: <strong style="color:#c8c8e8">String fuses</strong> — protect each panel
+          string individually so a fault in one string doesn't affect others;
+          <strong style="color:#c8c8e8">DC Isolator</strong> — a safety switch that allows the panels
+          to be safely disconnected from the inverter for maintenance (must be DC-rated — AC switches
+          cannot be used on DC circuits); <strong style="color:#c8c8e8">DC Surge Protection Device (SPD)</strong>
+          — protects all equipment from voltage spikes caused by lightning or grid disturbances.
+        </div>
+        <div>
+          <span class="spec-chip">1.25× Isc fuses</span>
+          <span class="spec-chip">3-pole DC isolator</span>
+          <span class="spec-chip">Type 2 DC SPD</span>
+          <span class="spec-chip">IEC 62305 compliant</span>
+        </div>
+      </div>
+    </div>
+
+    {# AC Distribution Board #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card">
+        <div class="component-icon">🏠</div>
+        <div class="component-title">AC Distribution Board (DB)</div>
+        <div class="component-sub">RCCB · MCBs · AC SPD · BS 7671</div>
+        <div class="component-desc mb-3">
+          The distribution board (DB or consumer unit) is where AC electricity from the inverter is
+          distributed to all the circuits in the building.
+          <strong style="color:#c8c8e8">RCCB (30mA)</strong> — detects earth faults as small as 30 milliamps
+          and trips within 40ms, preventing electric shock — this is the most important personal safety device.
+          <strong style="color:#c8c8e8">MCBs (Miniature Circuit Breakers)</strong> — protect each individual
+          circuit (lighting, sockets, air conditioning) from overloads and short circuits.
+          <strong style="color:#c8c8e8">AC SPD</strong> — protects sensitive electronics from voltage surges.
+          All designed and sized to BS 7671:2018 (18th Edition) regulations.
+        </div>
+        <div>
+          <span class="spec-chip">RCCB 30mA incomer</span>
+          <span class="spec-chip">MCB per circuit</span>
+          <span class="spec-chip">Type 2 AC SPD</span>
+          <span class="spec-chip">BS 7671:2018</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row -->
+
+  {# Earthing explanation #}
+  <div class="green-box mb-3">
+    <div class="head"><i class="bi bi-lightning-charge-fill"></i>Earthing &amp; Bonding System (BS 7430)</div>
+    Earthing is one of the most critical safety systems in any electrical installation.
+    A <strong style="color:#e2e2f0">copper earth rod</strong> (minimum 2.4m long) is driven into the ground
+    outside the building. This rod provides a low-resistance path for fault currents to safely drain into
+    the earth rather than through a person. All metal parts of the system — solar panel frames, inverter
+    chassis, battery rack, and DB enclosure — are connected to this earth rod using thick
+    green/yellow cable. This is called <strong style="color:#e2e2f0">bonding</strong>. Together, earthing
+    and bonding ensure that if any live wire touches any metal part, the protective devices (RCCBs, fuses)
+    immediately disconnect the supply. The earth electrode resistance must be ≤ 10 Ω (tested before energising).
+  </div>
+
+  {# Cables #}
+  <div class="prop-section-head" style="border-top:1px solid #1e1e3a;padding-top:16px;margin-top:4px">
+    <i class="bi bi-plug-fill"></i>A3f. AC Cable Sizing (BS 7671)
+  </div>
+  <div class="explain-box mb-3">
+    <div class="head"><i class="bi bi-info-circle"></i>Why cable sizing matters</div>
+    Every cable carries an electric current. If the cable is too thin for the current it carries, it will
+    overheat — this is a fire risk. Too thin also causes excess <strong style="color:#e2e2f0">voltage drop</strong>
+    (energy lost as heat in the cable), making your appliances run below their rated voltage. All cables
+    in this design are selected so that voltage drop stays below <strong style="color:#e2e2f0">3%</strong>
+    (BS 7671 requirement for final circuits) and the cable is rated for at least 125% of the connected load.
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm">
+      <thead><tr><th>Circuit</th><th class="text-center">Cable Size</th><th class="text-center">Current Rating</th><th class="text-center">Breaker</th><th class="text-center">Volt Drop</th><th class="text-center">Compliant?</th></tr></thead>
+      <tbody>
+        {% for c in r.ac_cables %}
+        <tr>
+          <td>{{ c.circuit }}</td>
+          <td class="text-center fw-bold text-warning">{{ c.cable_size_mm2 }} mm²</td>
+          <td class="text-center">{{ c.cable_rating_a }} A</td>
+          <td class="text-center">{{ c.breaker_a }} A</td>
+          <td class="text-center {{ 'text-success' if c.vd_ok else 'text-danger' }}">{{ c.vd_percent }}%</td>
+          <td class="text-center">
+            {% if c.vd_ok %}
+            <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">✓ Yes</span>
+            {% else %}
+            <span class="badge" style="background:#ef444422;color:#ef4444;border:1px solid #ef444444">✗ Review</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════ PART B #}
+<div class="part-head">
+  <div class="part-num" style="background:linear-gradient(135deg,#22c55e,#15803d);color:#fff">B</div>
+  <div>
+    <div style="font-weight:900;font-size:16px;color:#22c55e">PART B — FINANCIAL PROPOSAL</div>
+    <div class="text-secondary small">Investment cost, savings, loan structure &amp; 25-year returns</div>
+  </div>
+</div>
+
+<div class="prop-section">
+  <div class="prop-section-head"><i class="bi bi-cash-coin"></i>B1. Capital Investment (CAPEX)</div>
+  <div class="explain-box mb-3">
+    <div class="head"><i class="bi bi-info-circle"></i>What is CAPEX?</div>
+    CAPEX (Capital Expenditure) is the one-time upfront cost to purchase and install the solar system.
+    It includes the cost of all equipment (panels, batteries, inverter, cables, DB, protection devices)
+    and the labour to install, wire, test, and commission the complete system.
+    Once paid, the solar system generates free electricity for 25+ years — this is what makes solar
+    a strong financial investment.
+  </div>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="data-row"><span class="lbl">Equipment Supply (panels, batteries, inverter, cables, protection)</span><span class="val text-warning">{{ d.symbol }} {{ eco.equip_local|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Installation &amp; Labour (civil works, wiring, commissioning — 18%)</span><span class="val text-warning">{{ d.symbol }} {{ eco.install_local|fmt(0) }}</span></div>
+      <div class="data-row total"><span class="lbl"><strong>TOTAL CAPITAL COST</strong></span><span class="val" style="font-size:16px">{{ d.symbol }} {{ eco.total_local|fmt(0) }}</span></div>
+    </div>
+    <div class="col-md-6">
+      <div class="highlight-box" style="margin-bottom:0;height:100%;box-sizing:border-box">
+        <div class="head"><i class="bi bi-pie-chart-fill"></i>Cost breakdown</div>
+        Equipment represents ~82% of cost — this is normal for solar PV projects. The largest
+        single cost item is typically the battery bank (30–35%), followed by the solar panels (25–30%),
+        and the inverter (15–20%). Installation labour at 18% covers all civil works, cable containment,
+        electrical connections, testing, and commissioning.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="prop-section">
+  <div class="prop-section-head"><i class="bi bi-graph-up-arrow"></i>B2. Savings &amp; Return on Investment</div>
+  <div class="explain-box mb-3">
+    <div class="head"><i class="bi bi-info-circle"></i>How the system saves you money</div>
+    Every kWh of electricity your solar system generates is energy you no longer need to buy from the
+    utility grid or generate with a diesel generator. At the current tariff of
+    <strong style="color:#e2e2f0">{{ d.symbol }}{{ d.tariff }}/kWh</strong>, the system generates
+    annual savings of approximately <strong style="color:#e2e2f0">{{ d.symbol }} {{ eco.annual_sav|fmt(0) }}</strong>.
+    Electricity tariffs have historically increased at 6–10% per year — meaning your savings grow every year
+    while your capital cost remains fixed.
+  </div>
+  <div class="row g-3 mb-3">
+    <div class="col-md-6">
+      <div class="data-row"><span class="lbl">Annual Solar Generation</span><span class="val">{{ eco.annual_kwh|fmt(0) }} kWh/year</span></div>
+      <div class="data-row"><span class="lbl">Electricity Tariff</span><span class="val">{{ d.symbol }}{{ eco.tariff|fmt(3) }}/kWh</span></div>
+      <div class="data-row"><span class="lbl">Gross Annual Savings (Year 1)</span><span class="val text-success">{{ d.symbol }} {{ eco.annual_sav|fmt(0) }}/yr</span></div>
+      <div class="data-row"><span class="lbl">Annual O&amp;M Cost (maintenance)</span><span class="val text-danger">- {{ d.symbol }} {{ eco.om_yr1|fmt(0) }}/yr</span></div>
+      <div class="data-row total"><span class="lbl"><strong>Net Annual Benefit (Year 1)</strong></span><span class="val text-success" style="font-size:15px">{{ d.symbol }} {{ eco.net_yr1|fmt(0) }}/yr</span></div>
+    </div>
+    <div class="col-md-6">
+      <div class="data-row"><span class="lbl">Simple Payback Period</span><span class="val" style="color:{{ eco.v_color }}">{{ eco.payback|fmt(1) }} years</span></div>
+      <div class="data-row"><span class="lbl">Net Present Value (25yr)</span><span class="val {{ 'text-success' if eco.npv > 0 else 'text-danger' }}">{{ d.symbol }} {{ eco.npv|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Internal Rate of Return (IRR)</span><span class="val">{{ "%.1f"|format(eco.irr_pct) if eco.irr_pct else "N/A" }}%</span></div>
+      <div class="data-row"><span class="lbl">25-Year ROI</span><span class="val text-warning">{{ eco.roi_pct|fmt(0) }}%</span></div>
+      <div class="data-row"><span class="lbl">Cumulative Net Savings (25yr)</span><span class="val text-success">{{ d.symbol }} {{ eco.cumul_25|fmt(0) }}</span></div>
+    </div>
+  </div>
+  <div class="explain-box">
+    <div class="head"><i class="bi bi-question-circle-fill"></i>Understanding NPV, IRR, and Payback</div>
+    <strong style="color:#e2e2f0">Simple Payback</strong> — the number of years until your total savings equal your investment.
+    A payback of {{ eco.payback|fmt(1) }} years means the system "pays for itself" and then generates
+    pure profit for the remaining {{ (25 - eco.payback)|int }} years of its life.<br><br>
+    <strong style="color:#e2e2f0">NPV (Net Present Value)</strong> — the total value created by the investment in today's money,
+    after accounting for inflation and the time value of money at a 12% discount rate. An NPV of
+    {{ d.symbol }} {{ eco.npv|fmt(0) }} means the project creates this much real value above and beyond a 12% return.<br><br>
+    <strong style="color:#e2e2f0">IRR (Internal Rate of Return)</strong> — the annualised return the investment earns, comparable
+    to a bank interest rate. An IRR of {{ "%.1f"|format(eco.irr_pct) if eco.irr_pct else "N/A" }}% means
+    this solar investment outperforms most savings accounts, bonds, and many equity investments.
+  </div>
+</div>
+
+<div class="prop-section">
+  <div class="prop-section-head"><i class="bi bi-bank"></i>B3. Loan Structure &amp; Bankability</div>
+  <div class="explain-box mb-3">
+    <div class="head"><i class="bi bi-info-circle"></i>How solar project financing works</div>
+    Most solar projects are financed with a combination of <strong style="color:#e2e2f0">equity</strong>
+    (cash from the owner — 30%) and a <strong style="color:#e2e2f0">commercial loan</strong> (bank
+    financing — 70%). The key test for lenders is the
+    <strong style="color:#e2e2f0">Debt Service Coverage Ratio (DSCR)</strong> — the ratio of annual
+    net savings to annual loan repayments. Banks typically require DSCR ≥ 1.25, meaning savings
+    must be at least 25% more than repayments to give the lender confidence. This project's DSCR
+    is <strong style="color:{{ eco.bank_color }}">{{ eco.dscr|fmt(2) }} ({{ eco.bankability }})</strong>.
+  </div>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="data-row"><span class="lbl">Total Investment</span><span class="val">{{ d.symbol }} {{ eco.total_local|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Loan Amount (70%)</span><span class="val">{{ d.symbol }} {{ eco.loan_amt|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Client Equity (30%)</span><span class="val">{{ d.symbol }} {{ eco.equity|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Interest Rate</span><span class="val">15% p.a.</span></div>
+      <div class="data-row"><span class="lbl">Loan Tenor</span><span class="val">7 years</span></div>
+      <div class="data-row"><span class="lbl">Monthly Repayment</span><span class="val">{{ d.symbol }} {{ eco.pmt|fmt(0) }}/month</span></div>
+      <div class="data-row"><span class="lbl">Annual Debt Service</span><span class="val">{{ d.symbol }} {{ eco.annual_pmt|fmt(0) }}/year</span></div>
+      <div class="data-row total"><span class="lbl"><strong>DSCR</strong></span>
+        <span class="val" style="color:{{ eco.bank_color }}">{{ eco.dscr|fmt(2) }} — {{ eco.bankability }}</span>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="highlight-box" style="height:100%;box-sizing:border-box;margin-bottom:0">
+        <div class="head"><i class="bi bi-shield-check"></i>Bankability assessment</div>
+        {% for reason in eco.bank_reasons %}
+        <div class="check-item">
+          <span class="icon" style="color:{{ eco.bank_color }}">
+            {{ "✓" if eco.bankability=="BANKABLE" else "▸" }}
+          </span>
+          <span class="txt">{{ reason }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="prop-section">
+  <div class="prop-section-head"><i class="bi bi-tree-fill"></i>B4. Environmental &amp; Social Benefits</div>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="data-row"><span class="lbl">Annual CO₂ Avoided</span><span class="val" style="color:#a78bfa">{{ eco.co2_yr|fmt(2) }} tonnes/year</span></div>
+      <div class="data-row"><span class="lbl">25-Year CO₂ Avoided</span><span class="val" style="color:#a78bfa">{{ (eco.co2_yr*25)|fmt(1) }} tonnes</span></div>
+      <div class="data-row"><span class="lbl">Equivalent Trees Planted</span><span class="val text-success">{{ ((eco.co2_yr/0.02177)|int)|string }} trees/year</span></div>
+      <div class="data-row"><span class="lbl">Equivalent Cars Removed</span><span class="val text-success">{{ (eco.co2_yr/4.6)|round(1) }} cars/year</span></div>
+      <div class="data-row"><span class="lbl">Clean Energy Generated (25yr)</span><span class="val">{{ (eco.annual_kwh*25)|fmt(0) }} kWh</span></div>
+    </div>
+    <div class="col-md-6">
+      <div class="green-box" style="height:100%;box-sizing:border-box;margin-bottom:0">
+        <div class="head"><i class="bi bi-globe-americas"></i>Environmental impact explained</div>
+        Every kilowatt-hour of electricity generated by solar panels replaces electricity that would
+        otherwise come from fossil fuel power stations. The average grid electricity produces
+        <strong style="color:#e2e2f0">0.40 kg of CO₂ per kWh</strong> burned in power stations.
+        This solar system will prevent <strong style="color:#e2e2f0">{{ eco.co2_yr|fmt(2) }} tonnes</strong>
+        of CO₂ from entering the atmosphere every year — equivalent to planting
+        <strong style="color:#e2e2f0">{{ ((eco.co2_yr/0.02177)|int)|string }} trees</strong>
+        or removing <strong style="color:#e2e2f0">{{ (eco.co2_yr/4.6)|round(1) }} cars</strong> from the road, every year.
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════ PART C #}
+<div class="part-head">
+  <div class="part-num" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff">C</div>
+  <div>
+    <div style="font-weight:900;font-size:16px;color:#a78bfa">PART C — PROJECT DELIVERY</div>
+    <div class="text-secondary small">Installation methodology, testing, commissioning &amp; warranty</div>
+  </div>
+</div>
+
+<div class="prop-section">
+  <div class="prop-section-head"><i class="bi bi-hammer"></i>C1. Installation &amp; Commissioning Plan</div>
+  <div class="explain-box mb-3">
+    <div class="head"><i class="bi bi-info-circle"></i>Our installation approach</div>
+    All work is carried out by qualified electrical engineers and installers with experience in solar PV
+    systems. The installation follows a structured sequence to ensure safety, quality, and compliance
+    with BS 7671, IEC 60364, and all local regulations. No system is energised until all testing
+    and inspections are complete and signed off.
+  </div>
+  <div class="row g-3">
+    <div class="col-md-6">
+      {% for num,title,desc in [
+        ("1","Site Preparation & Civil Works","Prepare mounting surfaces, install aluminium racking / rails on roof with anti-corrosion clamps at the correct tilt angle for maximum solar harvest. Install metallic conduit runs from roof to equipment room."),
+        ("2","PV Panel Installation","Mount and connect solar panels in the designed string configuration. Each string fused individually in the DC combiner box. All connections are double-checked for polarity before proceeding."),
+        ("3","Battery & Inverter Installation","Install inverter on wall bracket in ventilated equipment room. Mount battery rack, install batteries, connect to inverter battery port with correctly rated fuse. Install BMS communication cables."),
+        ("4","AC Wiring & Distribution Board","Install and wire main AC distribution board with RCCB, MCBs, and SPD. Run all AC final circuit cables in appropriate containment, labelled at both ends."),
+      ] %}
+      <div class="timeline-step">
+        <div class="timeline-num">{{ num }}</div>
+        <div>
+          <div class="fw-bold small" style="color:#e2e2f0;margin-bottom:4px">{{ title }}</div>
+          <div style="font-size:12px;color:#8888b8;line-height:1.55">{{ desc }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="col-md-6">
+      {% for num,title,desc in [
+        ("5","Earthing & Bonding","Drive copper earth rod to minimum 2.4m depth, minimum 2m from building. Bond all metalwork — panel frames, inverter, battery rack, DB — to earth bar with 6mm² green/yellow cable. Test electrode resistance ≤ 10Ω."),
+        ("6","Pre-commissioning Tests","Insulation resistance test (≥ 1 MΩ), continuity test on all circuits, polarity verification on all DC strings, earth fault loop impedance test. All results recorded in the test schedule."),
+        ("7","System Commissioning","Power up inverter, verify AC output voltage and frequency (230/415V, 50Hz). Test all protection devices — RCD trip time ≤ 40ms, MCB overload trip, SPD functionality. Verify MPPT operation and battery charging."),
+        ("8","Handover & Monitoring","Provide client with full O&M manual, test certificates, and equipment warranties. Configure remote monitoring (where available) for 7-day performance verification against design targets."),
+      ] %}
+      <div class="timeline-step">
+        <div class="timeline-num">{{ num }}</div>
+        <div>
+          <div class="fw-bold small" style="color:#e2e2f0;margin-bottom:4px">{{ title }}</div>
+          <div style="font-size:12px;color:#8888b8;line-height:1.55">{{ desc }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="prop-section">
+  <div class="prop-section-head"><i class="bi bi-clipboard2-check-fill"></i>C2. Testing &amp; Verification Schedule</div>
+  <div class="explain-box mb-3">
+    <div class="head"><i class="bi bi-info-circle"></i>Why testing is critical</div>
+    Every solar installation must be thoroughly tested before it is handed over to the client.
+    Testing verifies that all equipment is correctly installed, all connections are secure,
+    all safety devices work correctly, and the system performs as designed. Test results are
+    documented and provided to the client as part of the Installation Completion Certificate.
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm">
+      <thead><tr><th>Test</th><th>Standard</th><th>Acceptance Criteria</th><th>Purpose</th></tr></thead>
+      <tbody>
+        {% for test,std,criteria,purpose in [
+          ("Insulation Resistance","IEC 60364-6","≥ 1 MΩ between all conductors","Confirms no insulation damage or wiring faults"),
+          ("Earth Continuity","BS 7671","≤ 0.1 Ω on all bonding conductors","Confirms all metalwork is safely earthed"),
+          ("Earth Electrode Resistance","BS 7430","≤ 10 Ω","Ensures fault currents can safely drain to earth"),
+          ("RCD Trip Time","BS EN 61008","≤ 40ms at rated current","Personal shock protection — most critical safety test"),
+          ("DC String Polarity","IEC 62446","No reversed polarity","Prevents inverter or panel damage on start-up"),
+          ("DC Open-Circuit Voltage","IEC 62446","Within 5% of calculated Voc","Confirms all panels are correctly connected and generating"),
+          ("AC Output Voltage","BS 7671","230V ±10% (or 415V for 3-ph)","Confirms inverter is producing correct supply voltage"),
+          ("Voltage Drop Verification","BS 7671","≤ 3% on final circuits","Confirms cables are adequate for their loads"),
+          ("MCB Overload Trip","BS EN 60898","Trip within manufacturer curves","Confirms overload protection is functional"),
+          ("7-Day Performance Check","IEC 62446","≥ 90% of design output","Confirms system is performing to design specification"),
+        ] %}
+        <tr>
+          <td class="fw-bold small">{{ test }}</td>
+          <td class="small text-secondary">{{ std }}</td>
+          <td class="small text-warning">{{ criteria }}</td>
+          <td class="small text-secondary">{{ purpose }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="prop-section">
+  <div class="prop-section-head"><i class="bi bi-shield-check"></i>C3. Warranties &amp; O&amp;M</div>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="data-row"><span class="lbl">PV Panels — Product Warranty</span><span class="val text-success">12 years</span></div>
+      <div class="data-row"><span class="lbl">PV Panels — Performance Warranty</span><span class="val text-success">25 years (≥ 80% output)</span></div>
+      <div class="data-row"><span class="lbl">Battery — Cycle Warranty</span><span class="val text-success">{{ r.chem_cycles if r.chem_cycles else "4,000+" }} cycles / {{ r.chem_life if r.chem_life else "10" }} years</span></div>
+      <div class="data-row"><span class="lbl">Inverter — Product Warranty</span><span class="val text-success">5 years (extendable)</span></div>
+      <div class="data-row"><span class="lbl">Installation Workmanship</span><span class="val text-success">2 years</span></div>
+      <div class="data-row"><span class="lbl">Annual O&amp;M Cost (Year 1)</span><span class="val">{{ d.symbol }} {{ eco.om_yr1|fmt(0) }}</span></div>
+    </div>
+    <div class="col-md-6">
+      <div class="highlight-box" style="margin-bottom:0;height:100%;box-sizing:border-box">
+        <div class="head"><i class="bi bi-tools"></i>Recommended maintenance schedule</div>
+        <div class="check-item"><span class="icon">✓</span><span class="txt"><strong>Monthly:</strong> Visual inspection of panels (dust, shading, physical damage). Check inverter display for fault codes.</span></div>
+        <div class="check-item"><span class="icon">✓</span><span class="txt"><strong>Quarterly:</strong> Clean panels with soft cloth and clean water. Check all DC/AC connections are tight.</span></div>
+        <div class="check-item"><span class="icon">✓</span><span class="txt"><strong>Annually:</strong> Professional inspection — insulation test, earth test, battery capacity check, RCD test, performance review.</span></div>
+        <div class="check-item"><span class="icon">✓</span><span class="txt"><strong>Every 5–7 years:</strong> Battery capacity assessment. Replace if below 80% of rated capacity.</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ══ VERDICT ══ #}
+<div class="solar-card p-4 mb-4" style="border-left:4px solid {{ eco.v_color }};border-color:{{ eco.v_color }}88">
+  <div class="d-flex align-items-center gap-3 mb-3">
+    <span style="font-size:44px">{{ "✅" if eco.verdict=="APPROVED" else "⚠️" if eco.verdict=="CONDITIONAL" else "❌" }}</span>
+    <div>
+      <div style="font-size:11px;font-weight:900;color:#6868a0;text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Project Verdict</div>
+      <span class="stamp" style="background:{{ eco.v_color }}18;border:2px solid {{ eco.v_color }}55;color:{{ eco.v_color }};font-size:16px">
+        PROJECT {{ eco.verdict }}
+      </span>
+      <span class="stamp ms-2" style="background:{{ eco.bank_color }}18;border:2px solid {{ eco.bank_color }}44;color:{{ eco.bank_color }};font-size:13px">
+        {{ eco.bankability }}
+      </span>
+    </div>
+  </div>
+  <div class="row g-3">
+    <div class="col-md-6">
+      {% for reason in eco.verdict_reasons %}
+      <div class="check-item">
+        <span class="icon" style="color:{{ eco.v_color }}">{{ "✓" if eco.verdict=="APPROVED" else "▸" }}</span>
+        <span class="txt">{{ reason }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="col-md-6">
+      {% for reason in eco.bank_reasons %}
+      <div class="check-item">
+        <span class="icon" style="color:{{ eco.bank_color }}">{{ "✓" if eco.bankability=="BANKABLE" else "▸" }}</span>
+        <span class="txt">{{ reason }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{# Footer disclaimer #}
+<div class="solar-card p-4 text-center small text-secondary">
+  <div class="mb-1 fw-bold text-warning" style="font-size:11px">INTELLIGENT GLOBAL PV SOLAR SYSTEM DESIGN PLATFORM</div>
+  BS 7671:2018 (18th Edition) &nbsp;·&nbsp; IEC 60364 &nbsp;·&nbsp; IEC 62305 &nbsp;·&nbsp; IEC 62446 &nbsp;·&nbsp; IEEE Standards
+  <br>
+  <span style="font-size:11px;margin-top:6px;display:block">
+    This proposal is based on preliminary engineering assessment. All figures are indicative and subject to detailed site survey,
+    final design, and equipment availability. Actual performance may vary by ±10% depending on site conditions.
+    This document does not constitute a binding contract. A formal quotation with detailed specifications will be issued separately.
+  </span>
+</div>
+
+{% endblock %}

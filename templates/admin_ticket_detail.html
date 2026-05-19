@@ -1,0 +1,394 @@
+{% extends "base.html" %}
+{% block title %}Ticket #{{ ticket.id }} — {{ ticket.subject[:40] }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── Layout ── */
+  .ticket-layout{display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start}
+  @media(max-width:900px){.ticket-layout{grid-template-columns:1fr}}
+
+  /* ── Chat thread ── */
+  .thread-wrap{background:#080816;border:1px solid #1e1e3a;border-radius:16px;
+    display:flex;flex-direction:column;min-height:500px}
+  .thread-header{padding:16px 20px;border-bottom:1px solid #1e1e3a;
+    background:#0d0d1e;border-radius:16px 16px 0 0}
+  .thread-body{flex:1;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px}
+  .thread-footer{padding:16px 20px;border-top:1px solid #1e1e3a;background:#0d0d1e;
+    border-radius:0 0 16px 16px}
+
+  /* ── Bubbles ── */
+  .bubble-wrap{display:flex;gap:10px;align-items:flex-end;max-width:85%}
+  .bubble-wrap.user-side{align-self:flex-start}
+  .bubble-wrap.admin-side{align-self:flex-end;flex-direction:row-reverse}
+
+  .bubble{padding:12px 16px;border-radius:16px;font-size:13px;line-height:1.6;
+    white-space:pre-wrap;word-break:break-word;position:relative}
+  .bubble.user-bubble{background:#13132a;border:1px solid #2a2a4a;border-bottom-left-radius:4px;
+    color:#d0d0e8}
+  .bubble.admin-bubble{background:#0c1f3a;border:1px solid #0ea5e944;border-bottom-right-radius:4px;
+    color:#c0d8f0}
+  .bubble.opening-bubble{background:#1a1208;border:1px solid #f59e0b33;border-bottom-left-radius:4px;
+    color:#e8d8b0}
+
+  .bubble-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:12px;font-weight:900;flex-shrink:0}
+  .bubble-meta{font-size:10px;color:#4a4a7a;margin-top:4px}
+  .bubble-wrap.admin-side .bubble-meta{text-align:right}
+
+  .admin-label{display:inline-block;padding:1px 6px;border-radius:4px;
+    background:#0ea5e918;color:#0ea5e9;font-size:9px;font-weight:800;letter-spacing:.3px;
+    border:1px solid #0ea5e933;margin-left:4px}
+
+  /* ── Reply textarea ── */
+  .reply-area{background:#0a0a1a;border:1px solid #2a2a5a;border-radius:10px;
+    color:#d0d0e8;font-size:13px;padding:12px;resize:vertical;width:100%;
+    min-height:90px;transition:.2s}
+  .reply-area:focus{outline:none;border-color:#0ea5e966;background:#080816}
+
+  /* ── Sidebar ── */
+  .sidebar-card{background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px;
+    padding:18px;margin-bottom:16px}
+  .sidebar-row{display:flex;justify-content:space-between;align-items:center;
+    padding:7px 0;border-bottom:1px solid #111128;font-size:12px}
+  .sidebar-row:last-child{border-bottom:none}
+  .sidebar-lbl{color:#5a5a8a;font-weight:600;text-transform:uppercase;
+    letter-spacing:.4px;font-size:10px}
+  .sidebar-val{color:#c0c0e0;font-weight:600;text-align:right;max-width:160px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .status-chip{display:inline-block;padding:3px 10px;border-radius:20px;
+    font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px}
+  .prio-chip{display:inline-block;padding:2px 8px;border-radius:10px;
+    font-size:9px;font-weight:800;text-transform:uppercase}
+  .plan-chip{display:inline-block;padding:2px 8px;border-radius:10px;
+    font-size:9px;font-weight:800;text-transform:uppercase}
+
+  .action-btn{width:100%;padding:8px;border-radius:8px;font-size:11px;font-weight:700;
+    border:1px solid transparent;cursor:pointer;transition:.15s;margin-bottom:6px;
+    text-align:left;display:flex;align-items:center;gap:8px}
+  .action-btn:last-child{margin-bottom:0}
+
+  .nav-ticket-btn{padding:5px 10px;border-radius:8px;font-size:11px;
+    background:#1e1e3a;border:1px solid #2a2a5a;color:#8888b0;text-decoration:none;transition:.15s}
+  .nav-ticket-btn:hover{border-color:#f59e0b44;color:#f0c050;text-decoration:none}
+  .nav-ticket-btn.disabled{opacity:.35;pointer-events:none}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% set sc = {
+  'open':        ('#ef4444','bi-exclamation-circle-fill'),
+  'in_progress': ('#f59e0b','bi-hourglass-split'),
+  'answered':    ('#0ea5e9','bi-chat-dots-fill'),
+  'closed':      ('#22c55e','bi-check-circle-fill'),
+  'resolved':    ('#22c55e','bi-check-circle-fill'),
+} %}
+{% set pc = {'high':'#ef4444','normal':'#f59e0b','low':'#6868a0'} %}
+{% set plan_colors = {'free':'#6868a0','demo':'#a78bfa','basic':'#22c55e','professional':'#0ea5e9','enterprise':'#f59e0b'} %}
+{% set s_color, s_icon = sc.get(ticket.status, ('#6868a0','bi-circle')) %}
+{% set p_color = pc.get(ticket.priority or 'normal', '#f59e0b') %}
+{% set pl_color = plan_colors.get((ticket.plan or 'free')|lower, '#6868a0') %}
+{% set admin_user = user %}
+
+<!-- Breadcrumb + navigation -->
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+  <div class="d-flex align-items-center gap-2">
+    <a href="{{ url_for('admin_dashboard') }}" class="text-secondary small text-decoration-none">
+      <i class="bi bi-shield me-1"></i>Admin
+    </a>
+    <span class="text-secondary">/</span>
+    <a href="{{ url_for('admin_tickets') }}" class="text-secondary small text-decoration-none">Tickets</a>
+    <span class="text-secondary">/</span>
+    <span class="text-warning small fw-bold">#{{ ticket.id }}</span>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('admin_ticket_detail', tid=prev_ticket.id) if prev_ticket else '#' }}"
+       class="nav-ticket-btn {% if not prev_ticket %}disabled{% endif %}">
+      <i class="bi bi-chevron-left me-1"></i>Prev
+    </a>
+    <a href="{{ url_for('admin_ticket_detail', tid=next_ticket.id) if next_ticket else '#' }}"
+       class="nav-ticket-btn {% if not next_ticket %}disabled{% endif %}">
+      Next<i class="bi bi-chevron-right ms-1"></i>
+    </a>
+    <a href="{{ url_for('admin_tickets') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-list-ul me-1"></i>All Tickets
+    </a>
+  </div>
+</div>
+
+<!-- Subject bar -->
+<div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+  <div class="fw-black" style="font-size:18px;color:#f0f0f8;flex:1;min-width:0">
+    {{ ticket.subject }}
+  </div>
+  <span class="status-chip" style="background:{{ s_color }}18;color:{{ s_color }};border:1px solid {{ s_color }}33">
+    <i class="bi {{ s_icon }} me-1" style="font-size:9px"></i>{{ ticket.status|upper|replace('_',' ') }}
+  </span>
+  <span class="prio-chip" style="background:{{ p_color }}18;color:{{ p_color }};border:1px solid {{ p_color }}33">
+    {{ (ticket.priority or 'normal')|upper }} PRIORITY
+  </span>
+</div>
+
+<!-- Two-column layout -->
+<div class="ticket-layout">
+
+  <!-- ── LEFT: Chat thread ──────────────────────────────────────────────── -->
+  <div class="thread-wrap">
+
+    <!-- Thread header -->
+    <div class="thread-header d-flex align-items-center justify-content-between">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-chat-dots-fill" style="color:#0ea5e9"></i>
+        <span class="small fw-bold" style="color:#c0c0e0">Conversation</span>
+        <span class="badge" style="background:#1e1e3a;color:#6868a0;font-size:9px">
+          {{ replies|length + 1 }} message{{ 's' if replies|length != 0 }}
+        </span>
+      </div>
+      <span class="text-secondary" style="font-size:10px">
+        Opened {{ ticket.created_at[:16].replace('T',' ') if ticket.created_at else '—' }}
+      </span>
+    </div>
+
+    <!-- Thread body -->
+    <div class="thread-body" id="threadBody">
+
+      <!-- Opening message (always user) -->
+      <div class="bubble-wrap user-side">
+        <div class="bubble-avatar" style="background:#f59e0b18;border:1px solid #f59e0b44;color:#f59e0b">
+          {{ ticket.username[0]|upper }}
+        </div>
+        <div>
+          <div class="bubble opening-bubble">{{ ticket.message }}</div>
+          <div class="bubble-meta">
+            <strong style="color:#8888a0">{{ ticket.username }}</strong>
+            · {{ ticket.created_at[:16].replace('T',' ') if ticket.created_at else '' }}
+            <span style="color:#f59e0b88;margin-left:6px">Opening message</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reply chain -->
+      {% for r in replies %}
+      {% if r.is_admin %}
+      <!-- Admin bubble — right side -->
+      <div class="bubble-wrap admin-side">
+        <div class="bubble-avatar" style="background:#0ea5e918;border:1px solid #0ea5e944;color:#0ea5e9">
+          {{ r.username[0]|upper }}
+        </div>
+        <div>
+          <div class="bubble admin-bubble">{{ r.message }}</div>
+          <div class="bubble-meta">
+            <strong style="color:#7090b0">{{ r.username }}</strong>
+            <span class="admin-label">ADMIN</span>
+            · {{ r.created_at[:16].replace('T',' ') if r.created_at else '' }}
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <!-- User bubble — left side -->
+      <div class="bubble-wrap user-side">
+        <div class="bubble-avatar" style="background:#f59e0b18;border:1px solid #f59e0b44;color:#f59e0b">
+          {{ r.username[0]|upper }}
+        </div>
+        <div>
+          <div class="bubble user-bubble">{{ r.message }}</div>
+          <div class="bubble-meta">
+            <strong style="color:#8888a0">{{ r.username }}</strong>
+            · {{ r.created_at[:16].replace('T',' ') if r.created_at else '' }}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+
+    </div><!-- /thread-body -->
+
+    <!-- Reply form -->
+    <div class="thread-footer">
+      {% if ticket.status != 'closed' %}
+      <form method="POST" id="replyForm">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="reply">
+        <div class="d-flex gap-2 align-items-end">
+          <div class="d-flex align-items-center justify-content-center flex-shrink-0"
+               style="width:32px;height:32px;border-radius:50%;background:#0ea5e918;
+                      border:1px solid #0ea5e944;color:#0ea5e9;font-size:12px;font-weight:900;
+                      margin-bottom:2px">
+            {{ admin_user.username[0]|upper if admin_user else 'A' }}
+          </div>
+          <div class="flex-grow-1">
+            <textarea name="message" id="replyText" class="reply-area"
+                      placeholder="Write your reply as admin… (Shift+Enter for new line)"
+                      required></textarea>
+          </div>
+          <div class="d-flex flex-column gap-1 flex-shrink-0">
+            <button type="submit" class="btn btn-sm"
+                    style="background:#0ea5e9;border:none;color:#fff;font-weight:700;
+                           padding:8px 14px;border-radius:8px;white-space:nowrap">
+              <i class="bi bi-send-fill me-1"></i>Send
+            </button>
+          </div>
+        </div>
+      </form>
+      {% else %}
+      <div class="text-center text-secondary small py-2">
+        <i class="bi bi-lock-fill me-1"></i>This ticket is closed.
+        <form method="POST" class="d-inline ms-2">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="open">
+          <button type="submit" class="btn btn-sm py-0"
+                  style="font-size:11px;background:#f59e0b18;border:1px solid #f59e0b44;color:#f59e0b">
+            Reopen
+          </button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+
+  </div><!-- /thread-wrap -->
+
+  <!-- ── RIGHT: Sidebar ────────────────────────────────────────────────── -->
+  <div>
+
+    <!-- Status actions -->
+    <div class="sidebar-card">
+      <div class="small fw-bold text-secondary mb-3" style="text-transform:uppercase;letter-spacing:.5px;font-size:10px">
+        <i class="bi bi-sliders me-1"></i>Update Status
+      </div>
+      {% for action,label,icon,bg,border,col in [
+        ('open',        'Mark Open',        'bi-arrow-counterclockwise', '#ef444415','#ef444433','#ef4444'),
+        ('in_progress', 'In Progress',      'bi-hourglass-split',        '#f59e0b15','#f59e0b33','#f59e0b'),
+        ('answered',    'Mark Answered',    'bi-chat-dots-fill',         '#0ea5e915','#0ea5e933','#0ea5e9'),
+        ('close',       'Close Ticket',     'bi-x-circle-fill',          '#22c55e15','#22c55e33','#22c55e'),
+      ] %}
+      {% if action != ticket.status and not (action=='close' and ticket.status=='closed') %}
+      <form method="POST">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="{{ action }}">
+        <button type="submit" class="action-btn"
+                style="background:{{ bg }};border-color:{{ border }};color:{{ col }}">
+          <i class="bi {{ icon }}" style="font-size:13px"></i>{{ label }}
+        </button>
+      </form>
+      {% else %}
+      <div class="action-btn" style="background:#1e1e3a22;border-color:#1e1e3a;color:#3a3a6a;cursor:default">
+        <i class="bi {{ icon }}" style="font-size:13px"></i>{{ label }}
+        <span style="margin-left:auto;font-size:9px;opacity:.6">current</span>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+
+    <!-- Ticket details -->
+    <div class="sidebar-card">
+      <div class="small fw-bold text-secondary mb-3" style="text-transform:uppercase;letter-spacing:.5px;font-size:10px">
+        <i class="bi bi-info-circle me-1"></i>Ticket Details
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">ID</span>
+        <span class="sidebar-val">#{{ ticket.id }}</span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Status</span>
+        <span class="status-chip" style="background:{{ s_color }}18;color:{{ s_color }};border:1px solid {{ s_color }}33;font-size:9px">
+          {{ ticket.status|upper|replace('_',' ') }}
+        </span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Priority</span>
+        <span class="prio-chip" style="background:{{ p_color }}18;color:{{ p_color }};border:1px solid {{ p_color }}33">
+          {{ (ticket.priority or 'normal')|upper }}
+        </span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Opened</span>
+        <span class="sidebar-val">{{ ticket.created_at[:16].replace('T',' ') if ticket.created_at else '—' }}</span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Last Update</span>
+        <span class="sidebar-val">{{ ticket.updated_at[:16].replace('T',' ') if ticket.updated_at else '—' }}</span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Replies</span>
+        <span class="sidebar-val">{{ replies|length }}</span>
+      </div>
+    </div>
+
+    <!-- User info -->
+    <div class="sidebar-card">
+      <div class="small fw-bold text-secondary mb-3" style="text-transform:uppercase;letter-spacing:.5px;font-size:10px">
+        <i class="bi bi-person-fill me-1"></i>User Profile
+      </div>
+      <!-- Avatar + name -->
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <div style="width:38px;height:38px;border-radius:50%;background:#f59e0b18;
+             border:1px solid #f59e0b44;display:flex;align-items:center;justify-content:center;
+             font-size:14px;font-weight:900;color:#f59e0b;flex-shrink:0">
+          {{ ticket.username[0]|upper }}
+        </div>
+        <div style="min-width:0">
+          <div class="fw-bold text-truncate" style="color:#e0e0f0;font-size:13px">{{ ticket.username }}</div>
+          {% if ticket.user_name %}
+          <div class="text-secondary text-truncate" style="font-size:10px">{{ ticket.user_name }}</div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Email</span>
+        <a href="mailto:{{ ticket.email }}" class="text-info text-decoration-none"
+           style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;display:block;text-align:right">
+          {{ ticket.email }}
+        </a>
+      </div>
+      {% if ticket.company %}
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Company</span>
+        <span class="sidebar-val">{{ ticket.company }}</span>
+      </div>
+      {% endif %}
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Plan</span>
+        <span class="plan-chip" style="background:{{ pl_color }}18;color:{{ pl_color }};border:1px solid {{ pl_color }}33">
+          {{ (ticket.plan or 'free')|upper }}
+        </span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Member since</span>
+        <span class="sidebar-val">{{ ticket.user_joined[:10] if ticket.user_joined else '—' }}</span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Total tickets</span>
+        <span class="sidebar-val">{{ user_ticket_count }}</span>
+      </div>
+      <div class="mt-3">
+        <a href="{{ url_for('admin_tickets') }}?user={{ ticket.username }}"
+           class="btn btn-sm w-100"
+           style="font-size:11px;background:#1e1e3a;border:1px solid #2a2a5a;color:#8888b0">
+          <i class="bi bi-ticket me-1"></i>All tickets from this user
+        </a>
+      </div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+</div><!-- /ticket-layout -->
+
+<script>
+/* Scroll thread to bottom on load */
+const tb = document.getElementById('threadBody');
+if (tb) tb.scrollTop = tb.scrollHeight;
+
+/* Shift+Enter = new line, Enter = submit */
+const ta = document.getElementById('replyText');
+if (ta) {
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('replyForm').submit();
+    }
+  });
+}
+</script>
+
+{% endblock %}

@@ -1,0 +1,168 @@
+========================================================================
+  PV SOLAR ECONOMIC IMPACT REPORT
+========================================================================
+  Project  : Solar PV Off-Grid System
+  Region   : Greater Accra
+  System   : 2.64 kWp  |  11.88 kWh Battery  |  3.56 kW Inverter
+  Tool     : Solar PV Designer Lite
+========================================================================
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │  PROJECT VIABILITY DECISION : CONDITIONAL                         │
+  ├─────────────────────────────────────────────────────────────────┤
+  │  Project payback of 9.5 years exceeds the 5-year threshold but      │
+  │  remains within the 8-year conditional range. Project may be        │
+  │  approved subject to conditions below.                              │
+  ├─────────────────────────────────────────────────────────────────┤
+  │  CONDITIONS / ACTIONS REQUIRED:                                 │
+  │  • Payback (9.5 yrs) exceeds 5-yr target — review system sizing or s│
+  │  • eek competitive supply quotes to reduce capital cost.            │
+  │  • Obtain at least 3 contractor quotes to validate BoQ cost estimate│
+  │  • s.                                                               │
+  │  • Conduct formal energy audit to confirm daily load figures.       │
+  └─────────────────────────────────────────────────────────────────┘
+
+1. SYSTEM INVESTMENT SUMMARY
+------------------------------------------------------------------------
+  Equipment Cost                    : GHS     52,800.00
+  Installation Labour (14%)         : GHS      7,392.00
+  ────────────────────────────────────────────────────────────
+  TOTAL CAPITAL INVESTMENT          : GHS     60,192.00
+
+2. CURRENT UTILITY COST BASELINE
+------------------------------------------------------------------------
+  Daily Energy Demand               : 9.50 kWh/day
+  Annual Energy Demand              : 3,468 kWh/year
+  ECG Tariff (residential)          : GHS 2.00 /kWh
+  Annual Utility Bill (current)     : GHS      6,935.00
+  Monthly Utility Bill (current)    : GHS        577.92
+
+3. SOLAR SAVINGS — YEAR 1
+------------------------------------------------------------------------
+  Annual Bill Avoided               : GHS      6,935.00
+  Annual O&M Cost                   : GHS        601.92
+  Net Annual Saving                 : GHS      6,333.08
+  Net Monthly Saving                : GHS        527.76
+
+4. FINANCIAL VIABILITY
+------------------------------------------------------------------------
+  *** 8-YEAR PAYBACK THRESHOLD      : 8 years  (West Africa IFC benchmark)
+  Simple Payback Period             : 9.5 years  ✗ EXCEEDS THRESHOLD
+  Discounted Payback (NPV = 0)      : Year 7
+  10-Year Cumulative Net Savings    : GHS    109,876.59
+  20-Year Cumulative Net Savings    : GHS    387,596.91
+  25-Year Cumulative Net Savings    : GHS    657,272.86
+  Net Present Value (NPV, 25yr)     : GHS     62,873.40
+  Return on Investment (ROI, 25yr)  : 1092%
+
+5. ANNUAL CASH FLOW PROJECTION
+------------------------------------------------------------------------
+   Yr    Gross Saving    O&M Cost    Net Saving      Cumulative       NPV Cumul
+  ----------------------------------------------------------------------
+    1           7,590         632         6,958         -53,234         -53,979
+    2           8,308         664         7,644         -45,590         -47,885
+    3           9,093         697         8,396         -37,194         -41,909
+    4           9,952         732         9,220         -27,973         -36,050
+    5          10,892         768        10,124         -17,849         -30,305
+    6          11,922         807        11,115          -6,734         -24,674
+    7          13,048         847        12,201           5,467         -19,154 ◄ BREAK-EVEN
+    8          14,281         889        13,392          18,860         -13,745
+    9          15,631         934        14,697          33,557          -8,445
+   10          17,108         980        16,128          49,685          -3,253
+   11          18,725       1,029        17,695          67,380           1,834
+   12          20,494       1,081        19,413          86,793           6,817
+   13          22,431       1,135        21,296         108,090          11,698
+   14          24,551       1,192        23,359         131,449          16,477
+   15          26,871       1,251        25,620         157,068          21,158
+   16          29,410       1,314        28,096         185,165          25,741
+   17          32,190       1,380        30,810         215,975          30,228
+   18          35,231       1,449        33,783         249,757          34,622
+   19          38,561       1,521        37,040         286,797          38,922
+   20          42,205       1,597        40,608         327,405          43,132
+   21          46,193       1,677        44,516         371,921          47,252
+   22          50,558       1,761        48,798         420,719          51,285
+   23          55,336       1,849        53,487         474,206          55,232
+   24          60,565       1,941        58,624         532,830          59,094
+   25          66,289       2,038        64,251         597,081          62,873
+
+6. RISK REGISTER
+------------------------------------------------------------------------
+  Cat           Risk                                     P   I  Score  Level   
+  ----------------------------------------------------------------------
+  Financial     Capital cost overrun                     2   3      6  !!! HIGH
+  Financial     USD/GHS currency exposure                3   2      6  !!! HIGH
+  Financial     ECG tariff reduction or subsidy          1   3      3    MEDIUM
+  Financial     Load falls below design level            2   2      4    MEDIUM
+  Technical     Panel degradation faster than modelled   2   2      4    MEDIUM
+  Technical     Inverter failure before warranty perio   2   3      6  !!! HIGH
+  Technical     Battery capacity fade                    2   2      4    MEDIUM
+  Technical     Shading / soiling losses higher than a   2   2      4    MEDIUM
+  Technical     Lightning / surge damage                 2   3      6  !!! HIGH
+  Regulatory    Changes to net metering or solar polic   1   2      2       LOW
+  Regulatory    Import duty increase on solar equipmen   1   2      2       LOW
+  Regulatory    ECG grid improvement reducing outage h   1   1      1       LOW
+  Operational   Skilled maintenance unavailable locall   2   2      4    MEDIUM
+  Operational   Load growth exceeding system capacity    2   2      4    MEDIUM
+  Operational   Theft or vandalism of outdoor equipmen   2   3      6  !!! HIGH
+  Climate       Rainy season generation shortfall        3   2      6  !!! HIGH
+  Climate       Harmattan dust accumulation              2   2      4    MEDIUM
+
+  P = Probability (1=Low, 2=Medium, 3=High)
+  I = Impact      (1=Low, 2=Medium, 3=High)
+  Score = P × I   (6–9=HIGH, 3–4=MEDIUM, 1–2=LOW)
+
+  HIGH RISK ITEMS — IMMEDIATE ATTENTION REQUIRED:
+------------------------------------------------------------------------
+  [Financial] Capital cost overrun
+    Detail     : Contractor quotes may exceed BoQ estimate by 10–20%.
+    Mitigation : Obtain minimum 3 contractor quotes; include 15% contingency in budget.
+
+  [Financial] USD/GHS currency exposure
+    Detail     : PV modules and inverters are priced in USD; GHS depreciation raises cost.
+    Mitigation : Lock in equipment prices at contract signing; consider forward purchase.
+
+  [Technical] Inverter failure before warranty period
+    Detail     : Inverter MTBF is typically 10–15 years; replacement cost ~GHS 7,200.
+    Mitigation : Select inverter with minimum 5-yr warranty; budget inverter replacement at year 12.
+
+  [Technical] Lightning / surge damage
+    Detail     : Greater Accra experiences significant lightning activity during wet season.
+    Mitigation : Install IEC 62305 lightning protection and BS EN 61643 surge protection devices.
+
+  [Operational] Theft or vandalism of outdoor equipment
+    Detail     : Panels, cables, and combiner boxes are exposed to theft risk.
+    Mitigation : Install anti-theft panel clamps, lockable enclosures, and site security.
+
+  [Climate] Rainy season generation shortfall
+    Detail     : Ghana wet season (Apr–Jul, Sep–Nov) reduces irradiance by up to 30%.
+    Mitigation : Size battery for 1-day autonomy; annual generation model uses average PSH.
+
+7. SENSITIVITY ANALYSIS
+------------------------------------------------------------------------
+  Tariff +20%       GHS 2.40/kWh  →  Payback 7.8 yrs  [APPROVED]
+  Tariff +10%       GHS 2.20/kWh  →  Payback 8.6 yrs  [CONDITIONAL]
+  Base case         GHS 2.00/kWh  →  Payback 9.5 yrs  [CONDITIONAL]
+  Tariff −10%       GHS 1.80/kWh  →  Payback 10.7 yrs  [CONDITIONAL]
+  Tariff −20%       GHS 1.60/kWh  →  Payback 12.2 yrs  [REJECTED]
+
+8. ENVIRONMENTAL IMPACT
+------------------------------------------------------------------------
+  Annual CO₂ Avoided          : 1.39 tonnes CO₂/year
+  25-Year CO₂ Avoided         : 34.7 tonnes CO₂
+  Equivalent trees planted    : 1,560 trees (over 25 yrs)
+
+9. KEY ASSUMPTIONS
+------------------------------------------------------------------------
+  ECG Residential Tariff      : GHS 2.00 /kWh
+  Annual Tariff Escalation    : 10%
+  Discount Rate (WACC)        : 12%
+  O&M Cost                    : 1.0% of capital per year
+  Panel Output Degradation    : 0.5% per year
+  System Lifetime             : 25 years
+  Grid Emission Factor        : 0.4 kg CO₂/kWh
+  5-Year Payback Gate         : 8 years (APPROVED threshold)
+  8-Year Payback Gate         : 12 years (CONDITIONAL threshold)
+
+========================================================================
+  Note: Rates from Ghana market data (April 2026). Subject to site survey.
+========================================================================

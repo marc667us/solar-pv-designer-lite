@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Support — SolarPro Global{% endblock %}
+
+{% block extra_head %}
+<style>
+  .new-ticket-panel{background:#080816;border:1px solid #0ea5e944;border-radius:14px;
+    padding:24px;margin-bottom:24px;display:none}
+  .new-ticket-panel.open{display:block}
+
+  .ticket-card{border:1px solid #1e1e3a;border-radius:12px;padding:16px 20px;
+    background:rgba(255,255,255,.015);transition:.15s;text-decoration:none;display:block;
+    position:relative;overflow:hidden}
+  .ticket-card:hover{background:rgba(255,255,255,.03);text-decoration:none;border-color:#2a2a5a}
+  .ticket-card.is-open{border-left:3px solid #ef4444}
+  .ticket-card.is-in_progress{border-left:3px solid #f59e0b}
+  .ticket-card.is-answered{border-left:3px solid #0ea5e9}
+  .ticket-card.is-closed,.ticket-card.is-resolved{border-left:3px solid #22c55e}
+
+  .unread-dot{width:8px;height:8px;border-radius:50%;background:#0ea5e9;
+    position:absolute;top:14px;right:14px;box-shadow:0 0 6px #0ea5e9}
+
+  .stat-chip{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;
+    font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+  .prio-chip{display:inline-block;padding:2px 7px;border-radius:8px;font-size:9px;
+    font-weight:800;text-transform:uppercase;letter-spacing:.3px}
+
+  .form-ctrl-dark{background:#0a0a1a;border:1px solid #2a2a5a;border-radius:8px;
+    color:#d0d0e8;padding:10px 14px;width:100%;font-size:13px;transition:.2s}
+  .form-ctrl-dark:focus{outline:none;border-color:#0ea5e966;background:#080816}
+  .form-ctrl-dark::placeholder{color:#3a3a6a}
+
+  .kpi-link{text-decoration:none;display:block}
+  .kpi-link:hover .kpi-card{border-color:#2a2a5a}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% set sc = {
+  'open':        ('#ef4444','bi-exclamation-circle-fill'),
+  'in_progress': ('#f59e0b','bi-hourglass-split'),
+  'answered':    ('#0ea5e9','bi-chat-dots-fill'),
+  'closed':      ('#22c55e','bi-check-circle-fill'),
+  'resolved':    ('#22c55e','bi-check-circle-fill'),
+} %}
+{% set pc = {'high':'#ef4444','normal':'#f59e0b','low':'#6868a0'} %}
+{% set open_count     = tickets|selectattr('status','equalto','open')|list|length %}
+{% set answered_count = tickets|selectattr('status','equalto','answered')|list|length %}
+{% set closed_count   = tickets|selectattr('status','in',['closed','resolved'])|list|length %}
+
+<!-- Header -->
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
+  <div>
+    <div class="fw-black" style="font-size:22px;color:#f0f0f8">
+      <i class="bi bi-headset me-2" style="color:#0ea5e9"></i>Support Centre
+    </div>
+    <div class="text-secondary small mt-1">Submit a request — we respond within 24 hours</div>
+  </div>
+  <button class="btn btn-solar" id="newTicketToggle" onclick="toggleNewTicket()">
+    <i class="bi bi-plus-lg me-1"></i>New Ticket
+  </button>
+</div>
+
+<!-- KPI strip -->
+<div class="row g-3 mb-4">
+  {% for icon,color,lbl,val in [
+    ('bi-ticket-fill',          '#6868a0', 'Total',      tickets|length),
+    ('bi-exclamation-circle-fill','#ef4444','Open',       open_count),
+    ('bi-chat-dots-fill',       '#0ea5e9', 'Answered',   answered_count),
+    ('bi-check-circle-fill',    '#22c55e', 'Closed',     closed_count),
+  ] %}
+  <div class="col-6 col-md-3">
+    <div class="kpi-card text-center p-3">
+      <div style="font-size:18px;color:{{ color }}"><i class="bi {{ icon }}"></i></div>
+      <div class="kpi-label mt-1" style="font-size:9px">{{ lbl }}</div>
+      <div class="kpi-value" style="font-size:20px">{{ val }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- New ticket panel -->
+<div class="new-ticket-panel" id="newTicketPanel">
+  <div class="d-flex align-items-center gap-2 mb-4">
+    <i class="bi bi-pencil-square" style="color:#0ea5e9;font-size:18px"></i>
+    <div class="fw-bold" style="color:#c0d8f0">Submit Support Request</div>
+    <button onclick="toggleNewTicket()" class="btn btn-sm ms-auto"
+            style="background:#1e1e3a;border:1px solid #2a2a5a;color:#6868a0;font-size:11px">
+      <i class="bi bi-x"></i> Cancel
+    </button>
+  </div>
+  <form method="POST" id="newTicketForm">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="row g-3">
+      <div class="col-md-8">
+        <label class="form-label small fw-bold text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-size:10px">Subject</label>
+        <input name="subject" class="form-ctrl-dark" placeholder="Brief description of your issue" required maxlength="200">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small fw-bold text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-size:10px">Priority</label>
+        <select name="priority" class="form-ctrl-dark">
+          <option value="low">Low — not urgent</option>
+          <option value="normal" selected>Normal</option>
+          <option value="high">High — Urgent</option>
+        </select>
+      </div>
+      <div class="col-12">
+        <label class="form-label small fw-bold text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-size:10px">Message</label>
+        <textarea name="message" rows="5" class="form-ctrl-dark"
+                  placeholder="Describe your issue in detail — include error messages, project names, or any relevant context." required></textarea>
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button class="btn btn-solar px-4"><i class="bi bi-send me-1"></i>Submit Ticket</button>
+        <button type="button" class="btn btn-outline-secondary" onclick="toggleNewTicket()">Cancel</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Ticket list -->
+{% if tickets %}
+<div class="d-flex flex-column gap-3">
+  {% for t in tickets %}
+  {% set s_color, s_icon = sc.get(t.status, ('#6868a0','bi-circle')) %}
+  {% set p_color = pc.get(t.priority or 'normal', '#f59e0b') %}
+  {% set has_new = t.status == 'answered' %}
+  <a href="{{ url_for('ticket_detail', tid=t.id) }}"
+     class="ticket-card is-{{ t.status }}">
+    {% if has_new %}
+    <div class="unread-dot" title="Admin replied"></div>
+    {% endif %}
+    <div class="d-flex align-items-start gap-3">
+      <!-- Icon -->
+      <div style="width:38px;height:38px;border-radius:10px;flex-shrink:0;
+           background:{{ s_color }}15;border:1px solid {{ s_color }}33;
+           display:flex;align-items:center;justify-content:center;font-size:16px;color:{{ s_color }};margin-top:2px">
+        <i class="bi {{ s_icon }}"></i>
+      </div>
+      <!-- Content -->
+      <div class="flex-grow-1" style="min-width:0">
+        <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+          <span class="fw-bold" style="color:#e0e0f0;font-size:13px">#{{ t.id }} — {{ t.subject }}</span>
+          {% if has_new %}
+          <span style="font-size:9px;font-weight:800;color:#0ea5e9;background:#0ea5e915;
+                border:1px solid #0ea5e933;padding:1px 6px;border-radius:8px">NEW REPLY</span>
+          {% endif %}
+        </div>
+        {% if t.message %}
+        <div class="text-secondary" style="font-size:11px;line-height:1.5;
+             overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical">
+          {{ t.message[:120] }}
+        </div>
+        {% endif %}
+        <div class="d-flex align-items-center gap-3 mt-2 flex-wrap">
+          <span class="stat-chip" style="background:{{ s_color }}15;color:{{ s_color }};border:1px solid {{ s_color }}33">
+            {{ t.status|upper|replace('_',' ') }}
+          </span>
+          <span class="prio-chip" style="background:{{ p_color }}15;color:{{ p_color }};border:1px solid {{ p_color }}33">
+            {{ (t.priority or 'normal')|upper }}
+          </span>
+          <span class="text-secondary" style="font-size:10px">
+            <i class="bi bi-clock me-1"></i>{{ t.created_at[:10] if t.created_at else '—' }}
+          </span>
+          {% if t.updated_at != t.created_at %}
+          <span class="text-secondary" style="font-size:10px">
+            <i class="bi bi-arrow-clockwise me-1"></i>Updated {{ t.updated_at[:10] if t.updated_at else '—' }}
+          </span>
+          {% endif %}
+        </div>
+      </div>
+      <!-- Arrow -->
+      <div class="flex-shrink-0 text-secondary" style="margin-top:8px">
+        <i class="bi bi-chevron-right" style="font-size:12px"></i>
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+{% else %}
+<!-- Empty state -->
+<div class="solar-card p-5 text-center">
+  <i class="bi bi-headset d-block mb-3" style="font-size:48px;color:#0ea5e944"></i>
+  <div class="fw-bold fs-5 mb-2" style="color:#c0c0e0">No tickets yet</div>
+  <div class="text-secondary mb-4">Have a question or found a bug? We're here to help.</div>
+  <button class="btn btn-solar px-4" onclick="toggleNewTicket()">
+    <i class="bi bi-plus-lg me-1"></i>Submit a Ticket
+  </button>
+</div>
+{% endif %}
+
+<script>
+function toggleNewTicket() {
+  const panel = document.getElementById('newTicketPanel');
+  const isOpen = panel.classList.contains('open');
+  panel.classList.toggle('open', !isOpen);
+  if (!isOpen) {
+    panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+    setTimeout(() => panel.querySelector('input[name=subject]')?.focus(), 300);
+  }
+}
+</script>
+{% endblock %}

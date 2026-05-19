@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Platform SaaS Metrics — SolarPro Global{% endblock %}
+{% block content %}
+<div class="container-xl py-4">
+
+<div class="report-header mb-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <div class="report-title"><i class="bi bi-graph-up-arrow me-2"></i>Platform SaaS Metrics</div>
+      <div class="text-secondary mt-1">Real-time overview · Revenue, users, growth &amp; engagement</div>
+    </div>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i>Admin Dashboard
+    </a>
+  </div>
+</div>
+
+<!-- Top KPI strip -->
+<div class="row g-3 mb-4">
+  {% for icon,color,lbl,val in [
+    ('bi-people-fill',         'solar-gold',  'Total Users',         total_users),
+    ('bi-person-check-fill',   'solar-blue',  'Paid Users',          paid_users),
+    ('bi-folder2-open',        'solar-green', 'Total Projects',      proj_count),
+    ('bi-envelope-fill',       'solar-gold',  'Emails Sent',         email_sent),
+    ('bi-headset',             'solar-blue',  'Open Tickets',        ticket_open),
+    ('bi-funnel-fill',         'solar-green', 'New Leads',           leads_new),
+    ('bi-envelope-heart-fill', 'solar-gold',  'Newsletter Subs',     subs_count),
+    ('bi-cash-stack',          'solar-blue',  'Total Revenue (USD)', '$'~(total_rev|int)),
+  ] %}
+  <div class="col-6 col-md-3">
+    <div class="kpi-card text-center">
+      <div style="font-size:22px;color:var(--{{ color }})"><i class="bi {{ icon }}"></i></div>
+      <div class="kpi-label mt-1">{{ lbl }}</div>
+      <div class="kpi-value" style="font-size:18px">{{ val }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- MRR + conversion row -->
+<div class="row g-4 mb-4">
+
+  <div class="col-md-4">
+    <div class="solar-card p-4 h-100">
+      <div class="section-head mb-3">MRR &amp; Conversion</div>
+
+      <div class="kpi-card mb-3 text-center">
+        <div class="kpi-label">Monthly Recurring Revenue</div>
+        <div style="font-size:32px;font-weight:900;background:linear-gradient(90deg,var(--solar-gold),#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
+          ${{ MRR|int }}
+        </div>
+        <div class="kpi-unit">USD / month</div>
+      </div>
+
+      <div class="data-row">
+        <span class="lbl">Conversion rate</span>
+        <span class="val">{% if total_users %}{{ '%.1f'|format(paid_users/total_users*100) }}%{% else %}—{% endif %}</span>
+      </div>
+      <div class="data-row">
+        <span class="lbl">Free users</span>
+        <span class="val">{{ total_users - paid_users }}</span>
+      </div>
+      <div class="data-row">
+        <span class="lbl">Paid users</span>
+        <span class="val" style="color:var(--solar-green)">{{ paid_users }}</span>
+      </div>
+      <div class="data-row total">
+        <span class="lbl">Total lifetime revenue</span>
+        <span class="val">${{ total_rev|int }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Plan Distribution -->
+  <div class="col-md-4">
+    <div class="solar-card p-4 h-100">
+      <div class="section-head mb-3">Plan Distribution</div>
+      {% set plan_colors = {'free':'#6868a0','demo':'#a78bfa','basic':'#22c55e','professional':'#0ea5e9','enterprise':'#f59e0b'} %}
+      {% for plan_key, count in plan_dist.items() %}
+      {% set pct = (count / total_users * 100) if total_users else 0 %}
+      {% set color = plan_colors.get(plan_key, '#6868a0') %}
+      <div class="mb-3">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="small fw-bold" style="color:{{ color }}">{{ plan_key|upper }}</span>
+          <span class="small text-secondary">{{ count }} users · {{ '%.0f'|format(pct) }}%</span>
+        </div>
+        <div style="height:6px;background:#1e1e3a;border-radius:3px">
+          <div style="height:100%;width:{{ pct }}%;background:{{ color }};border-radius:3px;transition:.5s"></div>
+        </div>
+        {% if plan_key in plan_prices and plan_prices[plan_key].get('usd') %}
+        <div class="text-secondary" style="font-size:10px">MRR contribution: ${{ (count * plan_prices[plan_key]['usd'])|int }}/mo</div>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="text-secondary small">No users yet.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Monthly Revenue Chart (text-based) -->
+  <div class="col-md-4">
+    <div class="solar-card p-4 h-100">
+      <div class="section-head mb-3">Monthly Revenue (last 12 mo)</div>
+      {% if monthly_rev %}
+      {% set max_rev = monthly_rev|map(attribute='rev')|max %}
+      {% for row in monthly_rev %}
+      {% set bar_pct = (row.rev / max_rev * 100) if max_rev else 0 %}
+      <div class="mb-2">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="small text-secondary">{{ row.mo }}</span>
+          <span class="small fw-bold" style="color:var(--solar-gold)">${{ row.rev|int }}</span>
+        </div>
+        <div style="height:5px;background:#1e1e3a;border-radius:3px">
+          <div style="height:100%;width:{{ bar_pct }}%;background:linear-gradient(90deg,var(--solar-gold),#fbbf24);border-radius:3px"></div>
+        </div>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="text-secondary small text-center py-4">No payment data yet.</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Recent Users + Recent Payments -->
+<div class="row g-4 mb-4">
+
+  <div class="col-md-6">
+    <div class="solar-card p-4">
+      <div class="section-head mb-3">Recent Users (last 10)</div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr>
+            <th>User</th><th>Plan</th><th>Joined</th><th>Country</th>
+          </tr></thead>
+          <tbody>
+          {% set plan_colors = {'free':'#6868a0','demo':'#a78bfa','basic':'#22c55e','professional':'#0ea5e9','enterprise':'#f59e0b'} %}
+          {% for u in recent_users %}
+          {% set plan = (u.plan or 'free').lower() %}
+          <tr>
+            <td>
+              <div class="small fw-semibold">{{ u.username }}</div>
+              <div class="text-secondary" style="font-size:11px">{{ u.email }}</div>
+            </td>
+            <td>
+              <span class="badge border" style="background:{{ plan_colors.get(plan,'#6868a0') }}22;color:{{ plan_colors.get(plan,'#6868a0') }};border-color:{{ plan_colors.get(plan,'#6868a0') }}44!important;font-size:10px">
+                {{ plan|upper }}
+              </span>
+            </td>
+            <td class="small text-secondary">{{ u.created_at[:10] if u.created_at else '—' }}</td>
+            <td class="small text-secondary">{{ u.country or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="text-center text-secondary py-3">No users yet.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <a href="{{ url_for('admin_users') }}" class="btn btn-outline-secondary btn-sm w-100 mt-2">
+        View All Users
+      </a>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="solar-card p-4">
+      <div class="section-head mb-3">Recent Payments</div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr>
+            <th>User</th><th>Plan</th><th>Amount</th><th>Date</th>
+          </tr></thead>
+          <tbody>
+          {% for p in payments %}
+          <tr>
+            <td class="small fw-semibold">{{ p.username }}</td>
+            <td><span class="badge bg-dark border" style="font-size:10px">{{ (p.plan or '—')|upper }}</span></td>
+            <td class="fw-bold" style="color:var(--solar-gold)">${{ p.amount_usd|int }}</td>
+            <td class="small text-secondary">{{ p.created_at[:10] if p.created_at else '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="text-center text-secondary py-3">No payments yet.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Quick links -->
+<div class="row g-3">
+  {% for icon,color,label,route in [
+    ('bi-person-lines-fill','solar-gold','Manage Leads','admin_leads'),
+    ('bi-megaphone-fill','solar-blue','Sales Dashboard','admin_sales'),
+    ('bi-people-fill','solar-green','Manage Users','admin_users'),
+    ('bi-envelope-heart-fill','solar-gold','Newsletter Subscribers','admin_newsletter'),
+    ('bi-newspaper','solar-blue','News Feed','admin_news'),
+    ('bi-key-fill','solar-green','Upgrade Codes','admin_codes'),
+  ] %}
+  <div class="col-md-4 col-lg-2">
+    <a href="{{ url_for(route) }}" class="text-decoration-none">
+      <div class="solar-card p-3 text-center h-100" style="transition:.2s" onmouseover="this.style.borderColor='var(--{{ color }})'" onmouseout="this.style.borderColor='#1e1e3a'">
+        <div style="font-size:24px;color:var(--{{ color }})"><i class="bi {{ icon }}"></i></div>
+        <div class="small fw-bold mt-1">{{ label }}</div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+
+</div>
+{% endblock %}

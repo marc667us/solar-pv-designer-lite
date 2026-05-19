@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SolarPro Ghana — PV Solar Store</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:           #06060f;
+    --bg2:          #09091a;
+    --panel:        #0e0e20;
+    --panel2:       #121228;
+    --panel3:       #161635;
+    --accent:       #f59e0b;
+    --accent2:      #fbbf24;
+    --accent-dim:   rgba(245,158,11,0.14);
+    --blue:         #38bdf8;
+    --blue2:        #7dd3fc;
+    --blue-dim:     rgba(56,189,248,0.12);
+    --purple:       #a78bfa;
+    --green:        #34d399;
+    --border:       #15152e;
+    --border2:      #1e1e40;
+    --border3:      #2a2a52;
+    --text:         #f2f2fd;
+    --text2:        #c6c6e8;
+    --muted:        #5c5c98;
+    --muted2:       #8888b8;
+    --success:      #34d399;
+    --danger:       #f87171;
+    --r:            10px;
+    --r-lg:         16px;
+    --r-xl:         22px;
+    --r-2xl:        30px;
+    --sh:           0 4px 28px rgba(0,0,0,0.5);
+    --sh-lg:        0 14px 52px rgba(0,0,0,0.6);
+    --sh-accent:    0 4px 28px rgba(245,158,11,0.3);
+    --sh-blue:      0 4px 28px rgba(56,189,248,0.24);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── AMBIENT BG ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 100% 60% at 50% -15%, rgba(56,189,248,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 55% 40% at 88% 80%,  rgba(167,139,250,0.06) 0%, transparent 55%),
+      radial-gradient(ellipse 45% 35% at  8% 65%,  rgba(245,158,11,0.05) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar       { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border3); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3c3c70; }
+
+  /* ── ANNOUNCE BAR ── */
+  #announce-bar {
+    background: linear-gradient(90deg, rgba(245,158,11,0.18) 0%, rgba(56,189,248,0.12) 50%, rgba(167,139,250,0.12) 100%);
+    border-bottom: 1px solid rgba(245,158,11,0.2);
+    padding: 9px 24px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent2);
+    letter-spacing: 0.2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  #announce-bar .ann-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 2s ease-in-out infinite; }
+  #announce-bar .ann-close { margin-left: auto; cursor: pointer; color: var(--muted2); font-size: 15px; line-height: 1; padding: 0 4px; }
+  #announce-bar .ann-close:hover { color: var(--text); }
+
+  /* ── HEADER ── */
+  #site-header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(6,6,15,0.9);
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    border-bottom: 1px solid var(--border2);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.04), 0 4px 24px rgba(0,0,0,0.3);
+  }
+  .header-inner {
+    max-width: 1340px; margin: 0 auto; padding: 0 24px;
+    height: 68px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 12px;
+    text-decoration: none; color: var(--text); white-space: nowrap; flex-shrink: 0;
+  }
+  .logo-icon {
+    width: 40px; height: 40px; border-radius: 11px;
+    display: flex; align-items: center; justify-content: center; font-size: 20px;
+    background: linear-gradient(135deg, rgba(245,158,11,0.3), rgba(56,189,248,0.2));
+    border: 1px solid rgba(245,158,11,0.35);
+    box-shadow: 0 0 20px rgba(245,158,11,0.22), inset 0 1px 0 rgba(255,255,255,0.1);
+  }
+  .logo-text .logo-name {
+    font-size: 16.5px; font-weight: 900; letter-spacing: -0.4px;
+    background: linear-gradient(90deg, #f2f2fd 30%, var(--accent2) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    display: block;
+  }
+  .logo-text .logo-sub {
+    font-size: 10.5px; color: var(--muted2); letter-spacing: 0.6px; text-transform: uppercase; display: block; margin-top: 1px;
+  }
+
+  nav { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; }
+  nav button {
+    background: none; border: 1px solid transparent; color: var(--muted2);
+    padding: 7px 16px; border-radius: var(--r); cursor: pointer;
+    font-size: 13.5px; font-weight: 600; font-family: inherit;
+    transition: all 0.2s; white-space: nowrap;
+  }
+  nav button:hover { color: var(--text); background: rgba(255,255,255,0.05); border-color: var(--border2); }
+  nav button.active {
+    background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(251,191,36,0.1));
+    color: var(--accent2); border-color: rgba(245,158,11,0.38);
+  }
+  .nav-cart-btn {
+    position: relative;
+    background: rgba(255,255,255,0.05) !important;
+    border-color: var(--border2) !important;
+    color: var(--text2) !important;
+  }
+  .nav-cart-btn:hover { border-color: rgba(245,158,11,0.35) !important; }
+  #cart-count-bubble {
+    position: absolute; top: -5px; right: -5px;
+    background: var(--accent); color: #06060f;
+    width: 18px; height: 18px; border-radius: 50%;
+    font-size: 10px; font-weight: 900;
+    display: none; align-items: center; justify-content: center;
+    box-shadow: 0 2px 6px rgba(245,158,11,0.5);
+  }
+  #cart-count-bubble.show { display: flex; animation: popIn 0.25s cubic-bezier(.22,.68,0,1.4); }
+  @keyframes popIn { from { transform:scale(0) } to { transform:scale(1) } }
+
+  /* ── MAIN ── */
+  #main-content { max-width: 1340px; margin: 0 auto; padding: 44px 24px 64px; }
+
+  /* ── HERO ── */
+  #hero {
+    display: grid; grid-template-columns: 1.15fr 0.85fr;
+    gap: 40px; align-items: center; margin-bottom: 20px; padding: 8px 0;
+  }
+  @media (max-width: 920px) { #hero { grid-template-columns: 1fr; } }
+
+  .hero-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: linear-gradient(90deg, rgba(245,158,11,0.14), rgba(56,189,248,0.09));
+    color: var(--accent2); border: 1px solid rgba(245,158,11,0.28);
+    border-radius: 20px; padding: 5px 16px;
+    font-size: 12px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase;
+    margin-bottom: 22px;
+  }
+  .hero-eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.55;transform:scale(1.35)} }
+
+  .hero-title {
+    font-size: clamp(28px, 3.8vw, 46px); font-weight: 900;
+    line-height: 1.15; letter-spacing: -1px; margin-bottom: 20px;
+    background: linear-gradient(155deg, #f8f8ff 15%, var(--accent2) 52%, var(--blue) 88%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .hero-sub { color: var(--muted2); font-size: 15.5px; max-width: 540px; margin-bottom: 34px; line-height: 1.75; }
+  .hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
+
+  /* Stats strip */
+  .stats-strip {
+    display: flex; gap: 0; margin: 36px 0 52px;
+    background: var(--panel); border: 1px solid var(--border2);
+    border-radius: var(--r-lg); overflow: hidden;
+    box-shadow: var(--sh);
+  }
+  .stat-item {
+    flex: 1; padding: 18px 16px; text-align: center;
+    border-right: 1px solid var(--border2);
+    transition: background 0.2s;
+  }
+  .stat-item:last-child { border-right: none; }
+  .stat-item:hover { background: rgba(255,255,255,0.03); }
+  .stat-val { font-size: 22px; font-weight: 900; letter-spacing: -0.8px; background: linear-gradient(90deg, var(--accent) 0%, var(--accent2) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .stat-label { font-size: 11.5px; color: var(--muted2); font-weight: 600; margin-top: 3px; letter-spacing: 0.3px; }
+
+  /* Hero card */
+  .hero-card {
+    background: linear-gradient(160deg, var(--panel2) 0%, var(--panel) 100%);
+    border: 1px solid var(--border2);
+    border-radius: var(--r-xl); padding: 28px 26px;
+    box-shadow: var(--sh), inset 0 1px 0 rgba(255,255,255,0.06);
+    position: relative; overflow: hidden;
+  }
+  .hero-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(56,189,248,0.4), rgba(245,158,11,0.4), transparent);
+  }
+  .hero-card-title { font-size: 16px; font-weight: 800; margin-bottom: 5px; }
+  .hero-card-sub { color: var(--muted2); font-size: 13px; margin-bottom: 18px; }
+  .wf-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border2);
+    border-radius: 10px; padding: 11px 14px; font-size: 13px;
+    margin-bottom: 8px; color: var(--text2); cursor: default;
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
+  }
+  .wf-row:last-child { margin-bottom: 0; }
+  .wf-row:hover { background: rgba(56,189,248,0.05); border-color: rgba(56,189,248,0.22); transform: translateX(3px); }
+  .wf-arrow { color: var(--accent2); font-size: 14px; font-weight: 800; }
+
+  /* Trust bar */
+  .trust-bar {
+    display: flex; gap: 0; margin-bottom: 44px;
+    background: var(--panel); border: 1px solid var(--border2);
+    border-radius: var(--r-lg); overflow: hidden;
+  }
+  .trust-item {
+    flex: 1; padding: 14px 12px; text-align: center;
+    border-right: 1px solid var(--border2);
+    display: flex; align-items: center; justify-content: center; gap: 9px;
+    font-size: 13px; color: var(--muted2); font-weight: 600;
+    transition: background 0.18s, color 0.18s;
+  }
+  .trust-item:last-child { border-right: none; }
+  .trust-item:hover { background: rgba(255,255,255,0.03); color: var(--text2); }
+  .trust-icon { font-size: 17px; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 10px 22px; border-radius: var(--r);
+    font-size: 14px; font-weight: 700; font-family: inherit;
+    cursor: pointer; border: 1px solid transparent;
+    transition: all 0.22s cubic-bezier(.22,.68,0,1.2);
+    text-decoration: none; white-space: nowrap; letter-spacing: -0.1px;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: translateY(0) scale(0.98); }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #07070e; box-shadow: 0 3px 14px rgba(245,158,11,0.38);
+  }
+  .btn-primary:hover { box-shadow: var(--sh-accent); filter: brightness(1.07); }
+  .btn-outline { background: rgba(255,255,255,0.04); border-color: var(--border2); color: var(--text2); }
+  .btn-outline:hover { border-color: rgba(245,158,11,0.4); color: var(--accent2); background: rgba(245,158,11,0.07); }
+  .btn-blue { background: linear-gradient(135deg, var(--blue), var(--blue2)); color: #07070e; box-shadow: 0 3px 14px rgba(56,189,248,0.32); }
+  .btn-blue:hover { box-shadow: var(--sh-blue); filter: brightness(1.07); }
+  .btn-ghost { background: none; border-color: transparent; color: var(--muted2); }
+  .btn-ghost:hover { color: var(--text); }
+  .btn-success { background: linear-gradient(135deg, #34d399, #6ee7b7); color: #07070e; }
+  .btn-sm  { padding: 6px 14px; font-size: 13px; border-radius: 8px; }
+  .btn-lg  { padding: 13px 30px; font-size: 15.5px; border-radius: var(--r-lg); }
+  .btn-full { width: 100%; justify-content: center; }
+  .btn:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--panel); border: 1px solid var(--border2);
+    border-radius: var(--r-lg); overflow: hidden;
+    position: relative; /* needed to contain ::after pseudo-element */
+  }
+  .card::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent);
+    pointer-events: none;
+  }
+  .card-dashed { border-style: dashed; }
+  .card-body   { padding: 20px 22px; }
+  .card-header { padding: 22px 22px 0; }
+  .card-title  { font-size: 16px; font-weight: 800; margin-bottom: 5px; letter-spacing: -0.25px; }
+  .card-desc   { color: var(--muted2); font-size: 13px; line-height: 1.6; }
+  .card-highlight {
+    border-color: rgba(245,158,11,0.3) !important;
+    background: linear-gradient(160deg, rgba(245,158,11,0.06), var(--panel)) !important;
+  }
+
+  /* ── SECTION HEADING ── */
+  .section-heading {
+    display: flex; align-items: baseline; gap: 14px; margin-bottom: 24px;
+  }
+  .section-heading h2 {
+    font-size: 21px; font-weight: 800; letter-spacing: -0.5px;
+    background: linear-gradient(90deg, var(--text) 40%, var(--muted2) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .section-heading .sh-line { flex: 1; height: 1px; background: linear-gradient(90deg, var(--border2), transparent); }
+  .section-heading .sh-count { font-size: 12px; color: var(--muted); font-weight: 600; }
+
+  /* ── BADGES ── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 20px;
+    font-size: 11.5px; font-weight: 700; letter-spacing: 0.1px;
+  }
+  .badge-accent  { background: rgba(245,158,11,0.14); color: var(--accent2);  border: 1px solid rgba(245,158,11,0.28); }
+  .badge-blue    { background: rgba(56,189,248,0.12);  color: var(--blue2);    border: 1px solid rgba(56,189,248,0.25); }
+  .badge-success { background: rgba(52,211,153,0.13);  color: var(--success);  border: 1px solid rgba(52,211,153,0.28); }
+  .badge-muted   { background: rgba(255,255,255,0.055); color: var(--muted2); border: 1px solid var(--border2); }
+  .badge-cat     { background: rgba(56,189,248,0.11);  color: var(--blue);     border: 1px solid rgba(56,189,248,0.22); }
+  .badge-hidden  { background: rgba(248,113,113,0.1);  color: #fca5a5;         border: 1px solid rgba(248,113,113,0.2); }
+  .badge-hot     { background: linear-gradient(90deg,rgba(245,158,11,0.25),rgba(251,191,36,0.15)); color: var(--accent2); border: 1px solid rgba(245,158,11,0.38); }
+  .badge-new     { background: linear-gradient(90deg,rgba(52,211,153,0.2),rgba(52,211,153,0.1));  color: var(--success);  border: 1px solid rgba(52,211,153,0.35); }
+
+  /* ── PAGES ── */
+  .page { display: none; }
+  .page.active { display: block; animation: pageFadeIn 0.22s ease; }
+  @keyframes pageFadeIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+
+  /* ── STOREFRONT ── */
+  .storefront-top { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 24px; margin-bottom: 36px; }
+  @media (max-width: 920px) { .storefront-top { grid-template-columns: 1fr; } }
+
+  .agent-panel .card-body { display: grid; gap: 10px; }
+  .agent-row {
+    display: flex; align-items: center; gap: 11px; font-size: 13px;
+    color: var(--muted2); padding: 9px 13px;
+    background: rgba(255,255,255,0.025); border: 1px solid var(--border);
+    border-radius: 9px; transition: border-color 0.15s, color 0.15s;
+  }
+  .agent-row:hover { border-color: var(--border2); color: var(--text2); }
+  .agent-icon { font-size: 16px; }
+
+  .filter-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .filter-btn {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border2);
+    color: var(--muted2); padding: 6px 15px; border-radius: var(--r);
+    cursor: pointer; font-size: 13px; font-weight: 700; font-family: inherit;
+    transition: all 0.18s;
+  }
+  .filter-btn:hover { border-color: rgba(245,158,11,0.35); color: var(--accent); background: rgba(245,158,11,0.07); }
+  .filter-btn.active {
+    background: linear-gradient(135deg, rgba(245,158,11,0.22), rgba(251,191,36,0.12));
+    border-color: rgba(245,158,11,0.42); color: var(--accent2);
+  }
+
+  .cart-info {
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border2);
+    border-radius: 10px; padding: 12px 16px; font-size: 13px; color: var(--muted2);
+  }
+
+  /* ── PRODUCT GRID ── */
+  .product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(296px, 1fr));
+    gap: 24px;
+  }
+
+  .product-card {
+    background: var(--panel); border: 1px solid var(--border2);
+    border-radius: var(--r-xl); overflow: hidden;
+    display: flex; flex-direction: column;
+    transition: transform 0.28s cubic-bezier(.22,.68,0,1.2), box-shadow 0.28s, border-color 0.28s;
+    box-shadow: var(--sh);
+    position: relative; /* contain ::before overlay and ribbons */
+  }
+  .product-card .product-body * { position: relative; z-index: 2; }
+  .product-card::before {
+    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    background: linear-gradient(160deg, rgba(255,255,255,0.025) 0%, transparent 55%);
+    pointer-events: none; z-index: 1;
+  }
+  .product-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 24px 56px rgba(0,0,0,0.6), 0 0 0 1px rgba(245,158,11,0.28);
+    border-color: rgba(245,158,11,0.28);
+  }
+
+  .product-img-wrap {
+    position: relative; overflow: hidden; aspect-ratio: 16/10; background: var(--bg2);
+  }
+  .product-img { width:100%; height:100%; object-fit:cover; display:block; transition: transform 0.45s ease; }
+  .product-card:hover .product-img { transform: scale(1.06); }
+  .product-img-overlay {
+    position: absolute; bottom:0; left:0; right:0; height:55%;
+    background: linear-gradient(to top, rgba(6,6,15,0.8) 0%, transparent 100%);
+  }
+  .product-ribbon {
+    position: absolute; top: 12px; left: 12px; z-index: 3;
+    display: flex; gap: 6px;
+  }
+  .product-price-chip {
+    position: absolute; bottom: 12px; right: 12px; z-index: 3;
+    background: rgba(6,6,15,0.85); border: 1px solid rgba(245,158,11,0.3);
+    border-radius: 8px; padding: 4px 10px;
+    font-size: 15px; font-weight: 900; letter-spacing: -0.5px;
+    color: var(--accent2);
+  }
+
+  .product-body { padding: 18px 20px; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+  .product-name { font-size: 16px; font-weight: 800; letter-spacing: -0.25px; line-height: 1.3; }
+  .product-desc { color: var(--muted2); font-size: 13px; line-height: 1.6; }
+  .product-brand-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .product-specs { list-style:none; font-size:13px; color:var(--muted2); display:grid; gap:4px; }
+  .product-specs li { display:flex; align-items:center; gap:8px; }
+  .product-specs li::before { content:''; width:5px; height:5px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--accent2)); flex-shrink:0; }
+  .product-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: auto; padding-top: 14px; border-top: 1px solid var(--border);
+  }
+  .product-price-main { font-size: 21px; font-weight: 900; letter-spacing: -0.7px; background: linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .in-cart-indicator { font-size:12px; color:var(--success); font-weight:700; display:flex; align-items:center; gap:4px; }
+
+  /* ── FLOATING CART ── */
+  #cart-float {
+    display: none; position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #07070e; padding: 13px 28px; border-radius: 50px;
+    font-size: 14px; font-weight: 800; letter-spacing: -0.1px;
+    box-shadow: 0 8px 32px rgba(245,158,11,0.45);
+    cursor: pointer; z-index: 150; white-space: nowrap;
+    transition: transform 0.2s, box-shadow 0.2s;
+    animation: floatUp 0.35s cubic-bezier(.22,.68,0,1.2);
+  }
+  #cart-float:hover { transform: translateX(-50%) translateY(-3px); box-shadow: 0 12px 40px rgba(245,158,11,0.55); }
+  @keyframes floatUp { from { transform:translateX(-50%) translateY(24px); opacity:0 } to { transform:translateX(-50%) translateY(0); opacity:1 } }
+
+  /* ── SERVICES PAGE ── */
+  .services-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 24px; align-items: start; }
+  @media (max-width: 920px) { .services-grid { grid-template-columns: 1fr; } }
+  .services-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-top: 16px; }
+  .pv-access-card .card-body { display: grid; gap: 14px; }
+  .wf-step {
+    display: flex; align-items: center; gap: 12px; font-size: 13px;
+    color: var(--text2); padding: 11px 13px;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border2); border-radius: 9px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .wf-step:hover { background: rgba(245,158,11,0.05); border-color: rgba(245,158,11,0.25); }
+  .wf-step .step-num {
+    width: 25px; height: 25px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #07070e; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 900; flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(245,158,11,0.4);
+  }
+
+  /* ── TECH SUPPORT PAGE ── */
+  .support-header-card { margin-bottom: 24px; }
+  .support-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 22px; }
+  @media (max-width: 500px) { .support-grid { grid-template-columns: 1fr; } }
+  .support-product-img { width:100%; aspect-ratio:16/8; object-fit:cover; display:block; background:var(--bg2); }
+  .support-detail-grid { display:grid; gap:8px; font-size:13px; }
+  .support-row { display:flex; gap:8px; }
+  .support-label { font-weight:700; color:var(--text2); min-width:140px; flex-shrink:0; }
+  .support-val { color:var(--muted2); }
+  .sep { height:1px; background:var(--border2); margin:4px 0; }
+  .selected-tag { color:var(--success); font-weight:700; }
+  .not-selected-tag { color:var(--muted); }
+
+  /* ── MODAL ── */
+  #modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.82);
+    backdrop-filter: blur(10px) saturate(110%); -webkit-backdrop-filter: blur(10px);
+    z-index: 200; align-items: center; justify-content: center; padding: 20px; overflow-y: auto;
+  }
+  #modal-overlay.open { display: flex; animation: fadeIn 0.22s ease; }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+  #modal-box {
+    background: linear-gradient(160deg, var(--panel2) 0%, var(--panel) 100%);
+    border: 1px solid var(--border2); border-radius: var(--r-xl);
+    width: 100%; max-width: 940px; max-height: 90vh; overflow-y: auto;
+    animation: slideUp 0.3s cubic-bezier(.22,.68,0,1.15);
+    position: relative;
+    box-shadow: var(--sh-lg), 0 0 0 1px rgba(255,255,255,0.04);
+  }
+  #modal-box::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(56,189,248,0.35), rgba(245,158,11,0.35), transparent);
+    pointer-events: none;
+  }
+  @keyframes slideUp { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
+
+  #modal-close {
+    position: absolute; top: 16px; right: 16px;
+    background: rgba(255,255,255,0.06); border: 1px solid var(--border2);
+    color: var(--muted2); width: 33px; height: 33px; border-radius: 50%;
+    cursor: pointer; font-size: 15px; display: flex; align-items: center; justify-content: center;
+    transition: all 0.18s; z-index: 2;
+  }
+  #modal-close:hover { background: rgba(248,113,113,0.16); color: var(--danger); border-color: rgba(248,113,113,0.3); transform: rotate(90deg); }
+
+  .modal-header { padding: 28px 28px 0; }
+  .modal-title { font-size: 23px; font-weight: 900; margin-bottom: 5px; letter-spacing: -0.6px; }
+  .modal-desc { color: var(--muted2); font-size: 13px; }
+  .modal-body  { padding: 22px 28px 32px; }
+
+  .step-indicator {
+    display: flex; margin-bottom: 28px;
+    border-radius: 11px; overflow: hidden; border: 1px solid var(--border2);
+    background: rgba(255,255,255,0.02);
+  }
+  .step-tab {
+    flex: 1; padding: 10px 12px; text-align: center;
+    font-size: 11.5px; font-weight: 800; color: var(--muted); background: transparent;
+    border-right: 1px solid var(--border2);
+    transition: all 0.2s; letter-spacing: 0.3px; text-transform: uppercase;
+  }
+  .step-tab:last-child { border-right: none; }
+  .step-tab.done { color: var(--success); background: rgba(52,211,153,0.08); }
+  .step-tab.active { color: var(--accent2); background: rgba(245,158,11,0.1); box-shadow: inset 0 -2px 0 var(--accent); }
+
+  /* ── AUTH ── */
+  .auth-layout { display: grid; grid-template-columns: 0.88fr 1.12fr; gap: 22px; align-items: start; }
+  @media (max-width: 700px) { .auth-layout { grid-template-columns: 1fr; } }
+  .auth-info .card-body { display: grid; gap: 10px; }
+  .info-row {
+    display: flex; align-items: center; gap: 11px; font-size: 13px; color: var(--muted2);
+    padding: 9px 13px; background: rgba(255,255,255,0.025); border: 1px solid var(--border); border-radius: 9px;
+  }
+  .info-icon { font-size: 16px; }
+  .tab-switcher {
+    display: grid; grid-template-columns: 1fr 1fr;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border2);
+    border-radius: var(--r); padding: 4px; margin-bottom: 18px;
+  }
+  .tab-btn {
+    background: none; border: none; color: var(--muted2); padding: 9px 16px;
+    border-radius: 8px; cursor: pointer; font-size: 13.5px; font-weight: 700; font-family: inherit; transition: all 0.18s;
+  }
+  .tab-btn.active { background: var(--panel2); color: var(--text); box-shadow: 0 2px 10px rgba(0,0,0,0.4); }
+
+  /* ── FORMS ── */
+  .field-group { display: grid; gap: 7px; margin-bottom: 14px; }
+  .field-group label { font-size: 11.5px; font-weight: 800; color: var(--text2); letter-spacing: 0.4px; text-transform: uppercase; }
+  .field-group input,
+  .field-group textarea,
+  .field-group select {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border2);
+    color: var(--text); padding: 10px 14px;
+    border-radius: var(--r); font-size: 14px; font-family: inherit;
+    transition: border-color 0.2s, box-shadow 0.2s; width: 100%;
+  }
+  .field-group input:focus,
+  .field-group textarea:focus,
+  .field-group select:focus {
+    outline: none; border-color: rgba(245,158,11,0.5);
+    box-shadow: 0 0 0 3px rgba(245,158,11,0.12), 0 2px 8px rgba(0,0,0,0.2);
+  }
+  .field-group input::placeholder,
+  .field-group textarea::placeholder { color: var(--muted); }
+  .field-group textarea { resize: vertical; min-height: 88px; }
+  .field-group select option { background: var(--panel2); color: var(--text); }
+  .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 560px) { .form-row-2 { grid-template-columns: 1fr; } }
+  .form-error {
+    color: #fca5a5; font-size: 12.5px; margin-bottom: 12px; display: none;
+    padding: 9px 13px; background: rgba(248,113,113,0.09); border: 1px solid rgba(248,113,113,0.22); border-radius: 8px;
+  }
+  .form-error.show { display: flex; align-items: center; gap: 7px; }
+  .form-error::before { content: '⚠'; font-size: 13px; }
+
+  /* ── DESIGNER ── */
+  .designer-layout { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 22px; align-items: start; }
+  @media (max-width: 800px) { .designer-layout { grid-template-columns: 1fr; } }
+  .profile-item {
+    display: flex; align-items: flex-start; gap: 10px; font-size: 13px;
+    color: var(--muted2); padding: 9px 0; border-bottom: 1px solid var(--border);
+  }
+  .profile-item:last-child { border-bottom: none; }
+  .profile-icon { font-size: 15px; padding-top: 1px; flex-shrink: 0; }
+  .profile-val { color: var(--text); font-weight: 600; }
+  .load-inputs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 560px) { .load-inputs { grid-template-columns: 1fr; } }
+  .result-cards { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 18px; }
+  @media (max-width: 640px) { .result-cards { grid-template-columns: 1fr 1fr; } }
+  .result-card {
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border2);
+    border-radius: 12px; padding: 14px 15px; transition: border-color 0.22s, box-shadow 0.22s, background 0.22s;
+  }
+  .result-card.highlight {
+    border-color: rgba(245,158,11,0.38); background: rgba(245,158,11,0.06);
+    box-shadow: 0 2px 18px rgba(245,158,11,0.14);
+  }
+  .result-label { font-size: 10px; color: var(--muted2); font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+  .result-value { font-size: 19px; font-weight: 900; letter-spacing: -0.6px; background: linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .result-unit  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .boq-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .boq-table th {
+    text-align:left; padding:10px 13px;
+    background:rgba(255,255,255,0.035); border-bottom:1px solid var(--border2);
+    color:var(--muted2); font-weight:800; font-size:10.5px; text-transform:uppercase; letter-spacing:0.6px;
+  }
+  .boq-table td { padding:10px 13px; border-bottom:1px solid rgba(21,21,46,0.9); color:var(--text2); }
+  .boq-table tr:last-child td { border-bottom:none; }
+  .boq-table tr:hover td { background:rgba(255,255,255,0.025); }
+  .boq-source { color:var(--blue); font-size:12px; font-weight:600; }
+
+  .hint-box {
+    background: rgba(56,189,248,0.06); border: 1px solid rgba(56,189,248,0.18);
+    border-radius: 10px; padding: 13px 16px; font-size: 12.5px; color: var(--muted2); margin-top: 14px; line-height: 1.65;
+  }
+
+  /* ── PAGE HEADINGS ── */
+  .page-heading { margin-bottom: 34px; }
+  .page-heading h2 {
+    font-size: 32px; font-weight: 900; margin-bottom: 8px; letter-spacing: -0.8px;
+    background: linear-gradient(90deg, var(--text) 35%, var(--accent2) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .page-heading p { color: var(--muted2); font-size: 15px; }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border2); margin-top: 70px;
+    background: linear-gradient(180deg, transparent, rgba(6,6,15,0.6));
+  }
+  .footer-inner {
+    max-width: 1340px; margin: 0 auto; padding: 40px 24px 28px;
+    display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 36px;
+  }
+  @media (max-width: 760px) { .footer-inner { grid-template-columns: 1fr; gap: 28px; } }
+  .footer-brand .logo-name-f { font-size: 17px; font-weight: 900; letter-spacing: -0.4px; background: linear-gradient(90deg,var(--text) 40%,var(--accent2) 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .footer-brand p { color: var(--muted); font-size: 13px; margin-top: 8px; line-height: 1.65; max-width: 280px; }
+  .footer-col h4 { font-size: 13px; font-weight: 800; color: var(--text2); margin-bottom: 12px; letter-spacing: 0.3px; text-transform: uppercase; }
+  .footer-col ul { list-style: none; display: grid; gap: 8px; }
+  .footer-col ul li { font-size: 13px; color: var(--muted2); cursor: pointer; transition: color 0.15s; }
+  .footer-col ul li:hover { color: var(--accent2); }
+  .footer-bottom { max-width: 1340px; margin: 0 auto; padding: 16px 24px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .footer-bottom span { font-size: 12.5px; color: var(--muted); }
+  .footer-badges { display: flex; gap: 8px; }
+
+  /* ── UTILS ── */
+  .divider { height: 1px; background: linear-gradient(90deg, transparent, var(--border2), transparent); margin: 6px 0; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ ANNOUNCE BAR ═══════════ -->
+<div id="announce-bar">
+  <div class="ann-dot"></div>
+  ☀ Free site assessment for systems above 5kWp — Book via Installation &amp; Service page
+  <span class="ann-close" onclick="this.parentElement.style.display='none'" title="Dismiss">✕</span>
+</div>
+
+<!-- ═══════════ HEADER ═══════════ -->
+<header id="site-header">
+  <div class="header-inner">
+    <a href="#" class="logo" onclick="showPage('store');return false;">
+      <div class="logo-icon">☀</div>
+      <div class="logo-text">
+        <span class="logo-name">SolarPro Ghana</span>
+        <span class="logo-sub">PV Solar Store &amp; Services</span>
+      </div>
+    </a>
+    <nav>
+      <button id="nav-store" class="active" onclick="showPage('store')">Storefront</button>
+      <button id="nav-services" onclick="showPage('services')">Installation &amp; Service</button>
+      <button id="nav-support" onclick="showPage('support')">Technical Support</button>
+      <button class="nav-cart-btn" onclick="showPage('store')" id="nav-cart">
+        🛒 Cart
+        <span id="cart-count-bubble">0</span>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<!-- ═══════════ MAIN ═══════════ -->
+<main id="main-content">
+
+  <!-- HERO -->
+  <section id="hero">
+    <div class="hero-left">
+      <div class="hero-eyebrow"><span class="dot"></span>Solar Commerce · Services · AI Product Agent</div>
+      <h1 class="hero-title">Ghana's professional solar PV supply, installation &amp; design platform.</h1>
+      <p class="hero-sub">AI-powered product sourcing with hidden manufacturer intelligence, gated PV designer, and full BoQ handoff — all in one platform.</p>
+      <div class="hero-btns">
+        <button class="btn btn-primary btn-lg" onclick="showPage('store')">☀ Browse Products</button>
+        <button class="btn btn-outline btn-lg" onclick="showPage('services')">🔧 Our Services</button>
+        <button class="btn btn-blue btn-lg" onclick="openModal()">🧮 PV Designer</button>
+      </div>
+    </div>
+    <div class="hero-card">
+      <div class="hero-card-title">⚡ AI Sourcing Workflow</div>
+      <div class="hero-card-sub">Customer-safe listings with hidden manufacturer intelligence.</div>
+      <div class="wf-row"><span>🌐 Agent searches manufacturer &amp; supplier sources</span><span class="wf-arrow">›</span></div>
+      <div class="wf-row"><span>📦 Storefront shows brand, price, image &amp; specs</span><span class="wf-arrow">›</span></div>
+      <div class="wf-row"><span>🔒 Manufacturer details hidden from customers</span><span class="wf-arrow">›</span></div>
+      <div class="wf-row"><span>📋 Tech support &amp; BoQ use internal sourcing data</span><span class="wf-arrow">›</span></div>
+    </div>
+  </section>
+
+  <!-- Stats Strip -->
+  <div class="stats-strip">
+    <div class="stat-item"><div class="stat-val">6</div><div class="stat-label">Products Listed</div></div>
+    <div class="stat-item"><div class="stat-val">16</div><div class="stat-label">Ghana Regions</div></div>
+    <div class="stat-item"><div class="stat-val">4.7–6.2</div><div class="stat-label">PSH Range (hrs)</div></div>
+    <div class="stat-item"><div class="stat-val">3</div><div class="stat-label">Service Lines</div></div>
+    <div class="stat-item"><div class="stat-val">BS 7671</div><div class="stat-label">Standard Applied</div></div>
+  </div>
+
+  <!-- ═══════════ STOREFRONT PAGE ═══════════ -->
+  <div id="page-store" class="page active">
+
+    <!-- Trust bar -->
+    <div class="trust-bar" style="margin-bottom:32px">
+      <div class="trust-item"><span class="trust-icon">🛡</span>Quality Assured</div>
+      <div class="trust-item"><span class="trust-icon">🚚</span>Nationwide Delivery</div>
+      <div class="trust-item"><span class="trust-icon">🔧</span>Installation Support</div>
+      <div class="trust-item"><span class="trust-icon">📋</span>BS 7671:2018 Compliant</div>
+      <div class="trust-item"><span class="trust-icon">☀</span>Ghana Solar Certified</div>
+    </div>
+
+    <div class="storefront-top">
+      <!-- AI Agent Panel -->
+      <div class="card card-dashed agent-panel">
+        <div class="card-header">
+          <div class="card-title">🤖 AI Product Agent</div>
+          <div class="card-desc">Simulated web-search agent — discovers manufacturer products, normalises specs, and publishes customer-safe listings.</div>
+        </div>
+        <div class="card-body">
+          <div class="agent-row"><span class="agent-icon">🌐</span>Searches supplier and manufacturer sources across the web</div>
+          <div class="agent-row"><span class="agent-icon">📦</span>Publishes storefront-ready products with hidden manufacturer layer</div>
+          <div class="agent-row"><span class="agent-icon">💼</span>Feeds internal technical data into support and BoQ workflow</div>
+          <div style="margin-top:4px;display:flex;gap:8px;flex-wrap:wrap">
+            <span class="badge badge-success">✓ 6 synced products</span>
+            <span class="badge badge-blue">↻ Live sync</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Storefront Controls -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🏪 Product Catalogue</div>
+          <div class="card-desc">Browse, filter, and select products for your design &amp; quotation workflow.</div>
+        </div>
+        <div class="card-body">
+          <div class="filter-row" id="filter-row">
+            <button class="filter-btn active" onclick="filterProducts('All',this)">All</button>
+            <button class="filter-btn" onclick="filterProducts('Panels',this)">Panels</button>
+            <button class="filter-btn" onclick="filterProducts('Batteries',this)">Batteries</button>
+            <button class="filter-btn" onclick="filterProducts('Inverters',this)">Inverters</button>
+            <button class="filter-btn" onclick="filterProducts('Protection',this)">Protection</button>
+            <button class="filter-btn" onclick="filterProducts('Accessories',this)">Accessories</button>
+          </div>
+          <div class="cart-info">
+            <span>Items selected for design &amp; quotation</span>
+            <span class="badge badge-accent" id="cart-badge">0 selected</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Products heading -->
+    <div class="section-heading">
+      <h2>Featured Products</h2>
+      <div class="sh-line"></div>
+      <span class="sh-count" id="product-count">6 items</span>
+    </div>
+
+    <div class="product-grid" id="product-grid"></div>
+  </div>
+
+  <!-- ═══════════ SERVICES PAGE ═══════════ -->
+  <div id="page-services" class="page">
+    <div class="page-heading">
+      <h2>Installation &amp; Service</h2>
+      <p>From product supply to installation, system upgrades, preventive maintenance, and preliminary design support.</p>
+    </div>
+
+    <!-- Service stats -->
+    <div class="trust-bar" style="margin-bottom:32px">
+      <div class="trust-item"><span class="trust-icon">📐</span>System Design</div>
+      <div class="trust-item"><span class="trust-icon">🔧</span>Installation</div>
+      <div class="trust-item"><span class="trust-icon">🛡</span>Maintenance</div>
+      <div class="trust-item"><span class="trust-icon">🏠</span>Residential</div>
+      <div class="trust-item"><span class="trust-icon">🏢</span>Commercial</div>
+    </div>
+
+    <div class="services-grid">
+      <div>
+        <div class="section-heading">
+          <h2>Service Lines</h2>
+          <div class="sh-line"></div>
+        </div>
+        <div class="services-cards" id="service-cards"></div>
+      </div>
+      <div class="card pv-access-card card-highlight">
+        <div class="card-header">
+          <div class="card-title">🧮 PV Designer Access</div>
+          <div class="card-desc">Start the full design workflow — authentication, customer contact capture, then access to the PV designer with BoQ handoff.</div>
+        </div>
+        <div class="card-body">
+          <div class="wf-step"><span class="step-num">1</span>Login or Sign Up to verify identity</div>
+          <div class="wf-step"><span class="step-num">2</span>Complete customer contact form</div>
+          <div class="wf-step"><span class="step-num">3</span>Access PV designer &amp; BoQ interface</div>
+          <button class="btn btn-primary btn-full btn-lg" onclick="openModal()">Start PV Designer ›</button>
+          <p style="text-align:center;font-size:12px;color:var(--muted)">Secure — authentication required</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ TECH SUPPORT PAGE ═══════════ -->
+  <div id="page-support" class="page">
+    <div class="page-heading">
+      <h2>Technical Sales Support</h2>
+      <p>Internal view showing hidden manufacturer, sourcing, and technical support details not visible on the storefront.</p>
+    </div>
+    <div class="card card-dashed support-header-card">
+      <div class="card-header">
+        <div class="card-title">⚙ Internal Product Intelligence Layer</div>
+        <div class="card-desc">Manufacturer identity, procurement channel, and internal support references — visible here and passed into the PV designer BoQ logic. Not visible to customers.</div>
+      </div>
+      <div class="card-body" style="padding-top:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="badge badge-hidden">🔒 Internal Use Only</span>
+          <span class="badge badge-blue">6 Products</span>
+          <span class="badge badge-muted">Procurement Reference</span>
+        </div>
+      </div>
+    </div>
+    <div class="section-heading">
+      <h2>Product Intelligence</h2>
+      <div class="sh-line"></div>
+    </div>
+    <div class="support-grid" id="support-grid"></div>
+  </div>
+
+</main>
+
+<!-- ═══════════ FLOATING CART ═══════════ -->
+<div id="cart-float" onclick="showPage('store')"></div>
+
+<!-- ═══════════ MODAL ═══════════ -->
+<div id="modal-overlay" onclick="overlayClick(event)">
+  <div id="modal-box">
+    <button id="modal-close" onclick="closeModal()" title="Close">✕</button>
+
+    <div class="modal-header" style="padding-bottom:0">
+      <div class="step-indicator">
+        <div class="step-tab active" id="stab-1">① Auth</div>
+        <div class="step-tab" id="stab-2">② Contact</div>
+        <div class="step-tab" id="stab-3">③ Designer</div>
+      </div>
+    </div>
+
+    <!-- STEP 1 -->
+    <div id="modal-step-1">
+      <div class="modal-header">
+        <div class="modal-title">🔑 Login or Sign Up</div>
+        <div class="modal-desc">Verify your identity before accessing the customer onboarding and design tool.</div>
+      </div>
+      <div class="modal-body">
+        <div class="auth-layout">
+          <div class="card auth-info">
+            <div class="card-header">
+              <div class="card-title">Access Control</div>
+              <div class="card-desc">Authentication required before design access is granted.</div>
+            </div>
+            <div class="card-body">
+              <div class="info-row"><span class="info-icon">🔒</span>Secure user gate before design access</div>
+              <div class="info-row"><span class="info-icon">📄</span>Collect customer details before opening app tools</div>
+              <div class="info-row"><span class="info-icon">🧮</span>Designer available after onboarding complete</div>
+            </div>
+          </div>
+          <div>
+            <div class="tab-switcher">
+              <button class="tab-btn active" id="tab-login" onclick="switchAuthTab('login')">🔑 Login</button>
+              <button class="tab-btn" id="tab-signup" onclick="switchAuthTab('signup')">✍ Sign Up</button>
+            </div>
+            <div id="auth-signup-field" style="display:none">
+              <div class="field-group">
+                <label for="auth-fullname">Full Name</label>
+                <input type="text" id="auth-fullname" placeholder="Enter your full name" />
+              </div>
+            </div>
+            <div class="field-group">
+              <label for="auth-email">Email Address</label>
+              <input type="email" id="auth-email" placeholder="name@example.com" />
+            </div>
+            <div class="field-group">
+              <label for="auth-password">Password</label>
+              <input type="password" id="auth-password" placeholder="Enter password" />
+            </div>
+            <div class="form-error" id="auth-error">Please fill in all required fields.</div>
+            <button class="btn btn-primary btn-full" onclick="continueAuth()">Continue to Contact Form →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div id="modal-step-2" style="display:none">
+      <div class="modal-header">
+        <div class="modal-title">👤 Customer Contact Form</div>
+        <div class="modal-desc">Complete and submit customer details before using the design tool.</div>
+      </div>
+      <div class="modal-body">
+        <div class="form-row-2">
+          <div class="field-group"><label for="ct-name">Contact Person *</label><input type="text" id="ct-name" placeholder="Customer name" /></div>
+          <div class="field-group"><label for="ct-email">Email *</label><input type="email" id="ct-email" placeholder="customer@email.com" /></div>
+        </div>
+        <div class="form-row-2">
+          <div class="field-group"><label for="ct-phone">Phone *</label><input type="tel" id="ct-phone" placeholder="+233 24 000 0000" /></div>
+          <div class="field-group"><label for="ct-location">Location / City / Site *</label><input type="text" id="ct-location" placeholder="e.g. Accra, Kumasi..." /></div>
+        </div>
+        <div class="field-group"><label for="ct-notes">Project Notes</label><textarea id="ct-notes" placeholder="Describe the installation type or energy need…"></textarea></div>
+        <div class="form-error" id="contact-error">Please fill in Name, Email, Phone, and Location.</div>
+        <button class="btn btn-primary btn-full" onclick="submitContact()">Submit &amp; Open Designer →</button>
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div id="modal-step-3" style="display:none">
+      <div class="modal-header">
+        <div class="modal-title">🧮 PV Designer Interface</div>
+        <div class="modal-desc">Preliminary solar PV sizing with Ghana region data and BoQ sourcing handoff.</div>
+      </div>
+      <div class="modal-body">
+        <div class="designer-layout">
+          <div class="card">
+            <div class="card-header"><div class="card-title">Customer Profile</div><div class="card-desc">Submitted in Step 2.</div></div>
+            <div class="card-body" id="profile-display"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">PV Designer</div><div class="card-desc">Enter daily loads and region to get instant sizing and BoQ.</div></div>
+            <div class="card-body">
+              <div class="load-inputs">
+                <div class="field-group" style="margin:0"><label>Lighting (kWh/day)</label><input type="number" id="d-lighting" placeholder="e.g. 2.5" min="0" step="0.1" oninput="calcDesigner()" /></div>
+                <div class="field-group" style="margin:0"><label>Socket (kWh/day)</label><input type="number" id="d-socket" placeholder="e.g. 3.0" min="0" step="0.1" oninput="calcDesigner()" /></div>
+                <div class="field-group" style="margin:0"><label>AC Load (kWh/day)</label><input type="number" id="d-ac" placeholder="e.g. 4.0" min="0" step="0.1" oninput="calcDesigner()" /></div>
+              </div>
+              <div class="field-group">
+                <label for="d-region">Ghana Region</label>
+                <select id="d-region" onchange="calcDesigner()">
+                  <option value="4.8">Greater Accra — PSH 4.8</option>
+                  <option value="4.8">Central — PSH 4.8</option>
+                  <option value="4.7">Western — PSH 4.7</option>
+                  <option value="5.0">Ashanti — PSH 5.0</option>
+                  <option value="5.1">Eastern — PSH 5.1</option>
+                  <option value="5.2">Volta — PSH 5.2</option>
+                  <option value="5.0">Western North — PSH 5.0</option>
+                  <option value="5.2">Ahafo — PSH 5.2</option>
+                  <option value="5.4">Bono — PSH 5.4</option>
+                  <option value="5.5">Bono East — PSH 5.5</option>
+                  <option value="5.5">Oti — PSH 5.5</option>
+                  <option value="5.8">Northern — PSH 5.8</option>
+                  <option value="5.9">Savannah — PSH 5.9</option>
+                  <option value="6.0">North East — PSH 6.0</option>
+                  <option value="6.0">Upper West — PSH 6.0</option>
+                  <option value="6.2">Upper East — PSH 6.2</option>
+                </select>
+              </div>
+              <div class="result-cards" id="result-cards">
+                <div class="result-card highlight"><div class="result-label">Total Load</div><div class="result-value" id="r-total">0.00</div><div class="result-unit">kWh/day</div></div>
+                <div class="result-card"><div class="result-label">PV Size</div><div class="result-value" id="r-pv">0.00</div><div class="result-unit">kWp</div></div>
+                <div class="result-card"><div class="result-label">Battery Size</div><div class="result-value" id="r-bat">0.00</div><div class="result-unit">kWh</div></div>
+                <div class="result-card"><div class="result-label">Inverter Size</div><div class="result-value" id="r-inv">0.00</div><div class="result-unit">kW</div></div>
+                <div class="result-card"><div class="result-label">No. of Panels</div><div class="result-value" id="r-panels">0</div><div class="result-unit">× 400W panels</div></div>
+                <div class="result-card"><div class="result-label">Battery Units</div><div class="result-value" id="r-batunits">0</div><div class="result-unit">× 2.4kWh units</div></div>
+              </div>
+              <div class="card card-dashed">
+                <div class="card-header"><div class="card-title" style="font-size:15px">📋 BoQ Handoff</div><div class="card-desc">Internal procurement source references.</div></div>
+                <div class="card-body" style="padding-top:10px;overflow-x:auto">
+                  <table class="boq-table" id="boq-table">
+                    <thead><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Internal Source</th></tr></thead>
+                    <tbody id="boq-body"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="hint-box">💡 This tool uses a simulated AI sourcing layer. In production, connect a backend agent that searches approved manufacturer sources and stores internal supplier data privately.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════ FOOTER ═══════════ -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <div class="logo-name-f">☀ SolarPro Ghana</div>
+      <p>Professional solar PV supply, installation, and design services across all 16 regions of Ghana. Compliant with BS 7671:2018.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Products</h4>
+      <ul>
+        <li onclick="filterProducts('Panels',null);showPage('store')">Solar Panels</li>
+        <li onclick="filterProducts('Batteries',null);showPage('store')">Battery Storage</li>
+        <li onclick="filterProducts('Inverters',null);showPage('store')">Inverters</li>
+        <li onclick="filterProducts('Protection',null);showPage('store')">Protection</li>
+        <li onclick="filterProducts('Accessories',null);showPage('store')">Accessories</li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Services</h4>
+      <ul>
+        <li onclick="showPage('services')">PV System Design</li>
+        <li onclick="showPage('services')">Installation</li>
+        <li onclick="showPage('services')">Maintenance</li>
+        <li onclick="openModal()">PV Designer Tool</li>
+        <li onclick="showPage('support')">Technical Support</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2025 SolarPro Ghana &nbsp;|&nbsp; BS 7671:2018 &nbsp;|&nbsp; Ghana</span>
+    <div class="footer-badges">
+      <span class="badge badge-muted">BS 7671</span>
+      <span class="badge badge-accent">☀ Solar</span>
+      <span class="badge badge-blue">AI Powered</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ═══════════ JS ═══════════ -->
+<script>
+// ─── DATA ───────────────────────────────────────────────────────────────────
+const agentFeed = [
+  {
+    id: 1, name: "550Wp Mono PERC PV Module", category: "Panels", price: "$145",
+    badge: "hot", badgeLabel: "Best Seller",
+    image: "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1200&q=80",
+    description: "High-efficiency monocrystalline module for residential and commercial rooftops.",
+    specs: ["550W rated output","Mono PERC cell technology","Positive power tolerance","25-year performance warranty"],
+    customerView: { displayBrand: "Premium Solar Brand", manufacturerHidden: true },
+    manufacturer: { name: "SunPeak Energy Manufacturing Co.", country: "China", moq: "Min. order: 36 panels", supplyChannel: "Direct OEM supply", technicalContact: "Internal reference only" }
+  },
+  {
+    id: 2, name: "5kWh Lithium Battery", category: "Batteries", price: "$1,950",
+    badge: "new", badgeLabel: "New",
+    image: "https://images.unsplash.com/photo-1620714223084-8fcacc2dfd8d?auto=format&fit=crop&w=1200&q=80",
+    description: "Wall-mount storage battery with long cycle life and integrated battery management.",
+    specs: ["5kWh usable capacity","Lithium chemistry (LiFePO4)","Integrated BMS protection","Wall-mounted enclosure"],
+    customerView: { displayBrand: "Advanced Storage Brand", manufacturerHidden: true },
+    manufacturer: { name: "VoltNest Power Systems Ltd.", country: "Germany", moq: "Min. order: 2 units", supplyChannel: "Authorized distributor", technicalContact: "Internal reference only" }
+  },
+  {
+    id: 3, name: "5kW Hybrid Inverter", category: "Inverters", price: "$980",
+    badge: "hot", badgeLabel: "Popular",
+    image: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=1200&q=80",
+    description: "Hybrid inverter with MPPT charging and backup capability for PV and battery systems.",
+    specs: ["5kW continuous output","Hybrid on-grid / off-grid","Dual MPPT charge controller","Battery-ready design"],
+    customerView: { displayBrand: "Hybrid Power Brand", manufacturerHidden: true },
+    manufacturer: { name: "HelioDrive Industrial Electronics", country: "Turkey", moq: "Min. order: 1 unit", supplyChannel: "Regional technical reseller", technicalContact: "Internal reference only" }
+  },
+  {
+    id: 4, name: "PV DC Isolator", category: "Protection", price: "$48",
+    badge: null, badgeLabel: null,
+    image: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80",
+    description: "Lockable DC isolator for safe PV array disconnection during maintenance.",
+    specs: ["DC rated enclosure","Lockable safety handle","IP65 weather-resistant","Service isolation rated"],
+    customerView: { displayBrand: "Protection Brand", manufacturerHidden: true },
+    manufacturer: { name: "ArcSafe Switchgear Works", country: "Italy", moq: "Min. order: 10 units", supplyChannel: "Bulk importer", technicalContact: "Internal reference only" }
+  },
+  {
+    id: 5, name: "Roof Mount Rail Kit", category: "Accessories", price: "$120",
+    badge: null, badgeLabel: null,
+    image: "https://images.unsplash.com/photo-1611365892117-00e1d8d36750?auto=format&fit=crop&w=1200&q=80",
+    description: "Aluminum mounting rail kit for secure solar panel installation on pitched roofs.",
+    specs: ["Anodised aluminium rails","Roof fasteners included","Corrosion-resistant finish","Universal panel clamp set"],
+    customerView: { displayBrand: "Mounting Brand", manufacturerHidden: true },
+    manufacturer: { name: "MountGrid Structural Components", country: "India", moq: "Min. order: 5 kits", supplyChannel: "Project procurement partner", technicalContact: "Internal reference only" }
+  },
+  {
+    id: 6, name: "6mm² Solar Cable Pair", category: "Accessories", price: "$85",
+    badge: null, badgeLabel: null,
+    image: "https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&w=1200&q=80",
+    description: "UV-resistant PV cable set suitable for rooftop array string wiring.",
+    specs: ["6mm² stranded copper","UV-resistant outer sheath","Double insulated per EN 50618","MC4 connector compatible"],
+    customerView: { displayBrand: "Solar Cable Brand", manufacturerHidden: true },
+    manufacturer: { name: "CableCore Energy Conductors", country: "Spain", moq: "Min. order: 100 m", supplyChannel: "Regional warehouse stock", technicalContact: "Internal reference only" }
+  }
+];
+
+const services = [
+  { title: "PV System Design", icon: "📐", text: "Preliminary sizing for panels, inverters, and batteries based on your daily energy demand and Ghana region solar data." },
+  { title: "Installation Services", icon: "🔧", text: "Residential and commercial installation support for rooftop, ground-mounted, and hybrid systems across Ghana." },
+  { title: "Maintenance &amp; Support", icon: "🛡", text: "Inspection, testing, replacement planning, and corrective maintenance for solar PV systems — all regions." }
+];
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let cart = new Set();
+let currentCategory = 'All';
+let authMode = 'login';
+let contactData = {};
+
+// ─── PAGE NAV ─────────────────────────────────────────────────────────────────
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.getElementById('nav-' + page).classList.add('active');
+  if (page === 'support') renderSupport();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ─── PRODUCTS ─────────────────────────────────────────────────────────────────
+function filterProducts(cat, btn) {
+  currentCategory = cat;
+  document.querySelectorAll('#filter-row .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderProducts();
+}
+
+function renderProducts() {
+  const grid = document.getElementById('product-grid');
+  const filtered = currentCategory === 'All' ? agentFeed : agentFeed.filter(p => p.category === currentCategory);
+  const countEl = document.getElementById('product-count');
+  if (countEl) countEl.textContent = filtered.length + ' item' + (filtered.length !== 1 ? 's' : '');
+
+  grid.innerHTML = filtered.map(p => {
+    const inCart = cart.has(p.id);
+    const badgeHtml = p.badge === 'hot'
+      ? `<span class="badge badge-hot">🔥 ${p.badgeLabel}</span>`
+      : p.badge === 'new'
+      ? `<span class="badge badge-new">✦ ${p.badgeLabel}</span>`
+      : '';
+    return `
+      <div class="product-card" id="pcard-${p.id}">
+        <div class="product-img-wrap">
+          <img class="product-img" src="${p.image}" alt="${p.name}" loading="lazy" />
+          <div class="product-img-overlay"></div>
+          <div class="product-ribbon">
+            <span class="badge badge-cat">${p.category}</span>
+            ${badgeHtml}
+          </div>
+          <div class="product-price-chip">${p.price}</div>
+        </div>
+        <div class="product-body">
+          <div class="product-name">${p.name}</div>
+          <div class="product-desc">${p.description}</div>
+          <div class="product-brand-row">
+            <span class="badge badge-muted">Brand: ${p.customerView.displayBrand}</span>
+            <span class="badge badge-hidden">🔒 Mfr hidden</span>
+          </div>
+          <ul class="product-specs">
+            ${p.specs.map(s => `<li>${s}</li>`).join('')}
+          </ul>
+          <div class="product-footer">
+            <span class="product-price-main">${p.price}</span>
+            <div style="display:flex;align-items:center;gap:9px">
+              ${inCart ? `<span class="in-cart-indicator">✓ Added</span>` : ''}
+              <button class="btn btn-primary btn-sm" onclick="addToCart(${p.id})" id="abtn-${p.id}">
+                ${inCart ? '✓ In Cart' : '🛒 Add'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function addToCart(id) {
+  cart.add(id);
+  updateCartBadge();
+  renderProducts();
+}
+
+function updateCartBadge() {
+  const n = cart.size;
+  const badge = document.getElementById('cart-badge');
+  const bubble = document.getElementById('cart-count-bubble');
+  const floater = document.getElementById('cart-float');
+  if (badge) badge.textContent = n + ' selected';
+  if (bubble) {
+    bubble.textContent = n;
+    bubble.classList.toggle('show', n > 0);
+  }
+  if (floater) {
+    if (n > 0) {
+      floater.style.display = 'flex';
+      floater.style.alignItems = 'center';
+      floater.style.gap = '8px';
+      floater.innerHTML = `🛒 ${n} item${n>1?'s':''} selected &nbsp;— view store`;
+    } else {
+      floater.style.display = 'none';
+    }
+  }
+}
+
+// ─── SERVICES ─────────────────────────────────────────────────────────────────
+function renderServices() {
+  const container = document.getElementById('service-cards');
+  container.innerHTML = services.map(s => `
+    <div class="card" style="transition:transform 0.2s,box-shadow 0.2s" onmouseenter="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 36px rgba(0,0,0,0.5)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+      <div class="card-header">
+        <div class="card-title">${s.icon} ${s.title}</div>
+      </div>
+      <div class="card-body">
+        <div class="card-desc">${s.text}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── SUPPORT ──────────────────────────────────────────────────────────────────
+function renderSupport() {
+  const grid = document.getElementById('support-grid');
+  grid.innerHTML = agentFeed.map(p => {
+    const selected = cart.has(p.id);
+    return `
+      <div class="card">
+        <img class="support-product-img" src="${p.image}" alt="${p.name}" loading="lazy" />
+        <div class="card-header" style="padding-bottom:10px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+            <div>
+              <div class="card-title">${p.name}</div>
+              <div class="card-desc">${p.manufacturer.name}</div>
+            </div>
+            <span class="badge badge-cat">${p.category}</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="support-detail-grid">
+            <div class="support-row"><span class="support-label">Manufacturer:</span><span class="support-val">${p.manufacturer.name}</span></div>
+            <div class="support-row"><span class="support-label">Country:</span><span class="support-val">${p.manufacturer.country}</span></div>
+            <div class="support-row"><span class="support-label">Supply Channel:</span><span class="support-val">${p.manufacturer.supplyChannel}</span></div>
+            <div class="support-row"><span class="support-label">MOQ:</span><span class="support-val">${p.manufacturer.moq}</span></div>
+            <div class="support-row"><span class="support-label">Technical Contact:</span><span class="support-val">${p.manufacturer.technicalContact}</span></div>
+            <div class="sep"></div>
+            <div class="support-row">
+              <span class="support-label">Cart status:</span>
+              <span class="${selected?'selected-tag':'not-selected-tag'}">${selected?'✓ Selected':'— Not selected'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ─── MODAL ────────────────────────────────────────────────────────────────────
+function openModal() {
+  showModalStep(1);
+  document.getElementById('modal-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function overlayClick(e) {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+}
+function showModalStep(step) {
+  [1,2,3].forEach(n => {
+    document.getElementById('modal-step-' + n).style.display = n === step ? '' : 'none';
+    const stab = document.getElementById('stab-' + n);
+    stab.className = 'step-tab';
+    if (n < step) stab.classList.add('done');
+    if (n === step) stab.classList.add('active');
+  });
+}
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+function switchAuthTab(mode) {
+  authMode = mode;
+  document.getElementById('tab-login').classList.toggle('active', mode === 'login');
+  document.getElementById('tab-signup').classList.toggle('active', mode === 'signup');
+  document.getElementById('auth-signup-field').style.display = mode === 'signup' ? '' : 'none';
+  document.getElementById('auth-error').classList.remove('show');
+}
+function continueAuth() {
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value.trim();
+  const fullname = document.getElementById('auth-fullname').value.trim();
+  const err = document.getElementById('auth-error');
+  if (!email || !password || (authMode === 'signup' && !fullname)) { err.classList.add('show'); return; }
+  err.classList.remove('show');
+  if (authMode === 'signup' && fullname) document.getElementById('ct-name').value = fullname;
+  if (email) document.getElementById('ct-email').value = email;
+  showModalStep(2);
+}
+
+// ─── CONTACT ─────────────────────────────────────────────────────────────────
+function submitContact() {
+  const name = document.getElementById('ct-name').value.trim();
+  const email = document.getElementById('ct-email').value.trim();
+  const phone = document.getElementById('ct-phone').value.trim();
+  const location = document.getElementById('ct-location').value.trim();
+  const notes = document.getElementById('ct-notes').value.trim();
+  const err = document.getElementById('contact-error');
+  if (!name || !email || !phone || !location) { err.classList.add('show'); return; }
+  err.classList.remove('show');
+  contactData = { name, email, phone, location, notes };
+  renderProfile();
+  calcDesigner();
+  showModalStep(3);
+}
+
+// ─── DESIGNER ────────────────────────────────────────────────────────────────
+function renderProfile() {
+  document.getElementById('profile-display').innerHTML = `
+    <div class="profile-item"><span class="profile-icon">👤</span><span class="profile-val">${contactData.name||'—'}</span></div>
+    <div class="profile-item"><span class="profile-icon">✉</span><span class="profile-val">${contactData.email||'—'}</span></div>
+    <div class="profile-item"><span class="profile-icon">📞</span><span class="profile-val">${contactData.phone||'—'}</span></div>
+    <div class="profile-item"><span class="profile-icon">📍</span><span class="profile-val">${contactData.location||'—'}</span></div>
+    ${contactData.notes?`<div class="profile-item" style="flex-direction:column;align-items:flex-start;gap:4px"><span style="font-size:11px;text-transform:uppercase;font-weight:800;color:var(--muted);letter-spacing:0.4px">Notes</span><span style="font-size:13px;color:var(--muted2)">${contactData.notes}</span></div>`:''}
+  `;
+}
+
+function calcDesigner() {
+  const lighting = parseFloat(document.getElementById('d-lighting').value) || 0;
+  const socket   = parseFloat(document.getElementById('d-socket').value)   || 0;
+  const ac       = parseFloat(document.getElementById('d-ac').value)       || 0;
+  const psh      = parseFloat(document.getElementById('d-region').value)   || 5.0;
+  const total    = lighting + socket + ac;
+  const pvSize   = total > 0 ? total / (psh * 0.75) : 0;
+  const battery  = total > 0 ? total / 0.8 : 0;
+  const inverter = total > 0 ? total * 1.3 : 0;
+  const panels   = pvSize > 0 ? Math.ceil(pvSize * 1000 / 400) : 0;
+  const batUnits = battery > 0 ? Math.ceil(battery / 2.4) : 0;
+
+  document.getElementById('r-total').textContent    = total.toFixed(2);
+  document.getElementById('r-pv').textContent       = pvSize.toFixed(2);
+  document.getElementById('r-bat').textContent      = battery.toFixed(2);
+  document.getElementById('r-inv').textContent      = inverter.toFixed(2);
+  document.getElementById('r-panels').textContent   = panels;
+  document.getElementById('r-batunits').textContent = batUnits;
+  document.querySelectorAll('.result-card').forEach(c => {
+    c.classList.toggle('highlight', parseFloat(c.querySelector('.result-value').textContent) > 0);
+  });
+
+  const ps = agentFeed.find(p=>p.category==='Panels')?.manufacturer.name||'Internal';
+  const is = agentFeed.find(p=>p.category==='Inverters')?.manufacturer.name||'Internal';
+  const bs = agentFeed.find(p=>p.category==='Batteries')?.manufacturer.name||'Internal';
+  const xs = agentFeed.find(p=>p.category==='Protection')?.manufacturer.name||'Internal';
+  const ms = agentFeed.find(p=>p.name.includes('Rail'))?.manufacturer.name||'Internal';
+  const cs = agentFeed.find(p=>p.name.includes('Cable'))?.manufacturer.name||'Internal';
+
+  document.getElementById('boq-body').innerHTML = [
+    { item:'PV Modules 550Wp (Mono PERC)', qty:panels, unit:'No.', source:ps },
+    { item:'Hybrid Inverter',       qty:total>0?1:0, unit:'No.',source:is },
+    { item:'Battery Units (2.4kWh)',qty:batUnits, unit:'No.',   source:bs },
+    { item:'PV DC Isolator',        qty:total>0?Math.max(1,panels):0, unit:'No.', source:xs },
+    { item:'Roof Mount Rail Kit',   qty:total>0?Math.max(1,Math.ceil(panels/4)):0, unit:'Kits', source:ms },
+    { item:'6mm² Solar Cable',      qty:total>0?panels*2:0, unit:'m run', source:cs },
+  ].map(r=>`<tr><td>${r.item}</td><td><strong>${r.qty}</strong></td><td>${r.unit}</td><td class="boq-source">${r.source}</td></tr>`).join('');
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+(function init() {
+  renderProducts();
+  renderServices();
+})();
+</script>
+</body>
+</html>

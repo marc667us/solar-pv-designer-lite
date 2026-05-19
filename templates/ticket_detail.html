@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+{% block title %}Ticket #{{ ticket.id }} — {{ ticket.subject[:40] }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── Layout ── */
+  .ticket-layout{display:grid;grid-template-columns:1fr 280px;gap:22px;align-items:start}
+  @media(max-width:860px){.ticket-layout{grid-template-columns:1fr}}
+
+  /* ── Thread ── */
+  .thread-wrap{background:#080816;border:1px solid #1e1e3a;border-radius:16px;
+    display:flex;flex-direction:column;min-height:480px}
+  .thread-header{padding:14px 18px;border-bottom:1px solid #1e1e3a;
+    background:#0d0d1e;border-radius:16px 16px 0 0}
+  .thread-body{flex:1;padding:18px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;
+    max-height:560px}
+  .thread-footer{padding:14px 18px;border-top:1px solid #1e1e3a;
+    background:#0d0d1e;border-radius:0 0 16px 16px}
+
+  /* ── Bubbles ── */
+  .bubble-wrap{display:flex;gap:9px;align-items:flex-end;max-width:82%}
+  .bubble-wrap.support-side{align-self:flex-start}   /* support = left */
+  .bubble-wrap.user-side{align-self:flex-end;flex-direction:row-reverse}  /* user = right */
+
+  .bubble{padding:11px 15px;border-radius:16px;font-size:13px;line-height:1.6;
+    white-space:pre-wrap;word-break:break-word}
+  .bubble.support-bubble{background:#0c1f3a;border:1px solid #0ea5e944;
+    border-bottom-left-radius:4px;color:#c0d8f0}
+  .bubble.user-bubble{background:#1a120a;border:1px solid #f59e0b44;
+    border-bottom-right-radius:4px;color:#e8d8b0}
+  .bubble.opening-bubble{background:#1a120a;border:1px solid #f59e0b55;
+    border-bottom-right-radius:4px;color:#e8d8b0}
+
+  .bubble-avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:11px;font-weight:900;flex-shrink:0}
+  .bubble-meta{font-size:10px;color:#3a3a6a;margin-top:4px}
+  .bubble-wrap.user-side .bubble-meta{text-align:right}
+
+  .support-tag{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;
+    border-radius:4px;background:#0ea5e915;color:#0ea5e9;
+    font-size:9px;font-weight:800;letter-spacing:.3px;border:1px solid #0ea5e930}
+
+  /* ── Reply area ── */
+  .reply-area{background:#0a0a1a;border:1px solid #2a2a5a;border-radius:10px;
+    color:#d0d0e8;font-size:13px;padding:10px 12px;resize:vertical;width:100%;
+    min-height:80px;transition:.2s}
+  .reply-area:focus{outline:none;border-color:#f59e0b66;background:#080816}
+
+  /* ── Info sidebar ── */
+  .sidebar-card{background:#0f0f22;border:1px solid #1e1e3a;border-radius:13px;
+    padding:16px;margin-bottom:14px}
+  .sidebar-row{display:flex;justify-content:space-between;align-items:center;
+    padding:6px 0;border-bottom:1px solid #111128;font-size:12px}
+  .sidebar-row:last-child{border-bottom:none}
+  .sidebar-lbl{color:#4a4a7a;font-weight:600;text-transform:uppercase;
+    letter-spacing:.4px;font-size:10px}
+  .sidebar-val{color:#c0c0e0;font-weight:600}
+
+  .stat-chip{display:inline-block;padding:3px 9px;border-radius:20px;font-size:10px;
+    font-weight:700;text-transform:uppercase}
+  .prio-chip{display:inline-block;padding:2px 7px;border-radius:8px;font-size:9px;
+    font-weight:800;text-transform:uppercase}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% set sc = {
+  'open':        ('#ef4444','bi-exclamation-circle-fill'),
+  'in_progress': ('#f59e0b','bi-hourglass-split'),
+  'answered':    ('#0ea5e9','bi-chat-dots-fill'),
+  'closed':      ('#22c55e','bi-check-circle-fill'),
+  'resolved':    ('#22c55e','bi-check-circle-fill'),
+} %}
+{% set pc = {'high':'#ef4444','normal':'#f59e0b','low':'#6868a0'} %}
+{% set s_color, s_icon = sc.get(ticket.status, ('#6868a0','bi-circle')) %}
+{% set p_color = pc.get(ticket.priority or 'normal', '#f59e0b') %}
+
+<!-- Breadcrumb -->
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+  <a href="{{ url_for('tickets') }}" class="text-secondary small text-decoration-none">
+    <i class="bi bi-headset me-1"></i>Support
+  </a>
+  <span class="text-secondary">/</span>
+  <span class="text-warning small fw-bold">#{{ ticket.id }}</span>
+</div>
+
+<!-- Subject + chips -->
+<div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+  <div class="fw-black flex-grow-1" style="font-size:17px;color:#f0f0f8;min-width:0">
+    {{ ticket.subject }}
+  </div>
+  <span class="stat-chip" style="background:{{ s_color }}15;color:{{ s_color }};border:1px solid {{ s_color }}33">
+    <i class="bi {{ s_icon }} me-1" style="font-size:9px"></i>{{ ticket.status|upper|replace('_',' ') }}
+  </span>
+  <span class="prio-chip" style="background:{{ p_color }}15;color:{{ p_color }};border:1px solid {{ p_color }}33">
+    {{ (ticket.priority or 'normal')|upper }}
+  </span>
+</div>
+
+<!-- Two-column layout -->
+<div class="ticket-layout">
+
+  <!-- ── LEFT/MAIN: Chat thread ─────────────────────────────────────────── -->
+  <div class="thread-wrap">
+
+    <div class="thread-header d-flex align-items-center justify-content-between">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-chat-dots-fill" style="color:#0ea5e9;font-size:13px"></i>
+        <span class="small fw-bold" style="color:#c0c0e0">Conversation</span>
+        <span class="badge" style="background:#1e1e3a;color:#6868a0;font-size:9px">
+          {{ replies|length + 1 }} message{{ 's' if replies|length != 0 }}
+        </span>
+      </div>
+      <a href="{{ url_for('tickets') }}" class="text-secondary text-decoration-none"
+         style="font-size:11px"><i class="bi bi-arrow-left me-1"></i>All tickets</a>
+    </div>
+
+    <div class="thread-body" id="threadBody">
+
+      <!-- Opening message — user side (right) -->
+      <div class="bubble-wrap user-side">
+        <div class="bubble-avatar"
+             style="background:#f59e0b18;border:1px solid #f59e0b44;color:#f59e0b">
+          {{ user.username[0]|upper }}
+        </div>
+        <div>
+          <div class="bubble opening-bubble">{{ ticket.message }}</div>
+          <div class="bubble-meta">
+            <strong style="color:#7a6840">You</strong>
+            · {{ ticket.created_at[:16].replace('T',' ') if ticket.created_at else '' }}
+            <span style="color:#f59e0b66;margin-left:4px">Opening message</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reply chain -->
+      {% for r in replies %}
+      {% if r.is_admin %}
+      <!-- Support reply — left side -->
+      <div class="bubble-wrap support-side">
+        <div class="bubble-avatar"
+             style="background:#0ea5e918;border:1px solid #0ea5e944;color:#0ea5e9">
+          S
+        </div>
+        <div>
+          <div class="bubble support-bubble">{{ r.message }}</div>
+          <div class="bubble-meta">
+            <span class="support-tag"><i class="bi bi-shield-fill" style="font-size:8px"></i>SolarPro Support</span>
+            <span class="ms-1">· {{ r.created_at[:16].replace('T',' ') if r.created_at else '' }}</span>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <!-- User reply — right side -->
+      <div class="bubble-wrap user-side">
+        <div class="bubble-avatar"
+             style="background:#f59e0b18;border:1px solid #f59e0b44;color:#f59e0b">
+          {{ user.username[0]|upper }}
+        </div>
+        <div>
+          <div class="bubble user-bubble">{{ r.message }}</div>
+          <div class="bubble-meta">
+            <strong style="color:#7a6840">You</strong>
+            · {{ r.created_at[:16].replace('T',' ') if r.created_at else '' }}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+
+    </div><!-- /thread-body -->
+
+    <!-- Reply footer -->
+    <div class="thread-footer">
+      {% if ticket.status not in ('closed', 'resolved') %}
+      <form method="POST" id="replyForm">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="d-flex gap-2 align-items-end">
+          <div class="bubble-avatar flex-shrink-0 mb-1"
+               style="background:#f59e0b18;border:1px solid #f59e0b44;color:#f59e0b">
+            {{ user.username[0]|upper }}
+          </div>
+          <div class="flex-grow-1">
+            <textarea name="message" id="replyText" class="reply-area"
+                      placeholder="Add more information or reply to support… (Enter to send, Shift+Enter for new line)"
+                      required></textarea>
+          </div>
+          <div class="flex-shrink-0 mb-1">
+            <button type="submit" class="btn btn-solar btn-sm px-3" style="white-space:nowrap">
+              <i class="bi bi-send-fill me-1"></i>Send
+            </button>
+          </div>
+        </div>
+      </form>
+      {% else %}
+      <div class="text-center text-secondary small py-2">
+        <i class="bi bi-check-circle-fill me-1" style="color:#22c55e"></i>
+        This ticket is closed.
+        <a href="{{ url_for('tickets') }}" class="text-warning ms-2">Back to support</a>
+      </div>
+      {% endif %}
+    </div>
+
+  </div><!-- /thread-wrap -->
+
+  <!-- ── RIGHT: Sidebar ────────────────────────────────────────────────── -->
+  <div>
+
+    <!-- Ticket info -->
+    <div class="sidebar-card">
+      <div class="small fw-bold text-secondary mb-3"
+           style="text-transform:uppercase;letter-spacing:.5px;font-size:10px">
+        <i class="bi bi-info-circle me-1"></i>Ticket Info
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">ID</span>
+        <span class="sidebar-val">#{{ ticket.id }}</span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Status</span>
+        <span class="stat-chip" style="background:{{ s_color }}15;color:{{ s_color }};border:1px solid {{ s_color }}33;font-size:9px">
+          {{ ticket.status|upper|replace('_',' ') }}
+        </span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Priority</span>
+        <span class="prio-chip" style="background:{{ p_color }}15;color:{{ p_color }};border:1px solid {{ p_color }}33">
+          {{ (ticket.priority or 'normal')|upper }}
+        </span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Opened</span>
+        <span class="sidebar-val" style="font-size:11px">{{ ticket.created_at[:10] if ticket.created_at else '—' }}</span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Last update</span>
+        <span class="sidebar-val" style="font-size:11px">{{ ticket.updated_at[:10] if ticket.updated_at else '—' }}</span>
+      </div>
+      <div class="sidebar-row">
+        <span class="sidebar-lbl">Replies</span>
+        <span class="sidebar-val">{{ replies|length }}</span>
+      </div>
+    </div>
+
+    <!-- What to expect -->
+    {% if ticket.status in ('open', 'in_progress') %}
+    <div class="sidebar-card" style="border-color:#0ea5e933">
+      <div class="small fw-bold mb-2" style="color:#0ea5e9;font-size:11px">
+        <i class="bi bi-clock me-1"></i>Response time
+      </div>
+      <div class="text-secondary" style="font-size:11px;line-height:1.6">
+        Our support team typically responds within <strong style="color:#c0c0e0">24 hours</strong>.
+        For urgent issues, mark your ticket as <span style="color:#ef4444">High</span> priority.
+      </div>
+    </div>
+    {% elif ticket.status == 'answered' %}
+    <div class="sidebar-card" style="border-color:#0ea5e944;background:#0c1a2a">
+      <div class="small fw-bold mb-2" style="color:#0ea5e9;font-size:11px">
+        <i class="bi bi-chat-dots-fill me-1"></i>Support replied
+      </div>
+      <div class="text-secondary" style="font-size:11px;line-height:1.6">
+        We've responded to your ticket. Scroll up to read and reply if you need further help.
+      </div>
+    </div>
+    {% elif ticket.status in ('closed', 'resolved') %}
+    <div class="sidebar-card" style="border-color:#22c55e33">
+      <div class="small fw-bold mb-2" style="color:#22c55e;font-size:11px">
+        <i class="bi bi-check-circle-fill me-1"></i>Ticket closed
+      </div>
+      <div class="text-secondary" style="font-size:11px;line-height:1.6">
+        This ticket has been resolved. If your issue persists,
+        <a href="{{ url_for('tickets') }}" class="text-warning">open a new ticket</a>.
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Navigation -->
+    <div class="sidebar-card">
+      <a href="{{ url_for('tickets') }}" class="btn btn-outline-secondary btn-sm w-100 mb-2">
+        <i class="bi bi-list-ul me-1"></i>All My Tickets
+      </a>
+      <button onclick="document.getElementById('replyText')?.focus()" class="btn btn-sm w-100"
+              style="background:#f59e0b18;border:1px solid #f59e0b44;color:#f59e0b;font-size:12px"
+              {% if ticket.status in ('closed','resolved') %}disabled{% endif %}>
+        <i class="bi bi-reply me-1"></i>Reply
+      </button>
+    </div>
+
+  </div><!-- /sidebar -->
+
+</div><!-- /ticket-layout -->
+
+<script>
+const tb = document.getElementById('threadBody');
+if (tb) tb.scrollTop = tb.scrollHeight;
+
+const ta = document.getElementById('replyText');
+if (ta) {
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('replyForm').submit();
+    }
+  });
+}
+</script>
+
+{% endblock %}
