@@ -1,0 +1,1 @@
+web: python -c "from dotenv import load_dotenv; load_dotenv(); from waitress import serve; from web_app import app, init_db; init_db(); serve(app, host='0.0.0.0', port=int(__import__('os').environ.get('PORT',5000)), threads=8)"
