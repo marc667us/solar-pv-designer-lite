@@ -4786,25 +4786,63 @@ def admin_agent_run():
         if focus:
             queries.insert(0, f'{loc} {focus} solar request for proposal OR tender OR RFP 2025 2026')
 
+        # Domains to always skip
+        skip_domains = ["pv-magazine", "pvtech", "reuters.com", "bloomberg.com",
+                        "wikipedia.org", "youtube.com", "linkedin.com/posts",
+                        "twitter.com", "facebook.com", "instagram.com",
+                        "solarpowerworldonline", "greentechmedia", "renewableenergyworld"]
+        # URL patterns that indicate a category/listing page, not a specific tender
+        # Block category/listing pages — substring matching (no regex)
+        listing_patterns = [
+            "/ghana-tenders", "/solar-tenders", "/renewable-energy-tenders",
+            "/country/ghana", "?country=",
+            # UNGM listing page (specific notices have a number after /Notice/)
+            "/Public/Notice\n", "/Public/Notice ",
+            # tendersinfo global category pages
+            "global-solar-tenders", "global-energy-and-power",
+            "global-solar-panel", "-tenders-26.php", "tenders.php", "rfq.php",
+            # Search / index pages
+            "/tenders/search", "/tenders/adminShow",
+            # globaltenders.com country listing pages (specific tenders have /tender-detail/)
+            "globaltenders.com/gh/", "globaltenders.com/ghana-tenders",
+            # Generic tender portal home pages
+            "tendersontime.com/ghana-tenders/",
+            "tendersontime.com/south-africa-tenders/",
+            # developmentaid search
+            "developmentaid.org/tenders",
+            # Devex funding index
+            "devex.com/funding/r?report=grant",
+        ]
+        # Must contain procurement intent
+        rfp_keywords = ["rfp", "tender", "bid", "proposal", "solicitation",
+                        "procurement", "expression of interest", "eoi",
+                        "invitation", "prequalif", "contract notice", "call for"]
+        # Must be solar/energy related
+        energy_keywords = ["solar", "pv ", "photovoltaic", "renewable energy",
+                           "wind", "energy", "power plant", "mini grid", "minigrid",
+                           "electrification", "off-grid", "grid", "kw", "mw"]
+
         with DDGS() as ddgs:
             for q in queries:
                 try:
-                    for r in ddgs.text(q, max_results=6, safesearch="off"):
-                        url  = r.get("href", "")
-                        body = r.get("body", "").lower()
+                    for r in ddgs.text(q, max_results=8, safesearch="off"):
+                        url   = r.get("href", "")
+                        body  = r.get("body", "").lower()
                         title = r.get("title", "").lower()
-                        # Skip news articles, opinion pieces, and general solar info pages
-                        skip_domains = ["pv-magazine", "pvtech", "reuters.com", "bloomberg.com",
-                                        "wikipedia.org", "youtube.com", "linkedin.com/posts",
-                                        "twitter.com", "facebook.com", "instagram.com"]
+                        # 1. Skip blocked domains
                         if any(d in url for d in skip_domains):
                             continue
-                        # Require procurement-intent keywords in title or body
-                        rfp_keywords = ["rfp", "tender", "bid", "proposal", "solicitation",
-                                        "procurement", "expression of interest", "eoi",
-                                        "invitation", "prequalif", "contract notice", "award"]
+                        # 2. Skip generic listing/category pages
+                        url_lower = url.lower()
+                        if any(p in url_lower for p in listing_patterns):
+                            continue
+                        # 3. Must have procurement intent in title or body
                         if not any(kw in title or kw in body for kw in rfp_keywords):
                             continue
+                        # 4. Must be energy/solar related
+                        if not any(kw in title or kw in body for kw in energy_keywords):
+                            continue
+                        # 5. Deduplicate by URL
                         if url and not any(x.get("href") == url for x in search_results):
                             search_results.append(r)
                 except Exception:
