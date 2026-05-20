@@ -4808,33 +4808,32 @@ def admin_agent_run():
             "OR site:gogla.org OR site:se4all.org OR site:energyaccess.org"
         )
 
-        # ── 10 targeted queries — all procurement-intent ──────────────────────
-        rfp_phrase = '"request for proposal" OR "invitation to bid" OR "expression of interest" OR tender OR "call for bids" OR EOI OR ITB OR RFP'
+        # ── Queries — mix of portal-targeted AND open-web (mirrors manual search) ──
+        rfp_phrase = ('"request for proposal" OR "invitation to bid" OR '
+                      '"expression of interest" OR tender OR "call for bids" '
+                      'OR EOI OR ITB OR RFP OR solicitation OR procurement')
+        epc_phrase = ('"EPC contract" OR "design and install" OR "design and build" '
+                      'OR "supply and install" OR "turnkey" OR "installation contract"')
         queries = [
-            # UN portals × West Africa solar
+            # ── Open-web: exactly what you'd type manually ────────────────────
+            f'solar PV RFP ({loc_q}) 2025 2026',
+            f'solar PV tender ({loc_q}) {sector} 2025 2026',
+            f'solar installation contract ({loc_q}) 2025 2026',
+            f'solar EPC tender ({loc_q}) 2025 2026',
+            f'solar project design install ({loc_q}) {rfp_phrase} 2025 2026',
+            f'({loc_q}) solar PV {epc_phrase} 2025 2026',
+            # ── Portal-targeted queries ───────────────────────────────────────
             f'({UN_PORTALS}) solar ({loc_q}) {rfp_phrase} 2025 2026',
-            # World Bank / AfDB / IFC active solar procurement
-            f'({DFI_PORTALS}) solar ({loc_q}) procurement OR {rfp_phrase} 2025 2026',
-            # Africa tender aggregators
+            f'({DFI_PORTALS}) solar ({loc_q}) {rfp_phrase} 2025 2026',
             f'({AFRICA_PORTALS}) solar ({loc_q}) {rfp_phrase} 2025 2026',
-            # Government energy ministry notices
             f'({GOV_PORTALS}) solar {rfp_phrase} 2025 2026',
-            # PPA / off-take solicitations
             f'({PPA_PORTALS}) solar ({loc_q}) "power purchase agreement" OR PPA OR {rfp_phrase} 2025 2026',
-            # Broad West-Africa solar RFP/tender (catches gov sites not in list)
-            f'({loc_q}) solar PV "request for proposal" OR "invitation to bid" OR "expression of interest" {sector} 2025 2026',
-            # AfDB & World Bank pipeline specifically
-            f'site:afdb.org solar ({loc_q}) procurement notice OR project appraisal 2025 2026',
-            # UNGM deep
+            f'site:afdb.org solar ({loc_q}) procurement 2025 2026',
             f'site:ungm.org solar ({loc_q}) 2025 2026',
-            # Devex solar grants & tenders
             f'site:devex.com solar ({loc_q}) "request for proposals" OR tender 2025 2026',
-            # Focus / niche override
-            f'({loc_q}) solar {"" if not focus else focus} {rfp_phrase} {sector} 2025 2026',
         ]
         if focus:
-            queries.insert(0,
-                f'({loc_q}) "{focus}" solar {rfp_phrase} 2025 2026')
+            queries.insert(0, f'({loc_q}) "{focus}" solar {rfp_phrase} 2025 2026')
 
         # ── Domains to always skip (news, social, generic AI content) ─────────
         skip_domains = [
@@ -4859,18 +4858,21 @@ def admin_agent_run():
             "devex.com/funding/r?report=grant",
             "/tag/solar", "/category/solar", "/news/solar",
         ]
-        # ── Hard gate 1: must be a procurement/project solicitation ───────────
+        # ── Hard gate 1: must be a procurement/project opportunity ──────────
         rfp_keywords = [
             "rfp", "tender", "bid", "proposal", "solicitation", "procurement",
             "expression of interest", "eoi", "ppa", "power purchase",
             "invitation to bid", "itb", "prequalif", "contract notice",
             "call for bids", "call for proposal", "request for quotation",
+            "epc", "design and install", "supply and install", "turnkey",
+            "installation contract", "design and build", "works contract",
         ]
-        # ── Hard gate 2: must be solar/renewable — required in TITLE ──────────
+        # ── Hard gate 2: solar keyword required in TITLE ─────────────────────
         solar_keywords = [
             "solar", "photovoltaic", "pv system", "pv project", "solar pv",
             "solar power", "solar energy", "solar plant", "solar farm",
             "mini grid", "minigrid", "off-grid solar", "renewable energy",
+            "solar installation", "solar design",
         ]
 
         def _real_url(raw):
