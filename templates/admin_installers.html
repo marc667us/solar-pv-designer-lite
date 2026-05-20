@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Installer Registry – SolarPro Admin{% endblock %}
+{% block content %}
+{% set GRADE_CLR = {'A':'#4ade80','B':'#86efac','C':'#fde047','D':'#f87171'} %}
+{% set STATUS_CLR = {'pending':'#f59e0b','approved':'#22c55e','rejected':'#f87171'} %}
+
+<div class="container-fluid py-4">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="fw-900 mb-0" style="font-size:1.5rem">
+        <i class="bi bi-tools me-2" style="color:#fb923c"></i>Installer Registry
+      </h2>
+      <div class="text-secondary small">Vetted installer &amp; subcontractor network</div>
+    </div>
+    <a href="{{ url_for('installer_register') }}" class="btn btn-sm btn-solar" target="_blank">
+      <i class="bi bi-box-arrow-up-right me-1"></i>Public Registration
+    </a>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="kpi-card text-center">
+        <div class="kpi-label">Total</div>
+        <div class="kpi-value">{{ installers|length }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card text-center">
+        <div class="kpi-label">Pending Review</div>
+        <div class="kpi-value" style="background:linear-gradient(90deg,#f59e0b,#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">{{ pending }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card text-center">
+        <div class="kpi-label">Approved</div>
+        <div class="kpi-value" style="background:linear-gradient(90deg,#22c55e,#4ade80);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">{{ approved }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card text-center">
+        <div class="kpi-label">Grade A/B</div>
+        {% set ab = installers | selectattr('ai_grade', 'in', ['A','B']) | list | length %}
+        <div class="kpi-value" style="background:linear-gradient(90deg,#4ade80,#86efac);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">{{ ab }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status filter -->
+  <div class="d-flex gap-2 mb-4">
+    {% for slug,label in [('all','All'),('pending','Pending'),('approved','Approved'),('rejected','Rejected')] %}
+    <a href="{{ url_for('admin_installers', status=slug) }}" class="text-decoration-none">
+      <span class="badge px-3 py-2 {% if status_filter==slug %}btn-solar{% endif %}"
+        style="{% if status_filter!=slug %}background:#1e1e3a;color:#a0a0c8;{% endif %}font-size:12px">
+        {{ label }}
+      </span>
+    </a>
+    {% endfor %}
+  </div>
+
+  {% if not installers %}
+  <div class="solar-card p-5 text-center text-secondary">
+    <i class="bi bi-tools" style="font-size:3rem;opacity:.3"></i>
+    <div class="mt-2">No installers registered yet.</div>
+    <a href="{{ url_for('installer_register') }}" class="btn btn-sm btn-solar mt-3" target="_blank">
+      <i class="bi bi-box-arrow-up-right me-1"></i>Open Registration Form
+    </a>
+  </div>
+  {% else %}
+  <div class="row g-3">
+    {% for inst in installers %}
+    {% set gclr = GRADE_CLR.get(inst.ai_grade,'#6868a0') %}
+    {% set sclr = STATUS_CLR.get(inst.status,'#6868a0') %}
+    <div class="col-xl-6">
+      <div class="solar-card p-3" style="border-left:3px solid {{ gclr }}">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div>
+            <div class="fw-bold">{{ inst.company_name }}
+              <span class="badge ms-1" style="background:{{ gclr }}22;color:{{ gclr }};font-size:10px">
+                Grade {{ inst.ai_grade or '?' }}
+              </span>
+              <span class="badge ms-1" style="background:{{ sclr }}22;color:{{ sclr }};font-size:10px">
+                {{ inst.status|capitalize }}
+              </span>
+            </div>
+            <div class="text-secondary small">{{ inst.contact_name }} · {{ inst.country or '—' }}</div>
+          </div>
+          <div class="text-secondary small">{{ inst.created_at[:10] }}</div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mb-2">
+          {% if inst.years_exp %}
+          <span class="badge" style="background:#0f0f22;border:1px solid #2e2e4a;color:#a0a0c8;font-size:11px">
+            <i class="bi bi-clock-history me-1"></i>{{ inst.years_exp }}yr exp
+          </span>
+          {% endif %}
+          {% if inst.staff_count %}
+          <span class="badge" style="background:#0f0f22;border:1px solid #2e2e4a;color:#a0a0c8;font-size:11px">
+            <i class="bi bi-people me-1"></i>{{ inst.staff_count }} staff
+          </span>
+          {% endif %}
+          {% if inst.max_project_kw %}
+          <span class="badge" style="background:#0f0f22;border:1px solid #2e2e4a;color:#a0a0c8;font-size:11px">
+            Max {{ inst.max_project_kw|int }} kWp
+          </span>
+          {% endif %}
+          <a href="mailto:{{ inst.email }}" class="badge text-decoration-none" style="background:#0ea5e922;color:#0ea5e9;font-size:11px;border:1px solid #0ea5e944">
+            <i class="bi bi-envelope me-1"></i>{{ inst.email }}
+          </a>
+          {% if inst.phone %}
+          <span class="badge" style="background:#22c55e22;color:#22c55e;font-size:11px;border:1px solid #22c55e44">
+            <i class="bi bi-telephone me-1"></i>{{ inst.phone }}
+          </span>
+          {% endif %}
+        </div>
+
+        {% if inst.certifications %}
+        <div class="small text-secondary mb-1" style="font-size:11px">
+          <i class="bi bi-patch-check me-1" style="color:#a78bfa"></i>{{ inst.certifications }}
+        </div>
+        {% endif %}
+        {% if inst.specialties %}
+        <div class="small text-secondary mb-1" style="font-size:11px">
+          <i class="bi bi-wrench-adjustable me-1" style="color:#fb923c"></i>{{ inst.specialties }}
+        </div>
+        {% endif %}
+        {% if inst.regions %}
+        <div class="small text-secondary mb-2" style="font-size:11px">
+          <i class="bi bi-geo-alt me-1" style="color:#38bdf8"></i>{{ inst.regions }}
+        </div>
+        {% endif %}
+
+        <!-- Action buttons -->
+        <div class="d-flex gap-2 mt-2">
+          {% if inst.status == 'pending' %}
+          <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+            <input type="hidden" name="action" value="approve">
+            <input type="hidden" name="iid" value="{{ inst.id }}">
+            <button type="submit" class="btn btn-sm" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">
+              <i class="bi bi-check-circle me-1"></i>Approve
+            </button>
+          </form>
+          <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+            <input type="hidden" name="action" value="reject">
+            <input type="hidden" name="iid" value="{{ inst.id }}">
+            <button type="submit" class="btn btn-sm" style="background:#f8717122;color:#f87171;border:1px solid #f8717144">
+              <i class="bi bi-x-circle me-1"></i>Reject
+            </button>
+          </form>
+          {% elif inst.status == 'approved' %}
+          <span class="badge px-3 py-2" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">
+            <i class="bi bi-check-circle-fill me-1"></i>Approved — Ready to Bid
+          </span>
+          {% elif inst.status == 'rejected' %}
+          <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+            <input type="hidden" name="action" value="approve">
+            <input type="hidden" name="iid" value="{{ inst.id }}">
+            <button type="submit" class="btn btn-sm" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;font-size:11px">
+              <i class="bi bi-arrow-repeat me-1"></i>Re-approve
+            </button>
+          </form>
+          {% endif %}
+          <form method="post" onsubmit="return confirm('Delete this installer?')">
+            <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="iid" value="{{ inst.id }}">
+            <button type="submit" class="btn btn-sm btn-outline-danger" style="font-size:11px">
+              <i class="bi bi-trash"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

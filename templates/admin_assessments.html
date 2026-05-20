@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Assessment Requests – SolarPro Admin{% endblock %}
+{% block content %}
+{% set STAGES = [('new','New','#6366f1'),('qualified','Qualified','#22c55e'),('assessment_sent','Assessment Sent','#0ea5e9'),('proposal_sent','Proposal Sent','#f59e0b'),('won','Won','#4ade80'),('lost','Lost','#f87171')] %}
+{% set GRADE_CLR = {'A':'#4ade80','B':'#86efac','C':'#fde047','D':'#f87171'} %}
+
+<div class="container-fluid py-4">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="fw-900 mb-0" style="font-size:1.5rem">
+        <i class="bi bi-clipboard2-check me-2" style="color:#4ade80"></i>Assessment Requests
+      </h2>
+      <div class="text-secondary small">Client assessment pipeline — qualify, assign, and convert</div>
+    </div>
+    <a href="{{ url_for('admin_pipeline') }}" class="btn btn-sm" style="background:#1e1e3a;color:#a0a0c8;border:1px solid #2e2e4a">
+      <i class="bi bi-kanban me-1"></i>Full Pipeline
+    </a>
+  </div>
+
+  <!-- Pipeline Stage KPIs -->
+  <div class="d-flex flex-wrap gap-2 mb-4">
+    <a href="{{ url_for('admin_assessments') }}" class="text-decoration-none">
+      <span class="badge px-3 py-2 {% if stage_filter=='all' %}btn-solar{% endif %}"
+        style="{% if stage_filter!='all' %}background:#1e1e3a;color:#a0a0c8;{% endif %}font-size:12px">
+        All ({{ counts.values()|sum }})
+      </span>
+    </a>
+    {% for slug,label,clr in STAGES %}
+    <a href="{{ url_for('admin_assessments', stage=slug) }}" class="text-decoration-none">
+      <span class="badge px-3 py-2" style="background:{{ clr }}22;color:{{ clr }};border:1px solid {{ clr }}44;font-size:12px;
+        {% if stage_filter==slug %}outline:2px solid {{ clr }};{% endif %}">
+        {{ label }} ({{ counts.get(slug,0) }})
+      </span>
+    </a>
+    {% endfor %}
+  </div>
+
+  {% if not requests %}
+  <div class="solar-card p-5 text-center text-secondary">
+    <i class="bi bi-clipboard2-x" style="font-size:3rem;opacity:.3"></i>
+    <div class="mt-2">No assessment requests yet.</div>
+    <a href="{{ url_for('assessment_request') }}" class="btn btn-sm btn-solar mt-3" target="_blank">
+      <i class="bi bi-box-arrow-up-right me-1"></i>View Public Form
+    </a>
+  </div>
+  {% else %}
+  <div class="row g-3">
+    {% for r in requests %}
+    {% set gclr = GRADE_CLR.get(r.ai_grade,'#6868a0') %}
+    <div class="col-xl-6">
+      <div class="solar-card p-3" style="border-left:3px solid {{ gclr }}">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div>
+            <div class="fw-bold">{{ r.name }}
+              <span class="badge ms-1 fw-bold" style="background:{{ gclr }}22;color:{{ gclr }};font-size:10px">
+                Grade {{ r.ai_grade or '?' }} · {{ r.ai_score or 0 }}/100
+              </span>
+            </div>
+            <div class="text-secondary small">{{ r.company or '—' }} · {{ r.country or '—' }}</div>
+          </div>
+          <div class="text-end">
+            <div class="small text-secondary">{{ r.created_at[:10] }}</div>
+            {% for slug,label,clr in STAGES %}{% if r.pipeline_stage==slug %}
+            <span class="badge" style="background:{{ clr }}22;color:{{ clr }};font-size:10px">{{ label }}</span>
+            {% endif %}{% endfor %}
+          </div>
+        </div>
+
+        <!-- Details row -->
+        <div class="d-flex flex-wrap gap-2 mb-2">
+          {% if r.system_type %}
+          <span class="badge" style="background:#0f0f22;border:1px solid #2e2e4a;color:#a0a0c8;font-size:11px">
+            <i class="bi bi-sun me-1 text-warning"></i>{{ r.system_type }}
+          </span>
+          {% endif %}
+          {% if r.system_size_kw %}
+          <span class="badge" style="background:#0f0f22;border:1px solid #2e2e4a;color:#a0a0c8;font-size:11px">
+            {{ r.system_size_kw }} kWp
+          </span>
+          {% endif %}
+          {% if r.budget_usd %}
+          <span class="badge" style="background:#0f0f22;border:1px solid #2e2e4a;color:#a0a0c8;font-size:11px">
+            <i class="bi bi-currency-dollar me-1"></i>{{ r.budget_usd }}
+          </span>
+          {% endif %}
+          <a href="mailto:{{ r.email }}" class="badge text-decoration-none" style="background:#0ea5e922;color:#0ea5e9;font-size:11px;border:1px solid #0ea5e944">
+            <i class="bi bi-envelope me-1"></i>{{ r.email }}
+          </a>
+          {% if r.phone %}
+          <span class="badge" style="background:#22c55e22;color:#22c55e;font-size:11px;border:1px solid #22c55e44">
+            <i class="bi bi-telephone me-1"></i>{{ r.phone }}
+          </span>
+          {% endif %}
+        </div>
+
+        {% if r.ai_notes %}
+        <div class="small text-secondary mb-2" style="font-size:11px">
+          <i class="bi bi-robot me-1" style="color:#a78bfa"></i>{{ r.ai_notes }}
+        </div>
+        {% endif %}
+        {% if r.message %}
+        <div class="small mb-2" style="color:#7070a0;border-left:2px solid #2e2e4a;padding-left:8px">
+          {{ r.message[:200] }}{% if r.message|length > 200 %}…{% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Update form -->
+        <form method="post" class="mt-2 d-flex flex-wrap gap-2 align-items-end">
+          <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+          <input type="hidden" name="action" value="update">
+          <input type="hidden" name="aid" value="{{ r.id }}">
+          <div>
+            <label class="form-label text-secondary mb-1" style="font-size:10px">Stage</label>
+            <select name="pipeline_stage" class="form-select form-select-sm" style="min-width:130px">
+              {% for slug,label,clr in STAGES %}
+              <option value="{{ slug }}" {% if r.pipeline_stage==slug %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="form-label text-secondary mb-1" style="font-size:10px">Follow-up</label>
+            <input type="date" name="follow_up_date" class="form-control form-control-sm"
+              value="{{ r.follow_up_date or '' }}" style="min-width:130px">
+          </div>
+          <div>
+            <label class="form-label text-secondary mb-1" style="font-size:10px">Status</label>
+            <select name="status" class="form-select form-select-sm">
+              <option value="open" {% if r.status=='open' %}selected{% endif %}>Open</option>
+              <option value="closed" {% if r.status=='closed' %}selected{% endif %}>Closed</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-sm btn-solar">Save</button>
+        </form>
+
+        <form method="post" class="d-inline mt-1"
+          onsubmit="return confirm('Delete this assessment request?')">
+          <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="aid" value="{{ r.id }}">
+          <button type="submit" class="btn btn-sm btn-outline-danger" style="font-size:11px">
+            <i class="bi bi-trash"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Installer Registration – SolarPro Global{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:820px">
+
+  <!-- Header -->
+  <div class="text-center mb-5">
+    <div class="mb-3"><span style="font-size:3rem">🔧</span></div>
+    <h1 class="fw-900 mb-2" style="background:linear-gradient(90deg,#fb923c,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:2.1rem">
+      Installer &amp; Contractor Registration
+    </h1>
+    <p class="text-secondary mb-0" style="font-size:1rem">
+      Join our vetted installer network to bid on solar projects in your region.
+      Registration is free — approval within 2 business days.
+    </p>
+  </div>
+
+  <!-- Perks -->
+  <div class="row g-3 mb-5">
+    {% for icon,clr,title,desc in [
+      ('bi-briefcase','#38bdf8','Access Project Tenders','Bid on commercial & industrial solar projects'),
+      ('bi-graph-up-arrow','#4ade80','Grow Your Business','Connect with qualified clients actively seeking installers'),
+      ('bi-patch-check','#a78bfa','Verified Installer Badge','Get a verified listing on our procurement portal'),
+      ('bi-currency-dollar','#f59e0b','Win More Contracts','Compete on price, quality and delivery capability'),
+    ] %}
+    <div class="col-6 col-md-3">
+      <div class="solar-card p-3 text-center h-100">
+        <i class="bi {{ icon }} mb-2" style="font-size:1.6rem;color:{{ clr }}"></i>
+        <div class="fw-bold small mb-1">{{ title }}</div>
+        <div class="text-secondary" style="font-size:11px">{{ desc }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Form -->
+  <div class="solar-card p-4 p-lg-5">
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat,msg in msgs %}
+      <div class="alert alert-{{ 'success' if cat=='success' else 'warning' }} alert-dismissible fade show mb-4">
+        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+      {% endfor %}
+    {% endwith %}
+
+    <form method="post" action="{{ url_for('installer_register') }}" id="regForm">
+      <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+
+      <!-- Company Info -->
+      <div class="mb-4">
+        <div class="section-head"><i class="bi bi-building me-2"></i>Company Information</div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">Company Name *</label>
+            <input name="company_name" class="form-control" placeholder="Your company name" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">Contact Person *</label>
+            <input name="contact_name" class="form-control" placeholder="Full name" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">Business Email *</label>
+            <input name="email" type="email" class="form-control" placeholder="info@company.com" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">Phone / WhatsApp</label>
+            <input name="phone" class="form-control" placeholder="+1 555 000 0000">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">Country</label>
+            <select name="country" class="form-select">
+              <option value="">Select country…</option>
+              {% for c in countries %}
+              <option value="{{ c.name }}">{{ c.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">Website</label>
+            <input name="website" class="form-control" placeholder="https://www.company.com">
+          </div>
+          <div class="col-12">
+            <label class="form-label text-secondary small">Operating Regions / Cities</label>
+            <input name="regions" class="form-control" placeholder="e.g. Greater Accra, Kumasi, Takoradi">
+            <div class="form-text text-secondary" style="font-size:11px">Comma-separated list of regions or cities you serve</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Capacity -->
+      <div class="mb-4">
+        <div class="section-head"><i class="bi bi-people me-2"></i>Technical Capacity</div>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label text-secondary small">Years in Solar Industry</label>
+            <input name="years_exp" type="number" min="0" max="50" class="form-control" placeholder="0">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label text-secondary small">Number of Staff</label>
+            <input name="staff_count" type="number" min="1" class="form-control" placeholder="0">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label text-secondary small">Max Project Size</label>
+            <div class="input-group">
+              <input name="max_project_kw" type="number" step="1" min="0" class="form-control" placeholder="0">
+              <span class="input-group-text text-secondary">kWp</span>
+            </div>
+          </div>
+          <div class="col-12">
+            <label class="form-label text-secondary small">Certifications &amp; Memberships</label>
+            <input name="certifications" class="form-control"
+              placeholder="e.g. NABCEP, MCS, IEC 62446, ISO 9001, Local electrical license no.">
+          </div>
+          <div class="col-12">
+            <label class="form-label text-secondary small">Specialties &amp; Services</label>
+            <input name="specialties" class="form-control"
+              placeholder="e.g. Rooftop PV, Ground mount, Battery storage, Mini-grid, Operations &amp; Maintenance">
+          </div>
+          <div class="col-12">
+            <label class="form-label text-secondary small">Additional Information</label>
+            <textarea name="notes" class="form-control" rows="3"
+              placeholder="Key projects delivered, notable clients, HSE policy, insurance coverage, equipment owned…"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-solar w-100 py-3 fw-bold" id="submitBtn" style="font-size:1.05rem">
+        <i class="bi bi-send-check me-2"></i>Submit Registration
+      </button>
+      <p class="text-center text-secondary mt-3 mb-0" style="font-size:12px">
+        <i class="bi bi-shield-check me-1 text-success"></i>
+        Free registration. Our team reviews all applications within 2 business days.
+      </p>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('regForm').addEventListener('submit', function() {
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting…';
+});
+</script>
+{% endblock %}

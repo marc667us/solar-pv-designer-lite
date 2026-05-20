@@ -312,12 +312,62 @@ def init_db():
             expires_at  TEXT DEFAULT '',
             created_at  TEXT DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS assessment_requests (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            name          TEXT NOT NULL,
+            email         TEXT NOT NULL,
+            phone         TEXT DEFAULT '',
+            company       TEXT DEFAULT '',
+            country       TEXT DEFAULT '',
+            system_type   TEXT DEFAULT 'off-grid',
+            system_size_kw REAL DEFAULT 0,
+            budget_usd    TEXT DEFAULT '',
+            location_desc TEXT DEFAULT '',
+            message       TEXT DEFAULT '',
+            ai_score      INTEGER DEFAULT 0,
+            ai_grade      TEXT DEFAULT '',
+            ai_notes      TEXT DEFAULT '',
+            pipeline_stage TEXT DEFAULT 'new',
+            assigned_to   TEXT DEFAULT '',
+            follow_up_date TEXT DEFAULT '',
+            source        TEXT DEFAULT 'website',
+            status        TEXT DEFAULT 'open',
+            created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at    TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS installers (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_name    TEXT NOT NULL,
+            contact_name    TEXT NOT NULL,
+            email           TEXT UNIQUE NOT NULL,
+            phone           TEXT DEFAULT '',
+            country         TEXT DEFAULT '',
+            regions         TEXT DEFAULT '',
+            years_exp       INTEGER DEFAULT 0,
+            staff_count     INTEGER DEFAULT 0,
+            certifications  TEXT DEFAULT '',
+            specialties     TEXT DEFAULT '',
+            max_project_kw  REAL DEFAULT 0,
+            website         TEXT DEFAULT '',
+            notes           TEXT DEFAULT '',
+            status          TEXT DEFAULT 'pending',
+            ai_grade        TEXT DEFAULT '',
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP
+        );
         """)
     # Migrate older DBs — ignore if column already exists
     for stmt in [
         "ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN stripe_customer_id TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN subscription_end TEXT DEFAULT ''",
+        "ALTER TABLE leads ADD COLUMN system_type TEXT DEFAULT 'residential'",
+        "ALTER TABLE leads ADD COLUMN system_size_kw REAL DEFAULT 0",
+        "ALTER TABLE leads ADD COLUMN budget_usd TEXT DEFAULT ''",
+        "ALTER TABLE leads ADD COLUMN ai_score INTEGER DEFAULT 0",
+        "ALTER TABLE leads ADD COLUMN ai_grade TEXT DEFAULT ''",
+        "ALTER TABLE leads ADD COLUMN ai_notes TEXT DEFAULT ''",
+        "ALTER TABLE leads ADD COLUMN pipeline_stage TEXT DEFAULT 'new'",
+        "ALTER TABLE leads ADD COLUMN follow_up_date TEXT DEFAULT ''",
     ]:
         try:
             with get_db() as c:
@@ -3670,6 +3720,243 @@ def newsletter_subscribe():
     return redirect(url_for("landing") + "#newsletter")
 
 
+# ─── Assessment Request (public) ──────────────────────────────────────────────
+
+def _qualify_lead(name, company, phone, system_type, size_kw, budget_usd, message):
+    """Rule-based lead scoring → (score 0-100, grade A/B/C/D, notes str)."""
+    score = 0
+    reasons = []
+    # Budget scoring
+    b = budget_usd.lower().replace(",","").replace("$","").replace("usd","").strip()
+    try:
+        bval = float(b.split("-")[0].split("k")[0]) * (1000 if "k" in b else 1)
+    except Exception:
+        bval = 0
+    if bval >= 100000:  score += 35; reasons.append("High budget ($100k+)")
+    elif bval >= 50000: score += 25; reasons.append("Good budget ($50k+)")
+    elif bval >= 10000: score += 15; reasons.append("Medium budget ($10k+)")
+    elif bval > 0:      score += 5;  reasons.append("Low budget")
+    # System size
+    try: sz = float(size_kw)
+    except Exception: sz = 0
+    if sz >= 100:    score += 30; reasons.append("Large commercial system (100kW+)")
+    elif sz >= 50:   score += 22; reasons.append("Commercial system (50-100kW)")
+    elif sz >= 10:   score += 14; reasons.append("SME system (10-50kW)")
+    elif sz >= 1:    score += 6;  reasons.append("Residential system")
+    # System type
+    if system_type in ("commercial", "industrial"): score += 15; reasons.append("Commercial/Industrial priority")
+    elif system_type == "hybrid":                   score += 10; reasons.append("Hybrid system")
+    # Lead quality signals
+    if company.strip(): score += 10; reasons.append("Company name provided")
+    if phone.strip():   score += 5;  reasons.append("Phone provided")
+    if len(message.strip()) > 50: score += 5; reasons.append("Detailed message")
+    score = min(score, 100)
+    if score >= 80:   grade = "A"
+    elif score >= 60: grade = "B"
+    elif score >= 40: grade = "C"
+    else:             grade = "D"
+    return score, grade, "; ".join(reasons) if reasons else "Unscored"
+
+
+@app.route("/assess", methods=["GET", "POST"])
+@limiter.limit("20 per hour")
+def assessment_request():
+    """Public assessment request form."""
+    if request.method == "POST":
+        name        = request.form.get("name", "").strip()
+        email       = request.form.get("email", "").strip()
+        phone       = request.form.get("phone", "").strip()
+        company     = request.form.get("company", "").strip()
+        country     = request.form.get("country", "").strip()
+        system_type = request.form.get("system_type", "off-grid")
+        size_kw     = request.form.get("system_size_kw", "0")
+        budget      = request.form.get("budget_usd", "").strip()
+        location    = request.form.get("location_desc", "").strip()
+        message     = request.form.get("message", "").strip()
+        if not name or not email:
+            flash("Name and email are required.", "warning")
+            return redirect(url_for("assessment_request"))
+        score, grade, notes = _qualify_lead(name, company, phone, system_type, size_kw, budget, message)
+        try: size_kw_f = float(size_kw)
+        except Exception: size_kw_f = 0.0
+        with get_db() as c:
+            c.execute(
+                "INSERT INTO assessment_requests "
+                "(name,email,phone,company,country,system_type,system_size_kw,budget_usd,"
+                "location_desc,message,ai_score,ai_grade,ai_notes,source) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'website')",
+                (name, email, phone, company, country, system_type, size_kw_f,
+                 budget, location, message, score, grade, notes))
+            # Also add to leads table for unified CRM
+            c.execute(
+                "INSERT INTO leads (name,email,phone,company,country,interest,message,source,"
+                "system_type,system_size_kw,budget_usd,ai_score,ai_grade,ai_notes,pipeline_stage) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name, email, phone, company, country, system_type, message, "assess_form",
+                 system_type, size_kw_f, budget, score, grade, notes,
+                 "qualified" if grade in ("A","B") else "new"))
+        flash("Thank you! Our team will contact you within 24 hours with your assessment.", "success")
+        return redirect(url_for("assessment_request"))
+    return render_template("assess.html", user=current_user(), countries=get_countries())
+
+
+# ─── Installer Registration (public) ──────────────────────────────────────────
+
+@app.route("/installer/register", methods=["GET", "POST"])
+@limiter.limit("10 per hour")
+def installer_register():
+    """Public installer/subcontractor registration."""
+    if request.method == "POST":
+        company   = request.form.get("company_name", "").strip()
+        contact   = request.form.get("contact_name", "").strip()
+        email     = request.form.get("email", "").strip()
+        phone     = request.form.get("phone", "").strip()
+        country   = request.form.get("country", "").strip()
+        regions   = request.form.get("regions", "").strip()
+        years     = request.form.get("years_exp", "0")
+        staff     = request.form.get("staff_count", "0")
+        certs     = request.form.get("certifications", "").strip()
+        specs     = request.form.get("specialties", "").strip()
+        max_kw    = request.form.get("max_project_kw", "0")
+        website   = request.form.get("website", "").strip()
+        notes     = request.form.get("notes", "").strip()
+        if not company or not email or not contact:
+            flash("Company name, contact name, and email are required.", "warning")
+            return redirect(url_for("installer_register"))
+        try: years_i = int(years)
+        except Exception: years_i = 0
+        try: staff_i = int(staff)
+        except Exception: staff_i = 0
+        try: max_kw_f = float(max_kw)
+        except Exception: max_kw_f = 0.0
+        # Simple grade based on experience
+        if years_i >= 10 and staff_i >= 20: grade = "A"
+        elif years_i >= 5 and staff_i >= 5: grade = "B"
+        elif years_i >= 2: grade = "C"
+        else: grade = "D"
+        try:
+            with get_db() as c:
+                c.execute(
+                    "INSERT INTO installers (company_name,contact_name,email,phone,country,"
+                    "regions,years_exp,staff_count,certifications,specialties,max_project_kw,"
+                    "website,notes,ai_grade) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (company, contact, email, phone, country, regions, years_i, staff_i,
+                     certs, specs, max_kw_f, website, notes, grade))
+            flash("Registration submitted! We'll review your application within 2 business days.", "success")
+        except Exception:
+            flash("An account with that email already exists.", "warning")
+        return redirect(url_for("installer_register"))
+    return render_template("installer_register.html", user=current_user(), countries=get_countries())
+
+
+# ─── Admin: Assessment Requests ───────────────────────────────────────────────
+
+@app.route("/admin/assessments", methods=["GET", "POST"])
+@admin_required
+def admin_assessments():
+    if request.method == "POST":
+        csrf_protect()
+        aid    = request.form.get("aid", type=int)
+        action = request.form.get("action")
+        with get_db() as c:
+            if action == "update":
+                c.execute(
+                    "UPDATE assessment_requests SET pipeline_stage=?,assigned_to=?,"
+                    "follow_up_date=?,status=?,updated_at=? WHERE id=?",
+                    (request.form.get("pipeline_stage"),
+                     request.form.get("assigned_to",""),
+                     request.form.get("follow_up_date",""),
+                     request.form.get("status","open"),
+                     datetime.now().isoformat(), aid))
+                flash("Assessment request updated.", "success")
+            elif action == "delete":
+                c.execute("DELETE FROM assessment_requests WHERE id=?", (aid,))
+                flash("Deleted.", "info")
+        return redirect(url_for("admin_assessments"))
+    stage_f = request.args.get("stage", "all")
+    with get_db() as c:
+        if stage_f != "all":
+            rows = c.execute(
+                "SELECT * FROM assessment_requests WHERE pipeline_stage=? ORDER BY created_at DESC",
+                (stage_f,)).fetchall()
+        else:
+            rows = c.execute(
+                "SELECT * FROM assessment_requests ORDER BY created_at DESC").fetchall()
+        counts = {}
+        for s in ("new","qualified","assessment_sent","proposal_sent","won","lost"):
+            counts[s] = c.execute(
+                "SELECT COUNT(*) FROM assessment_requests WHERE pipeline_stage=?", (s,)).fetchone()[0]
+    return render_template("admin_assessments.html", user=current_user(),
+                           requests=rows, stage_filter=stage_f, counts=counts)
+
+
+# ─── Admin: Installer Management ──────────────────────────────────────────────
+
+@app.route("/admin/installers", methods=["GET", "POST"])
+@admin_required
+def admin_installers():
+    if request.method == "POST":
+        csrf_protect()
+        iid    = request.form.get("iid", type=int)
+        action = request.form.get("action")
+        with get_db() as c:
+            if action == "approve":
+                c.execute("UPDATE installers SET status='approved' WHERE id=?", (iid,))
+                flash("Installer approved.", "success")
+            elif action == "reject":
+                c.execute("UPDATE installers SET status='rejected' WHERE id=?", (iid,))
+                flash("Installer rejected.", "info")
+            elif action == "delete":
+                c.execute("DELETE FROM installers WHERE id=?", (iid,))
+                flash("Deleted.", "info")
+        return redirect(url_for("admin_installers"))
+    status_f = request.args.get("status", "all")
+    with get_db() as c:
+        if status_f != "all":
+            rows = c.execute(
+                "SELECT * FROM installers WHERE status=? ORDER BY created_at DESC", (status_f,)).fetchall()
+        else:
+            rows = c.execute("SELECT * FROM installers ORDER BY created_at DESC").fetchall()
+        pending = c.execute("SELECT COUNT(*) FROM installers WHERE status='pending'").fetchone()[0]
+        approved = c.execute("SELECT COUNT(*) FROM installers WHERE status='approved'").fetchone()[0]
+    return render_template("admin_installers.html", user=current_user(),
+                           installers=rows, status_filter=status_f,
+                           pending=pending, approved=approved)
+
+
+# ─── Admin: CRM Pipeline ──────────────────────────────────────────────────────
+
+@app.route("/admin/pipeline")
+@admin_required
+def admin_pipeline():
+    """Kanban-style CRM pipeline across all leads + assessment requests."""
+    STAGES = ["new", "qualified", "assessment_sent", "proposal_sent", "won", "lost"]
+    with get_db() as c:
+        leads_rows  = c.execute("SELECT * FROM leads ORDER BY created_at DESC").fetchall()
+        assess_rows = c.execute("SELECT * FROM assessment_requests ORDER BY created_at DESC").fetchall()
+    # Normalise assessment_requests rows to look like leads for the Kanban
+    all_leads = list(leads_rows)
+    for ar in assess_rows:
+        # sqlite3.Row → dict, then patch missing keys leads template expects
+        d = dict(ar)
+        d.setdefault("interest", d.get("system_type",""))
+        d.setdefault("notes", "")
+        d.setdefault("rec_type", "assess")
+        all_leads.append(d)
+    by_stage = {s: [] for s in STAGES}
+    for lead in all_leads:
+        try:   st = lead["pipeline_stage"]
+        except Exception: st = "new"
+        if st not in STAGES: st = "new"
+        by_stage[st].append(lead)
+    total = len(all_leads)
+    won   = len(by_stage["won"])
+    conv  = round(won / total * 100, 1) if total else 0
+    return render_template("admin_pipeline.html", user=current_user(),
+                           by_stage=by_stage, stages=STAGES, total=total,
+                           won=won, conv=conv)
+
+
 @app.route("/admin/sales")
 @admin_required
 def admin_sales():
@@ -3687,16 +3974,29 @@ def admin_sales():
         monthly_signups = c.execute(
             "SELECT strftime('%Y-%m', created_at) as mo, COUNT(*) as cnt "
             "FROM users GROUP BY mo ORDER BY mo DESC LIMIT 6").fetchall()
+        assess_count   = c.execute("SELECT COUNT(*) FROM assessment_requests").fetchone()[0]
+        assess_open    = c.execute("SELECT COUNT(*) FROM assessment_requests WHERE status='open'").fetchone()[0]
+        installers_pending = c.execute("SELECT COUNT(*) FROM installers WHERE status='pending'").fetchone()[0]
+        pipeline_won   = c.execute("SELECT COUNT(*) FROM leads WHERE pipeline_stage='won'").fetchone()[0]
+        pipeline_total = c.execute("SELECT COUNT(*) FROM leads").fetchone()[0]
     lead_status = {}
     for ld in leads:
         s = ld["status"]
         lead_status[s] = lead_status.get(s, 0) + 1
+    pipeline_dist = {}
+    for ld in leads:
+        s = ld["pipeline_stage"] or "new"
+        pipeline_dist[s] = pipeline_dist.get(s, 0) + 1
     plan_dist = {r["plan"]: r["cnt"] for r in users}
+    conv = round(pipeline_won / pipeline_total * 100, 1) if pipeline_total else 0
     return render_template("admin_sales.html", user=current_user(),
                            leads=leads, subs=subs, plan_dist=plan_dist,
                            payments=payments, total_rev=total_rev,
                            news_count=news_count, lead_status=lead_status,
-                           monthly_signups=monthly_signups)
+                           monthly_signups=monthly_signups,
+                           assess_count=assess_count, assess_open=assess_open,
+                           installers_pending=installers_pending,
+                           pipeline_dist=pipeline_dist, conv=conv)
 
 
 @app.route("/admin/leads", methods=["GET", "POST"])
@@ -3708,8 +4008,11 @@ def admin_leads():
         action = request.form.get("action")
         with get_db() as c:
             if action == "update_status":
-                c.execute("UPDATE leads SET status=?,notes=? WHERE id=?",
-                          (request.form.get("status"), request.form.get("notes",""), lid))
+                c.execute(
+                    "UPDATE leads SET status=?,notes=?,pipeline_stage=?,follow_up_date=? WHERE id=?",
+                    (request.form.get("status"), request.form.get("notes",""),
+                     request.form.get("pipeline_stage","new"),
+                     request.form.get("follow_up_date",""), lid))
                 flash("Lead updated.", "success")
             elif action == "delete":
                 c.execute("DELETE FROM leads WHERE id=?", (lid,))

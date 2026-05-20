@@ -9,10 +9,12 @@
       <div class="text-secondary mt-1">Lead pipeline · Newsletter · Revenue · Platform growth</div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-      <a href="{{ url_for('admin_leads') }}"      class="btn btn-outline-warning btn-sm"><i class="bi bi-person-lines-fill me-1"></i>Manage Leads</a>
-      <a href="{{ url_for('admin_news') }}"        class="btn btn-outline-info btn-sm"><i class="bi bi-newspaper me-1"></i>News Feed</a>
-      <a href="{{ url_for('admin_newsletter') }}"  class="btn btn-outline-secondary btn-sm"><i class="bi bi-envelope-heart me-1"></i>Newsletter</a>
-      <a href="{{ url_for('admin_platform') }}"    class="btn btn-outline-success btn-sm"><i class="bi bi-graph-up-arrow me-1"></i>Platform Metrics</a>
+      <a href="{{ url_for('admin_pipeline') }}"    class="btn btn-outline-info btn-sm"><i class="bi bi-kanban me-1"></i>Pipeline</a>
+      <a href="{{ url_for('admin_assessments') }}" class="btn btn-outline-success btn-sm"><i class="bi bi-clipboard2-check me-1"></i>Assessments</a>
+      <a href="{{ url_for('admin_leads') }}"       class="btn btn-outline-warning btn-sm"><i class="bi bi-person-lines-fill me-1"></i>Leads CRM</a>
+      <a href="{{ url_for('admin_installers') }}"  class="btn btn-outline-secondary btn-sm"><i class="bi bi-tools me-1"></i>Installers</a>
+      <a href="{{ url_for('admin_news') }}"         class="btn btn-outline-info btn-sm"><i class="bi bi-newspaper me-1"></i>News Feed</a>
+      <a href="{{ url_for('admin_newsletter') }}"   class="btn btn-outline-secondary btn-sm"><i class="bi bi-envelope-heart me-1"></i>Newsletter</a>
     </div>
   </div>
 </div>
@@ -24,13 +26,12 @@
   {% set converted  = lead_status.get('converted', 0) %}
   {% set conv_rate  = (converted / total_leads * 100)|round(1) if total_leads else 0 %}
   {% for icon,color,lbl,val in [
-    ('bi-person-plus-fill',   '#f59e0b', 'Total Leads',        total_leads),
-    ('bi-star-fill',          '#ef4444', 'New / Unworked',     new_leads),
-    ('bi-check-circle-fill',  '#22c55e', 'Converted',          converted),
-    ('bi-percent',            '#0ea5e9', 'Conversion Rate',    conv_rate|string ~ '%'),
-    ('bi-envelope-heart-fill','#a78bfa', 'Newsletter Subs',    subs),
-    ('bi-newspaper',          '#f59e0b', 'Published Articles', news_count),
-    ('bi-cash-stack',         '#22c55e', 'Total Revenue',      '$'~(total_rev|int)),
+    ('bi-person-plus-fill',     '#f59e0b', 'Total Leads',         total_leads),
+    ('bi-clipboard2-check-fill','#22c55e', 'Assessment Requests', assess_count),
+    ('bi-tools',                '#fb923c', 'Pending Installers',  installers_pending),
+    ('bi-trophy-fill',          '#4ade80', 'Won (Pipeline)',       conv|string ~ '%'),
+    ('bi-envelope-heart-fill',  '#a78bfa', 'Newsletter Subs',     subs),
+    ('bi-cash-stack',           '#22c55e', 'Total Revenue',       '$'~(total_rev|int)),
   ] %}
   <div class="col-6 col-md">
     <div class="kpi-card text-center">
@@ -49,16 +50,17 @@
   <div class="col-md-4">
     <div class="solar-card p-4 h-100">
       <div class="section-head mb-3"><i class="bi bi-funnel me-1"></i>Lead Pipeline</div>
-      {% set statuses = [
-        ('new',       'New',        '#ef4444'),
-        ('contacted', 'Contacted',  '#f59e0b'),
-        ('qualified', 'Qualified',  '#0ea5e9'),
-        ('converted', 'Converted',  '#22c55e'),
-        ('closed',    'Closed',     '#6868a0'),
+      {% set PIPELINE_STAGES = [
+        ('new',             'New',             '#6366f1'),
+        ('qualified',       'Qualified',       '#22c55e'),
+        ('assessment_sent', 'Assessment Sent', '#0ea5e9'),
+        ('proposal_sent',   'Proposal Sent',   '#f59e0b'),
+        ('won',             'Won',             '#4ade80'),
+        ('lost',            'Lost',            '#f87171'),
       ] %}
-      {% set max_cnt = lead_status.values()|max if lead_status else 1 %}
-      {% for key, label, color in statuses %}
-      {% set cnt = lead_status.get(key, 0) %}
+      {% set max_cnt = pipeline_dist.values()|max if pipeline_dist else 1 %}
+      {% for key, label, color in PIPELINE_STAGES %}
+      {% set cnt = pipeline_dist.get(key, 0) %}
       {% set pct = (cnt / max_cnt * 100) if max_cnt else 0 %}
       <div class="mb-3">
         <div class="d-flex justify-content-between mb-1">
@@ -72,9 +74,14 @@
       {% endfor %}
       <div class="mt-3 pt-3" style="border-top:1px solid #1e1e3a">
         <div class="d-flex justify-content-between small">
-          <span class="text-secondary">Conversion rate</span>
-          <span class="fw-bold" style="color:#22c55e">{{ conv_rate }}%</span>
+          <span class="text-secondary">Win rate</span>
+          <span class="fw-bold" style="color:#22c55e">{{ conv }}%</span>
         </div>
+      </div>
+      <div class="mt-2">
+        <a href="{{ url_for('admin_pipeline') }}" class="btn btn-sm btn-solar w-100">
+          <i class="bi bi-kanban me-1"></i>Open Full Pipeline
+        </a>
       </div>
     </div>
   </div>

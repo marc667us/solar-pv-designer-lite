@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Sales Pipeline – SolarPro Admin{% endblock %}
+{% block content %}
+{% set STAGE_META = {
+  'new':             ('New Lead',        '#6366f1', 'bi-star'),
+  'qualified':       ('Qualified',       '#22c55e', 'bi-patch-check'),
+  'assessment_sent': ('Assessment Sent', '#0ea5e9', 'bi-clipboard2-check'),
+  'proposal_sent':   ('Proposal Sent',   '#f59e0b', 'bi-file-earmark-check'),
+  'won':             ('Won',             '#4ade80', 'bi-trophy'),
+  'lost':            ('Lost',            '#f87171', 'bi-x-circle'),
+} %}
+{% set GRADE_CLR = {'A':'#4ade80','B':'#86efac','C':'#fde047','D':'#f87171'} %}
+
+<div class="container-fluid py-4">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="fw-900 mb-0" style="font-size:1.5rem">
+        <i class="bi bi-kanban me-2" style="color:#38bdf8"></i>Sales Pipeline
+      </h2>
+      <div class="text-secondary small">All leads &amp; assessment requests across the conversion funnel</div>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin_assessments') }}" class="btn btn-sm" style="background:#1e1e3a;color:#a0a0c8;border:1px solid #2e2e4a">
+        <i class="bi bi-clipboard2-check me-1"></i>Assessments
+      </a>
+      <a href="{{ url_for('admin_leads') }}" class="btn btn-sm" style="background:#1e1e3a;color:#a0a0c8;border:1px solid #2e2e4a">
+        <i class="bi bi-person-lines-fill me-1"></i>All Leads
+      </a>
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="kpi-card text-center">
+        <div class="kpi-label">Total Leads</div>
+        <div class="kpi-value">{{ total }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card text-center">
+        <div class="kpi-label">Won</div>
+        <div class="kpi-value" style="background:linear-gradient(90deg,#22c55e,#4ade80);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">{{ won }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card text-center">
+        <div class="kpi-label">Conversion Rate</div>
+        <div class="kpi-value">{{ conv }}%</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card text-center">
+        <div class="kpi-label">Active Pipeline</div>
+        {% set active = (by_stage['new']|length) + (by_stage['qualified']|length) + (by_stage['assessment_sent']|length) + (by_stage['proposal_sent']|length) %}
+        <div class="kpi-value" style="background:linear-gradient(90deg,#0ea5e9,#38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">{{ active }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kanban board -->
+  <div class="d-flex gap-3 overflow-auto pb-3" style="align-items:flex-start;min-height:60vh">
+    {% for stage in stages %}
+    {% set meta = STAGE_META.get(stage, (stage, '#6868a0', 'bi-circle')) %}
+    {% set label = meta[0] %}
+    {% set clr   = meta[1] %}
+    {% set icon  = meta[2] %}
+    {% set cards = by_stage[stage] %}
+    <div style="min-width:260px;max-width:280px;flex-shrink:0">
+      <!-- Column header -->
+      <div class="d-flex align-items-center justify-content-between mb-2 px-1">
+        <span class="fw-bold small" style="color:{{ clr }}">
+          <i class="bi {{ icon }} me-1"></i>{{ label }}
+        </span>
+        <span class="badge" style="background:{{ clr }}22;color:{{ clr }};font-size:10px">{{ cards|length }}</span>
+      </div>
+      <!-- Cards -->
+      <div class="d-flex flex-column gap-2">
+        {% if not cards %}
+        <div class="solar-card p-3 text-center text-secondary" style="font-size:11px;opacity:.5">
+          <i class="bi bi-inbox" style="font-size:1.5rem"></i><br>Empty
+        </div>
+        {% endif %}
+        {% for lead in cards %}
+        {% set gclr = GRADE_CLR.get(lead.ai_grade,'#6868a0') if lead.ai_grade else '#6868a0' %}
+        <div class="solar-card p-3" style="border-left:2px solid {{ gclr }}">
+          <div class="fw-bold small mb-1">{{ lead.name }}</div>
+          <div class="text-secondary" style="font-size:11px">{{ lead.company or '—' }}</div>
+          <div class="d-flex flex-wrap gap-1 mt-2">
+            {% if lead.ai_grade %}
+            <span class="badge" style="background:{{ gclr }}22;color:{{ gclr }};font-size:10px">
+              Grade {{ lead.ai_grade }}{% if lead.ai_score %} · {{ lead.ai_score }}{% endif %}
+            </span>
+            {% endif %}
+            {% if lead.system_type %}
+            <span class="badge" style="background:#0f0f22;border:1px solid #2e2e4a;color:#a0a0c8;font-size:10px">
+              {{ lead.system_type }}
+            </span>
+            {% endif %}
+            {% if lead.system_size_kw and lead.system_size_kw > 0 %}
+            <span class="badge" style="background:#0f0f22;border:1px solid #2e2e4a;color:#a0a0c8;font-size:10px">
+              {{ lead.system_size_kw }} kWp
+            </span>
+            {% endif %}
+          </div>
+          {% if lead.budget_usd %}
+          <div class="small mt-1" style="color:#6868a0;font-size:10px">
+            <i class="bi bi-currency-dollar me-1"></i>{{ lead.budget_usd }}
+          </div>
+          {% endif %}
+          <div class="d-flex justify-content-between align-items-center mt-2">
+            <a href="mailto:{{ lead.email }}" class="small text-decoration-none" style="color:#0ea5e9;font-size:10px">
+              <i class="bi bi-envelope me-1"></i>{{ lead.email[:22] }}{% if lead.email|length > 22 %}…{% endif %}
+            </a>
+            <span class="text-secondary" style="font-size:10px">{{ lead.created_at[:10] }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Legend -->
+  <div class="mt-4 d-flex flex-wrap gap-3 align-items-center">
+    <span class="text-secondary small">Lead Grade:</span>
+    {% for g,clr in [('A','#4ade80'),('B','#86efac'),('C','#fde047'),('D','#f87171')] %}
+    <span class="badge px-2 py-1" style="background:{{ clr }}22;color:{{ clr }};border:1px solid {{ clr }}44;font-size:11px">
+      Grade {{ g }}
+    </span>
+    {% endfor %}
+    <span class="text-secondary small ms-3">Manage individual leads via <a href="{{ url_for('admin_leads') }}" style="color:#0ea5e9">Leads CRM</a> or <a href="{{ url_for('admin_assessments') }}" style="color:#4ade80">Assessment Requests</a></span>
+  </div>
+</div>
+{% endblock %}

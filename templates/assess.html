@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Free Solar Assessment Request – SolarPro Global{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:780px">
+
+  <!-- Header -->
+  <div class="text-center mb-5">
+    <div class="mb-3">
+      <span style="font-size:3rem">☀️</span>
+    </div>
+    <h1 class="fw-900 mb-2" style="background:linear-gradient(90deg,#f59e0b,#0ea5e9);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:2.2rem">
+      Free Solar Assessment Request
+    </h1>
+    <p class="text-secondary mb-0" style="font-size:1.05rem">
+      Tell us about your project and our engineers will produce a tailored system design,
+      BOQ, and financial analysis within 24 hours.
+    </p>
+  </div>
+
+  <!-- Value badges -->
+  <div class="d-flex flex-wrap justify-content-center gap-2 mb-5">
+    {% for icon,label in [('bi-lightning-charge-fill','AI-Powered Design'),('bi-file-earmark-bar-graph','BOQ & Cost Estimate'),('bi-currency-dollar','Financial Analysis'),('bi-clock','24-Hour Turnaround')] %}
+    <span class="badge px-3 py-2" style="background:#0f0f22;border:1px solid #1e1e3a;color:#a0a0c8;font-size:12px;font-weight:600;border-radius:20px">
+      <i class="bi {{ icon }} me-1" style="color:#f59e0b"></i>{{ label }}
+    </span>
+    {% endfor %}
+  </div>
+
+  <!-- Form -->
+  <div class="solar-card p-4 p-lg-5">
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat,msg in msgs %}
+      <div class="alert alert-{{ 'success' if cat=='success' else 'warning' }} alert-dismissible fade show mb-4" role="alert">
+        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+      {% endfor %}
+    {% endwith %}
+
+    <form method="post" action="{{ url_for('assessment_request') }}" id="assessForm">
+      <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
+
+      <!-- Section 1: Contact -->
+      <div class="mb-4">
+        <div class="section-head"><i class="bi bi-person-badge me-2"></i>Contact Information</div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">Full Name *</label>
+            <input name="name" class="form-control" placeholder="Your name" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">Email Address *</label>
+            <input name="email" type="email" class="form-control" placeholder="you@company.com" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">Phone / WhatsApp</label>
+            <input name="phone" class="form-control" placeholder="+1 555 000 0000">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">Company / Organisation</label>
+            <input name="company" class="form-control" placeholder="Company name">
+          </div>
+          <div class="col-12">
+            <label class="form-label text-secondary small">Country</label>
+            <select name="country" class="form-select">
+              <option value="">Select country…</option>
+              {% for c in countries %}
+              <option value="{{ c.name }}">{{ c.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Project -->
+      <div class="mb-4">
+        <div class="section-head"><i class="bi bi-sun me-2"></i>Project Details</div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">System Type *</label>
+            <select name="system_type" class="form-select" required>
+              <option value="off-grid">Off-Grid (Standalone)</option>
+              <option value="grid-tied">Grid-Tied</option>
+              <option value="hybrid">Hybrid (Grid + Battery)</option>
+              <option value="commercial">Commercial</option>
+              <option value="industrial">Industrial</option>
+              <option value="residential">Residential</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">Estimated System Size</label>
+            <div class="input-group">
+              <input name="system_size_kw" type="number" step="0.1" min="0" class="form-control" placeholder="0">
+              <span class="input-group-text text-secondary">kWp</span>
+            </div>
+            <div class="form-text text-secondary" style="font-size:11px">Leave 0 if unknown — we'll calculate it</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">Approximate Budget</label>
+            <select name="budget_usd" class="form-select">
+              <option value="">Not sure yet</option>
+              <option value="Under $5,000">Under $5,000</option>
+              <option value="$5,000 – $15,000">$5,000 – $15,000</option>
+              <option value="$15,000 – $50,000">$15,000 – $50,000</option>
+              <option value="$50,000 – $150,000">$50,000 – $150,000</option>
+              <option value="$150,000 – $500,000">$150,000 – $500,000</option>
+              <option value="Over $500,000">Over $500,000</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-secondary small">Installation Location</label>
+            <input name="location_desc" class="form-control" placeholder="City, region or GPS coords">
+          </div>
+          <div class="col-12">
+            <label class="form-label text-secondary small">Additional Details</label>
+            <textarea name="message" class="form-control" rows="4"
+              placeholder="Tell us about your electricity needs, current utility bill, roof/land availability, grid reliability issues, timeline, or any special requirements…"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- What you get -->
+      <div class="rounded p-3 mb-4" style="background:#0a0a14;border:1px solid #1e1e3a">
+        <div class="small text-secondary fw-bold mb-2"><i class="bi bi-gift me-1 text-warning"></i>Your Free Assessment Includes:</div>
+        <div class="row g-2">
+          {% for item in ['Complete PV System Design','Battery & Inverter Sizing','Full BOQ with Costs','Cable & Protection Sizing','Financial Analysis & ROI','Bankability Report'] %}
+          <div class="col-6 col-md-4">
+            <span class="small" style="color:#a0a0c8"><i class="bi bi-check-circle-fill me-1" style="color:#22c55e"></i>{{ item }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-solar w-100 py-3 fw-bold" id="submitBtn" style="font-size:1.05rem">
+        <i class="bi bi-send-check me-2"></i>Submit Assessment Request
+      </button>
+      <p class="text-center text-secondary mt-3 mb-0" style="font-size:12px">
+        <i class="bi bi-shield-check me-1 text-success"></i>
+        Your data is secure and never shared. Expect a response within 24 hours.
+      </p>
+    </form>
+  </div>
+
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('assessForm').addEventListener('submit', function() {
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting…';
+});
+</script>
+{% endblock %}

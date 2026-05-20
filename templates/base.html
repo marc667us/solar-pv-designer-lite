@@ -182,8 +182,23 @@
               </a>
             </li>
             <li>
+              <a class="dropdown-item" href="{{ url_for('admin_pipeline') }}">
+                <i class="bi bi-kanban me-2" style="color:#38bdf8"></i>Sales Pipeline
+              </a>
+            </li>
+            <li>
               <a class="dropdown-item" href="{{ url_for('admin_leads') }}">
                 <i class="bi bi-person-lines-fill me-2 text-info"></i>Leads CRM
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('admin_assessments') }}">
+                <i class="bi bi-clipboard2-check me-2" style="color:#4ade80"></i>Assessment Requests
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('admin_installers') }}">
+                <i class="bi bi-tools me-2" style="color:#fb923c"></i>Installer Registry
               </a>
             </li>
             <li>
@@ -282,6 +297,16 @@
         {# Guest nav #}
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('landing') }}"><i class="bi bi-house me-1"></i>Home</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('assessment_request') }}">
+            <i class="bi bi-sun me-1 text-warning"></i>Free Assessment
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('installer_register') }}">
+            <i class="bi bi-tools me-1" style="color:#fb923c"></i>Join as Installer
+          </a>
         </li>
         <li class="nav-item ms-1">
           <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('login') }}">
