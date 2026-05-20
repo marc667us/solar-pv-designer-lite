@@ -4751,76 +4751,100 @@ def admin_agent_run():
 
     loc = country or "global"
 
-    # ── Step 1: Target RFP/tender portals — no news, only solicitations ────────
+    # ── Step 1: Multi-source deep search ─────────────────────────────────────────
     search_results = []
     search_error   = None
 
-    # Known procurement/tender portals to target directly
-    TENDER_SITES = (
-        "site:ungm.org OR site:devex.com OR site:tendersontime.com "
-        "OR site:globaltenders.com OR site:tendersinfo.com "
-        "OR site:dgmarket.com OR site:africatenders.com "
-        "OR site:worldbank.org/en/projects-operations/procurement "
-        "OR site:afdb.org OR site:reliefweb.int OR site:esmap.org "
-        "OR site:reeep.org OR site:irena.org OR site:geapp.org"
-    )
-
     try:
         from ddgs import DDGS
-        rfp_terms  = "RFP OR tender OR bid OR solicitation OR EOI"
-        portal_q   = f"({TENDER_SITES}) solar {loc} {rfp_terms}"
+
+        # ── Source group 1: Procurement & tender portals ──────────────────────
+        TENDER_SITES = (
+            "site:ungm.org OR site:devex.com OR site:tendersontime.com "
+            "OR site:globaltenders.com OR site:tendersinfo.com "
+            "OR site:dgmarket.com OR site:africatenders.com "
+            "OR site:afdb.org OR site:reliefweb.int OR site:esmap.org "
+            "OR site:geapp.org OR site:africa-energy-portal.org"
+        )
+        # ── Source group 2: PPA solicitation sites ────────────────────────────
+        PPA_SITES = (
+            "site:irena.org OR site:ifc.org OR site:esmap.org "
+            "OR site:climatefinancelab.org OR site:gogla.org"
+        )
+        # ── Source group 3: LinkedIn — job posts & project announcements ──────
+        LINKEDIN_Q = (
+            f'site:linkedin.com {loc} solar PV '
+            f'"power purchase agreement" OR "PPA" OR "RFP" OR "tender" '
+            f'OR "solar project" OR "looking for" OR "seeking proposals" 2025 2026'
+        )
+        # ── Source group 4: Job boards (solar jobs = active projects) ─────────
+        JOB_SITES = (
+            "site:jobberman.com OR site:myjobmag.com OR site:jobsinghana.com "
+            "OR site:indeed.com OR site:brightermonday.com OR site:work.place"
+        )
+        JOB_Q = (
+            f'({JOB_SITES}) {loc} solar engineer OR solar project OR '
+            f'PV installer OR renewable energy project manager 2025 2026'
+        )
+        # ── Source group 5: Government & ministry sites ───────────────────────
+        GOV_SITES = (
+            f'site:ghana.gov.gh OR site:moe.gov.gh OR site:energycom.gov.gh '
+            f'OR site:purc.com.gh OR site:gridcogh.com OR site:.gov.{loc[:2].lower()}'
+        )
+        GOV_Q = f'({GOV_SITES}) solar tender OR procurement OR RFP OR energy project'
+        # ── Source group 6: Stadia, sports & public infrastructure ───────────
+        INFRA_Q = (
+            f'{loc} stadium OR hospital OR ministry OR university OR airport '
+            f'solar PV tender OR RFP OR "power purchase agreement" 2025 2026'
+        )
+        # ── Source group 7: World Bank / AfDB active procurement ──────────────
+        WB_Q  = f'site:worldbank.org OR site:afdb.org solar {loc} procurement 2025 2026'
+        UN_Q  = f'site:ungm.org solar {loc} 2025 2026'
+        DEV_Q = f'site:devex.com solar {loc} request for proposals OR call for bids 2025 2026'
+        # ── Source group 8: Focus-specific ───────────────────────────────────
         queries = [
-            # Direct on tender portals
-            portal_q,
-            # Government & development bank tenders
-            f'{loc} solar PV request for proposal OR tender notice OR bidding document {sector} 2025 2026',
-            # Expression of interest
-            f'{loc} solar energy expression of interest OR EOI OR prequalification {sector} 2025',
-            # World Bank / AfDB
-            f'site:worldbank.org OR site:afdb.org solar {loc} procurement notice 2025 2026',
-            # UN tenders
-            f'site:ungm.org solar {loc} 2025',
-            # Devex
-            f'site:devex.com solar {loc} request for proposals OR call for bids 2025',
+            f"({TENDER_SITES}) solar {loc} RFP OR tender OR bid OR EOI OR PPA",
+            f'{loc} solar PV "power purchase agreement" OR PPA solicitation OR RFP {sector} 2025 2026',
+            LINKEDIN_Q,
+            JOB_Q,
+            GOV_Q,
+            INFRA_Q,
+            WB_Q,
+            UN_Q,
+            DEV_Q,
+            f'({PPA_SITES}) solar {loc} {sector} procurement OR PPA OR tender 2025 2026',
         ]
         if focus:
-            queries.insert(0, f'{loc} {focus} solar request for proposal OR tender OR RFP 2025 2026')
+            queries.insert(0,
+                f'{loc} "{focus}" solar "request for proposal" OR tender OR RFP OR PPA 2025 2026')
 
-        # Domains to always skip
+        # ── Domains to always skip (pure news / social feeds) ─────────────────
         skip_domains = ["pv-magazine", "pvtech", "reuters.com", "bloomberg.com",
-                        "wikipedia.org", "youtube.com", "linkedin.com/posts",
-                        "twitter.com", "facebook.com", "instagram.com",
-                        "solarpowerworldonline", "greentechmedia", "renewableenergyworld"]
-        # URL patterns that indicate a category/listing page, not a specific tender
-        # Block category/listing pages — substring matching (no regex)
+                        "wikipedia.org", "youtube.com", "twitter.com", "instagram.com",
+                        "solarpowerworldonline", "greentechmedia", "renewableenergyworld",
+                        "facebook.com/watch", "tiktok.com"]
+        # ── Block category/listing pages (substring match) ────────────────────
         listing_patterns = [
             "/ghana-tenders", "/solar-tenders", "/renewable-energy-tenders",
-            "/country/ghana", "?country=",
-            # UNGM listing page (specific notices have a number after /Notice/)
-            "/Public/Notice\n", "/Public/Notice ",
-            # tendersinfo global category pages
-            "global-solar-tenders", "global-energy-and-power",
-            "global-solar-panel", "-tenders-26.php", "tenders.php", "rfq.php",
-            # Search / index pages
+            "/country/ghana", "global-solar-tenders", "global-energy-and-power",
+            "global-solar-panel", "-tenders-26.php", "rfq.php",
             "/tenders/search", "/tenders/adminShow",
-            # globaltenders.com country listing pages (specific tenders have /tender-detail/)
             "globaltenders.com/gh/", "globaltenders.com/ghana-tenders",
-            # Generic tender portal home pages
             "tendersontime.com/ghana-tenders/",
             "tendersontime.com/south-africa-tenders/",
-            # developmentaid search
             "developmentaid.org/tenders",
-            # Devex funding index
             "devex.com/funding/r?report=grant",
         ]
-        # Must contain procurement intent
+        # ── Must contain procurement / project intent ─────────────────────────
         rfp_keywords = ["rfp", "tender", "bid", "proposal", "solicitation",
-                        "procurement", "expression of interest", "eoi",
-                        "invitation", "prequalif", "contract notice", "call for"]
-        # Must be solar/energy related
-        energy_keywords = ["solar", "pv ", "photovoltaic", "renewable energy",
-                           "wind", "energy", "power plant", "mini grid", "minigrid",
-                           "electrification", "off-grid", "grid", "kw", "mw"]
+                        "procurement", "expression of interest", "eoi", "ppa",
+                        "power purchase", "invitation", "prequalif",
+                        "contract notice", "call for", "looking for",
+                        "seeking", "vacancy", "job", "hiring", "engineer"]
+        # ── Must be solar / energy related ───────────────────────────────────
+        energy_keywords = ["solar", "pv", "photovoltaic", "renewable", "energy",
+                           "power plant", "mini grid", "minigrid", "electrification",
+                           "off-grid", "battery", "kw", "mw", "inverter"]
 
         with DDGS() as ddgs:
             for q in queries:
