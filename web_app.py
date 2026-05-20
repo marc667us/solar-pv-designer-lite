@@ -4751,26 +4751,60 @@ def admin_agent_run():
 
     loc = country or "global"
 
-    # ── Step 1: Deep web search — multiple queries, real sources only ───────────
+    # ── Step 1: Target RFP/tender portals — no news, only solicitations ────────
     search_results = []
     search_error   = None
+
+    # Known procurement/tender portals to target directly
+    TENDER_SITES = (
+        "site:ungm.org OR site:devex.com OR site:tendersontime.com "
+        "OR site:globaltenders.com OR site:tendersinfo.com "
+        "OR site:dgmarket.com OR site:africatenders.com "
+        "OR site:worldbank.org/en/projects-operations/procurement "
+        "OR site:afdb.org OR site:reliefweb.int OR site:esmap.org "
+        "OR site:reeep.org OR site:irena.org OR site:geapp.org"
+    )
+
     try:
         from ddgs import DDGS
-        # Multi-angle queries to maximise real hits
+        rfp_terms  = "RFP OR tender OR bid OR solicitation OR EOI"
+        portal_q   = f"({TENDER_SITES}) solar {loc} {rfp_terms}"
         queries = [
-            f'{loc} {sector} solar PV project tender 2024 2025',
-            f'{loc} solar energy {sector} installation contract awarded',
-            f'{loc} solar project RFP bid procurement 2025',
-            f'{loc} solar power plant {sector} MW kW commissioned',
-            f'site:ungm.org OR site:tendersinfo.com OR site:reliefweb.int solar {loc}',
+            # Direct on tender portals
+            portal_q,
+            # Government & development bank tenders
+            f'{loc} solar PV request for proposal OR tender notice OR bidding document {sector} 2025 2026',
+            # Expression of interest
+            f'{loc} solar energy expression of interest OR EOI OR prequalification {sector} 2025',
+            # World Bank / AfDB
+            f'site:worldbank.org OR site:afdb.org solar {loc} procurement notice 2025 2026',
+            # UN tenders
+            f'site:ungm.org solar {loc} 2025',
+            # Devex
+            f'site:devex.com solar {loc} request for proposals OR call for bids 2025',
         ]
         if focus:
-            queries.append(f'{loc} {focus} solar energy project news')
+            queries.insert(0, f'{loc} {focus} solar request for proposal OR tender OR RFP 2025 2026')
+
         with DDGS() as ddgs:
             for q in queries:
                 try:
                     for r in ddgs.text(q, max_results=6, safesearch="off"):
-                        url = r.get("href","")
+                        url  = r.get("href", "")
+                        body = r.get("body", "").lower()
+                        title = r.get("title", "").lower()
+                        # Skip news articles, opinion pieces, and general solar info pages
+                        skip_domains = ["pv-magazine", "pvtech", "reuters.com", "bloomberg.com",
+                                        "wikipedia.org", "youtube.com", "linkedin.com/posts",
+                                        "twitter.com", "facebook.com", "instagram.com"]
+                        if any(d in url for d in skip_domains):
+                            continue
+                        # Require procurement-intent keywords in title or body
+                        rfp_keywords = ["rfp", "tender", "bid", "proposal", "solicitation",
+                                        "procurement", "expression of interest", "eoi",
+                                        "invitation", "prequalif", "contract notice", "award"]
+                        if not any(kw in title or kw in body for kw in rfp_keywords):
+                            continue
                         if url and not any(x.get("href") == url for x in search_results):
                             search_results.append(r)
                 except Exception:
@@ -4790,46 +4824,49 @@ def admin_agent_run():
                 f"[{i+1}] TITLE: {r.get('title','')}\nURL: {r.get('href','')}\nSNIPPET: {r.get('body','')[:400]}"
                 for i, r in enumerate(search_results[:12])
             )
-            prompt = f"""You are a solar PV business intelligence analyst. Your job is to extract REAL prospect information from web search results. You must NEVER invent, assume, or hallucinate any data.
+            prompt = f"""You are a solar PV procurement intelligence analyst. You have been given real search results from tender portals and procurement databases. Extract ONLY genuine RFPs, tenders, and solicitations — not news articles.
 
-Search criteria used:
+Search criteria:
 - Location: {loc}
 - Sector: {sector}
 - System size: {system_kw} kW
 - Budget: {budget}
 - Focus: {focus or 'general'}
 
-REAL web search results (these are the ONLY source of truth):
+REAL procurement search results:
 
 {snippets}
 
-STRICT RULES — violations will make results useless:
-1. ONLY extract information explicitly stated in the search results above
-2. source_url = exact URL from the result (copy it verbatim, do not modify)
-3. source_title = exact title from the result (copy verbatim)
-4. company_name = real organisation/company name from the result, NOT invented
-5. If a field is not in the result, use "" or 0 — never guess or fill with plausible-sounding data
-6. Do NOT create prospects for results that are not about solar projects or energy
-7. Do NOT combine information from different results into one prospect
-8. source_snippet = copy the most relevant sentence or phrase verbatim from the result body
+STRICT RULES:
+1. ONLY extract results that are genuine RFPs, tenders, invitations to bid, expressions of interest, or contract notices for solar/energy projects
+2. SKIP any result that is a news article, blog post, or general information page
+3. source_url = exact URL from the result, copied verbatim — do not modify or shorten
+4. source_title = exact title, copied verbatim
+5. company_name = the issuing organisation (government body, utility, NGO, bank) — NOT a made-up name
+6. deadline = submission deadline if mentioned, else ""
+7. tender_ref = reference number if stated, else ""
+8. If a field is not stated in the result, use "" or 0 — never invent data
+9. source_snippet = copy the most relevant sentence verbatim, max 300 chars
 
-Return up to {count} prospects. Return ONLY valid JSON, no markdown, no explanation:
+Return up to {count} results. Return ONLY valid JSON, no markdown:
 {{
   "prospects": [
     {{
-      "company_name": "Exact name from result",
-      "type": "type extracted from result or {sector}",
-      "location": "location stated in result",
+      "company_name": "Issuing organisation from result",
+      "type": "RFP / Tender / EOI / ITB / Contract Notice",
+      "location": "location from result",
       "estimated_kw": 0,
       "estimated_usd": 0,
-      "pain_points": ["only if explicitly mentioned in result"],
-      "pitch": "one sentence summarising what the result actually says",
-      "contact_strategy": "based only on information in the result",
-      "decision_maker": "role only if explicitly named in result, else ''",
-      "priority": "high if tender/contract, medium if news, low if general mention",
+      "pain_points": [],
+      "pitch": "one sentence describing what they are procuring, from the result",
+      "contact_strategy": "Submit bid by deadline via portal — see source link",
+      "decision_maker": "procurement contact if named, else ''",
+      "priority": "high if deadline within 60 days or large value, medium otherwise",
       "source_url": "https://exact-url-from-result.com/path",
       "source_title": "Exact title from result",
-      "source_snippet": "verbatim excerpt from result body, max 250 chars",
+      "source_snippet": "verbatim key sentence from result body",
+      "deadline": "",
+      "tender_ref": "",
       "verified": true
     }}
   ]
