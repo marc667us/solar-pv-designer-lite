@@ -4770,81 +4770,83 @@ def admin_agent_run():
         loc_q    = country
         loc_label = country
 
-    # ── Step 1: Multi-source deep search ─────────────────────────────────────────
+    # ── Step 1: Procurement-only deep search ──────────────────────────────────────
+    # Purpose: find real solar RFPs, ITBs, EOIs, PPAs and project solicitations.
+    # No job boards, no LinkedIn, no news. Only procurement portals + gov ministries.
     search_results = []
     search_error   = None
 
     try:
         from ddgs import DDGS
 
-        # ── Source group 1: Procurement & tender portals ──────────────────────
-        TENDER_SITES = (
-            "site:ungm.org OR site:devex.com OR site:tendersontime.com "
-            "OR site:globaltenders.com OR site:tendersinfo.com "
-            "OR site:dgmarket.com OR site:africatenders.com "
-            "OR site:afdb.org OR site:reliefweb.int OR site:esmap.org "
-            "OR site:geapp.org OR site:africa-energy-portal.org"
+        # ── Tier 1: UN / multilateral procurement portals ─────────────────────
+        UN_PORTALS = (
+            "site:ungm.org OR site:devex.com OR site:reliefweb.int "
+            "OR site:dgmarket.com OR site:tendersinfo.com"
         )
-        # ── Source group 2: PPA solicitation sites ────────────────────────────
-        PPA_SITES = (
-            "site:irena.org OR site:ifc.org OR site:esmap.org "
-            "OR site:climatefinancelab.org OR site:gogla.org"
+        # ── Tier 2: Development-bank procurement pages ────────────────────────
+        DFI_PORTALS = (
+            "site:worldbank.org OR site:afdb.org OR site:ifc.org "
+            "OR site:esmap.org OR site:geapp.org OR site:proparco.fr"
         )
-        # ── Source group 3: LinkedIn — job posts & project announcements ──────
-        LINKEDIN_Q = (
-            f'site:linkedin.com ({loc_q}) solar PV '
-            f'"power purchase agreement" OR "PPA" OR "RFP" OR "tender" '
-            f'OR "solar project" OR "looking for" OR "seeking proposals" 2025 2026'
+        # ── Tier 3: Africa / West-Africa tender aggregators ───────────────────
+        AFRICA_PORTALS = (
+            "site:africatenders.com OR site:africa-energy-portal.org "
+            "OR site:tendersontime.com OR site:globaltenders.com "
+            "OR site:ecreee.org OR site:wapp.org"
         )
-        # ── Source group 4: Job boards (solar jobs = active projects) ─────────
-        JOB_SITES = (
-            "site:jobberman.com OR site:myjobmag.com OR site:jobsinghana.com "
-            "OR site:indeed.com OR site:brightermonday.com OR site:work.place"
+        # ── Tier 4: West-African government energy ministries ────────────────
+        GOV_PORTALS = (
+            "site:energycom.gov.gh OR site:purc.com.gh OR site:gridcogh.com "
+            "OR site:moe.gov.gh OR site:ghana.gov.gh "
+            "OR site:nerc.gov.ng OR site:rea.gov.ng "
+            "OR site:ecowas.int OR site:ecreee.org"
         )
-        JOB_Q = (
-            f'({JOB_SITES}) ({loc_q}) solar engineer OR solar project OR '
-            f'PV installer OR renewable energy project manager 2025 2026'
+        # ── Tier 5: PPA solicitation & climate-finance portals ────────────────
+        PPA_PORTALS = (
+            "site:irena.org OR site:climatefinancelab.org "
+            "OR site:gogla.org OR site:se4all.org OR site:energyaccess.org"
         )
-        # ── Source group 5: Government & ministry sites (Ghana + neighbours) ──
-        GOV_SITES = (
-            "site:ghana.gov.gh OR site:moe.gov.gh OR site:energycom.gov.gh "
-            "OR site:purc.com.gh OR site:gridcogh.com "
-            "OR site:nigeria.gov.ng OR site:energy.gov.ng "
-            "OR site:gouv.sn OR site:gouvernement.bj OR site:gov.sl"
-        )
-        GOV_Q = f'({GOV_SITES}) solar tender OR procurement OR RFP OR energy project'
-        # ── Source group 6: Stadia, sports & public infrastructure ───────────
-        INFRA_Q = (
-            f'({loc_q}) stadium OR hospital OR ministry OR university OR airport '
-            f'solar PV tender OR RFP OR "power purchase agreement" 2025 2026'
-        )
-        # ── Source group 7: World Bank / AfDB active procurement ──────────────
-        WB_Q  = f'site:worldbank.org OR site:afdb.org solar ({loc_q}) procurement 2025 2026'
-        UN_Q  = f'site:ungm.org solar ({loc_q}) 2025 2026'
-        DEV_Q = f'site:devex.com solar ({loc_q}) request for proposals OR call for bids 2025 2026'
-        # ── Source group 8: Focus-specific ───────────────────────────────────
+
+        # ── 10 targeted queries — all procurement-intent ──────────────────────
+        rfp_phrase = '"request for proposal" OR "invitation to bid" OR "expression of interest" OR tender OR "call for bids" OR EOI OR ITB OR RFP'
         queries = [
-            f"({TENDER_SITES}) solar ({loc_q}) RFP OR tender OR bid OR EOI OR PPA",
-            f'({loc_q}) solar PV "power purchase agreement" OR PPA solicitation OR RFP {sector} 2025 2026',
-            LINKEDIN_Q,
-            JOB_Q,
-            GOV_Q,
-            INFRA_Q,
-            WB_Q,
-            UN_Q,
-            DEV_Q,
-            f'({PPA_SITES}) solar ({loc_q}) {sector} procurement OR PPA OR tender 2025 2026',
+            # UN portals × West Africa solar
+            f'({UN_PORTALS}) solar ({loc_q}) {rfp_phrase} 2025 2026',
+            # World Bank / AfDB / IFC active solar procurement
+            f'({DFI_PORTALS}) solar ({loc_q}) procurement OR {rfp_phrase} 2025 2026',
+            # Africa tender aggregators
+            f'({AFRICA_PORTALS}) solar ({loc_q}) {rfp_phrase} 2025 2026',
+            # Government energy ministry notices
+            f'({GOV_PORTALS}) solar {rfp_phrase} 2025 2026',
+            # PPA / off-take solicitations
+            f'({PPA_PORTALS}) solar ({loc_q}) "power purchase agreement" OR PPA OR {rfp_phrase} 2025 2026',
+            # Broad West-Africa solar RFP/tender (catches gov sites not in list)
+            f'({loc_q}) solar PV "request for proposal" OR "invitation to bid" OR "expression of interest" {sector} 2025 2026',
+            # AfDB & World Bank pipeline specifically
+            f'site:afdb.org solar ({loc_q}) procurement notice OR project appraisal 2025 2026',
+            # UNGM deep
+            f'site:ungm.org solar ({loc_q}) 2025 2026',
+            # Devex solar grants & tenders
+            f'site:devex.com solar ({loc_q}) "request for proposals" OR tender 2025 2026',
+            # Focus / niche override
+            f'({loc_q}) solar {"" if not focus else focus} {rfp_phrase} {sector} 2025 2026',
         ]
         if focus:
             queries.insert(0,
-                f'({loc_q}) "{focus}" solar "request for proposal" OR tender OR RFP OR PPA 2025 2026')
+                f'({loc_q}) "{focus}" solar {rfp_phrase} 2025 2026')
 
-        # ── Domains to always skip (pure news / social feeds) ─────────────────
-        skip_domains = ["pv-magazine", "pvtech", "reuters.com", "bloomberg.com",
-                        "wikipedia.org", "youtube.com", "twitter.com", "instagram.com",
-                        "solarpowerworldonline", "greentechmedia", "renewableenergyworld",
-                        "facebook.com/watch", "tiktok.com"]
-        # ── Block category/listing pages (substring match) ────────────────────
+        # ── Domains to always skip (news, social, generic AI content) ─────────
+        skip_domains = [
+            "pv-magazine", "pvtech", "reuters.com", "bloomberg.com",
+            "wikipedia.org", "youtube.com", "twitter.com", "instagram.com",
+            "solarpowerworldonline", "greentechmedia", "renewableenergyworld",
+            "facebook.com", "tiktok.com", "linkedin.com", "jobberman.com",
+            "myjobmag.com", "indeed.com", "brightermonday.com",
+            "pv-tech.org", "cleantechnica.com", "energymonitor.ai",
+            "spglobal.com", "woodmac.com", "iai.gov",
+        ]
+        # ── Block category/listing pages (not individual notices) ─────────────
         listing_patterns = [
             "/ghana-tenders", "/solar-tenders", "/renewable-energy-tenders",
             "/country/ghana", "global-solar-tenders", "global-energy-and-power",
@@ -4855,21 +4857,21 @@ def admin_agent_run():
             "tendersontime.com/south-africa-tenders/",
             "developmentaid.org/tenders",
             "devex.com/funding/r?report=grant",
+            "/tag/solar", "/category/solar", "/news/solar",
         ]
-        # ── Must contain procurement / project intent ─────────────────────────
-        rfp_keywords = ["rfp", "tender", "bid", "proposal", "solicitation",
-                        "procurement", "expression of interest", "eoi", "ppa",
-                        "power purchase", "invitation", "prequalif",
-                        "contract notice", "call for bids", "call for proposal"]
-        # ── Must be SOLAR specifically — checked against title first ──────────
-        solar_keywords = ["solar", "photovoltaic", "pv system", "pv project",
-                          "solar pv", "solar power", "solar energy",
-                          "solar plant", "solar farm", "mini grid", "minigrid",
-                          "off-grid", "renewable energy project"]
-        # Broader energy terms only accepted when title already has solar keyword
-        energy_keywords = solar_keywords + [
-            "renewable", "energy", "power plant", "electrification",
-            "battery storage", "kw solar", "mw solar", "inverter"]
+        # ── Hard gate 1: must be a procurement/project solicitation ───────────
+        rfp_keywords = [
+            "rfp", "tender", "bid", "proposal", "solicitation", "procurement",
+            "expression of interest", "eoi", "ppa", "power purchase",
+            "invitation to bid", "itb", "prequalif", "contract notice",
+            "call for bids", "call for proposal", "request for quotation",
+        ]
+        # ── Hard gate 2: must be solar/renewable — required in TITLE ──────────
+        solar_keywords = [
+            "solar", "photovoltaic", "pv system", "pv project", "solar pv",
+            "solar power", "solar energy", "solar plant", "solar farm",
+            "mini grid", "minigrid", "off-grid solar", "renewable energy",
+        ]
 
         def _real_url(raw):
             """Strip DuckDuckGo redirect wrappers to get the actual destination URL."""
@@ -4898,16 +4900,13 @@ def admin_agent_run():
                         url_lower = url.lower()
                         if any(p in url_lower for p in listing_patterns):
                             continue
-                        # 3. Must have procurement intent in title or body
-                        if not any(kw in title or kw in body for kw in rfp_keywords):
-                            continue
-                        # 4. SOLAR keyword required in title (hard gate)
+                        # 3. Solar keyword must appear in title (hard gate)
                         if not any(kw in title for kw in solar_keywords):
                             continue
-                        # 5. Broader energy check in body as secondary confirm
-                        if not any(kw in title or kw in body for kw in energy_keywords):
+                        # 4. Procurement intent required in title or body
+                        if not any(kw in title or kw in body for kw in rfp_keywords):
                             continue
-                        # 6. Deduplicate by URL; store cleaned URL
+                        # 5. Deduplicate by URL; store cleaned URL
                         if url and not any(x.get("href") == url for x in search_results):
                             r["href"] = url  # write cleaned URL back
                             search_results.append(r)
