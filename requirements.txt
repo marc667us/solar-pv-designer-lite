@@ -1,8 +1,9 @@
 Flask==3.1.3
 Flask-Limiter==4.1.1
 python-dotenv==1.2.2
-waitress==3.0.2
-pyngrok==8.1.2
+gunicorn==21.2.0
 python-docx
-markdown-pdf
 requests
+openpyxl
+anthropic
+markdown-pdf
