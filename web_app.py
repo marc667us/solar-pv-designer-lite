@@ -374,6 +374,19 @@ def init_db():
                 c.execute(stmt)
         except Exception:
             pass
+    # Seed default users — ensure admin and owner accounts always exist
+    _SEED_USERS = [
+        ("admin",    "admin@solarpro.global", "Administrator", "SolarAdmin2026!", "enterprise", 1),
+        ("marc667us","marc667us@yahoo.com",   "Marc",          "marc667us",       "enterprise", 1),
+    ]
+    with get_db() as c:
+        for uname, email, name, pwd, plan, is_admin in _SEED_USERS:
+            exists = c.execute("SELECT id FROM users WHERE username=?", (uname,)).fetchone()
+            if not exists:
+                c.execute(
+                    "INSERT INTO users (username,email,name,password_hash,plan,is_admin) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (uname, email, name, generate_password_hash(pwd), plan, is_admin))
     # Grant admin to the first registered user if no admins exist yet
     with get_db() as c:
         admins = c.execute("SELECT COUNT(*) FROM users WHERE is_admin=1").fetchone()[0]
