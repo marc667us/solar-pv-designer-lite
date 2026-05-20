@@ -4959,7 +4959,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
     {{
       "company_name": "Issuing organisation from result",
       "type": "RFP / Tender / EOI / ITB / Contract Notice",
-      "location": "location from result",
+      "location": "exact country/city from the result text — do NOT use the search country if the result says a different country",
       "estimated_kw": 0,
       "estimated_usd": 0,
       "pain_points": [],
@@ -4993,6 +4993,21 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
             pass  # fall through to raw results
 
     # ── Step 3: Return raw search results as prospects (no Claude key) ──────────
+    _COUNTRY_NAMES = [
+        "Ghana", "Nigeria", "Togo", "Benin", "Ivory Coast", "Côte d'Ivoire",
+        "Cote d'Ivoire", "Burkina Faso", "Senegal", "Sierra Leone", "Liberia",
+        "Guinea-Bissau", "Guinea", "Gambia", "Mali", "Niger", "Cameroon",
+        "Kenya", "Tanzania", "Uganda", "Rwanda", "Ethiopia", "Zambia",
+        "Zimbabwe", "Mozambique", "Malawi", "South Africa", "Namibia",
+        "Botswana", "Angola", "DRC", "Congo",
+    ]
+    def _detect_country(title, body):
+        text = (title + " " + body).lower()
+        for c in _COUNTRY_NAMES:
+            if c.lower() in text:
+                return c
+        return loc  # fall back to search country only if no match found
+
     if search_results:
         prospects = []
         for r in search_results[:count]:
@@ -5002,7 +5017,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
             prospects.append({
                 "company_name":    title[:80] if title else "Unknown",
                 "type":            sector,
-                "location":        loc,
+                "location":        _detect_country(title, snippet),
                 "estimated_kw":    0,
                 "estimated_usd":   0,
                 "pain_points":     [],
