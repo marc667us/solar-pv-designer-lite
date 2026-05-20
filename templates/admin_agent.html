@@ -15,13 +15,14 @@
       <div>
         <div class="d-flex align-items-center gap-2">
           <h4 class="fw-black mb-0" style="letter-spacing:-.3px">Client Prospecting Agent</h4>
+          <span class="badge" style="background:linear-gradient(135deg,#0ea5e9,#22c55e);color:#fff;font-size:10px;padding:3px 8px">
+            <i class="bi bi-globe2 me-1"></i>LIVE WEB SEARCH
+          </span>
           {% if has_ai %}
-          <span class="badge" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;font-size:10px;padding:3px 8px">AI POWERED</span>
-          {% else %}
-          <span class="badge" style="background:#1e1e3a;color:#9090c0;font-size:10px;padding:3px 8px">TEMPLATE MODE</span>
+          <span class="badge" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;font-size:10px;padding:3px 8px">+ CLAUDE AI</span>
           {% endif %}
         </div>
-        <div class="text-secondary" style="font-size:13px">AI-powered prospect finder · Solar client targeting · Auto-save to CRM</div>
+        <div class="text-secondary" style="font-size:13px">Searches the real web for verifiable solar project leads · Source links included · No invented data</div>
       </div>
     </div>
     <div class="d-flex gap-2">
@@ -32,12 +33,12 @@
   </div>
 </div>
 
-{% if not has_ai %}
-<div class="alert mb-4" style="background:#1a1a0a;border:1px solid #44440a;color:#fde047;font-size:13px">
-  <i class="bi bi-info-circle me-2"></i>
-  <strong>AI mode not active.</strong> Add <code>ANTHROPIC_API_KEY=your_key</code> to your <code>.env</code> file for Claude AI-powered prospect generation. Currently using smart template-based generation.
+<div class="alert mb-4" style="background:#0a140a;border:1px solid #22c55e33;color:#4ade80;font-size:13px">
+  <i class="bi bi-shield-check me-2"></i>
+  <strong>Verified results only.</strong> This agent searches the live web (DuckDuckGo) for real solar project leads.
+  Every result includes a clickable source link so you can verify the information directly.
+  {% if has_ai %}<br><i class="bi bi-robot me-1"></i>Claude AI is active and will analyse each result to extract structured prospect data.{% endif %}
 </div>
-{% endif %}
 
 <!-- KPI strip -->
 <div class="row g-3 mb-4">
@@ -279,7 +280,7 @@ async function runAgent(){
     if(!json.ok){ alert('Agent error: ' + (json.error || 'Unknown')); return; }
 
     currentProspects = json.prospects;
-    renderProspects(json.prospects, json.source);
+    renderProspects(json.prospects, json.source, json.result_count || 0);
   } catch(e){
     document.getElementById('loadingState').classList.add('d-none');
     document.getElementById('runBtn').disabled = false;
@@ -287,11 +288,13 @@ async function runAgent(){
   }
 }
 
-function renderProspects(prospects, source){
+function renderProspects(prospects, source, resultCount){
   const grid = document.getElementById('prospectGrid');
   grid.innerHTML = '';
+  const srcLabel = source === 'web+claude' ? '🌐 Web Search + Claude AI' :
+                   source === 'web_search' ? '🌐 Live Web Search' : source;
   document.getElementById('resultsCount').textContent = prospects.length + ' prospects found';
-  document.getElementById('resultsSource').textContent = source === 'claude' ? '(Claude AI)' : '(Template)';
+  document.getElementById('resultsSource').textContent = '(' + srcLabel + (resultCount ? ', ' + resultCount + ' pages scanned)' : ')');
   document.getElementById('resultsState').classList.remove('d-none');
 
   prospects.forEach((p, i) => {
@@ -299,7 +302,11 @@ function renderProspects(prospects, source){
     const col = PRIO[prio] || '#9090c0';
     const bg  = PRIO_BG[prio] || '#9090c020';
     const kw  = p.estimated_kw || 0;
-    const usd = (p.estimated_usd || 0).toLocaleString();
+    const usd = p.estimated_usd ? '$' + (p.estimated_usd).toLocaleString() : '';
+    const srcUrl   = p.source_url || '';
+    const srcTitle = p.source_title || '';
+    const srcSnip  = p.source_snippet || '';
+    const verified = p.verified ? `<span style="font-size:10px;background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;border-radius:6px;padding:1px 6px"><i class="bi bi-patch-check-fill me-1"></i>Verified Source</span>` : '';
 
     grid.innerHTML += `
     <div class="col-md-6" id="card-${i}">
@@ -314,27 +321,40 @@ function renderProspects(prospects, source){
           <span class="ms-2 badge flex-shrink-0" style="background:${bg};color:${col};font-size:10px;font-weight:800;text-transform:uppercase">${prio}</span>
         </div>
 
-        <!-- Location + sizes -->
-        <div class="d-flex gap-3 mb-3" style="font-size:11px;color:#6868a0">
+        <!-- Verified badge + location -->
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-2" style="font-size:11px;color:#6868a0">
+          ${verified}
           <span><i class="bi bi-geo-alt me-1"></i>${p.location}</span>
-          <span><i class="bi bi-lightning me-1"></i>${kw} kW</span>
-          <span><i class="bi bi-currency-dollar me-1"></i>$${usd}</span>
+          ${kw ? `<span><i class="bi bi-lightning me-1"></i>${kw} kW</span>` : ''}
+          ${usd ? `<span><i class="bi bi-currency-dollar me-1"></i>${usd}</span>` : ''}
         </div>
+
+        <!-- Source link — the key verifiable element -->
+        ${srcUrl ? `
+        <div class="mb-3 p-2 rounded" style="background:#0a140a;border:1px solid #22c55e33">
+          <div style="font-size:10px;color:#22c55e;font-weight:700;margin-bottom:3px"><i class="bi bi-link-45deg me-1"></i>SOURCE</div>
+          <a href="${srcUrl}" target="_blank" rel="noopener" style="color:#4ade80;font-size:11px;word-break:break-all;text-decoration:none">
+            <i class="bi bi-box-arrow-up-right me-1"></i>${srcTitle || srcUrl}
+          </a>
+          ${srcSnip ? `<div style="font-size:10px;color:#6868a0;margin-top:4px;line-height:1.4">${srcSnip.substring(0,200)}${srcSnip.length>200?'…':''}</div>` : ''}
+        </div>` : ''}
 
         <!-- Pain points -->
+        ${(p.pain_points||[]).length ? `
         <div class="mb-2 d-flex flex-wrap gap-1">
-          ${(p.pain_points||[]).map(pp=>`<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#1e1e3a;color:#9090c0">${pp}</span>`).join('')}
-        </div>
+          ${(p.pain_points).map(pp=>`<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#1e1e3a;color:#9090c0">${pp}</span>`).join('')}
+        </div>` : ''}
 
         <!-- Pitch -->
+        ${p.pitch ? `
         <div class="mb-3 p-2 rounded" style="background:#0f0f1e;border:1px solid #1e1e3a;font-size:12px;color:#c8c8e8;line-height:1.5">
           <i class="bi bi-chat-quote me-1" style="color:#a78bfa"></i>${p.pitch}
-        </div>
+        </div>` : ''}
 
         <!-- Decision maker + strategy -->
         <div class="mb-3" style="font-size:11px;color:#6868a0">
-          <div class="mb-1"><i class="bi bi-person-badge me-1 text-warning"></i><strong style="color:#c8c8e8">Decision maker:</strong> ${p.decision_maker}</div>
-          <div><i class="bi bi-send me-1 text-info"></i><strong style="color:#c8c8e8">Strategy:</strong> ${p.contact_strategy}</div>
+          ${p.decision_maker ? `<div class="mb-1"><i class="bi bi-person-badge me-1 text-warning"></i><strong style="color:#c8c8e8">Decision maker:</strong> ${p.decision_maker}</div>` : ''}
+          ${p.contact_strategy ? `<div><i class="bi bi-send me-1 text-info"></i><strong style="color:#c8c8e8">Strategy:</strong> ${p.contact_strategy}</div>` : ''}
         </div>
 
         <!-- Save button -->

@@ -4742,130 +4742,144 @@ def admin_agent():
 @limiter.limit("20 per hour")
 def admin_agent_run():
     csrf_protect()
-    country      = request.form.get("country", "").strip()
-    sector       = request.form.get("sector", "Commercial")
-    system_kw    = request.form.get("system_kw", "10-100")
-    budget       = request.form.get("budget", "$5,000-$100,000")
-    focus        = request.form.get("focus", "").strip()
-    count        = min(int(request.form.get("count", 8)), 12)
+    country   = request.form.get("country", "").strip()
+    sector    = request.form.get("sector", "Commercial")
+    system_kw = request.form.get("system_kw", "10-100")
+    budget    = request.form.get("budget", "$5,000-$100,000")
+    focus     = request.form.get("focus", "").strip()
+    count     = min(int(request.form.get("count", 8)), 12)
 
+    loc = country or "global"
+
+    # ── Step 1: Deep web search — multiple queries, real sources only ───────────
+    search_results = []
+    search_error   = None
+    try:
+        from ddgs import DDGS
+        # Multi-angle queries to maximise real hits
+        queries = [
+            f'{loc} {sector} solar PV project tender 2024 2025',
+            f'{loc} solar energy {sector} installation contract awarded',
+            f'{loc} solar project RFP bid procurement 2025',
+            f'{loc} solar power plant {sector} MW kW commissioned',
+            f'site:ungm.org OR site:tendersinfo.com OR site:reliefweb.int solar {loc}',
+        ]
+        if focus:
+            queries.append(f'{loc} {focus} solar energy project news')
+        with DDGS() as ddgs:
+            for q in queries:
+                try:
+                    for r in ddgs.text(q, max_results=6, safesearch="off"):
+                        url = r.get("href","")
+                        if url and not any(x.get("href") == url for x in search_results):
+                            search_results.append(r)
+                except Exception:
+                    continue
+                if len(search_results) >= 30:
+                    break
+    except Exception as e:
+        search_error = str(e)
+
+    # ── Step 2: Claude analyses real search results → structured prospects ───────
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-
-    if api_key:
+    if api_key and search_results:
         try:
             import anthropic as _ant
             client = _ant.Anthropic(api_key=api_key)
-            prompt = f"""You are a solar PV sales agent. Generate {count} realistic prospect profiles for a solar PV company targeting potential clients.
+            snippets = "\n\n".join(
+                f"[{i+1}] TITLE: {r.get('title','')}\nURL: {r.get('href','')}\nSNIPPET: {r.get('body','')[:400]}"
+                for i, r in enumerate(search_results[:12])
+            )
+            prompt = f"""You are a solar PV business intelligence analyst. Your job is to extract REAL prospect information from web search results. You must NEVER invent, assume, or hallucinate any data.
 
-Target criteria:
-- Country/Region: {country or 'Any'}
+Search criteria used:
+- Location: {loc}
 - Sector: {sector}
 - System size: {system_kw} kW
-- Budget range: {budget}
-- Special focus: {focus or 'None'}
+- Budget: {budget}
+- Focus: {focus or 'general'}
 
-Return ONLY a valid JSON object with this exact structure (no markdown, no explanation):
+REAL web search results (these are the ONLY source of truth):
+
+{snippets}
+
+STRICT RULES — violations will make results useless:
+1. ONLY extract information explicitly stated in the search results above
+2. source_url = exact URL from the result (copy it verbatim, do not modify)
+3. source_title = exact title from the result (copy verbatim)
+4. company_name = real organisation/company name from the result, NOT invented
+5. If a field is not in the result, use "" or 0 — never guess or fill with plausible-sounding data
+6. Do NOT create prospects for results that are not about solar projects or energy
+7. Do NOT combine information from different results into one prospect
+8. source_snippet = copy the most relevant sentence or phrase verbatim from the result body
+
+Return up to {count} prospects. Return ONLY valid JSON, no markdown, no explanation:
 {{
   "prospects": [
     {{
-      "company_name": "Example Business Ltd",
-      "type": "Hotel / Hospitality",
-      "location": "City, Country",
-      "estimated_kw": 45,
-      "estimated_usd": 40500,
-      "pain_points": ["High electricity bills", "Generator costs", "Power outages"],
-      "pitch": "One sentence compelling pitch for this prospect",
-      "contact_strategy": "LinkedIn outreach + site visit",
-      "decision_maker": "Facilities Manager / GM",
-      "priority": "high"
+      "company_name": "Exact name from result",
+      "type": "type extracted from result or {sector}",
+      "location": "location stated in result",
+      "estimated_kw": 0,
+      "estimated_usd": 0,
+      "pain_points": ["only if explicitly mentioned in result"],
+      "pitch": "one sentence summarising what the result actually says",
+      "contact_strategy": "based only on information in the result",
+      "decision_maker": "role only if explicitly named in result, else ''",
+      "priority": "high if tender/contract, medium if news, low if general mention",
+      "source_url": "https://exact-url-from-result.com/path",
+      "source_title": "Exact title from result",
+      "source_snippet": "verbatim excerpt from result body, max 250 chars",
+      "verified": true
     }}
   ]
-}}
-
-priority must be: high, medium, or low.
-Make prospects realistic, specific, and varied. Use real-sounding names for the country/region specified."""
-
+}}"""
             msg = client.messages.create(
                 model="claude-haiku-4-5-20251001",
-                max_tokens=3000,
+                max_tokens=4000,
                 messages=[{"role": "user", "content": prompt}]
             )
             raw = msg.content[0].text.strip()
-            # Strip any accidental markdown fences
             if raw.startswith("```"):
-                raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:]
+                raw = "\n".join(raw.split("\n")[1:])
+                if raw.endswith("```"):
+                    raw = raw[:-3]
             data = json.loads(raw)
-            return jsonify({"ok": True, "prospects": data["prospects"], "source": "claude"})
+            return jsonify({"ok": True, "prospects": data["prospects"],
+                            "source": "web+claude", "result_count": len(search_results)})
         except Exception as e:
-            # Fall through to template-based if API fails
-            pass
+            pass  # fall through to raw results
 
-    # ── Template-based fallback (no API key required) ──────────────────────────
-    import random
-    SECTOR_MAP = {
-        "Residential": [
-            ("Gated Estate / Housing Complex", "Estate Developer / HOA Chairman", ["Generator fuel costs","NEPA unreliability","Rising utility bills"]),
-            ("Luxury Apartment Block", "Property Manager", ["High common area bills","Tenant complaints","Generator noise"]),
-            ("Private School (Residential)", "School Bursar / Head", ["Fuel costs","Safety concerns","Exam disruptions"]),
-        ],
-        "Commercial": [
-            ("Hotel / Resort", "General Manager / Facilities", ["Generator costs","Guest complaints","High utility bills"]),
-            ("Shopping Mall / Plaza", "Mall Manager", ["24/7 power demand","High AC costs","Generator dependency"]),
-            ("Bank / Financial Institution", "Head of Facilities", ["Critical uptime needs","Generator costs","CSR goals"]),
-            ("Supermarket / Retail Chain", "Operations Manager", ["Refrigeration power","Night trading","Outage losses"]),
-            ("Restaurant / Fast Food Chain", "Owner / Operations Lead", ["Cooking equipment power","Cold storage","Peak hour outages"]),
-            ("Petrol Station", "Station Manager", ["Pump power","CCTV/ATM uptime","Fuel cost for generator"]),
-        ],
-        "Industrial": [
-            ("Manufacturing Plant", "Plant Manager / MD", ["Production downtime","Motor loads","Shift work losses"]),
-            ("Cold Storage / Ice Plant", "Operations Director", ["24/7 refrigeration","Critical uptime","Fuel costs"]),
-            ("Printing Press", "Production Manager", ["Equipment sensitivity","Power quality","Night shifts"]),
-            ("Bottling / Packaging Plant", "Factory Manager", ["High motor loads","Continuous ops","Cost reduction"]),
-        ],
-        "Government / Schools": [
-            ("Public University", "Works Director / VC", ["Lecture disruptions","Lab equipment","Large roof space"]),
-            ("Government Hospital", "Hospital Administrator", ["Life-critical systems","Fuel dependency","24/7 needs"]),
-            ("Local Government HQ", "Director of Works", ["Public image","Grant eligibility","Cost savings"]),
-            ("Rural Health Centre", "Facility Manager", ["No grid access","Vaccine storage","Patient safety"]),
-        ],
-    }
+    # ── Step 3: Return raw search results as prospects (no Claude key) ──────────
+    if search_results:
+        prospects = []
+        for r in search_results[:count]:
+            title   = r.get("title", "")
+            url     = r.get("href", "")
+            snippet = r.get("body", "")
+            prospects.append({
+                "company_name":    title[:80] if title else "Unknown",
+                "type":            sector,
+                "location":        loc,
+                "estimated_kw":    0,
+                "estimated_usd":   0,
+                "pain_points":     [],
+                "pitch":           snippet[:200] if snippet else "",
+                "contact_strategy":"Research contact via source link",
+                "decision_maker":  "See source",
+                "priority":        "medium",
+                "source_url":      url,
+                "source_title":    title,
+                "source_snippet":  snippet[:300],
+                "verified":        True,
+            })
+        return jsonify({"ok": True, "prospects": prospects,
+                        "source": "web_search", "result_count": len(search_results)})
 
-    sector_key = sector if sector in SECTOR_MAP else "Commercial"
-    templates  = SECTOR_MAP[sector_key]
-    prospects  = []
-    loc        = country or "West Africa"
-    kw_parts   = system_kw.replace("kW","").strip().split("-")
-    kw_min     = int(kw_parts[0]) if kw_parts[0].isdigit() else 10
-    kw_max     = int(kw_parts[-1]) if kw_parts[-1].isdigit() else 100
-
-    priorities = ["high", "high", "medium", "medium", "medium", "low"]
-
-    used = []
-    for i in range(count):
-        tpl = templates[i % len(templates)]
-        if tpl in used and len(templates) > 1:
-            tpl = random.choice([t for t in templates if t not in used] or templates)
-        used.append(tpl)
-        kw  = random.randint(kw_min, kw_max)
-        usd = round(kw * random.uniform(750, 1100), -2)
-        name_prefix = ["Alpha","Beacon","Crown","Delta","Eagle","First","Global","Heritage","Icon","Jade"][i % 10]
-        name_suffix = ["Group","Holdings","Properties","Enterprises","Associates","Partners","Solutions","Networks"][i % 8]
-        prospects.append({
-            "company_name":    f"{name_prefix} {name_suffix}",
-            "type":            tpl[0],
-            "location":        loc,
-            "estimated_kw":    kw,
-            "estimated_usd":   int(usd),
-            "pain_points":     tpl[2],
-            "pitch":           f"Cut {tpl[0].split('/')[0].strip()} energy costs by up to 70% with a {kw}kW solar system — zero upfront with our financing option.",
-            "contact_strategy":"Cold call → site visit → proposal",
-            "decision_maker":  tpl[1],
-            "priority":        priorities[i % len(priorities)],
-        })
-
-    return jsonify({"ok": True, "prospects": prospects, "source": "template"})
+    # ── Step 4: Last resort — inform user search failed ─────────────────────────
+    return jsonify({"ok": False,
+                    "error": f"Web search returned no results. {search_error or ''} "
+                             "Try different search criteria or add an ANTHROPIC_API_KEY."})
 
 
 @app.route("/admin/agent/save", methods=["POST"])
