@@ -4867,11 +4867,24 @@ def admin_agent_run():
                            "power plant", "mini grid", "minigrid", "electrification",
                            "off-grid", "battery", "kw", "mw", "inverter"]
 
+        def _real_url(raw):
+            """Strip DuckDuckGo redirect wrappers to get the actual destination URL."""
+            if not raw:
+                return raw
+            from urllib.parse import urlparse, parse_qs, unquote
+            p = urlparse(raw)
+            if "duckduckgo.com" in p.netloc:
+                qs = parse_qs(p.query)
+                for key in ("uddg", "u"):
+                    if key in qs:
+                        return unquote(qs[key][0])
+            return raw
+
         with DDGS() as ddgs:
             for q in queries:
                 try:
                     for r in ddgs.text(q, max_results=8, safesearch="off"):
-                        url   = r.get("href", "")
+                        url   = _real_url(r.get("href", ""))
                         body  = r.get("body", "").lower()
                         title = r.get("title", "").lower()
                         # 1. Skip blocked domains
@@ -4887,8 +4900,9 @@ def admin_agent_run():
                         # 4. Must be energy/solar related
                         if not any(kw in title or kw in body for kw in energy_keywords):
                             continue
-                        # 5. Deduplicate by URL
+                        # 5. Deduplicate by URL; store cleaned URL
                         if url and not any(x.get("href") == url for x in search_results):
+                            r["href"] = url  # write cleaned URL back
                             search_results.append(r)
                 except Exception:
                     continue
