@@ -4749,7 +4749,26 @@ def admin_agent_run():
     focus     = request.form.get("focus", "").strip()
     count     = min(int(request.form.get("count", 8)), 12)
 
-    loc = country or "global"
+    # West African neighbours to always include alongside Ghana
+    WEST_AFRICA_NEIGHBOURS = [
+        "Nigeria", "Côte d'Ivoire", "Ivory Coast", "Togo", "Benin",
+        "Burkina Faso", "Senegal", "Sierra Leone", "Liberia", "Guinea",
+        "Guinea-Bissau", "Gambia", "Mali",
+    ]
+    GHANA_ADJACENT = (
+        "Ghana OR Nigeria OR \"Ivory Coast\" OR \"Cote d'Ivoire\" OR "
+        "Togo OR Benin OR \"Burkina Faso\" OR Senegal OR \"Sierra Leone\" "
+        "OR Liberia OR Guinea"
+    )
+
+    if not country or country.strip().lower() in ("ghana", "west africa", "global", ""):
+        loc      = "Ghana"
+        loc_q    = GHANA_ADJACENT          # broad query term for search strings
+        loc_label = "Ghana & West Africa"
+    else:
+        loc      = country
+        loc_q    = country
+        loc_label = country
 
     # ── Step 1: Multi-source deep search ─────────────────────────────────────────
     search_results = []
@@ -4773,7 +4792,7 @@ def admin_agent_run():
         )
         # ── Source group 3: LinkedIn — job posts & project announcements ──────
         LINKEDIN_Q = (
-            f'site:linkedin.com {loc} solar PV '
+            f'site:linkedin.com ({loc_q}) solar PV '
             f'"power purchase agreement" OR "PPA" OR "RFP" OR "tender" '
             f'OR "solar project" OR "looking for" OR "seeking proposals" 2025 2026'
         )
@@ -4783,28 +4802,30 @@ def admin_agent_run():
             "OR site:indeed.com OR site:brightermonday.com OR site:work.place"
         )
         JOB_Q = (
-            f'({JOB_SITES}) {loc} solar engineer OR solar project OR '
+            f'({JOB_SITES}) ({loc_q}) solar engineer OR solar project OR '
             f'PV installer OR renewable energy project manager 2025 2026'
         )
-        # ── Source group 5: Government & ministry sites ───────────────────────
+        # ── Source group 5: Government & ministry sites (Ghana + neighbours) ──
         GOV_SITES = (
-            f'site:ghana.gov.gh OR site:moe.gov.gh OR site:energycom.gov.gh '
-            f'OR site:purc.com.gh OR site:gridcogh.com OR site:.gov.{loc[:2].lower()}'
+            "site:ghana.gov.gh OR site:moe.gov.gh OR site:energycom.gov.gh "
+            "OR site:purc.com.gh OR site:gridcogh.com "
+            "OR site:nigeria.gov.ng OR site:energy.gov.ng "
+            "OR site:gouv.sn OR site:gouvernement.bj OR site:gov.sl"
         )
         GOV_Q = f'({GOV_SITES}) solar tender OR procurement OR RFP OR energy project'
         # ── Source group 6: Stadia, sports & public infrastructure ───────────
         INFRA_Q = (
-            f'{loc} stadium OR hospital OR ministry OR university OR airport '
+            f'({loc_q}) stadium OR hospital OR ministry OR university OR airport '
             f'solar PV tender OR RFP OR "power purchase agreement" 2025 2026'
         )
         # ── Source group 7: World Bank / AfDB active procurement ──────────────
-        WB_Q  = f'site:worldbank.org OR site:afdb.org solar {loc} procurement 2025 2026'
-        UN_Q  = f'site:ungm.org solar {loc} 2025 2026'
-        DEV_Q = f'site:devex.com solar {loc} request for proposals OR call for bids 2025 2026'
+        WB_Q  = f'site:worldbank.org OR site:afdb.org solar ({loc_q}) procurement 2025 2026'
+        UN_Q  = f'site:ungm.org solar ({loc_q}) 2025 2026'
+        DEV_Q = f'site:devex.com solar ({loc_q}) request for proposals OR call for bids 2025 2026'
         # ── Source group 8: Focus-specific ───────────────────────────────────
         queries = [
-            f"({TENDER_SITES}) solar {loc} RFP OR tender OR bid OR EOI OR PPA",
-            f'{loc} solar PV "power purchase agreement" OR PPA solicitation OR RFP {sector} 2025 2026',
+            f"({TENDER_SITES}) solar ({loc_q}) RFP OR tender OR bid OR EOI OR PPA",
+            f'({loc_q}) solar PV "power purchase agreement" OR PPA solicitation OR RFP {sector} 2025 2026',
             LINKEDIN_Q,
             JOB_Q,
             GOV_Q,
@@ -4812,11 +4833,11 @@ def admin_agent_run():
             WB_Q,
             UN_Q,
             DEV_Q,
-            f'({PPA_SITES}) solar {loc} {sector} procurement OR PPA OR tender 2025 2026',
+            f'({PPA_SITES}) solar ({loc_q}) {sector} procurement OR PPA OR tender 2025 2026',
         ]
         if focus:
             queries.insert(0,
-                f'{loc} "{focus}" solar "request for proposal" OR tender OR RFP OR PPA 2025 2026')
+                f'({loc_q}) "{focus}" solar "request for proposal" OR tender OR RFP OR PPA 2025 2026')
 
         # ── Domains to always skip (pure news / social feeds) ─────────────────
         skip_domains = ["pv-magazine", "pvtech", "reuters.com", "bloomberg.com",
@@ -4889,7 +4910,7 @@ def admin_agent_run():
             prompt = f"""You are a solar PV procurement intelligence analyst. You have been given real search results from tender portals and procurement databases. Extract ONLY genuine RFPs, tenders, and solicitations — not news articles.
 
 Search criteria:
-- Location: {loc}
+- Location: {loc_label}
 - Sector: {sector}
 - System size: {system_kw} kW
 - Budget: {budget}
