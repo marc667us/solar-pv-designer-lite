@@ -4860,12 +4860,16 @@ def admin_agent_run():
         rfp_keywords = ["rfp", "tender", "bid", "proposal", "solicitation",
                         "procurement", "expression of interest", "eoi", "ppa",
                         "power purchase", "invitation", "prequalif",
-                        "contract notice", "call for", "looking for",
-                        "seeking", "vacancy", "job", "hiring", "engineer"]
-        # ── Must be solar / energy related ───────────────────────────────────
-        energy_keywords = ["solar", "pv", "photovoltaic", "renewable", "energy",
-                           "power plant", "mini grid", "minigrid", "electrification",
-                           "off-grid", "battery", "kw", "mw", "inverter"]
+                        "contract notice", "call for bids", "call for proposal"]
+        # ── Must be SOLAR specifically — checked against title first ──────────
+        solar_keywords = ["solar", "photovoltaic", "pv system", "pv project",
+                          "solar pv", "solar power", "solar energy",
+                          "solar plant", "solar farm", "mini grid", "minigrid",
+                          "off-grid", "renewable energy project"]
+        # Broader energy terms only accepted when title already has solar keyword
+        energy_keywords = solar_keywords + [
+            "renewable", "energy", "power plant", "electrification",
+            "battery storage", "kw solar", "mw solar", "inverter"]
 
         def _real_url(raw):
             """Strip DuckDuckGo redirect wrappers to get the actual destination URL."""
@@ -4897,10 +4901,13 @@ def admin_agent_run():
                         # 3. Must have procurement intent in title or body
                         if not any(kw in title or kw in body for kw in rfp_keywords):
                             continue
-                        # 4. Must be energy/solar related
+                        # 4. SOLAR keyword required in title (hard gate)
+                        if not any(kw in title for kw in solar_keywords):
+                            continue
+                        # 5. Broader energy check in body as secondary confirm
                         if not any(kw in title or kw in body for kw in energy_keywords):
                             continue
-                        # 5. Deduplicate by URL; store cleaned URL
+                        # 6. Deduplicate by URL; store cleaned URL
                         if url and not any(x.get("href") == url for x in search_results):
                             r["href"] = url  # write cleaned URL back
                             search_results.append(r)
