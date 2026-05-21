@@ -328,7 +328,7 @@ function renderProspects(prospects, source, resultCount){
   document.getElementById('resultsState').classList.remove('d-none');
 
   prospects.forEach((p, i) => {
-    const prio = p.priority || 'medium';
+    const prio = p.priority || 'low';
     const col = PRIO[prio] || '#9090c0';
     const bg  = PRIO_BG[prio] || '#9090c020';
     const kw  = p.estimated_kw || 0;
@@ -336,11 +336,18 @@ function renderProspects(prospects, source, resultCount){
     const srcUrl   = p.source_url || '';
     const srcTitle = p.source_title || '';
     const srcSnip  = p.source_snippet || '';
+    const isLow = prio === 'low';
+    const cardOpacity = isLow ? 'opacity:.65' : '';
     const verified = p.verified ? `<span style="font-size:10px;background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;border-radius:6px;padding:1px 6px"><i class="bi bi-patch-check-fill me-1"></i>Verified Source</span>` : '';
+
+    // Key fields — shown with warning if missing
+    const fieldRow = (icon, label, val, urgent) => val
+      ? `<div class="mb-1"><i class="bi bi-${icon} me-1" style="color:${urgent?'#f87171':'#a78bfa'}"></i><strong style="color:#c8c8e8;font-size:11px">${label}:</strong> <span style="color:#c8c8e8;font-size:11px">${val}</span></div>`
+      : `<div class="mb-1 text-secondary" style="font-size:11px"><i class="bi bi-${icon} me-1"></i>${label}: <span style="color:#f8717188;font-style:italic">not stated</span></div>`;
 
     grid.innerHTML += `
     <div class="col-md-6" id="card-${i}">
-      <div class="h-100 rounded-3 p-4" style="background:#0a0a14;border-left:3px solid ${col};border-right:1px solid #1e1e3a;border-top:1px solid #1e1e3a;border-bottom:1px solid #1e1e3a">
+      <div class="h-100 rounded-3 p-4" style="background:#0a0a14;border-left:3px solid ${col};border-right:1px solid #1e1e3a;border-top:1px solid #1e1e3a;border-bottom:1px solid #1e1e3a;${cardOpacity}">
 
         <!-- Header -->
         <div class="d-flex justify-content-between align-items-start mb-2">
@@ -348,21 +355,23 @@ function renderProspects(prospects, source, resultCount){
             <div class="fw-black" style="font-size:14px">${p.company_name}</div>
             <div style="font-size:11px;color:#9090c0">${p.type}</div>
           </div>
-          <span class="ms-2 badge flex-shrink-0" style="background:${bg};color:${col};font-size:10px;font-weight:800;text-transform:uppercase">${prio}</span>
+          <div class="d-flex flex-column align-items-end gap-1">
+            <span class="badge flex-shrink-0" style="background:${bg};color:${col};font-size:10px;font-weight:800;text-transform:uppercase">${prio}</span>
+            ${isLow ? `<span style="font-size:9px;color:#f87171;white-space:nowrap">Incomplete info</span>` : ''}
+          </div>
         </div>
 
-        <!-- Verified badge + type + location -->
-        <div class="d-flex flex-wrap gap-2 align-items-center mb-2" style="font-size:11px;color:#6868a0">
+        <!-- Badges row -->
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3" style="font-size:11px;color:#6868a0">
           ${verified}
           ${p.type ? `<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:#0ea5e922;color:#38bdf8;border:1px solid #0ea5e944;font-weight:700">${p.type}</span>` : ''}
           ${p.location ? `<span><i class="bi bi-geo-alt me-1"></i>${p.location}</span>` : ''}
           ${kw ? `<span><i class="bi bi-lightning me-1"></i>${kw} kW</span>` : ''}
           ${usd ? `<span><i class="bi bi-currency-dollar me-1"></i>${usd}</span>` : ''}
-          ${p.deadline ? `<span style="color:#f87171"><i class="bi bi-clock me-1"></i>Deadline: ${p.deadline}</span>` : ''}
           ${p.tender_ref ? `<span style="color:#fde047"><i class="bi bi-hash me-1"></i>${p.tender_ref}</span>` : ''}
         </div>
 
-        <!-- Source link — the key verifiable element -->
+        <!-- Source link -->
         ${srcUrl ? `
         <div class="mb-3 p-2 rounded" style="background:#0a140a;border:1px solid #22c55e33">
           <div style="font-size:10px;color:#22c55e;font-weight:700;margin-bottom:3px"><i class="bi bi-link-45deg me-1"></i>SOURCE</div>
@@ -372,23 +381,22 @@ function renderProspects(prospects, source, resultCount){
           ${srcSnip ? `<div style="font-size:10px;color:#6868a0;margin-top:4px;line-height:1.4">${srcSnip.substring(0,200)}${srcSnip.length>200?'…':''}</div>` : ''}
         </div>` : ''}
 
-        <!-- Pain points -->
-        ${(p.pain_points||[]).length ? `
-        <div class="mb-2 d-flex flex-wrap gap-1">
-          ${(p.pain_points).map(pp=>`<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#1e1e3a;color:#9090c0">${pp}</span>`).join('')}
-        </div>` : ''}
-
-        <!-- Pitch -->
-        ${p.pitch ? `
-        <div class="mb-3 p-2 rounded" style="background:#0f0f1e;border:1px solid #1e1e3a;font-size:12px;color:#c8c8e8;line-height:1.5">
-          <i class="bi bi-chat-quote me-1" style="color:#a78bfa"></i>${p.pitch}
-        </div>` : ''}
-
-        <!-- Decision maker + strategy -->
-        <div class="mb-3" style="font-size:11px;color:#6868a0">
-          ${p.decision_maker ? `<div class="mb-1"><i class="bi bi-person-badge me-1 text-warning"></i><strong style="color:#c8c8e8">Decision maker:</strong> ${p.decision_maker}</div>` : ''}
-          ${p.contact_strategy ? `<div><i class="bi bi-send me-1 text-info"></i><strong style="color:#c8c8e8">Strategy:</strong> ${p.contact_strategy}</div>` : ''}
+        <!-- Key procurement fields -->
+        <div class="mb-3 p-3 rounded" style="background:#0f0f1e;border:1px solid #1e1e3a">
+          <div style="font-size:10px;color:#a78bfa;font-weight:700;text-transform:uppercase;margin-bottom:8px"><i class="bi bi-file-earmark-text me-1"></i>Procurement Details</div>
+          ${fieldRow('card-text', 'Work Description', p.work_description, false)}
+          ${fieldRow('list-check', 'Requirements', p.requirements, false)}
+          ${fieldRow('file-ruled', 'Terms of Reference', p.tor, false)}
+          ${fieldRow('calendar-x', 'Deadline', p.deadline, true)}
+          ${fieldRow('envelope', 'Contact', p.contact_details, true)}
+          ${fieldRow('mailbox', 'Submission Address', p.submission_address, true)}
         </div>
+
+        <!-- Strategy -->
+        ${p.contact_strategy ? `
+        <div class="mb-3" style="font-size:11px;color:#6868a0">
+          <i class="bi bi-send me-1 text-info"></i><strong style="color:#c8c8e8">Strategy:</strong> ${p.contact_strategy}
+        </div>` : ''}
 
         <!-- Save button -->
         <button class="btn btn-sm w-100 save-btn" id="save-${i}" onclick="saveLead(${i})"

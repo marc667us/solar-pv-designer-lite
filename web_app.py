@@ -5036,7 +5036,7 @@ def admin_agent_run():
                 f"[{i+1}] TITLE: {r.get('title','')}\nURL: {r.get('href','')}\nSNIPPET: {r.get('body','')[:400]}"
                 for i, r in enumerate(search_results[:12])
             )
-            prompt = f"""You are a solar PV procurement intelligence analyst. You have been given real search results from tender portals and procurement databases. Extract ONLY genuine RFPs, tenders, and solicitations — not news articles.
+            prompt = f"""You are a solar PV procurement intelligence analyst. Extract ONLY genuine RFPs, tenders, and solicitations from the search results below — not news articles.
 
 Search criteria:
 - Location: {loc_label}
@@ -5050,35 +5050,43 @@ REAL procurement search results:
 {snippets}
 
 STRICT RULES:
-1. ONLY extract results that are genuine RFPs, tenders, invitations to bid, expressions of interest, or contract notices for solar/energy projects
-2. SKIP any result that is a news article, blog post, or general information page
-3. source_url = exact URL from the result, copied verbatim — do not modify or shorten
+1. ONLY extract genuine RFPs, tenders, invitations to bid, expressions of interest, or contract notices for solar/energy projects
+2. SKIP any news article, blog post, or general information page
+3. source_url = exact URL from result, copied verbatim
 4. source_title = exact title, copied verbatim
-5. company_name = the issuing organisation (government body, utility, NGO, bank) — NOT a made-up name
-6. deadline = submission deadline if mentioned, else ""
-7. tender_ref = reference number if stated, else ""
-8. If a field is not stated in the result, use "" or 0 — never invent data
-9. source_snippet = copy the most relevant sentence verbatim, max 300 chars
+5. company_name = issuing organisation — NOT a made-up name
+6. If a field is not stated in the result, use "" or 0 — never invent data
+
+PRIORITY RULE — assign based on how many of these 3 key fields are present in the result:
+  - work_description (what is being procured)
+  - deadline (submission closing date)
+  - contact_details (email, phone, or submission address)
+  Priority: "high" = all 3 present; "medium" = any 2 present; "low" = 0 or 1 present
 
 Return up to {count} results. Return ONLY valid JSON, no markdown:
 {{
   "prospects": [
     {{
-      "company_name": "Issuing organisation from result",
+      "company_name": "Issuing organisation",
       "type": "RFP / Tender / EOI / ITB / Contract Notice",
-      "location": "exact country/city from the result text — do NOT use the search country if the result says a different country",
+      "location": "exact country/city from result — do NOT invent",
       "estimated_kw": 0,
       "estimated_usd": 0,
       "pain_points": [],
-      "pitch": "one sentence describing what they are procuring, from the result",
-      "contact_strategy": "Submit bid by deadline via portal — see source link",
-      "decision_maker": "procurement contact if named, else ''",
-      "priority": "high if deadline within 60 days or large value, medium otherwise",
+      "pitch": "one sentence: what they are procuring",
+      "work_description": "full scope of work as stated — supply and install, design only, EPC, etc. Use '' if not stated.",
+      "requirements": "eligibility or technical requirements stated in result. Use '' if not stated.",
+      "tor": "terms of reference or scope details if stated. Use '' if not stated.",
+      "deadline": "closing/submission date exactly as stated, e.g. '30 June 2026'. Use '' if not stated.",
+      "submission_address": "where/how to submit: email, portal URL, physical address. Use '' if not stated.",
+      "contact_details": "procurement contact name, email, phone if stated. Use '' if not stated.",
+      "tender_ref": "reference number if stated, else ''",
+      "contact_strategy": "how to respond based on source type",
+      "decision_maker": "procurement contact name if named, else ''",
+      "priority": "high / medium / low — per PRIORITY RULE above",
       "source_url": "https://exact-url-from-result.com/path",
       "source_title": "Exact title from result",
-      "source_snippet": "verbatim key sentence from result body",
-      "deadline": "",
-      "tender_ref": "",
+      "source_snippet": "most relevant verbatim sentence, max 300 chars",
       "verified": true
     }}
   ]
@@ -5143,28 +5151,106 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
             return "Social Media — Seeking Installer"
         return "Solar Project Opportunity"
 
+    def _extract_deadline(text):
+        import re
+        t = text.lower()
+        # Match patterns like "closing date: 30 June 2026", "deadline: 2026-06-30"
+        patterns = [
+            r'(?:closing|deadline|submission|due|close[sd]?|submit by|bids? by)[:\s]+([0-9]{1,2}[\s\-/][a-z]+[\s\-/][0-9]{4})',
+            r'(?:closing|deadline|submission|due|close[sd]?|submit by|bids? by)[:\s]+([a-z]+ [0-9]{1,2},?\s*[0-9]{4})',
+            r'(?:closing|deadline|submission|due|close[sd]?|submit by|bids? by)[:\s]+([0-9]{4}-[0-9]{2}-[0-9]{2})',
+            r'\b([0-9]{1,2} (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* [0-9]{4})\b',
+            r'\b([0-9]{4}-[0-9]{2}-[0-9]{2})\b',
+        ]
+        for pat in patterns:
+            m = re.search(pat, t)
+            if m:
+                return m.group(1).strip()
+        return ""
+
+    def _extract_contact(text):
+        import re
+        emails = re.findall(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', text)
+        phones = re.findall(r'(?:\+?[0-9][\d\s\-().]{7,15})', text)
+        parts = []
+        if emails:
+            parts.append(emails[0])
+        if phones:
+            parts.append(phones[0].strip())
+        return "; ".join(parts)
+
+    def _extract_submission_address(text):
+        t = text.lower()
+        for kw in ["submit to", "submission to", "send to", "addressed to",
+                   "tender box", "procurement office", "p.o. box", "po box"]:
+            idx = t.find(kw)
+            if idx != -1:
+                return text[idx:idx+120].strip()
+        return ""
+
+    def _extract_description(title, body):
+        t = (title + " " + body).lower()
+        for kw in ["supply and install", "supply & install", "design and install",
+                   "epc contract", "installation of", "procurement of",
+                   "construction of", "works contract", "solar pv system",
+                   "off-grid solar", "mini grid", "solar farm"]:
+            if kw in t:
+                idx = t.find(kw)
+                return (title + " " + body)[max(0, idx-20):idx+120].strip()
+        return ""
+
+    def _extract_requirements(body):
+        t = body.lower()
+        for kw in ["must have", "required to", "eligible", "experience of",
+                   "registered", "qualification", "minimum", "years experience"]:
+            if kw in t:
+                idx = t.find(kw)
+                return body[idx:idx+200].strip()
+        return ""
+
+    def _score_priority(work_desc, deadline, contact):
+        filled = sum(1 for f in [work_desc, deadline, contact] if f and f.strip())
+        if filled == 3:
+            return "high"
+        if filled == 2:
+            return "medium"
+        return "low"
+
     if search_results:
         prospects = []
         for r in search_results[:count]:
             title   = r.get("title", "")
             url     = r.get("href", "")
             snippet = r.get("body", "")
+            combined_text = title + " " + snippet
             src_type = _classify_source(url)
+            work_desc   = _extract_description(title, snippet)
+            deadline_v  = _extract_deadline(combined_text)
+            contact_v   = _extract_contact(combined_text)
+            sub_addr    = _extract_submission_address(combined_text)
+            requirements = _extract_requirements(snippet)
             prospects.append({
-                "company_name":    title[:80] if title else "Unknown",
-                "type":            _infer_type(title, snippet),
-                "location":        loc,
-                "estimated_kw":    0,
-                "estimated_usd":   0,
-                "pain_points":     [src_type],
-                "pitch":           snippet[:250] if snippet else "",
-                "contact_strategy": _contact_strategy(src_type, url),
-                "decision_maker":  "See source",
-                "priority":        "medium",
-                "source_url":      url,
-                "source_title":    title,
-                "source_snippet":  snippet[:300],
-                "verified":        True,
+                "company_name":       title[:80] if title else "Unknown",
+                "type":               _infer_type(title, snippet),
+                "location":           loc,
+                "estimated_kw":       0,
+                "estimated_usd":      0,
+                "pain_points":        [src_type],
+                "pitch":              snippet[:250] if snippet else "",
+                "work_description":   work_desc,
+                "requirements":       requirements,
+                "tor":                "",
+                "deadline":           deadline_v,
+                "submission_address": sub_addr,
+                "contact_details":    contact_v,
+                "tender_ref":         "",
+                "contact_strategy":   _contact_strategy(src_type, url),
+                "decision_maker":     "",
+                "priority":           _score_priority(work_desc, deadline_v, contact_v),
+                "source_url":         url,
+                "source_title":       title,
+                "source_snippet":     snippet[:300],
+                "verified":           True,
             })
         return jsonify({"ok": True, "prospects": prospects,
                         "source": "web_search", "result_count": len(search_results)})
