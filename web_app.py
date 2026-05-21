@@ -4991,16 +4991,20 @@ def admin_agent_run():
                         # 4. Skip completed-project titles (past tense)
                         if any(w in title for w in news_title_words):
                             continue
-                        # 5. Country gate — formal sources: alias must be in TITLE or URL
-                        #    Social/job: alias allowed anywhere (title/body/url)
-                        #    This blocks Togo/regional AfDB pages that only mention Ghana in body
-                        title_url = title + " " + url_lower
+                        # 5. Country gate
+                        # Formal: ONLY the country name itself must appear in title or URL.
+                        #   City aliases (tema, accra, etc.) are NOT used here — short strings
+                        #   like "tema" are substrings of common words ("systematic") causing
+                        #   Zambia/Togo pages to pass the Ghana check.
+                        # Social/job: full alias list checked in title+body+url (cities useful
+                        #   for "Looking for installer in Kumasi" type posts).
                         if _is_social(url) or _is_job_board(url):
                             combined = title + " " + body + " " + url_lower
                             if not any(alias in combined for alias in loc_aliases):
                                 continue
                         else:
-                            if not any(alias in title_url for alias in loc_aliases):
+                            title_url = title + " " + url_lower
+                            if loc_lower not in title_url:
                                 continue
                         # 5b. Solar keyword required in title or body
                         if not any(kw in title or kw in body for kw in solar_keywords):
@@ -5432,14 +5436,17 @@ def _monitor_search(loc="Ghana"):
                                 continue
                         if any(w in title for w in news_title_words):
                             continue
-                        # Country gate: formal sources need alias in title/url, not just body
-                        title_url = title + " " + url_lower
+                        # Country gate — same logic as agent:
+                        # Formal: country name only in title/url (no city aliases — "tema" is
+                        #   inside "systematic", causing cross-country leakage)
+                        # Social/job: full alias list in title+body+url
                         if _is_social(url) or _is_job_board(url):
                             combined = title + " " + body + " " + url_lower
                             if not any(alias in combined for alias in loc_aliases):
                                 continue
                         else:
-                            if not any(alias in title_url for alias in loc_aliases):
+                            title_url = title + " " + url_lower
+                            if loc_lower not in title_url:
                                 continue
                         if not any(kw in title or kw in body for kw in solar_keywords):
                             continue
