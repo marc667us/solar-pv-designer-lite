@@ -1,0 +1,31 @@
+name: Sync secrets to Render
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  sync-env:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Push ANTHROPIC_API_KEY to Render service
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Fetch current env vars from Render
+          CURRENT=$(curl -sf \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars")
+
+          # Upsert ANTHROPIC_API_KEY without touching other vars
+          UPDATED=$(echo "$CURRENT" | jq --arg val "$ANTHROPIC_API_KEY" \
+            '[map(select(.key != "ANTHROPIC_API_KEY")), [{"key":"ANTHROPIC_API_KEY","value":$val}]] | add')
+
+          # Write updated env vars back to Render
+          curl -sf -X PUT \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$UPDATED" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars"
