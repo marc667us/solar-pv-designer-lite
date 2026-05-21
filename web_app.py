@@ -4808,32 +4808,34 @@ def admin_agent_run():
             "OR site:gogla.org OR site:se4all.org OR site:energyaccess.org"
         )
 
-        # ── Queries — mix of portal-targeted AND open-web (mirrors manual search) ──
+        # ── Phrases targeting design & installation contract work ────────────
         rfp_phrase = ('"request for proposal" OR "invitation to bid" OR '
                       '"expression of interest" OR tender OR "call for bids" '
-                      'OR EOI OR ITB OR RFP OR solicitation OR procurement')
-        epc_phrase = ('"EPC contract" OR "design and install" OR "design and build" '
-                      'OR "supply and install" OR "turnkey" OR "installation contract"')
+                      'OR EOI OR ITB OR RFP OR solicitation OR procurement OR '
+                      '"request for quotation" OR prequalification')
+        install_phrase = ('"design and install" OR "supply and install" OR '
+                          '"installation works" OR "installation contract" OR '
+                          '"EPC contract" OR "design and build" OR "turnkey solar" OR '
+                          '"works contract" OR "contractor" OR "installation tender"')
         queries = [
-            # ── Open-web: exactly what you'd type manually ────────────────────
-            f'solar PV RFP ({loc_q}) 2025 2026',
-            f'solar PV tender ({loc_q}) {sector} 2025 2026',
-            f'solar installation contract ({loc_q}) 2025 2026',
-            f'solar EPC tender ({loc_q}) 2025 2026',
-            f'solar project design install ({loc_q}) {rfp_phrase} 2025 2026',
-            f'({loc_q}) solar PV {epc_phrase} 2025 2026',
-            # ── Portal-targeted queries ───────────────────────────────────────
-            f'({UN_PORTALS}) solar ({loc_q}) {rfp_phrase} 2025 2026',
-            f'({DFI_PORTALS}) solar ({loc_q}) {rfp_phrase} 2025 2026',
+            # ── Open-web: design & installation work specifically ─────────────
+            f'solar "design and install" tender ({loc_q}) 2025 2026',
+            f'solar EPC contract tender ({loc_q}) 2025 2026',
+            f'solar "installation works" ({loc_q}) {rfp_phrase} 2025 2026',
+            f'solar PV "supply and install" contract ({loc_q}) 2025 2026',
+            f'solar PV installer contractor tender ({loc_q}) {sector} 2025 2026',
+            f'solar PV system {install_phrase} ({loc_q}) 2025 2026',
+            # ── Portal-targeted: installation & EPC focus ─────────────────────
+            f'({UN_PORTALS}) solar {install_phrase} ({loc_q}) 2025 2026',
+            f'({DFI_PORTALS}) solar {install_phrase} ({loc_q}) 2025 2026',
             f'({AFRICA_PORTALS}) solar ({loc_q}) {rfp_phrase} 2025 2026',
-            f'({GOV_PORTALS}) solar {rfp_phrase} 2025 2026',
-            f'({PPA_PORTALS}) solar ({loc_q}) "power purchase agreement" OR PPA OR {rfp_phrase} 2025 2026',
-            f'site:afdb.org solar ({loc_q}) procurement 2025 2026',
-            f'site:ungm.org solar ({loc_q}) 2025 2026',
-            f'site:devex.com solar ({loc_q}) "request for proposals" OR tender 2025 2026',
+            f'({GOV_PORTALS}) solar "installation" OR "design" {rfp_phrase} 2025 2026',
+            f'site:afdb.org solar ({loc_q}) procurement "installation" OR "EPC" 2025 2026',
+            f'site:ungm.org solar ({loc_q}) installation 2025 2026',
+            f'site:devex.com solar ({loc_q}) installation OR EPC OR contractor 2025 2026',
         ]
         if focus:
-            queries.insert(0, f'({loc_q}) "{focus}" solar {rfp_phrase} 2025 2026')
+            queries.insert(0, f'({loc_q}) "{focus}" solar installation {rfp_phrase} 2025 2026')
 
         # ── Domains to always skip (news, social, job boards, analyst reports) ──
         skip_domains = [
@@ -4875,14 +4877,30 @@ def admin_agent_run():
             "energycom.gov.gh", "purc.com.gh", "moe.gov.gh", "rea.gov.ng",
             "ecowas.int", "ecreee.org", "geapp.org", "esmap.org",
         ]
+        # ── News URL path blocker — editorial paths, never procurement ─────
+        news_url_paths = [
+            "/news/", "/news-", "-news/", "/press-release", "/press/",
+            "/media/", "/blog/", "/article/", "/articles/", "/story/",
+            "/stories/", "/insights/", "/newsroom/", "/en/news",
+            "/resources/news", "/updates/news", "/tag/", "/category/",
+        ]
+        # ── Completed-project title blocker — past tense = news, not open ───
+        news_title_words = [
+            "awarded", "award to", "wins contract", "win contract",
+            "signs agreement", "signed agreement", "mou signed",
+            "completes", "completed", "inaugurates", "inaugurated",
+            "commissioned", "connected to grid", "goes live", "gone live",
+            "breaks ground", "broke ground", "celebrates", "milestone",
+            "launches", "launched", "project approved", "approved project",
+        ]
         # ── Hard gate 1: must be a procurement/project opportunity ──────────
         rfp_keywords = [
             "rfp", "tender", "bid", "proposal", "solicitation", "procurement",
-            "expression of interest", "eoi", "ppa", "power purchase",
-            "invitation to bid", "itb", "prequalif", "contract notice",
-            "call for bids", "call for proposal", "request for quotation",
-            "epc", "design and install", "supply and install", "turnkey",
-            "installation contract", "design and build", "works contract",
+            "expression of interest", "eoi", "invitation to bid", "itb",
+            "prequalif", "contract notice", "call for bids", "call for proposal",
+            "request for quotation", "epc", "design and install",
+            "supply and install", "turnkey", "installation contract",
+            "installation works", "design and build", "works contract", "contractor",
         ]
         # ── Hard gate 2: solar/energy keyword in title OR body ──────────────
         solar_keywords = [
@@ -4918,18 +4936,24 @@ def admin_agent_run():
                         # 1. Skip blocked domains
                         if any(d in url for d in skip_domains):
                             continue
-                        # 2. Skip generic listing/category index pages
+                        # 2. Skip news/editorial URL paths
                         url_lower = url.lower()
+                        if any(p in url_lower for p in news_url_paths):
+                            continue
+                        # 3. Skip generic listing/category index pages
                         if any(p in url_lower for p in listing_patterns):
                             continue
-                        # 3. Solar keyword in title OR body
+                        # 4. Skip completed-project news titles (past tense = already done)
+                        if any(w in title for w in news_title_words):
+                            continue
+                        # 5. Solar keyword in title OR body
                         if not any(kw in title or kw in body for kw in solar_keywords):
                             continue
-                        # 4. Procurement intent required; portal pages are exempt from title check
+                        # 6. Procurement intent required; known portal pages exempt
                         if not _is_portal(url):
                             if not any(kw in title or kw in body for kw in rfp_keywords):
                                 continue
-                        # 5. Deduplicate by URL; store cleaned URL
+                        # 7. Deduplicate by URL; store cleaned URL
                         if url and not any(x.get("href") == url for x in search_results):
                             r["href"] = url  # write cleaned URL back
                             search_results.append(r)
