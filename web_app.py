@@ -4776,9 +4776,9 @@ def admin_agent_run():
 
     # ── Country aliases: include major cities so results aren't missed ────────
     COUNTRY_CITIES = {
+        # No single-letter or 2-letter aliases — they match inside any English word
         "ghana":        ["ghana", "ghanaian", "accra", "kumasi", "takoradi", "tema",
-                         "tamale", "cape coast", "sunyani", "wa", "ho", "koforidua",
-                         "bolgatanga", ".gh"],
+                         "tamale", "cape coast", "koforidua", "bolgatanga", ".gh"],
         "nigeria":      ["nigeria", "nigerian", "lagos", "abuja", "kano", "ibadan",
                          "port harcourt", "enugu", "kaduna", "benin city", ".ng"],
         "kenya":        ["kenya", "kenyan", "nairobi", "mombasa", "kisumu", "nakuru", ".ke"],
@@ -4904,7 +4904,14 @@ def admin_agent_run():
             "/story/", "/stories/", "/newsroom/", "/en/news",
             "/feature/", "/highlights/", "/publication/",
             "/project-story", "/success-story", "/case-study",
-            "worldbank.org/en/results", "afdb.org/en/news",
+            # AfDB/WorldBank narrative paths (projects, country pages, results = NOT tenders)
+            "afdb.org/en/news", "afdb.org/en/projects", "afdb.org/en/countries",
+            "afdb.org/en/documents", "afdb.org/en/topics",
+            "worldbank.org/en/news", "worldbank.org/en/results",
+            "worldbank.org/en/country", "worldbank.org/en/project",
+            "worldbank.org/en/topic", "worldbank.org/en/about",
+            "ifc.org/en/stories", "ifc.org/wps/wcm",
+            "esmap.org/node", "esmap.org/story",
         ]
         # ── Category/index page patterns ─────────────────────────────────────
         listing_patterns = [
@@ -4984,10 +4991,17 @@ def admin_agent_run():
                         # 4. Skip completed-project titles (past tense)
                         if any(w in title for w in news_title_words):
                             continue
-                        # 5. Country or one of its major cities must appear in title, body, or URL
-                        combined = title + " " + body + " " + url_lower
-                        if not any(alias in combined for alias in loc_aliases):
-                            continue
+                        # 5. Country gate — formal sources: alias must be in TITLE or URL
+                        #    Social/job: alias allowed anywhere (title/body/url)
+                        #    This blocks Togo/regional AfDB pages that only mention Ghana in body
+                        title_url = title + " " + url_lower
+                        if _is_social(url) or _is_job_board(url):
+                            combined = title + " " + body + " " + url_lower
+                            if not any(alias in combined for alias in loc_aliases):
+                                continue
+                        else:
+                            if not any(alias in title_url for alias in loc_aliases):
+                                continue
                         # 5b. Solar keyword required in title or body
                         if not any(kw in title or kw in body for kw in solar_keywords):
                             continue
@@ -5254,6 +5268,13 @@ def _monitor_search(loc="Ghana"):
     news_url_paths = [
         "/news/", "/blog/", "/article/", "/story/", "/stories/",
         "/press/", "/newsroom/", "/publication/", "/en/news",
+        # AfDB/WorldBank narrative paths — project/country pages are NOT procurement notices
+        "afdb.org/en/news", "afdb.org/en/projects", "afdb.org/en/countries",
+        "afdb.org/en/documents", "afdb.org/en/topics",
+        "worldbank.org/en/news", "worldbank.org/en/results",
+        "worldbank.org/en/country", "worldbank.org/en/project",
+        "worldbank.org/en/topic", "ifc.org/en/stories", "ifc.org/wps/wcm",
+        "esmap.org/node", "esmap.org/story",
     ]
     news_title_words = [
         "awarded", "wins contract", "signs agreement", "completed",
@@ -5325,9 +5346,15 @@ def _monitor_search(loc="Ghana"):
                                 continue
                         if any(w in title for w in news_title_words):
                             continue
-                        combined = title + " " + body + " " + url_lower
-                        if not any(alias in combined for alias in loc_aliases):
-                            continue
+                        # Country gate: formal sources need alias in title/url, not just body
+                        title_url = title + " " + url_lower
+                        if _is_social(url) or _is_job_board(url):
+                            combined = title + " " + body + " " + url_lower
+                            if not any(alias in combined for alias in loc_aliases):
+                                continue
+                        else:
+                            if not any(alias in title_url for alias in loc_aliases):
+                                continue
                         if not any(kw in title or kw in body for kw in solar_keywords):
                             continue
                         if _is_social(url) or _is_job_board(url):
