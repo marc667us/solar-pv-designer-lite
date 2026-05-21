@@ -46,8 +46,8 @@
   <div class="col-6 col-md-3">
     <div class="kpi-card h-100">
       <div class="kpi-label"><i class="bi bi-robot me-1"></i>Agent Mode</div>
-      <div class="kpi-value" style="font-size:15px">{{ 'AI' if has_ai else 'Template' }}</div>
-      <div class="kpi-unit">{{ 'Claude or Gemini' if has_ai else 'smart rules' }}</div>
+      <div class="kpi-value" style="font-size:15px">{{ 'Claude AI' if has_ai else 'Template' }}</div>
+      <div class="kpi-unit">{{ 'claude-haiku-4-5' if has_ai else 'smart rules' }}</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
@@ -293,7 +293,6 @@ function renderProspects(prospects, source, resultCount){
   const grid = document.getElementById('prospectGrid');
   grid.innerHTML = '';
   const srcLabel = source === 'web+claude' ? '🌐 Web Search + Claude AI' :
-                   source === 'web+gemini' ? '🌐 Web Search + Gemini AI' :
                    source === 'web_search' ? '🌐 Live Web Search' : source;
   document.getElementById('resultsCount').textContent = prospects.length + ' prospects found';
   document.getElementById('resultsSource').textContent = '(' + srcLabel + (resultCount ? ', ' + resultCount + ' pages scanned)' : ')');

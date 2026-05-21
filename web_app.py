@@ -4734,7 +4734,7 @@ def admin_agent():
         ).fetchone()[0]
     return render_template("admin_agent.html", user=current_user(),
                            saved_leads=saved, total_saved=total_saved,
-                           has_ai=bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("GEMINI_API_KEY")))
+                           has_ai=bool(os.environ.get("ANTHROPIC_API_KEY")))
 
 
 @app.route("/admin/agent/run", methods=["POST"])
@@ -4940,78 +4940,78 @@ def admin_agent_run():
     except Exception as e:
         search_error = str(e)
 
-    # ── Build shared AI prompt (used by both Claude and Gemini) ─────────────────
-    def _build_prompt():
-        snippets = "\n\n".join(
-            f"[{i+1}] TITLE: {r.get('title','')}\nURL: {r.get('href','')}\nSNIPPET: {r.get('body','')[:400]}"
-            for i, r in enumerate(search_results[:12])
-        )
-        return f"""You are a solar PV procurement intelligence analyst. Extract ONLY genuine RFPs, tenders, and solicitations from the search results below — not news articles.
+    # ── Step 2: Claude analyses real search results → structured prospects ───────
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if api_key and search_results:
+        try:
+            import anthropic as _ant
+            client = _ant.Anthropic(api_key=api_key)
+            snippets = "\n\n".join(
+                f"[{i+1}] TITLE: {r.get('title','')}\nURL: {r.get('href','')}\nSNIPPET: {r.get('body','')[:400]}"
+                for i, r in enumerate(search_results[:12])
+            )
+            prompt = f"""You are a solar PV procurement intelligence analyst. You have been given real search results from tender portals and procurement databases. Extract ONLY genuine RFPs, tenders, and solicitations — not news articles.
 
-Search criteria: Location={loc_label}, Sector={sector}, Size={system_kw} kW, Budget={budget}, Focus={focus or 'general'}
+Search criteria:
+- Location: {loc_label}
+- Sector: {sector}
+- System size: {system_kw} kW
+- Budget: {budget}
+- Focus: {focus or 'general'}
 
 REAL procurement search results:
 
 {snippets}
 
 STRICT RULES:
-1. ONLY extract genuine RFPs, tenders, EOIs, ITBs, contract notices for solar/energy projects
-2. SKIP news articles, blog posts, general information pages
-3. source_url = exact URL copied verbatim
-4. source_title = exact title copied verbatim
-5. company_name = issuing organisation (government, utility, NGO, bank) — never invent
-6. deadline = submission deadline if stated, else ""
+1. ONLY extract results that are genuine RFPs, tenders, invitations to bid, expressions of interest, or contract notices for solar/energy projects
+2. SKIP any result that is a news article, blog post, or general information page
+3. source_url = exact URL from the result, copied verbatim — do not modify or shorten
+4. source_title = exact title, copied verbatim
+5. company_name = the issuing organisation (government body, utility, NGO, bank) — NOT a made-up name
+6. deadline = submission deadline if mentioned, else ""
 7. tender_ref = reference number if stated, else ""
-8. Use "" or 0 for missing fields — never invent data
-9. source_snippet = most relevant verbatim sentence, max 300 chars
+8. If a field is not stated in the result, use "" or 0 — never invent data
+9. source_snippet = copy the most relevant sentence verbatim, max 300 chars
 
 Return up to {count} results. Return ONLY valid JSON, no markdown:
-{{"prospects": [{{"company_name":"","type":"RFP / Tender / EOI / ITB / Contract Notice","location":"","estimated_kw":0,"estimated_usd":0,"pain_points":[],"pitch":"","contact_strategy":"Submit via portal — see source link","decision_maker":"","priority":"medium","source_url":"","source_title":"","source_snippet":"","deadline":"","tender_ref":"","verified":true}}]}}"""
-
-    def _parse_ai_json(raw):
-        raw = raw.strip()
-        if raw.startswith("```"):
-            lines = raw.split("\n")
-            raw = "\n".join(lines[1:])
-            if raw.endswith("```"):
-                raw = raw[:-3]
-        return json.loads(raw)
-
-    # ── Step 2a: Claude analyses search results (Anthropic key) ──────────────────
-    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if anthropic_key and search_results:
-        try:
-            import anthropic as _ant
-            client = _ant.Anthropic(api_key=anthropic_key)
+{{
+  "prospects": [
+    {{
+      "company_name": "Issuing organisation from result",
+      "type": "RFP / Tender / EOI / ITB / Contract Notice",
+      "location": "exact country/city from the result text — do NOT use the search country if the result says a different country",
+      "estimated_kw": 0,
+      "estimated_usd": 0,
+      "pain_points": [],
+      "pitch": "one sentence describing what they are procuring, from the result",
+      "contact_strategy": "Submit bid by deadline via portal — see source link",
+      "decision_maker": "procurement contact if named, else ''",
+      "priority": "high if deadline within 60 days or large value, medium otherwise",
+      "source_url": "https://exact-url-from-result.com/path",
+      "source_title": "Exact title from result",
+      "source_snippet": "verbatim key sentence from result body",
+      "deadline": "",
+      "tender_ref": "",
+      "verified": true
+    }}
+  ]
+}}"""
             msg = client.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=4000,
-                messages=[{"role": "user", "content": _build_prompt()}]
+                messages=[{"role": "user", "content": prompt}]
             )
-            data = _parse_ai_json(msg.content[0].text)
+            raw = msg.content[0].text.strip()
+            if raw.startswith("```"):
+                raw = "\n".join(raw.split("\n")[1:])
+                if raw.endswith("```"):
+                    raw = raw[:-3]
+            data = json.loads(raw)
             return jsonify({"ok": True, "prospects": data["prospects"],
                             "source": "web+claude", "result_count": len(search_results)})
-        except Exception:
-            pass  # fall through to Gemini
-
-    # ── Step 2b: Gemini analyses search results (free tier fallback) ──────────────
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
-    if gemini_key and search_results:
-        try:
-            import requests as _req
-            resp = _req.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
-                json={"contents": [{"parts": [{"text": _build_prompt()}]}],
-                      "generationConfig": {"temperature": 0.1, "maxOutputTokens": 4000}},
-                timeout=60
-            )
-            resp.raise_for_status()
-            raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-            data = _parse_ai_json(raw)
-            return jsonify({"ok": True, "prospects": data["prospects"],
-                            "source": "web+gemini", "result_count": len(search_results)})
-        except Exception:
-            pass  # fall through to template mode
+        except Exception as e:
+            pass  # fall through to raw results
 
     # ── Step 3: Return raw search results as prospects (no Claude key) ──────────
     _COUNTRY_NAMES = [

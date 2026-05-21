@@ -11,8 +11,6 @@ services:
         value: "true"
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: GEMINI_API_KEY
-        sync: false
     disk:
       name: solar-db
       mountPath: /opt/render/project/src
