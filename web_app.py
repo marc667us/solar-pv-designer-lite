@@ -4931,14 +4931,15 @@ def admin_agent_run():
                         # 5. Solar keyword required in title or body
                         if not any(kw in title or kw in body for kw in solar_keywords):
                             continue
-                        # 6. Source-aware opportunity gate
+                        # 6. Source-aware gate
                         if _is_social(url) or _is_job_board(url):
-                            # Informal sources: any opportunity signal in title/body
+                            # Social/job: opportunity signal anywhere in title or body
                             if not any(kw in title or kw in body for kw in opportunity_keywords):
                                 continue
                         else:
-                            # Formal sources: procurement keyword in title or body
-                            if not any(kw in title or kw in body for kw in rfp_keywords):
+                            # Formal/government/portals: rfp keyword MUST be in TITLE
+                            # Narratives and initiative pages never name themselves as tenders
+                            if not any(kw in title for kw in rfp_keywords):
                                 continue
                         # 7. Deduplicate
                         if url and not any(x.get("href") == url for x in search_results):
