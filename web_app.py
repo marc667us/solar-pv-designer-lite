@@ -4883,6 +4883,12 @@ def admin_agent_run():
             "/media/", "/blog/", "/article/", "/articles/", "/story/",
             "/stories/", "/insights/", "/newsroom/", "/en/news",
             "/resources/news", "/updates/news", "/tag/", "/category/",
+            "/feature/", "/features/", "/highlight/", "/highlights/",
+            "/publication/", "/publications/", "/report/", "/results/",
+            "/project-story", "/success-story", "/case-study",
+            "afdb.org/en/news", "adb.org/news", "adb.org/results",
+            "worldbank.org/en/news", "worldbank.org/en/results",
+            "ifc.org/en/stories", "ifc.org/en/news",
         ]
         # ── Completed-project title blocker — past tense = news, not open ───
         news_title_words = [
@@ -4923,8 +4929,21 @@ def admin_agent_run():
                         return unquote(qs[key][0])
             return raw
 
+        # Procurement-specific URL paths — the page is actually a notice/tender
+        PROCUREMENT_PATHS = [
+            "/procurement/", "/tenders/", "/tender/", "/rfp/",
+            "/solicitation/", "/contract-notice/", "/bidding/",
+            "/call-for-proposals/", "/business-opportunities/",
+            "/opportunities/", "/notices/", "/projects-operations/procurement",
+            "/en/projects-operations/", "/node/", "/opportunity/",
+        ]
+
         def _is_portal(url):
-            return any(d in url for d in PORTAL_DOMAINS)
+            # Must be on a known portal domain AND on a procurement/notice path
+            url_lower = url.lower()
+            on_portal = any(d in url_lower for d in PORTAL_DOMAINS)
+            on_procurement_path = any(p in url_lower for p in PROCUREMENT_PATHS)
+            return on_portal and on_procurement_path
 
         with DDGS() as ddgs:
             for q in queries:
