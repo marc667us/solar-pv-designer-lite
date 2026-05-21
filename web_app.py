@@ -4749,26 +4749,9 @@ def admin_agent_run():
     focus     = request.form.get("focus", "").strip()
     count     = min(int(request.form.get("count", 8)), 12)
 
-    # West African neighbours to always include alongside Ghana
-    WEST_AFRICA_NEIGHBOURS = [
-        "Nigeria", "Côte d'Ivoire", "Ivory Coast", "Togo", "Benin",
-        "Burkina Faso", "Senegal", "Sierra Leone", "Liberia", "Guinea",
-        "Guinea-Bissau", "Gambia", "Mali",
-    ]
-    GHANA_ADJACENT = (
-        "Ghana OR Nigeria OR \"Ivory Coast\" OR \"Cote d'Ivoire\" OR "
-        "Togo OR Benin OR \"Burkina Faso\" OR Senegal OR \"Sierra Leone\" "
-        "OR Liberia OR Guinea"
-    )
-
-    if not country or country.strip().lower() in ("ghana", "west africa", "global", ""):
-        loc      = "Ghana"
-        loc_q    = GHANA_ADJACENT          # broad query term for search strings
-        loc_label = "Ghana & West Africa"
-    else:
-        loc      = country
-        loc_q    = country
-        loc_label = country
+    loc       = country if country else "Ghana"
+    loc_q     = f'"{loc}"'
+    loc_label = loc
 
     # ── Step 1: Procurement-only deep search ──────────────────────────────────────
     # Purpose: find real solar RFPs, ITBs, EOIs, PPAs and project solicitations.
