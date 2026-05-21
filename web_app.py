@@ -4753,16 +4753,39 @@ def admin_agent_run():
     loc_q     = f'"{loc}"'
     loc_label = loc
 
-    # ── Step 1: Procurement-only deep search ──────────────────────────────────────
-    # Purpose: find real solar RFPs, ITBs, EOIs, PPAs and project solicitations.
-    # No job boards, no LinkedIn, no news. Only procurement portals + gov ministries.
+    # ── Step 1: Deep multi-source search ─────────────────────────────────────────
     search_results = []
     search_error   = None
+
+    # ── Country aliases: include major cities so results aren't missed ────────
+    COUNTRY_CITIES = {
+        "ghana":        ["ghana", "ghanaian", "accra", "kumasi", "takoradi", "tema",
+                         "tamale", "cape coast", "sunyani", "wa", "ho", "koforidua",
+                         "bolgatanga", ".gh"],
+        "nigeria":      ["nigeria", "nigerian", "lagos", "abuja", "kano", "ibadan",
+                         "port harcourt", "enugu", "kaduna", "benin city", ".ng"],
+        "kenya":        ["kenya", "kenyan", "nairobi", "mombasa", "kisumu", "nakuru", ".ke"],
+        "south africa": ["south africa", "johannesburg", "cape town", "durban",
+                         "pretoria", "gauteng", ".za"],
+        "tanzania":     ["tanzania", "dar es salaam", "dodoma", "arusha", ".tz"],
+        "zambia":       ["zambia", "lusaka", "ndola", "kitwe", ".zm"],
+        "ethiopia":     ["ethiopia", "addis ababa", "dire dawa", ".et"],
+        "senegal":      ["senegal", "dakar", ".sn"],
+        "cameroon":     ["cameroon", "douala", "yaounde", ".cm"],
+        "uganda":       ["uganda", "kampala", ".ug"],
+        "rwanda":       ["rwanda", "kigali", ".rw"],
+        "uk":           ["united kingdom", "england", "scotland", "wales", "london",
+                         "birmingham", "manchester", ".uk", ".co.uk"],
+        "usa":          ["united states", "america", ".gov", ".edu"],
+        "india":        ["india", "indian", "mumbai", "delhi", "bangalore", ".in"],
+    }
+    loc_lower   = loc.lower()
+    loc_aliases = COUNTRY_CITIES.get(loc_lower, [loc_lower])
 
     try:
         from ddgs import DDGS
 
-        # ── Formal procurement portals ────────────────────────────────────────
+        # ── Portal groups ──────────────────────────────────────────────────────
         UN_PORTALS = (
             "site:ungm.org OR site:devex.com OR site:reliefweb.int "
             "OR site:dgmarket.com OR site:tendersinfo.com"
@@ -4775,16 +4798,20 @@ def admin_agent_run():
             "site:africatenders.com OR site:tendersontime.com "
             "OR site:globaltenders.com OR site:ecreee.org"
         )
-        # ── Government ministries ─────────────────────────────────────────────
-        GOV_MINISTRIES = (
+        # ── Ghana-specific national institutions ───────────────────────────────
+        GH_INSTITUTIONS = (
             "site:energycom.gov.gh OR site:moe.gov.gh OR site:purc.com.gh "
-            "OR site:ghana.gov.gh OR site:eda.gov.gh OR site:nerc.gov.ng "
-            "OR site:rea.gov.ng"
+            "OR site:ghana.gov.gh OR site:vra.com OR site:gridcogh.com "
+            "OR site:nedcoghana.com OR site:ppaghana.org OR site:eda.gov.gh"
         )
-        # ── Job board domains (hiring solar installer = active project) ───────
-        JOB_DOMAINS = ["jobberman.com", "myjobmag.com", "brightermonday.com",
-                       "ghanaiansjobs.com", "jobsinghana.com", "indeed.com"]
-        # ── Social media domains ──────────────────────────────────────────────
+        GH_SOCIAL_SECTOR = (
+            "site:ges.gov.gh OR site:moh.gov.gh OR site:ghs.gov.gh "
+            "OR site:mofa.gov.gh OR site:mlgrd.gov.gh"
+        )
+        # ── Job board and social domains ───────────────────────────────────────
+        JOB_DOMAINS   = ["jobberman.com", "myjobmag.com", "brightermonday.com",
+                         "ghanaiansjobs.com", "jobsinghana.com", "indeed.com",
+                         "jobsgha.com", "joblistghana.com"]
         SOCIAL_DOMAINS = ["facebook.com", "linkedin.com", "twitter.com", "x.com"]
 
         queries = [
@@ -4792,37 +4819,49 @@ def admin_agent_run():
             f'"tender for" solar installation {loc_q} 2025 2026',
             f'"invitation to bid" solar PV {loc_q} 2025 2026',
             f'"request for proposals" solar {loc_q} 2025 2026',
-            f'"expression of interest" solar {loc_q} install 2025 2026',
+            f'"expression of interest" solar {loc_q} installation 2025 2026',
             f'"call for tenders" solar {loc_q} 2025 2026',
-            f'"request for quotation" solar {loc_q} installation 2025 2026',
+            f'"request for quotation" solar PV {loc_q} 2025 2026',
             f'"tender notice" solar {loc_q} 2025 2026',
             f'"invitation to tender" solar {loc_q} 2025 2026',
             f'({UN_PORTALS}) solar {loc_q} tender OR ITB OR RFP 2025 2026',
             f'({DFI_PORTALS}) solar {loc_q} tender OR "invitation to bid" 2025 2026',
             f'({AFRICA_PORTALS}) solar {loc_q} tender OR RFP 2025 2026',
-            # === B: Government ministries & regional councils ================
-            f'({GOV_MINISTRIES}) solar tender OR procurement OR RFP 2025 2026',
-            f'{loc_q} ministry energy solar installation tender OR procurement 2025 2026',
+            # === B: National institutions & utilities ========================
+            f'({GH_INSTITUTIONS}) solar tender OR procurement OR RFP 2025 2026',
+            f'({GH_SOCIAL_SECTOR}) solar tender OR procurement 2025 2026',
+            f'{loc_q} "VRA" OR "ECG" OR "NEDCo" OR "GRIDCo" solar tender OR RFP 2025 2026',
+            f'{loc_q} public procurement authority solar installation 2025 2026',
+            # === C: Regional coordinating councils & district assemblies =====
             f'{loc_q} "regional coordinating council" solar tender OR procurement 2025 2026',
-            f'{loc_q} "district assembly" solar installation tender OR procurement 2025 2026',
-            f'{loc_q} government solar installation contract OR tender 2025 2026',
-            # === C: Social media — homeowners & businesses seeking solar =====
-            f'site:facebook.com {loc_q} solar installation "looking for" OR "need" OR "quote" 2025',
-            f'site:facebook.com {loc_q} "solar panels" "price" OR "installer" OR "contact" 2025',
-            f'site:facebook.com {loc_q} solar "who can install" OR "recommend" OR "how much" 2025',
-            f'site:linkedin.com {loc_q} solar installation "project" OR "contractor" OR "seeking" 2025',
-            # === D: Job boards — hiring solar installer = active project =====
+            f'{loc_q} "district assembly" solar installation tender OR contract 2025 2026',
+            f'{loc_q} "metropolitan assembly" solar tender OR installation 2025 2026',
+            f'{loc_q} local government solar installation tender OR RFP 2025 2026',
+            # === D: Private sector — hospitals, hotels, factories, schools ===
+            f'{loc_q} hospital OR clinic solar installation tender OR RFP 2025 2026',
+            f'{loc_q} school OR university solar installation tender OR contract 2025 2026',
+            f'{loc_q} hotel OR factory OR warehouse solar installation tender 2025 2026',
+            f'{loc_q} farm OR agri solar irrigation tender OR installation 2025 2026',
+            f'{loc_q} church OR mosque OR community solar installation tender 2025 2026',
+            # === E: Social media — homeowners & businesses ==================
+            f'site:facebook.com {loc_q} solar "looking for installer" OR "need solar" OR "solar quote" 2025',
+            f'site:facebook.com {loc_q} solar "recommend" OR "how much" OR "who installs" 2025',
+            f'site:facebook.com {loc_q} solar "dumsor" OR "ECG" OR "light bill" OR "generator" 2025',
+            f'site:facebook.com {loc_q} "solar panels" "contact" OR "WhatsApp" OR "call" 2025',
+            f'site:linkedin.com {loc_q} solar "contractor" OR "seeking" OR "project" OR "tender" 2025',
+            # === F: Job boards — installer hiring = active project ===========
             f'site:jobberman.com solar {loc_q} installer OR technician OR engineer 2025',
             f'site:myjobmag.com solar {loc_q} installer OR technician 2025',
-            f'site:brightermonday.com.gh solar installer OR technician OR engineer 2025',
-            f'{loc_q} solar installer OR "solar technician" job vacancy 2025 2026',
-            # === E: Open web — businesses & homeowners seeking quotes ========
-            f'{loc_q} "solar installation" "get quote" OR "free quote" OR "contact us" 2025 2026',
+            f'site:brightermonday.com.gh solar installer OR technician 2025',
+            f'{loc_q} "solar technician" OR "solar installer" OR "solar engineer" job vacancy 2025',
+            # === G: Open web — power problems driving solar demand ===========
+            f'{loc_q} "solar backup" OR "solar inverter" "supply and install" 2025 2026',
+            f'{loc_q} "off-grid solar" installation contractor OR tender 2025 2026',
             f'{loc_q} "solar panels" "supply and install" OR "design and install" 2025 2026',
-            f'{loc_q} company "solar" "installation" project tender OR contract 2025 2026',
+            f'{loc_q} "rooftop solar" installation quote OR tender OR contract 2025 2026',
         ]
         if focus:
-            queries.insert(0, f'{loc_q} "{focus}" solar installation tender OR "looking for" OR RFP 2025 2026')
+            queries.insert(0, f'{loc_q} "{focus}" solar installation tender OR "looking for" OR RFP OR quote 2025 2026')
 
         # ── Domains to always skip (news, analytics, pure editorial) ─────────
         skip_domains = [
@@ -4928,8 +4967,9 @@ def admin_agent_run():
                         # 4. Skip completed-project titles (past tense)
                         if any(w in title for w in news_title_words):
                             continue
-                        # 5. Country must appear in title, body, or URL
-                        if loc.lower() not in title and loc.lower() not in body and loc.lower() not in url_lower:
+                        # 5. Country or one of its major cities must appear in title, body, or URL
+                        combined = title + " " + body + " " + url_lower
+                        if not any(alias in combined for alias in loc_aliases):
                             continue
                         # 5b. Solar keyword required in title or body
                         if not any(kw in title or kw in body for kw in solar_keywords):
@@ -5028,21 +5068,49 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
         except Exception as e:
             pass  # fall through to raw results
 
-    # ── Step 3: Return raw search results as prospects (no Claude key) ──────────
-    _COUNTRY_NAMES = [
-        "Ghana", "Nigeria", "Togo", "Benin", "Ivory Coast", "Côte d'Ivoire",
-        "Cote d'Ivoire", "Burkina Faso", "Senegal", "Sierra Leone", "Liberia",
-        "Guinea-Bissau", "Guinea", "Gambia", "Mali", "Niger", "Cameroon",
-        "Kenya", "Tanzania", "Uganda", "Rwanda", "Ethiopia", "Zambia",
-        "Zimbabwe", "Mozambique", "Malawi", "South Africa", "Namibia",
-        "Botswana", "Angola", "DRC", "Congo",
-    ]
-    def _detect_country(title, body):
-        text = (title + " " + body).lower()
-        for c in _COUNTRY_NAMES:
-            if c.lower() in text:
-                return c
-        return loc  # fall back to search country only if no match found
+    # ── Step 3: Template extraction (no AI key) ──────────────────────────────────
+    def _classify_source(url):
+        u = url.lower()
+        if any(d in u for d in ["facebook.com", "twitter.com", "x.com"]):
+            return "Social Media Lead"
+        if "linkedin.com" in u:
+            return "LinkedIn Lead"
+        if any(d in u for d in ["jobberman.com", "myjobmag.com", "brightermonday.com",
+                                  "indeed.com", "jobsinghana.com", "ghanaiansjobs.com"]):
+            return "Job Board — Active Project"
+        if any(d in u for d in [".gov.gh", ".gov.ng", ".gov.ke", "gov.", "district",
+                                  "assembly", "council", "ministry"]):
+            return "Government / Public Sector"
+        if any(d in u for d in ["ungm.org", "devex.com", "worldbank.org", "afdb.org",
+                                  "reliefweb.int", "dgmarket.com", "tendersontime.com",
+                                  "globaltenders.com", "africatenders.com"]):
+            return "Tender Portal"
+        return "Commercial / Private Sector"
+
+    def _contact_strategy(source_type, url):
+        if source_type == "Social Media Lead":
+            return "Respond directly to the post — offer free site assessment and quote"
+        if source_type == "LinkedIn Lead":
+            return "Connect on LinkedIn, message offering a no-obligation solar audit"
+        if source_type == "Job Board — Active Project":
+            return "Company is hiring for a solar project — contact HR/procurement directly"
+        if source_type == "Government / Public Sector":
+            return "Submit formal expression of interest or bid via the government procurement portal"
+        if source_type == "Tender Portal":
+            return "Download tender documents and submit bid before closing date"
+        return "Contact via source link — offer free survey and detailed quotation"
+
+    def _infer_type(title, body):
+        t = (title + " " + body).lower()
+        if any(w in t for w in ["tender", "rfp", "itb", "invitation to bid", "call for"]):
+            return "Tender / RFP"
+        if any(w in t for w in ["expression of interest", "eoi", "prequalif"]):
+            return "Expression of Interest"
+        if any(w in t for w in ["job", "vacancy", "hiring", "technician", "installer"]):
+            return "Job Post — Active Project"
+        if any(w in t for w in ["looking for", "need", "quote", "recommend", "how much"]):
+            return "Social Media — Seeking Installer"
+        return "Solar Project Opportunity"
 
     if search_results:
         prospects = []
@@ -5050,15 +5118,16 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
             title   = r.get("title", "")
             url     = r.get("href", "")
             snippet = r.get("body", "")
+            src_type = _classify_source(url)
             prospects.append({
                 "company_name":    title[:80] if title else "Unknown",
-                "type":            sector,
-                "location":        _detect_country(title, snippet),
+                "type":            _infer_type(title, snippet),
+                "location":        loc,
                 "estimated_kw":    0,
                 "estimated_usd":   0,
-                "pain_points":     [],
-                "pitch":           snippet[:200] if snippet else "",
-                "contact_strategy":"Research contact via source link",
+                "pain_points":     [src_type],
+                "pitch":           snippet[:250] if snippet else "",
+                "contact_strategy": _contact_strategy(src_type, url),
                 "decision_maker":  "See source",
                 "priority":        "medium",
                 "source_url":      url,
