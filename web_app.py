@@ -4868,15 +4868,6 @@ def admin_agent_run():
             "devex.com/funding/r?report=grant",
             "/tag/solar", "/category/solar", "/news/solar",
         ]
-        # ── Known procurement portals — bypass the rfp-in-title requirement ───
-        PORTAL_DOMAINS = [
-            "ungm.org", "devex.com", "dgmarket.com", "tendersinfo.com",
-            "tendersontime.com", "globaltenders.com", "africatenders.com",
-            "worldbank.org/en/projects-operations/procurement",
-            "afdb.org", "ifc.org", "reliefweb.int",
-            "energycom.gov.gh", "purc.com.gh", "moe.gov.gh", "rea.gov.ng",
-            "ecowas.int", "ecreee.org", "geapp.org", "esmap.org",
-        ]
         # ── News URL path blocker — editorial paths, never procurement ─────
         news_url_paths = [
             "/news/", "/news-", "-news/", "/press-release", "/press/",
@@ -4929,21 +4920,6 @@ def admin_agent_run():
                         return unquote(qs[key][0])
             return raw
 
-        # Procurement-specific URL paths — the page is actually a notice/tender
-        PROCUREMENT_PATHS = [
-            "/procurement/", "/tenders/", "/tender/", "/rfp/",
-            "/solicitation/", "/contract-notice/", "/bidding/",
-            "/call-for-proposals/", "/business-opportunities/",
-            "/opportunities/", "/notices/", "/projects-operations/procurement",
-            "/en/projects-operations/", "/node/", "/opportunity/",
-        ]
-
-        def _is_portal(url):
-            # Must be on a known portal domain AND on a procurement/notice path
-            url_lower = url.lower()
-            on_portal = any(d in url_lower for d in PORTAL_DOMAINS)
-            on_procurement_path = any(p in url_lower for p in PROCUREMENT_PATHS)
-            return on_portal and on_procurement_path
 
         with DDGS() as ddgs:
             for q in queries:
@@ -4968,10 +4944,10 @@ def admin_agent_run():
                         # 5. Solar keyword in title OR body
                         if not any(kw in title or kw in body for kw in solar_keywords):
                             continue
-                        # 6. Procurement intent required; known portal pages exempt
-                        if not _is_portal(url):
-                            if not any(kw in title or kw in body for kw in rfp_keywords):
-                                continue
+                        # 6. RFP/tender keyword MUST appear in title — open opportunities
+                        #    always name themselves; news/narratives/stories never do
+                        if not any(kw in title for kw in rfp_keywords):
+                            continue
                         # 7. Deduplicate by URL; store cleaned URL
                         if url and not any(x.get("href") == url for x in search_results):
                             r["href"] = url  # write cleaned URL back
