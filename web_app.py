@@ -4835,7 +4835,7 @@ def admin_agent_run():
         if focus:
             queries.insert(0, f'({loc_q}) "{focus}" solar {rfp_phrase} 2025 2026')
 
-        # ── Domains to always skip (news, social, generic AI content) ─────────
+        # ── Domains to always skip (news, social, job boards, analyst reports) ──
         skip_domains = [
             "pv-magazine", "pvtech", "reuters.com", "bloomberg.com",
             "wikipedia.org", "youtube.com", "twitter.com", "instagram.com",
@@ -4844,19 +4844,36 @@ def admin_agent_run():
             "myjobmag.com", "indeed.com", "brightermonday.com",
             "pv-tech.org", "cleantechnica.com", "energymonitor.ai",
             "spglobal.com", "woodmac.com", "iai.gov",
+            "irena.org/news", "afdb.org/en/news", "worldbank.org/en/news",
+            "theguardian.com", "bbc.com", "cnn.com", "aljazeera.com",
+            "businessghana.com", "ghanaweb.com", "myjoyonline.com",
+            "modernghana.com", "ghanaiantimes.com", "graphic.com.gh",
+            "punchng.com", "vanguardngr.com", "thecable.ng", "premiumtimesng.com",
+            "nairametrics.com", "businessday.ng",
+            "zawya.com", "menafn.com", "arabnews.com",
+            "esi-africa.com", "theafricareport.com", "energy-pedia.com",
         ]
-        # ── Block category/listing pages (not individual notices) ─────────────
+        # ── Block category/listing index pages (not individual notices) ────────
+        # Only block exact category index paths — not all URLs containing the word
         listing_patterns = [
-            "/ghana-tenders", "/solar-tenders", "/renewable-energy-tenders",
-            "/country/ghana", "global-solar-tenders", "global-energy-and-power",
+            "global-solar-tenders", "global-energy-and-power",
             "global-solar-panel", "-tenders-26.php", "rfq.php",
             "/tenders/search", "/tenders/adminShow",
-            "globaltenders.com/gh/", "globaltenders.com/ghana-tenders",
-            "tendersontime.com/ghana-tenders/",
-            "tendersontime.com/south-africa-tenders/",
-            "developmentaid.org/tenders",
+            "globaltenders.com/gh/", "globaltenders.com/ghana-tenders/",
+            "tendersontime.com/ghana-tenders/page",
+            "tendersontime.com/south-africa-tenders/page",
+            "developmentaid.org/tenders/search",
             "devex.com/funding/r?report=grant",
             "/tag/solar", "/category/solar", "/news/solar",
+        ]
+        # ── Known procurement portals — bypass the rfp-in-title requirement ───
+        PORTAL_DOMAINS = [
+            "ungm.org", "devex.com", "dgmarket.com", "tendersinfo.com",
+            "tendersontime.com", "globaltenders.com", "africatenders.com",
+            "worldbank.org/en/projects-operations/procurement",
+            "afdb.org", "ifc.org", "reliefweb.int",
+            "energycom.gov.gh", "purc.com.gh", "moe.gov.gh", "rea.gov.ng",
+            "ecowas.int", "ecreee.org", "geapp.org", "esmap.org",
         ]
         # ── Hard gate 1: must be a procurement/project opportunity ──────────
         rfp_keywords = [
@@ -4867,7 +4884,7 @@ def admin_agent_run():
             "epc", "design and install", "supply and install", "turnkey",
             "installation contract", "design and build", "works contract",
         ]
-        # ── Hard gate 2: solar keyword required in TITLE ─────────────────────
+        # ── Hard gate 2: solar/energy keyword in title OR body ──────────────
         solar_keywords = [
             "solar", "photovoltaic", "pv system", "pv project", "solar pv",
             "solar power", "solar energy", "solar plant", "solar farm",
@@ -4888,6 +4905,9 @@ def admin_agent_run():
                         return unquote(qs[key][0])
             return raw
 
+        def _is_portal(url):
+            return any(d in url for d in PORTAL_DOMAINS)
+
         with DDGS() as ddgs:
             for q in queries:
                 try:
@@ -4898,16 +4918,17 @@ def admin_agent_run():
                         # 1. Skip blocked domains
                         if any(d in url for d in skip_domains):
                             continue
-                        # 2. Skip generic listing/category pages
+                        # 2. Skip generic listing/category index pages
                         url_lower = url.lower()
                         if any(p in url_lower for p in listing_patterns):
                             continue
-                        # 3. Solar keyword must appear in title (hard gate)
-                        if not any(kw in title for kw in solar_keywords):
+                        # 3. Solar keyword in title OR body
+                        if not any(kw in title or kw in body for kw in solar_keywords):
                             continue
-                        # 4. Procurement intent required in title or body
-                        if not any(kw in title or kw in body for kw in rfp_keywords):
-                            continue
+                        # 4. Procurement intent required; portal pages are exempt from title check
+                        if not _is_portal(url):
+                            if not any(kw in title or kw in body for kw in rfp_keywords):
+                                continue
                         # 5. Deduplicate by URL; store cleaned URL
                         if url and not any(x.get("href") == url for x in search_results):
                             r["href"] = url  # write cleaned URL back
