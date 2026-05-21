@@ -4739,6 +4739,54 @@ def err_500(e):
 
 # ─── Client Prospecting Agent ─────────────────────────────────────────────────
 
+import re as _re
+
+# All country names recognised for the hard foreign-country gate.
+# "benin" omitted → collision with Benin City (Nigeria).
+# "niger" omitted → collision with Nigeria.
+_ALL_COUNTRY_NAMES = frozenset([
+    "zambia", "zimbabwe", "togo", "cameroon", "senegal", "gambia", "liberia",
+    "burkina faso", "mali", "guinea", "sierra leone", "ivory coast",
+    "mozambique", "malawi", "angola", "botswana", "namibia", "lesotho",
+    "eswatini", "swaziland", "madagascar", "mauritius", "eritrea", "djibouti",
+    "somalia", "chad", "gabon", "congo", "rwanda", "burundi", "uganda",
+    "kenya", "tanzania", "ethiopia", "egypt", "morocco", "algeria",
+    "tunisia", "libya", "south africa", "south sudan", "sudan",
+    "nigeria", "ghana",
+    "india", "pakistan", "bangladesh", "indonesia", "philippines",
+    "vietnam", "thailand", "myanmar", "sri lanka", "nepal", "malaysia",
+    "cambodia", "laos", "mongolia",
+    "united kingdom", "england", "scotland", "wales",
+    "united states", "america",
+    "australia", "germany", "spain", "france", "china", "japan",
+    "saudi arabia", "united arab emirates", "qatar", "kuwait",
+    "iran", "iraq", "jordan", "lebanon", "syria", "yemen", "oman", "bahrain",
+    "brazil", "argentina", "colombia", "peru", "chile", "mexico", "ecuador",
+])
+
+# Alternate names that map to a canonical selected-country value
+_COUNTRY_EXEMPTIONS = {
+    "uk":            {"united kingdom", "england", "scotland", "wales", "britain", "uk"},
+    "usa":           {"united states", "america", "usa"},
+    "south africa":  {"south africa", "south african"},
+    "united kingdom": {"united kingdom", "england", "scotland", "wales", "britain", "uk"},
+    "united states": {"united states", "america", "usa"},
+}
+
+
+def _foreign_country_in_text(text, loc_lower):
+    """Return True if text names a country other than loc_lower (word-boundary match).
+    Used as a hard gate to block wrong-country results entirely."""
+    exempt = {loc_lower} | _COUNTRY_EXEMPTIONS.get(loc_lower, set())
+    t = text.lower()
+    for name in _ALL_COUNTRY_NAMES:
+        if name in exempt:
+            continue
+        if _re.search(r'\b' + _re.escape(name) + r'\b', t):
+            return True
+    return False
+
+
 @app.route("/admin/agent")
 @admin_required
 def admin_agent():
@@ -4990,6 +5038,10 @@ def admin_agent_run():
                             continue
                         # 4. Skip completed-project titles (past tense)
                         if any(w in title for w in news_title_words):
+                            continue
+                        # 4b. Hard foreign-country gate: if the title or URL explicitly names
+                        #     a DIFFERENT country, reject immediately — no exceptions.
+                        if _foreign_country_in_text(title + " " + url_lower, loc_lower):
                             continue
                         # 5. Country gate
                         # Formal: ONLY the country name itself must appear in title or URL.
@@ -5444,10 +5496,10 @@ def _monitor_search(loc="Ghana"):
                                 continue
                         if any(w in title for w in news_title_words):
                             continue
-                        # Country gate — same logic as agent:
-                        # Formal: country name only in title/url (no city aliases — "tema" is
-                        #   inside "systematic", causing cross-country leakage)
-                        # Social/job: full alias list in title+body+url
+                        # Hard foreign-country gate: reject if title/URL names a different country
+                        if _foreign_country_in_text(title + " " + url_lower, loc_lower):
+                            continue
+                        # Country gate — formal: country name in title/url; social: alias list
                         if _is_social(url) or _is_job_board(url):
                             combined = title + " " + body + " " + url_lower
                             if not any(alias in combined for alias in loc_aliases):
