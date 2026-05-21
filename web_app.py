@@ -4928,7 +4928,10 @@ def admin_agent_run():
                         # 4. Skip completed-project titles (past tense)
                         if any(w in title for w in news_title_words):
                             continue
-                        # 5. Solar keyword required in title or body
+                        # 5. Country must appear in title, body, or URL
+                        if loc.lower() not in title and loc.lower() not in body and loc.lower() not in url_lower:
+                            continue
+                        # 5b. Solar keyword required in title or body
                         if not any(kw in title or kw in body for kw in solar_keywords):
                             continue
                         # 6. Source-aware gate
