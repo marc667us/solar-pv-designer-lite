@@ -5061,11 +5061,13 @@ STRICT RULES:
 5. company_name = issuing organisation — NOT a made-up name
 6. If a field is not stated in the result, use "" or 0 — never invent data
 
-PRIORITY RULE — assign based on how many of these 3 key fields are present in the result:
-  - work_description (what is being procured)
-  - deadline (submission closing date)
-  - contact_details (email, phone, or submission address)
-  Priority: "high" = all 3 present; "medium" = any 2 present; "low" = 0 or 1 present
+PRIORITY RULE — score based on how many of these 5 key fields are present in the result:
+  1. work_description  — scope / what is being procured
+  2. requirements      — eligibility or technical requirements
+  3. tor               — terms of reference or detailed scope
+  4. deadline          — submission closing date
+  5. submission_address OR contact_details — where/how to submit or who to contact
+  Priority: "high" = all 5 present; "medium" = 3 or 4 present; "low" = 2 or fewer present
 
 Return up to {count} results. Return ONLY valid JSON, no markdown:
 {{
@@ -5087,7 +5089,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
       "tender_ref": "reference number if stated, else ''",
       "contact_strategy": "how to respond based on source type",
       "decision_maker": "procurement contact name if named, else ''",
-      "priority": "high / medium / low — per PRIORITY RULE above",
+      "priority": "high = all 5 fields present; medium = 3-4; low = 2 or fewer",
       "source_url": "https://exact-url-from-result.com/path",
       "source_title": "Exact title from result",
       "source_snippet": "most relevant verbatim sentence, max 300 chars",
@@ -5212,11 +5214,17 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                 return body[idx:idx+200].strip()
         return ""
 
-    def _score_priority(work_desc, deadline, contact):
-        filled = sum(1 for f in [work_desc, deadline, contact] if f and f.strip())
-        if filled == 3:
+    def _score_priority(work_desc, requirements, tor, deadline, submission_addr, contact):
+        # Count how many of the 5 mandatory fields are present.
+        # submission_address OR contact_details counts as the 5th field.
+        submission_ok = bool((submission_addr and submission_addr.strip()) or
+                             (contact and contact.strip()))
+        filled = sum(1 for f in [work_desc, requirements, tor, deadline] if f and f.strip())
+        if submission_ok:
+            filled += 1
+        if filled == 5:
             return "high"
-        if filled == 2:
+        if filled >= 3:
             return "medium"
         return "low"
 
@@ -5250,7 +5258,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                 "tender_ref":         "",
                 "contact_strategy":   _contact_strategy(src_type, url),
                 "decision_maker":     "",
-                "priority":           _score_priority(work_desc, deadline_v, contact_v),
+                "priority":           _score_priority(work_desc, requirements, "", deadline_v, sub_addr, contact_v),
                 "source_url":         url,
                 "source_title":       title,
                 "source_snippet":     snippet[:300],
