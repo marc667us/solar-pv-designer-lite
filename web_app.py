@@ -4808,34 +4808,29 @@ def admin_agent_run():
             "OR site:gogla.org OR site:se4all.org OR site:energyaccess.org"
         )
 
-        # ── Phrases targeting design & installation contract work ────────────
-        rfp_phrase = ('"request for proposal" OR "invitation to bid" OR '
-                      '"expression of interest" OR tender OR "call for bids" '
-                      'OR EOI OR ITB OR RFP OR solicitation OR procurement OR '
-                      '"request for quotation" OR prequalification')
-        install_phrase = ('"design and install" OR "supply and install" OR '
-                          '"installation works" OR "installation contract" OR '
-                          '"EPC contract" OR "design and build" OR "turnkey solar" OR '
-                          '"works contract" OR "contractor" OR "installation tender"')
+        # ── Queries: each leads with a quoted rfp phrase so search engines ──
+        # surface pages where those words appear in the title/heading first  ──
         queries = [
-            # ── Open-web: design & installation work specifically ─────────────
-            f'solar "design and install" tender ({loc_q}) 2025 2026',
-            f'solar EPC contract tender ({loc_q}) 2025 2026',
-            f'solar "installation works" ({loc_q}) {rfp_phrase} 2025 2026',
-            f'solar PV "supply and install" contract ({loc_q}) 2025 2026',
-            f'solar PV installer contractor tender ({loc_q}) {sector} 2025 2026',
-            f'solar PV system {install_phrase} ({loc_q}) 2025 2026',
-            # ── Portal-targeted: installation & EPC focus ─────────────────────
-            f'({UN_PORTALS}) solar {install_phrase} ({loc_q}) 2025 2026',
-            f'({DFI_PORTALS}) solar {install_phrase} ({loc_q}) 2025 2026',
-            f'({AFRICA_PORTALS}) solar ({loc_q}) {rfp_phrase} 2025 2026',
-            f'({GOV_PORTALS}) solar "installation" OR "design" {rfp_phrase} 2025 2026',
-            f'site:afdb.org solar ({loc_q}) procurement "installation" OR "EPC" 2025 2026',
-            f'site:ungm.org solar ({loc_q}) installation 2025 2026',
-            f'site:devex.com solar ({loc_q}) installation OR EPC OR contractor 2025 2026',
+            # ── Exact-phrase leads — open tender/RFP language ─────────────────
+            f'"tender for" solar installation ({loc_q}) 2025 2026',
+            f'"invitation to bid" solar PV ({loc_q}) 2025 2026',
+            f'"request for proposals" solar installation ({loc_q}) 2025 2026',
+            f'"expression of interest" solar ({loc_q}) design install 2025 2026',
+            f'"call for tenders" solar ({loc_q}) 2025 2026',
+            f'"request for quotation" solar PV installation ({loc_q}) 2025 2026',
+            f'"tender notice" solar installation ({loc_q}) 2025 2026',
+            f'"EPC tender" solar ({loc_q}) 2025 2026',
+            f'"installation tender" solar PV ({loc_q}) 2025 2026',
+            f'"procurement notice" solar ({loc_q}) installation 2025 2026',
+            f'"call for bids" solar ({loc_q}) 2025 2026',
+            f'"invitation to tender" solar ({loc_q}) 2025 2026',
+            # ── Portal-targeted with rfp lead ─────────────────────────────────
+            f'({UN_PORTALS}) "tender" OR "ITB" OR "RFP" solar installation ({loc_q}) 2025 2026',
+            f'({DFI_PORTALS}) "tender" OR "invitation to bid" solar ({loc_q}) 2025 2026',
+            f'({AFRICA_PORTALS}) "tender" OR "RFP" solar ({loc_q}) 2025 2026',
         ]
         if focus:
-            queries.insert(0, f'({loc_q}) "{focus}" solar installation {rfp_phrase} 2025 2026')
+            queries.insert(0, f'"tender for" OR "RFP" "{focus}" solar ({loc_q}) 2025 2026')
 
         # ── Domains to always skip (news, social, job boards, analyst reports) ──
         skip_domains = [
@@ -4890,14 +4885,24 @@ def admin_agent_run():
             "breaks ground", "broke ground", "celebrates", "milestone",
             "launches", "launched", "project approved", "approved project",
         ]
-        # ── Hard gate 1: must be a procurement/project opportunity ──────────
+        # ── Title gate: exact phrases found in real tender/RFP titles ──────
         rfp_keywords = [
-            "rfp", "tender", "bid", "proposal", "solicitation", "procurement",
-            "expression of interest", "eoi", "invitation to bid", "itb",
-            "prequalif", "contract notice", "call for bids", "call for proposal",
-            "request for quotation", "epc", "design and install",
-            "supply and install", "turnkey", "installation contract",
-            "installation works", "design and build", "works contract", "contractor",
+            # Universal procurement signals
+            "tender", "rfp", "itb", "eoi",
+            "invitation to bid", "invitation to tender",
+            "request for proposal", "request for proposals",
+            "request for quotation", "request for quote",
+            "expression of interest",
+            "call for tender", "call for tenders",
+            "call for bids", "call for proposals",
+            "tender notice", "tender for",
+            "procurement notice", "contract notice",
+            "solicitation", "prequalif", "bidding document",
+            # Installation & EPC-specific title words
+            "epc tender", "epc contract",
+            "installation tender", "installation works",
+            "design and install", "supply and install",
+            "works contract", "installation contract",
         ]
         # ── Hard gate 2: solar/energy keyword in title OR body ──────────────
         solar_keywords = [
