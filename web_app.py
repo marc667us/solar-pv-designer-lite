@@ -4774,6 +4774,84 @@ _COUNTRY_EXEMPTIONS = {
 }
 
 
+def _is_past_deadline(text):
+    """Return True if we can detect a deadline/closing date in text and it has passed."""
+    import re as _re2
+    from datetime import datetime
+    today = datetime.utcnow()
+    t = text.lower()
+    # Quick year check: if only year-2025 or earlier found with no later year, it's expired
+    years = [int(y) for y in _re2.findall(r'\b(20\d{2})\b', t)]
+    if years and max(years) < today.year:
+        return True
+    # Try to parse full dates near deadline keywords
+    patterns = [
+        r'(?:closing|deadline|submission|due|submit by|bids? by|close[sd]?)[:\s]+(\d{1,2}[\s\-/][a-z]{3,9}[\s\-/]\d{4})',
+        r'(?:closing|deadline|submission|due|submit by|bids? by|close[sd]?)[:\s]+([a-z]{3,9}\s+\d{1,2},?\s*\d{4})',
+        r'(?:closing|deadline|submission|due)[:\s]+(\d{4}-\d{2}-\d{2})',
+    ]
+    MONTH = {"january":1,"february":2,"march":3,"april":4,"may":5,"june":6,
+             "july":7,"august":8,"september":9,"october":10,"november":11,"december":12,
+             "jan":1,"feb":2,"mar":3,"apr":4,"jun":6,"jul":7,"aug":8,
+             "sep":9,"oct":10,"nov":11,"dec":12}
+    for pat in patterns:
+        m = _re2.search(pat, t)
+        if not m:
+            continue
+        raw = m.group(1).strip()
+        # Try YYYY-MM-DD
+        try:
+            d = datetime.strptime(raw, "%Y-%m-%d")
+            return d < today
+        except Exception:
+            pass
+        # Try "15 june 2026" or "june 15, 2026"
+        parts = _re2.split(r'[\s\-/,]+', raw)
+        nums = [p for p in parts if p.isdigit()]
+        words = [p for p in parts if p.isalpha()]
+        month_num = next((MONTH[w] for w in words if w in MONTH), None)
+        year_num  = next((int(n) for n in nums if len(n) == 4), None)
+        day_num   = next((int(n) for n in nums if len(n) <= 2), None)
+        if month_num and year_num:
+            try:
+                d = datetime(year_num, month_num, day_num or 1)
+                return d < today
+            except Exception:
+                pass
+    return False
+
+
+_CITY_MAP = {
+    "ghana":        ["accra", "kumasi", "takoradi", "tema", "tamale", "cape coast",
+                     "koforidua", "bolgatanga", "sunyani", "techiman"],
+    "nigeria":      ["lagos", "abuja", "kano", "ibadan", "port harcourt", "enugu",
+                     "kaduna", "calabar", "warri", "uyo", "benin city", "owerri"],
+    "kenya":        ["nairobi", "mombasa", "kisumu", "nakuru", "eldoret", "thika"],
+    "south africa": ["johannesburg", "cape town", "durban", "pretoria", "soweto",
+                     "bloemfontein", "port elizabeth", "east london"],
+    "tanzania":     ["dar es salaam", "dodoma", "arusha", "mwanza", "zanzibar"],
+    "zambia":       ["lusaka", "ndola", "kitwe", "kabwe", "livingstone"],
+    "ethiopia":     ["addis ababa", "dire dawa", "mekele", "gondar", "hawassa"],
+    "senegal":      ["dakar", "thiès", "kaolack", "saint-louis", "ziguinchor"],
+    "cameroon":     ["douala", "yaounde", "bamenda", "bafoussam", "garoua"],
+    "uganda":       ["kampala", "gulu", "mbarara", "jinja", "entebbe"],
+    "rwanda":       ["kigali", "butare", "gisenyi", "ruhengeri"],
+    "uk":           ["london", "birmingham", "manchester", "leeds", "glasgow"],
+    "usa":          ["new york", "los angeles", "chicago", "houston", "phoenix"],
+    "india":        ["mumbai", "delhi", "bangalore", "chennai", "hyderabad", "pune"],
+}
+
+
+def _extract_location_from_text(title, body, loc):
+    """Try to extract city/region from result text; fall back to country name."""
+    text = (title + " " + body).lower()
+    cities = _CITY_MAP.get(loc.lower(), [])
+    for city in cities:
+        if city in text:
+            return city.title() + ", " + loc
+    return loc
+
+
 def _foreign_country_in_text(title, loc_lower):
     """Return True only when the selected country is ABSENT from the title
     but a DIFFERENT country IS present — i.e., the page is clearly about
@@ -4891,52 +4969,52 @@ def admin_agent_run():
 
         queries = [
             # === A: Formal procurement — quoted rfp phrases ==================
-            f'"tender for" solar installation {loc_q} 2025 2026',
-            f'"invitation to bid" solar PV {loc_q} 2025 2026',
-            f'"request for proposals" solar {loc_q} 2025 2026',
-            f'"expression of interest" solar {loc_q} installation 2025 2026',
-            f'"call for tenders" solar {loc_q} 2025 2026',
-            f'"request for quotation" solar PV {loc_q} 2025 2026',
-            f'"tender notice" solar {loc_q} 2025 2026',
-            f'"invitation to tender" solar {loc_q} 2025 2026',
-            f'({UN_PORTALS}) solar {loc_q} tender OR ITB OR RFP 2025 2026',
-            f'({DFI_PORTALS}) solar {loc_q} tender OR "invitation to bid" 2025 2026',
-            f'({AFRICA_PORTALS}) solar {loc_q} tender OR RFP 2025 2026',
+            f'"tender for" solar installation {loc_q} 2026 2027',
+            f'"invitation to bid" solar PV {loc_q} 2026 2027',
+            f'"request for proposals" solar {loc_q} 2026 2027',
+            f'"expression of interest" solar {loc_q} installation 2026 2027',
+            f'"call for tenders" solar {loc_q} 2026 2027',
+            f'"request for quotation" solar PV {loc_q} 2026 2027',
+            f'"tender notice" solar {loc_q} 2026 2027',
+            f'"invitation to tender" solar {loc_q} 2026 2027',
+            f'({UN_PORTALS}) solar {loc_q} tender OR ITB OR RFP 2026 2027',
+            f'({DFI_PORTALS}) solar {loc_q} tender OR "invitation to bid" 2026 2027',
+            f'({AFRICA_PORTALS}) solar {loc_q} tender OR RFP 2026 2027',
             # === B: National institutions & utilities ========================
-            f'({GH_INSTITUTIONS}) solar tender OR procurement OR RFP 2025 2026',
-            f'({GH_SOCIAL_SECTOR}) solar tender OR procurement 2025 2026',
-            f'{loc_q} "VRA" OR "ECG" OR "NEDCo" OR "GRIDCo" solar tender OR RFP 2025 2026',
-            f'{loc_q} public procurement authority solar installation 2025 2026',
+            f'({GH_INSTITUTIONS}) solar tender OR procurement OR RFP 2026 2027',
+            f'({GH_SOCIAL_SECTOR}) solar tender OR procurement 2026 2027',
+            f'{loc_q} "VRA" OR "ECG" OR "NEDCo" OR "GRIDCo" solar tender OR RFP 2026 2027',
+            f'{loc_q} public procurement authority solar installation 2026 2027',
             # === C: Regional coordinating councils & district assemblies =====
-            f'{loc_q} "regional coordinating council" solar tender OR procurement 2025 2026',
-            f'{loc_q} "district assembly" solar installation tender OR contract 2025 2026',
-            f'{loc_q} "metropolitan assembly" solar tender OR installation 2025 2026',
-            f'{loc_q} local government solar installation tender OR RFP 2025 2026',
+            f'{loc_q} "regional coordinating council" solar tender OR procurement 2026 2027',
+            f'{loc_q} "district assembly" solar installation tender OR contract 2026 2027',
+            f'{loc_q} "metropolitan assembly" solar tender OR installation 2026 2027',
+            f'{loc_q} local government solar installation tender OR RFP 2026 2027',
             # === D: Private sector — hospitals, hotels, factories, schools ===
-            f'{loc_q} hospital OR clinic solar installation tender OR RFP 2025 2026',
-            f'{loc_q} school OR university solar installation tender OR contract 2025 2026',
-            f'{loc_q} hotel OR factory OR warehouse solar installation tender 2025 2026',
-            f'{loc_q} farm OR agri solar irrigation tender OR installation 2025 2026',
-            f'{loc_q} church OR mosque OR community solar installation tender 2025 2026',
+            f'{loc_q} hospital OR clinic solar installation tender OR RFP 2026 2027',
+            f'{loc_q} school OR university solar installation tender OR contract 2026 2027',
+            f'{loc_q} hotel OR factory OR warehouse solar installation tender 2026 2027',
+            f'{loc_q} farm OR agri solar irrigation tender OR installation 2026 2027',
+            f'{loc_q} church OR mosque OR community solar installation tender 2026 2027',
             # === E: Social media — homeowners & businesses ==================
-            f'site:facebook.com {loc_q} solar "looking for installer" OR "need solar" OR "solar quote" 2025',
-            f'site:facebook.com {loc_q} solar "recommend" OR "how much" OR "who installs" 2025',
-            f'site:facebook.com {loc_q} solar "dumsor" OR "ECG" OR "light bill" OR "generator" 2025',
-            f'site:facebook.com {loc_q} "solar panels" "contact" OR "WhatsApp" OR "call" 2025',
-            f'site:linkedin.com {loc_q} solar "contractor" OR "seeking" OR "project" OR "tender" 2025',
+            f'site:facebook.com {loc_q} solar "looking for installer" OR "need solar" OR "solar quote" 2026',
+            f'site:facebook.com {loc_q} solar "recommend" OR "how much" OR "who installs" 2026',
+            f'site:facebook.com {loc_q} solar "dumsor" OR "ECG" OR "light bill" OR "generator" 2026',
+            f'site:facebook.com {loc_q} "solar panels" "contact" OR "WhatsApp" OR "call" 2026',
+            f'site:linkedin.com {loc_q} solar "contractor" OR "seeking" OR "project" OR "tender" 2026',
             # === F: Job boards — installer hiring = active project ===========
-            f'site:jobberman.com solar {loc_q} installer OR technician OR engineer 2025',
-            f'site:myjobmag.com solar {loc_q} installer OR technician 2025',
-            f'site:brightermonday.com.gh solar installer OR technician 2025',
-            f'{loc_q} "solar technician" OR "solar installer" OR "solar engineer" job vacancy 2025',
+            f'site:jobberman.com solar {loc_q} installer OR technician OR engineer 2026',
+            f'site:myjobmag.com solar {loc_q} installer OR technician 2026',
+            f'site:brightermonday.com.gh solar installer OR technician 2026',
+            f'{loc_q} "solar technician" OR "solar installer" OR "solar engineer" job vacancy 2026',
             # === G: Open web — power problems driving solar demand ===========
-            f'{loc_q} "solar backup" OR "solar inverter" "supply and install" 2025 2026',
-            f'{loc_q} "off-grid solar" installation contractor OR tender 2025 2026',
-            f'{loc_q} "solar panels" "supply and install" OR "design and install" 2025 2026',
-            f'{loc_q} "rooftop solar" installation quote OR tender OR contract 2025 2026',
+            f'{loc_q} "solar backup" OR "solar inverter" "supply and install" 2026 2027',
+            f'{loc_q} "off-grid solar" installation contractor OR tender 2026 2027',
+            f'{loc_q} "solar panels" "supply and install" OR "design and install" 2026 2027',
+            f'{loc_q} "rooftop solar" installation quote OR tender OR contract 2026 2027',
         ]
         if focus:
-            queries.insert(0, f'{loc_q} "{focus}" solar installation tender OR "looking for" OR RFP OR quote 2025 2026')
+            queries.insert(0, f'{loc_q} "{focus}" solar installation tender OR "looking for" OR RFP OR quote 2026 2027')
 
         # ── Domains to always skip (news, analytics, pure editorial) ─────────
         skip_domains = [
@@ -5049,8 +5127,10 @@ def admin_agent_run():
                         # 4. Skip completed-project titles (past tense)
                         if any(w in title for w in news_title_words):
                             continue
-                        # 4b. Hard foreign-country gate: if the title or URL explicitly names
-                        #     a DIFFERENT country, reject immediately — no exceptions.
+                        # 4b. Skip if detectable deadline has already passed
+                        if _is_past_deadline(title + " " + body):
+                            continue
+                        # 4c. Hard foreign-country gate
                         if _foreign_country_in_text(title, loc_lower):
                             continue
                         # 5. Country gate
@@ -5137,7 +5217,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
     {{
       "company_name": "Issuing organisation",
       "type": "RFP / Tender / EOI / ITB / Contract Notice",
-      "location": "exact country/city from result — do NOT invent",
+      "location": "city AND country from result, e.g. 'Accra, Ghana' or 'Kumasi, Ghana' — use city name if stated, else just country. Do NOT invent.",
       "estimated_kw": 0,
       "estimated_usd": 0,
       "pain_points": [],
@@ -5306,7 +5386,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
             prospects.append({
                 "company_name":       title[:80] if title else "Unknown",
                 "type":               _infer_type(title, snippet),
-                "location":           loc,
+                "location":           _extract_location_from_text(title, snippet, loc),
                 "estimated_kw":       0,
                 "estimated_usd":      0,
                 "pain_points":        [src_type],
@@ -5403,18 +5483,18 @@ def _monitor_search(loc="Ghana"):
     SOCIAL_DOMAINS = ["facebook.com", "linkedin.com", "twitter.com", "x.com"]
 
     monitor_queries = [
-        f'"tender for" solar installation {loc_q} 2025 2026',
-        f'"invitation to bid" solar PV {loc_q} 2025 2026',
-        f'"request for proposals" solar {loc_q} 2025 2026',
-        f'"expression of interest" solar {loc_q} installation 2025 2026',
-        f'({UN_PORTALS}) solar {loc_q} tender OR RFP 2025 2026',
-        f'({DFI_PORTALS}) solar {loc_q} tender OR "invitation to bid" 2025 2026',
-        f'({AFRICA_PORTALS}) solar {loc_q} tender OR RFP 2025 2026',
-        f'{loc_q} "district assembly" solar installation tender OR contract 2025 2026',
-        f'site:facebook.com {loc_q} solar "looking for installer" OR "need solar" 2025',
-        f'site:linkedin.com {loc_q} solar "contractor" OR "seeking" OR "tender" 2025',
-        f'site:jobberman.com solar {loc_q} installer OR technician 2025',
-        f'{loc_q} "solar backup" OR "off-grid solar" "supply and install" 2025 2026',
+        f'"tender for" solar installation {loc_q} 2026 2027',
+        f'"invitation to bid" solar PV {loc_q} 2026 2027',
+        f'"request for proposals" solar {loc_q} 2026 2027',
+        f'"expression of interest" solar {loc_q} installation 2026 2027',
+        f'({UN_PORTALS}) solar {loc_q} tender OR RFP 2026 2027',
+        f'({DFI_PORTALS}) solar {loc_q} tender OR "invitation to bid" 2026 2027',
+        f'({AFRICA_PORTALS}) solar {loc_q} tender OR RFP 2026 2027',
+        f'{loc_q} "district assembly" solar installation tender OR contract 2026 2027',
+        f'site:facebook.com {loc_q} solar "looking for installer" OR "need solar" 2026',
+        f'site:linkedin.com {loc_q} solar "contractor" OR "seeking" OR "tender" 2026',
+        f'site:jobberman.com solar {loc_q} installer OR technician 2026',
+        f'{loc_q} "solar backup" OR "off-grid solar" "supply and install" 2026 2027',
     ]
 
     skip_domains = [
@@ -5506,7 +5586,8 @@ def _monitor_search(loc="Ghana"):
                                 continue
                         if any(w in title for w in news_title_words):
                             continue
-                        # Hard foreign-country gate: reject if title/URL names a different country
+                        if _is_past_deadline(title + " " + body):
+                            continue
                         if _foreign_country_in_text(title, loc_lower):
                             continue
                         # Country gate — formal: country name in title/url; social: alias list
