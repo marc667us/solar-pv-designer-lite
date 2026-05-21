@@ -4762,69 +4762,75 @@ def admin_agent_run():
     try:
         from ddgs import DDGS
 
-        # ── Tier 1: UN / multilateral procurement portals ─────────────────────
+        # ── Formal procurement portals ────────────────────────────────────────
         UN_PORTALS = (
             "site:ungm.org OR site:devex.com OR site:reliefweb.int "
             "OR site:dgmarket.com OR site:tendersinfo.com"
         )
-        # ── Tier 2: Development-bank procurement pages ────────────────────────
         DFI_PORTALS = (
             "site:worldbank.org OR site:afdb.org OR site:ifc.org "
-            "OR site:esmap.org OR site:geapp.org OR site:proparco.fr"
+            "OR site:esmap.org OR site:geapp.org"
         )
-        # ── Tier 3: Africa / West-Africa tender aggregators ───────────────────
         AFRICA_PORTALS = (
-            "site:africatenders.com OR site:africa-energy-portal.org "
-            "OR site:tendersontime.com OR site:globaltenders.com "
-            "OR site:ecreee.org OR site:wapp.org"
+            "site:africatenders.com OR site:tendersontime.com "
+            "OR site:globaltenders.com OR site:ecreee.org"
         )
-        # ── Tier 4: West-African government energy ministries ────────────────
-        GOV_PORTALS = (
-            "site:energycom.gov.gh OR site:purc.com.gh OR site:gridcogh.com "
-            "OR site:moe.gov.gh OR site:ghana.gov.gh "
-            "OR site:nerc.gov.ng OR site:rea.gov.ng "
-            "OR site:ecowas.int OR site:ecreee.org"
+        # ── Government ministries ─────────────────────────────────────────────
+        GOV_MINISTRIES = (
+            "site:energycom.gov.gh OR site:moe.gov.gh OR site:purc.com.gh "
+            "OR site:ghana.gov.gh OR site:eda.gov.gh OR site:nerc.gov.ng "
+            "OR site:rea.gov.ng"
         )
-        # ── Tier 5: PPA solicitation & climate-finance portals ────────────────
-        PPA_PORTALS = (
-            "site:irena.org OR site:climatefinancelab.org "
-            "OR site:gogla.org OR site:se4all.org OR site:energyaccess.org"
-        )
+        # ── Job board domains (hiring solar installer = active project) ───────
+        JOB_DOMAINS = ["jobberman.com", "myjobmag.com", "brightermonday.com",
+                       "ghanaiansjobs.com", "jobsinghana.com", "indeed.com"]
+        # ── Social media domains ──────────────────────────────────────────────
+        SOCIAL_DOMAINS = ["facebook.com", "linkedin.com", "twitter.com", "x.com"]
 
-        # ── Queries: each leads with a quoted rfp phrase so search engines ──
-        # surface pages where those words appear in the title/heading first  ──
         queries = [
-            # ── Exact-phrase leads — open tender/RFP language ─────────────────
-            f'"tender for" solar installation ({loc_q}) 2025 2026',
-            f'"invitation to bid" solar PV ({loc_q}) 2025 2026',
-            f'"request for proposals" solar installation ({loc_q}) 2025 2026',
-            f'"expression of interest" solar ({loc_q}) design install 2025 2026',
-            f'"call for tenders" solar ({loc_q}) 2025 2026',
-            f'"request for quotation" solar PV installation ({loc_q}) 2025 2026',
-            f'"tender notice" solar installation ({loc_q}) 2025 2026',
-            f'"EPC tender" solar ({loc_q}) 2025 2026',
-            f'"installation tender" solar PV ({loc_q}) 2025 2026',
-            f'"procurement notice" solar ({loc_q}) installation 2025 2026',
-            f'"call for bids" solar ({loc_q}) 2025 2026',
-            f'"invitation to tender" solar ({loc_q}) 2025 2026',
-            # ── Portal-targeted with rfp lead ─────────────────────────────────
-            f'({UN_PORTALS}) "tender" OR "ITB" OR "RFP" solar installation ({loc_q}) 2025 2026',
-            f'({DFI_PORTALS}) "tender" OR "invitation to bid" solar ({loc_q}) 2025 2026',
-            f'({AFRICA_PORTALS}) "tender" OR "RFP" solar ({loc_q}) 2025 2026',
+            # === A: Formal procurement — quoted rfp phrases ==================
+            f'"tender for" solar installation {loc_q} 2025 2026',
+            f'"invitation to bid" solar PV {loc_q} 2025 2026',
+            f'"request for proposals" solar {loc_q} 2025 2026',
+            f'"expression of interest" solar {loc_q} install 2025 2026',
+            f'"call for tenders" solar {loc_q} 2025 2026',
+            f'"request for quotation" solar {loc_q} installation 2025 2026',
+            f'"tender notice" solar {loc_q} 2025 2026',
+            f'"invitation to tender" solar {loc_q} 2025 2026',
+            f'({UN_PORTALS}) solar {loc_q} tender OR ITB OR RFP 2025 2026',
+            f'({DFI_PORTALS}) solar {loc_q} tender OR "invitation to bid" 2025 2026',
+            f'({AFRICA_PORTALS}) solar {loc_q} tender OR RFP 2025 2026',
+            # === B: Government ministries & regional councils ================
+            f'({GOV_MINISTRIES}) solar tender OR procurement OR RFP 2025 2026',
+            f'{loc_q} ministry energy solar installation tender OR procurement 2025 2026',
+            f'{loc_q} "regional coordinating council" solar tender OR procurement 2025 2026',
+            f'{loc_q} "district assembly" solar installation tender OR procurement 2025 2026',
+            f'{loc_q} government solar installation contract OR tender 2025 2026',
+            # === C: Social media — homeowners & businesses seeking solar =====
+            f'site:facebook.com {loc_q} solar installation "looking for" OR "need" OR "quote" 2025',
+            f'site:facebook.com {loc_q} "solar panels" "price" OR "installer" OR "contact" 2025',
+            f'site:facebook.com {loc_q} solar "who can install" OR "recommend" OR "how much" 2025',
+            f'site:linkedin.com {loc_q} solar installation "project" OR "contractor" OR "seeking" 2025',
+            # === D: Job boards — hiring solar installer = active project =====
+            f'site:jobberman.com solar {loc_q} installer OR technician OR engineer 2025',
+            f'site:myjobmag.com solar {loc_q} installer OR technician 2025',
+            f'site:brightermonday.com.gh solar installer OR technician OR engineer 2025',
+            f'{loc_q} solar installer OR "solar technician" job vacancy 2025 2026',
+            # === E: Open web — businesses & homeowners seeking quotes ========
+            f'{loc_q} "solar installation" "get quote" OR "free quote" OR "contact us" 2025 2026',
+            f'{loc_q} "solar panels" "supply and install" OR "design and install" 2025 2026',
+            f'{loc_q} company "solar" "installation" project tender OR contract 2025 2026',
         ]
         if focus:
-            queries.insert(0, f'"tender for" OR "RFP" "{focus}" solar ({loc_q}) 2025 2026')
+            queries.insert(0, f'{loc_q} "{focus}" solar installation tender OR "looking for" OR RFP 2025 2026')
 
-        # ── Domains to always skip (news, social, job boards, analyst reports) ──
+        # ── Domains to always skip (news, analytics, pure editorial) ─────────
         skip_domains = [
             "pv-magazine", "pvtech", "reuters.com", "bloomberg.com",
-            "wikipedia.org", "youtube.com", "twitter.com", "instagram.com",
+            "wikipedia.org", "youtube.com", "tiktok.com",
             "solarpowerworldonline", "greentechmedia", "renewableenergyworld",
-            "facebook.com", "tiktok.com", "linkedin.com", "jobberman.com",
-            "myjobmag.com", "indeed.com", "brightermonday.com",
             "pv-tech.org", "cleantechnica.com", "energymonitor.ai",
-            "spglobal.com", "woodmac.com", "iai.gov",
-            "irena.org/news", "afdb.org/en/news", "worldbank.org/en/news",
+            "spglobal.com", "woodmac.com",
             "theguardian.com", "bbc.com", "cnn.com", "aljazeera.com",
             "businessghana.com", "ghanaweb.com", "myjoyonline.com",
             "modernghana.com", "ghanaiantimes.com", "graphic.com.gh",
@@ -4832,71 +4838,58 @@ def admin_agent_run():
             "nairametrics.com", "businessday.ng",
             "zawya.com", "menafn.com", "arabnews.com",
             "esi-africa.com", "theafricareport.com", "energy-pedia.com",
+            "irena.org/news", "afdb.org/en/news", "worldbank.org/en/news",
+            "adb.org/news", "adb.org/results", "ifc.org/en/stories",
         ]
-        # ── Block category/listing index pages (not individual notices) ────────
-        # Only block exact category index paths — not all URLs containing the word
-        listing_patterns = [
-            "global-solar-tenders", "global-energy-and-power",
-            "global-solar-panel", "-tenders-26.php", "rfq.php",
-            "/tenders/search", "/tenders/adminShow",
-            "globaltenders.com/gh/", "globaltenders.com/ghana-tenders/",
-            "tendersontime.com/ghana-tenders/page",
-            "tendersontime.com/south-africa-tenders/page",
-            "developmentaid.org/tenders/search",
-            "devex.com/funding/r?report=grant",
-            "/tag/solar", "/category/solar", "/news/solar",
-        ]
-        # ── News URL path blocker — editorial paths, never procurement ─────
+        # ── News/editorial URL path patterns ──────────────────────────────────
         news_url_paths = [
-            "/news/", "/news-", "-news/", "/press-release", "/press/",
-            "/media/", "/blog/", "/article/", "/articles/", "/story/",
-            "/stories/", "/insights/", "/newsroom/", "/en/news",
-            "/resources/news", "/updates/news", "/tag/", "/category/",
-            "/feature/", "/features/", "/highlight/", "/highlights/",
-            "/publication/", "/publications/", "/report/", "/results/",
+            "/news/", "/news-release", "/press-release", "/press/",
+            "/blog/", "/article/", "/articles/",
+            "/story/", "/stories/", "/newsroom/", "/en/news",
+            "/feature/", "/highlights/", "/publication/",
             "/project-story", "/success-story", "/case-study",
-            "afdb.org/en/news", "adb.org/news", "adb.org/results",
-            "worldbank.org/en/news", "worldbank.org/en/results",
-            "ifc.org/en/stories", "ifc.org/en/news",
+            "worldbank.org/en/results", "afdb.org/en/news",
         ]
-        # ── Completed-project title blocker — past tense = news, not open ───
+        # ── Category/index page patterns ─────────────────────────────────────
+        listing_patterns = [
+            "global-solar-tenders", "/tenders/search", "/tenders/adminShow",
+            "globaltenders.com/gh/", "tendersontime.com/ghana-tenders/page",
+            "developmentaid.org/tenders/search", "devex.com/funding/r?report=grant",
+        ]
+        # ── Completed-project title patterns (past tense = not open) ─────────
         news_title_words = [
-            "awarded", "award to", "wins contract", "win contract",
-            "signs agreement", "signed agreement", "mou signed",
+            "awarded", "wins contract", "signs agreement", "signed agreement",
             "completes", "completed", "inaugurates", "inaugurated",
-            "commissioned", "connected to grid", "goes live", "gone live",
-            "breaks ground", "broke ground", "celebrates", "milestone",
-            "launches", "launched", "project approved", "approved project",
+            "commissioned", "connected to grid", "goes live",
+            "breaks ground", "broke ground", "milestone",
         ]
-        # ── Title gate: exact phrases found in real tender/RFP titles ──────
+        # ── Procurement signals for formal sources ────────────────────────────
         rfp_keywords = [
-            # Universal procurement signals
             "tender", "rfp", "itb", "eoi",
             "invitation to bid", "invitation to tender",
             "request for proposal", "request for proposals",
-            "request for quotation", "request for quote",
-            "expression of interest",
-            "call for tender", "call for tenders",
-            "call for bids", "call for proposals",
-            "tender notice", "tender for",
-            "procurement notice", "contract notice",
+            "request for quotation", "expression of interest",
+            "call for tenders", "call for bids", "call for proposals",
+            "tender notice", "procurement notice", "contract notice",
             "solicitation", "prequalif", "bidding document",
-            # Installation & EPC-specific title words
-            "epc tender", "epc contract",
-            "installation tender", "installation works",
-            "design and install", "supply and install",
-            "works contract", "installation contract",
+            "installation works", "epc contract", "works contract",
         ]
-        # ── Hard gate 2: solar/energy keyword in title OR body ──────────────
+        # ── Opportunity signals for social/job/open-web sources ───────────────
+        opportunity_keywords = [
+            "solar", "install", "installer", "installation", "technician",
+            "contractor", "supply", "design", "panel", "pv", "quote",
+            "looking for", "need", "seeking", "required", "wanted",
+            "vacancy", "hiring", "job", "project", "engineer",
+        ]
+        # ── Solar keyword gate ────────────────────────────────────────────────
         solar_keywords = [
-            "solar", "photovoltaic", "pv system", "pv project", "solar pv",
+            "solar", "photovoltaic", "pv system", "solar pv",
             "solar power", "solar energy", "solar plant", "solar farm",
             "mini grid", "minigrid", "off-grid solar", "renewable energy",
-            "solar installation", "solar design",
+            "solar installation",
         ]
 
         def _real_url(raw):
-            """Strip DuckDuckGo redirect wrappers to get the actual destination URL."""
             if not raw:
                 return raw
             from urllib.parse import urlparse, parse_qs, unquote
@@ -4908,41 +4901,52 @@ def admin_agent_run():
                         return unquote(qs[key][0])
             return raw
 
+        def _is_social(url):
+            return any(d in url for d in SOCIAL_DOMAINS)
+
+        def _is_job_board(url):
+            return any(d in url for d in JOB_DOMAINS)
 
         with DDGS() as ddgs:
             for q in queries:
                 try:
-                    for r in ddgs.text(q, max_results=8, safesearch="off"):
+                    for r in ddgs.text(q, max_results=10, safesearch="off"):
                         url   = _real_url(r.get("href", ""))
                         body  = r.get("body", "").lower()
                         title = r.get("title", "").lower()
-                        # 1. Skip blocked domains
+                        # 1. Skip always-blocked news/editorial domains
                         if any(d in url for d in skip_domains):
                             continue
-                        # 2. Skip news/editorial URL paths
+                        # 2. Skip news/editorial URL paths (not for social media)
                         url_lower = url.lower()
-                        if any(p in url_lower for p in news_url_paths):
-                            continue
-                        # 3. Skip generic listing/category index pages
+                        if not _is_social(url):
+                            if any(p in url_lower for p in news_url_paths):
+                                continue
+                        # 3. Skip category/index listing pages
                         if any(p in url_lower for p in listing_patterns):
                             continue
-                        # 4. Skip completed-project news titles (past tense = already done)
+                        # 4. Skip completed-project titles (past tense)
                         if any(w in title for w in news_title_words):
                             continue
-                        # 5. Solar keyword in title OR body
+                        # 5. Solar keyword required in title or body
                         if not any(kw in title or kw in body for kw in solar_keywords):
                             continue
-                        # 6. RFP/tender keyword MUST appear in title — open opportunities
-                        #    always name themselves; news/narratives/stories never do
-                        if not any(kw in title for kw in rfp_keywords):
-                            continue
-                        # 7. Deduplicate by URL; store cleaned URL
+                        # 6. Source-aware opportunity gate
+                        if _is_social(url) or _is_job_board(url):
+                            # Informal sources: any opportunity signal in title/body
+                            if not any(kw in title or kw in body for kw in opportunity_keywords):
+                                continue
+                        else:
+                            # Formal sources: procurement keyword in title or body
+                            if not any(kw in title or kw in body for kw in rfp_keywords):
+                                continue
+                        # 7. Deduplicate
                         if url and not any(x.get("href") == url for x in search_results):
-                            r["href"] = url  # write cleaned URL back
+                            r["href"] = url
                             search_results.append(r)
                 except Exception:
                     continue
-                if len(search_results) >= 30:
+                if len(search_results) >= 50:
                     break
     except Exception as e:
         search_error = str(e)
