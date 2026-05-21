@@ -3,7 +3,7 @@
 Intelligent Global PV Solar System Design Platform
 Flask web application — complete engineering + financial SaaS
 """
-import os, json, math, sqlite3, csv, secrets, io
+import os, json, math, sqlite3, csv, secrets, io, threading
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import (Flask, render_template, request, redirect, url_for,
@@ -354,6 +354,23 @@ def init_db():
             ai_grade        TEXT DEFAULT '',
             created_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS monitor_alerts (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            url         TEXT UNIQUE NOT NULL,
+            title       TEXT DEFAULT '',
+            snippet     TEXT DEFAULT '',
+            country     TEXT DEFAULT '',
+            source_type TEXT DEFAULT '',
+            is_new      INTEGER DEFAULT 1,
+            found_at    TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS monitor_state (
+            id          INTEGER PRIMARY KEY CHECK (id = 1),
+            last_scan   TEXT DEFAULT '',
+            last_count  INTEGER DEFAULT 0,
+            is_running  INTEGER DEFAULT 0
+        );
+        INSERT OR IGNORE INTO monitor_state (id) VALUES (1);
         """)
     # Migrate older DBs — ignore if column already exists
     for stmt in [
@@ -5167,6 +5184,294 @@ def admin_agent_save():
             (name, "", "", company, country, interest, notes, "agent", "new")
         )
     return jsonify({"ok": True})
+
+
+# ─── Background Monitor: actively listens for new solar postings ───────────────
+
+def _monitor_search(loc="Ghana"):
+    """Run the same search pipeline as admin_agent_run for a given country.
+    Returns a list of dicts with url, title, snippet, source_type."""
+    from ddgs import DDGS
+
+    loc_q = f'"{loc}"'
+    COUNTRY_CITIES = {
+        "ghana":        ["ghana", "ghanaian", "accra", "kumasi", "takoradi", "tema",
+                         "tamale", "cape coast", ".gh"],
+        "nigeria":      ["nigeria", "nigerian", "lagos", "abuja", "kano", ".ng"],
+        "kenya":        ["kenya", "kenyan", "nairobi", "mombasa", ".ke"],
+        "south africa": ["south africa", "johannesburg", "cape town", "durban", ".za"],
+        "tanzania":     ["tanzania", "dar es salaam", ".tz"],
+        "zambia":       ["zambia", "lusaka", ".zm"],
+        "ethiopia":     ["ethiopia", "addis ababa", ".et"],
+        "senegal":      ["senegal", "dakar", ".sn"],
+        "cameroon":     ["cameroon", "douala", ".cm"],
+        "uk":           ["united kingdom", "england", "london", ".uk", ".co.uk"],
+        "usa":          ["united states", "america", ".gov"],
+        "india":        ["india", "mumbai", "delhi", "bangalore", ".in"],
+    }
+    loc_lower   = loc.lower()
+    loc_aliases = COUNTRY_CITIES.get(loc_lower, [loc_lower])
+
+    UN_PORTALS = (
+        "site:ungm.org OR site:devex.com OR site:reliefweb.int "
+        "OR site:dgmarket.com OR site:tendersinfo.com"
+    )
+    DFI_PORTALS = (
+        "site:worldbank.org OR site:afdb.org OR site:ifc.org "
+        "OR site:esmap.org OR site:geapp.org"
+    )
+    AFRICA_PORTALS = (
+        "site:africatenders.com OR site:tendersontime.com "
+        "OR site:globaltenders.com OR site:ecreee.org"
+    )
+    JOB_DOMAINS    = ["jobberman.com", "myjobmag.com", "brightermonday.com",
+                      "ghanaiansjobs.com", "jobsinghana.com", "indeed.com"]
+    SOCIAL_DOMAINS = ["facebook.com", "linkedin.com", "twitter.com", "x.com"]
+
+    monitor_queries = [
+        f'"tender for" solar installation {loc_q} 2025 2026',
+        f'"invitation to bid" solar PV {loc_q} 2025 2026',
+        f'"request for proposals" solar {loc_q} 2025 2026',
+        f'"expression of interest" solar {loc_q} installation 2025 2026',
+        f'({UN_PORTALS}) solar {loc_q} tender OR RFP 2025 2026',
+        f'({DFI_PORTALS}) solar {loc_q} tender OR "invitation to bid" 2025 2026',
+        f'({AFRICA_PORTALS}) solar {loc_q} tender OR RFP 2025 2026',
+        f'{loc_q} "district assembly" solar installation tender OR contract 2025 2026',
+        f'site:facebook.com {loc_q} solar "looking for installer" OR "need solar" 2025',
+        f'site:linkedin.com {loc_q} solar "contractor" OR "seeking" OR "tender" 2025',
+        f'site:jobberman.com solar {loc_q} installer OR technician 2025',
+        f'{loc_q} "solar backup" OR "off-grid solar" "supply and install" 2025 2026',
+    ]
+
+    skip_domains = [
+        "pv-magazine", "pvtech", "reuters.com", "bloomberg.com", "wikipedia.org",
+        "youtube.com", "tiktok.com", "solarpowerworldonline", "greentechmedia",
+        "theguardian.com", "bbc.com", "cnn.com", "aljazeera.com",
+        "businessghana.com", "ghanaweb.com", "myjoyonline.com",
+        "esi-africa.com", "irena.org/news", "afdb.org/en/news",
+        "worldbank.org/en/news", "adb.org/news",
+    ]
+    news_url_paths = [
+        "/news/", "/blog/", "/article/", "/story/", "/stories/",
+        "/press/", "/newsroom/", "/publication/", "/en/news",
+    ]
+    news_title_words = [
+        "awarded", "wins contract", "signs agreement", "completed",
+        "inaugurated", "commissioned", "connected to grid",
+    ]
+    rfp_keywords = [
+        "tender", "rfp", "itb", "eoi", "invitation to bid",
+        "request for proposal", "expression of interest",
+        "call for tenders", "procurement notice", "bidding document",
+        "installation works", "epc contract",
+    ]
+    opportunity_keywords = [
+        "solar", "install", "installer", "technician", "contractor",
+        "supply", "design", "panel", "pv", "quote", "looking for",
+        "need", "seeking", "vacancy", "hiring", "job",
+    ]
+    solar_keywords = [
+        "solar", "photovoltaic", "pv system", "solar pv", "solar power",
+        "mini grid", "off-grid solar", "renewable energy",
+    ]
+
+    def _real_url(raw):
+        if not raw:
+            return raw
+        from urllib.parse import urlparse, parse_qs, unquote
+        p = urlparse(raw)
+        if "duckduckgo.com" in p.netloc:
+            qs = parse_qs(p.query)
+            for key in ("uddg", "u"):
+                if key in qs:
+                    return unquote(qs[key][0])
+        return raw
+
+    def _is_social(url):
+        return any(d in url for d in SOCIAL_DOMAINS)
+
+    def _is_job_board(url):
+        return any(d in url for d in JOB_DOMAINS)
+
+    def _classify(url):
+        if _is_social(url):
+            if "linkedin" in url:
+                return "LinkedIn Lead"
+            return "Social Media Lead"
+        if _is_job_board(url):
+            return "Job Board — Active Project"
+        if any(p in url for p in ["gov.", ".gov", "assembly", "council", "ministry"]):
+            return "Government / Public Sector"
+        if any(p in url for p in ["ungm", "devex", "reliefweb", "afdb", "worldbank"]):
+            return "Tender Portal"
+        return "Commercial / Private Sector"
+
+    results = []
+    try:
+        with DDGS() as ddgs:
+            for q in monitor_queries:
+                try:
+                    for r in ddgs.text(q, max_results=8, safesearch="off"):
+                        url   = _real_url(r.get("href", ""))
+                        body  = r.get("body", "").lower()
+                        title = r.get("title", "").lower()
+                        if not url:
+                            continue
+                        if any(d in url for d in skip_domains):
+                            continue
+                        url_lower = url.lower()
+                        if not _is_social(url):
+                            if any(p in url_lower for p in news_url_paths):
+                                continue
+                        if any(w in title for w in news_title_words):
+                            continue
+                        combined = title + " " + body + " " + url_lower
+                        if not any(alias in combined for alias in loc_aliases):
+                            continue
+                        if not any(kw in title or kw in body for kw in solar_keywords):
+                            continue
+                        if _is_social(url) or _is_job_board(url):
+                            if not any(kw in title or kw in body for kw in opportunity_keywords):
+                                continue
+                        else:
+                            if not any(kw in title for kw in rfp_keywords):
+                                continue
+                        if not any(x["url"] == url for x in results):
+                            results.append({
+                                "url":         url,
+                                "title":       r.get("title", "")[:255],
+                                "snippet":     r.get("body", "")[:500],
+                                "source_type": _classify(url),
+                            })
+                except Exception:
+                    continue
+                if len(results) >= 30:
+                    break
+    except Exception:
+        pass
+    return results
+
+
+def _run_monitor_scan():
+    """Scan for new solar postings and insert novel results into monitor_alerts."""
+    db_path = os.path.join(os.path.dirname(__file__), "solar.db")
+    import sqlite3 as _sqlite3
+    conn = _sqlite3.connect(db_path, timeout=15)
+    try:
+        # DB-level lock: only one gunicorn worker runs the scan at a time
+        row = conn.execute("SELECT is_running FROM monitor_state WHERE id=1").fetchone()
+        if row and row[0]:
+            return
+        conn.execute("UPDATE monitor_state SET is_running=1 WHERE id=1")
+        conn.commit()
+
+        # Determine which countries to scan: default Ghana + any in recent agent leads
+        countries_to_scan = {"Ghana"}
+        rows = conn.execute(
+            "SELECT DISTINCT country FROM leads WHERE source='agent' AND country != '' LIMIT 10"
+        ).fetchall()
+        for r in rows:
+            if r[0]:
+                countries_to_scan.add(r[0])
+
+        new_count = 0
+        for country in countries_to_scan:
+            items = _monitor_search(country)
+            for item in items:
+                existing = conn.execute(
+                    "SELECT id FROM monitor_alerts WHERE url=?", (item["url"],)
+                ).fetchone()
+                if not existing:
+                    conn.execute(
+                        "INSERT INTO monitor_alerts (url, title, snippet, country, source_type, is_new) "
+                        "VALUES (?, ?, ?, ?, ?, 1)",
+                        (item["url"], item["title"], item["snippet"],
+                         country, item["source_type"])
+                    )
+                    new_count += 1
+
+        from datetime import datetime as _dt
+        conn.execute(
+            "UPDATE monitor_state SET last_scan=?, last_count=?, is_running=0 WHERE id=1",
+            (_dt.utcnow().strftime("%Y-%m-%d %H:%M UTC"), new_count)
+        )
+        conn.commit()
+    except Exception:
+        try:
+            conn.execute("UPDATE monitor_state SET is_running=0 WHERE id=1")
+            conn.commit()
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+
+@app.route("/admin/agent/monitor/status")
+@admin_required
+def monitor_status():
+    with get_db() as c:
+        new_count = c.execute(
+            "SELECT COUNT(*) FROM monitor_alerts WHERE is_new=1"
+        ).fetchone()[0]
+        state = c.execute(
+            "SELECT last_scan, last_count FROM monitor_state WHERE id=1"
+        ).fetchone()
+    return jsonify({
+        "new_count":  new_count,
+        "last_scan":  state[0] if state else "",
+        "last_count": state[1] if state else 0,
+    })
+
+
+@app.route("/admin/agent/monitor/alerts")
+@admin_required
+def monitor_alerts_list():
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT id, url, title, snippet, country, source_type, found_at "
+            "FROM monitor_alerts WHERE is_new=1 ORDER BY found_at DESC LIMIT 50"
+        ).fetchall()
+    alerts = [
+        {"id": r[0], "url": r[1], "title": r[2], "snippet": r[3],
+         "country": r[4], "source_type": r[5], "found_at": r[6]}
+        for r in rows
+    ]
+    return jsonify({"alerts": alerts})
+
+
+@app.route("/admin/agent/monitor/dismiss", methods=["POST"])
+@admin_required
+def monitor_dismiss():
+    csrf_protect()
+    with get_db() as c:
+        c.execute("UPDATE monitor_alerts SET is_new=0")
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/agent/monitor/run", methods=["POST"])
+@admin_required
+def monitor_run_now():
+    """Manually trigger an immediate scan (useful for testing)."""
+    csrf_protect()
+    threading.Thread(target=_run_monitor_scan, daemon=True).start()
+    return jsonify({"ok": True, "message": "Scan started"})
+
+
+# Start background monitor thread (runs every 2 hours)
+def _monitor_loop():
+    import time
+    # Initial delay so the app fully starts before the first scan
+    time.sleep(120)
+    while True:
+        try:
+            _run_monitor_scan()
+        except Exception:
+            pass
+        time.sleep(7200)  # 2 hours
+
+
+_monitor_thread = threading.Thread(target=_monitor_loop, daemon=True)
+_monitor_thread.start()
 
 
 # ─── Entry point ──────────────────────────────────────────────────────────────

@@ -25,10 +25,39 @@
         <div class="text-secondary" style="font-size:13px">Searches the real web for verifiable solar project leads · Source links included · No invented data</div>
       </div>
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 align-items-center">
+      <!-- Live monitor badge -->
+      <button class="btn btn-sm position-relative" id="monitorBtn"
+        style="background:#0a140a;border:1px solid #22c55e44;color:#4ade80;font-size:12px"
+        onclick="toggleMonitorPanel()">
+        <i class="bi bi-broadcast me-1"></i>Live Monitor
+        <span id="monitorBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill d-none"
+          style="background:#f87171;font-size:9px;padding:3px 6px">0</span>
+      </button>
       <a href="{{ url_for('admin_leads') }}" class="btn btn-outline-info btn-sm px-3">
         <i class="bi bi-person-lines-fill me-1"></i>View CRM
       </a>
+    </div>
+  </div>
+</div>
+
+<!-- Live Monitor Panel -->
+<div id="monitorPanel" class="d-none mb-4">
+  <div class="solar-card p-4">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div class="section-head mb-0"><i class="bi bi-broadcast me-1 text-success"></i>Live Monitor — New Solar Postings</div>
+      <div class="d-flex gap-2">
+        <span id="monitorStatus" class="text-secondary" style="font-size:11px"></span>
+        <button class="btn btn-sm px-2" style="background:#0a140a;border:1px solid #22c55e44;color:#4ade80;font-size:11px"
+          onclick="triggerScan()"><i class="bi bi-arrow-clockwise me-1"></i>Scan Now</button>
+        <button class="btn btn-sm px-2" style="background:#1a0a0a;border:1px solid #f8717144;color:#f87171;font-size:11px"
+          onclick="dismissAlerts()"><i class="bi bi-check-all me-1"></i>Dismiss All</button>
+      </div>
+    </div>
+    <div id="monitorAlertsList">
+      <div class="text-secondary text-center py-3" style="font-size:12px">
+        <i class="bi bi-broadcast me-1"></i>Scanning every 2 hours for new tenders, RFPs, and solar opportunities…
+      </div>
     </div>
   </div>
 </div>
@@ -411,5 +440,90 @@ async function saveAll(){
     }
   }
 }
+
+// ── Live Monitor ──────────────────────────────────────────────────────────────
+
+let monitorPanelOpen = false;
+
+function toggleMonitorPanel(){
+  monitorPanelOpen = !monitorPanelOpen;
+  const panel = document.getElementById('monitorPanel');
+  if(monitorPanelOpen){
+    panel.classList.remove('d-none');
+    loadMonitorAlerts();
+  } else {
+    panel.classList.add('d-none');
+  }
+}
+
+async function pollMonitorStatus(){
+  try {
+    const r = await fetch("{{ url_for('monitor_status') }}");
+    const j = await r.json();
+    const badge = document.getElementById('monitorBadge');
+    const status = document.getElementById('monitorStatus');
+    if(j.new_count > 0){
+      badge.textContent = j.new_count;
+      badge.classList.remove('d-none');
+    } else {
+      badge.classList.add('d-none');
+    }
+    if(status && j.last_scan){
+      status.textContent = 'Last scan: ' + j.last_scan + ' · ' + j.last_count + ' new';
+    }
+  } catch(e){}
+}
+
+async function loadMonitorAlerts(){
+  try {
+    const r = await fetch("{{ url_for('monitor_alerts_list') }}");
+    const j = await r.json();
+    const list = document.getElementById('monitorAlertsList');
+    if(!j.alerts || j.alerts.length === 0){
+      list.innerHTML = '<div class="text-secondary text-center py-3" style="font-size:12px"><i class="bi bi-check-circle me-1 text-success"></i>No new alerts — monitoring active, scans every 2 hours.</div>';
+      return;
+    }
+    list.innerHTML = j.alerts.map(a => `
+      <div class="mb-2 p-3 rounded" style="background:#0a140a;border:1px solid #22c55e33">
+        <div class="d-flex justify-content-between align-items-start">
+          <div style="flex:1;min-width:0">
+            <a href="${a.url}" target="_blank" rel="noopener" style="color:#4ade80;font-size:12px;font-weight:700;text-decoration:none;word-break:break-all">
+              <i class="bi bi-box-arrow-up-right me-1"></i>${a.title || a.url}
+            </a>
+            <div style="font-size:10px;color:#6868a0;margin-top:2px">${a.source_type} · ${a.country} · ${a.found_at}</div>
+            ${a.snippet ? `<div style="font-size:11px;color:#9090c0;margin-top:4px;line-height:1.4">${a.snippet.substring(0,180)}…</div>` : ''}
+          </div>
+          <span class="badge ms-2 flex-shrink-0" style="background:#22c55e22;color:#22c55e;font-size:9px">NEW</span>
+        </div>
+      </div>`).join('');
+  } catch(e){}
+}
+
+async function dismissAlerts(){
+  const fd = new FormData();
+  fd.append('_csrf', CSRF);
+  await fetch("{{ url_for('monitor_dismiss') }}", {method:'POST', body:fd});
+  document.getElementById('monitorBadge').classList.add('d-none');
+  loadMonitorAlerts();
+}
+
+async function triggerScan(){
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Scanning…';
+  const fd = new FormData();
+  fd.append('_csrf', CSRF);
+  await fetch("{{ url_for('monitor_run_now') }}", {method:'POST', body:fd});
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Scan Now';
+    pollMonitorStatus();
+    if(monitorPanelOpen) loadMonitorAlerts();
+  }, 5000);
+}
+
+// Poll badge every 5 minutes
+pollMonitorStatus();
+setInterval(pollMonitorStatus, 300000);
 </script>
 {% endblock %}
