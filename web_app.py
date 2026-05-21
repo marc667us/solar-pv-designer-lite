@@ -4774,11 +4774,21 @@ _COUNTRY_EXEMPTIONS = {
 }
 
 
-def _foreign_country_in_text(text, loc_lower):
-    """Return True if text names a country other than loc_lower (word-boundary match).
-    Used as a hard gate to block wrong-country results entirely."""
+def _foreign_country_in_text(title, loc_lower):
+    """Return True only when the selected country is ABSENT from the title
+    but a DIFFERENT country IS present — i.e., the page is clearly about
+    the wrong country.
+
+    If the selected country appears in the title we keep the result even if
+    another country is also mentioned (regional/multi-country tenders are fine
+    as long as the target country is named).  Checking only the title (not the
+    URL) avoids false positives from aggregator sites that embed country codes
+    in their URL paths."""
+    t = title.lower()
+    # Selected country present → clearly relevant, don't block
+    if loc_lower in t:
+        return False
     exempt = {loc_lower} | _COUNTRY_EXEMPTIONS.get(loc_lower, set())
-    t = text.lower()
     for name in _ALL_COUNTRY_NAMES:
         if name in exempt:
             continue
@@ -5041,7 +5051,7 @@ def admin_agent_run():
                             continue
                         # 4b. Hard foreign-country gate: if the title or URL explicitly names
                         #     a DIFFERENT country, reject immediately — no exceptions.
-                        if _foreign_country_in_text(title + " " + url_lower, loc_lower):
+                        if _foreign_country_in_text(title, loc_lower):
                             continue
                         # 5. Country gate
                         # Formal: ONLY the country name itself must appear in title or URL.
@@ -5497,7 +5507,7 @@ def _monitor_search(loc="Ghana"):
                         if any(w in title for w in news_title_words):
                             continue
                         # Hard foreign-country gate: reject if title/URL names a different country
-                        if _foreign_country_in_text(title + " " + url_lower, loc_lower):
+                        if _foreign_country_in_text(title, loc_lower):
                             continue
                         # Country gate — formal: country name in title/url; social: alias list
                         if _is_social(url) or _is_job_board(url):
