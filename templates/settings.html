@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Display Settings — SolarPro{% endblock %}
+{% block title %}Settings — SolarPro{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -9,14 +9,102 @@
 <div class="rounded-3 p-4 mb-4" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1040 100%);border:1px solid var(--sp-border)">
   <div class="d-flex align-items-center gap-3">
     <div style="width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#7c3aed,#a78bfa);display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff">
-      <i class="bi bi-sliders"></i>
+      <i class="bi bi-gear-fill"></i>
     </div>
     <div>
-      <h4 class="fw-black mb-0">Display Settings</h4>
-      <div class="text-secondary" style="font-size:13px">Personalise theme, fonts, colours and layout. Changes apply instantly and are saved in your browser.</div>
+      <h4 class="fw-black mb-0">Settings</h4>
+      <div class="text-secondary" style="font-size:13px">Organisation profile, display preferences and account options.</div>
     </div>
   </div>
 </div>
+
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in msgs %}
+  <div class="alert alert-{{ cat }} alert-dismissible fade show py-2 mb-3" role="alert" style="font-size:13px">
+    {{ msg }}<button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endwith %}
+
+<!-- ── Organisation Profile ──────────────────────────────────────── -->
+<div class="solar-card p-4 mb-4">
+  <div class="section-head mb-3"><i class="bi bi-building me-1"></i>Organisation Profile</div>
+  <form method="post" action="{{ url_for('settings') }}">
+    <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token','') }}">
+    <div class="row g-3">
+
+      <div class="col-md-6">
+        <label class="form-label" style="font-size:12px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px">Organisation / Company Name</label>
+        <input type="text" name="org_name" class="form-control sp-input"
+               value="{{ user.org_name or '' }}" placeholder="e.g. SolarPro Ltd">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label" style="font-size:12px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px">Organisation Email</label>
+        <input type="email" name="org_email" class="form-control sp-input"
+               value="{{ user.org_email or '' }}" placeholder="info@yourcompany.com">
+        <div style="font-size:11px;color:var(--sp-muted);margin-top:4px">Used on generated reports and proposals.</div>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label" style="font-size:12px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px">Address</label>
+        <textarea name="org_address" class="form-control sp-input" rows="2"
+                  placeholder="Street, City, Region, Country, Postcode">{{ user.org_address or '' }}</textarea>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label" style="font-size:12px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px">Phone / WhatsApp</label>
+        <input type="tel" name="org_phone" class="form-control sp-input"
+               value="{{ user.org_phone or '' }}" placeholder="+44 20 1234 5678">
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label" style="font-size:12px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px">Website</label>
+        <input type="url" name="org_website" class="form-control sp-input"
+               value="{{ user.org_website or '' }}" placeholder="https://yourcompany.com">
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label" style="font-size:12px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px">Time Zone</label>
+        <select name="timezone" class="form-select sp-input">
+          {% set tz_groups = [
+            ('Africa',    ['Africa/Abidjan','Africa/Accra','Africa/Addis_Ababa','Africa/Cairo','Africa/Casablanca','Africa/Johannesburg','Africa/Lagos','Africa/Nairobi','Africa/Tripoli','Africa/Tunis']),
+            ('America',   ['America/Anchorage','America/Bogota','America/Buenos_Aires','America/Chicago','America/Denver','America/Los_Angeles','America/Mexico_City','America/New_York','America/Sao_Paulo','America/Toronto']),
+            ('Asia',      ['Asia/Bangkok','Asia/Dubai','Asia/Hong_Kong','Asia/Jakarta','Asia/Karachi','Asia/Kolkata','Asia/Kuwait','Asia/Manila','Asia/Riyadh','Asia/Seoul','Asia/Shanghai','Asia/Singapore','Asia/Tokyo']),
+            ('Atlantic',  ['Atlantic/Reykjavik']),
+            ('Australia', ['Australia/Adelaide','Australia/Brisbane','Australia/Melbourne','Australia/Perth','Australia/Sydney']),
+            ('Europe',    ['Europe/Amsterdam','Europe/Athens','Europe/Berlin','Europe/Brussels','Europe/Dublin','Europe/Helsinki','Europe/Istanbul','Europe/Lisbon','Europe/London','Europe/Madrid','Europe/Moscow','Europe/Oslo','Europe/Paris','Europe/Rome','Europe/Stockholm','Europe/Warsaw','Europe/Zurich']),
+            ('Pacific',   ['Pacific/Auckland','Pacific/Fiji','Pacific/Honolulu']),
+            ('UTC',       ['UTC']),
+          ] %}
+          {% for region, tzs in tz_groups %}
+            <optgroup label="{{ region }}">
+              {% for tz in tzs %}
+              <option value="{{ tz }}" {% if (user.timezone or 'UTC') == tz %}selected{% endif %}>{{ tz.split('/')[-1].replace('_',' ') }}</option>
+              {% endfor %}
+            </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+
+    </div><!-- /row -->
+
+    <div class="d-flex align-items-center justify-content-between mt-4">
+      <div style="font-size:12px;color:var(--sp-muted)">
+        <i class="bi bi-info-circle me-1"></i>This information appears on generated PDF reports and proposals.
+      </div>
+      <button type="submit" class="btn btn-sm px-4 fw-bold"
+        style="background:linear-gradient(135deg,var(--sp-accent),var(--sp-accent2));color:#000;border:none">
+        <i class="bi bi-check-lg me-1"></i>Save Profile
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- ── Display Settings ──────────────────────────────────────────── -->
+<div class="solar-card p-4 mb-1">
+  <div class="section-head"><i class="bi bi-sliders me-1"></i>Display Settings</div>
+  <div style="font-size:12px;color:var(--sp-muted);margin-bottom:16px">Personalise theme, fonts, colours and layout. Changes apply instantly and are saved in your browser.</div>
 
 <!-- Settings grid -->
 <div class="row g-4">
@@ -208,7 +296,9 @@
     </div>
   </div>
 
-</div><!-- /row -->
+</div><!-- /settings grid row -->
+</div><!-- /display settings card -->
+
 </div><!-- /col -->
 </div><!-- /row -->
 {% endblock %}

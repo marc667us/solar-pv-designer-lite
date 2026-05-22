@@ -391,6 +391,20 @@ def init_db():
                 c.execute(stmt)
         except Exception:
             pass
+    # Migrate: org profile columns on users
+    for col, defval in [
+        ("org_name",    "''"),
+        ("org_address", "''"),
+        ("org_email",   "''"),
+        ("org_phone",   "''"),
+        ("org_website", "''"),
+        ("timezone",    "'UTC'"),
+    ]:
+        try:
+            with get_db() as c:
+                c.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT {defval}")
+        except Exception:
+            pass
     # Seed default users — ensure admin and owner accounts always exist
     _SEED_USERS = [
         ("admin",    "admin@solarpro.global", "Administrator", "SolarAdmin2026!", "enterprise", 1),
@@ -3354,9 +3368,22 @@ def account():
                            total_paid=total_paid)
 
 
-@app.route("/settings")
+@app.route("/settings", methods=["GET", "POST"])
 @login_required
 def settings():
+    if request.method == "POST":
+        csrf_protect()
+        fields = ["org_name", "org_address", "org_email", "org_phone", "org_website", "timezone"]
+        vals = {f: request.form.get(f, "").strip() for f in fields}
+        with get_db() as c:
+            c.execute(
+                "UPDATE users SET org_name=?, org_address=?, org_email=?, "
+                "org_phone=?, org_website=?, timezone=? WHERE id=?",
+                (vals["org_name"], vals["org_address"], vals["org_email"],
+                 vals["org_phone"], vals["org_website"], vals["timezone"],
+                 session["user_id"]))
+        flash("Organisation profile saved.", "success")
+        return redirect(url_for("settings"))
     return render_template("settings.html", user=current_user())
 
 

@@ -80,6 +80,14 @@
   .data-row.total{background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2)}
   .data-row.total .val{color:var(--solar-gold);font-size:15px}
 
+  /* Form inputs themed */
+  .sp-input{background:rgba(255,255,255,.04)!important;border:1px solid var(--sp-border)!important;
+    color:var(--sp-text)!important;border-radius:8px!important;font-size:13px!important;
+    transition:border-color .15s,box-shadow .15s}
+  .sp-input:focus{border-color:var(--sp-accent)!important;box-shadow:0 0 0 2px rgba(245,158,11,.15)!important;outline:none!important}
+  .sp-input::placeholder{color:var(--sp-muted)!important}
+  .sp-input option,.sp-input optgroup{background:#0f0f22;color:var(--sp-text)}
+
   /* Toast notifications */
   .toast-stack{position:fixed;top:70px;right:16px;z-index:9000;display:flex;flex-direction:column;gap:8px;min-width:300px}
   .solar-toast{background:#0f0f22;border:1px solid #1e1e3a;border-radius:10px;
