@@ -4852,21 +4852,38 @@ def _extract_location_from_text(title, body, loc):
     return loc
 
 
-def _foreign_country_in_text(title, loc_lower):
-    """Return True only when the selected country is ABSENT from the title
-    but a DIFFERENT country IS present — i.e., the page is clearly about
-    the wrong country.
+def _foreign_country_in_text(title, loc_lower, full_content=None):
+    """Return True if this page is clearly about a different country.
 
-    If the selected country appears in the title we keep the result even if
-    another country is also mentioned (regional/multi-country tenders are fine
-    as long as the target country is named).  Checking only the title (not the
-    URL) avoids false positives from aggregator sites that embed country codes
-    in their URL paths."""
+    Title-only check (no full_content):
+      Block if selected country is absent from title AND a foreign country is present.
+
+    With full_content:
+      Even if selected country is in the title, block if any foreign country is
+      mentioned MORE TIMES than the selected country in the full page text — that
+      means the page is really about the foreign country (e.g. a Sudan tender
+      that has 'Ghana' once in a sidebar nav).
+    """
     t = title.lower()
-    # Selected country present → clearly relevant, don't block
+    exempt = {loc_lower} | _COUNTRY_EXEMPTIONS.get(loc_lower, set())
+
+    if full_content:
+        fc = full_content.lower()
+        loc_count = fc.count(loc_lower)
+        # Require selected country to appear at least twice in page content
+        if loc_count < 2:
+            return True
+        # Block if any foreign country appears more than selected country
+        for name in _ALL_COUNTRY_NAMES:
+            if name in exempt:
+                continue
+            if fc.count(name) > loc_count:
+                return True
+        return False
+
+    # No full content — title-only check
     if loc_lower in t:
         return False
-    exempt = {loc_lower} | _COUNTRY_EXEMPTIONS.get(loc_lower, set())
     for name in _ALL_COUNTRY_NAMES:
         if name in exempt:
             continue
@@ -5198,8 +5215,9 @@ def admin_agent_run():
             # Re-check expired deadline on full content
             if r.get("full_content") and _is_past_deadline(content):
                 continue
-            # Re-check wrong country on full content
-            if r.get("full_content") and _foreign_country_in_text(title_r, loc_lower):
+            # Re-check wrong country using full content (count-based dominance check)
+            fc = r.get("full_content")
+            if _foreign_country_in_text(title_r, loc_lower, full_content=fc):
                 continue
             # For formal sources: rfp keyword must appear somewhere in full content
             if r.get("full_content") and not (_is_social(url_r) or _is_job_board(url_r)):
@@ -5217,29 +5235,31 @@ def admin_agent_run():
             client = _ant.Anthropic(api_key=api_key)
             snippets = "\n\n".join(
                 f"[{i+1}] TITLE: {r.get('title','')}\nURL: {r.get('href','')}\n"
-                f"CONTENT: {(r.get('full_content') or r.get('body',''))[:1500]}"
+                f"CONTENT:\n{(r.get('full_content') or r.get('body',''))[:3000]}"
                 for i, r in enumerate(search_results[:12])
             )
-            prompt = f"""You are a solar PV procurement intelligence analyst. Extract ONLY genuine RFPs, tenders, and solicitations from the search results below — not news articles.
+            prompt = f"""You are a solar PV procurement intelligence analyst. Your job is to READ and ANALYSE the full content of each result below, then extract ONLY genuine, currently open procurement opportunities.
 
 Search criteria:
-- Location: {loc_label}
+- Target country: {loc_label} — results must be FOR THIS COUNTRY ONLY
 - Sector: {sector}
 - System size: {system_kw} kW
 - Budget: {budget}
 - Focus: {focus or 'general'}
 
-REAL procurement search results:
+RESULTS TO ANALYSE:
 
 {snippets}
 
-STRICT RULES:
-1. ONLY extract genuine RFPs, tenders, invitations to bid, expressions of interest, or contract notices for solar/energy projects
-2. SKIP any news article, blog post, or general information page
-3. source_url = exact URL from result, copied verbatim
-4. source_title = exact title, copied verbatim
-5. company_name = issuing organisation — NOT a made-up name
-6. If a field is not stated in the result, use "" or 0 — never invent data
+INSTRUCTIONS — read each result's CONTENT carefully before deciding:
+1. READ the full content provided. If it does not clearly confirm an open, active procurement for solar works IN {loc_label}, SKIP IT entirely.
+2. SKIP if the content is about a different country — even if {loc_label} appears once in a header or navigation. The TENDER ITSELF must be in {loc_label}.
+3. SKIP news articles, project completion stories, country overviews, funding announcements.
+4. SKIP if the closing/deadline date has already passed (today is {__import__('datetime').date.today()}).
+5. ONLY include results where the content confirms: what is being procured, who is issuing it, and how to respond.
+6. source_url = exact URL, copied verbatim — do not modify
+7. company_name = the issuing organisation extracted from the content
+8. Never invent data — use "" if a field is not stated in the content
 
 PRIORITY RULE — score based on how many of these 5 key fields are present in the result:
   1. work_description  — scope / what is being procured
