@@ -3354,6 +3354,12 @@ def account():
                            total_paid=total_paid)
 
 
+@app.route("/settings")
+@login_required
+def settings():
+    return render_template("settings.html", user=current_user())
+
+
 @app.route("/account/cancel", methods=["POST"])
 @login_required
 def account_cancel():

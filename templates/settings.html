@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+{% block title %}Display Settings — SolarPro{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+<div class="col-lg-9">
+
+<!-- Header -->
+<div class="rounded-3 p-4 mb-4" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1040 100%);border:1px solid var(--sp-border)">
+  <div class="d-flex align-items-center gap-3">
+    <div style="width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#7c3aed,#a78bfa);display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff">
+      <i class="bi bi-sliders"></i>
+    </div>
+    <div>
+      <h4 class="fw-black mb-0">Display Settings</h4>
+      <div class="text-secondary" style="font-size:13px">Personalise theme, fonts, colours and layout. Changes apply instantly and are saved in your browser.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings grid -->
+<div class="row g-4">
+
+  <!-- Theme -->
+  <div class="col-12">
+    <div class="solar-card p-4">
+      <div class="section-head"><i class="bi bi-palette me-1"></i>Theme</div>
+      <div class="d-flex flex-wrap gap-3" id="themeGroup">
+        {% set themes = [
+          ('dark',     'Dark',     '#0a0a14', '#0f0f22', '#e2e2f0', 'Default dark theme'),
+          ('midnight', 'Midnight', '#000010', '#080820', '#c8c8ff', 'Deep blue-black'),
+          ('slate',    'Slate',    '#0f1117', '#161b22', '#e6edf3', 'GitHub-style dark'),
+          ('solar',    'Solar',    '#0c0800', '#1a1000', '#fde68a', 'Warm amber tones'),
+          ('light',    'Light',    '#f1f5f9', '#ffffff', '#1e293b', 'Clean light mode'),
+        ] %}
+        {% for key, label, bg, card, text, desc in themes %}
+        <div class="theme-swatch" data-val="{{ key }}"
+          style="cursor:pointer;border-radius:12px;overflow:hidden;border:2px solid transparent;transition:all .2s;width:130px">
+          <div style="background:{{ bg }};padding:10px 12px;height:70px;position:relative">
+            <div style="background:{{ card }};border-radius:6px;padding:6px 8px;margin-bottom:5px">
+              <div style="width:60%;height:6px;border-radius:3px;background:{{ text }};opacity:.8;margin-bottom:4px"></div>
+              <div style="width:40%;height:4px;border-radius:2px;background:{{ text }};opacity:.4"></div>
+            </div>
+            <div style="width:100%;height:6px;border-radius:3px;background:linear-gradient(90deg,#f59e0b,#0ea5e9);opacity:.7"></div>
+          </div>
+          <div style="padding:6px 10px;background:{{ card }};border-top:1px solid rgba(255,255,255,.08)">
+            <div style="font-size:12px;font-weight:700;color:{{ text }}">{{ label }}</div>
+            <div style="font-size:10px;color:{{ text }};opacity:.5">{{ desc }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Accent colour -->
+  <div class="col-md-6">
+    <div class="solar-card p-4 h-100">
+      <div class="section-head"><i class="bi bi-droplet-half me-1"></i>Accent Colour</div>
+      <div class="d-flex flex-wrap gap-2" id="accentGroup">
+        {% for key, hex, name in [
+          ('gold','#f59e0b','Gold'),('blue','#3b82f6','Blue'),
+          ('green','#22c55e','Green'),('purple','#a78bfa','Purple'),
+          ('orange','#f97316','Orange'),('cyan','#06b6d4','Cyan'),
+          ('red','#ef4444','Red'),
+        ] %}
+        <div class="accent-swatch" data-val="{{ key }}" title="{{ name }}"
+          style="width:38px;height:38px;border-radius:50%;background:{{ hex }};
+                 cursor:pointer;border:3px solid transparent;transition:all .15s;
+                 box-shadow:0 2px 8px {{ hex }}44"></div>
+        {% endfor %}
+      </div>
+      <div class="mt-3" style="font-size:12px;color:var(--sp-muted)">
+        Affects buttons, KPI values, active nav links and highlights.
+      </div>
+    </div>
+  </div>
+
+  <!-- Card radius -->
+  <div class="col-md-6">
+    <div class="solar-card p-4 h-100">
+      <div class="section-head"><i class="bi bi-square-half me-1"></i>Card Style</div>
+      <div class="d-flex gap-3" id="radiusGroup">
+        {% for key, label, r, desc in [
+          ('sharp','Sharp','4px','Flat edges'),
+          ('def','Default','14px','Rounded corners'),
+          ('pill','Pill','24px','Soft curves'),
+        ] %}
+        <div class="radius-swatch text-center" data-val="{{ key }}" style="cursor:pointer;flex:1;padding:12px 8px;border-radius:10px;border:2px solid var(--sp-border);transition:all .2s">
+          <div style="width:100%;height:32px;background:var(--sp-card-bg);border:1px solid var(--sp-border);border-radius:{{ r }};margin-bottom:8px"></div>
+          <div style="font-size:12px;font-weight:700">{{ label }}</div>
+          <div style="font-size:10px;color:var(--sp-muted)">{{ desc }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Font family -->
+  <div class="col-md-7">
+    <div class="solar-card p-4 h-100">
+      <div class="section-head"><i class="bi bi-type me-1"></i>Font Family</div>
+      <div class="d-flex flex-column gap-2" id="fontGroup">
+        {% for key, family, label in [
+          ('system', "'Segoe UI',system-ui,sans-serif", 'System UI — Segoe UI / San Francisco'),
+          ('inter',  "'Inter',sans-serif",              'Inter — Clean modern sans-serif'),
+          ('roboto', "'Roboto',sans-serif",              'Roboto — Google Material style'),
+          ('dm',     "'DM Sans',sans-serif",             'DM Sans — Geometric rounded'),
+          ('mono',   "'JetBrains Mono',monospace",       'Monospace — Technical / code feel'),
+        ] %}
+        <div class="font-swatch d-flex align-items-center gap-3 p-2 rounded" data-val="{{ key }}"
+          style="cursor:pointer;border:1px solid transparent;transition:all .15s">
+          <div style="width:10px;height:10px;border-radius:50%;background:var(--sp-border);flex-shrink:0" class="font-dot"></div>
+          <div>
+            <div style="font-family:{{ family }};font-size:15px;font-weight:600;line-height:1.2">Aa — Solar PV Design</div>
+            <div style="font-size:10px;color:var(--sp-muted);margin-top:1px">{{ label }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Font size -->
+  <div class="col-md-5">
+    <div class="solar-card p-4 h-100">
+      <div class="section-head"><i class="bi bi-text-size me-1"></i>Font Size</div>
+      <div class="d-flex flex-column gap-3" id="sizeGroup">
+        {% for key, label, px, sample in [
+          ('sm', 'Small',  '13px', 'Compact — more content on screen'),
+          ('md', 'Normal', '14px', 'Balanced — recommended'),
+          ('lg', 'Large',  '16px', 'Accessible — easier to read'),
+        ] %}
+        <div class="size-swatch d-flex align-items-center justify-content-between p-2 px-3 rounded" data-val="{{ key }}"
+          style="cursor:pointer;border:1px solid transparent;transition:all .15s">
+          <div>
+            <div style="font-size:{{ px }};font-weight:700">{{ label }}</div>
+            <div style="font-size:11px;color:var(--sp-muted)">{{ sample }}</div>
+          </div>
+          <div style="font-size:11px;color:var(--sp-muted)">{{ px }}</div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Density -->
+      <div class="section-head mt-4"><i class="bi bi-distribute-vertical me-1"></i>Density</div>
+      <div class="d-flex flex-column gap-2" id="densityGroup">
+        {% for key, label, desc in [
+          ('normal',      'Normal',      'Standard spacing'),
+          ('compact',     'Compact',     'Tighter for power users'),
+          ('comfortable', 'Comfortable', 'Extra breathing room'),
+        ] %}
+        <div class="density-swatch d-flex align-items-center justify-content-between p-2 px-3 rounded" data-val="{{ key }}"
+          style="cursor:pointer;border:1px solid transparent;transition:all .15s">
+          <div style="font-size:13px;font-weight:600">{{ label }}</div>
+          <div style="font-size:11px;color:var(--sp-muted)">{{ desc }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Live preview -->
+  <div class="col-12">
+    <div class="solar-card p-4">
+      <div class="section-head"><i class="bi bi-eye me-1"></i>Live Preview</div>
+      <div id="preview" style="background:var(--sp-bg);border-radius:var(--sp-radius);padding:20px;border:1px solid var(--sp-border)">
+        <div class="row g-3">
+          <div class="col-md-3">
+            <div style="background:var(--sp-card-bg);border:1px solid var(--sp-border);border-radius:var(--sp-radius);padding:14px">
+              <div style="font-size:10px;color:var(--sp-muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">System Size</div>
+              <div style="font-size:22px;font-weight:900;background:linear-gradient(90deg,var(--sp-accent),#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">12.5 kW</div>
+              <div style="font-size:11px;color:var(--sp-muted)">peak capacity</div>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div style="background:var(--sp-card-bg);border:1px solid var(--sp-border);border-radius:var(--sp-radius);padding:14px">
+              <div style="font-size:10px;color:var(--sp-muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Battery Bank</div>
+              <div style="font-size:22px;font-weight:900;background:linear-gradient(90deg,var(--sp-accent),#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">200 Ah</div>
+              <div style="font-size:11px;color:var(--sp-muted)">lithium storage</div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div style="background:var(--sp-card-bg);border:1px solid var(--sp-border);border-radius:var(--sp-radius);padding:14px">
+              <div style="font-size:12px;font-weight:800;margin-bottom:8px;color:var(--sp-text)">Sample Solar Project</div>
+              <div style="font-size:12px;color:var(--sp-sub);margin-bottom:4px">Location: Accra, Ghana · Sector: Commercial · 48V DC</div>
+              <div style="display:flex;gap:6px">
+                <span style="font-size:10px;padding:2px 10px;border-radius:20px;background:var(--sp-accent)22;color:var(--sp-accent);border:1px solid var(--sp-accent)44;font-weight:700">APPROVED</span>
+                <span style="font-size:10px;padding:2px 10px;border-radius:20px;background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;font-weight:700">BANKABLE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="col-12">
+    <div class="d-flex align-items-center justify-content-between">
+      <button class="btn btn-sm px-4" id="resetBtn"
+        style="background:var(--sp-card-bg);border:1px solid var(--sp-border);color:var(--sp-muted)">
+        <i class="bi bi-arrow-counterclockwise me-1"></i>Reset to Defaults
+      </button>
+      <div id="saveMsg" class="text-success" style="font-size:13px;display:none">
+        <i class="bi bi-check-circle me-1"></i>Settings saved
+      </div>
+    </div>
+  </div>
+
+</div><!-- /row -->
+</div><!-- /col -->
+</div><!-- /row -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+const DEFAULTS = {theme:'dark', accent:'gold', font:'system', size:'md', radius:'def', density:'normal'};
+let S = {};
+try { S = JSON.parse(localStorage.getItem('sp_settings') || '{}'); } catch(e){}
+S = Object.assign({}, DEFAULTS, S);
+
+const THEMES = {
+  dark:     {bg:'#0a0a14',cb:'#0f0f22',bd:'#1e1e3a',tx:'#e2e2f0',mu:'#6868a0'},
+  midnight: {bg:'#000010',cb:'#080820',bd:'#12122a',tx:'#c8c8ff',mu:'#5050a0'},
+  slate:    {bg:'#0f1117',cb:'#161b22',bd:'#21262d',tx:'#e6edf3',mu:'#6e7681'},
+  solar:    {bg:'#0c0800',cb:'#1a1000',bd:'#2a1e00',tx:'#fde68a',mu:'#92610a'},
+  light:    {bg:'#f1f5f9',cb:'#ffffff',bd:'#e2e8f0',tx:'#1e293b',mu:'#64748b'},
+};
+const ACCENTS   = {gold:'#f59e0b',blue:'#3b82f6',green:'#22c55e',purple:'#a78bfa',orange:'#f97316',cyan:'#06b6d4',red:'#ef4444'};
+const FONTS     = {system:"'Segoe UI',system-ui,sans-serif",inter:"'Inter',sans-serif",roboto:"'Roboto',sans-serif",dm:"'DM Sans',sans-serif",mono:"'JetBrains Mono','Fira Code',monospace"};
+const SIZES     = {sm:'13px',md:'14px',lg:'16px'};
+const RADII     = {sharp:'4px',def:'14px',pill:'24px'};
+const DENSITIES = {compact:'0.75rem 1rem',normal:'1rem 1.5rem',comfortable:'1.5rem 2rem'};
+
+function applySettings(){
+  const t  = THEMES[S.theme]   || THEMES.dark;
+  const ac = ACCENTS[S.accent] || ACCENTS.gold;
+  const fn = FONTS[S.font]     || FONTS.system;
+  const fs = SIZES[S.size]     || SIZES.md;
+  const rd = RADII[S.radius]   || RADII.def;
+  const r  = document.documentElement.style;
+  r.setProperty('--sp-bg',      t.bg);
+  r.setProperty('--sp-card-bg', t.cb);
+  r.setProperty('--sp-border',  t.bd);
+  r.setProperty('--sp-text',    t.tx);
+  r.setProperty('--sp-muted',   t.mu);
+  r.setProperty('--sp-accent',  ac);
+  r.setProperty('--sp-font',    fn);
+  r.setProperty('--sp-fs',      fs);
+  r.setProperty('--sp-radius',  rd);
+  // Load Google Font if needed
+  if(S.font && S.font !== 'system' && S.font !== 'mono'){
+    const map = {inter:'Inter',roboto:'Roboto',dm:'DM+Sans'};
+    if(!document.querySelector('link[data-spfont]')){
+      const l = document.createElement('link');
+      l.rel = 'stylesheet'; l.dataset.spfont = '1';
+      l.href = 'https://fonts.googleapis.com/css2?family='+map[S.font]+':wght@400;600;700;900&display=swap';
+      document.head.appendChild(l);
+    }
+  }
+  localStorage.setItem('sp_settings', JSON.stringify(S));
+  showSaved();
+}
+
+function showSaved(){
+  const m = document.getElementById('saveMsg');
+  m.style.display = 'block';
+  clearTimeout(m._t);
+  m._t = setTimeout(()=> m.style.display='none', 2000);
+}
+
+function markActive(groupId, val, activeStyle, inactiveStyle){
+  document.querySelectorAll('#'+groupId+' [data-val]').forEach(el => {
+    const isActive = el.dataset.val === val;
+    Object.entries(isActive ? activeStyle : inactiveStyle).forEach(([k,v]) => el.style[k]=v);
+  });
+}
+
+function refreshUI(){
+  // Themes
+  document.querySelectorAll('#themeGroup .theme-swatch').forEach(el => {
+    el.style.borderColor = el.dataset.val === S.theme ? 'var(--sp-accent)' : 'transparent';
+    el.style.transform   = el.dataset.val === S.theme ? 'scale(1.04)' : 'scale(1)';
+  });
+  // Accents
+  document.querySelectorAll('#accentGroup .accent-swatch').forEach(el => {
+    el.style.borderColor = el.dataset.val === S.accent ? '#fff' : 'transparent';
+    el.style.transform   = el.dataset.val === S.accent ? 'scale(1.2)' : 'scale(1)';
+  });
+  // Fonts
+  document.querySelectorAll('#fontGroup .font-swatch').forEach(el => {
+    const active = el.dataset.val === S.font;
+    el.style.borderColor   = active ? 'var(--sp-accent)' : 'transparent';
+    el.style.background    = active ? 'var(--sp-accent)11' : 'transparent';
+    el.querySelector('.font-dot').style.background = active ? 'var(--sp-accent)' : 'var(--sp-border)';
+  });
+  // Sizes
+  document.querySelectorAll('#sizeGroup .size-swatch').forEach(el => {
+    const active = el.dataset.val === S.size;
+    el.style.borderColor = active ? 'var(--sp-accent)' : 'transparent';
+    el.style.background  = active ? 'var(--sp-accent)11' : 'transparent';
+  });
+  // Radius
+  document.querySelectorAll('#radiusGroup .radius-swatch').forEach(el => {
+    const active = el.dataset.val === S.radius;
+    el.style.borderColor = active ? 'var(--sp-accent)' : 'var(--sp-border)';
+    el.style.background  = active ? 'var(--sp-accent)11' : 'transparent';
+  });
+  // Density
+  document.querySelectorAll('#densityGroup .density-swatch').forEach(el => {
+    const active = el.dataset.val === S.density;
+    el.style.borderColor = active ? 'var(--sp-accent)' : 'transparent';
+    el.style.background  = active ? 'var(--sp-accent)11' : 'transparent';
+  });
+}
+
+// Wire up click handlers
+document.querySelectorAll('#themeGroup  [data-val]').forEach(el => el.addEventListener('click', ()=>{ S.theme   = el.dataset.val; applySettings(); refreshUI(); }));
+document.querySelectorAll('#accentGroup [data-val]').forEach(el => el.addEventListener('click', ()=>{ S.accent  = el.dataset.val; applySettings(); refreshUI(); }));
+document.querySelectorAll('#fontGroup   [data-val]').forEach(el => el.addEventListener('click', ()=>{ S.font    = el.dataset.val; applySettings(); refreshUI(); }));
+document.querySelectorAll('#sizeGroup   [data-val]').forEach(el => el.addEventListener('click', ()=>{ S.size    = el.dataset.val; applySettings(); refreshUI(); }));
+document.querySelectorAll('#radiusGroup [data-val]').forEach(el => el.addEventListener('click', ()=>{ S.radius  = el.dataset.val; applySettings(); refreshUI(); }));
+document.querySelectorAll('#densityGroup[data-val]').forEach(el => el.addEventListener('click', ()=>{ S.density = el.dataset.val; applySettings(); refreshUI(); }));
+
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  S = Object.assign({}, DEFAULTS);
+  applySettings(); refreshUI();
+});
+
+// Init
+refreshUI();
+</script>
+{% endblock %}
