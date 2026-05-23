@@ -26,7 +26,7 @@ WARN     = "#ffd54f"
 
 API_URL    = "https://api.anthropic.com/v1/messages"
 API_VER    = "2023-06-01"
-MODEL      = "claude-haiku-4-5-20251001"
+MODEL      = "claude-opus-4-7"
 MAX_TOKENS = 1024
 
 SYSTEM_PROMPT = """You are an expert solar PV system design assistant specialising in off-grid and hybrid systems for Ghana and West Africa.
