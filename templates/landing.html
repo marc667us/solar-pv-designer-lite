@@ -111,6 +111,206 @@
 
 <div class="gradient-divider"></div>
 
+<!-- ══════════════════════════════ FREE ASSESSMENT — PIPELINE ENTRY ══════ -->
+<div class="mb-5" id="assessment-section"
+     style="background:linear-gradient(135deg,#060f06,#0a180a);
+            border:2px solid #22c55e44;border-radius:24px;overflow:hidden">
+
+  <div style="height:4px;background:linear-gradient(90deg,#22c55e,#4ade80,#f59e0b)"></div>
+
+  <div class="p-4 p-md-5">
+    <div class="row g-5">
+
+      <!-- LEFT — inline form -->
+      <div class="col-lg-7">
+
+        <div style="display:inline-flex;align-items:center;gap:6px;
+          background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);
+          color:#22c55e;padding:5px 14px;border-radius:20px;
+          font-size:11px;font-weight:700;margin-bottom:14px">
+          <i class="bi bi-clipboard2-pulse-fill"></i> Free Solar Assessment — No Sign-Up Required
+        </div>
+
+        <h2 class="fw-black mb-2" style="font-size:clamp(1.4rem,2.5vw,2rem);line-height:1.2">
+          Tell us about your building.<br>
+          <span style="background:linear-gradient(90deg,#22c55e,#4ade80);
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
+            We'll start your solar design.
+          </span>
+        </h2>
+        <p class="mb-4" style="color:#6a8a6a;font-size:13px">
+          Fill in the form below — our engineering team will follow up within 24 hours.
+        </p>
+
+        <!-- ── The inline form ── -->
+        <form id="inlineAssessForm">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+          <!-- Row 1: Name + Phone -->
+          <div class="row g-2 mb-3">
+            <div class="col-sm-6">
+              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">
+                Full Name <span style="color:#f87171">*</span>
+              </label>
+              <input type="text" name="name" id="ia_name" required
+                     placeholder="e.g. Kwame Asante"
+                     style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
+                            color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">
+                Phone / WhatsApp <span style="color:#f87171">*</span>
+              </label>
+              <input type="tel" name="phone" id="ia_phone" required
+                     placeholder="e.g. +233 24 000 0000"
+                     style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
+                            color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px">
+            </div>
+          </div>
+
+          <!-- Row 2: Country + Region -->
+          <div class="row g-2 mb-3">
+            <div class="col-sm-6">
+              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">Country</label>
+              <select name="country" id="ia_country"
+                      style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
+                             color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px;-webkit-appearance:none">
+                <option value="">Select country…</option>
+                {% for c in countries %}
+                <option value="{{ c }}">{{ c }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">Region / City</label>
+              <select name="region" id="ia_region"
+                      style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
+                             color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px;-webkit-appearance:none">
+                <option value="">Select country first…</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Row 3: Building type + floors + size -->
+          <div class="row g-2 mb-3">
+            <div class="col-sm-5">
+              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">Type of Building</label>
+              <select name="building_type"
+                      style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
+                             color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px;-webkit-appearance:none">
+                <option value="">Select…</option>
+                <option>Residential House</option>
+                <option>Apartment</option>
+                <option>Office</option>
+                <option>Shop</option>
+                <option>Warehouse</option>
+                <option>Hotel</option>
+                <option>School</option>
+                <option>Hospital</option>
+                <option>Industrial</option>
+                <option>Mixed Use</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">Approx. Size (m²)</label>
+              <input type="text" name="building_size" placeholder="e.g. 250"
+                     style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
+                            color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px">
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">Floors</label>
+              <input type="number" name="num_floors" value="1" min="1"
+                     style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
+                            color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px">
+            </div>
+          </div>
+
+          <!-- Row 4: Description -->
+          <div class="mb-3">
+            <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">Building Description / Solar Needs</label>
+            <textarea name="building_desc" rows="2" placeholder="Briefly describe your building and what you need solar for…"
+                      style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
+                             color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px;resize:vertical"></textarea>
+          </div>
+
+          <!-- Error -->
+          <div id="ia_error" class="mb-2" style="color:#f87171;font-size:12px;display:none"></div>
+
+          <!-- Submit -->
+          <button type="submit" id="ia_btn"
+                  class="btn fw-bold w-100"
+                  style="background:linear-gradient(135deg,#22c55e,#16a34a);border:none;
+                         color:#000;font-size:14px;padding:12px;border-radius:10px">
+            <i class="bi bi-send-fill me-2"></i>Submit Free Assessment
+          </button>
+          <div class="mt-2 text-center" style="font-size:10px;color:#3a6a3a">
+            <i class="bi bi-lock-fill me-1"></i>No account needed · Your data is private · Reference issued instantly
+          </div>
+        </form>
+
+        <!-- Confirmation (shown after submit) -->
+        <div id="ia_confirm" style="display:none;background:#060f06;border:1px solid #22c55e44;
+             border-radius:16px;padding:28px;text-align:center">
+          <div style="font-size:48px;margin-bottom:12px">☀️</div>
+          <h5 class="fw-black mb-1" style="color:#e2e2f0">Thank you, <span id="ia_cname"></span>!</h5>
+          <p style="color:#6a8a6a;font-size:13px;margin-bottom:16px">
+            Your assessment has been received. Our engineering team will complete<br>
+            the design intake and contact you within 24 hours.
+          </p>
+          <div style="background:#0a0a14;border:1px solid #22c55e33;border-radius:10px;padding:16px;margin-bottom:20px">
+            <div style="font-size:10px;color:#4a6a4a;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Assessment Reference</div>
+            <div id="ia_cref" style="font-size:1.6rem;font-weight:900;color:#22c55e;letter-spacing:3px;font-family:monospace"></div>
+          </div>
+          <a id="ia_wa" href="#" target="_blank"
+             style="display:inline-flex;align-items:center;gap:8px;background:#25D366;
+                    color:#fff;border:none;border-radius:10px;padding:10px 20px;
+                    font-size:13px;font-weight:700;text-decoration:none;margin-right:8px">
+            <i class="bi bi-whatsapp"></i>WhatsApp Team
+          </a>
+          <button onclick="document.getElementById('ia_confirm').style.display='none';document.getElementById('inlineAssessForm').style.display='block';document.getElementById('inlineAssessForm').reset()"
+                  style="background:#1a3a1a;color:#86efac;border:1px solid #22c55e33;
+                         border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer">
+            Submit Another
+          </button>
+        </div>
+
+      </div><!-- /col-lg-7 -->
+
+      <!-- RIGHT — pipeline visual -->
+      <div class="col-lg-5 d-none d-lg-block">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+          color:#22c55e;margin-bottom:16px">
+          <i class="bi bi-kanban me-1"></i>What happens after you submit
+        </div>
+        {% for stage,color,icon,sub in [
+          ('Assessment Submitted',  '#6366f1','bi-clipboard2-pulse',    'Reference generated instantly'),
+          ('Assessment Reviewed',   '#818cf8','bi-clipboard2-check',    'Team reviews your building details'),
+          ('Lead Qualified',        '#22c55e','bi-patch-check-fill',    'Opportunity scored & assigned'),
+          ('Consultation',          '#0ea5e9','bi-camera-video',        'Engineer contacts you within 24 h'),
+          ('Proposal',              '#f59e0b','bi-file-earmark-text',   'Full solar proposal delivered'),
+          ('Won → Installation',    '#4ade80','bi-tools',               'Contract signed · Work begins'),
+        ] %}
+        <div class="d-flex align-items-start gap-3 mb-3">
+          <div style="width:34px;height:34px;border-radius:8px;background:{{ color }}15;
+            border:1px solid {{ color }}33;display:flex;align-items:center;
+            justify-content:center;flex-shrink:0">
+            <i class="bi {{ icon }}" style="color:{{ color }};font-size:14px"></i>
+          </div>
+          <div style="padding-top:2px">
+            <div style="font-size:12px;font-weight:700;color:#c0c0d8">{{ stage }}</div>
+            <div style="font-size:10px;color:#3a5a3a">{{ sub }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="gradient-divider"></div>
+
 <!-- ════════════════════════════════════════════ THE 3-STEP WORKFLOW ══════ -->
 <div class="text-center mb-4">
   <div class="section-label"><i class="bi bi-diagram-3 me-1"></i>How It Works</div>
@@ -608,204 +808,6 @@
       {% endfor %}
     </div>
     {% endif %}
-  </div>
-</div>
-
-<!-- ══════════════════════════════ FREE ASSESSMENT — PIPELINE ENTRY ══════ -->
-<div class="mb-5" id="assessment-section"
-     style="background:linear-gradient(135deg,#060f06,#0a180a);
-            border:2px solid #22c55e44;border-radius:24px;overflow:hidden">
-
-  <div style="height:4px;background:linear-gradient(90deg,#22c55e,#4ade80,#f59e0b)"></div>
-
-  <div class="p-4 p-md-5">
-    <div class="row g-5">
-
-      <!-- LEFT — inline form -->
-      <div class="col-lg-7">
-
-        <div style="display:inline-flex;align-items:center;gap:6px;
-          background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);
-          color:#22c55e;padding:5px 14px;border-radius:20px;
-          font-size:11px;font-weight:700;margin-bottom:14px">
-          <i class="bi bi-clipboard2-pulse-fill"></i> Free Solar Assessment — No Sign-Up Required
-        </div>
-
-        <h2 class="fw-black mb-2" style="font-size:clamp(1.4rem,2.5vw,2rem);line-height:1.2">
-          Tell us about your building.<br>
-          <span style="background:linear-gradient(90deg,#22c55e,#4ade80);
-            -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
-            We'll start your solar design.
-          </span>
-        </h2>
-        <p class="mb-4" style="color:#6a8a6a;font-size:13px">
-          Fill in the form below — our engineering team will follow up within 24 hours.
-        </p>
-
-        <!-- ── The inline form ── -->
-        <form id="inlineAssessForm">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-
-          <!-- Row 1: Name + Phone -->
-          <div class="row g-2 mb-3">
-            <div class="col-sm-6">
-              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">
-                Full Name <span style="color:#f87171">*</span>
-              </label>
-              <input type="text" name="name" id="ia_name" required
-                     placeholder="e.g. Kwame Asante"
-                     style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
-                            color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px">
-            </div>
-            <div class="col-sm-6">
-              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">
-                Phone / WhatsApp <span style="color:#f87171">*</span>
-              </label>
-              <input type="tel" name="phone" id="ia_phone" required
-                     placeholder="e.g. +233 24 000 0000"
-                     style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
-                            color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px">
-            </div>
-          </div>
-
-          <!-- Row 2: Country + Region -->
-          <div class="row g-2 mb-3">
-            <div class="col-sm-6">
-              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">Country</label>
-              <select name="country" id="ia_country"
-                      style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
-                             color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px;-webkit-appearance:none">
-                <option value="">Select country…</option>
-                {% for c in countries %}
-                <option value="{{ c }}">{{ c }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-sm-6">
-              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">Region / City</label>
-              <select name="region" id="ia_region"
-                      style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
-                             color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px;-webkit-appearance:none">
-                <option value="">Select country first…</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Row 3: Building type + floors + size -->
-          <div class="row g-2 mb-3">
-            <div class="col-sm-5">
-              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">Type of Building</label>
-              <select name="building_type"
-                      style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
-                             color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px;-webkit-appearance:none">
-                <option value="">Select…</option>
-                <option>Residential House</option>
-                <option>Apartment</option>
-                <option>Office</option>
-                <option>Shop</option>
-                <option>Warehouse</option>
-                <option>Hotel</option>
-                <option>School</option>
-                <option>Hospital</option>
-                <option>Industrial</option>
-                <option>Mixed Use</option>
-                <option>Other</option>
-              </select>
-            </div>
-            <div class="col-sm-4">
-              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">Approx. Size (m²)</label>
-              <input type="text" name="building_size" placeholder="e.g. 250"
-                     style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
-                            color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px">
-            </div>
-            <div class="col-sm-3">
-              <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">Floors</label>
-              <input type="number" name="num_floors" value="1" min="1"
-                     style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
-                            color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px">
-            </div>
-          </div>
-
-          <!-- Row 4: Description -->
-          <div class="mb-3">
-            <label class="form-label mb-1" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#4a7a4a">Building Description / Solar Needs</label>
-            <textarea name="building_desc" rows="2" placeholder="Briefly describe your building and what you need solar for…"
-                      style="background:#080e08;border:1px solid #1a3a1a;border-radius:8px;
-                             color:#d0d0e8;padding:9px 12px;width:100%;font-size:13px;resize:vertical"></textarea>
-          </div>
-
-          <!-- Error -->
-          <div id="ia_error" class="mb-2" style="color:#f87171;font-size:12px;display:none"></div>
-
-          <!-- Submit -->
-          <button type="submit" id="ia_btn"
-                  class="btn fw-bold w-100"
-                  style="background:linear-gradient(135deg,#22c55e,#16a34a);border:none;
-                         color:#000;font-size:14px;padding:12px;border-radius:10px">
-            <i class="bi bi-send-fill me-2"></i>Submit Free Assessment
-          </button>
-          <div class="mt-2 text-center" style="font-size:10px;color:#3a6a3a">
-            <i class="bi bi-lock-fill me-1"></i>No account needed · Your data is private · Reference issued instantly
-          </div>
-        </form>
-
-        <!-- Confirmation (shown after submit) -->
-        <div id="ia_confirm" style="display:none;background:#060f06;border:1px solid #22c55e44;
-             border-radius:16px;padding:28px;text-align:center">
-          <div style="font-size:48px;margin-bottom:12px">☀️</div>
-          <h5 class="fw-black mb-1" style="color:#e2e2f0">Thank you, <span id="ia_cname"></span>!</h5>
-          <p style="color:#6a8a6a;font-size:13px;margin-bottom:16px">
-            Your assessment has been received. Our engineering team will complete<br>
-            the design intake and contact you within 24 hours.
-          </p>
-          <div style="background:#0a0a14;border:1px solid #22c55e33;border-radius:10px;padding:16px;margin-bottom:20px">
-            <div style="font-size:10px;color:#4a6a4a;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Assessment Reference</div>
-            <div id="ia_cref" style="font-size:1.6rem;font-weight:900;color:#22c55e;letter-spacing:3px;font-family:monospace"></div>
-          </div>
-          <a id="ia_wa" href="#" target="_blank"
-             style="display:inline-flex;align-items:center;gap:8px;background:#25D366;
-                    color:#fff;border:none;border-radius:10px;padding:10px 20px;
-                    font-size:13px;font-weight:700;text-decoration:none;margin-right:8px">
-            <i class="bi bi-whatsapp"></i>WhatsApp Team
-          </a>
-          <button onclick="document.getElementById('ia_confirm').style.display='none';document.getElementById('inlineAssessForm').style.display='block';document.getElementById('inlineAssessForm').reset()"
-                  style="background:#1a3a1a;color:#86efac;border:1px solid #22c55e33;
-                         border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer">
-            Submit Another
-          </button>
-        </div>
-
-      </div><!-- /col-lg-7 -->
-
-      <!-- RIGHT — pipeline visual -->
-      <div class="col-lg-5 d-none d-lg-block">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
-          color:#22c55e;margin-bottom:16px">
-          <i class="bi bi-kanban me-1"></i>What happens after you submit
-        </div>
-        {% for stage,color,icon,sub in [
-          ('Assessment Submitted',  '#6366f1','bi-clipboard2-pulse',    'Reference generated instantly'),
-          ('Assessment Reviewed',   '#818cf8','bi-clipboard2-check',    'Team reviews your building details'),
-          ('Lead Qualified',        '#22c55e','bi-patch-check-fill',    'Opportunity scored & assigned'),
-          ('Consultation',          '#0ea5e9','bi-camera-video',        'Engineer contacts you within 24 h'),
-          ('Proposal',              '#f59e0b','bi-file-earmark-text',   'Full solar proposal delivered'),
-          ('Won → Installation',    '#4ade80','bi-tools',               'Contract signed · Work begins'),
-        ] %}
-        <div class="d-flex align-items-start gap-3 mb-3">
-          <div style="width:34px;height:34px;border-radius:8px;background:{{ color }}15;
-            border:1px solid {{ color }}33;display:flex;align-items:center;
-            justify-content:center;flex-shrink:0">
-            <i class="bi {{ icon }}" style="color:{{ color }};font-size:14px"></i>
-          </div>
-          <div style="padding-top:2px">
-            <div style="font-size:12px;font-weight:700;color:#c0c0d8">{{ stage }}</div>
-            <div style="font-size:10px;color:#3a5a3a">{{ sub }}</div>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-
-    </div>
   </div>
 </div>
 
