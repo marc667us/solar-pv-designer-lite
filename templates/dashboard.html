@@ -152,10 +152,10 @@
 <!-- ── Quick actions ──────────────────────────────────────────────────── -->
 <div class="row g-2 mb-4">
   {% for href,icon,bg,title,sub in [
-    (url_for('project_new'),  'bi-plus-circle-fill',     '#f59e0b', 'New Project',   'Start a solar design'),
-    (url_for('procurement'),  'bi-truck-front-fill',     '#0ea5e9', 'Procurement',   'Source equipment'),
-    (url_for('tickets'),      'bi-headset',              '#22c55e', 'Support',       'Get help'),
-    (url_for('upgrade'),      'bi-arrow-up-circle-fill', '#a78bfa', 'Upgrade Plan',  'Unlock all features'),
+    (url_for('project_new'),       'bi-plus-circle-fill',        '#f59e0b', 'New Project',     'Start a solar design'),
+    (url_for('assessment_request'),'bi-clipboard2-pulse-fill',   '#22c55e', 'Site Assessment', 'Submit a client request'),
+    (url_for('procurement'),       'bi-truck-front-fill',        '#0ea5e9', 'Procurement',     'Source equipment'),
+    (url_for('upgrade'),           'bi-arrow-up-circle-fill',    '#a78bfa', 'Upgrade Plan',    'Unlock all features'),
   ] %}
   <div class="col-6 col-md-3">
     <a href="{{ href }}" class="qa-tile h-100">
