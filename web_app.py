@@ -5480,7 +5480,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
   ]
 }}"""
             msg = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model="claude-opus-4-7",
                 max_tokens=4000,
                 messages=[{"role": "user", "content": prompt}]
             )
