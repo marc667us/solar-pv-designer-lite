@@ -65,6 +65,8 @@
     The only platform that <strong style="color:#f59e0b">automatically finds live solar RFPs and tenders</strong>
     in Ghana and West Africa — then generates your full engineering design, BOQ, and proposal in 30 minutes.
   </p>
+
+  <!-- Buttons row: Go to Dashboard + Free Site Assessment side by side -->
   <div class="d-flex gap-3 justify-content-center flex-wrap mb-3">
     {% if user %}
     <a href="{{ url_for('dashboard') }}" class="btn btn-solar btn-lg px-5 pulse-cta">
@@ -77,7 +79,7 @@
     {% endif %}
     <a href="#assessment-section"
        class="btn btn-lg px-4 fw-bold pulse-cta"
-       style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#000">
+       style="background:linear-gradient(135deg,#22c55e,#16a34a);border:none;color:#000">
       <i class="bi bi-clipboard2-check-fill me-2"></i>Free Site Assessment
     </a>
   </div>
@@ -111,39 +113,10 @@
 
 <div class="gradient-divider"></div>
 
-<!-- ══════════════════════════════ FREE ASSESSMENT — PIPELINE ENTRY ══════ -->
-<div class="mb-5" id="assessment-section"
-     style="background:linear-gradient(135deg,#060f06,#0a180a);
-            border:2px solid #22c55e44;border-radius:24px;overflow:hidden">
-
-  <div style="height:4px;background:linear-gradient(90deg,#22c55e,#4ade80,#f59e0b)"></div>
-
-  <div class="p-4 p-md-5">
-    <div class="row g-5">
-
-      <!-- LEFT — inline form -->
-      <div class="col-lg-7">
-
-        <div style="display:inline-flex;align-items:center;gap:6px;
-          background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);
-          color:#22c55e;padding:5px 14px;border-radius:20px;
-          font-size:11px;font-weight:700;margin-bottom:14px">
-          <i class="bi bi-clipboard2-pulse-fill"></i> Free Solar Assessment — No Sign-Up Required
-        </div>
-
-        <h2 class="fw-black mb-2" style="font-size:clamp(1.4rem,2.5vw,2rem);line-height:1.2">
-          Tell us about your building.<br>
-          <span style="background:linear-gradient(90deg,#22c55e,#4ade80);
-            -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
-            We'll start your solar design.
-          </span>
-        </h2>
-        <p class="mb-4" style="color:#6a8a6a;font-size:13px">
-          Fill in the form below — our engineering team will follow up within 24 hours.
-        </p>
-
-        <!-- ── The inline form ── -->
-        <form id="inlineAssessForm">
+<!-- ══════════════════════════════ FREE ASSESSMENT — PIPELINE ENTRY (removed — form now in hero) ══ -->
+<!-- duplicate removed -->
+<div style="display:none">
+        <form id="inlineAssessFormDupe">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
 
           <!-- Row 1: Name + Phone -->
@@ -308,6 +281,7 @@
     </div>
   </div>
 </div>
+</div><!-- /display:none dupe -->
 
 <div class="gradient-divider"></div>
 
