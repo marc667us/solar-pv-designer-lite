@@ -61,6 +61,31 @@
 
 {% set d = project.data %}
 
+{% if d.get('from_assessment_ref') %}
+<div class="alert mb-4 d-flex align-items-start gap-3"
+     style="background:#0f1a0f;border:1px solid #22c55e44;border-radius:12px;padding:16px">
+  <i class="bi bi-clipboard2-check-fill fs-5 flex-shrink-0" style="color:#22c55e;margin-top:2px"></i>
+  <div>
+    <div class="fw-bold small" style="color:#22c55e">
+      Design started from Assessment
+      <span style="font-family:monospace;letter-spacing:1px">{{ d.get('from_assessment_ref') }}</span>
+    </div>
+    <div class="text-secondary" style="font-size:12px;margin-top:3px">
+      <strong style="color:#d0d0e8">Client:</strong> {{ d.get('from_assessment_name','—') }} &nbsp;·&nbsp;
+      <strong style="color:#d0d0e8">Phone:</strong> {{ d.get('from_assessment_phone','—') }} &nbsp;·&nbsp;
+      <strong style="color:#d0d0e8">Building:</strong> {{ d.get('building_type','—') }}
+      {% if d.get('building_size') %} · {{ d.get('building_size') }} m²{% endif %}
+      {% if d.get('num_floors') %} · {{ d.get('num_floors') }} floor(s){% endif %}
+    </div>
+    {% if d.get('client_notes') %}
+    <div class="text-secondary mt-1" style="font-size:11px;font-style:italic">
+      "{{ d.get('client_notes')[:120] }}{% if d.get('client_notes','')|length > 120 %}…{% endif %}"
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <!-- ── Breadcrumb ─────────────────────────────────────────────────── -->
 <div class="d-flex align-items-center gap-2 mb-4 flex-wrap">
   <a href="{{ url_for('dashboard') }}" class="text-secondary small text-decoration-none">

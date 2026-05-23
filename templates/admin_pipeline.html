@@ -2,12 +2,16 @@
 {% block title %}Sales Pipeline – SolarPro Admin{% endblock %}
 {% block content %}
 {% set STAGE_META = {
-  'new':             ('New Lead',        '#6366f1', 'bi-star'),
-  'qualified':       ('Qualified',       '#22c55e', 'bi-patch-check'),
-  'assessment_sent': ('Assessment Sent', '#0ea5e9', 'bi-clipboard2-check'),
-  'proposal_sent':   ('Proposal Sent',   '#f59e0b', 'bi-file-earmark-check'),
-  'won':             ('Won',             '#4ade80', 'bi-trophy'),
-  'lost':            ('Lost',            '#f87171', 'bi-x-circle'),
+  'assessment_submitted': ('Assessment Submitted', '#6366f1', 'bi-clipboard2-pulse'),
+  'assessment_reviewed':  ('Assessment Reviewed',  '#818cf8', 'bi-clipboard2-check'),
+  'lead_qualified':       ('Lead Qualified',       '#22c55e', 'bi-patch-check-fill'),
+  'consultation':         ('Consultation',         '#0ea5e9', 'bi-camera-video'),
+  'proposal':             ('Proposal',             '#f59e0b', 'bi-file-earmark-text'),
+  'negotiation':          ('Negotiation',          '#fb923c', 'bi-arrow-left-right'),
+  'won':                  ('Won',                  '#4ade80', 'bi-trophy-fill'),
+  'installation':         ('Installation',         '#34d399', 'bi-tools'),
+  'after_sales':          ('After Sales',          '#a78bfa', 'bi-headset'),
+  'lost':                 ('Lost',                 '#f87171', 'bi-x-circle'),
 } %}
 {% set GRADE_CLR = {'A':'#4ade80','B':'#86efac','C':'#fde047','D':'#f87171'} %}
 
@@ -54,7 +58,7 @@
     <div class="col-6 col-md-3">
       <div class="kpi-card text-center">
         <div class="kpi-label">Active Pipeline</div>
-        {% set active = (by_stage['new']|length) + (by_stage['qualified']|length) + (by_stage['assessment_sent']|length) + (by_stage['proposal_sent']|length) %}
+        {% set active = (by_stage['assessment_submitted']|length) + (by_stage['assessment_reviewed']|length) + (by_stage['lead_qualified']|length) + (by_stage['consultation']|length) + (by_stage['proposal']|length) + (by_stage['negotiation']|length) %}
         <div class="kpi-value" style="background:linear-gradient(90deg,#0ea5e9,#38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">{{ active }}</div>
       </div>
     </div>
@@ -86,36 +90,62 @@
         {% for lead in cards %}
         {% set gclr = GRADE_CLR.get(lead.ai_grade,'#6868a0') if lead.ai_grade else '#6868a0' %}
         <div class="solar-card p-3" style="border-left:2px solid {{ gclr }}">
-          <div class="fw-bold small mb-1">{{ lead.name }}</div>
-          <div class="text-secondary" style="font-size:11px">{{ lead.company or '—' }}</div>
+          <div class="d-flex justify-content-between align-items-start mb-1">
+            <div class="fw-bold small">{{ lead.name }}</div>
+            {% if lead.rec_type == 'assess' %}
+            <span class="badge" style="background:#6366f122;color:#818cf8;font-size:9px;border:1px solid #6366f133">ASSESS</span>
+            {% endif %}
+          </div>
+          {% if lead.assessment_ref is defined and lead.assessment_ref %}
+          <div style="font-size:10px;color:#6366f1;font-weight:700">{{ lead.assessment_ref }}</div>
+          {% endif %}
+          <div class="text-secondary" style="font-size:11px">
+            {{ lead.company or lead.building_type or '—' }}
+            {% if lead.country %} · {{ lead.country }}{% endif %}
+          </div>
           <div class="d-flex flex-wrap gap-1 mt-2">
             {% if lead.ai_grade %}
             <span class="badge" style="background:{{ gclr }}22;color:{{ gclr }};font-size:10px">
               Grade {{ lead.ai_grade }}{% if lead.ai_score %} · {{ lead.ai_score }}{% endif %}
             </span>
             {% endif %}
-            {% if lead.system_type %}
+            {% if lead.building_type %}
+            <span class="badge" style="background:#0f0f22;border:1px solid #2e2e4a;color:#a0a0c8;font-size:10px">
+              {{ lead.building_type }}
+            </span>
+            {% elif lead.system_type %}
             <span class="badge" style="background:#0f0f22;border:1px solid #2e2e4a;color:#a0a0c8;font-size:10px">
               {{ lead.system_type }}
             </span>
             {% endif %}
-            {% if lead.system_size_kw and lead.system_size_kw > 0 %}
+            {% if lead.system_size_kw is defined and lead.system_size_kw and lead.system_size_kw > 0 %}
             <span class="badge" style="background:#0f0f22;border:1px solid #2e2e4a;color:#a0a0c8;font-size:10px">
               {{ lead.system_size_kw }} kWp
             </span>
             {% endif %}
           </div>
-          {% if lead.budget_usd %}
+          {% if lead.phone %}
           <div class="small mt-1" style="color:#6868a0;font-size:10px">
-            <i class="bi bi-currency-dollar me-1"></i>{{ lead.budget_usd }}
+            <i class="bi bi-telephone me-1"></i>{{ lead.phone }}
           </div>
           {% endif %}
           <div class="d-flex justify-content-between align-items-center mt-2">
+            {% if lead.email %}
             <a href="mailto:{{ lead.email }}" class="small text-decoration-none" style="color:#0ea5e9;font-size:10px">
               <i class="bi bi-envelope me-1"></i>{{ lead.email[:22] }}{% if lead.email|length > 22 %}…{% endif %}
             </a>
+            {% else %}
+            <span style="color:#4a4a70;font-size:10px"><i class="bi bi-telephone me-1"></i>{{ lead.phone[:20] }}</span>
+            {% endif %}
             <span class="text-secondary" style="font-size:10px">{{ lead.created_at[:10] }}</span>
           </div>
+          {% if lead.rec_type == 'assess' and lead.assessment_ref %}
+          <a href="{{ url_for('project_from_assessment', ref=lead.assessment_ref) }}"
+             class="btn w-100 mt-2 fw-bold"
+             style="background:#22c55e18;color:#22c55e;border:1px solid #22c55e44;font-size:11px;padding:5px 10px;border-radius:8px">
+            <i class="bi bi-rulers me-1"></i>Start Design
+          </a>
+          {% endif %}
         </div>
         {% endfor %}
       </div>

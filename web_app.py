@@ -385,6 +385,13 @@ def init_db():
         "ALTER TABLE leads ADD COLUMN ai_notes TEXT DEFAULT ''",
         "ALTER TABLE leads ADD COLUMN pipeline_stage TEXT DEFAULT 'new'",
         "ALTER TABLE leads ADD COLUMN follow_up_date TEXT DEFAULT ''",
+        # Assessment intake v2 columns
+        "ALTER TABLE assessment_requests ADD COLUMN assessment_ref TEXT DEFAULT ''",
+        "ALTER TABLE assessment_requests ADD COLUMN building_desc TEXT DEFAULT ''",
+        "ALTER TABLE assessment_requests ADD COLUMN building_size TEXT DEFAULT ''",
+        "ALTER TABLE assessment_requests ADD COLUMN num_floors INTEGER DEFAULT 0",
+        "ALTER TABLE assessment_requests ADD COLUMN building_type TEXT DEFAULT ''",
+        "ALTER TABLE assessment_requests ADD COLUMN pipeline_stage TEXT DEFAULT 'assessment_submitted'",
     ]:
         try:
             with get_db() as c:
@@ -1321,6 +1328,67 @@ def project_new():
     return render_template("project_new.html", user=u,
                            plan=plan, limit=limit, count=count,
                            sales_data=sales_data)
+
+
+@app.route("/project/from-assessment/<ref>")
+@login_required
+def project_from_assessment(ref):
+    """Create a new project pre-populated from an assessment intake record."""
+    user = current_user()
+    plan  = (user["plan"] or "free").lower()
+    limit = PLAN_LIMITS.get(plan, 1)
+    with get_db() as c:
+        count = c.execute(
+            "SELECT COUNT(*) FROM projects WHERE user_id=?",
+            (session["user_id"],)).fetchone()[0]
+        if count >= limit:
+            flash(
+                f"Your {plan.title()} plan allows up to {limit} project"
+                f"{'s' if limit > 1 else ''}. Upgrade to create more.", "warning")
+            return redirect(url_for("admin_pipeline"))
+        # Look up the assessment
+        row = c.execute(
+            "SELECT * FROM assessment_requests WHERE assessment_ref=?",
+            (ref,)).fetchone()
+        if not row:
+            flash(f"Assessment {ref} not found.", "danger")
+            return redirect(url_for("admin_pipeline"))
+        ar = dict(row)
+        # Build project name from assessment details
+        btype   = ar.get("building_type") or ar.get("system_type") or "Solar"
+        loc     = ar.get("country") or ""
+        client  = ar.get("name") or "Client"
+        proj_name = f"{btype} Solar Design — {client} [{ref}]"
+        if loc:
+            proj_name = f"{loc} · {proj_name}"
+        # Pre-fill data_json with known information
+        initial_data = {
+            "from_assessment_ref":  ref,
+            "from_assessment_name": ar.get("name", ""),
+            "from_assessment_phone":ar.get("phone", ""),
+            "country":  ar.get("country", ""),
+            "building_type": btype,
+            "building_size": ar.get("building_size", ""),
+            "num_floors":    ar.get("num_floors", 1),
+            "client_notes":  ar.get("building_desc", ""),
+        }
+        import json as _json
+        c.execute(
+            "INSERT INTO projects (user_id, name, data_json) VALUES (?,?,?)",
+            (session["user_id"], proj_name, _json.dumps(initial_data)))
+        pid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+        # Advance the assessment pipeline stage
+        c.execute(
+            "UPDATE assessment_requests SET pipeline_stage=? WHERE assessment_ref=?",
+            ("assessment_reviewed", ref))
+        # Also advance the mirrored lead
+        c.execute(
+            "UPDATE leads SET pipeline_stage=? WHERE message LIKE ? AND pipeline_stage='assessment_submitted'",
+            ("assessment_reviewed", f"%{ar.get('building_desc','')[:30]}%"))
+    flash(
+        f"Project created from assessment {ref}. "
+        f"Complete the location and load details below.", "success")
+    return redirect(url_for("project_location", pid=pid))
 
 
 @app.route("/project/<int:pid>/location", methods=["GET", "POST"])
@@ -3821,6 +3889,65 @@ def _qualify_lead(name, company, phone, system_type, size_kw, budget_usd, messag
     return score, grade, "; ".join(reasons) if reasons else "Unscored"
 
 
+@app.route("/assess/quick", methods=["POST"])
+@limiter.limit("10 per hour")
+def assess_quick():
+    """AJAX popup assessment intake — landing page modal.
+    Returns JSON {ok, ref, name} on success or {ok, error} on failure.
+    """
+    import random, string as _str
+    name       = request.form.get("name", "").strip()
+    phone      = request.form.get("phone", "").strip()
+    country    = request.form.get("country", "").strip()
+    region     = request.form.get("region", "").strip()
+    bldg_desc  = request.form.get("building_desc", "").strip()
+    bldg_size  = request.form.get("building_size", "").strip()
+    num_floors = request.form.get("num_floors", "1").strip()
+    bldg_type  = request.form.get("building_type", "").strip()
+
+    if not name or not phone:
+        return jsonify({"ok": False, "error": "Full name and phone number are required."}), 400
+
+    try:
+        num_floors_i = int(num_floors)
+    except Exception:
+        num_floors_i = 1
+
+    # Generate unique reference SA-XXXXXX
+    ref = "SA-" + "".join(random.choices(_str.ascii_uppercase + _str.digits, k=6))
+    location_desc = f"{region}, {country}".strip(", ") if region else country
+    score, grade, notes = _qualify_lead(name, "", phone, bldg_type or "residential",
+                                        "0", "", bldg_desc)
+
+    try:
+        with get_db() as c:
+            c.execute(
+                "INSERT INTO assessment_requests "
+                "(name,email,phone,country,system_type,location_desc,message,"
+                " ai_score,ai_grade,ai_notes,source,status,pipeline_stage,"
+                " assessment_ref,building_desc,building_size,num_floors,building_type) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name, "", phone, country,
+                 bldg_type or "residential", location_desc, bldg_desc,
+                 score, grade, notes, "landing_popup", "open",
+                 "assessment_submitted",
+                 ref, bldg_desc, bldg_size, num_floors_i, bldg_type))
+            # Mirror into leads CRM for pipeline tracking
+            c.execute(
+                "INSERT INTO leads (name,email,phone,country,interest,message,source,"
+                " system_type,ai_score,ai_grade,ai_notes,pipeline_stage) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name, "", phone, country,
+                 bldg_type or "residential", bldg_desc, "assessment_popup",
+                 bldg_type or "residential",
+                 score, grade, notes, "assessment_submitted"))
+    except Exception as e:
+        app.logger.error("assess_quick DB error: %s", e)
+        return jsonify({"ok": False, "error": "Could not save assessment. Please try again."}), 500
+
+    return jsonify({"ok": True, "ref": ref, "name": name.split()[0]})
+
+
 @app.route("/assess", methods=["GET", "POST"])
 @limiter.limit("20 per hour")
 def assessment_request():
@@ -3992,25 +4119,47 @@ def admin_installers():
 @app.route("/admin/pipeline")
 @admin_required
 def admin_pipeline():
-    """Kanban-style CRM pipeline across all leads + assessment requests."""
-    STAGES = ["new", "qualified", "assessment_sent", "proposal_sent", "won", "lost"]
+    """Kanban-style CRM pipeline across all leads + assessment requests — 9-stage."""
+    # 9-stage pipeline from spec + lost for dropped records
+    STAGES = [
+        "assessment_submitted", "assessment_reviewed", "lead_qualified",
+        "consultation", "proposal", "negotiation",
+        "won", "installation", "after_sales", "lost",
+    ]
+    # Remap legacy stage names to the new pipeline stages
+    STAGE_REMAP = {
+        "new":             "assessment_submitted",
+        "qualified":       "lead_qualified",
+        "assessment_sent": "consultation",
+        "proposal_sent":   "proposal",
+        "won":             "won",
+        "lost":            "lost",
+    }
     with get_db() as c:
         leads_rows  = c.execute("SELECT * FROM leads ORDER BY created_at DESC").fetchall()
         assess_rows = c.execute("SELECT * FROM assessment_requests ORDER BY created_at DESC").fetchall()
     # Normalise assessment_requests rows to look like leads for the Kanban
-    all_leads = list(leads_rows)
+    all_leads = []
+    for row in leads_rows:
+        d = dict(row)
+        d.setdefault("rec_type", "lead")
+        all_leads.append(d)
     for ar in assess_rows:
-        # sqlite3.Row → dict, then patch missing keys leads template expects
         d = dict(ar)
-        d.setdefault("interest", d.get("system_type",""))
+        d.setdefault("interest", d.get("system_type", ""))
+        d.setdefault("company", "")
         d.setdefault("notes", "")
         d.setdefault("rec_type", "assess")
         all_leads.append(d)
     by_stage = {s: [] for s in STAGES}
     for lead in all_leads:
-        try:   st = lead["pipeline_stage"]
-        except Exception: st = "new"
-        if st not in STAGES: st = "new"
+        try:
+            st = lead.get("pipeline_stage") or "assessment_submitted"
+        except Exception:
+            st = "assessment_submitted"
+        st = STAGE_REMAP.get(st, st)          # remap legacy names
+        if st not in STAGES:
+            st = "assessment_submitted"
         by_stage[st].append(lead)
     total = len(all_leads)
     won   = len(by_stage["won"])

@@ -74,9 +74,10 @@
     <a href="{{ url_for('register') }}" class="btn btn-solar btn-lg px-5 pulse-cta">
       <i class="bi bi-rocket-takeoff me-2"></i>Start Free — No Card Needed
     </a>
-    <a href="{{ url_for('assessment_request') }}" class="btn btn-outline-secondary btn-lg px-4">
-      <i class="bi bi-sun me-2"></i>Free Site Assessment
-    </a>
+    <button type="button" class="btn btn-outline-secondary btn-lg px-4"
+            data-bs-toggle="modal" data-bs-target="#assessModal">
+      <i class="bi bi-clipboard2-check me-2"></i>Free Site Assessment
+    </button>
     {% endif %}
   </div>
 
@@ -622,6 +623,11 @@
     <a href="{{ url_for('register') }}" class="btn btn-solar btn-lg px-5 pulse-cta">
       <i class="bi bi-rocket-takeoff me-2"></i>Start Free Today
     </a>
+    <button type="button" class="btn btn-lg px-4 fw-bold"
+            style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:#f59e0b"
+            data-bs-toggle="modal" data-bs-target="#assessModal">
+      <i class="bi bi-clipboard2-check me-2"></i>Request Free Assessment
+    </button>
     <a href="https://wa.me/233XXXXXXXXX?text=Hi%2C%20I%27d%20like%20a%20demo%20of%20SolarPro%20Global"
        target="_blank" class="whatsapp-btn btn-lg">
       <i class="bi bi-whatsapp" style="font-size:18px"></i>WhatsApp Demo
@@ -632,5 +638,238 @@
   </div>
 </div>
 {% endif %}
+
+<!-- ═══════════════════════════ ASSESSMENT POPUP MODAL ═══════════════════ -->
+<div class="modal fade" id="assessModal" tabindex="-1" aria-labelledby="assessModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content" style="background:#0f0f22;border:1px solid #2e2e5a;border-radius:18px">
+
+      <!-- Header -->
+      <div class="modal-header border-0 pb-0 pt-4 px-4">
+        <div>
+          <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.12);
+            border:1px solid rgba(245,158,11,.3);color:#f59e0b;padding:4px 12px;border-radius:20px;
+            font-size:11px;font-weight:700;margin-bottom:8px">
+            <i class="bi bi-sun-fill"></i> Free Solar Assessment
+          </div>
+          <h5 class="modal-title fw-black" id="assessModalLabel" style="font-size:1.2rem">
+            Tell us about your building
+          </h5>
+          <p class="text-secondary mb-0" style="font-size:12px;margin-top:4px">
+            Our team will prepare a free solar assessment and design intake for you.
+          </p>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <!-- Form -->
+      <div class="modal-body px-4 pb-4 pt-3" id="assessFormBody">
+        <form id="assessPopupForm">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+          <!-- Section A — Client Information -->
+          <div class="mb-3 pb-3" style="border-bottom:1px solid #1e1e3a">
+            <div class="small fw-bold mb-2" style="color:#f59e0b;text-transform:uppercase;
+              letter-spacing:.5px;font-size:10px"><i class="bi bi-person me-1"></i>Section A — Client Information</div>
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label small text-secondary mb-1">Full Name <span class="text-danger">*</span></label>
+                <input type="text" name="name" id="assess_name" required
+                       class="form-control bg-dark text-light border-secondary"
+                       placeholder="e.g. Kwame Asante">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small text-secondary mb-1">Phone Number <span class="text-danger">*</span></label>
+                <input type="tel" name="phone" id="assess_phone" required
+                       class="form-control bg-dark text-light border-secondary"
+                       placeholder="e.g. +233 24 000 0000">
+              </div>
+            </div>
+          </div>
+
+          <!-- Section B — Location -->
+          <div class="mb-3 pb-3" style="border-bottom:1px solid #1e1e3a">
+            <div class="small fw-bold mb-2" style="color:#0ea5e9;text-transform:uppercase;
+              letter-spacing:.5px;font-size:10px"><i class="bi bi-geo-alt me-1"></i>Section B — Location</div>
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label small text-secondary mb-1">Country</label>
+                <select name="country" id="assess_country"
+                        class="form-select bg-dark text-light border-secondary">
+                  <option value="">Select country…</option>
+                  {% for c in countries %}
+                  <option value="{{ c }}">{{ c }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small text-secondary mb-1">Region / City</label>
+                <select name="region" id="assess_region"
+                        class="form-select bg-dark text-light border-secondary">
+                  <option value="">Select country first…</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section C — Building Information -->
+          <div class="mb-3">
+            <div class="small fw-bold mb-2" style="color:#22c55e;text-transform:uppercase;
+              letter-spacing:.5px;font-size:10px"><i class="bi bi-building me-1"></i>Section C — Building Information</div>
+            <div class="mb-2">
+              <label class="form-label small text-secondary mb-1">Building Description</label>
+              <textarea name="building_desc" id="assess_bldg_desc" rows="2"
+                        class="form-control bg-dark text-light border-secondary"
+                        placeholder="Briefly describe the building and its solar needs…"></textarea>
+            </div>
+            <div class="row g-2">
+              <div class="col-md-4">
+                <label class="form-label small text-secondary mb-1">Approximate Size (m²)</label>
+                <input type="text" name="building_size"
+                       class="form-control bg-dark text-light border-secondary"
+                       placeholder="e.g. 250">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small text-secondary mb-1">Number of Floors</label>
+                <input type="number" name="num_floors" min="1" max="100" value="1"
+                       class="form-control bg-dark text-light border-secondary">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small text-secondary mb-1">Type of Building</label>
+                <select name="building_type"
+                        class="form-select bg-dark text-light border-secondary">
+                  <option value="">Select…</option>
+                  <option>Residential House</option>
+                  <option>Apartment</option>
+                  <option>Office</option>
+                  <option>Shop</option>
+                  <option>Warehouse</option>
+                  <option>Hotel</option>
+                  <option>School</option>
+                  <option>Hospital</option>
+                  <option>Industrial</option>
+                  <option>Mixed Use</option>
+                  <option>Other</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Error message -->
+          <div id="assessError" class="alert alert-danger py-2 small d-none"></div>
+
+          <!-- Submit -->
+          <div class="d-flex gap-2 justify-content-end mt-3">
+            <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-solar fw-bold px-4" id="assessSubmitBtn">
+              <i class="bi bi-send-fill me-2"></i>Submit Assessment
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Confirmation (hidden initially) -->
+      <div id="assessConfirmBody" class="modal-body px-4 pb-5 pt-3 text-center d-none">
+        <div style="font-size:52px;margin-bottom:12px">☀️</div>
+        <h5 class="fw-black mb-1">Thank you, <span id="confirmName"></span>!</h5>
+        <p class="text-secondary mb-3" style="font-size:13px;line-height:1.7">
+          Your assessment has been received.<br>
+          Our team will complete the design intake by adding your location and loading details.
+        </p>
+        <div class="p-3 rounded mb-4" style="background:#0a0a14;border:1px solid #2e2e5a">
+          <div class="small text-secondary mb-1">Assessment Reference</div>
+          <div class="fw-black" style="font-size:1.4rem;color:#f59e0b;letter-spacing:2px" id="confirmRef"></div>
+        </div>
+        <p class="text-secondary mb-3" style="font-size:12px">
+          One of our consultants may contact you for a follow-up consultation.
+        </p>
+        <div class="d-flex gap-2 justify-content-center flex-wrap">
+          <a href="https://wa.me/233XXXXXXXXX?text=Hi%2C%20I%20submitted%20an%20assessment%20and%20my%20reference%20is%20"
+             id="whatsappFollowup" target="_blank"
+             class="btn fw-bold" style="background:#25D366;color:#fff;border:none">
+            <i class="bi bi-whatsapp me-2"></i>WhatsApp Team
+          </a>
+          <button type="button" class="btn btn-solar" data-bs-dismiss="modal">
+            <i class="bi bi-check2-circle me-2"></i>Done
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── Assessment popup ─────────────────────────────────────────────── */
+(function(){
+  // Region cascade
+  document.getElementById('assess_country').addEventListener('change', function(){
+    var country = this.value;
+    var sel = document.getElementById('assess_region');
+    sel.innerHTML = '<option value="">Loading…</option>';
+    if(!country){ sel.innerHTML = '<option value="">Select country first…</option>'; return; }
+    fetch('/api/regions/' + encodeURIComponent(country))
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        sel.innerHTML = '<option value="">Select region…</option>';
+        (data.regions || data || []).forEach(function(r){
+          var opt = document.createElement('option');
+          opt.value = r; opt.textContent = r;
+          sel.appendChild(opt);
+        });
+      })
+      .catch(function(){ sel.innerHTML = '<option value="">—</option>'; });
+  });
+
+  // Form submit
+  document.getElementById('assessPopupForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var btn = document.getElementById('assessSubmitBtn');
+    var err = document.getElementById('assessError');
+    err.classList.add('d-none');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting…';
+
+    var fd = new FormData(this);
+    fetch('/assess/quick', { method: 'POST', body: fd })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if(!data.ok){
+          err.textContent = data.error || 'Something went wrong. Please try again.';
+          err.classList.remove('d-none');
+          btn.disabled = false;
+          btn.innerHTML = '<i class="bi bi-send-fill me-2"></i>Submit Assessment';
+          return;
+        }
+        // Show confirmation
+        document.getElementById('confirmRef').textContent  = data.ref;
+        document.getElementById('confirmName').textContent = data.name;
+        document.getElementById('whatsappFollowup').href  +=
+          encodeURIComponent(data.ref);
+        document.getElementById('assessFormBody').classList.add('d-none');
+        document.getElementById('assessConfirmBody').classList.remove('d-none');
+      })
+      .catch(function(){
+        err.textContent = 'Network error. Please check your connection and try again.';
+        err.classList.remove('d-none');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send-fill me-2"></i>Submit Assessment';
+      });
+  });
+
+  // Reset modal when closed
+  document.getElementById('assessModal').addEventListener('hidden.bs.modal', function(){
+    document.getElementById('assessPopupForm').reset();
+    document.getElementById('assessError').classList.add('d-none');
+    document.getElementById('assessFormBody').classList.remove('d-none');
+    document.getElementById('assessConfirmBody').classList.add('d-none');
+    document.getElementById('assessSubmitBtn').disabled = false;
+    document.getElementById('assessSubmitBtn').innerHTML =
+      '<i class="bi bi-send-fill me-2"></i>Submit Assessment';
+    document.getElementById('assess_region').innerHTML =
+      '<option value="">Select country first…</option>';
+  });
+})();
+</script>
 
 {% endblock %}
