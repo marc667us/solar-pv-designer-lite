@@ -611,6 +611,112 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════ FREE ASSESSMENT — PIPELINE ENTRY ══════ -->
+<div class="mb-5" id="assessment-section"
+     style="background:linear-gradient(135deg,#060f06,#0a180a);
+            border:2px solid #22c55e33;border-radius:24px;overflow:hidden">
+
+  <!-- Top accent bar -->
+  <div style="height:4px;background:linear-gradient(90deg,#22c55e,#4ade80,#f59e0b)"></div>
+
+  <div class="p-4 p-md-5">
+    <div class="row g-5 align-items-center">
+
+      <!-- LEFT — copy + button -->
+      <div class="col-lg-6">
+        <div style="display:inline-flex;align-items:center;gap:6px;
+          background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);
+          color:#22c55e;padding:5px 14px;border-radius:20px;
+          font-size:11px;font-weight:700;margin-bottom:16px">
+          <i class="bi bi-clipboard2-pulse-fill"></i> Step 1 of the Sales Pipeline
+        </div>
+
+        <h2 class="fw-black mb-3" style="font-size:clamp(1.5rem,3vw,2.2rem);line-height:1.2">
+          Start With a <span style="background:linear-gradient(90deg,#22c55e,#4ade80);
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+            background-clip:text">Free Solar Assessment</span>
+        </h2>
+
+        <p class="mb-4" style="color:#9090b8;font-size:14px;line-height:1.8">
+          Tell us about your building. We'll prepare a complete design intake, create
+          your project file, and assign it to our engineering team — all from one short form.
+          You receive a reference number instantly.
+        </p>
+
+        <!-- What happens next -->
+        <div class="mb-4">
+          {% for step,label,color in [
+            ('1','Assessment Submitted',    '#22c55e'),
+            ('2','Design Intake Created',   '#4ade80'),
+            ('3','Sales Lead Opened',       '#86efac'),
+            ('4','Engineer Follows Up',     '#f59e0b'),
+            ('5','Proposal & Installation', '#fbbf24'),
+          ] %}
+          <div class="d-flex align-items-center gap-3 mb-2">
+            <div style="width:28px;height:28px;border-radius:50%;background:{{ color }}18;
+              border:1px solid {{ color }}55;color:{{ color }};font-size:11px;font-weight:900;
+              display:flex;align-items:center;justify-content:center;flex-shrink:0">{{ step }}</div>
+            <span style="font-size:13px;color:#c0c0d8">{{ label }}</span>
+          </div>
+          {% endfor %}
+        </div>
+
+        <button type="button"
+                class="btn btn-lg fw-bold px-5 pulse-cta"
+                style="background:linear-gradient(135deg,#22c55e,#16a34a);
+                       border:none;color:#000;font-size:1rem;border-radius:12px"
+                data-bs-toggle="modal" data-bs-target="#assessModal">
+          <i class="bi bi-clipboard2-check-fill me-2"></i>Request Free Assessment
+        </button>
+
+        <div class="mt-3" style="font-size:11px;color:#4a7a4a">
+          <i class="bi bi-check2-circle me-1"></i>No sign-up needed &nbsp;·&nbsp;
+          <i class="bi bi-check2-circle me-1"></i>Reference issued instantly &nbsp;·&nbsp;
+          <i class="bi bi-check2-circle me-1"></i>Team follows up within 24 h
+        </div>
+      </div>
+
+      <!-- RIGHT — pipeline visual -->
+      <div class="col-lg-6">
+        <div style="background:#050d05;border:1px solid #1a3a1a;border-radius:16px;padding:24px">
+
+          <div class="small fw-bold mb-3" style="color:#22c55e;text-transform:uppercase;
+            letter-spacing:.6px;font-size:10px">
+            <i class="bi bi-kanban me-1"></i>Sales Pipeline Flow
+          </div>
+
+          {% for stage,color,icon,sub in [
+            ('Assessment Submitted',  '#6366f1','bi-clipboard2-pulse',    'Form submitted · Reference generated'),
+            ('Assessment Reviewed',   '#818cf8','bi-clipboard2-check',    'Team reviews building details'),
+            ('Lead Qualified',        '#22c55e','bi-patch-check-fill',    'Opportunity scored & assigned'),
+            ('Consultation',          '#0ea5e9','bi-camera-video',        'Engineer contacts client'),
+            ('Proposal',              '#f59e0b','bi-file-earmark-text',   'Technical & financial proposal sent'),
+            ('Won → Installation',    '#4ade80','bi-tools',               'Contract signed · Work begins'),
+          ] %}
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <div style="width:32px;height:32px;border-radius:8px;background:{{ color }}18;
+              border:1px solid {{ color }}33;display:flex;align-items:center;
+              justify-content:center;flex-shrink:0;margin-top:1px">
+              <i class="bi {{ icon }}" style="color:{{ color }};font-size:13px"></i>
+            </div>
+            <div>
+              <div class="fw-bold" style="font-size:12px;color:#d0d0e8">{{ stage }}</div>
+              <div style="font-size:10px;color:#4a6a5a">{{ sub }}</div>
+            </div>
+          </div>
+          {% endfor %}
+
+          <div class="mt-3 pt-3" style="border-top:1px solid #1a3a1a;font-size:11px;color:#3a6a3a">
+            <i class="bi bi-info-circle me-1"></i>
+            Assessment is the first entry into the pipeline — no account required.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════ FINAL CTA ════════════════ -->
 {% if not user %}
 <div class="text-center py-5 mb-4" style="background:radial-gradient(ellipse 70% 80% at 50% 50%,rgba(245,158,11,.07),transparent);border:1px solid #1e1e3a;border-radius:24px">
