@@ -1168,6 +1168,16 @@ def landing():
                            countries=get_countries(), news_posts=news)
 
 
+@app.route("/platform")
+def landing_page2():
+    with get_db() as c:
+        news = c.execute(
+            "SELECT * FROM news_posts WHERE is_published=1 ORDER BY created_at DESC LIMIT 3"
+        ).fetchall()
+    return render_template("landing_page2.html", user=current_user(),
+                           countries=get_countries(), news_posts=news)
+
+
 @app.route("/register", methods=["GET", "POST"])
 @limiter.limit("10 per hour")
 def register():
