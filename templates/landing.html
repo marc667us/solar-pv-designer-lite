@@ -65,7 +65,7 @@
     The only platform that <strong style="color:#f59e0b">automatically finds live solar RFPs and tenders</strong>
     in Ghana and West Africa — then generates your full engineering design, BOQ, and proposal in 30 minutes.
   </p>
-  <div class="d-flex gap-3 justify-content-center flex-wrap mb-5">
+  <div class="d-flex gap-3 justify-content-center flex-wrap mb-3">
     {% if user %}
     <a href="{{ url_for('dashboard') }}" class="btn btn-solar btn-lg px-5 pulse-cta">
       <i class="bi bi-grid-3x3-gap me-2"></i>Go to Dashboard
@@ -74,11 +74,15 @@
     <a href="{{ url_for('register') }}" class="btn btn-solar btn-lg px-5 pulse-cta">
       <i class="bi bi-rocket-takeoff me-2"></i>Start Free — No Card Needed
     </a>
-    <button type="button" class="btn btn-outline-secondary btn-lg px-4"
-            data-bs-toggle="modal" data-bs-target="#assessModal">
-      <i class="bi bi-clipboard2-check me-2"></i>Free Site Assessment
-    </button>
     {% endif %}
+    <button type="button" class="btn btn-lg px-4 fw-bold pulse-cta"
+            style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;color:#000"
+            data-bs-toggle="modal" data-bs-target="#assessModal">
+      <i class="bi bi-clipboard2-check-fill me-2"></i>Free Site Assessment
+    </button>
+  </div>
+  <div class="text-secondary mb-5" style="font-size:12px">
+    ☀️ No sign-up needed · Get your reference instantly
   </div>
 
   <!-- City coverage strip -->
