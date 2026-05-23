@@ -1018,7 +1018,6 @@
           encodeURIComponent('Hi, I submitted a solar assessment. My reference is ' + d.ref);
         document.getElementById('inlineAssessForm').style.display = 'none';
         document.getElementById('ia_confirm').style.display = 'block';
-        document.getElementById('assessment-section').scrollIntoView({behavior:'smooth'});
       })
       .catch(function(){
         err.textContent = 'Network error — please check your connection and try again.';

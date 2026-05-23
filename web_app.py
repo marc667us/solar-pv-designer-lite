@@ -392,6 +392,7 @@ def init_db():
         "ALTER TABLE assessment_requests ADD COLUMN num_floors INTEGER DEFAULT 0",
         "ALTER TABLE assessment_requests ADD COLUMN building_type TEXT DEFAULT ''",
         "ALTER TABLE assessment_requests ADD COLUMN pipeline_stage TEXT DEFAULT 'assessment_submitted'",
+        "ALTER TABLE assessment_requests ADD COLUMN region TEXT DEFAULT ''",
     ]:
         try:
             with get_db() as c:
@@ -1377,6 +1378,7 @@ def project_from_assessment(ref):
             "from_assessment_name": ar.get("name", ""),
             "from_assessment_phone":ar.get("phone", ""),
             "country":  ar.get("country", ""),
+            "region":   ar.get("region", ""),
             "building_type": btype,
             "building_size": ar.get("building_size", ""),
             "num_floors":    ar.get("num_floors", 1),
@@ -3940,11 +3942,11 @@ def assess_quick():
         with get_db() as c:
             c.execute(
                 "INSERT INTO assessment_requests "
-                "(name,email,phone,country,system_type,location_desc,message,"
+                "(name,email,phone,country,region,system_type,location_desc,message,"
                 " ai_score,ai_grade,ai_notes,source,status,pipeline_stage,"
                 " assessment_ref,building_desc,building_size,num_floors,building_type) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (name, "", phone, country,
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name, "", phone, country, region,
                  bldg_type or "residential", location_desc, bldg_desc,
                  score, grade, notes, "landing_popup", "open",
                  "assessment_submitted",
