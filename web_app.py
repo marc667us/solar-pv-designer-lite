@@ -1432,6 +1432,13 @@ def project_location(pid):
             "chemistry":      f.get("chemistry", "LiFePO4"),
             "panel_wp":       int(f.get("panel_wp", 400)),
             "mounting_type":  f.get("mounting_type", "rooftop_pitched"),
+            # Solar design parameters
+            "tilt_angle":       float(f.get("tilt_angle", 15)),
+            "azimuth":          float(f.get("azimuth", 0)),
+            "system_losses":    float(f.get("system_losses", 14)),
+            "inverter_eff":     float(f.get("inverter_eff", 95)),
+            "battery_dod":      float(f.get("battery_dod", 80)),
+            "performance_ratio": float(f.get("performance_ratio", 75)),
         })
         save_project_data(pid, data)
         return redirect(url_for("project_loads", pid=pid))

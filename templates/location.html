@@ -235,6 +235,56 @@
           </div>
         </div>
 
+        <!-- ── Solar Design Parameters ── -->
+        <div class="form-section">
+          <div class="form-section-head">
+            <i class="bi bi-sun-fill" style="color:#f59e0b"></i>Solar Design Parameters
+          </div>
+          <div class="row g-3">
+            <div class="col-4">
+              <label class="form-lbl">Panel Tilt (°)</label>
+              <input name="tilt_angle" id="tiltInput" type="number" min="0" max="90"
+                     value="{{ d.get('tilt_angle', 15) }}" class="form-ctrl"
+                     placeholder="15" oninput="updateDesignCard()"/>
+              <div style="font-size:9px;color:#4a4a7a;margin-top:3px">0° = flat · 90° = vertical</div>
+            </div>
+            <div class="col-4">
+              <label class="form-lbl">Azimuth (°)</label>
+              <input name="azimuth" id="azimuthInput" type="number" min="-180" max="180"
+                     value="{{ d.get('azimuth', 0) }}" class="form-ctrl"
+                     placeholder="0" oninput="updateDesignCard()"/>
+              <div style="font-size:9px;color:#4a4a7a;margin-top:3px">0°=South · 90°=West · -90°=East</div>
+            </div>
+            <div class="col-4">
+              <label class="form-lbl">System Losses (%)</label>
+              <input name="system_losses" id="lossesInput" type="number" min="0" max="30" step="0.1"
+                     value="{{ d.get('system_losses', 14) }}" class="form-ctrl"
+                     placeholder="14" oninput="updateDesignCard()"/>
+              <div style="font-size:9px;color:#4a4a7a;margin-top:3px">Cable + soiling + mismatch</div>
+            </div>
+            <div class="col-4">
+              <label class="form-lbl">Inverter Efficiency (%)</label>
+              <input name="inverter_eff" id="invEffInput" type="number" min="80" max="100" step="0.1"
+                     value="{{ d.get('inverter_eff', 95) }}" class="form-ctrl"
+                     placeholder="95" oninput="updateDesignCard()"/>
+            </div>
+            <div class="col-4">
+              <label class="form-lbl">Battery DoD (%)</label>
+              <input name="battery_dod" id="dodInput" type="number" min="50" max="100"
+                     value="{{ d.get('battery_dod', 80) }}" class="form-ctrl"
+                     placeholder="80" oninput="updateDesignCard()"/>
+              <div style="font-size:9px;color:#4a4a7a;margin-top:3px">LiFePO4=80% · Lead=50%</div>
+            </div>
+            <div class="col-4">
+              <label class="form-lbl">Performance Ratio (%)</label>
+              <input name="performance_ratio" id="prInput" type="number" min="50" max="100" step="0.1"
+                     value="{{ d.get('performance_ratio', 75) }}" class="form-ctrl"
+                     placeholder="75" oninput="updateDesignCard()"/>
+              <div style="font-size:9px;color:#4a4a7a;margin-top:3px">Overall system PR</div>
+            </div>
+          </div>
+        </div>
+
         <!-- ── Mounting type ── -->
         <div class="form-section">
           <div class="form-section-head">
@@ -321,6 +371,20 @@
       <div id="solarInfo"></div>
     </div>
 
+    <!-- Design Parameters card -->
+    <div class="solar-res-card" id="designParamsCard" style="display:block">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-sliders" style="color:#a78bfa;font-size:16px"></i>
+        <span class="fw-bold" style="font-size:13px;color:#c0a0f0">Design Parameters</span>
+      </div>
+      <div class="res-row"><span class="res-lbl">Panel Tilt</span><span class="res-val" id="dp_tilt">15°</span></div>
+      <div class="res-row"><span class="res-lbl">Azimuth</span><span class="res-val" id="dp_az">0° (South)</span></div>
+      <div class="res-row"><span class="res-lbl">System Losses</span><span class="res-val" id="dp_loss">14%</span></div>
+      <div class="res-row"><span class="res-lbl">Inverter Efficiency</span><span class="res-val" id="dp_inv">95%</span></div>
+      <div class="res-row"><span class="res-lbl">Battery DoD</span><span class="res-val" id="dp_dod">80%</span></div>
+      <div class="res-row"><span class="res-lbl">Performance Ratio</span><span class="res-val" id="dp_pr">75%</span></div>
+    </div>
+
     <!-- Coverage list -->
     <div style="background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px;padding:18px">
       <div class="d-flex align-items-center gap-2 mb-3">
@@ -341,6 +405,28 @@
 </div><!-- /row -->
 
 <script>
+function azLabel(az) {
+  az = parseFloat(az) || 0;
+  if (az===0)   return '0° (South)';
+  if (az===90)  return '90° (West)';
+  if (az===-90) return '-90° (East)';
+  if (az===180||az===-180) return az+'° (North)';
+  return az+'°';
+}
+function updateDesignCard() {
+  const tilt = document.getElementById('tiltInput').value   || 15;
+  const az   = document.getElementById('azimuthInput').value || 0;
+  const loss = document.getElementById('lossesInput').value  || 14;
+  const inv  = document.getElementById('invEffInput').value  || 95;
+  const dod  = document.getElementById('dodInput').value     || 80;
+  const pr   = document.getElementById('prInput').value      || 75;
+  document.getElementById('dp_tilt').textContent = tilt + '°';
+  document.getElementById('dp_az').textContent   = azLabel(az);
+  document.getElementById('dp_loss').textContent = loss + '%';
+  document.getElementById('dp_inv').textContent  = inv  + '%';
+  document.getElementById('dp_dod').textContent  = dod  + '%';
+  document.getElementById('dp_pr').textContent   = pr   + '%';
+}
 function selectMount(val, el) {
   document.querySelectorAll('.mount-card').forEach(c => {
     c.classList.remove('selected');
@@ -537,6 +623,7 @@ document.getElementById('locForm').addEventListener('submit',function(){
 
 window.addEventListener('DOMContentLoaded',()=>{
   initGlobe();
+  updateDesignCard();
   const country=document.getElementById('countrySelect').value;
   if(country){
     loadRegions();
