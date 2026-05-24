@@ -375,6 +375,7 @@
               <th>Gateway</th>
               <th>Status</th>
               <th>Reference</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -409,6 +410,16 @@
             <td class="text-secondary" style="font-size:10px;max-width:110px;
                 overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
               {{ pay.reference[:18] if pay.reference else '—' }}
+            </td>
+            <td>
+              {% if pay.status == 'success' %}
+              <a href="{{ url_for('account_invoice', payment_id=pay.id) }}"
+                 class="btn btn-sm"
+                 style="font-size:10px;padding:3px 9px;background:#ef444418;color:#ef4444;border:1px solid #ef444433"
+                 title="Download PDF receipt">
+                <i class="bi bi-file-earmark-pdf me-1"></i>Receipt
+              </a>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}

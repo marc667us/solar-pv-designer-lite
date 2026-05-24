@@ -8,3 +8,4 @@ openpyxl
 anthropic
 markdown-pdf
 ddgs
+pytest>=9.0

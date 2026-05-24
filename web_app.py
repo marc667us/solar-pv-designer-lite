@@ -898,18 +898,24 @@ def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
 
 
 def _irr(cashflows, guess=0.10, tol=1e-6, max_iter=100):
-    """Compute IRR using Newton-Raphson method."""
+    """Compute IRR using Newton-Raphson method. Returns None on degenerate inputs."""
+    # Guard: all-zero or all-negative cashflows have no meaningful IRR
+    if not cashflows or all(cf <= 0 for cf in cashflows):
+        return None
     r = guess
-    for _ in range(max_iter):
-        npv = sum(cf / (1+r)**t for t, cf in enumerate(cashflows))
-        dnpv = sum(-t * cf / (1+r)**(t+1) for t, cf in enumerate(cashflows))
-        if abs(dnpv) < 1e-12:
-            break
-        r_new = r - npv / dnpv
-        if abs(r_new - r) < tol:
-            return r_new
-        r = r_new
-    return r if -1 < r < 10 else None
+    try:
+        for _ in range(max_iter):
+            npv = sum(cf / (1 + r) ** t for t, cf in enumerate(cashflows))
+            dnpv = sum(-t * cf / (1 + r) ** (t + 1) for t, cf in enumerate(cashflows))
+            if abs(dnpv) < 1e-12:
+                break
+            r_new = r - npv / dnpv
+            if abs(r_new - r) < tol:
+                return r_new
+            r = r_new
+        return r if -1 < r < 10 else None
+    except (OverflowError, ZeroDivisionError, ValueError):
+        return None
 
 
 def calc_recommendations(eco, d, r):
@@ -1251,6 +1257,49 @@ def register():
                 uid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
             session["user_id"] = uid
             session["username"] = f["username"]
+            # Send welcome email — non-blocking
+            try:
+                _send_system_email(
+                    f["email"],
+                    "Welcome to SolarPro Global ☀️ — Your account is ready",
+                    f"""Hello {f.get('name', f['username'])},
+
+Welcome to SolarPro Global! Your free account has been created successfully.
+
+─────────────────────────────────────
+GETTING STARTED — 4 quick steps
+─────────────────────────────────────
+1. Complete your Organisation Profile
+   → Settings → Organization tab
+   (Your org name appears on all PDF reports)
+
+2. Create your first solar project
+   → Click "New Project" on your dashboard
+   → Enter location, load schedule → get full design
+
+3. Configure email to send reports to clients
+   → Settings → Email / SMTP tab
+   → Supports Gmail, Outlook, Brevo, Mailgun
+
+4. Explore tutorials and user guides
+   → Support → Resources (audio narration + PDF download)
+
+─────────────────────────────────────
+YOUR ACCOUNT
+─────────────────────────────────────
+Username:  {f['username']}
+Plan:      Free (upgrade anytime)
+Dashboard: {url_for('dashboard', _external=True)}
+
+Need help? Open a support ticket or email support@solarproglobal.com
+We respond within 24 hours.
+
+Welcome aboard!
+— The SolarPro Global Team
+solarpro-global.onrender.com
+""")
+            except Exception:
+                pass  # Email failure must never block registration
             flash("Welcome! Your account is ready.", "success")
             return redirect(url_for("dashboard"))
         except sqlite3.IntegrityError:
@@ -4189,6 +4238,100 @@ def account_cancel():
     return redirect(url_for("account"))
 
 
+# ─── Invoice / Receipt PDF ────────────────────────────────────────────────────
+
+@app.route("/account/invoice/<int:payment_id>")
+@login_required
+def account_invoice(payment_id):
+    """Generate and download a PDF payment receipt."""
+    uid = session["user_id"]
+    with get_db() as c:
+        pay = c.execute(
+            "SELECT * FROM payments WHERE id=? AND user_id=?", (payment_id, uid)
+        ).fetchone()
+        user = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+    if not pay:
+        abort(404)
+
+    org   = (user["org_name"]    or user["name"] or user["username"] or "SolarPro Global Customer")
+    addr  = (user["org_address"] or "").strip()
+    email = (user["org_email"]   or user["email"] or "")
+    phone = (user["org_phone"]   or "").strip()
+
+    date_str = (pay["created_at"] or datetime.utcnow().isoformat())[:10]
+    ref      = pay["reference"] or f"INV-{pay['id']:06d}"
+    plan_label = (pay["plan"] or "").title() or "Subscription"
+    amount_usd = float(pay["amount_usd"] or 0)
+    currency   = (pay["currency"] or "USD").upper()
+    gateway    = (pay["gateway"]  or "—").title()
+    status_str = (pay["status"]   or "—").upper()
+
+    PLAN_LABELS = {
+        "professional": "SolarPro Global — Professional Plan (Monthly)",
+        "enterprise":   "SolarPro Global — Enterprise Plan (Monthly)",
+        "basic":        "SolarPro Global — Basic Plan (Monthly)",
+        "free":         "SolarPro Global — Free Plan",
+    }
+    description = PLAN_LABELS.get((pay["plan"] or "").lower(), f"SolarPro Global — {plan_label} Plan")
+
+    md = f"""# SolarPro Global — Payment Receipt
+
+---
+
+**Receipt No.:** {ref}
+**Date:** {date_str}
+**Status:** {status_str}
+
+---
+
+## Billed To
+
+**{org}**
+{"" if not addr  else addr + "  "}
+{"" if not email else "Email: " + email + "  "}
+{"" if not phone else "Phone: " + phone + "  "}
+
+---
+
+## Receipt Details
+
+| Field | Value |
+|---|---|
+| Description | {description} |
+| Plan | {plan_label} |
+| Amount | {currency} {amount_usd:,.2f} |
+| Payment Gateway | {gateway} |
+| Transaction Reference | {ref} |
+| Date | {date_str} |
+| Status | {status_str} |
+
+---
+
+## Summary
+
+| | |
+|---|---|
+| **Subtotal** | **{currency} {amount_usd:,.2f}** |
+| Tax / VAT | Included (if applicable) |
+| **Total Paid** | **{currency} {amount_usd:,.2f}** |
+
+---
+
+*Thank you for your subscription to SolarPro Global.*
+
+For billing questions contact us at **support@solarproglobal.com**
+or visit **https://solarpro-global.onrender.com**
+
+---
+
+*SolarPro Global — Intelligent PV Solar System Design Platform*
+*This is a computer-generated receipt and is valid without a signature.*
+"""
+
+    filename = f"SolarPro_Receipt_{ref.replace(' ','_')}.pdf"
+    return _render_pdf(f"Payment Receipt — {ref}", md, filename)
+
+
 # ─── Phase 4: Ticketing ───────────────────────────────────────────────────────
 
 @app.route("/tickets", methods=["GET", "POST"])
@@ -5400,6 +5543,14 @@ def export_docx(pid):
     eco = r["economics"]
     sym = d.get("symbol", "$")
 
+    # Org details for title page and footer
+    u = current_user()
+    org_name    = (u["org_name"]    or u["name"] or u["username"] or "SolarPro Global").strip()
+    org_address = (u["org_address"] or "").strip()
+    org_email   = (u["org_email"]   or u["email"] or "").strip()
+    org_phone   = (u["org_phone"]   or "").strip()
+    org_website = (u["org_website"] or "").strip()
+
     doc = Document()
 
     # ── Page layout ────────────────────────────────────────────────────────────
@@ -5408,6 +5559,7 @@ def export_docx(pid):
     section.page_height = Inches(11.69)
     section.left_margin = section.right_margin = Inches(1.0)
     section.top_margin  = section.bottom_margin = Inches(0.9)
+    section.different_first_page_header_footer = True   # no header on title page
 
     GOLD  = RGBColor(0xF5, 0x9E, 0x0B)
     DARK  = RGBColor(0x1E, 0x3A, 0x8A)
@@ -5441,7 +5593,60 @@ def export_docx(pid):
                 shd.set(qn("w:val"), "clear")
                 tcPr.append(shd)
 
+    def _set_col_widths(tbl, widths_inches):
+        """Set explicit column widths on a table."""
+        for i, w in enumerate(widths_inches):
+            for cell in tbl.columns[i].cells:
+                cell.width = Inches(w)
+
+    def _add_page_field(paragraph, prefix="Page "):
+        """Append 'Page N of M' auto-field to a paragraph."""
+        paragraph.add_run(prefix)
+        for instrTxt in ("PAGE", " of ", "NUMPAGES"):
+            if instrTxt in (" of ", ):
+                paragraph.add_run(instrTxt)
+                continue
+            run = paragraph.add_run()
+            fc1 = OxmlElement("w:fldChar")
+            fc1.set(qn("w:fldCharType"), "begin")
+            itext = OxmlElement("w:instrText")
+            itext.set(qn("xml:space"), "preserve")
+            itext.text = instrTxt
+            fc2 = OxmlElement("w:fldChar")
+            fc2.set(qn("w:fldCharType"), "end")
+            run._r.append(fc1)
+            run._r.append(itext)
+            run._r.append(fc2)
+
+    # ── Header (all pages except title) ───────────────────────────────────────
+    header = section.header
+    header.is_linked_to_previous = False
+    hp = header.paragraphs[0]
+    hp.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    hp_run = hp.add_run(f"{org_name}  |  {project['name']}  |  SolarPro Global")
+    hp_run.font.size = Pt(8)
+    hp_run.font.color.rgb = GREY
+
+    # ── Footer (all pages) ────────────────────────────────────────────────────
+    footer = section.footer
+    footer.is_linked_to_previous = False
+    fp = footer.paragraphs[0]
+    fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    _add_page_field(fp, "Page ")
+    fp.runs[-1 if fp.runs else 0]  # ensure created
+    for run in fp.runs:
+        run.font.size = Pt(8)
+        run.font.color.rgb = GREY
+
     # ── Title page ────────────────────────────────────────────────────────────
+    # Org banner
+    if org_name and org_name != "SolarPro Global":
+        to = doc.add_paragraph()
+        to.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        tor = to.add_run(org_name.upper())
+        tor.bold = True; tor.font.size = Pt(14); tor.font.color.rgb = GREY
+
+    doc.add_paragraph()
     t = doc.add_paragraph()
     t.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = t.add_run("SolarPro Global")
@@ -5458,6 +5663,16 @@ def export_docx(pid):
     t3.add_run(f"Solar PV System Design Report\n"
                f"{d.get('region','')}, {d.get('country','')}\n"
                f"Generated: {datetime.now().strftime('%d %B %Y')}")
+
+    # Org contact block at bottom of title page
+    doc.add_paragraph()
+    contact_lines = [x for x in [org_address, org_phone, org_email, org_website] if x]
+    if contact_lines:
+        tc = doc.add_paragraph()
+        tc.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        tc_run = tc.add_run("\n".join(contact_lines))
+        tc_run.font.size = Pt(9)
+        tc_run.font.color.rgb = GREY
 
     doc.add_page_break()
 
@@ -5485,6 +5700,7 @@ def export_docx(pid):
     ]:
         _table_row(tbl, [k, v])
 
+    _set_col_widths(tbl, [2.8, 3.5])
     doc.add_paragraph()
 
     # ── 2. Load Schedule ─────────────────────────────────────────────────────
@@ -5502,6 +5718,7 @@ def export_docx(pid):
                           ld.get("hours",0), f"{kwh:.3f}",
                           "Yes" if ld.get("critical") else ""])
     _table_row(tbl2, ["","","","","","TOTAL",f"{tot:.3f} kWh/day"], bold=True)
+    _set_col_widths(tbl2, [1.0, 1.8, 0.6, 0.5, 0.7, 0.7, 0.6])
     doc.add_paragraph()
 
     # ── 3. Bill of Quantities ─────────────────────────────────────────────────
@@ -5515,13 +5732,14 @@ def export_docx(pid):
                           f"{row['total_r']:.2f}", f"{row['amount']:.2f}"])
     _table_row(tbl3, ["","","","","GRAND TOTAL", f"{sym} {r.get('boq_grand',0):.2f}"],
                bold=True, shade="F59E0B")
+    _set_col_widths(tbl3, [0.4, 2.6, 0.5, 0.5, 1.0, 1.0])
     doc.add_paragraph()
 
     # ── 4. Financial Analysis ─────────────────────────────────────────────────
     _heading("4. Financial Engineering & Economic Analysis")
     tbl4 = doc.add_table(rows=1, cols=2)
     tbl4.style = "Table Grid"
-    _table_row(tbl4, ["Metric","Value"], bold=True, shade="1E3A8A")
+    _table_row(tbl4, ["Metric", "Value"], bold=True, shade="1E3A8A")
     for k, v in [
         ("Total Investment",        f"{sym} {eco['total_local']:,.0f}"),
         ("Annual Generation",       f"{eco['annual_kwh']:,.0f} kWh/yr"),
@@ -5540,34 +5758,69 @@ def export_docx(pid):
         ("25-yr Cumulative Saving", f"{sym} {eco['cumul_25']:,.0f}"),
     ]:
         _table_row(tbl4, [k, v])
+    _set_col_widths(tbl4, [2.8, 3.5])
 
     doc.add_paragraph()
     _heading("4.1 Cash Flow Projection (25 Years)", level=2)
     tbl5 = doc.add_table(rows=1, cols=5)
     tbl5.style = "Table Grid"
-    _table_row(tbl5, ["Year",f"Gross ({sym})",f"O&M ({sym})",f"Net ({sym})",f"Cumulative ({sym})"],
+    _table_row(tbl5, ["Year", f"Gross ({sym})", f"O&M ({sym})", f"Net ({sym})", f"Cumulative ({sym})"],
                bold=True, shade="1E3A8A")
     for cf in eco.get("cf_rows", []):
-        flag = " ← BREAK-EVEN" if eco.get("breakeven") and cf["yr"]==eco["breakeven"] else ""
+        flag = " ← BREAK-EVEN" if eco.get("breakeven") and cf["yr"] == eco["breakeven"] else ""
         _table_row(tbl5, [cf["yr"], f"{cf['gross']:,.0f}", f"{cf['om']:,.0f}",
                           f"{cf['net']:,.0f}", f"{cf['cumul']:,.0f}{flag}"])
+    _set_col_widths(tbl5, [0.5, 1.5, 1.3, 1.3, 1.7])
     doc.add_paragraph()
 
     # ── 5. AC Cable Schedule ──────────────────────────────────────────────────
     _heading("5. AC Cable Sizing Schedule")
     tbl6 = doc.add_table(rows=1, cols=7)
     tbl6.style = "Table Grid"
-    _table_row(tbl6, ["Circuit","Power (kW)","Ib (A)","L (m)","Cable (mm²)","VD (%)","Breaker"],
+    _table_row(tbl6, ["Circuit", "Power (kW)", "Ib (A)", "L (m)", "Cable (mm²)", "VD (%)", "Breaker"],
                bold=True, shade="1E3A8A")
     for c2 in r.get("ac_cables", []):
         _table_row(tbl6, [c2["circuit"], c2["power_kw"], c2["design_current"],
                           c2["length_m"], f"{c2['cable_size_mm2']} mm²",
                           f"{c2['vd_percent']:.2f}%", f"{c2['breaker_a']} A"])
+    _set_col_widths(tbl6, [1.5, 0.9, 0.7, 0.7, 0.9, 0.7, 0.7])
+    doc.add_paragraph()
+
+    # ── 6. Energy Impact Analysis ─────────────────────────────────────────────
+    _heading("6. Energy Impact & Environmental Analysis")
+    monthly_factors = [0.88, 0.90, 0.95, 1.00, 1.05, 1.08, 1.10, 1.08, 1.03, 0.98, 0.92, 0.88]
+    base_monthly    = r["daily_kwh"] * 30.44
+    months_names    = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+    tbl7 = doc.add_table(rows=1, cols=4)
+    tbl7.style = "Table Grid"
+    tariff = float(d.get("tariff", 0) or 0)
+    sys_type = d.get("system_type", "grid").lower()
+    grid_offset_pct = 1.0 if sys_type == "off-grid" else 0.8
+    _table_row(tbl7, ["Month", "Generation (kWh)", f"Saving ({sym})", "Grid Offset (kWh)"],
+               bold=True, shade="1E3A8A")
+    annual_gen = 0.0
+    for mn, mf in zip(months_names, monthly_factors):
+        gen = round(base_monthly * mf, 1)
+        sav = round(gen * tariff, 1)
+        off = round(gen * grid_offset_pct, 1)
+        annual_gen += gen
+        _table_row(tbl7, [mn, f"{gen:,.1f}", f"{sav:,.1f}", f"{off:,.1f}"])
+    _table_row(tbl7, ["Annual Total", f"{annual_gen:,.1f}", f"{annual_gen * tariff:,.1f}",
+                      f"{annual_gen * grid_offset_pct:,.1f}"], bold=True, shade="F59E0B")
+    _set_col_widths(tbl7, [0.8, 1.6, 1.6, 1.6])
+    doc.add_paragraph()
+
+    trees_equiv = round(eco["co2_yr"] / 21.77, 0)
+    cars_equiv  = round(eco["co2_yr"] / 4.6, 2)
+    _para(f"Annual CO₂ Reduction: {eco['co2_yr']:.2f} tonnes  |  "
+          f"Equivalent to planting {int(trees_equiv):,} trees or removing {cars_equiv} cars.",
+          size=9)
     doc.add_paragraph()
 
     _para("Standard: BS 7671:2018 / IEC 60364-5-52 | Temperature derating and grouping factors applied.",
           size=9)
-    _para(f"Report generated by SolarPro Global — {datetime.now().strftime('%d %B %Y')}", size=9)
+    _para(f"Report generated by {org_name} using SolarPro Global — {datetime.now().strftime('%d %B %Y')}",
+          size=9)
 
     buf = io.BytesIO()
     doc.save(buf)
