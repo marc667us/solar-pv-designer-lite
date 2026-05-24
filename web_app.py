@@ -4660,8 +4660,10 @@ def project_email(pid):
             "SELECT * FROM email_logs WHERE project_id=? ORDER BY created_at DESC LIMIT 10",
             (pid,)).fetchall()
     smtp_ok = bool(SMTP_HOST and SMTP_USER)
+    d = project["data"]
+    r = d.get("results", {})
     return render_template("email_report.html", user=user, project=project,
-                           d=project["data"], report_options=REPORT_OPTIONS,
+                           d=d, r=r, report_options=REPORT_OPTIONS,
                            smtp_ok=smtp_ok, logs=logs)
 
 

@@ -69,10 +69,10 @@
 Please find the solar project report for {{ project.name }} attached.
 
 System Summary:
-• PV Array: {{ r.results.pv_kw|round(2) }} kWp
-• Battery: {{ r.results.bat_kwh|round(1) }} kWh
-• System Cost: {{ d.symbol }} {{ r.results.economics.total_local|int|format(',') }}
-• Payback: {{ r.results.economics.payback|round(1) }} years
+• PV Array: {{ r.pv_kw|default(0)|round(2) }} kWp
+• Battery: {{ r.bat_kwh|default(0)|round(1) }} kWh
+• System Cost: {{ d.symbol }} {{ r.economics.total_local|default(0)|int }}
+• Payback: {{ r.economics.payback|default(0)|round(1) }} years
 
 Regards,
 SolarPro Global"></textarea>
