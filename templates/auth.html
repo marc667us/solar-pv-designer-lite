@@ -46,7 +46,12 @@
         <input name="username" class="form-control" placeholder="username" required autocomplete="username"/>
       </div>
       <div class="mb-3">
-        <label class="form-label small fw-bold text-secondary">PASSWORD</label>
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <label class="form-label small fw-bold text-secondary mb-0">PASSWORD</label>
+          {% if mode == "login" %}
+          <a href="{{ url_for('forgot_password') }}" class="small text-warning" style="font-size:11px">Forgot password?</a>
+          {% endif %}
+        </div>
         <input name="password" type="password" class="form-control" placeholder="••••••••" required autocomplete="{% if mode=='register' %}new-password{% else %}current-password{% endif %}"/>
       </div>
       <button type="submit" class="btn btn-solar w-100 mt-2">

@@ -371,6 +371,14 @@ def init_db():
             is_running  INTEGER DEFAULT 0
         );
         INSERT OR IGNORE INTO monitor_state (id) VALUES (1);
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER NOT NULL,
+            token      TEXT UNIQUE NOT NULL,
+            expires_at TEXT NOT NULL,
+            used       INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
         """)
     # Migrate older DBs — ignore if column already exists
     for stmt in [
@@ -521,6 +529,35 @@ def init_db():
             c.executemany(
                 "INSERT INTO news_posts (title,content,category) VALUES (?,?,?)",
                 _default_news)
+
+
+# ─── System email helper ─────────────────────────────────────────────────────
+
+def _send_system_email(to_addr, subject, body_text):
+    """Send a transactional system email (password reset, alerts) via env-var SMTP."""
+    if not SMTP_HOST or not SMTP_USER:
+        return False, "SMTP not configured"
+    try:
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        msg = MIMEMultipart()
+        msg["From"]    = SMTP_FROM
+        msg["To"]      = to_addr
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body_text, "plain"))
+        if SMTP_TLS:
+            srv = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15)
+            srv.ehlo()
+            srv.starttls()
+        else:
+            srv = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15)
+        srv.login(SMTP_USER, SMTP_PASS)
+        srv.sendmail(SMTP_FROM, [to_addr], msg.as_string())
+        srv.quit()
+        return True, "sent"
+    except Exception as ex:
+        return False, str(ex)
 
 
 # ─── Auth helpers ─────────────────────────────────────────────────────────────
@@ -1244,6 +1281,93 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("landing"))
+
+
+# ─── Password Reset ───────────────────────────────────────────────────────────
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+@limiter.limit("5 per hour")
+def forgot_password():
+    if request.method == "POST":
+        csrf_protect()
+        email = request.form.get("email", "").strip().lower()
+        with get_db() as c:
+            user = c.execute(
+                "SELECT * FROM users WHERE LOWER(email)=?", (email,)).fetchone()
+            if user:
+                # Expire any existing unused tokens for this user
+                c.execute(
+                    "UPDATE password_reset_tokens SET used=1 WHERE user_id=? AND used=0",
+                    (user["id"],))
+                token   = secrets.token_urlsafe(32)
+                expires = (datetime.utcnow() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+                c.execute(
+                    "INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?,?,?)",
+                    (user["id"], token, expires))
+                reset_url = url_for("reset_password", token=token, _external=True)
+                body = (
+                    f"Hello {user['name'] or user['username']},\n\n"
+                    f"A password reset was requested for your SolarPro Global account.\n\n"
+                    f"Click the link below to set a new password (valid for 1 hour):\n\n"
+                    f"  {reset_url}\n\n"
+                    f"If you did not request this, ignore this email — your password has not changed.\n\n"
+                    f"— SolarPro Global"
+                )
+                ok, err = _send_system_email(
+                    user["email"], "Reset your SolarPro password", body)
+                if ok:
+                    flash(
+                        "Reset link sent! Check your inbox (and spam folder).", "success")
+                else:
+                    # SMTP not configured — show link directly so admins can share it securely
+                    flash(
+                        f"SMTP not configured on the server. "
+                        f"Admin: share this link securely with the user → {reset_url}", "warning")
+            else:
+                # Always show the same message to avoid email enumeration
+                flash(
+                    "If that email address is registered, a reset link has been sent.", "info")
+        return redirect(url_for("forgot_password"))
+    return render_template("forgot_password.html")
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    with get_db() as c:
+        rec = c.execute(
+            "SELECT * FROM password_reset_tokens WHERE token=? AND used=0",
+            (token,)).fetchone()
+    if not rec:
+        flash("This reset link is invalid or has already been used.", "danger")
+        return redirect(url_for("forgot_password"))
+    try:
+        expires = datetime.strptime(rec["expires_at"], "%Y-%m-%d %H:%M:%S")
+        if datetime.utcnow() > expires:
+            flash("This reset link has expired (links are valid for 1 hour). Request a new one.", "warning")
+            return redirect(url_for("forgot_password"))
+    except Exception:
+        flash("Invalid reset token.", "danger")
+        return redirect(url_for("forgot_password"))
+
+    if request.method == "POST":
+        csrf_protect()
+        new_pw  = request.form.get("new_password", "")
+        conf_pw = request.form.get("confirm_password", "")
+        if len(new_pw) < 8:
+            flash("Password must be at least 8 characters.", "danger")
+            return render_template("reset_password.html", token=token)
+        if new_pw != conf_pw:
+            flash("Passwords do not match.", "danger")
+            return render_template("reset_password.html", token=token)
+        with get_db() as c:
+            c.execute("UPDATE users SET password_hash=? WHERE id=?",
+                      (generate_password_hash(new_pw), rec["user_id"]))
+            c.execute(
+                "UPDATE password_reset_tokens SET used=1 WHERE token=?", (token,))
+        flash("Password changed successfully! You can now log in.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("reset_password.html", token=token)
 
 
 # ─── Routes — Dashboard ───────────────────────────────────────────────────────
