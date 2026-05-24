@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="row justify-content-center">
-<div class="col-lg-9">
+<div class="col-lg-10">
 
 <!-- Header -->
 <div class="rounded-3 p-4 mb-4" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1040 100%);border:1px solid var(--sp-border)">
@@ -13,59 +13,74 @@
     </div>
     <div>
       <h4 class="fw-black mb-0">Settings</h4>
-      <div class="text-secondary" style="font-size:13px">Organisation profile, display preferences and account options.</div>
+      <div class="text-secondary" style="font-size:13px">Organisation profile, display, email, and account security.</div>
     </div>
   </div>
 </div>
 
 {% with msgs = get_flashed_messages(with_categories=true) %}
   {% for cat, msg in msgs %}
-  <div class="alert alert-{{ cat }} alert-dismissible fade show py-2 mb-3" role="alert" style="font-size:13px">
+  <div class="alert alert-{{ 'success' if cat=='success' else 'warning' if cat=='warning' else 'danger' if cat=='danger' else 'info' }} alert-dismissible fade show py-2 mb-3" role="alert" style="font-size:13px">
     {{ msg }}<button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
   </div>
   {% endfor %}
 {% endwith %}
 
-<!-- ── Organisation Profile ──────────────────────────────────────── -->
-<div class="solar-card p-4 mb-4">
+<!-- ── Tab Navigation ──────────────────────────────────────────────────── -->
+<div class="d-flex gap-1 mb-4 flex-wrap" id="settingsTabNav" style="border-bottom:2px solid var(--sp-border);padding-bottom:0">
+  {% for key, icon, label in [
+      ('org',      'bi-building',         'Organization'),
+      ('datetime', 'bi-clock',            'Date & Time'),
+      ('display',  'bi-palette',          'Appearance'),
+      ('smtp',     'bi-envelope-at',      'Email / SMTP'),
+      ('security', 'bi-shield-lock',      'Security'),
+  ] %}
+  <button class="settings-tab btn btn-sm" data-tab="{{ key }}"
+    style="border-radius:8px 8px 0 0;border:2px solid transparent;border-bottom:none;
+           padding:8px 18px;font-weight:700;font-size:13px;transition:all .15s">
+    <i class="bi {{ icon }} me-1"></i>{{ label }}
+  </button>
+  {% endfor %}
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- TAB: Organization -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="settings-pane" id="pane-org">
+<div class="solar-card p-4">
   <div class="section-head mb-3"><i class="bi bi-building me-1"></i>Organisation Profile</div>
   <form method="post" action="{{ url_for('settings') }}">
-    <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token','') }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="_section" value="profile">
     <div class="row g-3">
-
       <div class="col-md-6">
-        <label class="form-label" style="font-size:12px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px">Organisation / Company Name</label>
+        <label class="sp-label">Organisation / Company Name</label>
         <input type="text" name="org_name" class="form-control sp-input"
                value="{{ user.org_name or '' }}" placeholder="e.g. SolarPro Ltd">
       </div>
-
       <div class="col-md-6">
-        <label class="form-label" style="font-size:12px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px">Organisation Email</label>
+        <label class="sp-label">Organisation Email</label>
         <input type="email" name="org_email" class="form-control sp-input"
                value="{{ user.org_email or '' }}" placeholder="info@yourcompany.com">
-        <div style="font-size:11px;color:var(--sp-muted);margin-top:4px">Used on generated reports and proposals.</div>
+        <div class="sp-hint">Appears on generated reports and proposals.</div>
       </div>
-
       <div class="col-12">
-        <label class="form-label" style="font-size:12px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px">Address</label>
+        <label class="sp-label">Address</label>
         <textarea name="org_address" class="form-control sp-input" rows="2"
                   placeholder="Street, City, Region, Country, Postcode">{{ user.org_address or '' }}</textarea>
       </div>
-
       <div class="col-md-4">
-        <label class="form-label" style="font-size:12px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px">Phone / WhatsApp</label>
+        <label class="sp-label">Phone / WhatsApp</label>
         <input type="tel" name="org_phone" class="form-control sp-input"
                value="{{ user.org_phone or '' }}" placeholder="+44 20 1234 5678">
       </div>
-
       <div class="col-md-4">
-        <label class="form-label" style="font-size:12px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px">Website</label>
+        <label class="sp-label">Website</label>
         <input type="url" name="org_website" class="form-control sp-input"
                value="{{ user.org_website or '' }}" placeholder="https://yourcompany.com">
       </div>
-
       <div class="col-md-4">
-        <label class="form-label" style="font-size:12px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px">Time Zone</label>
+        <label class="sp-label">Time Zone</label>
         <select name="timezone" class="form-select sp-input">
           {% set tz_groups = [
             ('Africa',    ['Africa/Abidjan','Africa/Accra','Africa/Addis_Ababa','Africa/Cairo','Africa/Casablanca','Africa/Johannesburg','Africa/Lagos','Africa/Nairobi','Africa/Tripoli','Africa/Tunis']),
@@ -86,66 +101,128 @@
           {% endfor %}
         </select>
       </div>
-
-    </div><!-- /row -->
-
+    </div>
     <div class="d-flex align-items-center justify-content-between mt-4">
-      <div style="font-size:12px;color:var(--sp-muted)">
-        <i class="bi bi-info-circle me-1"></i>This information appears on generated PDF reports and proposals.
-      </div>
-      <button type="submit" class="btn btn-sm px-4 fw-bold"
-        style="background:linear-gradient(135deg,var(--sp-accent),var(--sp-accent2));color:#000;border:none">
+      <div class="sp-hint"><i class="bi bi-info-circle me-1"></i>Shown on PDF reports, proposals, and email signatures.</div>
+      <button type="submit" class="btn btn-solar btn-sm px-4">
         <i class="bi bi-check-lg me-1"></i>Save Profile
       </button>
     </div>
   </form>
 </div>
+</div><!-- /pane-org -->
 
-<!-- ── Display Settings ──────────────────────────────────────────── -->
-<div class="solar-card p-4 mb-1">
-  <div class="section-head"><i class="bi bi-sliders me-1"></i>Display Settings</div>
-  <div style="font-size:12px;color:var(--sp-muted);margin-bottom:16px">Personalise theme, fonts, colours and layout. Changes apply instantly and are saved in your browser.</div>
 
-<!-- Settings grid -->
-<div class="row g-4">
-
-  <!-- Theme -->
-  <div class="col-12">
-    <div class="solar-card p-4">
-      <div class="section-head"><i class="bi bi-palette me-1"></i>Theme</div>
-      <div class="d-flex flex-wrap gap-3" id="themeGroup">
-        {% set themes = [
-          ('dark',     'Dark',     '#0a0a14', '#0f0f22', '#e2e2f0', 'Default dark theme'),
-          ('midnight', 'Midnight', '#000010', '#080820', '#c8c8ff', 'Deep blue-black'),
-          ('slate',    'Slate',    '#0f1117', '#161b22', '#e6edf3', 'GitHub-style dark'),
-          ('solar',    'Solar',    '#0c0800', '#1a1000', '#fde68a', 'Warm amber tones'),
-          ('light',    'Light',    '#f1f5f9', '#ffffff', '#1e293b', 'Clean light mode'),
-        ] %}
-        {% for key, label, bg, card, text, desc in themes %}
-        <div class="theme-swatch" data-val="{{ key }}"
-          style="cursor:pointer;border-radius:12px;overflow:hidden;border:2px solid transparent;transition:all .2s;width:130px">
-          <div style="background:{{ bg }};padding:10px 12px;height:70px;position:relative">
-            <div style="background:{{ card }};border-radius:6px;padding:6px 8px;margin-bottom:5px">
-              <div style="width:60%;height:6px;border-radius:3px;background:{{ text }};opacity:.8;margin-bottom:4px"></div>
-              <div style="width:40%;height:4px;border-radius:2px;background:{{ text }};opacity:.4"></div>
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- TAB: Date & Time -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="settings-pane" id="pane-datetime" style="display:none">
+<div class="solar-card p-4">
+  <div class="section-head mb-1"><i class="bi bi-clock me-1"></i>Date & Time Format</div>
+  <div class="sp-hint mb-3">Controls how dates and times appear on reports, dashboards, and exports.</div>
+  <form method="post" action="{{ url_for('settings') }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="_section" value="datetime">
+    <div class="row g-4">
+      <div class="col-md-6">
+        <label class="sp-label">Date Format</label>
+        {% set cur_df = user.date_format or 'DD/MM/YYYY' %}
+        <div class="d-flex flex-column gap-2">
+          {% for val, sample in [
+            ('DD/MM/YYYY', '23/05/2026 — Day first (EU / Africa / Asia)'),
+            ('MM/DD/YYYY', '05/23/2026 — Month first (US)'),
+            ('YYYY-MM-DD', '2026-05-23 — ISO 8601 / international'),
+            ('D MMM YYYY', '23 May 2026 — Long-form readable'),
+          ] %}
+          <label class="d-flex align-items-center gap-3 p-2 px-3 rounded cursor-pointer"
+                 style="border:1px solid {{ 'var(--sp-accent)' if cur_df == val else 'var(--sp-border)' }};
+                        background:{{ 'var(--sp-accent)11' if cur_df == val else 'transparent' }};
+                        cursor:pointer;transition:all .15s"
+                 onclick="selectDateFmt(this,'{{ val }}')">
+            <input type="radio" name="date_format" value="{{ val }}" class="d-none" {% if cur_df == val %}checked{% endif %}>
+            <span style="width:12px;height:12px;border-radius:50%;border:2px solid var(--sp-accent);background:{{ 'var(--sp-accent)' if cur_df == val else 'transparent' }};flex-shrink:0" class="df-dot"></span>
+            <div>
+              <div style="font-size:14px;font-weight:700;font-family:monospace">{{ val }}</div>
+              <div class="sp-hint">{{ sample }}</div>
             </div>
-            <div style="width:100%;height:6px;border-radius:3px;background:linear-gradient(90deg,#f59e0b,#0ea5e9);opacity:.7"></div>
-          </div>
-          <div style="padding:6px 10px;background:{{ card }};border-top:1px solid rgba(255,255,255,.08)">
-            <div style="font-size:12px;font-weight:700;color:{{ text }}">{{ label }}</div>
-            <div style="font-size:10px;color:{{ text }};opacity:.5">{{ desc }}</div>
-          </div>
+          </label>
+          {% endfor %}
         </div>
-        {% endfor %}
+      </div>
+      <div class="col-md-6">
+        <label class="sp-label">Time Format</label>
+        {% set cur_tf = user.time_format or '24h' %}
+        <div class="d-flex flex-column gap-2">
+          {% for val, label, sample in [
+            ('24h', '24-hour clock', 'e.g.  14:30 · 08:05 · 00:00'),
+            ('12h', '12-hour clock', 'e.g.  2:30 PM · 8:05 AM · 12:00 AM'),
+          ] %}
+          <label class="d-flex align-items-center gap-3 p-3 rounded cursor-pointer"
+                 style="border:1px solid {{ 'var(--sp-accent)' if cur_tf == val else 'var(--sp-border)' }};
+                        background:{{ 'var(--sp-accent)11' if cur_tf == val else 'transparent' }};
+                        cursor:pointer;transition:all .15s"
+                 onclick="selectTimeFmt(this,'{{ val }}')">
+            <input type="radio" name="time_format" value="{{ val }}" class="d-none" {% if cur_tf == val %}checked{% endif %}>
+            <span style="width:14px;height:14px;border-radius:50%;border:2px solid var(--sp-accent);background:{{ 'var(--sp-accent)' if cur_tf == val else 'transparent' }};flex-shrink:0" class="tf-dot"></span>
+            <div>
+              <div style="font-size:14px;font-weight:700">{{ label }}</div>
+              <div class="sp-hint">{{ sample }}</div>
+            </div>
+          </label>
+          {% endfor %}
+        </div>
       </div>
     </div>
-  </div>
+    <div class="d-flex justify-content-end mt-4">
+      <button type="submit" class="btn btn-solar btn-sm px-4">
+        <i class="bi bi-check-lg me-1"></i>Save Date & Time
+      </button>
+    </div>
+  </form>
+</div>
+</div><!-- /pane-datetime -->
 
-  <!-- Accent colour -->
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- TAB: Appearance -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="settings-pane" id="pane-display" style="display:none">
+<div class="solar-card p-4 mb-4">
+  <div class="section-head"><i class="bi bi-palette me-1"></i>Theme</div>
+  <div class="sp-hint mb-3">All changes apply instantly and are saved in your browser.</div>
+  <div class="d-flex flex-wrap gap-3" id="themeGroup">
+    {% set themes = [
+      ('dark',     'Dark',     '#0a0a14', '#0f0f22', '#e2e2f0', 'Default dark theme'),
+      ('midnight', 'Midnight', '#000010', '#080820', '#c8c8ff', 'Deep blue-black'),
+      ('slate',    'Slate',    '#0f1117', '#161b22', '#e6edf3', 'GitHub-style dark'),
+      ('solar',    'Solar',    '#0c0800', '#1a1000', '#fde68a', 'Warm amber tones'),
+      ('light',    'Light',    '#f1f5f9', '#ffffff', '#1e293b', 'Clean light mode'),
+    ] %}
+    {% for key, label, bg, card, text, desc in themes %}
+    <div class="theme-swatch" data-val="{{ key }}"
+      style="cursor:pointer;border-radius:12px;overflow:hidden;border:2px solid transparent;transition:all .2s;width:130px">
+      <div style="background:{{ bg }};padding:10px 12px;height:70px;position:relative">
+        <div style="background:{{ card }};border-radius:6px;padding:6px 8px;margin-bottom:5px">
+          <div style="width:60%;height:6px;border-radius:3px;background:{{ text }};opacity:.8;margin-bottom:4px"></div>
+          <div style="width:40%;height:4px;border-radius:2px;background:{{ text }};opacity:.4"></div>
+        </div>
+        <div style="width:100%;height:6px;border-radius:3px;background:linear-gradient(90deg,#f59e0b,#0ea5e9);opacity:.7"></div>
+      </div>
+      <div style="padding:6px 10px;background:{{ card }};border-top:1px solid rgba(255,255,255,.08)">
+        <div style="font-size:12px;font-weight:700;color:{{ text }}">{{ label }}</div>
+        <div style="font-size:10px;color:{{ text }};opacity:.5">{{ desc }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <!-- Accent -->
   <div class="col-md-6">
     <div class="solar-card p-4 h-100">
       <div class="section-head"><i class="bi bi-droplet-half me-1"></i>Accent Colour</div>
-      <div class="d-flex flex-wrap gap-2" id="accentGroup">
+      <div class="d-flex flex-wrap gap-2 mt-3" id="accentGroup">
         {% for key, hex, name in [
           ('gold','#f59e0b','Gold'),('blue','#3b82f6','Blue'),
           ('green','#22c55e','Green'),('purple','#a78bfa','Purple'),
@@ -158,17 +235,13 @@
                  box-shadow:0 2px 8px {{ hex }}44"></div>
         {% endfor %}
       </div>
-      <div class="mt-3" style="font-size:12px;color:var(--sp-muted)">
-        Affects buttons, KPI values, active nav links and highlights.
-      </div>
     </div>
   </div>
-
   <!-- Card radius -->
   <div class="col-md-6">
     <div class="solar-card p-4 h-100">
       <div class="section-head"><i class="bi bi-square-half me-1"></i>Card Style</div>
-      <div class="d-flex gap-3" id="radiusGroup">
+      <div class="d-flex gap-3 mt-3" id="radiusGroup">
         {% for key, label, r, desc in [
           ('sharp','Sharp','4px','Flat edges'),
           ('def','Default','14px','Rounded corners'),
@@ -183,12 +256,14 @@
       </div>
     </div>
   </div>
+</div>
 
+<div class="row g-3 mb-3">
   <!-- Font family -->
   <div class="col-md-7">
     <div class="solar-card p-4 h-100">
       <div class="section-head"><i class="bi bi-type me-1"></i>Font Family</div>
-      <div class="d-flex flex-column gap-2" id="fontGroup">
+      <div class="d-flex flex-column gap-2 mt-2" id="fontGroup">
         {% for key, family, label in [
           ('system', "'Segoe UI',system-ui,sans-serif", 'System UI — Segoe UI / San Francisco'),
           ('inter',  "'Inter',sans-serif",              'Inter — Clean modern sans-serif'),
@@ -208,14 +283,13 @@
       </div>
     </div>
   </div>
-
-  <!-- Font size -->
+  <!-- Font size + density -->
   <div class="col-md-5">
     <div class="solar-card p-4 h-100">
       <div class="section-head"><i class="bi bi-text-size me-1"></i>Font Size</div>
-      <div class="d-flex flex-column gap-3" id="sizeGroup">
+      <div class="d-flex flex-column gap-2 mt-2" id="sizeGroup">
         {% for key, label, px, sample in [
-          ('sm', 'Small',  '13px', 'Compact — more content on screen'),
+          ('sm', 'Small',  '13px', 'Compact — more content'),
           ('md', 'Normal', '14px', 'Balanced — recommended'),
           ('lg', 'Large',  '16px', 'Accessible — easier to read'),
         ] %}
@@ -229,10 +303,8 @@
         </div>
         {% endfor %}
       </div>
-
-      <!-- Density -->
-      <div class="section-head mt-4"><i class="bi bi-distribute-vertical me-1"></i>Density</div>
-      <div class="d-flex flex-column gap-2" id="densityGroup">
+      <div class="section-head mt-3"><i class="bi bi-distribute-vertical me-1"></i>Density</div>
+      <div class="d-flex flex-column gap-2 mt-2" id="densityGroup">
         {% for key, label, desc in [
           ('normal',      'Normal',      'Standard spacing'),
           ('compact',     'Compact',     'Tighter for power users'),
@@ -247,64 +319,267 @@
       </div>
     </div>
   </div>
+</div>
 
-  <!-- Live preview -->
-  <div class="col-12">
-    <div class="solar-card p-4">
-      <div class="section-head"><i class="bi bi-eye me-1"></i>Live Preview</div>
-      <div id="preview" style="background:var(--sp-bg);border-radius:var(--sp-radius);padding:20px;border:1px solid var(--sp-border)">
-        <div class="row g-3">
-          <div class="col-md-3">
-            <div style="background:var(--sp-card-bg);border:1px solid var(--sp-border);border-radius:var(--sp-radius);padding:14px">
-              <div style="font-size:10px;color:var(--sp-muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">System Size</div>
-              <div style="font-size:22px;font-weight:900;background:linear-gradient(90deg,var(--sp-accent),#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">12.5 kW</div>
-              <div style="font-size:11px;color:var(--sp-muted)">peak capacity</div>
-            </div>
-          </div>
-          <div class="col-md-3">
-            <div style="background:var(--sp-card-bg);border:1px solid var(--sp-border);border-radius:var(--sp-radius);padding:14px">
-              <div style="font-size:10px;color:var(--sp-muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Battery Bank</div>
-              <div style="font-size:22px;font-weight:900;background:linear-gradient(90deg,var(--sp-accent),#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">200 Ah</div>
-              <div style="font-size:11px;color:var(--sp-muted)">lithium storage</div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div style="background:var(--sp-card-bg);border:1px solid var(--sp-border);border-radius:var(--sp-radius);padding:14px">
-              <div style="font-size:12px;font-weight:800;margin-bottom:8px;color:var(--sp-text)">Sample Solar Project</div>
-              <div style="font-size:12px;color:var(--sp-sub);margin-bottom:4px">Location: Accra, Ghana · Sector: Commercial · 48V DC</div>
-              <div style="display:flex;gap:6px">
-                <span style="font-size:10px;padding:2px 10px;border-radius:20px;background:var(--sp-accent)22;color:var(--sp-accent);border:1px solid var(--sp-accent)44;font-weight:700">APPROVED</span>
-                <span style="font-size:10px;padding:2px 10px;border-radius:20px;background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;font-weight:700">BANKABLE</span>
-              </div>
-            </div>
+<!-- Live preview -->
+<div class="solar-card p-4 mb-3">
+  <div class="section-head"><i class="bi bi-eye me-1"></i>Live Preview</div>
+  <div id="preview" style="background:var(--sp-bg);border-radius:var(--sp-radius);padding:20px;border:1px solid var(--sp-border);margin-top:12px">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <div style="background:var(--sp-card-bg);border:1px solid var(--sp-border);border-radius:var(--sp-radius);padding:14px">
+          <div style="font-size:10px;color:var(--sp-muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">System Size</div>
+          <div style="font-size:22px;font-weight:900;background:linear-gradient(90deg,var(--sp-accent),#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">12.5 kW</div>
+          <div style="font-size:11px;color:var(--sp-muted)">peak capacity</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div style="background:var(--sp-card-bg);border:1px solid var(--sp-border);border-radius:var(--sp-radius);padding:14px">
+          <div style="font-size:10px;color:var(--sp-muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Battery Bank</div>
+          <div style="font-size:22px;font-weight:900;background:linear-gradient(90deg,var(--sp-accent),#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">200 Ah</div>
+          <div style="font-size:11px;color:var(--sp-muted)">lithium storage</div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div style="background:var(--sp-card-bg);border:1px solid var(--sp-border);border-radius:var(--sp-radius);padding:14px">
+          <div style="font-size:12px;font-weight:800;margin-bottom:8px;color:var(--sp-text)">Sample Solar Project</div>
+          <div style="font-size:12px;color:var(--sp-sub);margin-bottom:4px">Location: Accra, Ghana · Commercial · 48V DC</div>
+          <div style="display:flex;gap:6px">
+            <span style="font-size:10px;padding:2px 10px;border-radius:20px;background:var(--sp-accent)22;color:var(--sp-accent);border:1px solid var(--sp-accent)44;font-weight:700">APPROVED</span>
+            <span style="font-size:10px;padding:2px 10px;border-radius:20px;background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;font-weight:700">BANKABLE</span>
           </div>
         </div>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- Actions -->
-  <div class="col-12">
-    <div class="d-flex align-items-center justify-content-between">
-      <button class="btn btn-sm px-4" id="resetBtn"
-        style="background:var(--sp-card-bg);border:1px solid var(--sp-border);color:var(--sp-muted)">
-        <i class="bi bi-arrow-counterclockwise me-1"></i>Reset to Defaults
+<!-- Reset -->
+<div class="d-flex align-items-center justify-content-between">
+  <button class="btn btn-sm px-4" id="resetBtn"
+    style="background:var(--sp-card-bg);border:1px solid var(--sp-border);color:var(--sp-muted)">
+    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset to Defaults
+  </button>
+  <div id="saveMsg" class="text-success" style="font-size:13px;display:none">
+    <i class="bi bi-check-circle me-1"></i>Appearance saved
+  </div>
+</div>
+</div><!-- /pane-display -->
+
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- TAB: Email / SMTP -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="settings-pane" id="pane-smtp" style="display:none">
+<div class="solar-card p-4">
+  <div class="section-head mb-1"><i class="bi bi-envelope-at me-1"></i>Email / SMTP Configuration</div>
+  <div class="sp-hint mb-3">Configure your outbound mail server to send project reports. Your settings override any server-level defaults.</div>
+
+  <!-- Quick-fill hints -->
+  <div class="row g-2 mb-4">
+    {% for name, host, port, tls, hint in [
+      ('Gmail',   'smtp.gmail.com',     '587', 'starttls', 'Use an App Password (not your Google password)'),
+      ('Outlook', 'smtp.office365.com', '587', 'starttls', 'Works with Microsoft 365 / Outlook.com accounts'),
+      ('Brevo',   'smtp-relay.brevo.com','587','starttls', 'Free 300 emails/day — recommended for SaaS'),
+      ('Mailgun', 'smtp.mailgun.org',   '587', 'starttls', 'Transactional email — high deliverability'),
+    ] %}
+    <div class="col-6 col-md-3">
+      <button type="button" class="btn w-100 quick-fill-btn"
+        data-host="{{ host }}" data-port="{{ port }}" data-tls="{{ tls }}"
+        style="background:var(--sp-card-bg);border:1px solid var(--sp-border);font-size:12px;font-weight:700;padding:8px;border-radius:8px;color:var(--sp-text)">
+        <i class="bi bi-lightning-fill text-warning me-1" style="font-size:10px"></i>{{ name }}
       </button>
-      <div id="saveMsg" class="text-success" style="font-size:13px;display:none">
-        <i class="bi bi-check-circle me-1"></i>Settings saved
-      </div>
+      <div class="sp-hint mt-1 text-center" style="font-size:10px">{{ hint }}</div>
     </div>
+    {% endfor %}
   </div>
 
-</div><!-- /settings grid row -->
-</div><!-- /display settings card -->
+  <form method="post" action="{{ url_for('settings') }}" id="smtpForm">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="_section" value="smtp">
+    <div class="row g-3">
+      <div class="col-md-8">
+        <label class="sp-label">SMTP Host</label>
+        <input type="text" name="smtp_host" id="smtpHost" class="form-control sp-input"
+               value="{{ user.smtp_host or '' }}" placeholder="smtp.gmail.com">
+      </div>
+      <div class="col-md-2">
+        <label class="sp-label">Port</label>
+        <input type="number" name="smtp_port" id="smtpPort" class="form-control sp-input"
+               value="{{ user.smtp_port or '587' }}" placeholder="587">
+      </div>
+      <div class="col-md-2">
+        <label class="sp-label">Encryption</label>
+        <select name="smtp_tls" id="smtpTls" class="form-select sp-input">
+          <option value="starttls" {% if (user.smtp_tls or 'starttls') == 'starttls' %}selected{% endif %}>STARTTLS</option>
+          <option value="ssl"      {% if user.smtp_tls == 'ssl' %}selected{% endif %}>SSL/TLS</option>
+          <option value="none"     {% if user.smtp_tls == 'none' %}selected{% endif %}>None</option>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="sp-label">SMTP Username / Login Email</label>
+        <input type="email" name="smtp_user" id="smtpUser" class="form-control sp-input"
+               value="{{ user.smtp_user or '' }}" placeholder="you@gmail.com" autocomplete="username">
+      </div>
+      <div class="col-md-6">
+        <label class="sp-label">SMTP Password / App Password</label>
+        <div class="input-group">
+          <input type="password" name="smtp_pass" id="smtpPass" class="form-control sp-input"
+                 placeholder="{% if user.smtp_pass %}••••••••••••{% else %}Enter password{% endif %}" autocomplete="current-password">
+          <button type="button" class="btn btn-outline-secondary" onclick="toggleSmtpPass()" style="border-color:var(--sp-border)">
+            <i class="bi bi-eye" id="smtpPassEye"></i>
+          </button>
+        </div>
+        {% if user.smtp_pass %}
+        <div class="sp-hint"><i class="bi bi-check-circle text-success me-1"></i>Password saved — leave blank to keep existing.</div>
+        {% endif %}
+      </div>
+      <div class="col-md-6">
+        <label class="sp-label">From Address (appears in recipient's inbox)</label>
+        <input type="email" name="smtp_from" class="form-control sp-input"
+               value="{{ user.smtp_from or '' }}" placeholder="reports@yourcompany.com">
+      </div>
+      <div class="col-md-6 d-flex align-items-end">
+        <button type="button" class="btn btn-outline-info w-100" id="testSmtpBtn" onclick="testSmtp()">
+          <i class="bi bi-plug me-1"></i>Test Connection
+        </button>
+      </div>
+    </div>
 
-</div><!-- /col -->
+    <!-- Test result -->
+    <div id="smtpTestResult" class="mt-3" style="display:none"></div>
+
+    <div class="d-flex align-items-center justify-content-between mt-4">
+      <div class="sp-hint">
+        <i class="bi bi-info-circle me-1"></i>
+        Gmail: use <a href="https://myaccount.google.com/apppasswords" target="_blank" class="text-warning">App Passwords</a>.
+        Brevo: sign up free for 300 emails/day.
+      </div>
+      <button type="submit" class="btn btn-solar btn-sm px-4">
+        <i class="bi bi-check-lg me-1"></i>Save SMTP
+      </button>
+    </div>
+  </form>
+</div>
+</div><!-- /pane-smtp -->
+
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- TAB: Security -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="settings-pane" id="pane-security" style="display:none">
+<div class="solar-card p-4 mb-3">
+  <div class="section-head mb-1"><i class="bi bi-key me-1"></i>Change Password</div>
+  <div class="sp-hint mb-3">Use a strong, unique password. Minimum 8 characters.</div>
+  <form method="post" action="{{ url_for('settings') }}" id="pwForm">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="_section" value="password">
+    <div class="row g-3">
+      <div class="col-12">
+        <label class="sp-label">Current Password</label>
+        <div class="input-group">
+          <input type="password" name="current_password" id="curPw" class="form-control sp-input"
+                 placeholder="Enter your current password" required autocomplete="current-password">
+          <button type="button" class="btn btn-outline-secondary" onclick="togglePw('curPw','eyeCur')" style="border-color:var(--sp-border)">
+            <i class="bi bi-eye" id="eyeCur"></i>
+          </button>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <label class="sp-label">New Password</label>
+        <div class="input-group">
+          <input type="password" name="new_password" id="newPw" class="form-control sp-input"
+                 placeholder="At least 8 characters" required autocomplete="new-password" oninput="checkStrength(this.value)">
+          <button type="button" class="btn btn-outline-secondary" onclick="togglePw('newPw','eyeNew')" style="border-color:var(--sp-border)">
+            <i class="bi bi-eye" id="eyeNew"></i>
+          </button>
+        </div>
+        <!-- Strength bar -->
+        <div class="mt-2">
+          <div style="height:4px;border-radius:2px;background:var(--sp-border);overflow:hidden">
+            <div id="strengthBar" style="height:100%;width:0;border-radius:2px;transition:all .3s;background:#ef4444"></div>
+          </div>
+          <div id="strengthLabel" class="sp-hint mt-1"></div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <label class="sp-label">Confirm New Password</label>
+        <div class="input-group">
+          <input type="password" name="confirm_password" id="conPw" class="form-control sp-input"
+                 placeholder="Re-enter new password" required autocomplete="new-password" oninput="checkMatch()">
+          <button type="button" class="btn btn-outline-secondary" onclick="togglePw('conPw','eyeCon')" style="border-color:var(--sp-border)">
+            <i class="bi bi-eye" id="eyeCon"></i>
+          </button>
+        </div>
+        <div id="matchMsg" class="sp-hint mt-1"></div>
+      </div>
+    </div>
+    <div class="d-flex justify-content-end mt-4">
+      <button type="submit" class="btn btn-danger btn-sm px-4">
+        <i class="bi bi-shield-check me-1"></i>Change Password
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Account info -->
+<div class="solar-card p-4">
+  <div class="section-head mb-3"><i class="bi bi-person-circle me-1"></i>Account Info</div>
+  <div class="row g-2" style="font-size:13px">
+    <div class="col-md-4"><span class="sp-label d-block">Username</span><span class="fw-bold">{{ user.username }}</span></div>
+    <div class="col-md-4"><span class="sp-label d-block">Email</span><span class="fw-bold">{{ user.email }}</span></div>
+    <div class="col-md-4"><span class="sp-label d-block">Plan</span>
+      <span class="badge" style="background:{% if user.plan=='enterprise' %}#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44{% elif user.plan=='professional' %}#0ea5e922;color:#0ea5e9;border:1px solid #0ea5e944{% else %}var(--sp-border);color:var(--sp-muted){% endif %}">
+        {{ (user.plan or 'Free') | title }}
+      </span>
+    </div>
+    <div class="col-md-4 mt-2"><span class="sp-label d-block">Member Since</span><span class="fw-bold">{{ (user.created_at or '')[:10] }}</span></div>
+    <div class="col-md-4 mt-2"><span class="sp-label d-block">Admin</span><span class="fw-bold">{{ 'Yes' if user.is_admin else 'No' }}</span></div>
+  </div>
+</div>
+</div><!-- /pane-security -->
+
+
+</div><!-- /col-lg-10 -->
 </div><!-- /row -->
 {% endblock %}
 
 {% block scripts %}
+<style>
+.sp-label { font-size:12px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;display:block }
+.sp-hint  { font-size:11px;color:var(--sp-muted);line-height:1.4 }
+.settings-tab { color:var(--sp-muted) }
+.settings-tab.active {
+  color:var(--sp-accent);
+  border-color:var(--sp-accent) !important;
+  border-bottom-color:var(--sp-bg) !important;
+  background:var(--sp-accent)11 !important;
+  margin-bottom:-2px;
+}
+</style>
 <script>
+// ── Tab Switching ────────────────────────────────────────────────────────────
+function showTab(key) {
+  document.querySelectorAll('.settings-pane').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.settings-tab').forEach(b => b.classList.remove('active'));
+  const pane = document.getElementById('pane-' + key);
+  if (pane) pane.style.display = 'block';
+  const btn = document.querySelector('.settings-tab[data-tab="' + key + '"]');
+  if (btn) btn.classList.add('active');
+  history.replaceState(null, '', location.pathname + '?tab=' + key);
+}
+
+document.querySelectorAll('.settings-tab').forEach(btn => {
+  btn.addEventListener('click', () => showTab(btn.dataset.tab));
+});
+
+// Activate tab from URL param
+(function(){
+  const p = new URLSearchParams(location.search).get('tab') || 'org';
+  showTab(p);
+})();
+
+// ── Appearance (from original settings.js) ──────────────────────────────────
 const DEFAULTS = {theme:'dark', accent:'gold', font:'system', size:'md', radius:'def', density:'normal'};
 let S = {};
 try { S = JSON.parse(localStorage.getItem('sp_settings') || '{}'); } catch(e){}
@@ -339,7 +614,6 @@ function applySettings(){
   r.setProperty('--sp-font',    fn);
   r.setProperty('--sp-fs',      fs);
   r.setProperty('--sp-radius',  rd);
-  // Load Google Font if needed
   if(S.font && S.font !== 'system' && S.font !== 'mono'){
     const map = {inter:'Inter',roboto:'Roboto',dm:'DM+Sans'};
     if(!document.querySelector('link[data-spfont]')){
@@ -350,62 +624,39 @@ function applySettings(){
     }
   }
   localStorage.setItem('sp_settings', JSON.stringify(S));
-  showSaved();
-}
-
-function showSaved(){
   const m = document.getElementById('saveMsg');
-  m.style.display = 'block';
-  clearTimeout(m._t);
-  m._t = setTimeout(()=> m.style.display='none', 2000);
-}
-
-function markActive(groupId, val, activeStyle, inactiveStyle){
-  document.querySelectorAll('#'+groupId+' [data-val]').forEach(el => {
-    const isActive = el.dataset.val === val;
-    Object.entries(isActive ? activeStyle : inactiveStyle).forEach(([k,v]) => el.style[k]=v);
-  });
+  if(m){ m.style.display = 'block'; clearTimeout(m._t); m._t = setTimeout(()=> m.style.display='none', 2000); }
 }
 
 function refreshUI(){
-  // Themes
   document.querySelectorAll('#themeGroup .theme-swatch').forEach(el => {
     el.style.borderColor = el.dataset.val === S.theme ? 'var(--sp-accent)' : 'transparent';
     el.style.transform   = el.dataset.val === S.theme ? 'scale(1.04)' : 'scale(1)';
   });
-  // Accents
   document.querySelectorAll('#accentGroup .accent-swatch').forEach(el => {
     el.style.borderColor = el.dataset.val === S.accent ? '#fff' : 'transparent';
     el.style.transform   = el.dataset.val === S.accent ? 'scale(1.2)' : 'scale(1)';
   });
-  // Fonts
   document.querySelectorAll('#fontGroup .font-swatch').forEach(el => {
     const active = el.dataset.val === S.font;
     el.style.borderColor   = active ? 'var(--sp-accent)' : 'transparent';
     el.style.background    = active ? 'var(--sp-accent)11' : 'transparent';
     el.querySelector('.font-dot').style.background = active ? 'var(--sp-accent)' : 'var(--sp-border)';
   });
-  // Sizes
   document.querySelectorAll('#sizeGroup .size-swatch').forEach(el => {
-    const active = el.dataset.val === S.size;
-    el.style.borderColor = active ? 'var(--sp-accent)' : 'transparent';
-    el.style.background  = active ? 'var(--sp-accent)11' : 'transparent';
+    el.style.borderColor = el.dataset.val === S.size ? 'var(--sp-accent)' : 'transparent';
+    el.style.background  = el.dataset.val === S.size ? 'var(--sp-accent)11' : 'transparent';
   });
-  // Radius
   document.querySelectorAll('#radiusGroup .radius-swatch').forEach(el => {
-    const active = el.dataset.val === S.radius;
-    el.style.borderColor = active ? 'var(--sp-accent)' : 'var(--sp-border)';
-    el.style.background  = active ? 'var(--sp-accent)11' : 'transparent';
+    el.style.borderColor = el.dataset.val === S.radius ? 'var(--sp-accent)' : 'var(--sp-border)';
+    el.style.background  = el.dataset.val === S.radius ? 'var(--sp-accent)11' : 'transparent';
   });
-  // Density
   document.querySelectorAll('#densityGroup .density-swatch').forEach(el => {
-    const active = el.dataset.val === S.density;
-    el.style.borderColor = active ? 'var(--sp-accent)' : 'transparent';
-    el.style.background  = active ? 'var(--sp-accent)11' : 'transparent';
+    el.style.borderColor = el.dataset.val === S.density ? 'var(--sp-accent)' : 'transparent';
+    el.style.background  = el.dataset.val === S.density ? 'var(--sp-accent)11' : 'transparent';
   });
 }
 
-// Wire up click handlers
 document.querySelectorAll('#themeGroup  [data-val]').forEach(el => el.addEventListener('click', ()=>{ S.theme   = el.dataset.val; applySettings(); refreshUI(); }));
 document.querySelectorAll('#accentGroup [data-val]').forEach(el => el.addEventListener('click', ()=>{ S.accent  = el.dataset.val; applySettings(); refreshUI(); }));
 document.querySelectorAll('#fontGroup   [data-val]').forEach(el => el.addEventListener('click', ()=>{ S.font    = el.dataset.val; applySettings(); refreshUI(); }));
@@ -413,12 +664,118 @@ document.querySelectorAll('#sizeGroup   [data-val]').forEach(el => el.addEventLi
 document.querySelectorAll('#radiusGroup [data-val]').forEach(el => el.addEventListener('click', ()=>{ S.radius  = el.dataset.val; applySettings(); refreshUI(); }));
 document.querySelectorAll('#densityGroup[data-val]').forEach(el => el.addEventListener('click', ()=>{ S.density = el.dataset.val; applySettings(); refreshUI(); }));
 
-document.getElementById('resetBtn').addEventListener('click', ()=>{
-  S = Object.assign({}, DEFAULTS);
-  applySettings(); refreshUI();
+const resetBtn = document.getElementById('resetBtn');
+if(resetBtn) resetBtn.addEventListener('click', ()=>{ S = Object.assign({}, DEFAULTS); applySettings(); refreshUI(); });
+
+refreshUI();
+
+// ── Date/Time format radio highlight ─────────────────────────────────────────
+function selectDateFmt(label, val){
+  label.closest('.d-flex').querySelectorAll('label').forEach(l => {
+    const active = l.querySelector('input').value === val;
+    l.style.borderColor = active ? 'var(--sp-accent)' : 'var(--sp-border)';
+    l.style.background  = active ? 'var(--sp-accent)11' : 'transparent';
+    l.querySelector('.df-dot').style.background = active ? 'var(--sp-accent)' : 'transparent';
+    l.querySelector('input').checked = active;
+  });
+}
+function selectTimeFmt(label, val){
+  label.closest('.d-flex').querySelectorAll('label').forEach(l => {
+    const active = l.querySelector('input').value === val;
+    l.style.borderColor = active ? 'var(--sp-accent)' : 'var(--sp-border)';
+    l.style.background  = active ? 'var(--sp-accent)11' : 'transparent';
+    l.querySelector('.tf-dot').style.background = active ? 'var(--sp-accent)' : 'transparent';
+    l.querySelector('input').checked = active;
+  });
+}
+
+// ── SMTP quick-fill ──────────────────────────────────────────────────────────
+document.querySelectorAll('.quick-fill-btn').forEach(btn => {
+  btn.addEventListener('click', function(){
+    document.getElementById('smtpHost').value = this.dataset.host;
+    document.getElementById('smtpPort').value = this.dataset.port;
+    document.getElementById('smtpTls').value  = this.dataset.tls;
+    document.querySelectorAll('.quick-fill-btn').forEach(b => b.style.borderColor = 'var(--sp-border)');
+    this.style.borderColor = 'var(--sp-accent)';
+  });
 });
 
-// Init
-refreshUI();
+function toggleSmtpPass(){
+  const f = document.getElementById('smtpPass');
+  const e = document.getElementById('smtpPassEye');
+  if(f.type === 'password'){ f.type = 'text'; e.className = 'bi bi-eye-slash'; }
+  else { f.type = 'password'; e.className = 'bi bi-eye'; }
+}
+
+// ── SMTP Test Connection ─────────────────────────────────────────────────────
+function testSmtp(){
+  const btn = document.getElementById('testSmtpBtn');
+  const res = document.getElementById('smtpTestResult');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing…';
+  res.style.display = 'none';
+
+  const fd = new FormData(document.getElementById('smtpForm'));
+  fd.append('_csrf', '{{ csrf_token() }}');
+
+  fetch('{{ url_for("test_smtp_connection") }}', { method:'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+      res.style.display = 'block';
+      res.innerHTML = data.ok
+        ? `<div class="alert py-2 mb-0" style="background:#22c55e22;border:1px solid #22c55e44;color:#22c55e;font-size:13px"><i class="bi bi-check-circle-fill me-1"></i>${data.msg}</div>`
+        : `<div class="alert py-2 mb-0" style="background:#ef444422;border:1px solid #ef444444;color:#ef4444;font-size:13px"><i class="bi bi-x-circle-fill me-1"></i>${data.msg}</div>`;
+    })
+    .catch(e => {
+      res.style.display = 'block';
+      res.innerHTML = `<div class="alert py-2 mb-0 alert-danger" style="font-size:13px">Network error: ${e.message}</div>`;
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plug me-1"></i>Test Connection';
+    });
+}
+
+// ── Password Security ─────────────────────────────────────────────────────────
+function togglePw(id, eyeId){
+  const f = document.getElementById(id);
+  const e = document.getElementById(eyeId);
+  if(f.type === 'password'){ f.type = 'text'; e.className = 'bi bi-eye-slash'; }
+  else { f.type = 'password'; e.className = 'bi bi-eye'; }
+}
+
+function checkStrength(pw){
+  const bar = document.getElementById('strengthBar');
+  const lbl = document.getElementById('strengthLabel');
+  let score = 0;
+  if(pw.length >= 8)  score++;
+  if(pw.length >= 12) score++;
+  if(/[A-Z]/.test(pw)) score++;
+  if(/[0-9]/.test(pw)) score++;
+  if(/[^a-zA-Z0-9]/.test(pw)) score++;
+  const levels = [
+    {w:'0%',   c:'#ef4444', t:''},
+    {w:'20%',  c:'#ef4444', t:'Very weak'},
+    {w:'40%',  c:'#f97316', t:'Weak'},
+    {w:'60%',  c:'#f59e0b', t:'Fair'},
+    {w:'80%',  c:'#22c55e', t:'Strong'},
+    {w:'100%', c:'#22c55e', t:'Very strong'},
+  ];
+  const l = levels[Math.min(score, 5)];
+  bar.style.width = l.w; bar.style.background = l.c;
+  lbl.style.color = l.c; lbl.textContent = l.t;
+}
+
+function checkMatch(){
+  const nw = document.getElementById('newPw').value;
+  const cn = document.getElementById('conPw').value;
+  const m  = document.getElementById('matchMsg');
+  if(!cn){ m.textContent = ''; return; }
+  if(nw === cn){
+    m.style.color = '#22c55e'; m.textContent = '✓ Passwords match';
+  } else {
+    m.style.color = '#ef4444'; m.textContent = '✗ Passwords do not match';
+  }
+}
 </script>
 {% endblock %}

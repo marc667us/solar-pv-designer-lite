@@ -413,6 +413,22 @@ def init_db():
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT {defval}")
         except Exception:
             pass
+    # Migrate: date/time + per-user SMTP settings
+    for col, defval in [
+        ("date_format", "'DD/MM/YYYY'"),
+        ("time_format", "'24h'"),
+        ("smtp_host",   "''"),
+        ("smtp_port",   "'587'"),
+        ("smtp_user",   "''"),
+        ("smtp_pass",   "''"),
+        ("smtp_from",   "''"),
+        ("smtp_tls",    "'starttls'"),
+    ]:
+        try:
+            with get_db() as c:
+                c.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT {defval}")
+        except Exception:
+            pass
     # Seed default users — ensure admin and owner accounts always exist
     _SEED_USERS = [
         ("admin",    "admin@solarpro.global", "Administrator", "SolarAdmin2026!", "enterprise", 1),
@@ -3466,18 +3482,103 @@ def account():
 def settings():
     if request.method == "POST":
         csrf_protect()
-        fields = ["org_name", "org_address", "org_email", "org_phone", "org_website", "timezone"]
-        vals = {f: request.form.get(f, "").strip() for f in fields}
-        with get_db() as c:
-            c.execute(
-                "UPDATE users SET org_name=?, org_address=?, org_email=?, "
-                "org_phone=?, org_website=?, timezone=? WHERE id=?",
-                (vals["org_name"], vals["org_address"], vals["org_email"],
-                 vals["org_phone"], vals["org_website"], vals["timezone"],
-                 session["user_id"]))
-        flash("Organisation profile saved.", "success")
+        section = request.form.get("_section", "profile")
+        uid = session["user_id"]
+
+        if section == "profile":
+            fields = ["org_name", "org_address", "org_email", "org_phone", "org_website", "timezone"]
+            vals = {f: request.form.get(f, "").strip() for f in fields}
+            with get_db() as c:
+                c.execute(
+                    "UPDATE users SET org_name=?, org_address=?, org_email=?, "
+                    "org_phone=?, org_website=?, timezone=? WHERE id=?",
+                    (vals["org_name"], vals["org_address"], vals["org_email"],
+                     vals["org_phone"], vals["org_website"], vals["timezone"], uid))
+            flash("Organisation profile saved.", "success")
+            return redirect(url_for("settings") + "?tab=org")
+
+        elif section == "datetime":
+            date_fmt = request.form.get("date_format", "DD/MM/YYYY").strip()
+            time_fmt = request.form.get("time_format", "24h").strip()
+            with get_db() as c:
+                c.execute("UPDATE users SET date_format=?, time_format=? WHERE id=?",
+                          (date_fmt, time_fmt, uid))
+            flash("Date & time preferences saved.", "success")
+            return redirect(url_for("settings") + "?tab=datetime")
+
+        elif section == "smtp":
+            smtp_host = request.form.get("smtp_host", "").strip()
+            smtp_port = request.form.get("smtp_port", "587").strip() or "587"
+            smtp_user = request.form.get("smtp_user", "").strip()
+            smtp_pass = request.form.get("smtp_pass", "").strip()
+            smtp_from = request.form.get("smtp_from", "").strip()
+            smtp_tls  = request.form.get("smtp_tls", "starttls").strip()
+            with get_db() as c:
+                if not smtp_pass:
+                    existing = c.execute("SELECT smtp_pass FROM users WHERE id=?", (uid,)).fetchone()
+                    if existing:
+                        smtp_pass = existing["smtp_pass"] or ""
+                c.execute(
+                    "UPDATE users SET smtp_host=?, smtp_port=?, smtp_user=?, "
+                    "smtp_pass=?, smtp_from=?, smtp_tls=? WHERE id=?",
+                    (smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_tls, uid))
+            flash("SMTP configuration saved.", "success")
+            return redirect(url_for("settings") + "?tab=smtp")
+
+        elif section == "password":
+            current_pw = request.form.get("current_password", "")
+            new_pw     = request.form.get("new_password", "")
+            confirm_pw = request.form.get("confirm_password", "")
+            with get_db() as c:
+                user_row = c.execute("SELECT password_hash FROM users WHERE id=?", (uid,)).fetchone()
+            if not check_password_hash(user_row["password_hash"], current_pw):
+                flash("Current password is incorrect.", "danger")
+            elif len(new_pw) < 8:
+                flash("New password must be at least 8 characters.", "danger")
+            elif new_pw != confirm_pw:
+                flash("New passwords do not match.", "danger")
+            else:
+                with get_db() as c:
+                    c.execute("UPDATE users SET password_hash=? WHERE id=?",
+                              (generate_password_hash(new_pw), uid))
+                flash("Password changed successfully.", "success")
+            return redirect(url_for("settings") + "?tab=security")
+
         return redirect(url_for("settings"))
+
     return render_template("settings.html", user=current_user())
+
+
+@app.route("/settings/test-smtp", methods=["POST"])
+@login_required
+def test_smtp_connection():
+    """AJAX: test per-user SMTP configuration."""
+    csrf_protect()
+    user = current_user()
+    host = (request.form.get("smtp_host") or user.get("smtp_host") or "").strip()
+    port_str = (request.form.get("smtp_port") or user.get("smtp_port") or "587").strip()
+    port = int(port_str) if port_str.isdigit() else 587
+    usr  = (request.form.get("smtp_user") or user.get("smtp_user") or "").strip()
+    pwd  = (request.form.get("smtp_pass") or user.get("smtp_pass") or "").strip()
+    tls_mode = (request.form.get("smtp_tls") or user.get("smtp_tls") or "starttls").strip()
+    if not host or not usr:
+        return jsonify(ok=False, msg="SMTP host and username are required.")
+    try:
+        import smtplib
+        if tls_mode == "starttls":
+            srv = smtplib.SMTP(host, port, timeout=10)
+            srv.ehlo()
+            srv.starttls()
+        elif tls_mode == "ssl":
+            srv = smtplib.SMTP_SSL(host, port, timeout=10)
+        else:
+            srv = smtplib.SMTP(host, port, timeout=10)
+        if pwd:
+            srv.login(usr, pwd)
+        srv.quit()
+        return jsonify(ok=True, msg="Connection successful — SMTP is working correctly.")
+    except Exception as ex:
+        return jsonify(ok=False, msg=str(ex))
 
 
 @app.route("/account/cancel", methods=["POST"])
@@ -4575,11 +4676,29 @@ Prepared by: SolarPro Global | Currency: USD (local rates apply × {fx})
 @app.route("/project/<int:pid>/email", methods=["GET", "POST"])
 @login_required
 def project_email(pid):
-    """Send a PDF report to recipients via SMTP."""
+    """Send a PDF report to recipients via SMTP (user settings > env vars)."""
     project = get_project(pid)
     if not project or "results" not in project["data"]:
         flash("Run calculations first.", "warning")
         return redirect(url_for("project_results", pid=pid))
+
+    user = current_user()
+
+    # Resolve SMTP: user DB settings take priority over env vars
+    u_host = (user.get("smtp_host") or "").strip()
+    u_user = (user.get("smtp_user") or "").strip()
+    u_pass = (user.get("smtp_pass") or "").strip()
+    u_from = (user.get("smtp_from") or "").strip()
+    u_port_s = (user.get("smtp_port") or "587").strip()
+    u_port = int(u_port_s) if u_port_s.isdigit() else 587
+    u_tls  = (user.get("smtp_tls") or "starttls") == "starttls"
+
+    eff_host = u_host or SMTP_HOST
+    eff_user = u_user or SMTP_USER
+    eff_pass = u_pass or SMTP_PASS
+    eff_from = u_from or SMTP_FROM
+    eff_port = u_port if u_host else SMTP_PORT
+    eff_tls  = u_tls  if u_host else SMTP_TLS
 
     REPORT_OPTIONS = [
         ("BOQ Report",          url_for("export_pdf_boq",        pid=pid)),
@@ -4596,23 +4715,20 @@ def project_email(pid):
         recipients = [e.strip() for e in request.form.get("recipients","").split(",") if e.strip()]
         subject    = request.form.get("subject","").strip() or f"Solar Project Report — {project['name']}"
         body_text  = request.form.get("body","").strip()
-        report_key = request.form.get("report", "")
 
         if not recipients:
             flash("Enter at least one recipient email.", "warning")
             return redirect(url_for("project_email", pid=pid))
 
-        if not SMTP_HOST or not SMTP_USER:
-            # Log attempt but inform user SMTP not configured
+        if not eff_host or not eff_user:
             with get_db() as c:
                 c.execute(
                     "INSERT INTO email_logs (user_id,project_id,recipients,subject,status,error_msg) "
                     "VALUES (?,?,?,?,?,?)",
                     (session["user_id"], pid, ",".join(recipients), subject,
-                     "failed", "SMTP not configured — set SMTP_HOST, SMTP_USER, SMTP_PASS in .env"))
+                     "failed", "SMTP not configured"))
             flash(
-                "SMTP not configured. Add SMTP_HOST / SMTP_USER / SMTP_PASS to your .env file. "
-                "Your Gmail, Outlook, or any free SMTP works.", "warning")
+                "SMTP not configured. Go to Settings → Email / SMTP to add your mail credentials.", "warning")
             return redirect(url_for("project_email", pid=pid))
 
         try:
@@ -4621,21 +4737,21 @@ def project_email(pid):
             from email.mime.text import MIMEText
 
             msg = MIMEMultipart()
-            msg["From"]    = SMTP_FROM
+            msg["From"]    = eff_from
             msg["To"]      = ", ".join(recipients)
             msg["Subject"] = subject
             msg.attach(MIMEText(body_text or
                 f"Please find the solar project report for {project['name']} attached.\n\n"
                 f"Generated by SolarPro Global.", "plain"))
 
-            if SMTP_TLS:
-                srv = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15)
+            if eff_tls:
+                srv = smtplib.SMTP(eff_host, eff_port, timeout=15)
                 srv.ehlo()
                 srv.starttls()
             else:
-                srv = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15)
-            srv.login(SMTP_USER, SMTP_PASS)
-            srv.sendmail(SMTP_FROM, recipients, msg.as_string())
+                srv = smtplib.SMTP_SSL(eff_host, eff_port, timeout=15)
+            srv.login(eff_user, eff_pass)
+            srv.sendmail(eff_from, recipients, msg.as_string())
             srv.quit()
 
             with get_db() as c:
@@ -4654,12 +4770,11 @@ def project_email(pid):
 
         return redirect(url_for("project_email", pid=pid))
 
-    user = current_user()
     with get_db() as c:
         logs = c.execute(
             "SELECT * FROM email_logs WHERE project_id=? ORDER BY created_at DESC LIMIT 10",
             (pid,)).fetchall()
-    smtp_ok = bool(SMTP_HOST and SMTP_USER)
+    smtp_ok = bool(eff_host and eff_user)
     d = project["data"]
     r = d.get("results", {})
     return render_template("email_report.html", user=user, project=project,
