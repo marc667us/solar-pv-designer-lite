@@ -658,6 +658,84 @@ INVERTER_BRANDS = [
     (9999,"Huawei SUN2000-20KTL, SMA Sunny Tripower CORE1, Sungrow SG25CX"),
 ]
 
+# ─── Ghana PURC Tariff Schedule (Q2 2026, effective April 1 2026) ─────────────
+# Source: Public Utilities Regulatory Commission (PURC) Ghana
+GHANA_PURC_TARIFFS = {
+    "Residential Lifeline (0-30 kWh/month)": {
+        "rate_ghc":   0.8690,
+        "fixed_ghc":  2.13,
+        "description": "Low-income households consuming up to 30 kWh/month",
+        "bldg_hint":  ["low_income", "single_room"],
+    },
+    "Residential Standard (0-300 kWh/month)": {
+        "rate_ghc":   1.9688,
+        "fixed_ghc":  10.73,
+        "description": "Standard residential homes consuming up to 300 kWh/month",
+        "bldg_hint":  ["residential", "apartment", "bungalow", "villa", "duplex"],
+    },
+    "Residential High Use (>300 kWh/month)": {
+        "rate_ghc":   2.4500,
+        "fixed_ghc":  10.73,
+        "description": "High-consumption residential, >300 kWh/month (large homes)",
+        "bldg_hint":  ["mansion", "estate"],
+    },
+    "Non-Residential Standard (0-300 kWh/month)": {
+        "rate_ghc":   1.7775,
+        "fixed_ghc":  30.00,
+        "description": "Small offices, shops, clinics up to 300 kWh/month",
+        "bldg_hint":  ["office", "retail", "shop", "clinic", "small_commercial"],
+    },
+    "Non-Residential High Use (>300 kWh/month)": {
+        "rate_ghc":   2.1649,
+        "fixed_ghc":  30.00,
+        "description": "Larger commercial users, hotels, supermarkets, >300 kWh/month",
+        "bldg_hint":  ["commercial", "hotel", "supermarket", "restaurant", "church"],
+    },
+    "Special Load - LV (hospitals, schools)": {
+        "rate_ghc":   2.3211,
+        "fixed_ghc":  100.00,
+        "description": "Hospitals, schools, government buildings on LV supply",
+        "bldg_hint":  ["hospital", "school", "government", "institution", "university"],
+    },
+    "Special Load - HV (large facilities)": {
+        "rate_ghc":   1.8212,
+        "fixed_ghc":  200.00,
+        "description": "Large special facilities on high-voltage supply",
+        "bldg_hint":  [],
+    },
+    "Industrial - LV (factories, warehouses)": {
+        "rate_ghc":   2.2000,
+        "fixed_ghc":  300.00,
+        "description": "Industrial users on low-voltage supply — factories, warehouses",
+        "bldg_hint":  ["industrial", "factory", "warehouse", "manufacturing"],
+    },
+    "Industrial - HV (large industries)": {
+        "rate_ghc":   1.7000,
+        "fixed_ghc":  500.00,
+        "description": "Large industrial facilities on high-voltage supply",
+        "bldg_hint":  [],
+    },
+    "EV Charging Station": {
+        "rate_ghc":   2.0160,
+        "fixed_ghc":  50000.00,
+        "description": "Electric vehicle charging stations",
+        "bldg_hint":  ["ev_station", "petrol_station"],
+    },
+}
+
+# ─── Demand Factors by load category ─────────────────────────────────────────
+# Fraction of connected load actually operating simultaneously (IEC 60364 / BS 7671)
+DEMAND_FACTORS = {
+    "Lighting":    0.75,   # Not all lights on at once
+    "Cooling":     0.65,   # Staggered thermostat cycling
+    "Appliances":  0.50,   # Diverse usage patterns
+    "Electronics": 0.70,   # Partial simultaneous use
+    "Pumps":       0.70,   # Usually one pump runs at a time
+    "Heating":     0.60,   # Thermostat-controlled staggering
+    "Office":      0.70,   # Not all office equipment running simultaneously
+    "Other":       0.70,   # General diversity allowance
+}
+
 def inverter_brand(inv_kw):
     for threshold, brand in INVERTER_BRANDS:
         if inv_kw <= threshold:
@@ -668,12 +746,18 @@ def inverter_brand(inv_kw):
 # ─── Engineering calculations ─────────────────────────────────────────────────
 
 def calc_loads(loads):
+    """Sum diversified daily energy demand.
+    Each load's kWh is multiplied by its demand_factor (fraction of connected
+    load actually operating simultaneously). Default DF per category if not set."""
     total = 0.0
     for ld in loads:
-        w = float(ld.get("wattage", 0))
-        q = float(ld.get("quantity", 1))
-        h = float(ld.get("hours", 0))
-        total += (w * q * h) / 1000
+        w  = float(ld.get("wattage", 0))
+        q  = float(ld.get("quantity", 1))
+        h  = float(ld.get("hours", 0))
+        df = float(ld.get("demand_factor",
+                   DEMAND_FACTORS.get(ld.get("category", "Other"), 0.70)))
+        df = max(0.10, min(1.0, df))   # clamp 10%–100%
+        total += (w * q * h * df) / 1000
     return round(total, 3)
 
 
@@ -2100,6 +2184,12 @@ def project_location(pid):
             "battery_dod":      float(f.get("battery_dod", 80)),
             "performance_ratio": float(f.get("performance_ratio", 75)),
         })
+        # Save Ghana PURC category if provided
+        purc_cat = f.get("purc_category", "").strip()
+        if purc_cat:
+            data["purc_category"] = purc_cat
+        elif "purc_category" in data and country != "Ghana":
+            data.pop("purc_category", None)   # clear if country changed
         save_project_data(pid, data)
         return redirect(url_for("project_loads", pid=pid))
 
@@ -2107,7 +2197,8 @@ def project_location(pid):
                            project=project, countries=get_countries(),
                            global_data=GLOBAL_DATA,
                            battery_chemistries=list(BATTERY_CHEMISTRY.keys()),
-                           panel_options=PANEL_SPEC["standard_wp"])
+                           panel_options=PANEL_SPEC["standard_wp"],
+                           purc_tariffs=GHANA_PURC_TARIFFS)
 
 
 @app.route("/project/<int:pid>/loads", methods=["GET", "POST"])
@@ -2125,18 +2216,27 @@ def project_loads(pid):
         watts    = request.form.getlist("load_watt[]")
         qtys     = request.form.getlist("load_qty[]")
         hours    = request.form.getlist("load_hours[]")
+        dfs      = request.form.getlist("load_df[]")
         critical = request.form.getlist("load_critical[]")
 
         for i in range(len(names)):
             if not names[i].strip():
                 continue
+            cat = cats[i] if i < len(cats) else "Other"
+            df_default = DEMAND_FACTORS.get(cat, 0.70)
+            try:
+                df_val = float(dfs[i]) if i < len(dfs) and dfs[i] else df_default
+            except (ValueError, IndexError):
+                df_val = df_default
+            df_val = max(0.10, min(1.0, df_val))
             loads.append({
-                "name":     names[i],
-                "category": cats[i] if i < len(cats) else "Other",
-                "wattage":  float(watts[i]) if i < len(watts) else 0,
-                "quantity": float(qtys[i]) if i < len(qtys) else 1,
-                "hours":    float(hours[i]) if i < len(hours) else 0,
-                "critical": str(i) in critical or names[i] in critical,
+                "name":          names[i],
+                "category":      cat,
+                "wattage":       float(watts[i]) if i < len(watts) else 0,
+                "quantity":      float(qtys[i]) if i < len(qtys) else 1,
+                "hours":         float(hours[i]) if i < len(hours) else 0,
+                "demand_factor": round(df_val, 2),
+                "critical":      str(i) in critical or names[i] in critical,
             })
 
         if not loads:
@@ -2146,9 +2246,20 @@ def project_loads(pid):
         data = project["data"]
         data["loads"] = loads
 
-        # Connected peak load (wattage × qty, no hours — simultaneous demand)
+        # Save PURC customer category if provided
+        purc_cat = request.form.get("purc_category", "").strip()
+        if purc_cat:
+            data["purc_category"] = purc_cat
+
+        # Connected peak load (wattage × qty, no DF — used for phase selection & cable sizing)
         peak_kw = sum(
             float(ld.get("wattage", 0)) * float(ld.get("quantity", 1))
+            for ld in loads
+        ) / 1000.0
+
+        # Diversified peak (with demand factors — used for inverter sizing)
+        div_peak_kw = sum(
+            float(ld.get("wattage", 0)) * float(ld.get("quantity", 1)) * float(ld.get("demand_factor", 0.70))
             for ld in loads
         ) / 1000.0
 
@@ -2190,7 +2301,7 @@ def project_loads(pid):
 
         pv_kw, num_panels, td      = calc_pv(daily_kwh, psh, temp, panel_wp)
         bat_kwh, num_bat, unit_bat = calc_battery(daily_kwh, autonomy, chemistry)
-        inv_kw                     = calc_inverter(daily_kwh, peak_kw=peak_kw)
+        inv_kw                     = calc_inverter(daily_kwh, peak_kw=div_peak_kw)
         mppt_a                     = calc_mppt(pv_kw, dc_voltage)
         ac_cables = size_all_cables(inv_kw, pv_kw, system_type, phase,
                                     ambient_c=temp)
@@ -2226,6 +2337,7 @@ def project_loads(pid):
             "inv_brand":    inverter_brand(inv_kw),
             "mppt_a":       mppt_a,
             "peak_kw":      round(peak_kw, 2),
+            "div_peak_kw":  round(div_peak_kw, 2),
             "auto_phase":   auto_phase,
             "panel_spec":   PANEL_SPEC,
             "economics":    economics,
@@ -2591,6 +2703,27 @@ def api_solar(country, region):
     if not sd:
         abort(404)
     return jsonify(sd)
+
+
+@app.route("/api/purc-tariffs")
+@limiter.limit("120 per minute")
+def api_purc_tariffs():
+    """Return Ghana PURC Q2 2026 tariff schedule as JSON."""
+    result = {}
+    for cat, info in GHANA_PURC_TARIFFS.items():
+        result[cat] = {
+            "rate_ghc":    info["rate_ghc"],
+            "fixed_ghc":   info["fixed_ghc"],
+            "description": info["description"],
+        }
+    return jsonify(result)
+
+
+@app.route("/api/demand-factors")
+@limiter.limit("120 per minute")
+def api_demand_factors():
+    """Return default demand factors per load category."""
+    return jsonify(DEMAND_FACTORS)
 
 
 # ─── Export endpoints ─────────────────────────────────────────────────────────

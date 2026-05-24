@@ -113,6 +113,7 @@
                 <th style="width:80px;color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">W</th>
                 <th style="width:60px;color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Qty</th>
                 <th style="width:80px;color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Hrs/day</th>
+                <th style="width:70px;color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px" title="Demand Factor — fraction of load in use simultaneously">DF %</th>
                 <th style="width:90px;color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">kWh/day</th>
                 <th style="width:60px;color:#6868a0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:center">Critical</th>
                 <th style="width:36px"></th>
@@ -134,7 +135,14 @@
                   <td><input name="load_watt[]" type="number" min="0" step="1" class="form-control form-control-sm watt" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="{{ ld.wattage|int }}" onchange="recalc(this)"/></td>
                   <td><input name="load_qty[]" type="number" min="1" step="1" class="form-control form-control-sm qty" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="{{ ld.quantity|int }}" onchange="recalc(this)"/></td>
                   <td><input name="load_hours[]" type="number" min="0" max="24" step="0.5" class="form-control form-control-sm hrs" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="{{ ld.hours }}" onchange="recalc(this)"/></td>
-                  <td><span class="text-warning fw-bold kwh-cell" style="font-size:13px">{{ "%.3f"|format(ld.wattage*ld.quantity*ld.hours/1000) }}</span></td>
+                  <td>
+                    <input name="load_df[]" type="number" min="10" max="100" step="5"
+                           class="form-control form-control-sm df-inp"
+                           style="background:#0a0a18;border-color:#2e2e50;color:#86efac;font-size:12px;width:62px"
+                           value="{{ ((ld.get('demand_factor', 0.70) if ld is mapping else 0.70) * 100)|int }}"
+                           title="Demand Factor %" onchange="recalc(this)"/>
+                  </td>
+                  <td><span class="text-warning fw-bold kwh-cell" style="font-size:13px">{{ "%.3f"|format(ld.wattage*ld.quantity*ld.hours*(ld.get('demand_factor',0.70) if ld is mapping else 0.70)/1000) }}</span></td>
                   <td class="text-center">
                     <input name="load_critical[]" type="checkbox" class="form-check-input crit-check" value="{{ loop.index0 }}" {% if ld.critical %}checked{% endif %} style="border-color:#2e2e50"/>
                   </td>
@@ -159,7 +167,7 @@
         <div class="d-flex justify-content-between align-items-center mt-3 pt-3" style="border-top:1px solid #1e1e3a">
           <div class="text-secondary" style="font-size:11px">
             <i class="bi bi-info-circle me-1"></i>
-            Σ Daily Energy = Σ (W × Qty × Hrs/day) ÷ 1000
+            Σ Daily Energy = Σ (W × Qty × Hrs/day × Demand Factor) ÷ 1000
           </div>
           <div class="d-flex gap-2">
             <a href="{{ url_for('project_location', pid=project.id) }}" class="btn btn-outline-secondary btn-sm px-3">
@@ -189,7 +197,7 @@
 
       <div class="d-flex gap-2 mb-3">
         <div class="flex-fill p-2 rounded text-center" style="background:#0a0a18;border:1px solid #2e2e50">
-          <div style="font-size:10px;color:#6868a0;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Peak Demand</div>
+          <div style="font-size:10px;color:#6868a0;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Diversified Peak</div>
           <div class="text-warning fw-bold" style="font-size:18px" id="peakKw">0.00</div>
           <div style="font-size:10px;color:#6868a0">kW</div>
         </div>
@@ -229,7 +237,8 @@
       </div>
       <div style="font-size:10px;color:#6868a0">
         <i class="bi bi-check-circle me-1 text-warning"></i>Critical loads backed by battery autonomy<br>
-        <i class="bi bi-info-circle me-1 text-secondary mt-1"></i>Peak &gt; 8 kW triggers 3-phase auto-select
+        <i class="bi bi-info-circle me-1 text-secondary mt-1"></i>Connected peak &gt; 8 kW triggers 3-phase auto-select<br>
+        <i class="bi bi-activity me-1 text-success mt-1"></i>DF % = fraction of load in use simultaneously
       </div>
     </div>
   </div>
@@ -251,7 +260,13 @@
     <td><input name="load_watt[]" type="number" min="0" step="1" class="form-control form-control-sm watt" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="100" onchange="recalc(this)"/></td>
     <td><input name="load_qty[]" type="number" min="1" step="1" class="form-control form-control-sm qty" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="1" onchange="recalc(this)"/></td>
     <td><input name="load_hours[]" type="number" min="0" max="24" step="0.5" class="form-control form-control-sm hrs" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="8" onchange="recalc(this)"/></td>
-    <td><span class="text-warning fw-bold kwh-cell" style="font-size:13px">0.800</span></td>
+    <td>
+      <input name="load_df[]" type="number" min="10" max="100" step="5"
+             class="form-control form-control-sm df-inp"
+             style="background:#0a0a18;border-color:#2e2e50;color:#86efac;font-size:12px;width:62px"
+             value="70" title="Demand Factor %" onchange="recalc(this)"/>
+    </td>
+    <td><span class="text-warning fw-bold kwh-cell" style="font-size:13px">0.560</span></td>
     <td class="text-center">
       <input name="load_critical[]" type="checkbox" class="form-check-input crit-check" style="border-color:#2e2e50"/>
     </td>
@@ -294,9 +309,26 @@ const CAT_COLORS = {
 
 function getCatColor(cat){ return CAT_COLORS[cat] || "#9090c0"; }
 
+// Default demand factors per category (mirrors server-side DEMAND_FACTORS)
+const CAT_DF = {
+  "Lighting":    75,
+  "Cooling":     65,
+  "Appliances":  50,
+  "Electronics": 70,
+  "Pumps":       70,
+  "Heating":     60,
+  "Office":      70,
+  "Other":       70
+};
+
 function updateDot(sel){
-  const dot = sel.closest('tr').querySelector('.cat-dot');
+  const row = sel.closest('tr');
+  const dot = row.querySelector('.cat-dot');
   if(dot){ dot.style.background = getCatColor(sel.value); dot.dataset.cat = sel.value; }
+  // Auto-fill demand factor for this category
+  const dfInp = row.querySelector('.df-inp');
+  if(dfInp){ dfInp.value = CAT_DF[sel.value] ?? 70; }
+  recalcRow(row);
   updateSummary();
 }
 
@@ -317,9 +349,10 @@ function addRow(preset=null){
     newRow.querySelector('.watt').value = preset.w;
     newRow.querySelector('.qty').value = preset.q;
     newRow.querySelector('.hrs').value = preset.h;
-    updateDot(newRow.querySelector('.cat-sel'));
+    updateDot(newRow.querySelector('.cat-sel'));  // also sets DF from category
+    if(preset.df != null){ newRow.querySelector('.df-inp').value = preset.df; }
   } else {
-    updateDot(newRow.querySelector('.cat-sel'));
+    updateDot(newRow.querySelector('.cat-sel'));  // also sets DF from category
   }
   recalcRow(newRow);
   updateSummary();
@@ -339,33 +372,38 @@ function recalc(el){
 }
 
 function recalcRow(row){
-  const w = parseFloat(row.querySelector('.watt').value) || 0;
-  const q = parseFloat(row.querySelector('.qty').value) || 1;
-  const h = parseFloat(row.querySelector('.hrs').value) || 0;
-  const kwh = (w * q * h) / 1000;
+  const w   = parseFloat(row.querySelector('.watt').value) || 0;
+  const q   = parseFloat(row.querySelector('.qty').value) || 1;
+  const h   = parseFloat(row.querySelector('.hrs').value) || 0;
+  const dfPct = parseFloat(row.querySelector('.df-inp')?.value) || 70;
+  const df  = Math.min(100, Math.max(10, dfPct)) / 100;
+  const kwh = (w * q * h * df) / 1000;
   row.querySelector('.kwh-cell').textContent = kwh.toFixed(3);
   row.dataset.kwh = kwh;
 }
 
 function updateSummary(){
   const rows = document.querySelectorAll('#loadRows tr.load-row');
-  let total = 0, peakW = 0, critKwh = 0;
+  let total = 0, connPeakW = 0, divPeakW = 0, critKwh = 0;
   const catTotals = {};
 
   rows.forEach(row => {
-    const kwh = parseFloat(row.querySelector('.kwh-cell').textContent) || 0;
-    const w = parseFloat(row.querySelector('.watt').value) || 0;
-    const q = parseFloat(row.querySelector('.qty').value) || 1;
-    const cat = (row.querySelector('.cat-dot')?.dataset.cat) || 'Other';
+    const kwh  = parseFloat(row.querySelector('.kwh-cell').textContent) || 0;
+    const w    = parseFloat(row.querySelector('.watt').value) || 0;
+    const q    = parseFloat(row.querySelector('.qty').value) || 1;
+    const dfPct= parseFloat(row.querySelector('.df-inp')?.value) || 70;
+    const df   = Math.min(100, Math.max(10, dfPct)) / 100;
+    const cat  = (row.querySelector('.cat-dot')?.dataset.cat) || 'Other';
     const crit = row.querySelector('.crit-check')?.checked;
 
     total += kwh;
-    peakW += w * q;
+    connPeakW += w * q;           // connected (no DF) — used for phase auto-select
+    divPeakW  += w * q * df;     // diversified — used for inverter sizing
     if(crit) critKwh += kwh;
     catTotals[cat] = (catTotals[cat] || 0) + kwh;
   });
 
-  const peakKw = peakW / 1000;
+  const peakKw = connPeakW / 1000;  // phase threshold uses connected peak
 
   // Update big total
   document.getElementById('totalKwhBig').textContent = total.toFixed(3);
@@ -373,7 +411,7 @@ function updateSummary(){
   const leg = document.getElementById('totalKwh');
   if(leg) leg.textContent = total.toFixed(3);
 
-  document.getElementById('peakKw').textContent = peakKw.toFixed(2);
+  document.getElementById('peakKw').textContent = (divPeakW / 1000).toFixed(2);
   document.getElementById('critKwh').textContent = critKwh.toFixed(3);
   document.getElementById('loadCount').textContent = rows.length;
 

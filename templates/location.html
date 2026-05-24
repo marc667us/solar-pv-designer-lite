@@ -212,6 +212,44 @@
                      value="{{ d.get('tariff', '') }}" class="form-ctrl"
                      placeholder="Auto-filled when region is selected"/>
             </div>
+
+            <!-- Ghana PURC Customer Category (shown only for Ghana) -->
+            <div class="col-12" id="purcSection" style="display:none">
+              <div class="p-3 rounded" style="background:#0a1a0a;border:1px solid #22c55e33">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                  <span style="font-size:13px;font-weight:800;color:#22c55e">
+                    <i class="bi bi-lightning-charge-fill me-1"></i>Ghana PURC Tariff Category
+                  </span>
+                  <span style="font-size:10px;color:#6868a0;background:#1e1e3a;padding:2px 7px;border-radius:10px">Q2 2026 · Effective 1 Apr 2026</span>
+                </div>
+                <div class="row g-2">
+                  <div class="col-12">
+                    <label class="form-lbl" style="font-size:11px">Select the customer category that matches the building type</label>
+                    <select id="purcCatSelect" class="form-ctrl" style="font-size:12px"
+                            onchange="applyPurcTariff(this.value)">
+                      <option value="">— Select customer category —</option>
+                      {% for cat, info in purc_tariffs.items() %}
+                      <option value="{{ cat }}"
+                              data-rate="{{ info.rate_ghc }}"
+                              data-fixed="{{ info.fixed_ghc }}"
+                              data-desc="{{ info.description }}"
+                              {% if d.get('purc_category') == cat %}selected{% endif %}>
+                        {{ cat }}
+                      </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-12" id="purcRateCard" style="display:none">
+                    <div class="d-flex gap-3 p-2 rounded" style="background:#081208;border:1px solid #22c55e22;font-size:11px">
+                      <div><span style="color:#6868a0">Energy Rate:</span> <strong style="color:#22c55e" id="purcRateVal">—</strong> GHS/kWh</div>
+                      <div><span style="color:#6868a0">Fixed Charge:</span> <strong style="color:#f59e0b" id="purcFixedVal">—</strong> GHS/month</div>
+                      <div style="flex:1;color:#8080a0" id="purcDescVal"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="col-6">
               <label class="form-lbl">Battery Chemistry</label>
               <select name="chemistry" class="form-ctrl">
@@ -322,6 +360,9 @@
             {% endfor %}
           </div>
         </div>
+
+        <!-- Hidden: sync PURC category from dropdown to form field -->
+        <input type="hidden" name="purc_category" id="purcCatHidden" value="{{ d.get('purc_category','') }}"/>
 
         <button type="submit" class="btn btn-solar w-100 mt-2" style="padding:12px;font-size:14px;font-weight:800">
           <i class="bi bi-lightning-charge me-2"></i>Save &amp; Enter Loads
@@ -590,6 +631,16 @@ function loadSolarData(){
   document.getElementById('currLabel').textContent=`(${cd.currency}/kWh)`;
   document.getElementById('regionBadge').textContent=`${region}, ${country}`;
 
+  // Show PURC section for Ghana
+  const purcSec = document.getElementById('purcSection');
+  if(country === 'Ghana'){
+    purcSec.style.display = '';
+    const sel = document.getElementById('purcCatSelect');
+    if(sel.value) applyPurcTariff(sel.value);
+  } else {
+    purcSec.style.display = 'none';
+  }
+
   /* PSH rating */
   const psh=rd.psh;
   const rating=psh>=6?'Excellent':psh>=5.5?'Very Good':psh>=5?'Good':psh>=4?'Moderate':'Low';
@@ -621,6 +672,24 @@ document.getElementById('locForm').addEventListener('submit',function(){
   }
 });
 
+function applyPurcTariff(cat){
+  const sel = document.getElementById('purcCatSelect');
+  const opt = Array.from(sel.options).find(o => o.value === cat);
+  document.getElementById('purcCatHidden').value = cat || '';
+  if(!opt || !cat){ document.getElementById('purcRateCard').style.display='none'; return; }
+  const rate  = parseFloat(opt.dataset.rate);
+  const fixed = parseFloat(opt.dataset.fixed);
+  const desc  = opt.dataset.desc;
+  // Fill tariff field with PURC rate (GHS/kWh)
+  document.getElementById('tariffInput').value = rate.toFixed(4);
+  document.getElementById('currLabel').textContent = '(GHS/kWh)';
+  // Show rate card
+  document.getElementById('purcRateVal').textContent  = rate.toFixed(4);
+  document.getElementById('purcFixedVal').textContent = fixed.toFixed(2);
+  document.getElementById('purcDescVal').textContent  = desc;
+  document.getElementById('purcRateCard').style.display = '';
+}
+
 window.addEventListener('DOMContentLoaded',()=>{
   initGlobe();
   updateDesignCard();
@@ -630,6 +699,14 @@ window.addEventListener('DOMContentLoaded',()=>{
     {% if project.data.get('region') %}
     document.getElementById('regionSelect').value={{ project.data.get('region','')|tojson }};
     loadSolarData();
+    {% endif %}
+  }
+  // Restore PURC section if Ghana
+  if(country === 'Ghana'){
+    document.getElementById('purcSection').style.display = '';
+    {% if project.data.get('purc_category') %}
+    document.getElementById('purcCatSelect').value = {{ project.data.get('purc_category','')|tojson }};
+    applyPurcTariff({{ project.data.get('purc_category','')|tojson }});
     {% endif %}
   }
 });
