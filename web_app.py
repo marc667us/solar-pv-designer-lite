@@ -2423,6 +2423,8 @@ def export_pdf_energy(pid):
                for m, f in zip(months, monthly_factors)]
     trees  = round(eco["co2_yr"] / 21.77, 0)
     cars   = round(eco["co2_yr"] / 4600, 2)
+    offset_factor = 1.0 if d.get("system_type") == "off-grid" else 0.8
+    annual_offset_kwh = r["daily_kwh"] * 365 * offset_factor
 
     md = f"""# Energy Impact Analysis — {project["name"]}
 
@@ -2436,6 +2438,7 @@ def export_pdf_energy(pid):
 |---|---|---|
 | Daily Solar Generation | {_fmt(r["daily_kwh"],2)} | kWh/day |
 | Annual Solar Generation | {_fmt(r["daily_kwh"]*365,0)} | kWh/year |
+| Annual Grid Offset | {_fmt(annual_offset_kwh,0)} | kWh/year |
 | Annual Savings (Yr 1) | {sym} {_fmt(eco["annual_sav"],0)} | /year |
 | CO₂ Reduction | {_fmt(eco["co2_yr"],2)} | tonnes/year |
 | Trees Equivalent | {int(trees)} | trees/year |
@@ -2445,12 +2448,15 @@ def export_pdf_energy(pid):
 
 # Monthly Energy Generation & Savings
 
-| Month | Generation (kWh) | Savings ({sym}) |
-|---|---|---|
+| Month | Generation (kWh) | Grid Offset (kWh) | Utility Offset (%) | Savings ({sym}) |
+|---|---|---|---|---|
 """
     for m in monthly:
-        md += f"| {m['month']} | {m['kwh']} | {sym} {m['saving']} |\n"
-    md += f"| **ANNUAL TOTAL** | **{_fmt(r['daily_kwh']*365,0)} kWh** | **{sym} {_fmt(eco['annual_sav'],0)}** |\n"
+        offset_kwh = round(m['kwh'] * offset_factor, 1)
+        base_avg   = r["daily_kwh"] * 365 / 12
+        pct        = min(int(m['kwh'] / base_avg * 100), 100)
+        md += f"| {m['month']} | {m['kwh']} | {offset_kwh} | {pct}% | {sym} {m['saving']} |\n"
+    md += f"| **ANNUAL TOTAL** | **{_fmt(r['daily_kwh']*365,0)} kWh** | **{_fmt(annual_offset_kwh,0)} kWh** | — | **{sym} {_fmt(eco['annual_sav'],0)}** |\n"
 
     md += f"""
 ---

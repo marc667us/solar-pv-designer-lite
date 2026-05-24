@@ -20,14 +20,15 @@
 </div>
 
 <!-- KPI Strip -->
+{% set offset_factor = 1.0 if d.system_type == 'off-grid' else 0.8 %}
 <div class="row g-2 mb-4">
   {% for lbl,val,unit,color in [
-    ("Daily Generation",  r.daily_kwh|fmt(2),           "kWh/day",  "#f59e0b"),
-    ("Annual Generation", (r.daily_kwh*365)|fmt(0),     "kWh/year", "#0ea5e9"),
-    ("Annual Savings",    eco.annual_sav|fmt(0),         d.symbol,   "#22c55e"),
-    ("CO2 Reduction",     eco.co2_yr|fmt(2),             "t/year",   "#a78bfa"),
-    ("Trees Equivalent",  trees_equiv|int,               "trees/yr", "#22c55e"),
-    ("Grid Offset",       "100" if d.system_type=="off-grid" else "80", "%",  "#f59e0b"),
+    ("Daily Generation",   r.daily_kwh|fmt(2),                          "kWh/day",  "#f59e0b"),
+    ("Annual Generation",  (r.daily_kwh*365)|fmt(0),                    "kWh/year", "#0ea5e9"),
+    ("Grid Offset (kWh)",  (r.daily_kwh*365*offset_factor)|fmt(0),      "kWh/yr",   "#0ea5e9"),
+    ("Annual Savings",     eco.annual_sav|fmt(0),                        d.symbol,   "#22c55e"),
+    ("CO2 Reduction",      eco.co2_yr|fmt(2),                            "t/year",   "#a78bfa"),
+    ("Trees Equivalent",   trees_equiv|int,                               "trees/yr", "#22c55e"),
   ] %}
   <div class="col-6 col-md-4 col-lg-2">
     <div class="kpi-card text-center">
@@ -46,10 +47,12 @@
     <div class="section-head"><i class="bi bi-calendar3 me-2"></i>Monthly Energy Generation &amp; Savings</div>
     <div class="table-responsive">
       <table class="table table-sm mb-0">
+        {% set offset_factor = 1.0 if d.system_type == 'off-grid' else 0.8 %}
         <thead>
           <tr>
             <th>Month</th>
             <th class="text-end">Generation (kWh)</th>
+            <th class="text-end">Grid Offset (kWh)</th>
             <th class="text-end">Utility Offset (%)</th>
             <th class="text-end">Savings ({{ d.symbol }})</th>
           </tr>
@@ -57,9 +60,11 @@
         <tbody>
           {% set annual_kwh = r.daily_kwh * 365 %}
           {% for m in monthly %}
+          {% set offset_kwh = (m.kwh * offset_factor) %}
           <tr>
             <td class="fw-bold text-warning">{{ m.month }}</td>
             <td class="text-end">{{ m.kwh|fmt(1) }}</td>
+            <td class="text-end fw-bold" style="color:#0ea5e9">{{ offset_kwh|fmt(1) }}</td>
             <td class="text-end">
               <!-- Visual bar -->
               <div class="d-flex align-items-center justify-content-end gap-2">
@@ -77,6 +82,7 @@
           <tr class="fw-bold" style="border-top:2px solid #f59e0b44">
             <td>ANNUAL TOTAL</td>
             <td class="text-end text-warning">{{ (r.daily_kwh*365)|fmt(0) }} kWh</td>
+            <td class="text-end" style="color:#0ea5e9">{{ (r.daily_kwh*365*offset_factor)|fmt(0) }} kWh</td>
             <td class="text-end">—</td>
             <td class="text-end text-success">{{ d.symbol }} {{ eco.annual_sav|fmt(0) }}</td>
           </tr>
