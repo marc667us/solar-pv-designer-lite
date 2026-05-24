@@ -3980,6 +3980,18 @@ def admin_users():
             elif action == "disable":
                 c.execute("UPDATE users SET plan='disabled' WHERE id=?", (uid,))
                 flash("Account disabled.", "warning")
+            elif action == "record_payment":
+                pay_plan    = request.form.get("pay_plan", "professional")
+                pay_amount  = float(request.form.get("pay_amount", 0) or 0)
+                pay_curr    = request.form.get("pay_currency", "USD").upper()
+                pay_ref     = request.form.get("pay_reference", "").strip() or f"MANUAL-{secrets.token_hex(6).upper()}"
+                pay_gateway = request.form.get("pay_gateway", "manual")
+                pay_upgrade = request.form.get("pay_upgrade_plan") == "1"
+                _record_payment(uid, pay_gateway, pay_plan, pay_amount,
+                                currency=pay_curr, reference=pay_ref, status="success")
+                if pay_upgrade:
+                    c.execute("UPDATE users SET plan=? WHERE id=?", (pay_plan, uid))
+                flash(f"Payment recorded: {pay_curr} {pay_amount:.2f} ({pay_plan}). Ref: {pay_ref}", "success")
         return redirect(url_for("admin_users"))
     with get_db() as c:
         users = c.execute(

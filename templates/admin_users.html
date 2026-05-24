@@ -175,6 +175,13 @@
                 <i class="bi bi-shield{% if u.is_admin %}-fill{% endif %}"></i>
               </button>
             </form>
+            <!-- Record payment -->
+            <button type="button" class="btn btn-sm py-0 px-2"
+                    style="font-size:11px;background:#22c55e18;border:1px solid #22c55e44;color:#22c55e"
+                    title="Record manual payment"
+                    onclick="openPayModal({{ u.id }}, '{{ u.username }}', '{{ plan }}')">
+              <i class="bi bi-cash-coin"></i>
+            </button>
           </div>
         </td>
       </tr>
@@ -190,6 +197,91 @@
 <div id="noResults" class="text-center text-secondary py-5 small" style="display:none">
   <i class="bi bi-search d-block mb-2" style="font-size:28px;opacity:.3"></i>
   No users match your search.
+</div>
+
+<!-- ── Record Payment Modal ────────────────────────────────────────────── -->
+<div class="modal fade" id="payModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:460px">
+    <div class="modal-content" style="background:#0f0f22;border:1px solid #2a2a5a;border-radius:16px">
+      <div class="modal-header" style="border-color:#1e1e3a">
+        <div>
+          <div class="fw-bold" style="color:#f0f0f8;font-size:15px">
+            <i class="bi bi-cash-coin me-2" style="color:#22c55e"></i>Record Manual Payment
+          </div>
+          <div class="text-secondary" style="font-size:11px" id="payModalSub">User: —</div>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('admin_users') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="record_payment">
+        <input type="hidden" name="uid" id="payUid">
+        <div class="modal-body p-4">
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label small fw-bold text-secondary mb-1">PLAN</label>
+              <select name="pay_plan" id="payPlan" class="form-select form-select-sm"
+                      style="background:#0a0a1a;border-color:#2a2a5a;color:#d0d0e8">
+                <option value="professional">Professional</option>
+                <option value="enterprise">Enterprise</option>
+                <option value="basic">Basic</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-bold text-secondary mb-1">GATEWAY</label>
+              <select name="pay_gateway" class="form-select form-select-sm"
+                      style="background:#0a0a1a;border-color:#2a2a5a;color:#d0d0e8">
+                <option value="manual">Manual / Bank Transfer</option>
+                <option value="stripe">Stripe</option>
+                <option value="paystack">Paystack</option>
+                <option value="cash">Cash</option>
+              </select>
+            </div>
+            <div class="col-4">
+              <label class="form-label small fw-bold text-secondary mb-1">AMOUNT</label>
+              <input type="number" name="pay_amount" id="payAmount" step="0.01" min="0"
+                     class="form-control form-control-sm"
+                     style="background:#0a0a1a;border-color:#2a2a5a;color:#d0d0e8"
+                     placeholder="99.00">
+            </div>
+            <div class="col-4">
+              <label class="form-label small fw-bold text-secondary mb-1">CURRENCY</label>
+              <input type="text" name="pay_currency" value="USD" maxlength="3"
+                     class="form-control form-control-sm"
+                     style="background:#0a0a1a;border-color:#2a2a5a;color:#d0d0e8">
+            </div>
+            <div class="col-4">
+              <label class="form-label small fw-bold text-secondary mb-1">REFERENCE</label>
+              <input type="text" name="pay_reference" id="payRef"
+                     class="form-control form-control-sm"
+                     style="background:#0a0a1a;border-color:#2a2a5a;color:#d0d0e8"
+                     placeholder="auto-generated">
+            </div>
+            <div class="col-12">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="pay_upgrade_plan"
+                       value="1" id="payUpgrade" checked>
+                <label class="form-check-label small text-secondary" for="payUpgrade">
+                  Also upgrade user's plan to selected plan
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="mt-3 p-3 rounded" style="background:#22c55e08;border:1px solid #22c55e22;font-size:11px;color:#86efac">
+            <i class="bi bi-info-circle me-1"></i>
+            This records a <strong>success</strong> payment. The user will see a Receipt download button on their Account page.
+          </div>
+        </div>
+        <div class="modal-footer" style="border-color:#1e1e3a">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm"
+                  style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#000;font-weight:700;border:none">
+            <i class="bi bi-check-circle me-1"></i>Record Payment
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -216,6 +308,29 @@ function setPlanFilter(btn) {
   activePlan = btn.dataset.plan;
   filterUsers();
 }
+
+// ── Payment modal ────────────────────────────────────────────────────────────
+const PLAN_PRICES = { professional: 99, enterprise: 249, basic: 49 };
+
+function openPayModal(uid, username, currentPlan) {
+  document.getElementById('payUid').value      = uid;
+  document.getElementById('payModalSub').textContent = 'User: ' + username;
+  // Pre-select a higher plan than current
+  const plans = ['basic','professional','enterprise'];
+  const next  = plans.find(p => p !== currentPlan) || 'professional';
+  document.getElementById('payPlan').value     = next;
+  document.getElementById('payAmount').value   = PLAN_PRICES[next] || '';
+  document.getElementById('payRef').value      = '';  // let server auto-generate
+  new bootstrap.Modal(document.getElementById('payModal')).show();
+}
+
+// Update amount when plan changes
+document.getElementById('payPlan').addEventListener('change', function() {
+  const a = document.getElementById('payAmount');
+  if (!a.value || Object.values(PLAN_PRICES).includes(parseFloat(a.value))) {
+    a.value = PLAN_PRICES[this.value] || '';
+  }
+});
 </script>
 
 {% endblock %}
