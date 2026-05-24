@@ -198,11 +198,36 @@
           </a>
         </li>
 
-        <li class="nav-item">
-          <a class="nav-link {% if ep == 'tickets' %}active{% endif %}"
-             href="{{ url_for('tickets') }}">
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if ep in ('tickets','support','support_email_setup','support_user_guide') %}active{% endif %}"
+             href="#" data-bs-toggle="dropdown" aria-expanded="false">
             <i class="bi bi-headset me-1"></i>Support
           </a>
+          <ul class="dropdown-menu dropdown-menu-dark" style="min-width:200px">
+            <li><span class="dropdown-header text-secondary" style="font-size:10px;letter-spacing:.5px">HELP</span></li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('tickets') }}">
+                <i class="bi bi-chat-dots me-2 text-secondary"></i>Support Tickets
+              </a>
+            </li>
+            <li><hr class="dropdown-divider" style="border-color:#1e1e3a"></li>
+            <li><span class="dropdown-header text-secondary" style="font-size:10px;letter-spacing:.5px">RESOURCES</span></li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('support') }}">
+                <i class="bi bi-collection-play me-2" style="color:#a78bfa"></i>All Tutorials
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('support_user_guide') }}">
+                <i class="bi bi-book me-2" style="color:#0ea5e9"></i>Full User Guide
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('support_email_setup') }}">
+                <i class="bi bi-envelope-at me-2" style="color:#22c55e"></i>Email Setup Guide
+              </a>
+            </li>
+          </ul>
         </li>
 
         {# ── Admin dropdown ───────────────────────────────────────────────── #}

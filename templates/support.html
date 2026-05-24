@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Resources & Tutorials — SolarPro Global{% endblock %}
+{% block content %}
+<div class="container-xl py-4">
+
+<!-- Header -->
+<div class="report-header mb-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <div class="report-title"><i class="bi bi-collection-play me-2"></i>Resources & Tutorials</div>
+      <div class="text-secondary mt-1">Step-by-step guides — read, listen, or download as PDF.</div>
+    </div>
+    <a href="{{ url_for('tickets') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-chat-dots me-1"></i>Open a Support Ticket
+    </a>
+  </div>
+</div>
+
+<!-- Tutorial cards -->
+<div class="row g-4">
+
+  <!-- Full User Guide -->
+  <div class="col-md-6">
+    <div class="solar-card p-4 h-100 d-flex flex-column">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#0ea5e922,#0ea5e944);border:1px solid #0ea5e944;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
+          📘
+        </div>
+        <div>
+          <div class="fw-bold" style="font-size:15px">Full User Guide</div>
+          <div class="text-secondary" style="font-size:12px">Complete walkthrough — account setup to final report</div>
+        </div>
+      </div>
+      <p class="text-secondary" style="font-size:13px;line-height:1.6">
+        Covers every step: creating an account, setting up your organisation profile, entering
+        loads, running calculations, accessing all 8 report types, emailing reports to clients,
+        and managing your subscription.
+      </p>
+      <div class="mt-2 mb-3 d-flex flex-wrap gap-2" style="font-size:11px">
+        <span class="badge" style="background:#0ea5e922;color:#0ea5e9;border:1px solid #0ea5e944">11 Sections</span>
+        <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">Beginner Friendly</span>
+        <span class="badge" style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44">~15 min read</span>
+      </div>
+      <div class="mt-auto d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('support_user_guide') }}" class="btn btn-sm px-3 fw-bold"
+           style="background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;border:none">
+          <i class="bi bi-book me-1"></i>Read Guide
+        </a>
+        <a href="{{ url_for('support_user_guide') }}#audio" class="btn btn-sm px-3"
+           style="background:#0ea5e922;color:#0ea5e9;border:1px solid #0ea5e944">
+          <i class="bi bi-play-circle me-1"></i>Listen
+        </a>
+        <a href="{{ url_for('support_user_guide_pdf') }}" class="btn btn-sm px-3"
+           style="background:#ef444422;color:#ef4444;border:1px solid #ef444444">
+          <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email Setup -->
+  <div class="col-md-6">
+    <div class="solar-card p-4 h-100 d-flex flex-column">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#22c55e22,#22c55e44);border:1px solid #22c55e44;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
+          📧
+        </div>
+        <div>
+          <div class="fw-bold" style="font-size:15px">Email / SMTP Setup Guide</div>
+          <div class="text-secondary" style="font-size:12px">Configure outbound email to send reports to clients</div>
+        </div>
+      </div>
+      <p class="text-secondary" style="font-size:13px;line-height:1.6">
+        Step-by-step setup for Gmail, Outlook, Brevo, and Mailgun. Includes generating App Passwords,
+        testing the connection, and troubleshooting common errors like authentication failures and
+        emails landing in spam.
+      </p>
+      <div class="mt-2 mb-3 d-flex flex-wrap gap-2" style="font-size:11px">
+        <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">5 Steps</span>
+        <span class="badge" style="background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44">4 Providers</span>
+        <span class="badge" style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44">~8 min read</span>
+      </div>
+      <div class="mt-auto d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('support_email_setup') }}" class="btn btn-sm px-3 fw-bold"
+           style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#000;border:none">
+          <i class="bi bi-book me-1"></i>Read Guide
+        </a>
+        <a href="{{ url_for('support_email_setup') }}#audio" class="btn btn-sm px-3"
+           style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">
+          <i class="bi bi-play-circle me-1"></i>Listen
+        </a>
+        <a href="{{ url_for('support_email_setup_pdf') }}" class="btn btn-sm px-3"
+           style="background:#ef444422;color:#ef4444;border:1px solid #ef444444">
+          <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Placeholder — more coming -->
+  <div class="col-md-6">
+    <div class="solar-card p-4 h-100 d-flex flex-column" style="opacity:.5">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div style="width:48px;height:48px;border-radius:12px;background:#1e1e3a;border:1px solid #1e1e3a;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
+          📊
+        </div>
+        <div>
+          <div class="fw-bold" style="font-size:15px">Financial Analysis Guide</div>
+          <div class="text-secondary" style="font-size:12px">NPV, IRR, payback, loan modelling</div>
+        </div>
+      </div>
+      <p class="text-secondary" style="font-size:13px">Coming soon.</p>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="solar-card p-4 h-100 d-flex flex-column" style="opacity:.5">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div style="width:48px;height:48px;border-radius:12px;background:#1e1e3a;border:1px solid #1e1e3a;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
+          🔋
+        </div>
+        <div>
+          <div class="fw-bold" style="font-size:15px">Load Scheduling Guide</div>
+          <div class="text-secondary" style="font-size:12px">Accurate load entry for reliable sizing</div>
+        </div>
+      </div>
+      <p class="text-secondary" style="font-size:13px">Coming soon.</p>
+    </div>
+  </div>
+
+</div><!-- /row -->
+
+<!-- Still need help? -->
+<div class="solar-card p-4 mt-4 d-flex align-items-center gap-4 flex-wrap">
+  <div style="font-size:28px">💬</div>
+  <div class="flex-grow-1">
+    <div class="fw-bold mb-1">Still need help?</div>
+    <div class="text-secondary" style="font-size:13px">
+      Our support team responds to tickets within 24 hours.
+      You can also email <a href="mailto:support@solarproglobal.com" class="text-warning">support@solarproglobal.com</a>.
+    </div>
+  </div>
+  <a href="{{ url_for('tickets') }}" class="btn btn-solar btn-sm px-4">
+    <i class="bi bi-chat-dots me-1"></i>Open a Ticket
+  </a>
+</div>
+
+</div>
+{% endblock %}

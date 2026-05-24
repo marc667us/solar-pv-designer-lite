@@ -1,0 +1,550 @@
+{% extends "base.html" %}
+{% block title %}Email SMTP Setup Guide — SolarPro Global{% endblock %}
+{% block content %}
+<div class="container-xl py-4">
+
+<!-- Breadcrumb -->
+<nav class="mb-3" style="font-size:12px">
+  <a href="{{ url_for('support') }}" class="text-secondary text-decoration-none">
+    <i class="bi bi-collection-play me-1"></i>Resources
+  </a>
+  <span class="text-secondary mx-2">/</span>
+  <span class="text-warning">Email / SMTP Setup</span>
+</nav>
+
+<div class="row g-4">
+
+  <!-- ── Left: Tutorial content ─────────────────────────────────────────── -->
+  <div class="col-lg-8">
+
+    <!-- Title card -->
+    <div class="solar-card p-4 mb-4" style="background:linear-gradient(135deg,#0d1f12,#0f2a18);border:1px solid #22c55e33">
+      <div class="d-flex align-items-center gap-3 mb-2">
+        <span style="font-size:32px">📧</span>
+        <div>
+          <div style="font-size:20px;font-weight:900;color:#22c55e">Email / SMTP Setup Guide</div>
+          <div class="text-secondary" style="font-size:13px">Configure SolarPro to send project reports to clients, banks & installers</div>
+        </div>
+      </div>
+      <div class="d-flex gap-2 flex-wrap mt-3">
+        <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">5 Steps</span>
+        <span class="badge" style="background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44">Gmail · Outlook · Brevo · Mailgun</span>
+        <span class="badge" style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44">~8 min read</span>
+      </div>
+    </div>
+
+    <!-- Why email? -->
+    <div class="solar-card p-4 mb-3">
+      <div class="section-head mb-2"><i class="bi bi-info-circle me-1"></i>Why Set Up Email?</div>
+      <p class="text-secondary" style="font-size:13px;line-height:1.7">
+        SolarPro can send project PDF reports directly to clients, banks, and installers.
+        To do this it needs to connect to your outbound mail server (SMTP). Once configured you can:
+      </p>
+      <ul style="font-size:13px;color:var(--sp-sub);line-height:1.8;padding-left:20px">
+        <li>Send any project report from the <strong>Email Reports</strong> page</li>
+        <li>Receive password reset emails automatically</li>
+        <li>Get system notifications from the platform</li>
+      </ul>
+    </div>
+
+    <!-- Step 1 -->
+    <div class="solar-card p-4 mb-3" id="step1">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num">1</div>
+        <div class="section-head mb-0">Open Settings → Email / SMTP</div>
+      </div>
+      <ol style="font-size:13px;line-height:1.9;color:var(--sp-sub);padding-left:20px">
+        <li>Log in to your SolarPro account.</li>
+        <li>Click your <strong>username</strong> in the top-right navigation bar.</li>
+        <li>Select <strong>Settings</strong> from the dropdown menu.</li>
+        <li>Click the <strong class="text-warning">Email / SMTP</strong> tab at the top of the Settings page.</li>
+      </ol>
+      <div class="rounded p-3 mt-2" style="background:#22c55e11;border:1px solid #22c55e33;font-size:12px;color:#22c55e">
+        <i class="bi bi-lightbulb me-1"></i>
+        You will see the SMTP form with fields for host, port, username, password, encryption, and From address.
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="solar-card p-4 mb-3" id="step2">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num">2</div>
+        <div class="section-head mb-0">Choose Your Email Provider</div>
+      </div>
+      <p class="text-secondary" style="font-size:13px">Use the Quick-Fill buttons to auto-fill host and port. Supported providers:</p>
+      <div class="table-responsive">
+        <table class="table table-sm mb-3">
+          <thead><tr><th>Provider</th><th>Best For</th><th>Free Tier</th></tr></thead>
+          <tbody style="font-size:12px">
+            <tr><td class="fw-bold text-warning">Gmail</td><td>Personal accounts, small teams</td><td>500 emails / day</td></tr>
+            <tr><td class="fw-bold text-warning">Outlook / M365</td><td>Business Microsoft accounts</td><td>Included with M365</td></tr>
+            <tr><td class="fw-bold text-warning">Brevo</td><td>Professional SaaS sending</td><td>300 emails / day</td></tr>
+            <tr><td class="fw-bold text-warning">Mailgun</td><td>High-volume transactional</td><td>100 emails / day</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="rounded p-3" style="background:#f59e0b11;border:1px solid #f59e0b33;font-size:12px;color:#f59e0b">
+        <i class="bi bi-star-fill me-1"></i>
+        <strong>Recommended:</strong> For a professional solar consultancy, <strong>Brevo</strong> is the best choice.
+        Free up to 300 emails/day, excellent deliverability, no App Password needed.
+      </div>
+    </div>
+
+    <!-- Step 3A Gmail -->
+    <div class="solar-card p-4 mb-3" id="step3a">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num">3A</div>
+        <div class="section-head mb-0">Set Up Gmail</div>
+      </div>
+      <p class="text-secondary mb-3" style="font-size:13px">
+        Gmail requires an <strong>App Password</strong> — a 16-character code separate from your Google password.
+      </p>
+      <div class="fw-bold mb-2" style="font-size:13px">Generate a Gmail App Password:</div>
+      <ol style="font-size:13px;line-height:1.9;color:var(--sp-sub);padding-left:20px">
+        <li>Go to <strong>myaccount.google.com</strong></li>
+        <li>Click <strong>Security</strong> in the left sidebar.</li>
+        <li>Under "How you sign in to Google", click <strong>2-Step Verification</strong> (must be enabled).</li>
+        <li>Scroll to the bottom → click <strong>App passwords</strong>.</li>
+        <li>App: <strong>Mail</strong> · Device: <strong>Other</strong> → type "SolarPro" → <strong>Generate</strong>.</li>
+        <li>Copy the 16-character password shown.</li>
+      </ol>
+      <div class="fw-bold mb-2 mt-3" style="font-size:13px">Enter in Settings → Email / SMTP:</div>
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <tbody style="font-size:12px">
+            <tr><td class="text-secondary" style="width:140px">SMTP Host</td><td class="fw-bold font-monospace">smtp.gmail.com</td></tr>
+            <tr><td class="text-secondary">Port</td><td class="fw-bold">587</td></tr>
+            <tr><td class="text-secondary">Encryption</td><td class="fw-bold">STARTTLS</td></tr>
+            <tr><td class="text-secondary">Username</td><td class="fw-bold">your.email@gmail.com</td></tr>
+            <tr><td class="text-secondary">Password</td><td class="fw-bold text-warning">16-character App Password (NOT your Google password)</td></tr>
+            <tr><td class="text-secondary">From Address</td><td class="fw-bold">your.email@gmail.com</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="rounded p-2 mt-1" style="background:#ef444411;border:1px solid #ef444433;font-size:12px;color:#ef4444">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        Remove spaces when pasting the App Password. Google shows it in groups of 4 — it is one continuous string.
+      </div>
+    </div>
+
+    <!-- Step 3B Brevo -->
+    <div class="solar-card p-4 mb-3" id="step3b">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num">3B</div>
+        <div class="section-head mb-0">Set Up Brevo <span class="badge ms-2" style="background:#22c55e;color:#000;font-size:10px">Recommended</span></div>
+      </div>
+      <ol style="font-size:13px;line-height:1.9;color:var(--sp-sub);padding-left:20px">
+        <li>Sign up free at <strong>brevo.com</strong>.</li>
+        <li>Go to <strong>Senders & IP → SMTP & API</strong>.</li>
+        <li>Copy your <strong>SMTP Login</strong> and <strong>Master Password</strong> (or generate a new SMTP key).</li>
+      </ol>
+      <div class="table-responsive mt-2">
+        <table class="table table-sm">
+          <tbody style="font-size:12px">
+            <tr><td class="text-secondary" style="width:140px">SMTP Host</td><td class="fw-bold font-monospace">smtp-relay.brevo.com</td></tr>
+            <tr><td class="text-secondary">Port</td><td class="fw-bold">587</td></tr>
+            <tr><td class="text-secondary">Encryption</td><td class="fw-bold">STARTTLS</td></tr>
+            <tr><td class="text-secondary">Username</td><td class="fw-bold">Your Brevo account email</td></tr>
+            <tr><td class="text-secondary">Password</td><td class="fw-bold">Your Brevo master password or SMTP key</td></tr>
+            <tr><td class="text-secondary">From Address</td><td class="fw-bold">A verified sender in your Brevo account</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="rounded p-2 mt-1" style="background:#f59e0b11;border:1px solid #f59e0b33;font-size:12px;color:#f59e0b">
+        <i class="bi bi-info-circle me-1"></i>
+        You must verify your From address (or domain) in Brevo → Senders before emails will be delivered.
+      </div>
+    </div>
+
+    <!-- Step 3C Outlook -->
+    <div class="solar-card p-4 mb-3" id="step3c">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num">3C</div>
+        <div class="section-head mb-0">Set Up Outlook / Microsoft 365</div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <tbody style="font-size:12px">
+            <tr><td class="text-secondary" style="width:140px">SMTP Host</td><td class="fw-bold font-monospace">smtp.office365.com</td></tr>
+            <tr><td class="text-secondary">Port</td><td class="fw-bold">587</td></tr>
+            <tr><td class="text-secondary">Encryption</td><td class="fw-bold">STARTTLS</td></tr>
+            <tr><td class="text-secondary">Username</td><td class="fw-bold">your@company.com</td></tr>
+            <tr><td class="text-secondary">Password</td><td class="fw-bold">Your M365 account password</td></tr>
+            <tr><td class="text-secondary">From Address</td><td class="fw-bold">your@company.com</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Step 4 -->
+    <div class="solar-card p-4 mb-3" id="step4">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num">4</div>
+        <div class="section-head mb-0">Test the Connection</div>
+      </div>
+      <p class="text-secondary" style="font-size:13px">After filling in all fields, click <strong>Test Connection</strong>.</p>
+      <div class="d-flex flex-column gap-2" style="font-size:13px">
+        <div class="rounded p-3" style="background:#22c55e11;border:1px solid #22c55e33">
+          <i class="bi bi-check-circle-fill text-success me-2"></i>
+          <strong>"Connection successful"</strong> — SMTP is working. Click <strong>Save SMTP</strong>.
+        </div>
+        <div class="rounded p-3" style="background:#ef444411;border:1px solid #ef444433">
+          <i class="bi bi-x-circle-fill text-danger me-2"></i>
+          <strong>"Authentication failed"</strong> — check your password. Gmail: use the App Password, not your Google password.
+        </div>
+        <div class="rounded p-3" style="background:#ef444411;border:1px solid #ef444433">
+          <i class="bi bi-x-circle-fill text-danger me-2"></i>
+          <strong>"Connection timed out"</strong> — check host and port. Port 587 may be blocked by your firewall.
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5 -->
+    <div class="solar-card p-4 mb-3" id="step5">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num">5</div>
+        <div class="section-head mb-0">Send a Test Report</div>
+      </div>
+      <ol style="font-size:13px;line-height:1.9;color:var(--sp-sub);padding-left:20px">
+        <li>Open any project with completed calculations.</li>
+        <li>Click <strong>Results → Email Reports</strong>.</li>
+        <li>Enter your own email address in the <strong>Recipients</strong> field.</li>
+        <li>Select any report (e.g. BOQ Report).</li>
+        <li>Click <strong>Send Email</strong>.</li>
+      </ol>
+      <div class="rounded p-3 mt-2" style="background:#22c55e11;border:1px solid #22c55e33;font-size:12px;color:#22c55e">
+        <i class="bi bi-lightbulb me-1"></i>
+        Email arrives within 1–2 minutes. Check your spam folder if not visible in the inbox.
+      </div>
+    </div>
+
+    <!-- Quick Reference -->
+    <div class="solar-card p-4 mb-3">
+      <div class="section-head mb-3"><i class="bi bi-table me-1"></i>Quick Reference</div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Provider</th><th>Host</th><th>Port</th><th>Encryption</th></tr></thead>
+          <tbody style="font-size:12px">
+            <tr><td class="text-warning fw-bold">Gmail</td><td class="font-monospace">smtp.gmail.com</td><td>587</td><td>STARTTLS</td></tr>
+            <tr><td class="text-warning fw-bold">Outlook / M365</td><td class="font-monospace">smtp.office365.com</td><td>587</td><td>STARTTLS</td></tr>
+            <tr><td class="text-warning fw-bold">Brevo</td><td class="font-monospace">smtp-relay.brevo.com</td><td>587</td><td>STARTTLS</td></tr>
+            <tr><td class="text-warning fw-bold">Mailgun</td><td class="font-monospace">smtp.mailgun.org</td><td>587</td><td>STARTTLS</td></tr>
+            <tr><td class="text-warning fw-bold">Yahoo Mail</td><td class="font-monospace">smtp.mail.yahoo.com</td><td>587</td><td>STARTTLS</td></tr>
+            <tr><td class="text-warning fw-bold">Zoho Mail</td><td class="font-monospace">smtp.zoho.com</td><td>587</td><td>STARTTLS</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /col-lg-8 -->
+
+
+  <!-- ── Right: Audio player + PDF ─────────────────────────────────────── -->
+  <div class="col-lg-4">
+    <div style="position:sticky;top:80px">
+
+      <!-- Audio player -->
+      <div class="solar-card p-4 mb-3" id="audio">
+        <div class="section-head mb-3"><i class="bi bi-headphones me-1"></i>Listen to Guide</div>
+        <p class="text-secondary mb-3" style="font-size:12px">
+          The tutorial will be read aloud using your browser's text-to-speech.
+          Works in Chrome, Edge, Firefox, and Safari.
+        </p>
+
+        <!-- Play button -->
+        <button id="playBtn" onclick="toggleAudio()"
+          class="btn w-100 mb-3 fw-bold"
+          style="background:linear-gradient(135deg,#22c55e,#16a34a);color:#000;border:none;padding:12px">
+          <i class="bi bi-play-fill me-2" id="playIcon"></i><span id="playLabel">Play Tutorial</span>
+        </button>
+
+        <!-- Progress -->
+        <div class="mb-3">
+          <div class="d-flex justify-content-between mb-1" style="font-size:11px;color:var(--sp-muted)">
+            <span id="progressLabel">Ready to play</span>
+            <span id="progressSection"></span>
+          </div>
+          <div style="height:4px;background:var(--sp-border);border-radius:2px;overflow:hidden">
+            <div id="progressBar" style="height:100%;width:0;background:linear-gradient(90deg,#22c55e,#0ea5e9);border-radius:2px;transition:width .5s"></div>
+          </div>
+        </div>
+
+        <!-- Controls row -->
+        <div class="d-flex gap-2 mb-3">
+          <button onclick="stopAudio()" class="btn btn-sm flex-fill"
+            style="background:var(--sp-card-bg);border:1px solid var(--sp-border);font-size:12px">
+            <i class="bi bi-stop-fill me-1"></i>Stop
+          </button>
+          <button onclick="skipSection(-1)" class="btn btn-sm flex-fill"
+            style="background:var(--sp-card-bg);border:1px solid var(--sp-border);font-size:12px">
+            <i class="bi bi-skip-backward-fill"></i>
+          </button>
+          <button onclick="skipSection(1)" class="btn btn-sm flex-fill"
+            style="background:var(--sp-card-bg);border:1px solid var(--sp-border);font-size:12px">
+            <i class="bi bi-skip-forward-fill"></i>
+          </button>
+        </div>
+
+        <!-- Speed -->
+        <div class="mb-3">
+          <div class="d-flex justify-content-between mb-1" style="font-size:11px;color:var(--sp-muted)">
+            <span>Speed</span><span id="rateLabel">1.0×</span>
+          </div>
+          <input type="range" id="rateSlider" min="0.5" max="2" step="0.25" value="1"
+            oninput="updateRate(this.value)"
+            class="form-range" style="accent-color:#22c55e">
+        </div>
+
+        <!-- Voice selector -->
+        <div>
+          <label class="sp-label">Voice</label>
+          <select id="voiceSelect" class="form-select sp-input form-select-sm" onchange="updateVoice()"></select>
+        </div>
+      </div>
+
+      <!-- PDF download -->
+      <div class="solar-card p-4 mb-3">
+        <div class="section-head mb-2"><i class="bi bi-file-earmark-pdf me-1"></i>Download PDF</div>
+        <p class="text-secondary mb-3" style="font-size:12px">
+          Save this guide as a PDF to share with your team or keep for reference.
+        </p>
+        <a href="{{ url_for('support_email_setup_pdf') }}"
+           class="btn w-100 btn-sm fw-bold"
+           style="background:#ef4444;color:#fff;border:none">
+          <i class="bi bi-download me-1"></i>Download PDF Guide
+        </a>
+      </div>
+
+      <!-- Go to settings -->
+      <div class="solar-card p-3">
+        <div class="d-flex align-items-center gap-3">
+          <i class="bi bi-gear-fill" style="font-size:20px;color:#a78bfa"></i>
+          <div>
+            <div class="fw-bold" style="font-size:13px">Ready to configure?</div>
+            <div class="text-secondary" style="font-size:11px">Go to Settings → Email / SMTP</div>
+          </div>
+        </div>
+        <a href="{{ url_for('settings') }}?tab=smtp" class="btn btn-sm w-100 mt-3"
+           style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;border:none">
+          <i class="bi bi-envelope-at me-1"></i>Open SMTP Settings
+        </a>
+      </div>
+
+    </div><!-- /sticky -->
+  </div><!-- /col-lg-4 -->
+
+</div><!-- /row -->
+</div>
+
+<style>
+.step-num {
+  width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg,#22c55e,#16a34a);
+  color:#000;font-weight:900;font-size:14px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0
+}
+.sp-label { font-size:11px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;display:block }
+.sp-input { background:var(--sp-card-bg)!important;color:var(--sp-text)!important;border-color:var(--sp-border)!important }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Audio script sections ──────────────────────────────────────────────────
+const SECTIONS = [
+  {
+    label: "Introduction",
+    text: `Welcome to the SolarPro Global Email and SMTP Setup Guide.
+           This tutorial will walk you through configuring outbound email
+           so you can send project reports directly to your clients, banks, and installers.`
+  },
+  {
+    label: "Step 1 — Open Settings",
+    text: `Step 1. Open Settings.
+           Log in to your SolarPro account.
+           Click your username in the top-right navigation bar and select Settings from the dropdown.
+           Then click the Email SMTP tab at the top of the Settings page.
+           You will see the SMTP configuration form with fields for host, port, username, password, encryption, and From address.`
+  },
+  {
+    label: "Step 2 — Choose a Provider",
+    text: `Step 2. Choose your email provider.
+           SolarPro supports any standard SMTP provider.
+           Use the Quick-Fill buttons on the settings page to auto-fill the host and port.
+           Gmail is good for personal accounts and small teams, with up to 500 emails per day.
+           Brevo, formerly Sendinblue, is our recommended choice for professional solar consultancies.
+           It is free for up to 300 emails per day and has excellent deliverability.`
+  },
+  {
+    label: "Step 3A — Gmail Setup",
+    text: `Step 3A. Setting up Gmail.
+           Gmail requires an App Password — a special 16-character code separate from your regular Google password.
+           To generate one: go to myaccount.google.com, click Security, then click 2-Step Verification — this must be turned on.
+           Scroll to the bottom and click App Passwords.
+           Set the App to Mail and Device to Other, type SolarPro, then click Generate.
+           Copy the 16-character password. Remove any spaces before pasting it into SolarPro.
+           In Settings, enter: host smtp.gmail.com, port 587, encryption STARTTLS,
+           your Gmail address as the username, the App Password as the password,
+           and your Gmail address as the From address.`
+  },
+  {
+    label: "Step 3B — Brevo Setup",
+    text: `Step 3B. Setting up Brevo — the recommended provider.
+           Sign up free at brevo.com.
+           After logging in, go to Senders and IP, then SMTP and API.
+           Copy your SMTP Login and Master Password.
+           In Settings, enter: host smtp-relay.brevo.com, port 587, encryption STARTTLS,
+           your Brevo account email as the username, and your Brevo password or SMTP key as the password.
+           Important: you must verify your From address as a sender in Brevo before emails will be delivered.`
+  },
+  {
+    label: "Step 4 — Test Connection",
+    text: `Step 4. Test the connection.
+           After filling in all fields, click the Test Connection button.
+           If you see "Connection successful", your SMTP is working — click Save SMTP.
+           If you see "Authentication failed", check your username and password.
+           For Gmail, make sure you used the App Password, not your regular Google password.
+           If you see "Connection timed out", check the host and port. Port 587 may be blocked by your firewall.`
+  },
+  {
+    label: "Step 5 — Send a Test Report",
+    text: `Step 5. Send a test report to confirm everything is working.
+           Open any project that has completed calculations.
+           Click Results, then Email Reports.
+           Enter your own email address in the Recipients field.
+           Select any report — for example the BOQ Report.
+           Click Send Email.
+           The email should arrive within 1 to 2 minutes. Check your spam folder if it does not appear in your inbox.
+           Congratulations! Your email is now configured. You can send any project report to clients, banks, or installers directly from SolarPro Global.`
+  }
+];
+
+let currentSection = 0;
+let utterance      = null;
+let speaking       = false;
+let paused         = false;
+let voiceList      = [];
+
+// Load voices
+function loadVoices() {
+  voiceList = speechSynthesis.getVoices();
+  const sel = document.getElementById('voiceSelect');
+  sel.innerHTML = '';
+  const englishVoices = voiceList.filter(v => v.lang.startsWith('en'));
+  const toShow = englishVoices.length ? englishVoices : voiceList;
+  toShow.forEach((v, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${v.name} (${v.lang})`;
+    sel.appendChild(opt);
+  });
+  // Prefer a Google or neural voice
+  const preferredIdx = toShow.findIndex(v => v.name.includes('Google') && v.lang === 'en-US')
+                    || toShow.findIndex(v => v.lang === 'en-US');
+  if (preferredIdx >= 0) sel.value = preferredIdx;
+}
+speechSynthesis.onvoiceschanged = loadVoices;
+loadVoices();
+
+function getSelectedVoice() {
+  const sel   = document.getElementById('voiceSelect');
+  const idx   = parseInt(sel.value);
+  const list  = voiceList.filter(v => v.lang.startsWith('en'));
+  const toUse = list.length ? list : voiceList;
+  return toUse[idx] || null;
+}
+
+function speakSection(idx) {
+  if (idx < 0 || idx >= SECTIONS.length) {
+    stopAudio(); return;
+  }
+  window.speechSynthesis.cancel();
+  currentSection = idx;
+  updateProgress();
+  const u = new SpeechSynthesisUtterance(SECTIONS[idx].text);
+  u.rate  = parseFloat(document.getElementById('rateSlider').value);
+  u.pitch = 1;
+  const voice = getSelectedVoice();
+  if (voice) u.voice = voice;
+  u.onend  = () => { speakSection(currentSection + 1); };
+  u.onerror = () => { stopAudio(); };
+  utterance = u;
+  window.speechSynthesis.speak(u);
+  speaking = true; paused = false;
+  updateControls();
+}
+
+function toggleAudio() {
+  if (speaking && !paused) {
+    window.speechSynthesis.pause();
+    paused = true;
+    updateControls();
+  } else if (paused) {
+    window.speechSynthesis.resume();
+    paused = false;
+    updateControls();
+  } else {
+    speakSection(0);
+  }
+}
+
+function stopAudio() {
+  window.speechSynthesis.cancel();
+  speaking = false; paused = false;
+  currentSection = 0;
+  updateControls();
+  updateProgress();
+}
+
+function skipSection(dir) {
+  const next = currentSection + dir;
+  if (next >= 0 && next < SECTIONS.length) speakSection(next);
+}
+
+function updateRate(val) {
+  document.getElementById('rateLabel').textContent = parseFloat(val).toFixed(2) + '×';
+  if (utterance) utterance.rate = parseFloat(val);
+}
+
+function updateVoice() {
+  if (speaking) { const cur = currentSection; stopAudio(); speakSection(cur); }
+}
+
+function updateControls() {
+  const btn   = document.getElementById('playBtn');
+  const icon  = document.getElementById('playIcon');
+  const label = document.getElementById('playLabel');
+  if (speaking && !paused) {
+    icon.className  = 'bi bi-pause-fill me-2';
+    label.textContent = 'Pause';
+    btn.style.background = 'linear-gradient(135deg,#f59e0b,#d97706)';
+  } else if (paused) {
+    icon.className  = 'bi bi-play-fill me-2';
+    label.textContent = 'Resume';
+    btn.style.background = 'linear-gradient(135deg,#3b82f6,#1d4ed8)';
+  } else {
+    icon.className  = 'bi bi-play-fill me-2';
+    label.textContent = 'Play Tutorial';
+    btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
+  }
+}
+
+function updateProgress() {
+  const pct = SECTIONS.length ? (currentSection / SECTIONS.length) * 100 : 0;
+  document.getElementById('progressBar').style.width  = pct + '%';
+  document.getElementById('progressLabel').textContent = speaking
+    ? `Playing: ${SECTIONS[currentSection]?.label || ''}`
+    : (currentSection === 0 ? 'Ready to play' : 'Stopped');
+  document.getElementById('progressSection').textContent =
+    speaking ? `${currentSection + 1} / ${SECTIONS.length}` : '';
+}
+
+// If user clicks #audio link, auto-scroll and start
+if (location.hash === '#audio') {
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('audio')?.scrollIntoView({behavior:'smooth'});
+  });
+}
+</script>
+{% endblock %}

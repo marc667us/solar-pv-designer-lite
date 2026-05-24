@@ -1370,6 +1370,475 @@ def reset_password(token):
     return render_template("reset_password.html", token=token)
 
 
+# ─── Support / Help Centre ───────────────────────────────────────────────────
+
+@app.route("/support")
+@login_required
+def support():
+    return render_template("support.html", user=current_user())
+
+
+@app.route("/support/email-setup")
+@login_required
+def support_email_setup():
+    return render_template("support_email_setup.html", user=current_user())
+
+
+@app.route("/support/email-setup/pdf")
+@login_required
+def support_email_setup_pdf():
+    return _render_pdf(
+        "Email SMTP Setup Guide — SolarPro Global",
+        _TUTORIAL_EMAIL_SETUP_MD,
+        "SolarPro_Email_Setup_Guide.pdf")
+
+
+@app.route("/support/user-guide")
+@login_required
+def support_user_guide():
+    return render_template("support_user_guide.html", user=current_user())
+
+
+@app.route("/support/user-guide/pdf")
+@login_required
+def support_user_guide_pdf():
+    return _render_pdf(
+        "User Guide — SolarPro Global",
+        _TUTORIAL_USER_GUIDE_MD,
+        "SolarPro_User_Guide.pdf")
+
+
+_TUTORIAL_EMAIL_SETUP_MD = """# Email & SMTP Setup Guide
+## SolarPro Global Help Centre
+
+**Version 1.0 · solarpro-global.onrender.com**
+
+---
+
+## Why Set Up Email?
+
+SolarPro Global can send your solar project PDF reports — BOQ, Economic Analysis,
+Energy Impact, and more — directly to clients, banks, and installers. To do this,
+the platform needs to connect to your outbound mail server (SMTP).
+
+Once configured you can:
+
+- Send any project report from the **Email Reports** page
+- Receive password reset emails automatically
+- Get system notifications from the platform
+
+---
+
+# Step 1 — Open Settings
+
+1. Log in to your SolarPro account.
+2. Click your **username** in the top-right navigation bar.
+3. Select **Settings** from the dropdown menu.
+4. Click the **Email / SMTP** tab at the top of the Settings page.
+
+You will see the SMTP configuration form with fields for host, port, username,
+password, encryption mode, and From address.
+
+---
+
+# Step 2 — Choose Your Email Provider
+
+SolarPro supports any standard SMTP provider. Use the **Quick-Fill buttons** on the
+settings page to auto-fill the host and port for popular providers.
+
+| Provider | Best For | Free Tier |
+|---|---|---|
+| Gmail | Personal accounts, small teams | 500 emails / day |
+| Outlook / Microsoft 365 | Business Microsoft accounts | Included with M365 |
+| Brevo (formerly Sendinblue) | Professional SaaS sending | 300 emails / day |
+| Mailgun | High-volume transactional | 100 emails / day |
+
+> **Recommendation:** For a solar consultancy, **Brevo** is the best choice.
+> It is free for up to 300 emails per day, has excellent deliverability, and
+> does not require an App Password like Gmail.
+
+---
+
+# Step 3A — Set Up Gmail
+
+Gmail requires an **App Password** — a special 16-character code separate from
+your normal Google account password.
+
+**Step-by-step — generate a Gmail App Password:**
+
+1. Go to **myaccount.google.com**
+2. Click **Security** in the left sidebar.
+3. Under "How you sign in to Google", click **2-Step Verification** (must be on).
+4. Scroll to the bottom → click **App passwords**.
+5. App: **Mail** · Device: **Other** → type "SolarPro" → click **Generate**.
+6. Copy the 16-character password shown (no spaces).
+
+**Enter these values in SolarPro Settings → Email / SMTP:**
+
+| Field | Value |
+|---|---|
+| SMTP Host | smtp.gmail.com |
+| Port | 587 |
+| Encryption | STARTTLS |
+| Username | your.email@gmail.com |
+| Password | The 16-character App Password (NOT your Google password) |
+| From Address | your.email@gmail.com |
+
+> If you paste the App Password, remove any spaces. Google displays it in groups
+> of 4 characters — it is one continuous string.
+
+---
+
+# Step 3B — Set Up Brevo (Recommended)
+
+1. Sign up free at **brevo.com**.
+2. After logging in, go to **Senders & IP** → **SMTP & API**.
+3. Copy your **SMTP Login** (your Brevo email) and **Master Password**,
+   or generate a dedicated SMTP key.
+
+**Enter these values in SolarPro Settings → Email / SMTP:**
+
+| Field | Value |
+|---|---|
+| SMTP Host | smtp-relay.brevo.com |
+| Port | 587 |
+| Encryption | STARTTLS |
+| Username | Your Brevo account email |
+| Password | Your Brevo master password or SMTP key |
+| From Address | A verified sender in your Brevo account |
+
+> You must verify your sender email address or domain in Brevo before emails
+> will be delivered. Go to **Brevo → Senders → Add a sender**.
+
+---
+
+# Step 3C — Set Up Outlook / Microsoft 365
+
+| Field | Value |
+|---|---|
+| SMTP Host | smtp.office365.com |
+| Port | 587 |
+| Encryption | STARTTLS |
+| Username | your@company.com |
+| Password | Your Microsoft 365 account password |
+| From Address | your@company.com |
+
+> If your organisation has Multi-Factor Authentication (MFA) enabled, generate
+> an App Password in your Microsoft account security settings.
+
+---
+
+# Step 4 — Test the Connection
+
+After filling in all fields, click **Test Connection** (the blue button).
+
+- **✓ "Connection successful"** — SMTP is working. Click **Save SMTP**.
+- **✗ "Authentication failed"** — check your username and password.
+  For Gmail, ensure you used the App Password, not your regular password.
+- **✗ "Connection refused / timed out"** — check the host and port.
+  Port 587 may be blocked by your network firewall.
+
+Always click **Save SMTP** after a successful test.
+
+---
+
+# Step 5 — Send a Test Report
+
+1. Open any project with completed calculations.
+2. Click **Results** → **Email Reports**.
+3. Enter your own email address in the **Recipients** field.
+4. Select any report (e.g. BOQ Report).
+5. Click **Send Email**.
+
+The email should arrive within 1–2 minutes. Check your spam folder if it does
+not appear in your inbox.
+
+---
+
+# Troubleshooting
+
+## "SMTP not configured" warning on the Email Reports page
+Your SMTP settings have not been saved yet. Go to **Settings → Email / SMTP**
+and complete setup, then click **Test Connection** before saving.
+
+## "Authentication failed" error
+- **Gmail:** use an App Password, not your Google account password.
+- **Brevo:** check your SMTP Login credentials, not the API key.
+- **Outlook:** generate an App Password if MFA is enabled.
+
+## "Connection timed out" error
+- Port 587 may be blocked by your network.
+- Try port 465 with **SSL/TLS** encryption instead.
+- Contact your network administrator.
+
+## Emails landing in spam
+- Verify your From Address as a sender in your email provider dashboard.
+- For Brevo: verify your sending domain (adds SPF and DKIM DNS records).
+- Ensure the From Address matches the SMTP username.
+
+## Password reset emails not arriving
+The password reset system uses the **server-level SMTP** (Render environment
+variables), not the per-user Settings SMTP. Contact your system administrator
+to configure SMTP_HOST, SMTP_USER, and SMTP_PASS in the Render dashboard.
+
+---
+
+# Quick Reference
+
+| Provider | Host | Port | Encryption |
+|---|---|---|---|
+| Gmail | smtp.gmail.com | 587 | STARTTLS |
+| Outlook / M365 | smtp.office365.com | 587 | STARTTLS |
+| Brevo | smtp-relay.brevo.com | 587 | STARTTLS |
+| Mailgun | smtp.mailgun.org | 587 | STARTTLS |
+| Yahoo Mail | smtp.mail.yahoo.com | 587 | STARTTLS |
+| Zoho Mail | smtp.zoho.com | 587 | STARTTLS |
+
+---
+
+*SolarPro Global Help Centre · support@solarproglobal.com*
+"""
+
+
+_TUTORIAL_USER_GUIDE_MD = """# SolarPro Global — Complete User Guide
+## Intelligent Solar PV Design & Financial Engineering Platform
+
+**Version 1.0 · solarpro-global.onrender.com**
+
+---
+
+## Welcome to SolarPro Global
+
+SolarPro Global is a professional solar PV design platform that takes you from
+initial site assessment all the way through to a bankable financial proposal —
+in a single workflow. This guide walks you through every step.
+
+---
+
+# Step 1 — Create Your Account
+
+1. Go to **solarpro-global.onrender.com**
+2. Click **Start Free** on the homepage.
+3. Fill in your name, company, country, and choose a plan.
+4. Enter your email address and a secure password.
+5. Click **Create Account** — you are automatically logged in.
+
+**Plans available:**
+
+| Plan | Projects | Best For |
+|---|---|---|
+| Free | Up to 3 | Evaluation and small projects |
+| Professional | Up to 20 | Consultancies and SMEs |
+| Enterprise | Unlimited | Large firms and white-label |
+
+---
+
+# Step 2 — Set Up Your Organisation Profile
+
+Before creating your first project, configure your organisation details so they
+appear on all generated reports.
+
+1. Click your **username** (top right) → **Settings**.
+2. On the **Organization** tab, fill in:
+   - Company name and email
+   - Street address
+   - Phone / WhatsApp
+   - Website URL
+   - Time zone
+3. Click **Save Profile**.
+
+Your organisation details will appear as the author on every PDF report,
+proposal, and email sent from the platform.
+
+---
+
+# Step 3 — Create a New Project
+
+1. Click **New Project** in the navigation bar (or the **+** button on the dashboard).
+2. Enter a project name (e.g. "Accra Commercial Office — 50 kW").
+3. Click **Create Project** — you are taken to the Location form.
+
+---
+
+# Step 4 — Set the Location & Solar Resource
+
+The Location form captures where the system will be installed and pulls in
+solar irradiance data for that region.
+
+**Fields to complete:**
+
+- **Country** — select from the 22 supported countries.
+- **Region / City** — the region dropdown populates automatically after you select a country.
+- **Solar resource data** loads automatically once country and region are selected,
+  showing Peak Sun Hours (PSH), average irradiance, and the local electricity tariff.
+- **System Type** — Off-grid, On-grid (grid-tied), or Hybrid.
+- **DC Bus Voltage** — 12V, 24V, or 48V (for off-grid/hybrid).
+- **Currency** — shown on all financial outputs.
+
+**Solar Design Parameters** (on the right panel):
+
+- **Panel Tilt** — degrees from horizontal (typically 10–20° for equatorial regions).
+- **Azimuth** — 0° = south-facing (northern hemisphere); adjust for your roof orientation.
+- **System Losses** — default 14% (wiring, soiling, temperature derating).
+- **Inverter Efficiency** — default 95%.
+- **Battery Depth of Discharge (DoD)** — default 80% for lithium, 50% for lead-acid.
+- **Performance Ratio** — overall system efficiency factor (default 75%).
+
+Click **Save & Continue** when the location is set.
+
+---
+
+# Step 5 — Enter the Load Schedule
+
+The load schedule is the heart of the design — it defines how much energy the
+building consumes and when.
+
+1. Click **Add Appliance** to add each electrical load.
+2. For each appliance enter:
+   - **Name** (e.g. Air Conditioner, Refrigerator, LED Lights)
+   - **Quantity** — number of identical units
+   - **Power (Watts)** — rated wattage per unit
+   - **Hours per day** — average daily run time
+   - **Days per week** — operating days
+3. The **Daily Load (Wh)** calculates automatically.
+4. Add all appliances, then click **Save Loads**.
+
+The platform separates loads into **critical** (must run during outages) and
+**non-critical** to optimise battery sizing for hybrid systems.
+
+---
+
+# Step 6 — Review Engineering Results
+
+Click **Results** to see the full system design. The platform calculates:
+
+**PV Array:**
+- Required PV capacity (kWp)
+- Number of solar panels
+- Suggested panel configuration (series × parallel strings)
+
+**Battery Bank:**
+- Required capacity (kWh and Ah)
+- Number of batteries
+- Battery configuration
+
+**Inverter & Charge Controller:**
+- Minimum inverter rating (kVA)
+- Charge controller rating (Amps)
+
+**AC Cable Schedule:**
+- Cable cross-sections for each circuit
+- Voltage drop calculations
+- Protection device ratings
+
+**Financial Summary:**
+- Total system cost (CAPEX)
+- Payback period
+- Net Present Value (NPV) and Internal Rate of Return (IRR)
+
+---
+
+# Step 7 — Access Reports
+
+From the Results page, click any report in the left panel:
+
+| Report | What It Contains |
+|---|---|
+| PV Design | Panel layout, string configuration, technical specs |
+| Bill of Quantities (BOQ) | Itemised equipment list with local currency pricing |
+| AC Cable Schedule | All cable sizes, lengths, voltage drop, protection |
+| Economic Analysis | NPV, IRR, payback, 25-year cash flow projections |
+| Energy Impact | Monthly generation, grid offset, CO2 savings, trees equivalent |
+| Installation Plan | Step-by-step construction and commissioning checklist |
+| Staffing Plan | Crew roles, responsibilities, and man-hour estimates |
+| Site Assessment | Field inspection checklist for engineers |
+
+Every report can be **exported as PDF** or printed directly from the browser.
+
+---
+
+# Step 8 — Export to Excel
+
+From the Results page, click **Export Excel** to download a full workbook
+containing all results in tabular format — useful for clients and banks who
+need the numbers in a spreadsheet.
+
+---
+
+# Step 9 — Email Reports to Clients
+
+Once your SMTP is configured in **Settings → Email / SMTP**, you can send any
+PDF report directly to clients, banks, or installers.
+
+1. From the Results page, click **Email Reports**.
+2. Select the report to send (e.g. Economic Analysis).
+3. Enter one or more recipient email addresses (comma-separated).
+4. Edit the subject line and message body.
+5. Click **Send Email**.
+
+The platform logs all sent emails. You can view the history at the bottom of
+the Email Reports page.
+
+---
+
+# Step 10 — Request a Site Assessment
+
+Before designing a system, you may want a formal site assessment.
+
+1. Click **Free Assessment** in the navigation (or on the homepage).
+2. Fill in the client's details: name, phone, country, region, building type,
+   floor count, and a description of the site.
+3. Submit — you receive a reference code immediately.
+4. The admin team reviews the assessment and can create a project directly
+   from the assessment record in the pipeline.
+
+---
+
+# Step 11 — Manage Your Account
+
+**Dashboard** — shows all your projects with their status, system size, and
+quick-access buttons.
+
+**Account page** (click username → Account) — view your subscription plan,
+payment history, and support tickets.
+
+**Settings** — configure organisation profile, date/time format, appearance
+theme, SMTP email, and change your password.
+
+**Upgrade** — move from Free to Professional or Enterprise to unlock more
+projects and premium features.
+
+---
+
+# Tips for Professional Reports
+
+- Fill in your **organisation name and logo details** in Settings before exporting
+  any PDFs — these appear on the report header.
+- Set the correct **currency and electricity tariff** in the Location form —
+  all financial figures depend on these inputs.
+- Use the **Hybrid** system type for grid-connected systems with battery backup;
+  use **Off-grid** only for sites with no grid connection at all.
+- Always run **Test Connection** after saving SMTP settings before trying to send
+  your first report.
+- For the most accurate BOQ pricing, use **Settings → Equipment Catalog** (admin)
+  to set current local market prices.
+
+---
+
+# Getting Help
+
+- **Support Tickets** — click **Support** in the navigation to open a ticket.
+  The support team responds within 24 hours.
+- **Email** — contact support@solarproglobal.com
+- **Help Centre** — visit **Support → Help Centre** for step-by-step tutorials
+  on specific features.
+
+---
+
+*SolarPro Global · solarpro-global.onrender.com · support@solarproglobal.com*
+"""
+
+
 # ─── Routes — Dashboard ───────────────────────────────────────────────────────
 
 @app.route("/dashboard")

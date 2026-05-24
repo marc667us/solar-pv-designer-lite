@@ -1,0 +1,429 @@
+{% extends "base.html" %}
+{% block title %}Full User Guide — SolarPro Global{% endblock %}
+{% block content %}
+<div class="container-xl py-4">
+
+<!-- Breadcrumb -->
+<nav class="mb-3" style="font-size:12px">
+  <a href="{{ url_for('support') }}" class="text-secondary text-decoration-none">
+    <i class="bi bi-collection-play me-1"></i>Resources
+  </a>
+  <span class="text-secondary mx-2">/</span>
+  <span class="text-warning">Full User Guide</span>
+</nav>
+
+<div class="row g-4">
+
+  <!-- ── Left: Guide content ────────────────────────────────────────────── -->
+  <div class="col-lg-8">
+
+    <!-- Title -->
+    <div class="solar-card p-4 mb-4" style="background:linear-gradient(135deg,#0d1422,#0f1a30);border:1px solid #0ea5e933">
+      <div class="d-flex align-items-center gap-3 mb-2">
+        <span style="font-size:32px">📘</span>
+        <div>
+          <div style="font-size:20px;font-weight:900;color:#0ea5e9">SolarPro Global — Full User Guide</div>
+          <div class="text-secondary" style="font-size:13px">Complete walkthrough from account creation to final bankable report</div>
+        </div>
+      </div>
+      <div class="d-flex gap-2 flex-wrap mt-3">
+        <span class="badge" style="background:#0ea5e922;color:#0ea5e9;border:1px solid #0ea5e944">11 Sections</span>
+        <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">Beginner Friendly</span>
+        <span class="badge" style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44">~15 min read</span>
+      </div>
+    </div>
+
+    <!-- Overview -->
+    <div class="solar-card p-4 mb-3">
+      <div class="section-head mb-2"><i class="bi bi-info-circle me-1"></i>What is SolarPro Global?</div>
+      <p class="text-secondary" style="font-size:13px;line-height:1.7">
+        SolarPro Global is a professional solar PV design platform that takes you from initial site
+        assessment all the way through to a bankable financial proposal — in a single workflow.
+        It handles PV sizing, battery and inverter calculations, AC cable design, Bill of Quantities,
+        economic analysis, installation planning, and report generation.
+      </p>
+    </div>
+
+    <!-- Step 1 -->
+    <div class="solar-card p-4 mb-3" id="step1">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num-blue">1</div>
+        <div class="section-head mb-0">Create Your Account</div>
+      </div>
+      <ol style="font-size:13px;line-height:1.9;color:var(--sp-sub);padding-left:20px">
+        <li>Go to <strong>solarpro-global.onrender.com</strong>.</li>
+        <li>Click <strong>Start Free</strong> on the homepage.</li>
+        <li>Fill in your name, company, country, and choose a plan.</li>
+        <li>Enter your email address and a secure password.</li>
+        <li>Click <strong>Create Account</strong> — you are automatically logged in.</li>
+      </ol>
+      <div class="table-responsive mt-2">
+        <table class="table table-sm">
+          <thead><tr><th>Plan</th><th>Projects</th><th>Best For</th></tr></thead>
+          <tbody style="font-size:12px">
+            <tr><td class="fw-bold">Free</td><td>Up to 3</td><td>Evaluation and small projects</td></tr>
+            <tr><td class="fw-bold text-info">Professional</td><td>Up to 20</td><td>Consultancies and SMEs</td></tr>
+            <tr><td class="fw-bold text-warning">Enterprise</td><td>Unlimited</td><td>Large firms and white-label</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="solar-card p-4 mb-3" id="step2">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num-blue">2</div>
+        <div class="section-head mb-0">Set Up Your Organisation Profile</div>
+      </div>
+      <p class="text-secondary" style="font-size:13px">Configure your org details so they appear on all generated reports.</p>
+      <ol style="font-size:13px;line-height:1.9;color:var(--sp-sub);padding-left:20px">
+        <li>Click your <strong>username</strong> (top right) → <strong>Settings</strong>.</li>
+        <li>On the <strong>Organization</strong> tab, fill in: company name, email, address, phone, website, timezone.</li>
+        <li>Click <strong>Save Profile</strong>.</li>
+      </ol>
+      <div class="rounded p-3 mt-2" style="background:#0ea5e911;border:1px solid #0ea5e933;font-size:12px;color:#0ea5e9">
+        <i class="bi bi-lightbulb me-1"></i>
+        Your org details appear as the author on every PDF report, proposal, and email sent from the platform.
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="solar-card p-4 mb-3" id="step3">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num-blue">3</div>
+        <div class="section-head mb-0">Create a New Project</div>
+      </div>
+      <ol style="font-size:13px;line-height:1.9;color:var(--sp-sub);padding-left:20px">
+        <li>Click <strong>New Project</strong> in the navigation bar (or the <strong>+</strong> tile on the dashboard).</li>
+        <li>Enter a project name — e.g. "Accra Commercial Office — 50 kW".</li>
+        <li>Click <strong>Create Project</strong> — you are taken to the Location form.</li>
+      </ol>
+    </div>
+
+    <!-- Step 4 -->
+    <div class="solar-card p-4 mb-3" id="step4">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num-blue">4</div>
+        <div class="section-head mb-0">Set the Location & Solar Resource</div>
+      </div>
+      <p class="text-secondary" style="font-size:13px">Captures where the system will be installed and pulls in irradiance data.</p>
+      <div class="row g-3 mt-1">
+        <div class="col-md-6">
+          <div class="fw-bold mb-1" style="font-size:12px;color:var(--sp-muted);text-transform:uppercase">Location Fields</div>
+          <ul style="font-size:12px;line-height:1.8;color:var(--sp-sub);padding-left:16px">
+            <li><strong>Country</strong> — 22 countries supported</li>
+            <li><strong>Region/City</strong> — populates automatically</li>
+            <li><strong>System Type</strong> — Off-grid, On-grid, or Hybrid</li>
+            <li><strong>DC Bus Voltage</strong> — 12V, 24V, or 48V</li>
+            <li><strong>Currency</strong> — shown on all financial outputs</li>
+          </ul>
+        </div>
+        <div class="col-md-6">
+          <div class="fw-bold mb-1" style="font-size:12px;color:var(--sp-muted);text-transform:uppercase">Design Parameters</div>
+          <ul style="font-size:12px;line-height:1.8;color:var(--sp-sub);padding-left:16px">
+            <li><strong>Panel Tilt</strong> — degrees from horizontal</li>
+            <li><strong>Azimuth</strong> — 0° = south-facing</li>
+            <li><strong>System Losses</strong> — default 14%</li>
+            <li><strong>Inverter Efficiency</strong> — default 95%</li>
+            <li><strong>Battery DoD</strong> — 80% lithium / 50% lead-acid</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5 -->
+    <div class="solar-card p-4 mb-3" id="step5">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num-blue">5</div>
+        <div class="section-head mb-0">Enter the Load Schedule</div>
+      </div>
+      <p class="text-secondary" style="font-size:13px">The load schedule is the heart of the design — it defines energy consumption and timing.</p>
+      <ol style="font-size:13px;line-height:1.9;color:var(--sp-sub);padding-left:20px">
+        <li>Click <strong>Add Appliance</strong> for each electrical load.</li>
+        <li>Enter: Name · Quantity · Power (Watts) · Hours/day · Days/week.</li>
+        <li>Daily Load (Wh) calculates automatically.</li>
+        <li>Add all appliances, then click <strong>Save Loads</strong>.</li>
+      </ol>
+    </div>
+
+    <!-- Step 6 -->
+    <div class="solar-card p-4 mb-3" id="step6">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num-blue">6</div>
+        <div class="section-head mb-0">Review Engineering Results</div>
+      </div>
+      <p class="text-secondary mb-2" style="font-size:13px">Click <strong>Results</strong> to see the full system design.</p>
+      <div class="row g-2">
+        {% for title, items in [
+          ('PV Array', ['Required capacity (kWp)', 'Number of panels', 'String configuration']),
+          ('Battery Bank', ['Required capacity (kWh & Ah)', 'Number of batteries', 'Battery configuration']),
+          ('Inverter & CC', ['Minimum inverter rating (kVA)', 'Charge controller rating (A)']),
+          ('Financials', ['Total CAPEX', 'Payback period', 'NPV and IRR']),
+        ] %}
+        <div class="col-md-6">
+          <div class="rounded p-3" style="background:var(--sp-card-bg);border:1px solid var(--sp-border)">
+            <div class="fw-bold mb-2" style="font-size:12px;color:var(--sp-accent)">{{ title }}</div>
+            <ul style="font-size:12px;color:var(--sp-sub);padding-left:14px;margin:0;line-height:1.8">
+              {% for item in items %}<li>{{ item }}</li>{% endfor %}
+            </ul>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Step 7 -->
+    <div class="solar-card p-4 mb-3" id="step7">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="step-num-blue">7</div>
+        <div class="section-head mb-0">Access Reports</div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Report</th><th>What It Contains</th></tr></thead>
+          <tbody style="font-size:12px">
+            <tr><td class="fw-bold text-warning">PV Design</td><td>Panel layout, string config, technical specs</td></tr>
+            <tr><td class="fw-bold text-warning">Bill of Quantities</td><td>Itemised equipment list with local currency pricing</td></tr>
+            <tr><td class="fw-bold text-warning">AC Cable Schedule</td><td>Cable sizes, lengths, voltage drop, protection devices</td></tr>
+            <tr><td class="fw-bold text-warning">Economic Analysis</td><td>NPV, IRR, payback, 25-year cash flow projections</td></tr>
+            <tr><td class="fw-bold text-warning">Energy Impact</td><td>Monthly generation, grid offset, CO2 savings, trees equivalent</td></tr>
+            <tr><td class="fw-bold text-warning">Installation Plan</td><td>Step-by-step construction and commissioning checklist</td></tr>
+            <tr><td class="fw-bold text-warning">Staffing Plan</td><td>Crew roles, responsibilities, and man-hour estimates</td></tr>
+            <tr><td class="fw-bold text-warning">Site Assessment</td><td>Field inspection checklist for engineers</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Steps 8–11 -->
+    {% for num, title, body in [
+      (8,  'Export to Excel',
+           'From the Results page, click <strong>Export Excel</strong> to download a full workbook with all results in tabular format — useful for clients and banks who prefer spreadsheets.'),
+      (9,  'Email Reports to Clients',
+           'Once your SMTP is configured in <strong>Settings → Email / SMTP</strong>, open any project → Results → Email Reports. Select the report, enter recipient addresses, edit the message body, and click <strong>Send Email</strong>. All sent emails are logged at the bottom of the page.'),
+      (10, 'Request a Site Assessment',
+           'Click <strong>Free Assessment</strong> in the navigation. Fill in client details (name, phone, country, region, building type, floor count, description). Submit — you receive a reference code immediately. Admins can create a project directly from the assessment record.'),
+      (11, 'Manage Your Account',
+           'Use the <strong>Dashboard</strong> for all projects and KPIs. The <strong>Account page</strong> shows your subscription, payment history, and support tickets. <strong>Settings</strong> covers org profile, date/time format, appearance, SMTP, and password. <strong>Upgrade</strong> unlocks more projects and premium features.'),
+    ] %}
+    <div class="solar-card p-4 mb-3" id="step{{ num }}">
+      <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="step-num-blue">{{ num }}</div>
+        <div class="section-head mb-0">{{ title }}</div>
+      </div>
+      <p class="text-secondary" style="font-size:13px;line-height:1.7">{{ body | safe }}</p>
+    </div>
+    {% endfor %}
+
+  </div><!-- /col-lg-8 -->
+
+
+  <!-- ── Right: Audio + PDF ─────────────────────────────────────────────── -->
+  <div class="col-lg-4">
+    <div style="position:sticky;top:80px">
+
+      <!-- Audio player -->
+      <div class="solar-card p-4 mb-3" id="audio">
+        <div class="section-head mb-3"><i class="bi bi-headphones me-1"></i>Listen to Guide</div>
+        <p class="text-secondary mb-3" style="font-size:12px">
+          Full narration of all 11 sections. Works in Chrome, Edge, Firefox, and Safari.
+        </p>
+        <button id="playBtn" onclick="toggleAudio()"
+          class="btn w-100 mb-3 fw-bold"
+          style="background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;border:none;padding:12px">
+          <i class="bi bi-play-fill me-2" id="playIcon"></i><span id="playLabel">Play User Guide</span>
+        </button>
+        <div class="mb-3">
+          <div class="d-flex justify-content-between mb-1" style="font-size:11px;color:var(--sp-muted)">
+            <span id="progressLabel">Ready to play</span>
+            <span id="progressSection"></span>
+          </div>
+          <div style="height:4px;background:var(--sp-border);border-radius:2px;overflow:hidden">
+            <div id="progressBar" style="height:100%;width:0;background:linear-gradient(90deg,#0ea5e9,#a78bfa);border-radius:2px;transition:width .5s"></div>
+          </div>
+        </div>
+        <div class="d-flex gap-2 mb-3">
+          <button onclick="stopAudio()" class="btn btn-sm flex-fill"
+            style="background:var(--sp-card-bg);border:1px solid var(--sp-border);font-size:12px">
+            <i class="bi bi-stop-fill me-1"></i>Stop
+          </button>
+          <button onclick="skipSection(-1)" class="btn btn-sm flex-fill"
+            style="background:var(--sp-card-bg);border:1px solid var(--sp-border);font-size:12px">
+            <i class="bi bi-skip-backward-fill"></i>
+          </button>
+          <button onclick="skipSection(1)" class="btn btn-sm flex-fill"
+            style="background:var(--sp-card-bg);border:1px solid var(--sp-border);font-size:12px">
+            <i class="bi bi-skip-forward-fill"></i>
+          </button>
+        </div>
+        <div class="mb-3">
+          <div class="d-flex justify-content-between mb-1" style="font-size:11px;color:var(--sp-muted)">
+            <span>Speed</span><span id="rateLabel">1.0×</span>
+          </div>
+          <input type="range" id="rateSlider" min="0.5" max="2" step="0.25" value="1"
+            oninput="updateRate(this.value)" class="form-range" style="accent-color:#0ea5e9">
+        </div>
+        <div>
+          <label class="sp-label">Voice</label>
+          <select id="voiceSelect" class="form-select sp-input form-select-sm" onchange="updateVoice()"></select>
+        </div>
+      </div>
+
+      <!-- PDF -->
+      <div class="solar-card p-4 mb-3">
+        <div class="section-head mb-2"><i class="bi bi-file-earmark-pdf me-1"></i>Download PDF</div>
+        <p class="text-secondary mb-3" style="font-size:12px">Full user guide as a printable PDF.</p>
+        <a href="{{ url_for('support_user_guide_pdf') }}"
+           class="btn w-100 btn-sm fw-bold"
+           style="background:#ef4444;color:#fff;border:none">
+          <i class="bi bi-download me-1"></i>Download PDF Guide
+        </a>
+      </div>
+
+      <!-- Jump to section -->
+      <div class="solar-card p-3">
+        <div class="section-head mb-2" style="font-size:12px"><i class="bi bi-list-ul me-1"></i>Jump to Section</div>
+        <div class="d-flex flex-column gap-1">
+          {% for num, title in [
+            (1,'Create Account'),(2,'Organisation Profile'),(3,'New Project'),
+            (4,'Location & Solar'),(5,'Load Schedule'),(6,'Results'),
+            (7,'Reports'),(8,'Excel Export'),(9,'Email Reports'),
+            (10,'Site Assessment'),(11,'Account Management'),
+          ] %}
+          <a href="#step{{ num }}" class="text-decoration-none" style="font-size:12px;color:var(--sp-muted);padding:3px 0">
+            <span class="text-warning me-2">{{ num }}.</span>{{ title }}
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+
+    </div><!-- /sticky -->
+  </div>
+
+</div><!-- /row -->
+</div>
+
+<style>
+.step-num-blue {
+  width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg,#0ea5e9,#2563eb);
+  color:#fff;font-weight:900;font-size:14px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0
+}
+.sp-label { font-size:11px;font-weight:700;color:var(--sp-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;display:block }
+.sp-input { background:var(--sp-card-bg)!important;color:var(--sp-text)!important;border-color:var(--sp-border)!important }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SECTIONS = [
+  { label:"Introduction", text:`Welcome to the SolarPro Global Full User Guide. This tutorial covers all eleven steps from creating your account to generating a complete bankable solar project report.` },
+  { label:"Step 1 — Create Account", text:`Step 1. Create your account. Go to solarpro-global.onrender.com and click Start Free on the homepage. Fill in your name, company, country, and choose a subscription plan. Enter your email address and a secure password of at least 8 characters, then click Create Account. You are automatically logged in and taken to your dashboard.` },
+  { label:"Step 2 — Organisation Profile", text:`Step 2. Set up your Organisation Profile. Click your username in the top-right navigation bar and select Settings from the dropdown. On the Organization tab, fill in your company name, email address, street address, phone number, website, and time zone. Click Save Profile. This information will appear as the author on every PDF report, proposal, and email sent from the platform.` },
+  { label:"Step 3 — New Project", text:`Step 3. Create a new project. Click New Project in the navigation bar, or click the plus tile on the dashboard. Enter a descriptive project name — for example, Accra Commercial Office, 50 kilowatts. Click Create Project and you are taken to the Location form.` },
+  { label:"Step 4 — Location & Solar", text:`Step 4. Set the Location and Solar Resource. Select the country from the 22 supported countries. The region or city dropdown will populate automatically. Solar resource data loads automatically once country and region are selected, showing Peak Sun Hours, average irradiance, and the local electricity tariff. Choose the System Type — Off-grid, On-grid, or Hybrid. Select the DC Bus Voltage for off-grid or hybrid systems — 12, 24, or 48 volts. Set the Solar Design Parameters on the right panel, including panel tilt, azimuth, system losses, inverter efficiency, battery depth of discharge, and performance ratio.` },
+  { label:"Step 5 — Load Schedule", text:`Step 5. Enter the Load Schedule. The load schedule is the heart of the design — it defines how much energy the building consumes and when. Click Add Appliance for each electrical load. For each appliance, enter the name, quantity, power in watts, hours per day, and days per week. The daily energy in watt-hours calculates automatically. Add all appliances and click Save Loads.` },
+  { label:"Step 6 — Results", text:`Step 6. Review Engineering Results. Click Results to see the full system design. The platform calculates the required PV array size in kilowatt-peak, the number of solar panels and their string configuration. It sizes the battery bank in kilowatt-hours and ampere-hours. It determines the minimum inverter rating and charge controller size. It also sizes all AC cables and runs the financial model including total CAPEX, payback period, Net Present Value, and Internal Rate of Return.` },
+  { label:"Step 7 — Reports", text:`Step 7. Access Reports. From the Results page, click any report in the left panel. Available reports include: PV Design, Bill of Quantities with local currency pricing, AC Cable Schedule, Economic Analysis with 25-year cash flow projections, Energy Impact showing monthly generation and CO2 savings, Installation Plan, Staffing Plan, and Site Assessment checklist. Every report can be exported as a PDF or printed directly from the browser.` },
+  { label:"Step 8 — Excel Export", text:`Step 8. Export to Excel. From the Results page, click Export Excel to download a full workbook containing all results in tabular format. This is useful for clients and banks who need the numbers in a spreadsheet.` },
+  { label:"Step 9 — Email Reports", text:`Step 9. Email Reports to Clients. Once your SMTP is configured in Settings, open any project, go to Results, then Email Reports. Select the report to send, enter one or more recipient email addresses separated by commas, edit the subject line and message body, and click Send Email. The platform logs all sent emails and you can view the history at the bottom of the Email Reports page.` },
+  { label:"Step 10 — Site Assessment", text:`Step 10. Request a Site Assessment. Click Free Assessment in the navigation bar. Fill in the client details including name, phone, country, region, building type, number of floors, and a description of the site. Submit the form and you receive a reference code immediately. The admin team reviews the assessment in the pipeline and can create a project directly from the assessment record, with the location pre-filled.` },
+  { label:"Step 11 — Account Management", text:`Step 11. Manage Your Account. Use the Dashboard to see all your projects with their status, system size, and quick-access buttons. The Account page shows your subscription plan, payment history, and support tickets. The Settings page covers organisation profile, date and time format, appearance theme, SMTP email configuration, and changing your password. Use the Upgrade page to move from Free to Professional or Enterprise and unlock more projects and premium features. That completes the SolarPro Global User Guide. Thank you for using SolarPro Global.` },
+];
+
+let currentSection = 0;
+let utterance = null;
+let speaking = false;
+let paused = false;
+let voiceList = [];
+
+function loadVoices() {
+  voiceList = speechSynthesis.getVoices();
+  const sel = document.getElementById('voiceSelect');
+  sel.innerHTML = '';
+  const englishVoices = voiceList.filter(v => v.lang.startsWith('en'));
+  const toShow = englishVoices.length ? englishVoices : voiceList;
+  toShow.forEach((v, i) => {
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = `${v.name} (${v.lang})`; sel.appendChild(opt);
+  });
+  const preferredIdx = toShow.findIndex(v => v.name.includes('Google') && v.lang === 'en-US');
+  if (preferredIdx >= 0) sel.value = preferredIdx;
+}
+speechSynthesis.onvoiceschanged = loadVoices; loadVoices();
+
+function getSelectedVoice() {
+  const sel = document.getElementById('voiceSelect');
+  const idx = parseInt(sel.value);
+  const list = voiceList.filter(v => v.lang.startsWith('en'));
+  const toUse = list.length ? list : voiceList;
+  return toUse[idx] || null;
+}
+
+function speakSection(idx) {
+  if (idx < 0 || idx >= SECTIONS.length) { stopAudio(); return; }
+  window.speechSynthesis.cancel();
+  currentSection = idx; updateProgress();
+  const u = new SpeechSynthesisUtterance(SECTIONS[idx].text);
+  u.rate = parseFloat(document.getElementById('rateSlider').value);
+  u.pitch = 1;
+  const voice = getSelectedVoice(); if (voice) u.voice = voice;
+  u.onend = () => speakSection(currentSection + 1);
+  u.onerror = () => stopAudio();
+  utterance = u;
+  window.speechSynthesis.speak(u);
+  speaking = true; paused = false; updateControls();
+}
+
+function toggleAudio() {
+  if (speaking && !paused) { window.speechSynthesis.pause(); paused = true; updateControls(); }
+  else if (paused) { window.speechSynthesis.resume(); paused = false; updateControls(); }
+  else { speakSection(0); }
+}
+
+function stopAudio() {
+  window.speechSynthesis.cancel(); speaking = false; paused = false;
+  currentSection = 0; updateControls(); updateProgress();
+}
+
+function skipSection(dir) {
+  const next = currentSection + dir;
+  if (next >= 0 && next < SECTIONS.length) speakSection(next);
+}
+
+function updateRate(val) {
+  document.getElementById('rateLabel').textContent = parseFloat(val).toFixed(2) + '×';
+  if (utterance) utterance.rate = parseFloat(val);
+}
+function updateVoice() { if (speaking) { const c = currentSection; stopAudio(); speakSection(c); } }
+
+function updateControls() {
+  const btn = document.getElementById('playBtn');
+  const icon = document.getElementById('playIcon');
+  const label = document.getElementById('playLabel');
+  if (speaking && !paused) {
+    icon.className = 'bi bi-pause-fill me-2'; label.textContent = 'Pause';
+    btn.style.background = 'linear-gradient(135deg,#f59e0b,#d97706)'; btn.style.color = '#000';
+  } else if (paused) {
+    icon.className = 'bi bi-play-fill me-2'; label.textContent = 'Resume';
+    btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)'; btn.style.color = '#000';
+  } else {
+    icon.className = 'bi bi-play-fill me-2'; label.textContent = 'Play User Guide';
+    btn.style.background = 'linear-gradient(135deg,#0ea5e9,#2563eb)'; btn.style.color = '#fff';
+  }
+}
+
+function updateProgress() {
+  const pct = SECTIONS.length ? (currentSection / SECTIONS.length) * 100 : 0;
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = speaking
+    ? `Playing: ${SECTIONS[currentSection]?.label || ''}` : (currentSection === 0 ? 'Ready to play' : 'Stopped');
+  document.getElementById('progressSection').textContent = speaking ? `${currentSection + 1} / ${SECTIONS.length}` : '';
+}
+
+if (location.hash === '#audio') {
+  document.addEventListener('DOMContentLoaded', () => document.getElementById('audio')?.scrollIntoView({behavior:'smooth'}));
+}
+</script>
+{% endblock %}
