@@ -1,14 +1,26 @@
-name: Sync secrets to Render
+name: Deploy to Render
 
 on:
   push:
     branches: [master]
 
 jobs:
-  sync-env:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Push all secrets to Render service
+      - name: Trigger Render deploy
+        env:
+          RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            | jq '{id: .id, status: .status}'
+
+      - name: Sync secrets to Render
         env:
           RENDER_API_KEY:          ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID:       ${{ secrets.RENDER_SERVICE_ID }}
@@ -22,12 +34,10 @@ jobs:
           SMTP_USER:               ${{ secrets.SMTP_USER }}
           SMTP_PASS:               ${{ secrets.SMTP_PASS }}
         run: |
-          # Fetch current env vars from Render
           CURRENT=$(curl -sf \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars")
 
-          # Build updated list: remove managed keys then re-add from GitHub Secrets
           UPDATED=$(echo "$CURRENT" | jq \
             --arg anthropic  "$ANTHROPIC_API_KEY" \
             --arg secret_key "$SECRET_KEY" \
@@ -57,7 +67,6 @@ jobs:
               ]
             ] | add')
 
-          # Write updated env vars back to Render
           curl -sf -X PUT \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
