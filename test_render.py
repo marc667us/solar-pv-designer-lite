@@ -200,8 +200,52 @@ chk("Settings: saved time format shown selected",
     'value="12h"' in body and
     ('checked' in body[body.find('value="12h"'):body.find('value="12h"')+60]))
 
-# ── SECTION 4: API endpoints ──────────────────────────────────────────────────
-print("\n=== 12. API endpoints ===")
+# ── SECTION 4: AI Assistant widget ───────────────────────────────────────────
+print("\n=== 12. AI Assistant widget ===")
+# Widget markup present in base template
+r = s.get(BASE + "/dashboard", timeout=20)
+h("Dashboard (widget host) loads", r)
+body = r.text
+chk("Widget: floating button present",    'id="sp-asst-btn"'     in body)
+chk("Widget: chat panel present",         'id="sp-asst-panel"'   in body)
+chk("Widget: escalate div present",       'id="sp-asst-escalate"' in body)
+chk("Widget: input textarea present",     'id="sp-asst-input"'   in body)
+
+# Chat API
+print("\n=== 13. AI Assistant chat API ===")
+r = s.post(BASE + "/api/assistant/chat",
+    json={"message": "How do I add loads to my project?", "history": []},
+    headers={"X-CSRF-Token": s.get(BASE + "/dashboard", timeout=20)
+             .text.split('name="csrf-token" content="')[1].split('"')[0]},
+    timeout=40)
+h("Chat API responds", r)
+if r.status_code == 200:
+    try:
+        d = r.json()
+        chk("Chat API: reply key present",    "reply"    in d)
+        chk("Chat API: escalate key present", "escalate" in d)
+        chk("Chat API: reply non-empty",      bool(d.get("reply")))
+    except: chk("Chat API JSON parse", False)
+
+# Escalate API
+print("\n=== 14. AI Assistant escalate API ===")
+csrf_tok = s.get(BASE + "/dashboard", timeout=20).text.split('name="csrf-token" content="')[1].split('"')[0]
+r = s.post(BASE + "/api/assistant/escalate",
+    json={"summary": "Test escalation from test suite",
+          "history": [{"role":"user","content":"My reports are not loading"},
+                      {"role":"assistant","content":"This needs engineering review"}]},
+    headers={"X-CSRF-Token": csrf_tok},
+    timeout=30)
+h("Escalate API responds", r)
+if r.status_code == 200:
+    try:
+        d = r.json()
+        chk("Escalate: ok=True",            d.get("ok") is True)
+        chk("Escalate: ticket_id returned", isinstance(d.get("ticket_id"), int))
+    except: chk("Escalate JSON parse", False)
+
+# ── SECTION 5: API endpoints ──────────────────────────────────────────────────
+print("\n=== 15. API endpoints ===")
 r = s.get(BASE + "/api/purc-tariffs", timeout=15)
 h("PURC tariffs API", r)
 if r.status_code == 200:

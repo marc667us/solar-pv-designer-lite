@@ -4638,6 +4638,106 @@ def ticket_detail(tid):
                            ticket=ticket, replies=replies)
 
 
+# ─── AI Technical Assistant ───────────────────────────────────────────────────
+
+_ASSISTANT_SYSTEM = """You are SolarPro Assistant — the expert AI technical support agent for SolarPro Global, an intelligent solar PV system design and financial engineering platform.
+
+Platform knowledge:
+- Design flow: Create Project → Location (country, region, tariff, funding mode) → Loads (appliances, watts, hours, demand factor) → Results (PV/battery/inverter/cable sizing + financials) → Reports
+- Funding modes: Loan Finance (DSCR analysis) or Self-Funded (NPV/IRR/payback)
+- Battery chemistry: LiFePO4 or Lead-Acid
+- Plans: Free (1 project, basic), Professional (20 projects), Enterprise (unlimited + all reports/exports)
+- Reports: BOQ (8% markup, 15% installation), Economic (25-yr model, 0.8% O&M, battery/inverter replacement), Proposal, Cable sizing, Installation plan, Energy production
+- Settings: Organisation profile, Date & Time format (4 options each), Appearance (5 themes, 7 accent colours, 5 fonts), Email/SMTP (Gmail/Outlook/Brevo/Mailgun), Security
+- 22+ countries with local tariff data; Ghana uses PURC tariff categories with 4-decimal rates
+- Standards: BS 7671, IEC 60364, NEC 2023, IEEE 1547
+
+Common issues:
+- Location form not saving → ensure country AND region both selected; step validation was fixed in latest release
+- Loads page error → add at least one appliance row before calculating
+- Reports locked → Professional/Enterprise plan required for BOQ and Economic reports
+- Date/Time picker unresponsive → fixed in latest release; clear browser cache if still occurring
+- SMTP test failing → use App Passwords for Gmail; Brevo recommended for 300 free emails/day
+
+Your rules:
+- Be concise and practical — 2-5 sentences per reply
+- If you fully solve the issue, confirm the fix clearly
+- If the issue requires database access, backend changes, billing queries, or is a confirmed bug you cannot resolve: include [ESCALATE] in your reply so the system can raise a support ticket
+- Never invent features; say so if unsure and suggest escalating"""
+
+
+@app.route("/api/assistant/chat", methods=["POST"])
+def assistant_chat():
+    """AI technical assistant chat — no login required (widget only renders for logged-in users)."""
+    csrf_protect()
+    data    = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
+    history = data.get("history") or []
+    if not message:
+        return jsonify({"error": "No message"}), 400
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return jsonify({
+            "reply": "AI assistant is currently unavailable. Please raise a support ticket and our engineering team will assist you.",
+            "escalate": True
+        })
+
+    try:
+        import anthropic as _ant
+        _ac = _ant.Anthropic(api_key=api_key)
+        msgs = []
+        for h in history[-12:]:
+            role    = h.get("role", "")
+            content = (h.get("content") or "").strip()
+            if role in ("user", "assistant") and content:
+                msgs.append({"role": role, "content": content})
+        msgs.append({"role": "user", "content": message})
+        resp  = _ac.messages.create(model="claude-opus-4-7", max_tokens=500,
+                                    system=_ASSISTANT_SYSTEM, messages=msgs)
+        reply = resp.content[0].text if resp.content else "I couldn't generate a response. Please try again."
+        escalate = "[ESCALATE]" in reply
+        reply    = reply.replace("[ESCALATE]", "").strip()
+        return jsonify({"reply": reply, "escalate": escalate})
+    except Exception as e:
+        app.logger.error(f"assistant_chat error: {e}")
+        return jsonify({
+            "reply": "I'm having trouble connecting right now. Please try again shortly, or raise a support ticket if the problem persists.",
+            "escalate": True
+        })
+
+
+@app.route("/api/assistant/escalate", methods=["POST"])
+@login_required
+def assistant_escalate():
+    """Create a high-priority support ticket from the AI chat conversation."""
+    csrf_protect()
+    data    = request.get_json(silent=True) or {}
+    summary = (data.get("summary") or "").strip()
+    history = data.get("history") or []
+
+    chat_log = ""
+    for h in history[-20:]:
+        role    = "User" if h.get("role") == "user" else "AI Assistant"
+        content = (h.get("content") or "").strip()
+        if content:
+            chat_log += f"\n**{role}:** {content}\n"
+
+    subject = (summary or "AI Assistant escalation")[:120]
+    body    = (f"**Escalated from AI Assistant chat**\n"
+               f"\n{'Chat transcript:' if chat_log else 'No transcript available.'}"
+               f"\n{chat_log}\n\n"
+               f"---\n*Auto-created by the SolarPro AI assistant.*")
+
+    with get_db() as c:
+        c.execute(
+            "INSERT INTO tickets (user_id, subject, message, priority) VALUES (?,?,?,?)",
+            (session["user_id"], subject, body, "high"))
+        tid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    return jsonify({"ok": True, "ticket_id": tid})
+
+
 # ─── Phase 4: Subscription upgrade & payment ─────────────────────────────────
 
 @app.route("/upgrade")
