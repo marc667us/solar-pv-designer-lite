@@ -20,7 +20,7 @@ jobs:
             "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
             | jq '{id: .id, status: .status}'
 
-      - name: Sync secrets to Render
+      - name: Sync secrets to Render (skips empty values)
         env:
           RENDER_API_KEY:          ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID:       ${{ secrets.RENDER_SERVICE_ID }}
@@ -34,38 +34,40 @@ jobs:
           SMTP_USER:               ${{ secrets.SMTP_USER }}
           SMTP_PASS:               ${{ secrets.SMTP_PASS }}
         run: |
+          # Build update list — only include secrets with non-empty values
+          # so missing GitHub Secrets never overwrite values set in Render dashboard
+          NEW_VARS='[]'
+          add() {
+            local key="$1" val="$2"
+            if [ -n "$val" ]; then
+              NEW_VARS=$(printf '%s' "$NEW_VARS" | \
+                jq --arg k "$key" --arg v "$val" '. + [{"key":$k,"value":$v}]')
+            fi
+          }
+          add ANTHROPIC_API_KEY     "$ANTHROPIC_API_KEY"
+          add SECRET_KEY            "$SECRET_KEY"
+          add PAYSTACK_SECRET_KEY   "$PAYSTACK_SECRET_KEY"
+          add STRIPE_SECRET_KEY     "$STRIPE_SECRET_KEY"
+          add STRIPE_WEBHOOK_SECRET "$STRIPE_WEBHOOK_SECRET"
+          add SMTP_HOST             "$SMTP_HOST"
+          add SMTP_PORT             "$SMTP_PORT"
+          add SMTP_USER             "$SMTP_USER"
+          add SMTP_PASS             "$SMTP_PASS"
+
+          if [ "$NEW_VARS" = '[]' ]; then
+            echo "No GitHub Secrets configured — skipping Render env-var sync"
+            exit 0
+          fi
+
+          echo "Syncing $(echo "$NEW_VARS" | jq 'length') secret(s) to Render..."
+
           CURRENT=$(curl -sf \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars")
 
           UPDATED=$(echo "$CURRENT" | jq \
-            --arg anthropic  "$ANTHROPIC_API_KEY" \
-            --arg secret_key "$SECRET_KEY" \
-            --arg paystack   "$PAYSTACK_SECRET_KEY" \
-            --arg stripe     "$STRIPE_SECRET_KEY" \
-            --arg stripe_wh  "$STRIPE_WEBHOOK_SECRET" \
-            --arg smtp_host  "$SMTP_HOST" \
-            --arg smtp_port  "$SMTP_PORT" \
-            --arg smtp_user  "$SMTP_USER" \
-            --arg smtp_pass  "$SMTP_PASS" \
-            '[
-              map(select(.key | IN(
-                "ANTHROPIC_API_KEY","SECRET_KEY",
-                "PAYSTACK_SECRET_KEY","STRIPE_SECRET_KEY","STRIPE_WEBHOOK_SECRET",
-                "SMTP_HOST","SMTP_PORT","SMTP_USER","SMTP_PASS"
-              ) | not)),
-              [
-                {"key":"ANTHROPIC_API_KEY",     "value":$anthropic},
-                {"key":"SECRET_KEY",            "value":$secret_key},
-                {"key":"PAYSTACK_SECRET_KEY",   "value":$paystack},
-                {"key":"STRIPE_SECRET_KEY",     "value":$stripe},
-                {"key":"STRIPE_WEBHOOK_SECRET", "value":$stripe_wh},
-                {"key":"SMTP_HOST",             "value":$smtp_host},
-                {"key":"SMTP_PORT",             "value":$smtp_port},
-                {"key":"SMTP_USER",             "value":$smtp_user},
-                {"key":"SMTP_PASS",             "value":$smtp_pass}
-              ]
-            ] | add')
+            --argjson new "$NEW_VARS" \
+            'map(select(.key as $k | ($new | map(.key) | index($k)) == null)) + $new')
 
           curl -sf -X PUT \
             -H "Authorization: Bearer $RENDER_API_KEY" \
