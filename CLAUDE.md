@@ -170,9 +170,51 @@ Persistent disk mounted at `/opt/render/project/src` (1 GB) — this is where `s
 
 ---
 
+## Testing
+
+`test_render.py` — 72-check end-to-end test suite against the live Render site. Requires admin account (enterprise plan). Run with:
+
+```powershell
+python test_render.py
+```
+
+To wait for a deploy to finish before testing (uses GitHub public API — no auth needed):
+
+```bash
+# Poll GitHub Actions for current HEAD commit, wait for success, then test
+SHA=$(git rev-parse HEAD)
+until curl -sf -H "Accept: application/vnd.github+json" \
+  "https://api.github.com/repos/marc667us/solar-pv-designer-lite/actions/runs?head_sha=$SHA&per_page=1" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin).get('workflow_runs',[]); exit(0 if r and r[0]['status']=='completed' and r[0]['conclusion']=='success' else 1)" 2>/dev/null
+do sleep 10; done && sleep 40 && python test_render.py
+```
+
+---
+
+## Helpline — AI Technical Assistant
+
+Floating chat widget on every logged-in page (bottom-right, `#sp-asst-btn`). Powered by Claude `claude-opus-4-7`.
+
+- **Routes**: `POST /api/assistant/chat` (no login required), `POST /api/assistant/escalate` (`@login_required`)
+- **CSRF**: passed via `X-CSRF-Token` header (meta tag `name="csrf-token"` in base.html)
+- **GitHub context**: `_fetch_github_context()` fetches last 10 commits from public GitHub API, 5-min cache (`_gh_ctx_cache`), appended to system prompt so Helpline knows recent fixes
+- **Escalation**: AI includes `[ESCALATE]` tag → red banner → one-click creates high-priority ticket with chat transcript
+- **ANTHROPIC_API_KEY**: must be set in Render dashboard (CI no longer overwrites it with empty value)
+
+---
+
+## CI/CD
+
+`.github/workflows/deploy.yml`:
+1. Triggers Render deploy via `POST /v1/services/$RENDER_SERVICE_ID/deploys`
+2. Syncs non-empty GitHub Secrets to Render env vars (skips secrets not configured as GitHub Secrets — safe for keys set directly in Render dashboard)
+
+Required GitHub Secrets: `RENDER_API_KEY`, `RENDER_SERVICE_ID`. Others optional (only synced if set).
+
+---
+
 ## Notes
 
-- No test suite. Test manually via the web UI or `python test_agent.py` for the agent endpoint.
 - The legacy tkinter desktop app files (`ui.py`, `main.py`, `solar_pv_designer/`, `build/`, `dist*/`) are still present — ignore them; the web app (`web_app.py`) is the live product.
 - `SPEC.md` contains the original functional spec — useful background but may lag the implementation.
 - `assumptions.md` documents engineering calculation assumptions (derating factors, autonomy days, etc.).
