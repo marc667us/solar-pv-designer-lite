@@ -499,7 +499,7 @@
 </style>
 
 <!-- Floating bubble -->
-<button id="sp-asst-btn" onclick="spAsstToggle()" title="SolarPro AI Assistant" class="no-print"
+<button id="sp-asst-btn" onclick="spAsstToggle()" title="Helpline — SolarPro AI Assistant" class="no-print"
   style="position:fixed;bottom:24px;right:24px;z-index:9990;width:56px;height:56px;border-radius:50%;
          border:none;cursor:pointer;background:linear-gradient(135deg,var(--sp-accent),#a78bfa);
          box-shadow:0 4px 24px rgba(245,158,11,.45);display:flex;align-items:center;
@@ -524,9 +524,9 @@
       <i class="bi bi-stars" style="color:#fff;font-size:15px"></i>
     </div>
     <div>
-      <div style="font-size:14px;font-weight:800;color:var(--sp-text)">SolarPro Assistant</div>
+      <div style="font-size:15px;font-weight:900;color:var(--sp-text);letter-spacing:-.2px">Helpline</div>
       <div style="font-size:10px;color:var(--sp-muted)">
-        <span style="color:#22c55e;font-size:9px">●</span> AI-powered · Escalates to engineering team
+        <span style="color:#22c55e;font-size:9px">●</span> SolarPro AI Assistant · Escalates to engineering team
       </div>
     </div>
     <button onclick="spAsstToggle()"
@@ -597,7 +597,7 @@
       btn.style.transform = 'scale(0.92)';
       if(!welcomed){
         welcomed = true;
-        spAddMsg('asst', 'Hi! I\'m the SolarPro AI assistant. Describe your issue or question and I\'ll help — and if needed I can escalate directly to our engineering team.');
+        spAddMsg('asst', 'Hi! I\'m Helpline, SolarPro\'s AI assistant. Describe your issue or question and I\'ll help — and if needed I can escalate directly to our engineering team.');
       }
       setTimeout(function(){ document.getElementById('sp-asst-input').focus(); }, 80);
     } else {

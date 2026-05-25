@@ -4640,7 +4640,7 @@ def ticket_detail(tid):
 
 # ─── AI Technical Assistant ───────────────────────────────────────────────────
 
-_ASSISTANT_SYSTEM = """You are SolarPro Assistant — the expert AI technical support agent for SolarPro Global, an intelligent solar PV system design and financial engineering platform.
+_ASSISTANT_SYSTEM = """You are Helpline — SolarPro Global's expert AI technical support agent. SolarPro Global is an intelligent solar PV system design and financial engineering platform.
 
 Platform knowledge:
 - Design flow: Create Project → Location (country, region, tariff, funding mode) → Loads (appliances, watts, hours, demand factor) → Results (PV/battery/inverter/cable sizing + financials) → Reports
