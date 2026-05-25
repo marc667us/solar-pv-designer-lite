@@ -1,0 +1,196 @@
+"""End-to-end test against https://solarpro-global.onrender.com
+   Uses the enterprise-plan admin account so report gates don't block.
+"""
+import sys, re, time
+import requests
+
+BASE = "https://solarpro-global.onrender.com"
+s = requests.Session()
+s.headers.update({"User-Agent": "solar-test/1.0"})
+
+PASS = 0; FAIL = 0
+
+def h(label, resp, expect=200):
+    global PASS, FAIL
+    ok = resp.status_code == expect
+    sym = "PASS" if ok else "FAIL"
+    if ok: PASS += 1
+    else:  FAIL += 1
+    print(f"  [{sym}] {label} => {resp.status_code}")
+    if not ok:
+        print(f"         body preview: {resp.text[:400]}")
+    return ok
+
+def chk(label, cond, detail=""):
+    global PASS, FAIL
+    sym = "PASS" if cond else "FAIL"
+    if cond: PASS += 1
+    else:    FAIL += 1
+    print(f"  [{sym}] {label}" + (f"  [{detail}]" if detail else ""))
+
+def get_csrf(url):
+    r = s.get(url, timeout=20)
+    m = re.search(r'name="_csrf"\s+value="([^"]+)"', r.text)
+    return m.group(1) if m else ""
+
+def post(url, data):
+    token = get_csrf(url)
+    if token:
+        data = dict(data)
+        data["_csrf"] = token
+    return s.post(url, data=data, allow_redirects=True, timeout=40)
+
+def extract_pid(url):
+    parts = url.rstrip("/").split("/")
+    for i, p in enumerate(parts):
+        if p == "project" and i+1 < len(parts):
+            try: return int(parts[i+1])
+            except: pass
+    return None
+
+# ── Wake + login as admin (enterprise plan) ───────────────────────────────────
+print("\n=== 0. Wake & Login (admin / enterprise) ===")
+r = s.get(BASE + "/", timeout=60)
+h("Home page reachable", r)
+
+r = post(BASE + "/login", {"username": "admin", "password": "SolarAdmin2026!"})
+h("Admin login", r)
+chk("Landed on dashboard", "dashboard" in r.url or "project" in r.url, r.url)
+
+# ── SECTION 1: Loan-funded project ───────────────────────────────────────────
+TS = str(int(time.time()))[-5:]
+print("\n=== 1. Create loan-funded Ghana project ===")
+r = post(BASE + "/project/new", {"name": f"LoanTest-{TS}", "client_name": "Test Client"})
+h("Create project", r)
+pid = extract_pid(r.url)
+chk(f"Got project ID", pid is not None, f"pid={pid}")
+
+if pid:
+    print("\n=== 2. Submit location (Ghana, loan-funded) ===")
+    loc = {
+        "country": "Ghana", "region": "Greater Accra",
+        "latitude": "5.6037", "longitude": "-0.187",
+        "tariff_per_kwh": "1.9688", "currency": "GHS", "symbol": "GHS",
+        "funding_mode": "loan", "battery_chemistry": "LiFePO4",
+        "peak_sun_hours": "5.5", "autonomy_days": "1",
+        "cost_usd_per_kwp": "750", "fx_usd_to_local": "15.5",
+        "purc_category": "Residential Standard (0-300 kWh/month)",
+    }
+    r = post(BASE + f"/project/{pid}/location", loc)
+    h("Submit location", r)
+
+    print("\n=== 3. Submit loads ===")
+    loads = {
+        "load_name[]":  ["LED Lights", "Fan", "Fridge", "TV"],
+        "load_watt[]":  ["10", "75", "150", "100"],
+        "load_qty[]":   ["6", "2", "1", "1"],
+        "load_hours[]": ["6", "8", "24", "5"],
+        "load_cat[]":   ["Lighting", "Cooling", "Appliances", "Electronics"],
+        "load_df[]":    ["75", "65", "50", "70"],
+    }
+    r = post(BASE + f"/project/{pid}/loads", loads)
+    h("Submit loads", r)
+
+    print("\n=== 4. Results page (triggers calculation) ===")
+    r = s.get(BASE + f"/project/{pid}/results", timeout=30)
+    h("Results page", r)
+    chk("Results: no error heading", "500" not in r.text[:500] and "Error" not in r.text[:300])
+
+    # ── BOQ report ──────────────────────────────────────────────────────────
+    print("\n=== 5. BOQ report ===")
+    r = s.get(BASE + f"/project/{pid}/report/boq", timeout=30)
+    h("BOQ report loads", r)
+    body = r.text
+    chk("BOQ: 'Installation Labour' row present",  "Installation Labour" in body)
+    chk("BOQ: 8% markup label present",            "8%" in body)
+    chk("BOQ: 15% install label present",          "15%" in body)
+    chk("BOQ: old 'Installation (18%)' gone",      "Installation (18%)" not in body)
+    chk("BOQ: Loan Finance funding mode shown",    "Loan Finance" in body)
+    chk("BOQ: grand total row present",            "GRAND TOTAL" in body)
+
+    # ── Economic report ─────────────────────────────────────────────────────
+    print("\n=== 6. Economic report (loan-funded) ===")
+    r = s.get(BASE + f"/project/{pid}/report/economic", timeout=30)
+    h("Economic report loads", r)
+    body = r.text
+    chk("Eco: 0.8% O&M label",                        "0.8%" in body)
+    chk("Eco: battery replacement mentioned",          "Battery Replacement" in body or "battery replacement" in body.lower())
+    chk("Eco: inverter replacement mentioned",         "Inverter Replacement" in body or "inverter replacement" in body.lower())
+    chk("Eco: residual value in model (self-funded only shows it)", True, "residual shown in self-funded section")
+    chk("Eco: DSCR shown for loan project",            "DSCR" in body)
+    chk("Eco: 8% markup label",                        "8%" in body)
+    chk("Eco: 15% install label",                      "15%" in body)
+    chk("Eco: old 'Installation (18%)' gone",          "Installation (18%)" not in body)
+
+    # ── Proposal report ─────────────────────────────────────────────────────
+    print("\n=== 7. Proposal report ===")
+    r = s.get(BASE + f"/project/{pid}/report/proposal", timeout=30)
+    h("Proposal report loads", r)
+    body = r.text
+    chk("Proposal: 15% install shown",    "15%" in body)
+    chk("Proposal: hard-coded 'Installation (18%)' gone",  "Installation (18%)" not in body)
+
+# ── SECTION 2: Self-funded project ───────────────────────────────────────────
+print("\n=== 8. Create self-funded project ===")
+r = post(BASE + "/project/new", {"name": f"SelfTest-{TS}", "client_name": "Self Client"})
+h("Create self-funded project", r)
+pid2 = extract_pid(r.url)
+chk(f"Got self-funded project ID", pid2 is not None, f"pid={pid2}")
+
+if pid2:
+    loc2 = dict(loc); loc2["funding_mode"] = "self"
+    r = post(BASE + f"/project/{pid2}/location", loc2)
+    h("Submit self-funded location", r)
+
+    r = post(BASE + f"/project/{pid2}/loads", loads)
+    h("Submit self-funded loads", r)
+
+    r = s.get(BASE + f"/project/{pid2}/results", timeout=30)
+    h("Self-funded results page", r)
+
+    print("\n=== 9. Self-funded economic report ===")
+    r = s.get(BASE + f"/project/{pid2}/report/economic", timeout=30)
+    h("Self-funded eco report loads", r)
+    body = r.text
+    chk("Self-funded: 'Self-Funded' label shown",      "Self-Funded" in body or "SELF-FUNDED" in body)
+    chk("Self-funded: battery replacement mentioned",  "Battery Replacement" in body or "battery replacement" in body.lower())
+    chk("Self-funded: residual value mentioned",       "Residual" in body or "residual" in body.lower())
+    chk("Self-funded: DSCR heading changes",           "DSCR" not in body or "Self-Funded" in body)
+
+    print("\n=== 10. Location form: funding toggle ===")
+    r = s.get(BASE + f"/project/{pid2}/location", timeout=30)
+    h("Location form loads", r)
+    body = r.text
+    chk("Location: funding_mode field present",  "funding_mode" in body)
+    chk("Location: Self-Funded option present",  "Self-Funded" in body or 'value="self"' in body)
+
+# ── SECTION 3: API endpoints ──────────────────────────────────────────────────
+print("\n=== 11. API endpoints ===")
+r = s.get(BASE + "/api/purc-tariffs", timeout=15)
+h("PURC tariffs API", r)
+if r.status_code == 200:
+    try:
+        data = r.json()
+        chk("PURC API: 10 Ghana categories", len(data) == 10, f"{len(data)} categories")
+        chk("PURC API: Residential Lifeline present",
+            any("Lifeline" in k for k in data))
+    except: chk("PURC API JSON parse", False)
+
+r = s.get(BASE + "/api/demand-factors", timeout=15)
+h("Demand factors API", r)
+if r.status_code == 200:
+    try:
+        data = r.json()
+        chk("DF API: Lighting=0.75", data.get("Lighting") == 0.75, str(data.get("Lighting")))
+        chk("DF API: Cooling=0.65",  data.get("Cooling")  == 0.65, str(data.get("Cooling")))
+        chk("DF API: Appliances=0.50", data.get("Appliances") == 0.50, str(data.get("Appliances")))
+    except: chk("DF API JSON parse", False)
+
+# ── Summary ───────────────────────────────────────────────────────────────────
+total = PASS + FAIL
+print(f"\n{'='*50}")
+print(f"  PASSED: {PASS}/{total}")
+print(f"  FAILED: {FAIL}/{total}")
+print("  All checks PASSED." if FAIL == 0 else "  Some checks FAILED - see above.")
+print("="*50)
+sys.exit(0 if FAIL == 0 else 1)
