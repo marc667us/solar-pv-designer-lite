@@ -4640,6 +4640,38 @@ def ticket_detail(tid):
 
 # ─── AI Technical Assistant ───────────────────────────────────────────────────
 
+# ── GitHub public API context cache (no auth needed — public repo) ────────────
+_gh_ctx_cache = {"data": None, "expires": 0.0}
+
+def _fetch_github_context():
+    """Return recent commit messages from the public GitHub repo (cached 5 min).
+    Gives Helpline live awareness of recent fixes and changes."""
+    import time as _time, urllib.request as _ur, json as _json
+    now = _time.time()
+    if _gh_ctx_cache["data"] and now < _gh_ctx_cache["expires"]:
+        return _gh_ctx_cache["data"]
+    try:
+        REPO = "marc667us/solar-pv-designer-lite"
+        req  = _ur.Request(
+            f"https://api.github.com/repos/{REPO}/commits?per_page=10",
+            headers={"Accept": "application/vnd.github+json",
+                     "User-Agent": "solarpro-helpline/1.0"})
+        with _ur.urlopen(req, timeout=6) as r:
+            commits = _json.loads(r.read())
+        lines = []
+        for c in commits[:10]:
+            sha  = (c.get("sha") or "")[:7]
+            msg  = ((c.get("commit") or {}).get("message") or "").split("\n")[0][:120]
+            date = ((c.get("commit") or {}).get("committer") or {}).get("date", "")[:10]
+            lines.append(f"  {sha} ({date}): {msg}")
+        ctx = "Recent platform changes (live from GitHub — use to confirm fixes/releases):\n" + "\n".join(lines)
+        _gh_ctx_cache["data"]    = ctx
+        _gh_ctx_cache["expires"] = now + 300   # 5-minute cache
+        return ctx
+    except Exception:
+        return _gh_ctx_cache["data"] or ""   # serve stale on error
+
+
 _ASSISTANT_SYSTEM = """You are Helpline — SolarPro Global's expert AI technical support agent. SolarPro Global is an intelligent solar PV system design and financial engineering platform.
 
 Platform knowledge:
@@ -4693,8 +4725,10 @@ def assistant_chat():
             if role in ("user", "assistant") and content:
                 msgs.append({"role": role, "content": content})
         msgs.append({"role": "user", "content": message})
+        gh_ctx = _fetch_github_context()
+        system = _ASSISTANT_SYSTEM + (f"\n\n{gh_ctx}" if gh_ctx else "")
         resp  = _ac.messages.create(model="claude-opus-4-7", max_tokens=500,
-                                    system=_ASSISTANT_SYSTEM, messages=msgs)
+                                    system=system, messages=msgs)
         reply = resp.content[0].text if resp.content else "I couldn't generate a response. Please try again."
         escalate = "[ESCALATE]" in reply
         reply    = reply.replace("[ESCALATE]", "").strip()
