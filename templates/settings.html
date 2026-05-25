@@ -671,7 +671,7 @@ refreshUI();
 
 // ── Date/Time format radio highlight ─────────────────────────────────────────
 function selectDateFmt(label, val){
-  label.closest('.d-flex').querySelectorAll('label').forEach(l => {
+  label.parentElement.querySelectorAll('label').forEach(l => {
     const active = l.querySelector('input').value === val;
     l.style.borderColor = active ? 'var(--sp-accent)' : 'var(--sp-border)';
     l.style.background  = active ? 'var(--sp-accent)11' : 'transparent';
@@ -680,7 +680,7 @@ function selectDateFmt(label, val){
   });
 }
 function selectTimeFmt(label, val){
-  label.closest('.d-flex').querySelectorAll('label').forEach(l => {
+  label.parentElement.querySelectorAll('label').forEach(l => {
     const active = l.querySelector('input').value === val;
     l.style.borderColor = active ? 'var(--sp-accent)' : 'var(--sp-border)';
     l.style.background  = active ? 'var(--sp-accent)11' : 'transparent';
