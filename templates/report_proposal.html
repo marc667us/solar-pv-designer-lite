@@ -443,15 +443,15 @@
   <div class="row g-3">
     <div class="col-md-6">
       <div class="data-row"><span class="lbl">Equipment Supply (panels, batteries, inverter, cables, protection)</span><span class="val text-warning">{{ d.symbol }} {{ eco.equip_local|fmt(0) }}</span></div>
-      <div class="data-row"><span class="lbl">Installation &amp; Labour (civil works, wiring, commissioning — 18%)</span><span class="val text-warning">{{ d.symbol }} {{ eco.install_local|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Installation &amp; Labour (civil works, wiring, commissioning — {{ eco.get('install_rate_pct',15) }}%)</span><span class="val text-warning">{{ d.symbol }} {{ eco.install_local|fmt(0) }}</span></div>
       <div class="data-row total"><span class="lbl"><strong>TOTAL CAPITAL COST</strong></span><span class="val" style="font-size:16px">{{ d.symbol }} {{ eco.total_local|fmt(0) }}</span></div>
     </div>
     <div class="col-md-6">
       <div class="highlight-box" style="margin-bottom:0;height:100%;box-sizing:border-box">
         <div class="head"><i class="bi bi-pie-chart-fill"></i>Cost breakdown</div>
-        Equipment represents ~82% of cost — this is normal for solar PV projects. The largest
-        single cost item is typically the battery bank (30–35%), followed by the solar panels (25–30%),
-        and the inverter (15–20%). Installation labour at 18% covers all civil works, cable containment,
+        Equipment represents ~87% of cost — this is normal for solar PV projects. The largest
+        single cost item is typically the battery bank (30–40%), followed by the solar panels (25–30%),
+        and the inverter (12–18%). Installation labour at {{ eco.get('install_rate_pct',15) }}% covers all civil works, cable containment,
         electrical connections, testing, and commissioning.
       </div>
     </div>

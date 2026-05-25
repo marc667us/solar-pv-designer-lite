@@ -50,11 +50,13 @@
     </div>
     {% endfor %}
   </div>
-  <!-- Bankability reasons (only show detail when not BANKABLE) -->
-  {% if eco.bankability != "BANKABLE" %}
+  <!-- Bankability / funding reasons -->
+  {% if eco.bankability != "BANKABLE" or eco.get('funding_mode') == 'self' %}
   <hr style="border-color:#1e1e3a;margin:12px 0">
   <div>
-    <div class="small fw-bold mb-2" style="color:{{ eco.bank_color }}">Bankability Assessment — {{ eco.bankability }}:</div>
+    <div class="small fw-bold mb-2" style="color:{{ eco.bank_color }}">
+      {% if eco.get('funding_mode') == 'self' %}Funding Analysis — SELF-FUNDED:{% else %}Bankability Assessment — {{ eco.bankability }}:{% endif %}
+    </div>
     {% for reason in eco.bank_reasons %}
     <div class="d-flex gap-2 mb-1 small">
       <span style="color:{{ eco.bank_color }};flex-shrink:0">&#9656;</span>
@@ -74,7 +76,7 @@
     ("NPV (25yr)", eco.npv|fmt(0), d.symbol, "#22c55e"),
     ("IRR", ("%.1f"|format(eco.irr_pct) if eco.irr_pct else "—"), "%", "#a78bfa"),
     ("ROI (25yr)", eco.roi_pct|fmt(0), "%", "#f59e0b"),
-    ("DSCR", eco.dscr|fmt(2), "ratio", eco.bank_color),
+    ("DSCR" if eco.get('funding_mode','loan')=='loan' else "Funding", eco.dscr|fmt(2) if eco.get('funding_mode','loan')=='loan' else "Self", "ratio" if eco.get('funding_mode','loan')=='loan' else "funded", eco.bank_color),
     ("CO₂ Saved", eco.co2_yr|fmt(2), "t/yr", "#22c55e"),
   ] %}
   <div class="col-6 col-md-3">
@@ -91,32 +93,47 @@
 <div class="col-lg-5">
   <div class="solar-card p-4 mb-3">
     <div class="section-head">1. Investment Summary</div>
-    <div class="data-row"><span class="lbl">Equipment Cost</span><span class="val">{{ d.symbol }} {{ eco.equip_local|fmt(0) }}</span></div>
-    <div class="data-row"><span class="lbl">Installation (18%)</span><span class="val">{{ d.symbol }} {{ eco.install_local|fmt(0) }}</span></div>
+    <div class="data-row"><span class="lbl">Equipment Supply (8% markup)</span><span class="val">{{ d.symbol }} {{ eco.equip_local|fmt(0) }}</span></div>
+    <div class="data-row"><span class="lbl">Installation Labour ({{ eco.get('install_rate_pct',15) }}%)</span><span class="val">{{ d.symbol }} {{ eco.install_local|fmt(0) }}</span></div>
     <div class="data-row total"><span class="lbl"><strong>Total Capital</strong></span><span class="val">{{ d.symbol }} {{ eco.total_local|fmt(0) }}</span></div>
+    <div class="data-row"><span class="lbl">Discount Rate</span><span class="val">{{ eco.get('disc_rate_pct',12) }}%/yr ({{ 'opp. cost' if eco.get('funding_mode')=='self' else 'WACC' }})</span></div>
+    <div class="data-row"><span class="lbl">Annual O&amp;M (yr1)</span><span class="val">{{ d.symbol }} {{ eco.om_yr1|fmt(0) }} (0.8% of CAPEX)</span></div>
   </div>
 
   <div class="solar-card p-4 mb-3">
-    <div class="section-head">2. Energy & Savings</div>
+    <div class="section-head">2. Energy &amp; Savings</div>
     <div class="data-row"><span class="lbl">Daily Load</span><span class="val">{{ r.daily_kwh|fmt(3) }} kWh/day</span></div>
     <div class="data-row"><span class="lbl">Annual Generation</span><span class="val">{{ eco.annual_kwh|fmt(0) }} kWh/yr</span></div>
-    <div class="data-row"><span class="lbl">Tariff</span><span class="val">{{ d.symbol }} {{ eco.tariff|fmt(2) }}/kWh</span></div>
+    <div class="data-row"><span class="lbl">Tariff</span><span class="val">{{ d.symbol }} {{ eco.tariff|fmt(3) }}/kWh</span></div>
+    <div class="data-row"><span class="lbl">Tariff Escalation</span><span class="val">8%/yr (utility trend)</span></div>
     <div class="data-row"><span class="lbl">Annual Bill Saving</span><span class="val">{{ d.symbol }} {{ eco.annual_sav|fmt(0) }}/yr</span></div>
-    <div class="data-row"><span class="lbl">Annual O&M Cost</span><span class="val">{{ d.symbol }} {{ eco.om_yr1|fmt(0) }}/yr</span></div>
-    <div class="data-row total"><span class="lbl"><strong>Net Annual Saving</strong></span><span class="val">{{ d.symbol }} {{ eco.net_yr1|fmt(0) }}/yr</span></div>
+    <div class="data-row total"><span class="lbl"><strong>Net Annual Saving (Yr1)</strong></span><span class="val">{{ d.symbol }} {{ eco.net_yr1|fmt(0) }}/yr</span></div>
   </div>
 
   <div class="solar-card p-4 mb-3">
-    <div class="section-head">3. Loan / Funding Analysis</div>
+    <div class="section-head">3. Funding &amp; Debt Service</div>
+    {% if eco.get('funding_mode') == 'self' %}
+    <div class="p-2 rounded text-center mb-2" style="background:#0a0a18;border:1px solid #818cf833">
+      <span style="color:#818cf8;font-weight:800"><i class="bi bi-person-fill me-1"></i>Self-Funded — no debt service</span>
+    </div>
+    <div class="data-row"><span class="lbl">Total Own Capital</span><span class="val">{{ d.symbol }} {{ eco.total_local|fmt(0) }}</span></div>
+    <div class="data-row"><span class="lbl">Opportunity Cost Rate</span><span class="val">{{ eco.get('disc_rate_pct',10) }}% p.a.</span></div>
+    <div class="data-row"><span class="lbl">Battery Replacement (yr {{ eco.bat_replace_yr }})</span><span class="val">{{ d.symbol }} {{ eco.bat_replace_cost|fmt(0) }}</span></div>
+    <div class="data-row"><span class="lbl">Inverter Replacement (yr 10)</span><span class="val">{{ d.symbol }} {{ eco.inv_replace_cost|fmt(0) }}</span></div>
+    <div class="data-row text-success"><span class="lbl">Residual Value (yr 25)</span><span class="val text-success">{{ d.symbol }} {{ eco.residual_value|fmt(0) }}</span></div>
+    {% else %}
     <div class="data-row"><span class="lbl">Loan (70% of CAPEX)</span><span class="val">{{ d.symbol }} {{ eco.loan_amt|fmt(0) }}</span></div>
     <div class="data-row"><span class="lbl">Equity (30%)</span><span class="val">{{ d.symbol }} {{ eco.equity|fmt(0) }}</span></div>
     <div class="data-row"><span class="lbl">Interest Rate</span><span class="val">15% p.a.</span></div>
     <div class="data-row"><span class="lbl">Loan Tenor</span><span class="val">7 years</span></div>
     <div class="data-row"><span class="lbl">Monthly Repayment</span><span class="val">{{ d.symbol }} {{ eco.pmt|fmt(0) }}/mo</span></div>
     <div class="data-row"><span class="lbl">Annual Debt Service</span><span class="val">{{ d.symbol }} {{ eco.annual_pmt|fmt(0) }}/yr</span></div>
+    <div class="data-row"><span class="lbl">Battery Replacement (yr {{ eco.bat_replace_yr }})</span><span class="val">{{ d.symbol }} {{ eco.bat_replace_cost|fmt(0) }}</span></div>
+    <div class="data-row"><span class="lbl">Inverter Replacement (yr 10)</span><span class="val">{{ d.symbol }} {{ eco.inv_replace_cost|fmt(0) }}</span></div>
     <div class="data-row total"><span class="lbl"><strong>DSCR</strong></span>
       <span class="val" style="color:{{ eco.bank_color }}">{{ eco.dscr|fmt(2) }} — {{ eco.bankability }}</span>
     </div>
+    {% endif %}
   </div>
 
   <div class="solar-card p-4">

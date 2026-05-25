@@ -61,11 +61,15 @@
     <div class="solar-card p-4">
       <div class="section-head">CAPEX Breakdown</div>
       {% set eco = r.economics %}
-      <div class="data-row"><span class="lbl">Equipment Supply</span><span class="val">{{ d.symbol }} {{ eco.equip_local|fmt(0) }}</span></div>
-      <div class="data-row"><span class="lbl">Installation (18%)</span><span class="val">{{ d.symbol }} {{ eco.install_local|fmt(0) }}</span></div>
+      {% set install_pct = eco.get('install_rate_pct', 15) %}
+      <div class="data-row"><span class="lbl">Equipment Supply (incl. 8% markup)</span><span class="val">{{ d.symbol }} {{ eco.equip_local|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Installation Labour ({{ install_pct }}%)</span><span class="val">{{ d.symbol }} {{ eco.install_local|fmt(0) }}</span></div>
       <div class="data-row total"><span class="lbl"><strong>Total CAPEX</strong></span><span class="val">{{ d.symbol }} {{ eco.total_local|fmt(0) }}</span></div>
-      <div class="data-row"><span class="lbl">Contingency (10%)</span><span class="val">{{ d.symbol }} {{ (eco.total_local*0.1)|fmt(0) }}</span></div>
-      <div class="data-row total"><span class="lbl"><strong>Budget (incl. contingency)</strong></span><span class="val">{{ d.symbol }} {{ (eco.total_local*1.1)|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Funding Mode</span>
+        <span class="val" style="color:{% if eco.get('funding_mode')=='self' %}#818cf8{% else %}#22c55e{% endif %}">
+          {% if eco.get('funding_mode')=='self' %}Self-Funded{% else %}Loan Finance{% endif %}
+        </span>
+      </div>
     </div>
   </div>
   <div class="col-md-4">
@@ -81,11 +85,12 @@
     <div class="solar-card p-4">
       <div class="section-head">BOQ Notes</div>
       <ul class="list-unstyled small text-secondary mb-0">
-        <li class="mb-1">• Rates: Total Rate = Basic × 1.20 (delivery + OH&P)</li>
-        <li class="mb-1">• Quantities subject to detailed design review</li>
-        <li class="mb-1">• Cable lengths are estimated — confirm on site</li>
-        <li class="mb-1">• Subject to contractor quotation and site survey</li>
-        <li>• Excludes site-specific VAT/duties</li>
+        <li class="mb-1">• Supply markup: 8% on basic rates (direct import basis)</li>
+        <li class="mb-1">• Installation labour: 15% of supply subtotal</li>
+        <li class="mb-1">• Basic prices verified against West Africa 2025–26 market data</li>
+        <li class="mb-1">• Quantities subject to detailed site survey confirmation</li>
+        <li class="mb-1">• Cable lengths are estimates — verify on site before ordering</li>
+        <li>• Excludes site-specific VAT, duties, and permit fees</li>
       </ul>
     </div>
   </div>

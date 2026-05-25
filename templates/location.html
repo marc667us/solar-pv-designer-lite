@@ -250,6 +250,26 @@
               </div>
             </div>
 
+            <!-- Funding Mode -->
+            <div class="col-12">
+              <label class="form-lbl">Project Funding Mode</label>
+              <div class="d-flex gap-2">
+                {% for val, label, icon in [('loan','Loan / Bank Finance','bi-bank'),('self','Self-Funded','bi-person-fill')] %}
+                <label class="flex-fill p-2 rounded d-flex align-items-center gap-2 cursor-pointer"
+                       style="background:#0a0a18;border:1px solid {% if d.get('funding_mode','loan')==val %}#f59e0b{% else %}#2e2e50{% endif %};cursor:pointer"
+                       onclick="setFunding('{{ val }}')">
+                  <input type="radio" name="funding_mode" value="{{ val }}" class="d-none"
+                         {% if d.get('funding_mode','loan')==val %}checked{% endif %}>
+                  <i class="bi {{ icon }}" style="color:{% if d.get('funding_mode','loan')==val %}#f59e0b{% else %}#6868a0{% endif %}"></i>
+                  <span style="font-size:12px;color:{% if d.get('funding_mode','loan')==val %}#e0e0f0{% else %}#7070a0{% endif %}">{{ label }}</span>
+                </label>
+                {% endfor %}
+              </div>
+              <div style="font-size:10px;color:#4a4a7a;margin-top:4px">
+                Self-funded: no DSCR/bankability check — verdict based on payback &amp; NPV only
+              </div>
+            </div>
+
             <div class="col-6">
               <label class="form-lbl">Battery Chemistry</label>
               <select name="chemistry" class="form-ctrl">
@@ -671,6 +691,17 @@ document.getElementById('locForm').addEventListener('submit',function(){
     if(rd) flyToLocation(rd.lat,rd.lon,`${region}, ${country}`,true);
   }
 });
+
+function setFunding(val){
+  document.querySelectorAll('input[name="funding_mode"]').forEach(r => {
+    const lbl = r.closest('label');
+    const active = r.value === val;
+    r.checked = active;
+    lbl.style.borderColor = active ? '#f59e0b' : '#2e2e50';
+    lbl.querySelector('i').style.color = active ? '#f59e0b' : '#6868a0';
+    lbl.querySelector('span').style.color = active ? '#e0e0f0' : '#7070a0';
+  });
+}
 
 function applyPurcTariff(cat){
   const sel = document.getElementById('purcCatSelect');
