@@ -164,6 +164,12 @@
           <span id="phaseMsg"></span>
         </div>
 
+        <!-- No-loads error banner (hidden by default) -->
+        <div id="noLoadsErr" class="d-none mb-3 p-3 rounded" style="background:#1a0808;border:1px solid #f8717155;font-size:12px;color:#f87171">
+          <i class="bi bi-exclamation-circle-fill me-2"></i>
+          Please add at least one load before running calculations. Use the <strong>Add Row</strong> button or click a preset above.
+        </div>
+
         <div class="d-flex justify-content-between align-items-center mt-3 pt-3" style="border-top:1px solid #1e1e3a">
           <div class="text-secondary" style="font-size:11px">
             <i class="bi bi-info-circle me-1"></i>
@@ -474,11 +480,15 @@ document.getElementById('loadsForm').addEventListener('submit', e => {
   const rows = document.querySelectorAll('#loadRows tr.load-row');
   if(rows.length === 0){
     e.preventDefault();
-    alert('Please add at least one load before running calculations.');
+    const errBanner = document.getElementById('noLoadsErr');
+    errBanner.classList.remove('d-none');
+    errBanner.scrollIntoView({behavior:'smooth', block:'center'});
     return;
   }
-  document.getElementById('submitBtn').innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Calculating…';
-  document.getElementById('submitBtn').disabled = true;
+  document.getElementById('noLoadsErr').classList.add('d-none');
+  const btn = document.getElementById('submitBtn');
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Calculating…';
+  btn.disabled = true;
 });
 
 // Init

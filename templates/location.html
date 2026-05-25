@@ -152,10 +152,13 @@
               </select>
             </div>
             <div class="col-6">
-              <label class="form-lbl">Region / State</label>
-              <select name="region" id="regionSelect" class="form-ctrl" required onchange="loadSolarData()">
+              <label class="form-lbl">Region / State <span id="regionReqBadge" style="color:#f87171;font-size:9px;display:none">* required</span></label>
+              <select name="region" id="regionSelect" class="form-ctrl" onchange="loadSolarData()">
                 <option value="">— Select Region —</option>
               </select>
+              <div id="regionErr" style="color:#f87171;font-size:10px;margin-top:4px;display:none">
+                <i class="bi bi-exclamation-circle me-1"></i>Please select a region / state
+              </div>
             </div>
           </div>
         </div>
@@ -384,7 +387,7 @@
         <!-- Hidden: sync PURC category from dropdown to form field -->
         <input type="hidden" name="purc_category" id="purcCatHidden" value="{{ d.get('purc_category','') }}"/>
 
-        <button type="submit" class="btn btn-solar w-100 mt-2" style="padding:12px;font-size:14px;font-weight:800">
+        <button type="submit" id="saveBtn" class="btn btn-solar w-100 mt-2" style="padding:12px;font-size:14px;font-weight:800">
           <i class="bi bi-lightning-charge me-2"></i>Save &amp; Enter Loads
           <i class="bi bi-arrow-right ms-2"></i>
         </button>
@@ -628,6 +631,12 @@ function loadRegions(){
   const sel=document.getElementById('regionSelect');
   sel.innerHTML='<option value="">— Select Region —</option>';
   document.getElementById('solarDataCard').style.display='none';
+  // Reset region error state
+  sel.style.borderColor='';
+  document.getElementById('regionErr').style.display='none';
+  document.getElementById('regionReqBadge').style.display='none';
+  // Reset country error state
+  document.getElementById('countrySelect').style.borderColor='';
   if(!country) return;
   const regions=Object.keys(globalData[country]?.regions||{});
   regions.forEach(r=>{
@@ -635,12 +644,20 @@ function loadRegions(){
     sel.appendChild(o);
   });
   if(regions.length===1){sel.value=regions[0]; loadSolarData();}
+  else if(regions.length>1){
+    // Highlight that region must be selected
+    sel.style.borderColor='#f59e0b44';
+  }
 }
 
 function loadSolarData(){
   const country=document.getElementById('countrySelect').value;
   const region =document.getElementById('regionSelect').value;
   if(!country||!region) return;
+  // Clear any region error when user picks a valid region
+  document.getElementById('regionSelect').style.borderColor='';
+  document.getElementById('regionErr').style.display='none';
+  document.getElementById('regionReqBadge').style.display='none';
   const cd=globalData[country];
   const rd=cd?.regions?.[region];
   if(!rd) return;
@@ -683,13 +700,35 @@ function loadSolarData(){
   flyToLocation(rd.lat,rd.lon,`${region}, ${country}`,false);
 }
 
-document.getElementById('locForm').addEventListener('submit',function(){
+document.getElementById('locForm').addEventListener('submit',function(e){
   const country=document.getElementById('countrySelect').value;
   const region =document.getElementById('regionSelect').value;
+
+  // Explicit validation — show in-form errors instead of silent browser tooltip
+  let ok = true;
+  if(!country){
+    document.getElementById('countrySelect').style.borderColor='#f87171';
+    ok = false;
+  }
+  if(!region){
+    document.getElementById('regionSelect').style.borderColor='#f87171';
+    document.getElementById('regionErr').style.display='';
+    document.getElementById('regionReqBadge').style.display='';
+    document.getElementById('regionSelect').scrollIntoView({behavior:'smooth',block:'center'});
+    ok = false;
+  }
+  if(!ok){ e.preventDefault(); return; }
+
+  // Animate globe to selected location
   if(country&&region){
     const rd=globalData[country]?.regions?.[region];
     if(rd) flyToLocation(rd.lat,rd.lon,`${region}, ${country}`,true);
   }
+
+  // Disable button to prevent double-submit
+  const btn=document.getElementById('saveBtn');
+  btn.disabled=true;
+  btn.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>Saving…';
 });
 
 function setFunding(val){
