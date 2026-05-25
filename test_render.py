@@ -164,8 +164,44 @@ if pid2:
     chk("Location: funding_mode field present",  "funding_mode" in body)
     chk("Location: Self-Funded option present",  "Self-Funded" in body or 'value="self"' in body)
 
-# ── SECTION 3: API endpoints ──────────────────────────────────────────────────
-print("\n=== 11. API endpoints ===")
+# ── SECTION 3: Settings – Date & Time ────────────────────────────────────────
+print("\n=== 11. Settings – Date & Time ===")
+r = s.get(BASE + "/settings?tab=datetime", timeout=20)
+h("Settings page loads", r)
+body = r.text
+chk("Settings: datetime pane present",      'id="pane-datetime"'    in body)
+chk("Settings: date_format radio present",  'name="date_format"'    in body)
+chk("Settings: time_format radio present",  'name="time_format"'    in body)
+chk("Settings: selectDateFmt uses parentElement",
+    'label.parentElement.querySelectorAll' in body)
+chk("Settings: selectTimeFmt uses parentElement",
+    'label.parentElement.querySelectorAll' in body)
+chk("Settings: old closest('.d-flex') gone",
+    "label.closest('.d-flex')" not in body)
+
+# Save date/time via POST
+r = post(BASE + "/settings", {
+    "_section":   "datetime",
+    "date_format": "D MMM YYYY",
+    "time_format": "12h",
+})
+h("Settings: save date/time POST", r)
+chk("Settings: after save, still on settings",
+    "settings" in r.url or r.status_code == 200)
+
+# Verify saved value reflected on reload
+r = s.get(BASE + "/settings?tab=datetime", timeout=20)
+h("Settings: reload after save", r)
+body = r.text
+chk("Settings: saved date format shown selected",
+    'value="D MMM YYYY"' in body and
+    ('checked' in body[body.find('value="D MMM YYYY"'):body.find('value="D MMM YYYY"')+80]))
+chk("Settings: saved time format shown selected",
+    'value="12h"' in body and
+    ('checked' in body[body.find('value="12h"'):body.find('value="12h"')+60]))
+
+# ── SECTION 4: API endpoints ──────────────────────────────────────────────────
+print("\n=== 12. API endpoints ===")
 r = s.get(BASE + "/api/purc-tariffs", timeout=15)
 h("PURC tariffs API", r)
 if r.status_code == 200:
