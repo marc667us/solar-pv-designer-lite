@@ -2769,17 +2769,13 @@ def report_installation_drawings(pid):
     last_str_panels = num_panels - (num_strings - 1) * pps
     phase = d.get("phase", "single")
     v_ac = 415 if phase == "three" else 230
-    try:
-        return render_template("report_installation_drawings.html",
-                               user=current_user(),
-                               project=project, d=d, r=r,
-                               pps=pps, num_strings=num_strings,
-                               last_str_panels=last_str_panels,
-                               v_ac=v_ac)
-    except Exception as _draw_err:
-        import traceback as _tb
-        return f"<pre style='color:red;background:#111;padding:20px'>" \
-               f"DRAWINGS DEBUG ERROR:\n{_tb.format_exc()}\n\nr keys: {list(r.keys())}\nd keys: {list(d.keys())}</pre>", 500
+    return render_template("report_installation_drawings.html",
+                           user=current_user(),
+                           project=project, d=d, r=r,
+                           voltage=voltage,
+                           pps=pps, num_strings=num_strings,
+                           last_str_panels=last_str_panels,
+                           v_ac=v_ac)
 
 
 @app.route("/project/<int:pid>/report/proposal")
