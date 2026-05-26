@@ -1514,6 +1514,13 @@ def login():
 
 @app.route("/logout")
 def logout():
+    uid = session.get("user_id")
+    if uid:
+        # Purge draft/incomplete projects — only completed (stage='results') persist
+        with get_db() as _db:
+            _db.execute(
+                "DELETE FROM projects WHERE user_id=? AND stage NOT IN ('results')",
+                (uid,))
     session.clear()
     return redirect(url_for("landing"))
 
@@ -2785,6 +2792,42 @@ def project_delete(pid):
                   (pid, session["user_id"]))
     flash("Project deleted successfully.", "success")
     return redirect(url_for("dashboard"))
+
+
+@app.route("/project/<int:pid>/clone", methods=["POST"])
+@login_required
+def project_clone(pid):
+    """Clone a completed project as a new editable draft (Use as Template)."""
+    csrf_protect()
+    uid  = session["user_id"]
+    user = current_user()
+    plan = (user["plan"] or "free").lower()
+    limit = PLAN_LIMITS.get(plan, 1)
+
+    with get_db() as c:
+        src = c.execute(
+            "SELECT * FROM projects WHERE id=? AND user_id=?", (pid, uid)
+        ).fetchone()
+        if not src:
+            flash("Project not found.", "danger")
+            return redirect(url_for("dashboard"))
+
+        count = c.execute(
+            "SELECT COUNT(*) FROM projects WHERE user_id=?", (uid,)
+        ).fetchone()[0]
+        if count >= limit:
+            flash(f"Project limit reached — upgrade to create more.", "warning")
+            return redirect(url_for("upgrade"))
+
+        new_name = f"Copy of {src['name']}"
+        # Copy full data_json (location + loads) but reset stage to 'location'
+        c.execute(
+            "INSERT INTO projects (user_id, name, stage, data_json) VALUES (?,?,'location',?)",
+            (uid, new_name, src["data_json"] or "{}"))
+        new_pid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    flash(f"'{new_name}' created — update location or loads then recalculate.", "success")
+    return redirect(url_for("project_location", pid=new_pid))
 
 
 # ─── API endpoints (login-required, rate-limited) ─────────────────────────────
