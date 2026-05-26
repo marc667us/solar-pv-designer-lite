@@ -4708,31 +4708,60 @@ def assistant_chat():
     if not message:
         return jsonify({"error": "No message"}), 400
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
+    api_key  = os.environ.get("ANTHROPIC_API_KEY", "")
+    gh_token = os.environ.get("GITHUB_TOKEN", "")
+
+    if not api_key and not gh_token:
         return jsonify({
             "reply": "AI assistant is currently unavailable. Please raise a support ticket and our engineering team will assist you.",
             "escalate": True
         })
 
+    # Build shared message list and system prompt
+    msgs = []
+    for h in history[-12:]:
+        role    = h.get("role", "")
+        content = (h.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            msgs.append({"role": role, "content": content})
+    msgs.append({"role": "user", "content": message})
+    gh_ctx = _fetch_github_context()
+    system = _ASSISTANT_SYSTEM + (f"\n\n{gh_ctx}" if gh_ctx else "")
+
     try:
-        import anthropic as _ant
-        _ac = _ant.Anthropic(api_key=api_key)
-        msgs = []
-        for h in history[-12:]:
-            role    = h.get("role", "")
-            content = (h.get("content") or "").strip()
-            if role in ("user", "assistant") and content:
-                msgs.append({"role": role, "content": content})
-        msgs.append({"role": "user", "content": message})
-        gh_ctx = _fetch_github_context()
-        system = _ASSISTANT_SYSTEM + (f"\n\n{gh_ctx}" if gh_ctx else "")
-        resp  = _ac.messages.create(model="claude-opus-4-7", max_tokens=500,
-                                    system=system, messages=msgs)
-        reply = resp.content[0].text if resp.content else "I couldn't generate a response. Please try again."
+        if api_key:
+            # ── Anthropic Claude (primary) ─────────────────────────────────
+            import anthropic as _ant
+            _ac  = _ant.Anthropic(api_key=api_key)
+            resp = _ac.messages.create(model="claude-opus-4-7", max_tokens=500,
+                                       system=system, messages=msgs)
+            reply = resp.content[0].text if resp.content else "I couldn't generate a response. Please try again."
+        else:
+            # ── GitHub Models API (fallback — free via GitHub token) ───────
+            import urllib.request as _ur2, json as _json2
+            payload = _json2.dumps({
+                "model":       "openai/gpt-4.1-mini",
+                "messages":    [{"role": "system", "content": system}] + msgs,
+                "max_tokens":  500,
+                "temperature": 0.7
+            }).encode()
+            req2 = _ur2.Request(
+                "https://models.inference.ai.azure.com/chat/completions",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {gh_token}",
+                    "Content-Type":  "application/json",
+                    "Accept":        "application/json",
+                    "User-Agent":    "solarpro-helpline/1.0"
+                })
+            with _ur2.urlopen(req2, timeout=30) as r2:
+                result = _json2.loads(r2.read())
+            reply = result["choices"][0]["message"]["content"]
+
         escalate = "[ESCALATE]" in reply
         reply    = reply.replace("[ESCALATE]", "").strip()
         return jsonify({"reply": reply, "escalate": escalate})
+
     except Exception as e:
         app.logger.error(f"assistant_chat error: {e}")
         return jsonify({
@@ -6782,12 +6811,11 @@ def admin_agent_run():
         if refined:
             search_results = refined
 
-    # ── Step 2: Claude analyses real search results → structured prospects ───────
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if api_key and search_results:
+    # ── Step 2: AI analyses real search results → structured prospects ──────────
+    api_key  = os.environ.get("ANTHROPIC_API_KEY", "")
+    gh_token = os.environ.get("GITHUB_TOKEN", "")
+    if (api_key or gh_token) and search_results:
         try:
-            import anthropic as _ant
-            client = _ant.Anthropic(api_key=api_key)
             snippets = "\n\n".join(
                 f"[{i+1}] TITLE: {r.get('title','')}\nURL: {r.get('href','')}\n"
                 f"CONTENT:\n{(r.get('full_content') or r.get('body',''))[:3000]}"
@@ -6852,19 +6880,46 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
     }}
   ]
 }}"""
-            msg = client.messages.create(
-                model="claude-opus-4-7",
-                max_tokens=4000,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            raw = msg.content[0].text.strip()
+            if api_key:
+                # ── Anthropic Claude (primary) ─────────────────────────────
+                import anthropic as _ant
+                client = _ant.Anthropic(api_key=api_key)
+                msg    = client.messages.create(
+                    model="claude-opus-4-7", max_tokens=4000,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                raw = msg.content[0].text.strip()
+                ai_source = "web+claude"
+            else:
+                # ── GitHub Models (fallback — free) ────────────────────────
+                import urllib.request as _ur3, json as _json3
+                _payload3 = _json3.dumps({
+                    "model":       "openai/gpt-4.1-mini",
+                    "messages":    [{"role": "user", "content": prompt}],
+                    "max_tokens":  4000,
+                    "temperature": 0.3
+                }).encode()
+                _req3 = _ur3.Request(
+                    "https://models.inference.ai.azure.com/chat/completions",
+                    data=_payload3,
+                    headers={
+                        "Authorization": f"Bearer {gh_token}",
+                        "Content-Type":  "application/json",
+                        "Accept":        "application/json",
+                        "User-Agent":    "solarpro-agent/1.0"
+                    })
+                with _ur3.urlopen(_req3, timeout=60) as _r3:
+                    _result3 = _json3.loads(_r3.read())
+                raw = _result3["choices"][0]["message"]["content"].strip()
+                ai_source = "web+github-models"
+
             if raw.startswith("```"):
                 raw = "\n".join(raw.split("\n")[1:])
                 if raw.endswith("```"):
                     raw = raw[:-3]
             data = json.loads(raw)
             return jsonify({"ok": True, "prospects": data["prospects"],
-                            "source": "web+claude", "result_count": len(search_results)})
+                            "source": ai_source, "result_count": len(search_results)})
         except Exception as e:
             pass  # fall through to raw results
 
