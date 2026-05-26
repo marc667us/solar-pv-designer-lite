@@ -591,9 +591,15 @@ def get_project(pid):
 
 
 def save_project_data(pid, data):
+    stage = "results" if "results" in data else None
     with get_db() as c:
-        c.execute("UPDATE projects SET data_json=?, updated_at=? WHERE id=?",
-                  (json.dumps(data), datetime.now().isoformat(), pid))
+        if stage:
+            c.execute(
+                "UPDATE projects SET data_json=?, updated_at=?, stage=? WHERE id=?",
+                (json.dumps(data), datetime.now().isoformat(), stage, pid))
+        else:
+            c.execute("UPDATE projects SET data_json=?, updated_at=? WHERE id=?",
+                      (json.dumps(data), datetime.now().isoformat(), pid))
 
 
 # ─── Equipment specifications ─────────────────────────────────────────────────
