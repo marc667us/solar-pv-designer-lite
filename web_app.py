@@ -186,6 +186,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             name    TEXT NOT NULL,
+            stage   TEXT DEFAULT 'new',
             data_json TEXT DEFAULT '{}',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -393,6 +394,8 @@ def init_db():
         "ALTER TABLE leads ADD COLUMN ai_notes TEXT DEFAULT ''",
         "ALTER TABLE leads ADD COLUMN pipeline_stage TEXT DEFAULT 'new'",
         "ALTER TABLE leads ADD COLUMN follow_up_date TEXT DEFAULT ''",
+        # projects lifecycle stage column
+        "ALTER TABLE projects ADD COLUMN stage TEXT DEFAULT 'new'",
         # Assessment intake v2 columns
         "ALTER TABLE assessment_requests ADD COLUMN assessment_ref TEXT DEFAULT ''",
         "ALTER TABLE assessment_requests ADD COLUMN building_desc TEXT DEFAULT ''",
