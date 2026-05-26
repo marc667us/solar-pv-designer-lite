@@ -2743,6 +2743,31 @@ def report_installation(pid):
                            v_ac=v_ac)
 
 
+@app.route("/project/<int:pid>/report/installation/drawings")
+@login_required
+def report_installation_drawings(pid):
+    gate = _paid_only(pid)
+    if gate: return gate
+    project = get_project(pid)
+    if not project or "results" not in project["data"]:
+        return redirect(url_for("project_results", pid=pid))
+    d = project["data"]
+    r = project["data"]["results"]
+    voltage = d.get("voltage", 48)
+    num_panels = r["num_panels"]
+    pps = 2 if voltage <= 24 else 4 if voltage <= 48 else 8
+    num_strings = math.ceil(num_panels / pps)
+    last_str_panels = num_panels - (num_strings - 1) * pps
+    phase = d.get("phase", "single")
+    v_ac = 415 if phase == "three" else 230
+    return render_template("report_installation_drawings.html",
+                           user=current_user(),
+                           project=project, d=d, r=r,
+                           pps=pps, num_strings=num_strings,
+                           last_str_panels=last_str_panels,
+                           v_ac=v_ac)
+
+
 @app.route("/project/<int:pid>/report/proposal")
 @login_required
 def report_proposal(pid):
