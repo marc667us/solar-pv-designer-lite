@@ -256,6 +256,15 @@
 
         {# ── Admin dropdown ───────────────────────────────────────────────── #}
         {% if user.is_admin %}
+        {# ── Prospect alert bell (admin only) ─────────────────────────── #}
+        <li class="nav-item">
+          <a class="nav-link position-relative" href="{{ url_for('admin_agent') }}"
+             title="Prospect Agent Alerts" style="padding:.35rem .5rem">
+            <i class="bi bi-robot" style="font-size:15px;color:#a78bfa"></i>
+            <span id="navAlertBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill d-none"
+              style="background:#f87171;font-size:8px;padding:2px 5px;min-width:16px"></span>
+          </a>
+        </li>
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle text-warning {% if ep.startswith('admin') %}active{% endif %}"
              href="#" data-bs-toggle="dropdown" aria-expanded="false">
@@ -747,5 +756,29 @@ document.querySelectorAll('.solar-toast').forEach(function(t){
 </script>
 
 {% block scripts %}{% endblock %}
+
+{% if user and user.is_admin %}
+<script>
+/* ── Prospect Agent alert bell (admin navbar, all pages) ── */
+(function(){
+  var badge = document.getElementById('navAlertBadge');
+  if(!badge) return;
+  function refreshBell(){
+    fetch('/admin/agent/monitor/status')
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if(j.new_count > 0){
+          badge.textContent = j.new_count > 99 ? '99+' : j.new_count;
+          badge.classList.remove('d-none');
+        } else {
+          badge.classList.add('d-none');
+        }
+      }).catch(function(){});
+  }
+  refreshBell();
+  setInterval(refreshBell, 300000); /* every 5 min */
+})();
+</script>
+{% endif %}
 </body>
 </html>

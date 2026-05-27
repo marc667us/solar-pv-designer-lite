@@ -43,20 +43,106 @@
 
 <!-- Live Monitor Panel -->
 <div id="monitorPanel" class="d-none mb-4">
-  <div class="solar-card p-4">
-    <div class="d-flex align-items-center justify-content-between mb-3">
-      <div class="section-head mb-0"><i class="bi bi-broadcast me-1 text-success"></i>Live Monitor — New Solar Postings</div>
-      <div class="d-flex gap-2">
-        <span id="monitorStatus" class="text-secondary" style="font-size:11px"></span>
-        <button class="btn btn-sm px-2" style="background:#0a140a;border:1px solid #22c55e44;color:#4ade80;font-size:11px"
-          onclick="triggerScan()"><i class="bi bi-arrow-clockwise me-1"></i>Scan Now</button>
-        <button class="btn btn-sm px-2" style="background:#1a0a0a;border:1px solid #f8717144;color:#f87171;font-size:11px"
-          onclick="dismissAlerts()"><i class="bi bi-check-all me-1"></i>Dismiss All</button>
+  <div class="solar-card p-0" style="border-color:#22c55e44">
+
+    <!-- Panel header -->
+    <div class="p-4 pb-3" style="border-bottom:1px solid #1e1e3a">
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div class="section-head mb-0"><i class="bi bi-broadcast me-1 text-success"></i>Live Monitor — New Solar Postings</div>
+        <div class="d-flex gap-2 flex-wrap">
+          <span id="monitorStatus" class="text-secondary align-self-center" style="font-size:11px"></span>
+          <button class="btn btn-sm px-2" style="background:#0a140a;border:1px solid #22c55e44;color:#4ade80;font-size:11px"
+            onclick="triggerScan()"><i class="bi bi-arrow-clockwise me-1"></i>Scan Now</button>
+          <button class="btn btn-sm px-2" style="background:#1a0a0a;border:1px solid #f8717144;color:#f87171;font-size:11px"
+            onclick="dismissAlerts()"><i class="bi bi-check-all me-1"></i>Dismiss All</button>
+        </div>
       </div>
     </div>
-    <div id="monitorAlertsList">
-      <div class="text-secondary text-center py-3" style="font-size:12px">
-        <i class="bi bi-broadcast me-1"></i>Scanning every 2 hours for new tenders, RFPs, and solar opportunities…
+
+    <!-- Alert frequency + notification settings -->
+    <div class="p-4 pb-3" style="border-bottom:1px solid #1e1e3a;background:#07071a">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-gear-fill text-warning" style="font-size:13px"></i>
+        <span style="font-size:12px;font-weight:700;color:#e0e0f8;text-transform:uppercase;letter-spacing:.4px">Alert Settings</span>
+      </div>
+      <form id="monitorSettingsForm" class="row g-3 align-items-end">
+        <input type="hidden" name="_csrf" id="settingsCsrf" value="{{ csrf_token() }}">
+
+        <!-- Frequency -->
+        <div class="col-12 col-md-5">
+          <label class="form-label" style="font-size:11px;color:#9090c0;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">
+            <i class="bi bi-clock me-1"></i>Scan Frequency
+          </label>
+          <select name="scan_interval" id="scanInterval" class="form-select form-select-sm"
+            style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:13px">
+            <option value="15"   {% if ms.scan_interval == 15   %}selected{% endif %}>Every 15 minutes</option>
+            <option value="30"   {% if ms.scan_interval == 30   %}selected{% endif %}>Every 30 minutes</option>
+            <option value="60"   {% if ms.scan_interval == 60   %}selected{% endif %}>Every 1 hour</option>
+            <option value="120"  {% if ms.scan_interval == 120  %}selected{% endif %}>Every 2 hours (default)</option>
+            <option value="240"  {% if ms.scan_interval == 240  %}selected{% endif %}>Every 4 hours</option>
+            <option value="480"  {% if ms.scan_interval == 480  %}selected{% endif %}>Every 8 hours</option>
+            <option value="720"  {% if ms.scan_interval == 720  %}selected{% endif %}>Every 12 hours</option>
+            <option value="1440" {% if ms.scan_interval == 1440 %}selected{% endif %}>Every 24 hours</option>
+          </select>
+        </div>
+
+        <!-- Email notification toggle -->
+        <div class="col-12 col-md-5">
+          <label class="form-label" style="font-size:11px;color:#9090c0;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">
+            <i class="bi bi-envelope me-1"></i>Email Notifications
+          </label>
+          <div class="form-check form-switch pt-1">
+            <input class="form-check-input" type="checkbox" name="notify_email" id="notifyEmail"
+              {% if ms.notify_email %}checked{% endif %}
+              style="width:2.2em;height:1.1em;cursor:pointer">
+            <label class="form-check-label" for="notifyEmail" style="font-size:13px;color:#c8c8e8;cursor:pointer">
+              Send email alert when new leads found
+            </label>
+          </div>
+          <div style="font-size:10px;color:#6868a0;margin-top:3px">
+            Requires SMTP configured in environment settings
+          </div>
+        </div>
+
+        <!-- Save button -->
+        <div class="col-12 col-md-2">
+          <button type="button" onclick="saveMonitorSettings()" class="btn btn-sm w-100 fw-bold"
+            style="background:#22c55e22;border:1px solid #22c55e44;color:#4ade80;font-size:12px">
+            <i class="bi bi-check-lg me-1"></i>Save
+          </button>
+        </div>
+      </form>
+      <div id="settingsSavedMsg" class="d-none mt-2" style="font-size:11px;color:#22c55e">
+        <i class="bi bi-check-circle me-1"></i>Settings saved — next scan will use the new interval.
+      </div>
+    </div>
+
+    <!-- Stats row -->
+    <div class="px-4 py-3 d-flex gap-4 flex-wrap" style="border-bottom:1px solid #1e1e3a;background:#0a0a14">
+      <div>
+        <div style="font-size:10px;color:#6868a0;text-transform:uppercase;letter-spacing:.4px">Last Monitor Scan</div>
+        <div id="lastScanDisplay" style="font-size:13px;color:#c8c8e8;font-weight:700">{{ ms.last_scan or '—' }}</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:#6868a0;text-transform:uppercase;letter-spacing:.4px">New from Last Scan</div>
+        <div id="lastCountDisplay" style="font-size:13px;color:#22c55e;font-weight:700">{{ ms.last_count }}</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:#6868a0;text-transform:uppercase;letter-spacing:.4px">Last Agent Run</div>
+        <div id="lastRunDisplay" style="font-size:13px;color:#a78bfa;font-weight:700">{{ ms.last_agent_run or '—' }}</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:#6868a0;text-transform:uppercase;letter-spacing:.4px">Total Agent Runs</div>
+        <div id="runCountDisplay" style="font-size:13px;color:#f59e0b;font-weight:700">{{ ms.agent_run_count }}</div>
+      </div>
+    </div>
+
+    <!-- Alert list -->
+    <div class="p-4">
+      <div id="monitorAlertsList">
+        <div class="text-secondary text-center py-3" style="font-size:12px">
+          <i class="bi bi-broadcast me-1"></i>Scanning at the configured interval for new tenders, RFPs, and solar opportunities…
+        </div>
       </div>
     </div>
   </div>
@@ -72,32 +158,53 @@
 
 <!-- KPI strip -->
 <div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="kpi-card h-100">
       <div class="kpi-label"><i class="bi bi-robot me-1"></i>Agent Mode</div>
-      <div class="kpi-value" style="font-size:15px">{{ 'Claude AI' if has_ai else 'Template' }}</div>
+      <div class="kpi-value" style="font-size:13px">{{ 'Claude AI' if has_ai else 'Web Search' }}</div>
       <div class="kpi-unit">{{ 'claude-opus-4-7' if has_ai else 'smart rules' }}</div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="kpi-card h-100">
       <div class="kpi-label"><i class="bi bi-people me-1"></i>Saved Prospects</div>
       <div class="kpi-value">{{ total_saved }}</div>
       <div class="kpi-unit">added to CRM</div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-play-circle me-1"></i>Agent Runs</div>
+      <div class="kpi-value" id="kpiRunCount">{{ ms.agent_run_count }}</div>
+      <div class="kpi-unit">total searches</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-clock me-1"></i>Scan Every</div>
+      <div class="kpi-value" id="kpiInterval" style="font-size:13px">
+        {% if ms.scan_interval < 60 %}{{ ms.scan_interval }}m
+        {% elif ms.scan_interval == 60 %}1h
+        {% elif ms.scan_interval < 1440 %}{{ (ms.scan_interval // 60) }}h
+        {% else %}24h{% endif %}
+      </div>
+      <div class="kpi-unit">background monitor</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-bell me-1"></i>Email Alerts</div>
+      <div class="kpi-value" style="font-size:13px;color:{{ '#22c55e' if ms.notify_email else '#6868a0' }}" id="kpiNotify">
+        {{ 'ON' if ms.notify_email else 'OFF' }}
+      </div>
+      <div class="kpi-unit">notification status</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-2">
     <div class="kpi-card h-100">
       <div class="kpi-label"><i class="bi bi-lightning me-1"></i>Max Per Run</div>
       <div class="kpi-value">12</div>
       <div class="kpi-unit">prospects</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="kpi-card h-100">
-      <div class="kpi-label"><i class="bi bi-clock-history me-1"></i>Rate Limit</div>
-      <div class="kpi-value">20</div>
-      <div class="kpi-unit">runs per hour</div>
     </div>
   </div>
 </div>
@@ -264,6 +371,7 @@
 
 <style>
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+@keyframes slideInToast { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
 @media(max-width:991px){
   div[style*="grid-template-columns:320px"]{grid-template-columns:1fr !important}
   div[style*="position:sticky"]{position:static !important}
@@ -288,9 +396,43 @@ let currentProspects = [];
 
 document.getElementById('runBtn').addEventListener('click', runAgent);
 
+/* ── Toast notification ──────────────────────────────────────────────── */
+function showToast(msg, color){
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;
+    background:#0f0f22;border:1px solid ${color}44;border-left:4px solid ${color};
+    color:#e2e2f0;padding:14px 18px;border-radius:10px;font-size:13px;
+    box-shadow:0 8px 32px rgba(0,0,0,.6);max-width:340px;line-height:1.5;
+    animation:slideInToast .3s ease`;
+  t.innerHTML = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity .4s';
+    setTimeout(() => t.remove(), 400); }, 5000);
+}
+
+async function notifyAgentRun(count, country, source){
+  try {
+    const fd = new FormData();
+    fd.append('_csrf', CSRF);
+    fd.append('count', count);
+    fd.append('country', country || '');
+    fd.append('source', source || 'web_search');
+    await fetch("{{ url_for('admin_agent_notify') }}", {method:'POST', body:fd});
+    // Refresh run count KPI
+    const st = await (await fetch("{{ url_for('monitor_status') }}")).json();
+    const rc = document.getElementById('kpiRunCount');
+    if(rc) rc.textContent = st.agent_run_count || '';
+    const rd = document.getElementById('lastRunDisplay');
+    if(rd) rd.textContent = st.last_agent_run || '—';
+    const rcd = document.getElementById('runCountDisplay');
+    if(rcd) rcd.textContent = st.agent_run_count || '0';
+  } catch(e){}
+}
+
 async function runAgent(){
   const form = document.getElementById('agentForm');
   const data = new FormData(form);
+  const country = data.get('country') || '';
 
   document.getElementById('emptyState').classList.add('d-none');
   document.getElementById('resultsState').classList.add('d-none');
@@ -311,11 +453,55 @@ async function runAgent(){
 
     currentProspects = json.prospects;
     renderProspects(json.prospects, json.source, json.result_count || 0);
+
+    // Log run + send email notification if enabled
+    notifyAgentRun(json.prospects.length, country, json.source);
+
+    // Show in-page toast
+    const srcLabel = json.source === 'web+claude' ? 'Claude AI' :
+                     json.source && json.source.includes('github') ? 'GitHub Models' : 'Web Search';
+    showToast(
+      `<i class="bi bi-robot me-2" style="color:#a78bfa"></i>` +
+      `<strong>${json.prospects.length} prospect${json.prospects.length!==1?'s':''} found</strong>` +
+      (country ? ` for <strong>${country}</strong>` : '') +
+      `<br><span style="font-size:11px;color:#9090c0">via ${srcLabel} · ${new Date().toLocaleTimeString()}</span>`,
+      '#a78bfa'
+    );
   } catch(e){
     document.getElementById('loadingState').classList.add('d-none');
     document.getElementById('runBtn').disabled = false;
     alert('Request failed: ' + e.message);
   }
+}
+
+/* ── Monitor settings save ───────────────────────────────────────────── */
+async function saveMonitorSettings(){
+  const form = document.getElementById('monitorSettingsForm');
+  const fd = new FormData(form);
+  // Checkbox: if unchecked, FormData omits it — manually send 0
+  if(!document.getElementById('notifyEmail').checked) fd.set('notify_email', '');
+  try {
+    const resp = await fetch("{{ url_for('monitor_settings') }}", {method:'POST', body:fd});
+    const json = await resp.json();
+    if(json.ok){
+      const msg = document.getElementById('settingsSavedMsg');
+      msg.classList.remove('d-none');
+      setTimeout(() => msg.classList.add('d-none'), 3500);
+      // Update KPI tiles
+      const iv = json.scan_interval;
+      const ivEl = document.getElementById('kpiInterval');
+      if(ivEl) ivEl.textContent = iv < 60 ? iv+'m' : iv < 1440 ? (iv/60|0)+'h' : '24h';
+      const ntEl = document.getElementById('kpiNotify');
+      if(ntEl){ ntEl.textContent = json.notify_email ? 'ON' : 'OFF';
+                ntEl.style.color  = json.notify_email ? '#22c55e' : '#6868a0'; }
+      showToast(
+        `<i class="bi bi-gear-fill me-2" style="color:#22c55e"></i>` +
+        `Monitor settings saved — scanning every <strong>${iv < 60 ? iv+' min' : (iv/60|0)+' hr'}</strong>, ` +
+        `email alerts <strong>${json.notify_email ? 'ON' : 'OFF'}</strong>`,
+        '#22c55e'
+      );
+    }
+  } catch(e){ alert('Save failed: ' + e.message); }
 }
 
 function renderProspects(prospects, source, resultCount){
@@ -473,12 +659,36 @@ async function pollMonitorStatus(){
     if(j.new_count > 0){
       badge.textContent = j.new_count;
       badge.classList.remove('d-none');
+      // Show toast if new alerts appeared since last poll (only when panel is closed)
+      if(!monitorPanelOpen && j.new_count !== (window._lastAlertCount||0) && (window._lastAlertCount||0) > 0){
+        showToast(
+          `<i class="bi bi-broadcast me-2" style="color:#22c55e"></i>` +
+          `<strong>${j.new_count} new solar alert${j.new_count!==1?'s':''}</strong> found by background monitor` +
+          `<br><span style="font-size:11px;color:#9090c0">Click Live Monitor to review</span>`,
+          '#22c55e'
+        );
+      }
     } else {
       badge.classList.add('d-none');
     }
-    if(status && j.last_scan){
-      status.textContent = 'Last scan: ' + j.last_scan + ' · ' + j.last_count + ' new';
+    window._lastAlertCount = j.new_count;
+    const iv = j.scan_interval || 120;
+    const ivTxt = iv < 60 ? iv+' min' : iv < 1440 ? (iv/60|0)+' hr' : '24 hr';
+    if(status){
+      let st = j.last_scan ? 'Last scan: ' + j.last_scan : 'No scan yet';
+      if(j.last_count > 0) st += ' · ' + j.last_count + ' new';
+      st += ' · Next in ~' + ivTxt;
+      status.textContent = st;
     }
+    // Refresh stats row
+    const ls = document.getElementById('lastScanDisplay');
+    if(ls) ls.textContent = j.last_scan || '—';
+    const lc = document.getElementById('lastCountDisplay');
+    if(lc) lc.textContent = j.last_count || '0';
+    const lr = document.getElementById('lastRunDisplay');
+    if(lr) lr.textContent = j.last_agent_run || '—';
+    const rc = document.getElementById('runCountDisplay');
+    if(rc) rc.textContent = j.agent_run_count || '0';
   } catch(e){}
 }
 

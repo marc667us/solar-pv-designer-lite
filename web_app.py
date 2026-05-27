@@ -366,10 +366,14 @@ def init_db():
             found_at    TEXT DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS monitor_state (
-            id          INTEGER PRIMARY KEY CHECK (id = 1),
-            last_scan   TEXT DEFAULT '',
-            last_count  INTEGER DEFAULT 0,
-            is_running  INTEGER DEFAULT 0
+            id               INTEGER PRIMARY KEY CHECK (id = 1),
+            last_scan        TEXT DEFAULT '',
+            last_count       INTEGER DEFAULT 0,
+            is_running       INTEGER DEFAULT 0,
+            scan_interval    INTEGER DEFAULT 120,
+            notify_email     INTEGER DEFAULT 0,
+            last_agent_run   TEXT DEFAULT '',
+            agent_run_count  INTEGER DEFAULT 0
         );
         INSERT OR IGNORE INTO monitor_state (id) VALUES (1);
         CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -396,6 +400,11 @@ def init_db():
         "ALTER TABLE leads ADD COLUMN follow_up_date TEXT DEFAULT ''",
         # projects lifecycle stage column
         "ALTER TABLE projects ADD COLUMN stage TEXT DEFAULT 'new'",
+        # monitor_state: configurable interval + email notifications
+        "ALTER TABLE monitor_state ADD COLUMN scan_interval INTEGER DEFAULT 120",
+        "ALTER TABLE monitor_state ADD COLUMN notify_email INTEGER DEFAULT 0",
+        "ALTER TABLE monitor_state ADD COLUMN last_agent_run TEXT DEFAULT ''",
+        "ALTER TABLE monitor_state ADD COLUMN agent_run_count INTEGER DEFAULT 0",
         # Assessment intake v2 columns
         "ALTER TABLE assessment_requests ADD COLUMN assessment_ref TEXT DEFAULT ''",
         "ALTER TABLE assessment_requests ADD COLUMN building_desc TEXT DEFAULT ''",
@@ -6564,9 +6573,22 @@ def admin_agent():
         total_saved = c.execute(
             "SELECT COUNT(*) FROM leads WHERE source='agent'"
         ).fetchone()[0]
+        mstate = c.execute(
+            "SELECT last_scan, last_count, scan_interval, notify_email, "
+            "last_agent_run, agent_run_count FROM monitor_state WHERE id=1"
+        ).fetchone()
+    ms = {
+        "last_scan":       mstate[0] if mstate else "",
+        "last_count":      mstate[1] if mstate else 0,
+        "scan_interval":   mstate[2] if mstate else 120,
+        "notify_email":    bool(mstate[3]) if mstate else False,
+        "last_agent_run":  mstate[4] if mstate else "",
+        "agent_run_count": mstate[5] if mstate else 0,
+    }
     return render_template("admin_agent.html", user=current_user(),
                            saved_leads=saved, total_saved=total_saved,
-                           has_ai=bool(os.environ.get("ANTHROPIC_API_KEY")))
+                           has_ai=bool(os.environ.get("ANTHROPIC_API_KEY")),
+                           ms=ms)
 
 
 @app.route("/admin/agent/run", methods=["POST"])
@@ -7161,6 +7183,36 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                              "Try different search criteria or add an ANTHROPIC_API_KEY."})
 
 
+@app.route("/admin/agent/notify", methods=["POST"])
+@admin_required
+def admin_agent_notify():
+    """Called by the frontend after a successful agent run to log it and optionally email."""
+    csrf_protect()
+    count   = int(request.form.get("count", 0))
+    country = request.form.get("country", "").strip() or "Global"
+    source  = request.form.get("source", "web_search")
+    now     = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
+    with get_db() as c:
+        c.execute(
+            "UPDATE monitor_state SET last_agent_run=?, "
+            "agent_run_count=agent_run_count+1 WHERE id=1", (now,))
+        state = c.execute(
+            "SELECT notify_email FROM monitor_state WHERE id=1"
+        ).fetchone()
+    if state and state[0] and count > 0:
+        src_label = "Web Search + Claude AI" if source == "web+claude" else \
+                    "GitHub Models + Claude" if "github" in source else "Live Web Search"
+        def _send():
+            _send_prospect_notification(
+                f"Agent Run Complete — {count} Prospect{'s' if count!=1 else ''} Found",
+                [f"<strong>{count}</strong> solar prospect{'s' if count!=1 else ''} found for <strong>{country}</strong>.",
+                 f"Source: {src_label}",
+                 "Open the Agent Dashboard to review results and save the best leads to your CRM."]
+            )
+        threading.Thread(target=_send, daemon=True).start()
+    return jsonify({"ok": True})
+
+
 @app.route("/admin/agent/save", methods=["POST"])
 @admin_required
 def admin_agent_save():
@@ -7431,13 +7483,34 @@ def monitor_status():
             "SELECT COUNT(*) FROM monitor_alerts WHERE is_new=1"
         ).fetchone()[0]
         state = c.execute(
-            "SELECT last_scan, last_count FROM monitor_state WHERE id=1"
+            "SELECT last_scan, last_count, scan_interval, notify_email, "
+            "last_agent_run, agent_run_count FROM monitor_state WHERE id=1"
         ).fetchone()
     return jsonify({
-        "new_count":  new_count,
-        "last_scan":  state[0] if state else "",
-        "last_count": state[1] if state else 0,
+        "new_count":       new_count,
+        "last_scan":       state[0] if state else "",
+        "last_count":      state[1] if state else 0,
+        "scan_interval":   state[2] if state else 120,
+        "notify_email":    bool(state[3]) if state else False,
+        "last_agent_run":  state[4] if state else "",
+        "agent_run_count": state[5] if state else 0,
     })
+
+
+@app.route("/admin/agent/monitor/settings", methods=["POST"])
+@admin_required
+def monitor_settings():
+    """Save scan frequency and email notification preference."""
+    csrf_protect()
+    interval     = int(request.form.get("scan_interval", 120))
+    notify_email = 1 if request.form.get("notify_email") else 0
+    # Clamp interval: min 15 min, max 24 hours
+    interval = max(15, min(interval, 1440))
+    with get_db() as c:
+        c.execute(
+            "UPDATE monitor_state SET scan_interval=?, notify_email=? WHERE id=1",
+            (interval, notify_email))
+    return jsonify({"ok": True, "scan_interval": interval, "notify_email": bool(notify_email)})
 
 
 @app.route("/admin/agent/monitor/alerts")
@@ -7474,17 +7547,91 @@ def monitor_run_now():
     return jsonify({"ok": True, "message": "Scan started"})
 
 
-# Start background monitor thread (runs every 2 hours)
+def _send_prospect_notification(subject, body_lines, admin_email=None):
+    """Send email notification to admin for prospect agent events."""
+    try:
+        host = os.environ.get("SMTP_HOST", "")
+        port = int(os.environ.get("SMTP_PORT", 587))
+        user = os.environ.get("SMTP_USER", "")
+        pw   = os.environ.get("SMTP_PASS", "")
+        frm  = os.environ.get("SMTP_FROM", user)
+        if not (host and user and pw):
+            return False
+        to = admin_email or user
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"[SolarPro Agent] {subject}"
+        msg["From"]    = frm
+        msg["To"]      = to
+        txt = "\n".join(body_lines)
+        html_rows = "".join(f"<li style='margin-bottom:6px'>{l}</li>" for l in body_lines)
+        html = f"""<div style="font-family:sans-serif;background:#0a0a14;color:#e2e2f0;padding:28px;border-radius:12px;max-width:600px">
+  <h2 style="color:#a78bfa;margin-top:0"><span style="margin-right:8px">🤖</span>{subject}</h2>
+  <ul style="padding-left:20px;color:#c8c8e8">{html_rows}</ul>
+  <hr style="border-color:#1e1e3a;margin:20px 0">
+  <a href="https://solarpro-global.onrender.com/admin/agent" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:700">
+    Open Agent Dashboard →
+  </a>
+  <p style="color:#6868a0;font-size:11px;margin-top:20px">SolarPro Global · AI Prospect Agent</p>
+</div>"""
+        msg.attach(MIMEText(txt, "plain"))
+        msg.attach(MIMEText(html, "html"))
+        tls_mode = os.environ.get("SMTP_TLS", "starttls").lower()
+        if tls_mode == "ssl":
+            sv = smtplib.SMTP_SSL(host, port, timeout=15)
+        else:
+            sv = smtplib.SMTP(host, port, timeout=15)
+            sv.starttls()
+        sv.login(user, pw)
+        sv.sendmail(frm, [to], msg.as_string())
+        sv.quit()
+        return True
+    except Exception:
+        return False
+
+
+# Start background monitor thread (reads scan_interval from DB each cycle)
 def _monitor_loop():
-    import time
+    import time, sqlite3 as _sq3
     # Initial delay so the app fully starts before the first scan
     time.sleep(120)
     while True:
         try:
             _run_monitor_scan()
+            # After scan: check if email notification is wanted for new alerts
+            db_path = os.path.join(os.path.dirname(__file__), "solar.db")
+            try:
+                conn = _sq3.connect(db_path, timeout=10)
+                row = conn.execute(
+                    "SELECT notify_email, last_count, scan_interval FROM monitor_state WHERE id=1"
+                ).fetchone()
+                conn.close()
+                notify = row[0] if row else 0
+                new_ct = row[1] if row else 0
+                interval_min = row[2] if row else 120
+            except Exception:
+                notify, new_ct, interval_min = 0, 0, 120
+            if notify and new_ct > 0:
+                _send_prospect_notification(
+                    f"{new_ct} New Solar Prospect Alert{'s' if new_ct!=1 else ''}",
+                    [f"The background monitor found <strong>{new_ct}</strong> new solar opportunities.",
+                     "Log in to the Agent Dashboard to review and save them to your CRM.",
+                     f"Next scan in {interval_min} minute{'s' if interval_min!=1 else ''}."]
+                )
         except Exception:
-            pass
-        time.sleep(7200)  # 2 hours
+            interval_min = 120
+        # Read fresh interval each cycle
+        try:
+            db_path = os.path.join(os.path.dirname(__file__), "solar.db")
+            conn = _sq3.connect(db_path, timeout=10)
+            row2 = conn.execute("SELECT scan_interval FROM monitor_state WHERE id=1").fetchone()
+            conn.close()
+            interval_min = int(row2[0]) if row2 and row2[0] else 120
+        except Exception:
+            interval_min = 120
+        time.sleep(interval_min * 60)
 
 
 _monitor_thread = threading.Thread(target=_monitor_loop, daemon=True)
