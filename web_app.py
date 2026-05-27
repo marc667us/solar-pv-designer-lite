@@ -4780,9 +4780,10 @@ Common issues:
 
 Your rules:
 - Be concise and practical — 2-5 sentences per reply
-- If you fully solve the issue, confirm the fix clearly
-- If the issue requires database access, backend changes, billing queries, or is a confirmed bug you cannot resolve: include [ESCALATE] in your reply so the system can raise a support ticket
-- Never invent features; say so if unsure and suggest escalating"""
+- Always try to solve the issue yourself first using the platform knowledge above; most questions have a self-service answer
+- Only include [ESCALATE] when ALL of the following are true: (1) you have already tried to answer, (2) the issue genuinely requires a human to look at the user's account/data (e.g. a payment that didn't apply, data corruption, a bug reproducible after cache clear) — NOT just because you're uncertain about a UI detail
+- If you're unsure about a feature, say what you do know and invite the user to try it; do NOT escalate just because you're not 100% certain
+- Never invent features; if a feature definitely doesn't exist, say so clearly"""
 
 
 @app.route("/api/assistant/chat", methods=["POST"])
