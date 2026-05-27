@@ -4799,11 +4799,7 @@ def assistant_chat():
     api_key  = os.environ.get("ANTHROPIC_API_KEY", "")
     gh_token = os.environ.get("GITHUB_TOKEN", "")
 
-    if not api_key and not gh_token:
-        return jsonify({
-            "reply": "AI assistant is currently unavailable. Please raise a support ticket and our engineering team will assist you.",
-            "escalate": True
-        })
+    # (rule-based fallback handles the no-API case; no early exit needed)
 
     # Build shared message list and system prompt
     msgs = []
@@ -4816,6 +4812,39 @@ def assistant_chat():
     gh_ctx = _fetch_github_context()
     system = _ASSISTANT_SYSTEM + (f"\n\n{gh_ctx}" if gh_ctx else "")
 
+    # ── Rule-based fallback answers (no API needed) ───────────────────────────
+    _KB = [
+        (["add load","add appliance","load schedule","watt","appliance"],
+         "Go to your project → click **Loads** in the sidebar. Add a row for each appliance: enter the name, watts, quantity, hours/day, and demand factor. Click **Calculate** when done."),
+        (["location","country","region","solar data","irradiance"],
+         "On the **Location** step, select your country then your region from the dropdown. Both must be chosen before the form saves. Ghana uses PURC tariff categories shown below the region picker."),
+        (["results","calculate","sizing","pv","battery","inverter"],
+         "After saving your Loads, click **View Results** (or open Results from the sidebar). The engine sizes your PV array, battery bank, inverter, and cables automatically."),
+        (["report","pdf","boq","proposal","export","download"],
+         "Reports are in the sidebar under your project. BOQ, Economic Analysis, and Proposal require a **Professional or Enterprise** plan. PDF download is on each report page."),
+        (["plan","upgrade","professional","enterprise","free","limit"],
+         "The Free plan gives 1 project + 5 AI Agent runs/month. Professional ($29/mo) gives 20 projects + all 9 reports. Enterprise ($99/mo) is unlimited + white-label. Upgrade at **Settings → Upgrade**."),
+        (["payment","momo","mobile money","mtn","paystack","stripe"],
+         "We accept MTN MoMo, AirtelTigo, and Vodafone Cash (Ghana) via Paystack, plus Visa/Mastercard worldwide. Go to **Settings → Upgrade** and choose your payment method."),
+        (["login","password","forgot","reset","account"],
+         "Use the **Forgot Password** link on the login page. If you're locked out, contact support via the form on the homepage."),
+        (["agent","tender","rfp","prospect","scan"],
+         "The AI Prospecting Agent is at **Admin → Agent** (admin accounts) or the Agent tab in your dashboard. Click **Run Agent** to search for live solar tenders. Results appear in the Alerts table."),
+        (["settings","theme","colour","font","appearance","smtp","email"],
+         "Go to **Settings** (top-right menu). You can change appearance (5 themes, 7 accent colours, 5 fonts), date/time format, and email/SMTP config there."),
+        (["economic","npv","irr","payback","dscr","loan","self.fund"],
+         "The Economic Analysis runs a 25-year model with 0.8% O&M, battery/inverter replacement, and 8% tariff escalation. Choose **Loan Finance** on the Location step to include DSCR analysis."),
+        (["cable","ac cable","bs 7671","iec","standard"],
+         "The AC Cable Sizing report is generated automatically from your load and inverter data. It follows BS 7671 / IEC 60364 and shows cable size, current, voltage drop, and protection rating."),
+        (["hi","hello","help","hey","what can"],
+         "Hi! I'm Helpline, SolarPro's support assistant. I can help with the design flow (Location → Loads → Results → Reports), plans and pricing, payments, settings, and the AI Prospecting Agent. What do you need?"),
+    ]
+    def _rule_reply(msg_lower):
+        for keywords, answer in _KB:
+            if any(k in msg_lower for k in keywords):
+                return answer
+        return None
+
     try:
         if api_key:
             # ── Anthropic Claude (primary) ─────────────────────────────────
@@ -4824,7 +4853,7 @@ def assistant_chat():
             resp = _ac.messages.create(model="claude-opus-4-7", max_tokens=500,
                                        system=system, messages=msgs)
             reply = resp.content[0].text if resp.content else "I couldn't generate a response. Please try again."
-        else:
+        elif gh_token:
             # ── GitHub Models API (fallback — free via GitHub token) ───────
             import urllib.request as _ur2, json as _json2
             payload = _json2.dumps({
@@ -4845,16 +4874,24 @@ def assistant_chat():
             with _ur2.urlopen(req2, timeout=30) as r2:
                 result = _json2.loads(r2.read())
             reply = result["choices"][0]["message"]["content"]
+        else:
+            # ── Rule-based (no API configured) ────────────────────────────
+            rule = _rule_reply(message.lower())
+            reply = rule or ("I can answer questions about the design flow, reports, plans, payments, settings, and the AI Agent. Could you give me a bit more detail about what you need?")
 
         escalate = "[ESCALATE]" in reply
         reply    = reply.replace("[ESCALATE]", "").strip()
         return jsonify({"reply": reply, "escalate": escalate})
 
     except Exception as e:
-        app.logger.error(f"assistant_chat error: {e}")
+        app.logger.error(f"assistant_chat error ({type(e).__name__}): {e}")
+        # Try rule-based fallback before giving up
+        rule = _rule_reply(message.lower())
+        if rule:
+            return jsonify({"reply": rule, "escalate": False})
         return jsonify({
-            "reply": "I'm having trouble connecting right now. Please try again shortly, or raise a support ticket if the problem persists.",
-            "escalate": True
+            "reply": "I'm having a temporary connection issue. In the meantime: use the sidebar to navigate between Location → Loads → Results → Reports. For account issues, raise a support ticket.",
+            "escalate": False
         })
 
 
