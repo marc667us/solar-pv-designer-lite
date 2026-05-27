@@ -4840,6 +4840,10 @@ def assistant_chat():
          "From the **Dashboard**, click **New Project** to start. Each project goes through: Location → Loads → Results → Reports. Saved projects appear in the dashboard list."),
         (["hi","hello","help","hey","what can","how does","how do"],
          "Hi! I'm Helpline, SolarPro's support assistant. I can help with the design flow (Location → Loads → Results → Reports), plans and pricing, payments, settings, and the AI Prospecting Agent. What do you need?"),
+        (["thank","thanks","ok","okay","great","got it","understood","perfect","sorted","all good",
+          "no problem","that's all","that's fine","i'm fine","im fine","i'm good","im good",
+          "never mind","nevermind","bye","goodbye","cheers","appreciate"],
+         "Great, glad I could help! Feel free to ask any time if you have more questions. 😊"),
     ]
     def _rule_reply(msg_lower):
         import re as _re
