@@ -4851,14 +4851,28 @@ def assistant_chat():
                     return answer
         return None
 
+    _GENERIC = ("I can help with: **adding loads**, **reports & PDF export**, **plans & pricing**, "
+                "**Mobile Money payment**, **AI tender agent**, **results & calculations**, "
+                "**settings & themes**, **economic analysis**, **cable sizing**, and **account/login**. "
+                "Could you give me a bit more detail about what you need?")
+
     try:
         if api_key:
-            # ── Anthropic Claude (primary) ─────────────────────────────────
+            # ── Anthropic Claude — try Haiku first (fast/cheap), Opus as fallback ──
             import anthropic as _ant
-            _ac  = _ant.Anthropic(api_key=api_key)
-            resp = _ac.messages.create(model="claude-opus-4-7", max_tokens=500,
-                                       system=system, messages=msgs)
-            reply = resp.content[0].text if resp.content else "I couldn't generate a response. Please try again."
+            _ac = _ant.Anthropic(api_key=api_key)
+            for _model in ("claude-haiku-4-5-20251001", "claude-opus-4-7"):
+                try:
+                    resp = _ac.messages.create(model=_model, max_tokens=500,
+                                               system=system, messages=msgs)
+                    reply = resp.content[0].text if resp.content else None
+                    if reply:
+                        break
+                except Exception as _me:
+                    app.logger.warning(f"helpline model {_model} failed: {_me}")
+                    reply = None
+            if not reply:
+                raise RuntimeError("all Claude models failed")
         elif gh_token:
             # ── GitHub Models API (fallback — free via GitHub token) ───────
             import urllib.request as _ur2, json as _json2
@@ -4882,8 +4896,7 @@ def assistant_chat():
             reply = result["choices"][0]["message"]["content"]
         else:
             # ── Rule-based (no API configured) ────────────────────────────
-            rule = _rule_reply(message.lower())
-            reply = rule or ("I can answer questions about the design flow, reports, plans, payments, settings, and the AI Agent. Could you give me a bit more detail about what you need?")
+            reply = _rule_reply(message.lower()) or _GENERIC
 
         escalate = "[ESCALATE]" in reply
         reply    = reply.replace("[ESCALATE]", "").strip()
@@ -4891,14 +4904,9 @@ def assistant_chat():
 
     except Exception as e:
         app.logger.error(f"assistant_chat error ({type(e).__name__}): {e}")
-        # Try rule-based fallback before giving up
-        rule = _rule_reply(message.lower())
-        if rule:
-            return jsonify({"reply": rule, "escalate": False})
-        return jsonify({
-            "reply": "I'm having a temporary connection issue. In the meantime: use the sidebar to navigate between Location → Loads → Results → Reports. For account issues, raise a support ticket.",
-            "escalate": False
-        })
+        # Always serve a useful answer — never show a raw error to the user
+        reply = _rule_reply(message.lower()) or _GENERIC
+        return jsonify({"reply": reply, "escalate": False})
 
 
 @app.route("/api/assistant/escalate", methods=["POST"])
