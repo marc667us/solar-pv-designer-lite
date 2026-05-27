@@ -413,6 +413,8 @@ def init_db():
         "ALTER TABLE assessment_requests ADD COLUMN building_type TEXT DEFAULT ''",
         "ALTER TABLE assessment_requests ADD COLUMN pipeline_stage TEXT DEFAULT 'assessment_submitted'",
         "ALTER TABLE assessment_requests ADD COLUMN region TEXT DEFAULT ''",
+        # User roles (job function — separate from plan/billing tier)
+        "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'customer'",
     ]:
         try:
             with get_db() as c:
@@ -4303,6 +4305,10 @@ def admin_users():
                 new_val = 0 if cur and cur["is_admin"] else 1
                 c.execute("UPDATE users SET is_admin=? WHERE id=?", (new_val, uid))
                 flash("Admin status toggled.", "success")
+            elif action == "set_role":
+                new_role = request.form.get("role", "customer")
+                c.execute("UPDATE users SET role=? WHERE id=?", (new_role, uid))
+                flash(f"Role updated to '{new_role}'.", "success")
             elif action == "disable":
                 c.execute("UPDATE users SET plan='disabled' WHERE id=?", (uid,))
                 flash("Account disabled.", "warning")
@@ -4759,31 +4765,75 @@ def _fetch_github_context():
         return _gh_ctx_cache["data"] or ""   # serve stale on error
 
 
-_ASSISTANT_SYSTEM = """You are Helpline — SolarPro Global's expert AI technical support agent. SolarPro Global is an intelligent solar PV system design and financial engineering platform.
+_ASSISTANT_SYSTEM = """You are Helpline — the AI customer engagement, assessment, and technical support agent for SolarPro Global (IntelInfraAI Solar Platform). Your mission: guide, engage, assess, support, and convert prospects into real solar projects.
 
-Platform knowledge:
-- Design flow: Create Project → Location (country, region, tariff, funding mode) → Loads (appliances, watts, hours, demand factor) → Results (PV/battery/inverter/cable sizing + financials) → Reports
-- Funding modes: Loan Finance (DSCR analysis) or Self-Funded (NPV/IRR/payback)
-- Battery chemistry: LiFePO4 or Lead-Acid
-- Plans: Free (1 project, basic), Professional (20 projects), Enterprise (unlimited + all reports/exports)
-- Reports: BOQ (8% markup, 15% installation), Economic (25-yr model, 0.8% O&M, battery/inverter replacement), Proposal, Cable sizing, Installation plan, Energy production
-- Settings: Organisation profile, Date & Time format (4 options each), Appearance (5 themes, 7 accent colours, 5 fonts), Email/SMTP (Gmail/Outlook/Brevo/Mailgun), Security
-- 22+ countries with local tariff data; Ghana uses PURC tariff categories with 4-decimal rates
-- Standards: BS 7671, IEC 60364, NEC 2023, IEEE 1547
+=== PLATFORM KNOWLEDGE ===
+Design flow: Create Project → Location (country, region, tariff, funding mode) → Loads (appliances, watts, hours, demand factor) → Results (PV/battery/inverter/cable sizing + financials) → Reports
+Funding modes: Loan Finance (DSCR analysis) or Self-Funded (NPV/IRR/payback)
+Battery chemistry: LiFePO4 or Lead-Acid
+Plans: Free (1 project, 5 AI Agent runs/mo), Professional ($29/mo — 20 projects, all 9 reports), Enterprise ($99/mo — unlimited + white-label)
+Reports: BOQ (8% markup, 15% installation), Economic (25-yr, 0.8% O&M, battery/inverter replacement, 8% tariff escalation), Proposal, Cable sizing (BS 7671/IEC 60364), Installation plan, Energy production
+Settings: Organisation profile, Date/Time format, Appearance (5 themes, 7 accent colours, 5 fonts), Email/SMTP, Security
+22+ countries with local tariff data; Standards: BS 7671, IEC 60364, NEC 2023, IEEE 1547
 
-Common issues:
-- Location form not saving → ensure country AND region both selected; step validation was fixed in latest release
+=== YOUR TASK AREAS ===
+
+A. CUSTOMER ENGAGEMENT
+- Welcome visitors and explain the platform's capabilities
+- Guide new users through onboarding (Create Project → Location → Loads → Results → Reports)
+- Answer FAQs about features, pricing, and workflow
+- Recommend the right plan or service based on the user's stated needs
+
+B. ASSESSMENT GUIDANCE
+- Help users identify and list their loads (appliances, watts, hours/day, demand factor)
+- Help estimate runtime requirements for critical loads
+- Recommend suitable equipment categories (off-grid vs grid-tied, battery chemistry)
+- Validate assessment inputs: flag missing country/region, missing loads, zero-watt entries
+- Guide users to upload utility bills or share monthly kWh consumption if available
+
+C. PRELIMINARY SOLAR DESIGN ESTIMATES (conversational only — full calculations done by the engine)
+- Give rough estimates: a 5 kW home needs ~15–20 × 350 Wp panels, ~10–20 kWh battery, ~5 kW inverter
+- Estimate simple ROI: typical payback 3–7 years depending on tariff and system cost
+- Estimate savings: daily kWh × local tariff × 365 = annual saving
+- Always direct user to the full design engine for accurate sizing
+
+D. PROPOSAL ASSISTANCE
+- Help prepare a brief summary of what the customer needs (load profile, location, budget)
+- Explain what the full Proposal report contains (technical + financial + BOQ)
+- Guide users to the Proposal report under their project
+
+E. FOLLOW-UP & ENGAGEMENT
+- Remind users to complete unfinished steps (e.g. "You've added loads — click View Results next")
+- Encourage booking a consultation for complex projects
+- Promote the Professional plan for users who need more than 1 project
+
+F. LEVEL 1–2 TECHNICAL SUPPORT
+- Password/login issues → Forgot Password link on login page
+- Portal navigation issues → guide step by step
+- Monitoring explanation → Results page shows live system metrics after commissioning
+- Alarm interpretation → high-priority alerts mean system fault; check inverter and battery status
+- Basic troubleshooting: location not saving (both country AND region must be selected), loads page error (add at least one row), reports locked (requires Professional/Enterprise plan)
+- Ticket generation → escalate confirmed bugs or account-level issues
+
+G. CUSTOMER SUCCESS
+- Promote annual maintenance plans for installed systems
+- Suggest platform upgrades when users hit Free plan limits
+- Collect feedback: ask if the report was useful and what could be improved
+- Promote renewals and expansion for existing customers
+
+=== COMMON ISSUES ===
+- Location form not saving → both country AND region must be selected
 - Loads page error → add at least one appliance row before calculating
 - Reports locked → Professional/Enterprise plan required for BOQ and Economic reports
-- Date/Time picker unresponsive → fixed in latest release; clear browser cache if still occurring
+- Date/Time picker unresponsive → clear browser cache
 - SMTP test failing → use App Passwords for Gmail; Brevo recommended for 300 free emails/day
 
-Your rules:
-- Be concise and practical — 2-5 sentences per reply
-- Always try to solve the issue yourself first using the platform knowledge above; most questions have a self-service answer
-- Only include [ESCALATE] when ALL of the following are true: (1) you have already tried to answer, (2) the issue genuinely requires a human to look at the user's account/data (e.g. a payment that didn't apply, data corruption, a bug reproducible after cache clear) — NOT just because you're uncertain about a UI detail
-- If you're unsure about a feature, say what you do know and invite the user to try it; do NOT escalate just because you're not 100% certain
-- Never invent features; if a feature definitely doesn't exist, say so clearly"""
+=== RULES ===
+- Be concise and warm — 2–5 sentences per reply
+- Always try to answer using the knowledge above before anything else
+- For rough estimates, give a sensible range and direct to the engine for accuracy
+- Only include [ESCALATE] when the issue genuinely requires a human to access the user's account data (payment not applied, data corruption, confirmed bug after cache clear)
+- Never invent features; if unsure, say what you know and invite the user to try it"""
 
 
 @app.route("/api/assistant/chat", methods=["POST"])
@@ -4838,8 +4888,25 @@ def assistant_chat():
          "The AC Cable Sizing report is generated automatically. It follows BS 7671 / IEC 60364 and shows cable size, current rating, voltage drop, and protection device rating."),
         (["project","dashboard","new project","create","start"],
          "From the **Dashboard**, click **New Project** to start. Each project goes through: Location → Loads → Results → Reports. Saved projects appear in the dashboard list."),
+        # Assessment & design guidance
+        (["assess","site assessment","consultation","building","house","office","hospital","school","warehouse","apartment"],
+         "Start with a **Free Site Assessment** — click the Assessment button on the homepage or go to the Assessment section. Provide your building type, location, and approximate size. Our team will follow up with a preliminary design."),
+        (["panel","solar panel","pv panel","how many panel","wp","watt peak"],
+         "A rough guide: divide your daily kWh demand by your peak sun hours (e.g. 5h for West Africa) and add 25% derating — that gives you the array kWp. Divide by your panel wattage (e.g. 400 Wp) for panel count. Use the **Results** page for the accurate calculation."),
+        (["battery","storage","autonomy","backup","off-grid","days"],
+         "Battery size = daily kWh × autonomy days ÷ depth of discharge (80% for LiFePO4). For a 10 kWh/day home wanting 2 days backup: 10 × 2 ÷ 0.8 = 25 kWh. Use the **Results** page for the precise figure including temperature derating."),
+        (["inverter","charge controller","mppt","hybrid"],
+         "Inverter size must cover your peak simultaneous load (sum of all loads running at once). MPPT charge controller rating = PV array current. For hybrid systems, the inverter handles both grid and battery. The Results page calculates this automatically."),
+        (["roi","savings","payback","return","investment","cost"],
+         "Typical solar payback in Africa: 3–6 years for commercial, 5–8 years for residential, depending on local tariff and system cost. The **Economic Analysis** report gives you 25-year NPV, IRR, and annual savings based on your actual load and local tariff data."),
+        (["maintenance","service","fault","alarm","monitoring","alert"],
+         "For installed systems: check the **Monitoring** section in your project. Red alerts = critical fault (check inverter display and battery status). Amber = warning (low battery, high temp). For recurring faults, raise a support ticket and our technical team will assist."),
+        (["utility bill","bill","tariff","unit rate","purc","kwh rate"],
+         "The platform uses local utility tariff data for your country/region. For Ghana, PURC rates are pre-loaded by category (Residential, Commercial, Industrial). Enter your monthly bill amount on the Location page to calibrate the financial model."),
+        (["upgrade","recommend","which plan","what plan","need"],
+         "If you need more than 1 project or want BOQ + Economic + Proposal PDFs, **Professional ($29/mo)** is the right step. For white-label reports and team accounts, choose **Enterprise ($99/mo)**. Both plans include unlimited AI Agent tender searches."),
         (["hi","hello","help","hey","what can","how does","how do"],
-         "Hi! I'm Helpline, SolarPro's support assistant. I can help with the design flow (Location → Loads → Results → Reports), plans and pricing, payments, settings, and the AI Prospecting Agent. What do you need?"),
+         "Hi! I'm Helpline, SolarPro's AI assistant. I can help with: solar system sizing estimates, assessment guidance, the design flow (Location → Loads → Results → Reports), reports & exports, plans & pricing, payments, settings, and the AI Prospecting Agent. What do you need?"),
         (["thank","thanks","ok","okay","great","got it","understood","perfect","sorted","all good",
           "no problem","that's all","that's fine","i'm fine","im fine","i'm good","im good",
           "never mind","nevermind","bye","goodbye","cheers","appreciate"],
@@ -4855,9 +4922,11 @@ def assistant_chat():
                     return answer
         return None
 
-    _GENERIC = ("I can help with: **adding loads**, **reports & PDF export**, **plans & pricing**, "
-                "**Mobile Money payment**, **AI tender agent**, **results & calculations**, "
-                "**settings & themes**, **economic analysis**, **cable sizing**, and **account/login**. "
+    _GENERIC = ("I can help with: **solar sizing estimates** (panels, batteries, inverters, ROI), "
+                "**assessment & onboarding**, **adding loads**, **reports & PDF export**, "
+                "**plans & pricing**, **Mobile Money payment**, **AI tender agent**, "
+                "**results & calculations**, **monitoring & alarms**, **settings & themes**, "
+                "**economic analysis**, **cable sizing**, and **account/login**. "
                 "Could you give me a bit more detail about what you need?")
 
     try:
@@ -6999,6 +7068,8 @@ INSTRUCTIONS — read each result's CONTENT carefully before deciding:
 6. source_url = exact URL, copied verbatim — do not modify
 7. company_name = the issuing organisation extracted from the content
 8. Never invent data — use "" if a field is not stated in the content
+9. Extract ALL contact intelligence: named persons, office names, GPS/addresses, websites, submission methods, mandatory documents, certifications required.
+10. Score each opportunity: classify as hot (deadline ≤14 days OR budget confirmed high), warm (deadline ≤45 days OR medium budget), cold (distant deadline or vague budget). urgency_score 1–10 (10=closes within 7 days). revenue_potential = realistic contract value in USD if stated, else estimate from system size.
 
 PRIORITY RULE — score based on how many of these 5 key fields are present in the result:
   1. work_description  — scope / what is being procured
@@ -7013,21 +7084,33 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
   "prospects": [
     {{
       "company_name": "Issuing organisation",
-      "type": "RFP / Tender / EOI / ITB / Contract Notice",
-      "location": "city AND country from result, e.g. 'Accra, Ghana' or 'Kumasi, Ghana' — use city name if stated, else just country. Do NOT invent.",
+      "type": "RFP / Tender / EOI / ITB / Contract Notice / Grant / Installation Job",
+      "project_category": "Rooftop / Ground-mount / Hybrid / Off-grid / Mini-grid / Street lighting / Water pumping / Other",
+      "location": "city AND country from result, e.g. 'Accra, Ghana' — use city name if stated, else just country. Do NOT invent.",
       "estimated_kw": 0,
       "estimated_usd": 0,
+      "budget": "stated budget exactly as written, e.g. 'USD 500,000' or ''",
+      "revenue_potential": 0,
       "pain_points": [],
       "pitch": "one sentence: what they are procuring",
       "work_description": "full scope of work as stated — supply and install, design only, EPC, etc. Use '' if not stated.",
       "requirements": "eligibility or technical requirements stated in result. Use '' if not stated.",
+      "mandatory_documents": "list of mandatory documents stated, e.g. 'Company registration, Tax clearance, PURC licence'. Use '' if not stated.",
+      "certifications": "certifications or accreditations required, e.g. 'ISO 9001, ECG approved installer'. Use '' if not stated.",
       "tor": "terms of reference or scope details if stated. Use '' if not stated.",
       "deadline": "closing/submission date exactly as stated, e.g. '30 June 2026'. Use '' if not stated.",
       "submission_address": "where/how to submit: email, portal URL, physical address. Use '' if not stated.",
+      "submission_method": "email / online portal / physical drop-off / courier / hand-deliver — as stated. Use '' if not stated.",
       "contact_details": "procurement contact name, email, phone if stated. Use '' if not stated.",
+      "contact_person": "named contact person extracted from result. Use '' if not stated.",
+      "procurement_office": "procurement office or department name. Use '' if not stated.",
+      "website": "organisation website if stated. Use '' if not stated.",
+      "gps_location": "GPS coordinates or full physical address of the project/organisation if stated. Use '' if not stated.",
       "tender_ref": "reference number if stated, else ''",
       "contact_strategy": "how to respond based on source type",
       "decision_maker": "procurement contact name if named, else ''",
+      "classification": "hot / warm / cold",
+      "urgency_score": 5,
       "priority": "high = all 5 fields present; medium = 3-4; low = 2 or fewer",
       "source_url": "https://exact-url-from-result.com/path",
       "source_title": "Exact title from result",

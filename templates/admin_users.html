@@ -129,6 +129,8 @@
               {% if u.name or u.company %}
               <div class="text-secondary" style="font-size:10px">{{ u.name or '' }}{% if u.name and u.company %} · {% endif %}{{ u.company or '' }}</div>
               {% endif %}
+              {% set role_label = u.role or 'customer' %}
+              <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#2a2a5a;color:#a0a0c8;border:1px solid #3a3a6a" title="Job role">{{ role_label|replace('_',' ')|title }}</span>
             </div>
           </div>
         </td>
@@ -173,6 +175,21 @@
               <button type="submit" class="btn btn-sm py-0 px-2" title="{{ 'Remove admin' if u.is_admin else 'Make admin' }}"
                       style="font-size:11px;{% if u.is_admin %}background:#f59e0b22;border:1px solid #f59e0b44;color:#f59e0b{% else %}background:#1e1e3a;border:1px solid #2a2a5a;color:#6868a0{% endif %}">
                 <i class="bi bi-shield{% if u.is_admin %}-fill{% endif %}"></i>
+              </button>
+            </form>
+            <!-- Set role -->
+            <form method="POST" class="d-flex gap-1 align-items-center">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <input type="hidden" name="uid" value="{{ u.id }}">
+              <input type="hidden" name="action" value="set_role">
+              <select name="role" class="action-select" title="Job role">
+                {% for r in ['customer','prospect','bdo','sales_engineer','design_engineer','proposal_engineer','project_manager','technician','support_engineer','customer_success','admin'] %}
+                <option value="{{ r }}" {% if (u.role or 'customer')==r %}selected{% endif %}>{{ r|replace('_',' ')|title }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="btn btn-sm py-0 px-2"
+                      style="font-size:10px;background:#a78bfa18;border:1px solid #a78bfa44;color:#a78bfa">
+                Role
               </button>
             </form>
             <!-- Record payment -->
