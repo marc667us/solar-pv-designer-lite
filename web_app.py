@@ -4845,8 +4845,9 @@ def assistant_chat():
         import re as _re
         for keywords, answer in _KB:
             for k in keywords:
-                # word-boundary match so "load" doesn't fire on "download"
-                if _re.search(r'\b' + _re.escape(k) + r'\b', msg_lower):
+                # leading \b prevents "load" firing on "download";
+                # no trailing \b so "plan" matches "plans", "calcul" matches "calculate"
+                if _re.search(r'\b' + _re.escape(k), msg_lower):
                     return answer
         return None
 
