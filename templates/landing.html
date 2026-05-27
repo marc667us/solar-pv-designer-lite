@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}SolarPro Global — Find Solar Tenders & Design Winning Proposals | Ghana{% endblock %}
+{% block title %}SolarPro Global — Find Solar Tenders & Design Winning Proposals{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -54,7 +54,7 @@
 <!-- ══════════════════════════════════════════════════════════════ HERO ══ -->
 <div class="hero-bg text-center py-5 mb-4">
   <div class="hero-badge">
-    <i class="bi bi-stars"></i> Built for Ghana · Free to Start · No Credit Card
+    <i class="bi bi-stars"></i> Global Platform · Free to Start · No Credit Card
   </div>
   <h1 class="fw-black mb-3" style="font-size:clamp(2rem,5vw,3.4rem);letter-spacing:-.5px;
     background:linear-gradient(135deg,#f2f2fd 20%,var(--solar-gold) 55%,var(--solar-blue));
@@ -63,7 +63,7 @@
   </h1>
   <p class="lead text-secondary mb-4 mx-auto" style="max-width:620px;font-size:1.05rem;line-height:1.7">
     The only platform that <strong style="color:#f59e0b">automatically finds live solar RFPs and tenders</strong>
-    in Ghana and West Africa — then generates your full engineering design, BOQ, and proposal in 30 minutes.
+    across 22+ countries worldwide — then generates your full engineering design, BOQ, and proposal in 30 minutes.
   </p>
 
   <!-- Buttons row: Go to Dashboard + Free Site Assessment side by side -->
@@ -94,10 +94,10 @@
       Serving Solar Professionals In
     </div>
     <div class="d-flex flex-wrap gap-2 justify-content-center">
-      {% for city,icon in [('Accra','bi-buildings'),('Kumasi','bi-tree'),('Takoradi','bi-droplet-half'),('Tamale','bi-sun'),('Sunyani','bi-flower1')] %}
+      {% for city,icon in [('Lagos','bi-buildings'),('Nairobi','bi-tree'),('Dubai','bi-sun'),('London','bi-globe'),('New Delhi','bi-flower1')] %}
       <span class="city-chip"><i class="bi {{ icon }}"></i>{{ city }}</span>
       {% endfor %}
-      <span class="city-chip" style="color:#9090b8;border-color:#1e1e3a"><i class="bi bi-three-dots"></i>+West Africa</span>
+      <span class="city-chip" style="color:#9090b8;border-color:#1e1e3a"><i class="bi bi-three-dots"></i>+22 Countries</span>
     </div>
   </div>
 
@@ -283,7 +283,7 @@
     <h5 class="fw-black mb-2">1. Find the Tender</h5>
     <p class="text-secondary mb-0" style="font-size:13px;line-height:1.6">
       The AI Agent searches UNGM, World Bank, AfDB, government portals, and development banks —
-      finding live solar RFPs in Ghana and West Africa you'd never find manually.
+      finding live solar RFPs across Africa, Middle East, and global development banks you'd never find manually.
     </p>
   </div>
   <div class="workflow-arrow d-none d-md-flex"><i class="bi bi-arrow-right-circle-fill"></i></div>
@@ -331,7 +331,7 @@
       <p class="text-secondary mb-4" style="font-size:14px;line-height:1.8">
         Every week, solar contracts worth <strong style="color:#f59e0b">millions of dollars</strong> are posted on
         UNGM, World Bank, AfDB, government portals, and development bank databases —
-        and most Ghanaian contractors never see them.
+        and most solar contractors never see them.
         <br><br>
         SolarPro's AI Agent scans all these sources automatically and delivers live
         RFPs, EOIs, and tender notices directly to your dashboard.
@@ -430,7 +430,7 @@
 <!-- ══════════════════════════════════════════════ WHO IS IT FOR ══════════ -->
 <div class="text-center mb-4">
   <div class="section-label"><i class="bi bi-people me-1"></i>Who Uses SolarPro</div>
-  <h2 class="fw-black mb-2">Built for Solar Professionals in Ghana</h2>
+  <h2 class="fw-black mb-2">Built for Solar Professionals Globally</h2>
 </div>
 
 <div class="row g-3 mb-5">
@@ -452,7 +452,7 @@
      ['Off-grid & hybrid sizing','Economic viability report','Free plan available']),
     ('bi-mortarboard-fill','#0ea5e9','Engineering Students & Lecturers',
      'Learn real-world solar design with live engineering tools.',
-     ['Free plan for learning','Standards-traceable outputs','Accra & Kumasi universities']),
+     ['Free plan for learning','Standards-traceable outputs','Universities worldwide']),
   ] %}
   <div class="col-md-6 col-lg-4">
     <div class="use-case-card">
@@ -480,7 +480,7 @@
 <!-- ══════════════════════════════════════════════════ TESTIMONIALS ═══════ -->
 <div class="text-center mb-4">
   <div class="section-label"><i class="bi bi-chat-quote me-1"></i>What Professionals Say</div>
-  <h2 class="fw-black mb-2">Trusted by Solar Companies in Ghana</h2>
+  <h2 class="fw-black mb-2">Trusted by Solar Companies Worldwide</h2>
 </div>
 <div class="row g-3 mb-5">
   {% for quote,name,role,city in [
@@ -517,7 +517,7 @@
 <!-- ══════════════════════════════════════════════ PRICING ════════════════ -->
 <div class="text-center mb-4">
   <div class="section-label"><i class="bi bi-tag me-1"></i>Pricing</div>
-  <h2 class="fw-black mb-2">Affordable for Ghanaian Businesses</h2>
+  <h2 class="fw-black mb-2">Affordable for Any Solar Business</h2>
   <p class="text-secondary" style="font-size:14px">Start free. Pay with Mobile Money or card. Cancel any time.</p>
 </div>
 
@@ -640,17 +640,17 @@
         ("Can I pay with MTN Mobile Money?",
          "Yes. We accept MTN MoMo, AirtelTigo, and Vodafone Cash in Ghana via Paystack. Payment is in GHS at the current rate. Contact us to activate MoMo billing."),
         ("How does the AI Prospecting Agent work?",
-         "The agent searches 14+ procurement portals — UNGM, World Bank, AfDB, Ghana Energy Commission, Devex, ECREEE, and others — for live solar RFPs, EOIs, and tenders in Ghana and West Africa. Results include source links so you can verify and respond directly."),
+         "The agent searches 14+ procurement portals — UNGM, World Bank, AfDB, Ghana Energy Commission, Devex, ECREEE, and others — for live solar RFPs, EOIs, and tenders globally. Results include source links so you can verify and respond directly."),
         ("How long does it take to generate a full proposal?",
          "Most projects take 20-40 minutes from entering your load schedule to downloading the full proposal PDF. The BOQ, cable schedule, and economic report generate automatically."),
-        ("Can I use it for off-grid systems in northern Ghana?",
-         "Yes. The platform handles grid-connected, off-grid, and hybrid systems. Off-grid sizing includes battery bank, charge controller, and autonomy calculations — ideal for rural and agricultural projects."),
+        ("Can I use it for off-grid systems in remote areas?",
+         "Yes. The platform handles grid-connected, off-grid, and hybrid systems. Off-grid sizing includes battery bank, charge controller, and autonomy calculations — ideal for rural, agricultural, and island projects."),
         ("What if I find a tender but need help with the proposal?",
          "Submit a request through the platform and our partner installer network can connect with you. You can also use the Contact form to reach our engineering team."),
         ("Can I white-label reports with my company name and logo?",
          "Yes — on the Enterprise plan ($99/mo). Reports carry your branding. This is popular with consultants who deliver reports to their own clients."),
         ("Do I need to install any software?",
-         "No. SolarPro Global is fully web-based. Works on desktop, tablet, and mobile — including low-bandwidth connections common in Ghana."),
+         "No. SolarPro Global is fully web-based. Works on desktop, tablet, and mobile — including low-bandwidth connections common in developing regions."),
       ] %}
       <div class="faq-item">
         <div class="faq-q" onclick="var a=this.nextElementSibling;a.style.display=a.style.display=='block'?'none':'block';this.querySelector('.faq-icon').style.transform=a.style.display=='block'?'rotate(45deg)':''">
@@ -720,7 +720,7 @@
       <div class="section-label mb-1"><i class="bi bi-envelope-heart me-1"></i>Newsletter</div>
       <h4 class="fw-black mb-1">Stay Ahead in Solar</h4>
       <p class="text-secondary small mb-3">
-        Live RFP alerts, platform updates, solar market insights for Ghana and West Africa — weekly.
+        Live RFP alerts, platform updates, solar market insights globally — weekly.
       </p>
       <form method="POST" action="{{ url_for('newsletter_subscribe') }}">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -774,7 +774,7 @@
     Your Next Solar Contract Starts Here
   </h2>
   <p class="text-secondary mb-4" style="max-width:500px;margin:0 auto;font-size:14px;line-height:1.7">
-    Join solar professionals in Accra, Kumasi, Takoradi, Tamale and Sunyani
+    Join solar professionals across Africa, Middle East, Europe and Asia
     using SolarPro to find tenders, design systems, and win contracts.
   </p>
   <div class="d-flex gap-3 justify-content-center flex-wrap">
