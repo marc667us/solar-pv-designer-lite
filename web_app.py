@@ -4842,9 +4842,12 @@ def assistant_chat():
          "Hi! I'm Helpline, SolarPro's support assistant. I can help with the design flow (Location → Loads → Results → Reports), plans and pricing, payments, settings, and the AI Prospecting Agent. What do you need?"),
     ]
     def _rule_reply(msg_lower):
+        import re as _re
         for keywords, answer in _KB:
-            if any(k in msg_lower for k in keywords):
-                return answer
+            for k in keywords:
+                # word-boundary match so "load" doesn't fire on "download"
+                if _re.search(r'\b' + _re.escape(k) + r'\b', msg_lower):
+                    return answer
         return None
 
     try:
