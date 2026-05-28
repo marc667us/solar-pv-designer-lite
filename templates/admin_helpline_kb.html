@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Learned KB — SolarPro Admin{% endblock %}
+
+{% block extra_head %}
+<style>
+  .kb-card{background:#0f0f22;border:1px solid #1e1e3a;border-radius:10px;padding:14px 18px;margin-bottom:10px;transition:.15s}
+  .kb-card:hover{border-color:#2a2a5a;background:#12122a}
+  .kb-agent{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.5px;background:#a78bfa18;color:#a78bfa;border:1px solid #a78bfa33}
+  .kb-q{color:#e0e0f0;font-weight:600;font-size:13px;margin-bottom:6px}
+  .kb-a{color:#9090b8;font-size:12px;line-height:1.5}
+  .kb-meta{color:#4a4a7a;font-size:10px;margin-top:8px}
+  .stat-box{background:#0f0f22;border:1px solid #1e1e3a;border-radius:10px;padding:16px 20px;text-align:center}
+  .stat-num{font-size:28px;font-weight:800;color:#a78bfa}
+  .stat-lbl{font-size:11px;color:#6868a0;text-transform:uppercase;letter-spacing:.5px}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-4" style="max-width:1100px">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <i class="bi bi-lightbulb-fill" style="color:#a78bfa;font-size:20px"></i>
+        <h4 class="mb-0 fw-bold" style="color:#e0e0f0">Learned Knowledge Base</h4>
+      </div>
+      <div class="text-secondary" style="font-size:12px">
+        Q&amp;A pairs auto-extracted from real Helpline conversations · Used to improve future AI responses
+      </div>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin_users') }}" class="btn btn-sm"
+         style="background:#1e1e3a;border:1px solid #2a2a5a;color:#9090b8;font-size:12px">
+        <i class="bi bi-arrow-left me-1"></i>Back to Users
+      </a>
+      <form method="POST" onsubmit="return confirm('Delete ALL learned entries?')">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="delete_all">
+        <input type="hidden" name="agent" value="helpline">
+        <button class="btn btn-sm" style="background:#ef444418;border:1px solid #ef444444;color:#ef4444;font-size:12px">
+          <i class="bi bi-trash me-1"></i>Clear All
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="row g-3 mb-4">
+    <div class="col-auto">
+      <div class="stat-box">
+        <div class="stat-num">{{ entries|length }}</div>
+        <div class="stat-lbl">Total Entries</div>
+      </div>
+    </div>
+    <div class="col-auto">
+      <div class="stat-box">
+        <div class="stat-num" style="color:#22c55e">{{ entries|selectattr('use_count','gt',0)|list|length }}</div>
+        <div class="stat-lbl">Times Served</div>
+      </div>
+    </div>
+    <div class="col-auto">
+      <div class="stat-box">
+        <div class="stat-num" style="color:#0ea5e9">{{ entries|map(attribute='use_count')|sum }}</div>
+        <div class="stat-lbl">Total Uses</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Flash messages -->
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in msgs %}
+  <div class="alert alert-{{ 'success' if cat=='success' else 'warning' }} py-2 mb-3" style="font-size:13px">{{ msg }}</div>
+  {% endfor %}
+  {% endwith %}
+
+  <!-- Entries -->
+  {% if entries %}
+  {% for e in entries %}
+  <div class="kb-card">
+    <div class="d-flex align-items-start justify-content-between gap-3">
+      <div style="flex:1;min-width:0">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="kb-agent">{{ e.agent or 'helpline' }}</span>
+          <span style="font-size:10px;color:#4a4a7a">#{{ e.id }}</span>
+          {% if e.use_count > 0 %}
+          <span style="font-size:10px;color:#22c55e;background:#22c55e12;padding:1px 7px;border-radius:4px;border:1px solid #22c55e33">
+            Used {{ e.use_count }}×
+          </span>
+          {% endif %}
+        </div>
+        <div class="kb-q">Q: {{ e.question }}</div>
+        <div class="kb-a">A: {{ e.answer }}</div>
+        <div class="kb-meta">Learned {{ e.created_at[:16] if e.created_at else '—' }}</div>
+      </div>
+      <form method="POST" onsubmit="return confirm('Delete this entry?')">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="delete">
+        <input type="hidden" name="kid" value="{{ e.id }}">
+        <button class="btn btn-sm py-0 px-2"
+                style="font-size:11px;background:#ef444418;border:1px solid #ef444444;color:#ef4444">
+          <i class="bi bi-trash"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="text-center py-5" style="color:#4a4a7a">
+    <i class="bi bi-lightbulb" style="font-size:40px;display:block;margin-bottom:12px;color:#2a2a5a"></i>
+    <div style="font-size:14px;color:#6868a0">No learned entries yet.</div>
+    <div style="font-size:12px;color:#4a4a7a;margin-top:6px">
+      The Helpline AI will automatically learn from conversations once users have multi-turn chats.
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

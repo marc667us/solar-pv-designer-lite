@@ -384,6 +384,14 @@ def init_db():
             used       INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS helpline_learned_kb (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent      TEXT DEFAULT 'helpline',
+            question   TEXT NOT NULL,
+            answer     TEXT NOT NULL,
+            use_count  INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
         """)
     # Migrate older DBs — ignore if column already exists
     for stmt in [
@@ -4427,6 +4435,31 @@ def admin_appliances():
                            appliances=apps, categories=categories)
 
 
+@app.route("/admin/helpline-kb", methods=["GET", "POST"])
+@admin_required
+def admin_helpline_kb():
+    """View and manage the dynamically learned Helpline KB."""
+    csrf_protect() if request.method == "POST" else None
+    if request.method == "POST":
+        action = request.form.get("action")
+        kid    = request.form.get("kid", type=int)
+        if action == "delete" and kid:
+            with get_db() as c:
+                c.execute("DELETE FROM helpline_learned_kb WHERE id=?", (kid,))
+            flash("Entry deleted.", "success")
+        elif action == "delete_all":
+            agent = request.form.get("agent", "helpline")
+            with get_db() as c:
+                c.execute("DELETE FROM helpline_learned_kb WHERE agent=?", (agent,))
+            flash("All entries cleared.", "warning")
+        return redirect(url_for("admin_helpline_kb"))
+    with get_db() as c:
+        entries = c.execute(
+            "SELECT * FROM helpline_learned_kb ORDER BY use_count DESC, created_at DESC"
+        ).fetchall()
+    return render_template("admin_helpline_kb.html", user=current_user(), entries=entries)
+
+
 # ─── Phase 4: Account / subscription management ───────────────────────────────
 
 def _record_payment(uid, gateway, plan, amount_usd, currency="USD",
@@ -4765,6 +4798,85 @@ def _fetch_github_context():
         return _gh_ctx_cache["data"] or ""   # serve stale on error
 
 
+def _load_learned_kb(agent="helpline", limit=20):
+    """Return the top-N most-used learned KB entries for a given agent."""
+    try:
+        with get_db() as c:
+            rows = c.execute(
+                "SELECT question, answer FROM helpline_learned_kb "
+                "WHERE agent=? ORDER BY use_count DESC, created_at DESC LIMIT ?",
+                (agent, limit)
+            ).fetchall()
+        return [(r["question"], r["answer"]) for r in rows]
+    except Exception:
+        return []
+
+
+def _learn_from_conversation(msgs, api_key, agent="helpline"):
+    """
+    Background: ask Claude Haiku to extract reusable Q&A pairs from a finished
+    conversation and store new ones to helpline_learned_kb.
+    Only called when there are at least 4 messages (2 full exchanges).
+    """
+    if len(msgs) < 4:
+        return
+    convo = "\n".join(
+        f"{m['role'].upper()}: {m['content']}" for m in msgs[-16:]
+    )
+    prompt = f"""You are a knowledge-extraction assistant for a solar platform helpdesk (SolarPro Global).
+
+CONVERSATION:
+{convo}
+
+TASK: Extract 0–3 reusable Q&A pairs that future helpdesk users might ask.
+Rules:
+- Only extract if the answer in the conversation was genuinely helpful and accurate.
+- Skip generic greetings, acknowledgements, and vague exchanges.
+- Each question must be a short phrase (≤15 words) a real user would type.
+- Each answer must be concise (2–4 sentences) and self-contained.
+- Do NOT invent information not present in the conversation.
+
+Return ONLY valid JSON, no markdown fences:
+{{"learned":[{{"question":"...","answer":"..."}}]}}
+If nothing worth extracting, return {{"learned":[]}}"""
+    try:
+        import anthropic as _ant
+        client = _ant.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        raw = msg.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = "\n".join(raw.split("\n")[1:])
+            if raw.endswith("```"):
+                raw = raw[:-3]
+        data = json.loads(raw)
+        learned = data.get("learned", [])
+        if not learned:
+            return
+        with get_db() as c:
+            for item in learned:
+                q = (item.get("question") or "").strip()[:200]
+                a = (item.get("answer") or "").strip()[:800]
+                if len(q) < 6 or len(a) < 10:
+                    continue
+                # Skip near-duplicates (first 40 chars of question)
+                exists = c.execute(
+                    "SELECT id FROM helpline_learned_kb WHERE agent=? AND question LIKE ?",
+                    (agent, f"{q[:40]}%")
+                ).fetchone()
+                if not exists:
+                    c.execute(
+                        "INSERT INTO helpline_learned_kb (agent, question, answer) VALUES (?,?,?)",
+                        (agent, q, a)
+                    )
+        app.logger.info(f"helpline learning: stored {len(learned)} new KB entries (agent={agent})")
+    except Exception as e:
+        app.logger.warning(f"helpline learning failed (agent={agent}): {e}")
+
+
 _ASSISTANT_SYSTEM = """You are Helpline — the AI customer engagement, assessment, and technical support agent for SolarPro Global (IntelInfraAI Solar Platform). Your mission: guide, engage, assess, support, and convert prospects into real solar projects.
 
 === PLATFORM KNOWLEDGE ===
@@ -4861,7 +4973,15 @@ def assistant_chat():
             msgs.append({"role": role, "content": content})
     msgs.append({"role": "user", "content": message})
     gh_ctx = _fetch_github_context()
-    system = _ASSISTANT_SYSTEM + (f"\n\n{gh_ctx}" if gh_ctx else "")
+
+    # ── Inject learned KB into system prompt ─────────────────────────────────
+    learned_entries = _load_learned_kb(agent="helpline", limit=20)
+    learned_section = ""
+    if learned_entries:
+        pairs = "\n".join(f"Q: {q}\nA: {a}" for q, a in learned_entries)
+        learned_section = f"\n\n=== LEARNED FROM PREVIOUS CONVERSATIONS ===\n{pairs}"
+
+    system = _ASSISTANT_SYSTEM + learned_section + (f"\n\n{gh_ctx}" if gh_ctx else "")
 
     # ── Rule-based fallback answers (no API needed) ───────────────────────────
     _KB = [
@@ -4984,6 +5104,18 @@ def assistant_chat():
 
         escalate = "[ESCALATE]" in reply
         reply    = reply.replace("[ESCALATE]", "").strip()
+
+        # ── Background learning — extract Q&A from conversation if long enough ──
+        if api_key and len(msgs) >= 4:
+            import threading as _th
+            _app = app._get_current_object()
+            _msgs_copy = list(msgs)
+            def _bg_learn():
+                with _app.app_context():
+                    _learn_from_conversation(_msgs_copy, api_key, agent="helpline")
+            _t = _th.Thread(target=_bg_learn, daemon=True)
+            _t.start()
+
         return jsonify({"reply": reply, "escalate": escalate})
 
     except Exception as e:
