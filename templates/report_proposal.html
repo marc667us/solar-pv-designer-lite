@@ -385,9 +385,64 @@
     immediately disconnect the supply. The earth electrode resistance must be ≤ 10 Ω (tested before energising).
   </div>
 
+  {# A4 — Engineering Sizing Calculations #}
+  <div class="prop-section-head" style="border-top:1px solid #1e1e3a;padding-top:16px;margin-top:4px">
+    <i class="bi bi-calculator-fill"></i>A4. Engineering Sizing Calculations
+  </div>
+  <div class="explain-box mb-3">
+    <div class="head"><i class="bi bi-info-circle"></i>How the system was engineered</div>
+    All sizing calculations follow IEC 60364, BS 7671:2018, and IEC 61215 standards. The three primary
+    design equations — PV array, battery bank, and inverter — are shown below with the actual numbers for this project.
+  </div>
+  <div class="row g-3 mb-3">
+    <div class="col-md-4">
+      <div class="component-card">
+        <div class="component-icon">☀️</div>
+        <div class="component-title" style="font-size:13px">PV Array Sizing</div>
+        <div class="component-sub">Formula: PV (kWp) = E ÷ (PSH × η)</div>
+        <div class="component-desc">
+          <div class="data-row" style="font-size:12px"><span class="lbl">Daily Demand (E)</span><span class="val">{{ r.daily_kwh|fmt(3) }} kWh/day</span></div>
+          <div class="data-row" style="font-size:12px"><span class="lbl">Peak Sun Hours</span><span class="val">{{ d.psh }} h/day</span></div>
+          <div class="data-row" style="font-size:12px"><span class="lbl">BOS Efficiency</span><span class="val">75%</span></div>
+          <div class="data-row" style="font-size:12px"><span class="lbl">Temp Derating</span><span class="val">{{ r.temp_derating|fmt(4) if r.temp_derating is defined else '—' }}</span></div>
+          <div class="data-row" style="font-size:12px"><span class="lbl">Effective η</span><span class="val">{{ ((0.75*(r.temp_derating if r.temp_derating is defined else 1))*100)|round(1) }}%</span></div>
+          <div class="data-row total" style="font-size:12px"><span class="lbl"><strong>PV Required</strong></span><span class="val">{{ r.pv_kw|fmt(3) }} kWp → {{ r.num_panels }} × {{ r.panel_wp|default(400) }} Wp</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="component-card">
+        <div class="component-icon">🔋</div>
+        <div class="component-title" style="font-size:13px">Battery Bank Sizing</div>
+        <div class="component-sub">Formula: B = (E × Days) ÷ (DoD × η)</div>
+        <div class="component-desc">
+          <div class="data-row" style="font-size:12px"><span class="lbl">Daily Demand (E)</span><span class="val">{{ r.daily_kwh|fmt(3) }} kWh/day</span></div>
+          <div class="data-row" style="font-size:12px"><span class="lbl">Autonomy Days</span><span class="val">{{ d.autonomy }} day(s)</span></div>
+          <div class="data-row" style="font-size:12px"><span class="lbl">Chemistry</span><span class="val">{{ r.chemistry|default('LiFePO4') }}</span></div>
+          <div class="data-row" style="font-size:12px"><span class="lbl">DoD</span><span class="val">{{ ((r.chem_dod if r.chem_dod is defined else 0.8)*100)|int }}%</span></div>
+          <div class="data-row total" style="font-size:12px"><span class="lbl"><strong>Battery Required</strong></span><span class="val">{{ r.bat_kwh|fmt(2) }} kWh → {{ r.num_bat }} × {{ r.unit_bat_kwh|fmt(2) }} kWh</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="component-card">
+        <div class="component-icon">⚡</div>
+        <div class="component-title" style="font-size:13px">Inverter Sizing</div>
+        <div class="component-sub">Formula: Inv = Peak Load × 1.25 SF</div>
+        <div class="component-desc">
+          <div class="data-row" style="font-size:12px"><span class="lbl">Connected Peak Load</span><span class="val">{{ r.peak_kw|fmt(2) if r.peak_kw is defined else '—' }} kW</span></div>
+          <div class="data-row" style="font-size:12px"><span class="lbl">Safety Factor</span><span class="val">1.25×</span></div>
+          <div class="data-row" style="font-size:12px"><span class="lbl">MPPT Rating</span><span class="val">{{ r.mppt_a|default('—') }} A</span></div>
+          <div class="data-row" style="font-size:12px"><span class="lbl">DC Bus Voltage</span><span class="val">{{ d.voltage|default(48) }} V</span></div>
+          <div class="data-row total" style="font-size:12px"><span class="lbl"><strong>Inverter Required</strong></span><span class="val">{{ r.inv_kw|fmt(2) }} kW · {{ '3-Phase' if d.phase=='three' else 'Single-Phase' }}</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   {# Cables #}
   <div class="prop-section-head" style="border-top:1px solid #1e1e3a;padding-top:16px;margin-top:4px">
-    <i class="bi bi-plug-fill"></i>A3f. AC Cable Sizing (BS 7671)
+    <i class="bi bi-plug-fill"></i>A5. AC Cable Sizing (BS 7671)
   </div>
   <div class="explain-box mb-3">
     <div class="head"><i class="bi bi-info-circle"></i>Why cable sizing matters</div>
@@ -405,7 +460,7 @@
         <tr>
           <td>{{ c.circuit }}</td>
           <td class="text-center fw-bold text-warning">{{ c.cable_size_mm2 }} mm²</td>
-          <td class="text-center">{{ c.cable_rating_a }} A</td>
+          <td class="text-center">{{ c.cable_capacity }} A</td>
           <td class="text-center">{{ c.breaker_a }} A</td>
           <td class="text-center {{ 'text-success' if c.vd_ok else 'text-danger' }}">{{ c.vd_percent }}%</td>
           <td class="text-center">
@@ -432,7 +487,7 @@
 </div>
 
 <div class="prop-section">
-  <div class="prop-section-head"><i class="bi bi-cash-coin"></i>B1. Capital Investment (CAPEX)</div>
+  <div class="prop-section-head"><i class="bi bi-cash-coin"></i>B1. Capital Investment (CAPEX) &amp; Bill of Quantities</div>
   <div class="explain-box mb-3">
     <div class="head"><i class="bi bi-info-circle"></i>What is CAPEX?</div>
     CAPEX (Capital Expenditure) is the one-time upfront cost to purchase and install the solar system.
@@ -441,11 +496,57 @@
     Once paid, the solar system generates free electricity for 25+ years — this is what makes solar
     a strong financial investment.
   </div>
+
+  {# Itemized BOQ Table #}
+  <div class="table-responsive mb-3">
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          <th style="width:32px">No.</th>
+          <th>Description</th>
+          <th>Specification</th>
+          <th class="text-center">Qty</th>
+          <th class="text-center">Unit</th>
+          <th class="text-end">Basic Rate ({{ d.symbol }})</th>
+          <th class="text-end">Total Rate ({{ d.symbol }})</th>
+          <th class="text-end">Amount ({{ d.symbol }})</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in r.boq_rows %}
+        <tr>
+          <td class="text-secondary">{{ row.no }}</td>
+          <td class="fw-semibold">{{ row.desc }}</td>
+          <td class="text-secondary small">{{ row.spec }}</td>
+          <td class="text-center">{{ row.qty }}</td>
+          <td class="text-center text-secondary">{{ row.unit }}</td>
+          <td class="text-end">{{ row.basic|fmt(2) }}</td>
+          <td class="text-end">{{ row.total_r|fmt(2) }}</td>
+          <td class="text-end fw-bold text-warning">{{ row.amount|fmt(2) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="fw-bold" style="border-top:2px solid #f59e0b44">
+          <td colspan="7" class="text-end text-warning">GRAND TOTAL ({{ d.symbol }})</td>
+          <td class="text-end text-warning" style="font-size:15px">{{ r.boq_grand|fmt(2) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <div class="small text-secondary mb-3" style="font-size:11px">
+    <i class="bi bi-info-circle me-1"></i>Total Rate = Basic Rate × 1.08 (8% supply/procurement markup — delivery, overheads &amp; profit).
+    Installation Labour = {{ eco.get('install_rate_pct',15) }}% of supply subtotal.
+    Excludes site-specific VAT, import duties, and permit fees.
+  </div>
+
   <div class="row g-3">
     <div class="col-md-6">
-      <div class="data-row"><span class="lbl">Equipment Supply (panels, batteries, inverter, cables, protection)</span><span class="val text-warning">{{ d.symbol }} {{ eco.equip_local|fmt(0) }}</span></div>
-      <div class="data-row"><span class="lbl">Installation &amp; Labour (civil works, wiring, commissioning — {{ eco.get('install_rate_pct',15) }}%)</span><span class="val text-warning">{{ d.symbol }} {{ eco.install_local|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Equipment Supply (incl. 8% markup)</span><span class="val text-warning">{{ d.symbol }} {{ eco.equip_local|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Installation &amp; Labour ({{ eco.get('install_rate_pct',15) }}% of supply)</span><span class="val text-warning">{{ d.symbol }} {{ eco.install_local|fmt(0) }}</span></div>
       <div class="data-row total"><span class="lbl"><strong>TOTAL CAPITAL COST</strong></span><span class="val" style="font-size:16px">{{ d.symbol }} {{ eco.total_local|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Contingency (10%) — advisory</span><span class="val">{{ d.symbol }} {{ (eco.total_local*0.1)|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">Budget incl. contingency</span><span class="val">{{ d.symbol }} {{ (eco.total_local*1.1)|fmt(0) }}</span></div>
     </div>
     <div class="col-md-6">
       <div class="highlight-box" style="margin-bottom:0;height:100%;box-sizing:border-box">
@@ -563,6 +664,126 @@
         or removing <strong style="color:#e2e2f0">{{ (eco.co2_yr/4.6)|round(1) }} cars</strong> from the road, every year.
       </div>
     </div>
+  </div>
+</div>
+
+<div class="prop-section">
+  <div class="prop-section-head"><i class="bi bi-calendar3"></i>B5. Monthly Energy Generation &amp; Savings Profile</div>
+  <div class="explain-box mb-3">
+    <div class="head"><i class="bi bi-info-circle"></i>How generation varies through the year</div>
+    Solar generation follows seasonal patterns — slightly higher in dry-season months and lower during
+    heavy cloud / rainy season. The table below shows the estimated monthly output and savings based on
+    your location's irradiance profile. All annual totals match the financial projections above.
+  </div>
+  {% set offset_factor = 1.0 if d.system_type == 'off-grid' else 0.8 %}
+  <div class="table-responsive mb-3">
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th class="text-end">Generation (kWh)</th>
+          <th class="text-end">Grid Offset (kWh)</th>
+          <th class="text-center">Relative Output</th>
+          <th class="text-end">Savings ({{ d.symbol }})</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set annual_kwh = r.daily_kwh * 365 %}
+        {% for m in monthly %}
+        {% set offset_kwh = (m.kwh * offset_factor) %}
+        <tr>
+          <td class="fw-bold text-warning">{{ m.month }}</td>
+          <td class="text-end">{{ m.kwh|fmt(1) }}</td>
+          <td class="text-end fw-bold" style="color:#0ea5e9">{{ offset_kwh|fmt(1) }}</td>
+          <td class="text-center">
+            <div class="d-flex align-items-center justify-content-center gap-2">
+              <div style="width:80px;height:7px;background:#1e1e3a;border-radius:3px;overflow:hidden">
+                <div style="width:{{ [m.kwh/(annual_kwh/12)*100,100]|min|int }}%;height:100%;background:#f59e0b;border-radius:3px"></div>
+              </div>
+              <span class="small text-secondary">{{ [m.kwh/(annual_kwh/12)*100,100]|min|int }}%</span>
+            </div>
+          </td>
+          <td class="text-end text-success fw-bold">{{ m.saving|fmt(1) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="fw-bold" style="border-top:2px solid #f59e0b44">
+          <td>ANNUAL TOTAL</td>
+          <td class="text-end text-warning">{{ (r.daily_kwh*365)|fmt(0) }} kWh</td>
+          <td class="text-end" style="color:#0ea5e9">{{ (r.daily_kwh*365*offset_factor)|fmt(0) }} kWh</td>
+          <td class="text-center">—</td>
+          <td class="text-end text-success">{{ d.symbol }} {{ eco.annual_sav|fmt(0) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="data-row"><span class="lbl">Annual CO₂ Avoided</span><span class="val" style="color:#a78bfa">{{ eco.co2_yr|fmt(2) }} t CO₂/yr</span></div>
+      <div class="data-row"><span class="lbl">25-Year CO₂ Avoided</span><span class="val" style="color:#a78bfa">{{ (eco.co2_yr*25)|fmt(1) }} t CO₂</span></div>
+      <div class="data-row"><span class="lbl">Equivalent Trees (annual)</span><span class="val text-success">{{ trees_equiv|int }} trees/year</span></div>
+      <div class="data-row"><span class="lbl">Equivalent Cars Removed</span><span class="val text-success">{{ cars_equiv }} cars/year</span></div>
+    </div>
+    <div class="col-md-6">
+      <div class="data-row"><span class="lbl">Annual Generation</span><span class="val">{{ eco.annual_kwh|fmt(0) }} kWh/yr</span></div>
+      <div class="data-row"><span class="lbl">Gross Annual Savings (Yr 1)</span><span class="val text-success">{{ d.symbol }} {{ eco.annual_sav|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">10-Year Cumulative Saving</span><span class="val">{{ d.symbol }} {{ eco.cumul_10|fmt(0) }}</span></div>
+      <div class="data-row"><span class="lbl">25-Year Cumulative Saving</span><span class="val text-warning">{{ d.symbol }} {{ eco.cumul_25|fmt(0) }}</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="prop-section">
+  <div class="prop-section-head"><i class="bi bi-bar-chart-fill"></i>B6. 25-Year Cash Flow Projection</div>
+  <div class="explain-box mb-3">
+    <div class="head"><i class="bi bi-info-circle"></i>Year-by-year financial projection</div>
+    The table below shows the full 25-year cashflow model. Gross savings grow at 8% per year (tariff escalation).
+    O&amp;M cost is 0.8% of CAPEX per year. The <strong style="color:#22c55e">green-highlighted row</strong>
+    is the payback year — from that point on, every year is pure profit.
+    NPV column discounts future cash flows at {{ eco.get('disc_rate_pct',12) }}% per year ({{ 'opportunity cost' if eco.get('funding_mode')=='self' else 'WACC' }}).
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          <th>Year</th>
+          <th class="text-end">Gross Saving ({{ d.symbol }})</th>
+          <th class="text-end">O&amp;M ({{ d.symbol }})</th>
+          <th class="text-end">Net Saving ({{ d.symbol }})</th>
+          <th class="text-end">Cumulative ({{ d.symbol }})</th>
+          <th class="text-end">NPV Cumul. ({{ d.symbol }})</th>
+          <th class="text-center">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cf in eco.cf_rows %}
+        <tr style="{{ 'background:rgba(34,197,94,.07);font-weight:700' if cf.cumul >= eco.total_local and loop.previtem is defined and loop.previtem.cumul < eco.total_local else ('background:rgba(34,197,94,.03)' if cf.cumul >= eco.total_local else '') }}">
+          <td class="fw-bold">{{ cf.yr }}</td>
+          <td class="text-end">{{ d.symbol }} {{ cf.gross|fmt(0) }}</td>
+          <td class="text-end text-secondary">{{ d.symbol }} {{ cf.om|fmt(0) }}</td>
+          <td class="text-end">{{ d.symbol }} {{ cf.net|fmt(0) }}</td>
+          <td class="text-end fw-bold {% if cf.cumul >= 0 %}text-success{% else %}text-danger{% endif %}">
+            {{ d.symbol }} {{ cf.cumul|fmt(0) }}
+          </td>
+          <td class="text-end text-secondary">{{ d.symbol }} {{ cf.npv_c|fmt(0) }}</td>
+          <td class="text-center">
+            {% if cf.cumul >= eco.total_local and (loop.index0 == 0 or eco.cf_rows[loop.index0-1].cumul < eco.total_local) %}
+            <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">✓ PAYBACK</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="fw-bold" style="border-top:2px solid #f59e0b44">
+          <td colspan="4" class="text-end text-secondary">25-Year Cumulative</td>
+          <td class="text-end text-success">{{ d.symbol }} {{ eco.cumul_25|fmt(0) }}</td>
+          <td class="text-end text-secondary">{{ d.symbol }} {{ eco.npv|fmt(0) }}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
   </div>
 </div>
 

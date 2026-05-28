@@ -2805,10 +2805,23 @@ def report_proposal(pid):
     project = get_project(pid)
     if not project or "results" not in project["data"]:
         return redirect(url_for("project_results", pid=pid))
+    r   = project["data"]["results"]
+    eco = r["economics"]
+    d   = project["data"]
+    # Monthly generation data (same calculation as energy report)
+    monthly_factors = [0.88,0.90,0.95,1.00,1.05,1.08,1.10,1.08,1.03,0.98,0.92,0.88]
+    base_monthly    = r["daily_kwh"] * 30.44
+    months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+    monthly = [{"month": m, "kwh": round(base_monthly * f, 1),
+                "saving": round(base_monthly * f * d.get("tariff", 1), 1)}
+               for m, f in zip(months, monthly_factors)]
+    trees_equiv = round(eco["co2_yr"] / 21.77, 0)
+    cars_equiv  = round(eco["co2_yr"] / 4600, 2)
     return render_template("report_proposal.html", user=current_user(),
-                           project=project, d=project["data"],
-                           r=project["data"]["results"],
-                           eco=project["data"]["results"]["economics"])
+                           project=project, d=d, r=r, eco=eco,
+                           monthly=monthly,
+                           trees_equiv=trees_equiv,
+                           cars_equiv=cars_equiv)
 
 
 @app.route("/project/<int:pid>/report/energy")
