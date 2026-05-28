@@ -293,8 +293,8 @@ if r.status_code == 200:
             str(len(d.get("regions", []))))
     except: chk("Regions JSON parse", False)
 
-r = s.get(BASE + "/api/solar_data/Ghana/Accra%20(Greater%20Accra)", timeout=15)
-h("Public solar data API — Ghana/Accra", r)
+r = s.get(BASE + "/api/solar_data/Ghana/Greater%20Accra", timeout=15)
+h("Public solar data API — Ghana/Greater Accra", r)
 if r.status_code == 200:
     try:
         d = r.json()
@@ -306,7 +306,7 @@ if r.status_code == 200:
 print("\n=== 18. Design API — Ghana residential ===")
 payload1 = {
     "name": "Test User", "email": "test@example.com", "phone": "",
-    "country": "Ghana", "region": "Accra (Greater Accra)",
+    "country": "Ghana", "region": "Greater Accra",
     "building_type": "residential",
     "loads": [
         {"name": "LED Lights", "watts": 60, "qty": 6, "hours": 6, "demand_factor": 0.75},
@@ -314,6 +314,7 @@ payload1 = {
         {"name": "Fridge",     "watts": 150,"qty": 1, "hours": 24,"demand_factor": 0.33},
     ]
 }
+d1 = {}
 r1 = s.post(BASE + "/api/assess/design", json=payload1, timeout=30)
 h("Design API Ghana residential", r1)
 if r1.status_code == 200:
@@ -345,14 +346,16 @@ if r2.status_code == 200:
         d2 = r2.json()
         chk("Nigeria design ok",      d2.get("ok") is True)
         chk("Nigeria currency NGN",   d2.get("currency") == "NGN")
-        chk("Nigeria larger than GH", (d2.get("pv_kw") or 0) > (d1.get("pv_kw") or 0))
+        gh_pv = d1.get("pv_kw") or 0
+        chk("Nigeria larger than GH", (d2.get("pv_kw") or 0) > gh_pv,
+            f"NG={d2.get('pv_kw')} GH={gh_pv}")
     except Exception as e: chk(f"Nigeria design JSON parse: {e}", False)
 
 print("\n=== 20. Design API — validation errors ===")
 r_bad = s.post(BASE + "/api/assess/design",
-    json={"name":"","email":"","country":"Ghana","region":"Accra (Greater Accra)","loads":[]},
+    json={"name":"","email":"","country":"Ghana","region":"Greater Accra","loads":[]},
     timeout=15)
-h("Validation: missing name/email/loads", r_bad)
+h("Validation: missing name/email/loads (expect 400)", r_bad, expect=400)
 if r_bad.status_code in (200, 400):
     try:
         d_bad = r_bad.json()
