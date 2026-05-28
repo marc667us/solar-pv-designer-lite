@@ -2884,6 +2884,27 @@ def project_clone(pid):
     return redirect(url_for("project_location", pid=new_pid))
 
 
+# ─── Public solar-data API (no login — used by assessment form) ──────────────
+
+@app.route("/api/solar_regions/<country>")
+@limiter.limit("60 per minute")
+def api_solar_regions_public(country):
+    """Public: list regions for a country (used by the assessment form)."""
+    if country not in GLOBAL_DATA:
+        return jsonify({"regions": []})
+    return jsonify({"regions": get_regions(country)})
+
+
+@app.route("/api/solar_data/<country>/<region>")
+@limiter.limit("60 per minute")
+def api_solar_data_public(country, region):
+    """Public: get irradiance/tariff data for a country+region (assessment form)."""
+    sd = get_solar_data(country, region)
+    if not sd:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(sd)
+
+
 # ─── API endpoints (login-required, rate-limited) ─────────────────────────────
 
 @app.route("/api/regions/<country>")
@@ -5619,6 +5640,253 @@ def assessment_request():
         flash("Thank you! Our team will contact you within 24 hours with your assessment.", "success")
         return redirect(url_for("assessment_request"))
     return render_template("assess.html", user=current_user(), countries=get_countries())
+
+
+@app.route("/api/assess/design", methods=["POST"])
+@limiter.limit("10 per hour")
+def assess_design():
+    """
+    AJAX — runs full preliminary solar sizing from the assessment form.
+    Accepts JSON payload, returns JSON with sizing + cost + financial results.
+    Also saves lead to DB and emails the results to the user.
+    """
+    import random, string as _str
+    data = request.get_json(silent=True) or {}
+
+    name      = (data.get("name") or "").strip()
+    email     = (data.get("email") or "").strip()
+    phone     = (data.get("phone") or "").strip()
+    country   = (data.get("country") or "").strip()
+    region    = (data.get("region") or "").strip()
+    bldg_type = (data.get("building_type") or "residential").strip()
+    loads     = data.get("loads") or []
+
+    if not name or not email:
+        return jsonify({"ok": False, "error": "Full name and email are required."}), 400
+    if not country or not region:
+        return jsonify({"ok": False, "error": "Please select a country and region."}), 400
+    if not loads:
+        return jsonify({"ok": False, "error": "Please add at least one appliance to the load schedule."}), 400
+
+    sd = get_solar_data(country, region)
+    if not sd:
+        return jsonify({"ok": False, "error": "Location not found. Please select a valid country and region."}), 400
+
+    psh      = sd["psh"]
+    temp     = sd["avg_temp"]
+    tariff   = sd["tariff"]
+    currency = sd["currency"]
+    symbol   = sd["symbol"]
+    cost_kwp = sd["cost_usd_kwp"]
+    fx       = sd["fx_usd"]
+
+    # ── Load calculation ──────────────────────────────────────────────────────
+    daily_kwh = 0.0
+    peak_kw   = 0.0
+    for ld in loads:
+        try:
+            w  = float(ld.get("watts") or 0)
+            q  = float(ld.get("qty") or 1)
+            h  = float(ld.get("hours") or 0)
+            df = float(ld.get("demand_factor") or 1.0)
+            daily_kwh += w * q * h * df / 1000.0
+            peak_kw   += w * q / 1000.0
+        except Exception:
+            pass
+
+    if daily_kwh <= 0:
+        return jsonify({"ok": False, "error": "Total daily load is zero. Please check appliance wattage and hours."}), 400
+
+    # ── Sizing ────────────────────────────────────────────────────────────────
+    pv_kw, num_panels, _td = calc_pv(daily_kwh, psh, temp)
+    bat_kwh, num_bat, unit_kwh = calc_battery(daily_kwh, autonomy=1.5)
+    inv_kw = calc_inverter(daily_kwh, peak_kw)
+
+    # ── Cost estimate ─────────────────────────────────────────────────────────
+    pv_usd  = pv_kw * cost_kwp
+    bat_usd = bat_kwh * BATTERY_CHEMISTRY["LiFePO4"]["usd_per_kwh"]
+    if   inv_kw <= 3:   inv_usd = 280
+    elif inv_kw <= 5:   inv_usd = 400
+    elif inv_kw <= 8:   inv_usd = 560
+    elif inv_kw <= 12:  inv_usd = 820
+    else:               inv_usd = 1180
+    equip_usd   = pv_usd + bat_usd + inv_usd
+    total_usd   = equip_usd * 1.24           # +8% markup +15% install ≈ ×1.24
+    total_local = total_usd * fx
+
+    # ── Financials ────────────────────────────────────────────────────────────
+    annual_kwh = daily_kwh * 365
+    annual_sav = annual_kwh * tariff
+    payback_yr = round(total_local / annual_sav, 1) if annual_sav > 0 else 0
+    co2_yr     = round(annual_kwh * 0.40 / 1000, 2)
+
+    # ── Reference ─────────────────────────────────────────────────────────────
+    ref = "SA-" + "".join(random.choices(_str.ascii_uppercase + _str.digits, k=6))
+
+    # ── Save to DB ────────────────────────────────────────────────────────────
+    try:
+        score, grade, notes = _qualify_lead(name, "", phone, bldg_type, str(pv_kw), "", "")
+        with get_db() as c:
+            c.execute(
+                "INSERT INTO assessment_requests "
+                "(name,email,phone,country,region,system_type,location_desc,message,"
+                " ai_score,ai_grade,ai_notes,source,status,pipeline_stage,"
+                " assessment_ref,building_type) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name, email, phone, country, region, bldg_type,
+                 f"{region}, {country}",
+                 json.dumps({"loads": loads, "daily_kwh": round(daily_kwh,2),
+                             "pv_kw": pv_kw, "bat_kwh": bat_kwh, "inv_kw": inv_kw}),
+                 score, grade, notes, "assess_design", "open",
+                 "design_generated", ref, bldg_type))
+            c.execute(
+                "INSERT INTO leads (name,email,phone,country,interest,message,source,"
+                " system_type,ai_score,ai_grade,ai_notes,pipeline_stage) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name, email, phone, country, bldg_type,
+                 f"Auto-design {ref}: {pv_kw}kWp PV / {bat_kwh}kWh battery / {inv_kw}kW inverter",
+                 "assess_design", bldg_type, score, grade, notes, "design_generated"))
+    except Exception as db_e:
+        app.logger.error("assess_design DB: %s", db_e)
+
+    # ── Email results to user ─────────────────────────────────────────────────
+    first = name.split()[0]
+    html_email = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f4f4f8;margin:0;padding:20px">
+<div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+  <div style="background:linear-gradient(135deg,#0f0f22,#1a1a3e);padding:32px;text-align:center">
+    <div style="font-size:32px;margin-bottom:8px">☀️</div>
+    <h1 style="color:#f59e0b;margin:0;font-size:22px;font-weight:800">Preliminary Solar Design</h1>
+    <div style="color:#a0a0c8;font-size:13px;margin-top:6px">Reference: {ref}</div>
+  </div>
+  <div style="padding:28px 32px">
+    <p style="color:#333;font-size:15px">Hi {first},</p>
+    <p style="color:#555;font-size:14px">Here is your preliminary solar system design for <strong>{region}, {country}</strong>
+    based on the load schedule you provided. This is an indicative estimate — our engineers will refine it during consultation.</p>
+
+    <h3 style="color:#1a1a3e;font-size:15px;margin:24px 0 12px;border-bottom:2px solid #f59e0b;padding-bottom:6px">
+      📊 Preliminary System Sizing
+    </h3>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <tr style="background:#f8f8fc"><td style="padding:10px 14px;color:#555;width:50%">Daily Energy Demand</td>
+        <td style="padding:10px 14px;font-weight:700;color:#1a1a3e">{daily_kwh:.1f} kWh/day</td></tr>
+      <tr><td style="padding:10px 14px;color:#555">Peak Sun Hours ({region})</td>
+        <td style="padding:10px 14px;font-weight:700;color:#1a1a3e">{psh} hrs/day</td></tr>
+      <tr style="background:#f8f8fc"><td style="padding:10px 14px;color:#555">PV Array Size</td>
+        <td style="padding:10px 14px;font-weight:700;color:#f59e0b">{pv_kw:.1f} kWp ({num_panels} panels × 400Wp)</td></tr>
+      <tr><td style="padding:10px 14px;color:#555">Battery Bank (1.5 days autonomy)</td>
+        <td style="padding:10px 14px;font-weight:700;color:#0ea5e9">{bat_kwh:.1f} kWh ({num_bat} × {unit_kwh}kWh units)</td></tr>
+      <tr style="background:#f8f8fc"><td style="padding:10px 14px;color:#555">Inverter / Charger</td>
+        <td style="padding:10px 14px;font-weight:700;color:#1a1a3e">{inv_kw:.0f} kW</td></tr>
+    </table>
+
+    <h3 style="color:#1a1a3e;font-size:15px;margin:24px 0 12px;border-bottom:2px solid #22c55e;padding-bottom:6px">
+      💰 Estimated Cost &amp; Savings
+    </h3>
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <tr style="background:#f8f8fc"><td style="padding:10px 14px;color:#555">Estimated System Cost</td>
+        <td style="padding:10px 14px;font-weight:700;color:#1a1a3e">{symbol}{total_local:,.0f} {currency} (≈ USD {total_usd:,.0f})</td></tr>
+      <tr><td style="padding:10px 14px;color:#555">Estimated Annual Savings</td>
+        <td style="padding:10px 14px;font-weight:700;color:#22c55e">{symbol}{annual_sav:,.0f} {currency}/year</td></tr>
+      <tr style="background:#f8f8fc"><td style="padding:10px 14px;color:#555">Simple Payback Period</td>
+        <td style="padding:10px 14px;font-weight:700;color:#1a1a3e">{payback_yr} years</td></tr>
+      <tr><td style="padding:10px 14px;color:#555">Annual CO₂ Offset</td>
+        <td style="padding:10px 14px;font-weight:700;color:#22c55e">{co2_yr} tonnes CO₂/year</td></tr>
+    </table>
+
+    <div style="background:#fffbeb;border:1px solid #f59e0b44;border-radius:8px;padding:16px;margin:24px 0;font-size:13px;color:#555">
+      <strong style="color:#f59e0b">⚠ Note:</strong> This is a preliminary estimate based on standard assumptions.
+      A detailed site survey and full engineering design may adjust these figures.
+      Local taxes, import duties, and civil works are not included in the cost estimate.
+    </div>
+
+    <div style="text-align:center;margin:28px 0">
+      <a href="https://solarpro-global.onrender.com/register" style="display:inline-block;background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#0f0f22;font-weight:800;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px">
+        Request Full Consultation →
+      </a>
+      <div style="color:#888;font-size:12px;margin-top:10px">Create a free account to book your consultation</div>
+    </div>
+  </div>
+  <div style="background:#f8f8fc;padding:16px 32px;text-align:center;border-top:1px solid #e8e8f0">
+    <div style="color:#888;font-size:12px">SolarPro Global · AI-Powered Solar Design Platform</div>
+    <div style="color:#aaa;font-size:11px;margin-top:4px">Reference: {ref} · {region}, {country}</div>
+  </div>
+</div>
+</body></html>"""
+
+    try:
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText as _MIMEText
+        emsg = MIMEMultipart("alternative")
+        emsg["From"]    = SMTP_FROM
+        emsg["To"]      = email
+        emsg["Subject"] = f"Your Preliminary Solar Design ({ref}) — SolarPro Global"
+        emsg.attach(_MIMEText(
+            f"Hi {first}, your preliminary design is ready. Ref: {ref}\n"
+            f"PV: {pv_kw:.1f}kWp | Battery: {bat_kwh:.1f}kWh | Inverter: {inv_kw:.0f}kW\n"
+            f"Estimated cost: {symbol}{total_local:,.0f} {currency} | Payback: {payback_yr} yrs\n"
+            f"Visit https://solarpro-global.onrender.com to book a consultation.", "plain"))
+        emsg.attach(_MIMEText(html_email, "html"))
+        if SMTP_HOST and SMTP_USER:
+            if SMTP_TLS:
+                srv = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15)
+                srv.ehlo(); srv.starttls()
+            else:
+                srv = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15)
+            srv.login(SMTP_USER, SMTP_PASS)
+            srv.sendmail(SMTP_FROM, [email], emsg.as_string())
+            srv.quit()
+    except Exception as mail_e:
+        app.logger.warning("assess_design email failed: %s", mail_e)
+
+    return jsonify({
+        "ok":         True,
+        "ref":        ref,
+        "first":      first,
+        "daily_kwh":  round(daily_kwh, 2),
+        "peak_kw":    round(peak_kw, 2),
+        "psh":        psh,
+        "pv_kw":      pv_kw,
+        "num_panels": num_panels,
+        "bat_kwh":    bat_kwh,
+        "num_bat":    num_bat,
+        "unit_kwh":   unit_kwh,
+        "inv_kw":     inv_kw,
+        "total_usd":  round(total_usd, 0),
+        "total_local":round(total_local, 0),
+        "currency":   currency,
+        "symbol":     symbol,
+        "annual_kwh": round(annual_kwh, 0),
+        "annual_sav": round(annual_sav, 0),
+        "payback_yr": payback_yr,
+        "co2_yr":     co2_yr,
+        "country":    country,
+        "region":     region,
+    })
+
+
+@app.route("/assess/consultation", methods=["POST"])
+@login_required
+def assess_consultation():
+    """Authenticated — submit consultation request from assessment results page."""
+    csrf_protect()
+    ref     = request.form.get("ref", "").strip()
+    message = request.form.get("message", "").strip()
+    u       = current_user()
+    if not message:
+        flash("Please describe your project briefly.", "warning")
+        return redirect(url_for("assessment_request"))
+    with get_db() as c:
+        c.execute(
+            "INSERT INTO tickets (user_id, subject, body, status, priority) VALUES (?,?,?,?,?)",
+            (u["id"],
+             f"Consultation Request — {ref or 'Assessment'}",
+             f"Assessment Ref: {ref}\n\n{message}",
+             "open", "high"))
+    flash("Consultation request submitted! Our team will contact you within 24 hours.", "success")
+    return redirect(url_for("assessment_request"))
 
 
 # ─── Installer Registration (public) ──────────────────────────────────────────

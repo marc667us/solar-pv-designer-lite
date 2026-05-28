@@ -1,153 +1,544 @@
 {% extends "base.html" %}
-{% block title %}Free Solar Assessment Request – SolarPro Global{% endblock %}
-{% block content %}
-<div class="container py-5" style="max-width:780px">
+{% block title %}Free Solar Assessment & Instant Design — SolarPro Global{% endblock %}
 
-  <!-- Header -->
+{% block extra_head %}
+<style>
+  .step-badge{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;
+    border-radius:50%;background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#0f0f22;
+    font-weight:900;font-size:13px;flex-shrink:0}
+  .step-title{font-size:17px;font-weight:700;color:#e0e0f0}
+  .form-label{color:#9090b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+  .form-control,.form-select{background:#0a0a1a;border:1px solid #2a2a5a;color:#d0d0e8;border-radius:8px;
+    padding:10px 14px;font-size:14px;transition:.2s}
+  .form-control:focus,.form-select:focus{background:#0f0f22;border-color:#f59e0b;color:#e0e0f0;
+    box-shadow:0 0 0 3px rgba(245,158,11,.12);outline:none}
+  .form-select option{background:#0f0f22;color:#d0d0e8}
+  .load-table{width:100%;border-collapse:collapse}
+  .load-table th{color:#6868a0;font-size:10px;text-transform:uppercase;letter-spacing:.5px;
+    font-weight:600;padding:8px 10px;border-bottom:1px solid #1e1e3a;white-space:nowrap}
+  .load-table td{padding:6px 6px;vertical-align:middle}
+  .load-table .form-control{padding:7px 10px;font-size:13px;min-width:0}
+  .load-table .form-select{padding:7px 10px;font-size:13px}
+  .load-totals{background:#0a0a1a;border:1px solid #1e1e3a;border-radius:8px;padding:12px 16px;font-size:13px;color:#9090b8}
+  .load-totals strong{color:#f59e0b}
+  .result-card{background:linear-gradient(135deg,#0f0f22,#12122a);border:1px solid #2a2a5a;
+    border-radius:14px;padding:28px;display:none}
+  .result-card.show{display:block}
+  .result-stat{background:#0a0a1a;border:1px solid #1e1e3a;border-radius:10px;padding:14px 16px;text-align:center}
+  .result-stat .val{font-size:22px;font-weight:800;margin-bottom:2px}
+  .result-stat .lbl{font-size:11px;color:#6868a0;text-transform:uppercase;letter-spacing:.4px}
+  .result-table{width:100%;border-collapse:collapse;font-size:13px}
+  .result-table td{padding:9px 12px;border-bottom:1px solid #1e1e3a}
+  .result-table tr:last-child td{border-bottom:none}
+  .result-table td:first-child{color:#9090b8}
+  .result-table td:last-child{text-align:right;font-weight:600;color:#e0e0f0}
+  .consult-box{background:#0a0a1a;border:1px solid #1e1e3a;border-radius:12px;padding:24px;margin-top:24px}
+  .section-divider{border-color:#1e1e3a}
+  #addLoadBtn{background:#f59e0b18;border:1px solid #f59e0b44;color:#f59e0b;
+    font-size:12px;font-weight:600;border-radius:6px;padding:6px 14px;cursor:pointer;transition:.15s}
+  #addLoadBtn:hover{background:#f59e0b30}
+  .del-row{background:#ef444418;border:1px solid #ef444444;color:#ef4444;
+    border-radius:5px;padding:4px 8px;font-size:12px;cursor:pointer;transition:.15s}
+  .del-row:hover{background:#ef444430}
+  .calc-btn{background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#0f0f22;font-weight:800;
+    border:none;border-radius:10px;padding:14px 32px;font-size:15px;transition:.2s;width:100%}
+  .calc-btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(245,158,11,.3)}
+  .calc-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  .spinner-sm{width:18px;height:18px;border:2px solid transparent;border-top-color:#0f0f22;
+    border-radius:50%;display:inline-block;animation:spin .6s linear infinite;margin-right:8px;vertical-align:middle}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5" style="max-width:860px">
+
   <div class="text-center mb-5">
-    <div class="mb-3">
-      <span style="font-size:3rem">☀️</span>
-    </div>
+    <div style="font-size:3rem;margin-bottom:12px">☀️</div>
     <h1 class="fw-900 mb-2" style="background:linear-gradient(90deg,#f59e0b,#0ea5e9);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-size:2.2rem">
-      Free Solar Assessment Request
+      Instant Solar Assessment
     </h1>
     <p class="text-secondary mb-0" style="font-size:1.05rem">
-      Tell us about your project and our engineers will produce a tailored system design,
-      BOQ, and financial analysis within 24 hours.
+      Enter your location and loads — get a full preliminary system design, cost estimate, and financial summary instantly.
+      Results are emailed to you automatically.
     </p>
   </div>
 
-  <!-- Value badges -->
   <div class="d-flex flex-wrap justify-content-center gap-2 mb-5">
-    {% for icon,label in [('bi-lightning-charge-fill','AI-Powered Design'),('bi-file-earmark-bar-graph','BOQ & Cost Estimate'),('bi-currency-dollar','Financial Analysis'),('bi-clock','24-Hour Turnaround')] %}
+    {% for icon,label in [('bi-lightning-charge-fill','Instant AI Design'),('bi-file-earmark-bar-graph','Cost Estimate'),('bi-envelope-check','Emailed to You'),('bi-calendar-check','Book Consultation')] %}
     <span class="badge px-3 py-2" style="background:#0f0f22;border:1px solid #1e1e3a;color:#a0a0c8;font-size:12px;font-weight:600;border-radius:20px">
       <i class="bi {{ icon }} me-1" style="color:#f59e0b"></i>{{ label }}
     </span>
     {% endfor %}
   </div>
 
-  <!-- Form -->
-  <div class="solar-card p-4 p-lg-5">
-    {% with msgs = get_flashed_messages(with_categories=true) %}
-      {% for cat,msg in msgs %}
-      <div class="alert alert-{{ 'success' if cat=='success' else 'warning' }} alert-dismissible fade show mb-4" role="alert">
-        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-      </div>
-      {% endfor %}
-    {% endwith %}
-
-    <form method="post" action="{{ url_for('assessment_request') }}" id="assessForm">
-      <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}">
-
-      <!-- Section 1: Contact -->
-      <div class="mb-4">
-        <div class="section-head"><i class="bi bi-person-badge me-2"></i>Contact Information</div>
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label class="form-label text-secondary small">Full Name *</label>
-            <input name="name" class="form-control" placeholder="Your name" required>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label text-secondary small">Email Address *</label>
-            <input name="email" type="email" class="form-control" placeholder="you@company.com" required>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label text-secondary small">Phone / WhatsApp</label>
-            <input name="phone" class="form-control" placeholder="+1 555 000 0000">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label text-secondary small">Company / Organisation</label>
-            <input name="company" class="form-control" placeholder="Company name">
-          </div>
-          <div class="col-12">
-            <label class="form-label text-secondary small">Country</label>
-            <select name="country" class="form-select">
-              <option value="">Select country…</option>
-              {% for c in countries %}
-              <option value="{{ c }}">{{ c }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <!-- Section 2: Project -->
-      <div class="mb-4">
-        <div class="section-head"><i class="bi bi-sun me-2"></i>Project Details</div>
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label class="form-label text-secondary small">System Type *</label>
-            <select name="system_type" class="form-select" required>
-              <option value="off-grid">Off-Grid (Standalone)</option>
-              <option value="grid-tied">Grid-Tied</option>
-              <option value="hybrid">Hybrid (Grid + Battery)</option>
-              <option value="commercial">Commercial</option>
-              <option value="industrial">Industrial</option>
-              <option value="residential">Residential</option>
-            </select>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label text-secondary small">Estimated System Size</label>
-            <div class="input-group">
-              <input name="system_size_kw" type="number" step="0.1" min="0" class="form-control" placeholder="0">
-              <span class="input-group-text text-secondary">kWp</span>
-            </div>
-            <div class="form-text text-secondary" style="font-size:11px">Leave 0 if unknown — we'll calculate it</div>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label text-secondary small">Approximate Budget</label>
-            <select name="budget_usd" class="form-select">
-              <option value="">Not sure yet</option>
-              <option value="Under $5,000">Under $5,000</option>
-              <option value="$5,000 – $15,000">$5,000 – $15,000</option>
-              <option value="$15,000 – $50,000">$15,000 – $50,000</option>
-              <option value="$50,000 – $150,000">$50,000 – $150,000</option>
-              <option value="$150,000 – $500,000">$150,000 – $500,000</option>
-              <option value="Over $500,000">Over $500,000</option>
-            </select>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label text-secondary small">Installation Location</label>
-            <input name="location_desc" class="form-control" placeholder="City, region or GPS coords">
-          </div>
-          <div class="col-12">
-            <label class="form-label text-secondary small">Additional Details</label>
-            <textarea name="message" class="form-control" rows="4"
-              placeholder="Tell us about your electricity needs, current utility bill, roof/land availability, grid reliability issues, timeline, or any special requirements…"></textarea>
-          </div>
-        </div>
-      </div>
-
-      <!-- What you get -->
-      <div class="rounded p-3 mb-4" style="background:#0a0a14;border:1px solid #1e1e3a">
-        <div class="small text-secondary fw-bold mb-2"><i class="bi bi-gift me-1 text-warning"></i>Your Free Assessment Includes:</div>
-        <div class="row g-2">
-          {% for item in ['Complete PV System Design','Battery & Inverter Sizing','Full BOQ with Costs','Cable & Protection Sizing','Financial Analysis & ROI','Bankability Report'] %}
-          <div class="col-6 col-md-4">
-            <span class="small" style="color:#a0a0c8"><i class="bi bi-check-circle-fill me-1" style="color:#22c55e"></i>{{ item }}</span>
-          </div>
-          {% endfor %}
-        </div>
-      </div>
-
-      <button type="submit" class="btn btn-solar w-100 py-3 fw-bold" id="submitBtn" style="font-size:1.05rem">
-        <i class="bi bi-send-check me-2"></i>Submit Assessment Request
-      </button>
-      <p class="text-center text-secondary mt-3 mb-0" style="font-size:12px">
-        <i class="bi bi-shield-check me-1 text-success"></i>
-        Your data is secure and never shared. Expect a response within 24 hours.
-      </p>
-    </form>
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat,msg in msgs %}
+  <div class="alert alert-{{ 'success' if cat=='success' else 'warning' }} alert-dismissible fade show mb-4" role="alert">
+    {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
   </div>
+  {% endfor %}
+  {% endwith %}
+
+  <!-- ── SECTION 1: Details & Location ──────────────────────────────────────── -->
+  <div class="solar-card p-4 p-lg-5 mb-4">
+    <div class="d-flex align-items-center gap-3 mb-4">
+      <span class="step-badge">1</span>
+      <span class="step-title">Your Details &amp; Location</span>
+    </div>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Full Name *</label>
+        <input type="text" id="f_name" class="form-control" placeholder="e.g. Kwame Mensah" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Email Address *</label>
+        <input type="email" id="f_email" class="form-control" placeholder="your@email.com" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Phone Number</label>
+        <input type="tel" id="f_phone" class="form-control" placeholder="+233 24 000 0000">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Building / Facility Type</label>
+        <select id="f_bldg_type" class="form-select">
+          <option value="residential">Residential</option>
+          <option value="commercial">Commercial Office</option>
+          <option value="industrial">Industrial / Factory</option>
+          <option value="hospital">Hospital / Clinic</option>
+          <option value="school">School / University</option>
+          <option value="hotel">Hotel / Hospitality</option>
+          <option value="warehouse">Warehouse / Storage</option>
+          <option value="retail">Retail / Shop</option>
+          <option value="telecom">Telecom / BTS Site</option>
+          <option value="farm">Farm / Agriculture</option>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Country *</label>
+        <select id="f_country" class="form-select" required>
+          <option value="">— Select Country —</option>
+          {% for c in countries %}
+          <option value="{{ c }}">{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Region / City *</label>
+        <select id="f_region" class="form-select" required disabled>
+          <option value="">— Select Country First —</option>
+        </select>
+      </div>
+      <div class="col-12" id="solar_preview" style="display:none">
+        <div style="background:#0a0a1a;border:1px solid #1e1e3a;border-radius:8px;padding:12px 16px;font-size:13px">
+          <i class="bi bi-sun me-2" style="color:#f59e0b"></i>
+          <span style="color:#6868a0">Solar data: </span>
+          <span id="prev_psh" style="color:#f59e0b;font-weight:700"></span>
+          <span style="color:#6868a0"> peak sun hours · Tariff: </span>
+          <span id="prev_tariff" style="color:#22c55e;font-weight:700"></span>
+          <span id="prev_currency" style="color:#d0d0e8"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 2: Load Schedule ───────────────────────────────────────────── -->
+  <div class="solar-card p-4 p-lg-5 mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+      <div class="d-flex align-items-center gap-3">
+        <span class="step-badge">2</span>
+        <span class="step-title">Load Schedule</span>
+      </div>
+      <button type="button" id="addLoadBtn" onclick="addRow()">
+        <i class="bi bi-plus-circle me-1"></i>Add Appliance
+      </button>
+    </div>
+    <p class="text-secondary mb-3" style="font-size:12px">
+      Add all appliances powered by the solar system. A preset is loaded based on building type — edit as needed.
+      Demand factor: 1.0 = always on · 0.75 = partial use · 0.33 = cyclic (fridge).
+    </p>
+    <div style="overflow-x:auto">
+      <table class="load-table" id="loadTable">
+        <thead>
+          <tr>
+            <th style="min-width:160px">Appliance / Load</th>
+            <th style="min-width:85px">Watts (W)</th>
+            <th style="min-width:55px">Qty</th>
+            <th style="min-width:95px">Hours/Day</th>
+            <th style="min-width:130px">Demand Factor</th>
+            <th style="min-width:80px;text-align:right;color:#22c55e">kWh/day</th>
+            <th style="width:40px"></th>
+          </tr>
+        </thead>
+        <tbody id="loadBody"></tbody>
+      </table>
+    </div>
+    <div class="load-totals mt-3 d-flex flex-wrap gap-4">
+      <div>Daily Energy: <strong id="tot_kwh">0.0 kWh</strong></div>
+      <div>Peak Load: <strong id="tot_peak">0.0 kW</strong></div>
+      <span style="color:#4a4a7a;font-size:11px">↑ Input to the solar sizing engine</span>
+    </div>
+  </div>
+
+  <!-- ── CALCULATE BUTTON ───────────────────────────────────────────────────── -->
+  <div class="mb-4">
+    <button class="calc-btn" id="calcBtn" onclick="runCalculation()">
+      <i class="bi bi-lightning-charge-fill me-2"></i>Calculate My Solar System
+    </button>
+    <div id="calcError" class="mt-3 text-danger text-center" style="font-size:13px;display:none"></div>
+  </div>
+
+  <!-- ── SECTION 3: Results ─────────────────────────────────────────────────── -->
+  <div class="result-card mb-4" id="resultsSection">
+
+    <div class="d-flex align-items-center gap-3 mb-4">
+      <span class="step-badge" style="background:linear-gradient(135deg,#22c55e,#16a34a)">✓</span>
+      <div>
+        <div class="step-title">Preliminary Design Results</div>
+        <div style="font-size:12px;color:#6868a0">
+          Ref: <span id="res_ref" style="color:#f59e0b;font-weight:700"></span>
+          &nbsp;·&nbsp; Results emailed to <span id="res_email" style="color:#0ea5e9"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Key stat boxes -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="result-stat">
+          <div class="val" style="color:#f59e0b" id="r_pv">—</div>
+          <div class="lbl">PV Array (kWp)</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="result-stat">
+          <div class="val" style="color:#0ea5e9" id="r_bat">—</div>
+          <div class="lbl">Battery (kWh)</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="result-stat">
+          <div class="val" style="color:#a78bfa" id="r_inv">—</div>
+          <div class="lbl">Inverter (kW)</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="result-stat">
+          <div class="val" style="color:#22c55e" id="r_pay">—</div>
+          <div class="lbl">Payback (yrs)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail tables -->
+    <div class="row g-4 mb-2">
+      <div class="col-md-6">
+        <div style="color:#6868a0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+          📐 System Sizing
+        </div>
+        <table class="result-table">
+          <tr><td>Daily Energy Demand</td>    <td id="rd_kwh">—</td></tr>
+          <tr><td>Peak Simultaneous Load</td> <td id="rd_peak">—</td></tr>
+          <tr><td>Peak Sun Hours</td>          <td id="rd_psh">—</td></tr>
+          <tr><td>PV Array</td>                <td id="rd_pv">—</td></tr>
+          <tr><td>Battery Bank (1.5 days)</td> <td id="rd_bat">—</td></tr>
+          <tr><td>Inverter / Charger</td>      <td id="rd_inv">—</td></tr>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <div style="color:#6868a0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+          💰 Cost &amp; Financial Summary
+        </div>
+        <table class="result-table">
+          <tr><td>Estimated System Cost</td>   <td id="rd_cost" style="color:#f59e0b">—</td></tr>
+          <tr><td>Annual Energy Produced</td>  <td id="rd_akwh">—</td></tr>
+          <tr><td>Annual Utility Savings</td>  <td id="rd_sav" style="color:#22c55e">—</td></tr>
+          <tr><td>Simple Payback Period</td>   <td id="rd_payback">—</td></tr>
+          <tr><td>CO₂ Offset / Year</td>       <td id="rd_co2" style="color:#22c55e">—</td></tr>
+          <tr>
+            <td colspan="2" style="font-size:11px;color:#4a4a7a;padding-top:8px">
+              ※ Indicative estimate · excludes taxes, duties, civil works · subject to site survey
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <hr style="border-color:#1e1e3a;margin:24px 0">
+
+    <!-- ── Consultation CTA ──────────────────────────────────────────────────── -->
+    <div class="consult-box">
+      <div class="d-flex align-items-start gap-3 mb-3">
+        <div style="font-size:26px">🤝</div>
+        <div>
+          <div style="font-weight:700;color:#e0e0f0;font-size:15px">Ready for the full detailed engineering design?</div>
+          <div style="color:#9090b8;font-size:13px;margin-top:4px">
+            Our engineers will produce a full SLD, detailed BOQ, 25-year financial model, and proposal document —
+            tailored to your exact site conditions and requirements.
+          </div>
+        </div>
+      </div>
+
+      {% if user %}
+      <!-- Logged-in: show consultation form directly -->
+      <form method="POST" action="{{ url_for('assess_consultation') }}" id="consultForm">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="ref" id="consult_ref" value="">
+        <div class="mb-3">
+          <label class="form-label">Describe your project briefly</label>
+          <textarea name="message" class="form-control" rows="3"
+            placeholder="e.g. 3-storey commercial building, 120 kWh/day demand, looking for a hybrid grid-tied system with 2-day backup..."></textarea>
+        </div>
+        <button type="submit" class="btn btn-success fw-700 px-4">
+          <i class="bi bi-calendar-check me-2"></i>Request Full Consultation
+        </button>
+      </form>
+      {% else %}
+      <!-- Not logged in: prompt to register -->
+      <p style="color:#9090b8;font-size:13px;margin-bottom:16px">
+        Create a free account (30 seconds) to submit your consultation request and track your full engineering design.
+      </p>
+      <div class="d-flex gap-3 flex-wrap">
+        <a id="regLink" href="{{ url_for('register') }}"
+           class="btn fw-700 px-4" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#0f0f22;border:none">
+          <i class="bi bi-person-plus me-2"></i>Create Free Account
+        </a>
+        <a href="{{ url_for('login') }}" class="btn px-4"
+           style="background:#1e1e3a;border:1px solid #2a2a5a;color:#d0d0e8">
+          <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+        </a>
+      </div>
+      {% endif %}
+    </div>
+
+  </div><!-- /results -->
 
 </div>
 {% endblock %}
-{% block scripts %}
+
+{% block extra_scripts %}
 <script>
-document.getElementById('assessForm').addEventListener('submit', function() {
-  const btn = document.getElementById('submitBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting…';
+const PRESETS = {
+  residential:[
+    {name:"LED Lighting",        watts:60,  qty:6,  hours:6,  df:0.75},
+    {name:"Ceiling Fan",         watts:80,  qty:3,  hours:8,  df:0.75},
+    {name:"Refrigerator",        watts:150, qty:1,  hours:24, df:0.33},
+    {name:"TV / Entertainment",  watts:100, qty:1,  hours:5,  df:1.0 },
+    {name:"Phone Charging",      watts:30,  qty:4,  hours:2,  df:1.0 },
+  ],
+  commercial:[
+    {name:"LED Office Lighting", watts:200, qty:10, hours:10, df:1.0 },
+    {name:"Air Conditioner",     watts:1500,qty:2,  hours:10, df:0.75},
+    {name:"Computers",           watts:300, qty:10, hours:8,  df:0.8 },
+    {name:"Printer / Copier",    watts:400, qty:2,  hours:4,  df:0.5 },
+    {name:"Refrigerator",        watts:200, qty:1,  hours:24, df:0.33},
+  ],
+  hospital:[
+    {name:"Medical Equipment",   watts:2000,qty:3,  hours:24, df:0.75},
+    {name:"Ward Lighting",       watts:500, qty:1,  hours:24, df:1.0 },
+    {name:"Air Conditioner",     watts:1500,qty:4,  hours:24, df:0.75},
+    {name:"Refrigerator",        watts:300, qty:2,  hours:24, df:0.5 },
+    {name:"Computers",           watts:200, qty:5,  hours:12, df:0.8 },
+  ],
+  school:[
+    {name:"Classroom Lighting",  watts:200, qty:10, hours:8,  df:1.0 },
+    {name:"Projectors",          watts:300, qty:5,  hours:6,  df:0.75},
+    {name:"Computers / Laptops", watts:150, qty:20, hours:6,  df:0.8 },
+    {name:"Admin AC",            watts:1200,qty:2,  hours:8,  df:0.75},
+  ],
+  hotel:[
+    {name:"Room Lighting",       watts:100, qty:30, hours:8,  df:0.75},
+    {name:"Room AC",             watts:1200,qty:20, hours:10, df:0.75},
+    {name:"Kitchen Equipment",   watts:3000,qty:2,  hours:10, df:0.8 },
+    {name:"Computers / POS",     watts:200, qty:5,  hours:12, df:0.8 },
+  ],
+  industrial:[
+    {name:"Production Machinery",watts:5000,qty:3,  hours:8,  df:0.8 },
+    {name:"Lighting",            watts:500, qty:10, hours:10, df:1.0 },
+    {name:"Office Equipment",    watts:500, qty:5,  hours:8,  df:0.75},
+    {name:"Air Compressor",      watts:2200,qty:1,  hours:4,  df:0.5 },
+  ],
+};
+
+window.addEventListener('DOMContentLoaded', () => {
+  loadPreset('residential');
+  document.getElementById('f_country').addEventListener('change', function() {
+    const country = this.value;
+    const regSel  = document.getElementById('f_region');
+    regSel.innerHTML = '<option value="">Loading...</option>';
+    regSel.disabled = true;
+    document.getElementById('solar_preview').style.display = 'none';
+    if (!country) return;
+    fetch('/api/solar_regions/' + encodeURIComponent(country))
+      .then(r => r.json())
+      .then(d => {
+        regSel.innerHTML = '<option value="">— Select Region —</option>';
+        (d.regions || []).forEach(r => {
+          const o = document.createElement('option'); o.value = r; o.textContent = r;
+          regSel.appendChild(o);
+        });
+        regSel.disabled = false;
+      });
+  });
+  document.getElementById('f_region').addEventListener('change', function() {
+    const country = document.getElementById('f_country').value;
+    const region  = this.value;
+    if (!country || !region) { document.getElementById('solar_preview').style.display='none'; return; }
+    fetch('/api/solar_data/' + encodeURIComponent(country) + '/' + encodeURIComponent(region))
+      .then(r => r.json())
+      .then(d => {
+        if (d.psh) {
+          document.getElementById('prev_psh').textContent    = d.psh + ' hrs';
+          document.getElementById('prev_tariff').textContent = (d.symbol||'') + d.tariff + '/kWh ';
+          document.getElementById('prev_currency').textContent = '(' + (d.currency||'') + ')';
+          document.getElementById('solar_preview').style.display = 'block';
+        }
+      });
+  });
+  document.getElementById('f_bldg_type').addEventListener('change', function() {
+    const p = this.value;
+    if (PRESETS[p]) loadPreset(p);
+  });
 });
+
+function loadPreset(type) {
+  document.getElementById('loadBody').innerHTML = '';
+  (PRESETS[type] || PRESETS.residential).forEach(row => addRow(row));
+  recalcTotals();
+}
+
+let rowId = 0;
+function addRow(data) {
+  data = data || {};
+  const id = rowId++;
+  const df = data.df || 1.0;
+  const dfOpts = [
+    [1.0,'1.00 — Always on'],[0.9,'0.90'],[0.8,'0.80'],
+    [0.75,'0.75'],[0.6,'0.60'],[0.5,'0.50'],[0.33,'0.33 — Cyclic']
+  ].map(([v,l]) => `<option value="${v}"${Math.abs(df-v)<0.01?' selected':''}>${l}</option>`).join('');
+
+  const tr = document.createElement('tr');
+  tr.id = 'row_' + id;
+  tr.innerHTML = `
+    <td><input type="text"   class="form-control" value="${data.name||''}" placeholder="Appliance name"></td>
+    <td><input type="number" class="form-control ldinput" data-f="watts"         value="${data.watts||0}"  min="0"  step="1"   onchange="recalcTotals()"></td>
+    <td><input type="number" class="form-control ldinput" data-f="qty"           value="${data.qty||1}"    min="1"  step="1"   onchange="recalcTotals()"></td>
+    <td><input type="number" class="form-control ldinput" data-f="hours"         value="${data.hours||0}"  min="0"  max="24" step="0.5" onchange="recalcTotals()"></td>
+    <td><select class="form-select ldinput" data-f="demand_factor" onchange="recalcTotals()">${dfOpts}</select></td>
+    <td style="text-align:right"><span class="row-kwh" style="color:#22c55e;font-weight:600;font-size:13px">0.0</span></td>
+    <td><button type="button" class="del-row" onclick="delRow(${id})"><i class="bi bi-trash"></i></button></td>`;
+  document.getElementById('loadBody').appendChild(tr);
+  recalcTotals();
+}
+
+function delRow(id) {
+  const el = document.getElementById('row_' + id);
+  if (el) el.remove();
+  recalcTotals();
+}
+
+function recalcTotals() {
+  let kwhTotal = 0, kwTotal = 0;
+  document.querySelectorAll('#loadBody tr').forEach(tr => {
+    const w  = parseFloat(tr.querySelector('[data-f="watts"]')?.value        || 0);
+    const q  = parseFloat(tr.querySelector('[data-f="qty"]')?.value          || 1);
+    const h  = parseFloat(tr.querySelector('[data-f="hours"]')?.value        || 0);
+    const df = parseFloat(tr.querySelector('[data-f="demand_factor"]')?.value || 1);
+    const kwh = w * q * h * df / 1000;
+    kwhTotal += kwh;
+    kwTotal  += w * q / 1000;
+    const s = tr.querySelector('.row-kwh');
+    if (s) s.textContent = kwh.toFixed(2);
+  });
+  document.getElementById('tot_kwh').textContent  = kwhTotal.toFixed(2) + ' kWh';
+  document.getElementById('tot_peak').textContent = kwTotal.toFixed(2)  + ' kW';
+}
+
+function getLoads() {
+  return Array.from(document.querySelectorAll('#loadBody tr')).map(tr => ({
+    name:          tr.querySelector('td:first-child input')?.value?.trim() || 'Load',
+    watts:         parseFloat(tr.querySelector('[data-f="watts"]')?.value        || 0),
+    qty:           parseFloat(tr.querySelector('[data-f="qty"]')?.value          || 1),
+    hours:         parseFloat(tr.querySelector('[data-f="hours"]')?.value        || 0),
+    demand_factor: parseFloat(tr.querySelector('[data-f="demand_factor"]')?.value || 1),
+  })).filter(l => l.watts > 0);
+}
+
+async function runCalculation() {
+  const name    = document.getElementById('f_name').value.trim();
+  const email   = document.getElementById('f_email').value.trim();
+  const phone   = document.getElementById('f_phone').value.trim();
+  const country = document.getElementById('f_country').value;
+  const region  = document.getElementById('f_region').value;
+  const btype   = document.getElementById('f_bldg_type').value;
+  const loads   = getLoads();
+  const errEl   = document.getElementById('calcError');
+  errEl.style.display = 'none';
+
+  if (!name)                       { showErr('Please enter your full name.'); return; }
+  if (!email || !email.includes('@')){ showErr('Please enter a valid email address.'); return; }
+  if (!country)                    { showErr('Please select a country.'); return; }
+  if (!region)                     { showErr('Please select a region / city.'); return; }
+  if (!loads.length)               { showErr('Please add at least one appliance with watts > 0.'); return; }
+
+  const btn = document.getElementById('calcBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-sm"></span>Calculating...';
+
+  try {
+    const resp = await fetch('/api/assess/design', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, email, phone, country, region, building_type: btype, loads})
+    });
+    const d = await resp.json();
+    if (!d.ok) { showErr(d.error || 'Calculation failed. Please try again.'); return; }
+
+    const sym = d.symbol || '';
+    const cur = d.currency || '';
+    const fmt = n => Math.round(n).toLocaleString();
+
+    document.getElementById('res_ref').textContent    = d.ref;
+    document.getElementById('res_email').textContent  = email;
+    document.getElementById('r_pv').textContent       = d.pv_kw.toFixed(1);
+    document.getElementById('r_bat').textContent      = d.bat_kwh.toFixed(1);
+    document.getElementById('r_inv').textContent      = d.inv_kw.toFixed(0);
+    document.getElementById('r_pay').textContent      = d.payback_yr;
+    document.getElementById('rd_kwh').textContent     = d.daily_kwh.toFixed(2) + ' kWh/day';
+    document.getElementById('rd_peak').textContent    = d.peak_kw.toFixed(2)   + ' kW';
+    document.getElementById('rd_psh').textContent     = d.psh + ' hrs/day';
+    document.getElementById('rd_pv').textContent      = d.pv_kw.toFixed(1) + ' kWp  (' + d.num_panels + ' × 400 Wp panels)';
+    document.getElementById('rd_bat').textContent     = d.bat_kwh.toFixed(1) + ' kWh  (' + d.num_bat + ' × ' + d.unit_kwh + ' kWh units)';
+    document.getElementById('rd_inv').textContent     = d.inv_kw.toFixed(0) + ' kW';
+    document.getElementById('rd_cost').textContent    = sym + fmt(d.total_local) + ' ' + cur + '  (≈ USD ' + fmt(d.total_usd) + ')';
+    document.getElementById('rd_akwh').textContent    = fmt(d.annual_kwh) + ' kWh/year';
+    document.getElementById('rd_sav').textContent     = sym + fmt(d.annual_sav) + ' ' + cur + '/year';
+    document.getElementById('rd_payback').textContent = d.payback_yr + ' years';
+    document.getElementById('rd_co2').textContent     = d.co2_yr + ' tonnes CO₂/year';
+
+    const cref = document.getElementById('consult_ref');
+    if (cref) cref.value = d.ref;
+    const rlink = document.getElementById('regLink');
+    if (rlink) rlink.href = '/register?ref=' + d.ref;
+
+    const sec = document.getElementById('resultsSection');
+    sec.classList.add('show');
+    sec.scrollIntoView({behavior:'smooth', block:'start'});
+
+  } catch(e) {
+    showErr('Network error. Please check your connection and try again.');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-lightning-charge-fill me-2"></i>Calculate My Solar System';
+  }
+}
+
+function showErr(msg) {
+  const el = document.getElementById('calcError');
+  el.textContent = msg; el.style.display = 'block';
+  const btn = document.getElementById('calcBtn');
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-lightning-charge-fill me-2"></i>Calculate My Solar System';
+}
 </script>
 {% endblock %}
