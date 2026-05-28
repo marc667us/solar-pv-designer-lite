@@ -4774,6 +4774,7 @@ Battery chemistry: LiFePO4 or Lead-Acid
 Plans: Free (1 project, 5 AI Agent runs/mo), Professional ($29/mo — 20 projects, all 9 reports), Enterprise ($99/mo — unlimited + white-label)
 Reports: BOQ (8% markup, 15% installation), Economic (25-yr, 0.8% O&M, battery/inverter replacement, 8% tariff escalation), Proposal, Cable sizing (BS 7671/IEC 60364), Installation plan, Energy production
 Settings: Organisation profile, Date/Time format, Appearance (5 themes, 7 accent colours, 5 fonts), Email/SMTP, Security
+User management (admin only): Admin → Users — view all accounts, change plan (free/professional/enterprise), assign job role (customer/bdo/sales_engineer/design_engineer/proposal_engineer/project_manager/technician/support_engineer/customer_success/admin), toggle admin flag, record manual payments, disable accounts. New users self-register at /register.
 22+ countries with local tariff data; Standards: BS 7671, IEC 60364, NEC 2023, IEEE 1547
 
 === YOUR TASK AREAS ===
@@ -4900,6 +4901,8 @@ def assistant_chat():
          "The Free plan gives 1 project + 5 AI Agent runs/month. Professional ($29/mo) gives 20 projects + all 9 reports. Enterprise ($99/mo) is unlimited + white-label. Upgrade at **Settings → Upgrade**."),
         (["payment","momo","mobile money","mtn","paystack","stripe","billing","invoice"],
          "We accept MTN MoMo, AirtelTigo, and Vodafone Cash via Paystack, plus Visa/Mastercard worldwide. Go to **Settings → Upgrade** and choose your payment method."),
+        (["add user","new user","create user","manage user","user management","user account","user role","assign role"],
+         "To add or manage users, go to **Admin → Users** (admin accounts only). From there you can view all accounts, change a user's plan, assign a job role (e.g. Design Engineer, Sales Engineer), toggle admin rights, record payments, or disable an account. New users can self-register at the **Register** page on the homepage."),
         (["login","password","forgot","reset","sign in","account","register"],
          "Use the **Forgot Password** link on the login page to reset. For new accounts, click **Register** on the homepage."),
         (["agent","tender","rfp","prospect","scan","bid","procurement"],
