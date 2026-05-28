@@ -3046,13 +3046,68 @@ def export_excel(pid):
     ws3 = wb.create_sheet("Bill of Quantities")
     ws3.sheet_view.showGridLines = False
     cols3 = [("No.",5),("Description",28),("Specification",30),
-             ("Qty",6),("Unit",7),(f"Unit Rate ({sym})",16),(f"Total ({sym})",16)]
+             ("Qty",6),("Unit",7),(f"Basic Rate ({sym})",16),
+             (f"Total Rate ({sym}) +8%",18),(f"Amount ({sym})",16)]
     _xl_header(ws3, cols3)
     for row in r.get("boq_rows",[]):
         ws3.append([row["no"], row["desc"], row["spec"], row["qty"],
-                    row["unit"], round(row["total_r"],2), round(row["amount"],2)])
-    ws3.append(["","","","","","GRAND TOTAL", round(r["boq_grand"],2)])
+                    row["unit"], round(row["basic"],2),
+                    round(row["total_r"],2), round(row["amount"],2)])
+    ws3.append(["","","","","","","GRAND TOTAL", round(r["boq_grand"],2)])
     ws3[f"G{ws3.max_row}"].font = Font(bold=True, color="F59E0B")
+    ws3[f"H{ws3.max_row}"].font = Font(bold=True, color="F59E0B")
+
+    # ── Cost Summary below BOQ ────────────────────────────────────────────────
+    install_pct   = eco.get("install_rate_pct", 15)
+    equip_local   = eco.get("equip_local", 0)
+    install_local = eco.get("install_local", 0)
+    total_local   = eco.get("total_local", 0)
+    funding_label = "Self-Funded" if eco.get("funding_mode") == "self" else "Loan Finance"
+
+    ws3.append([])
+    ws3.append(["COST SUMMARY & CAPEX BREAKDOWN"])
+    ws3[f"A{ws3.max_row}"].font = Font(bold=True, size=12, color="F59E0B")
+
+    sum_hdr_row = ws3.max_row + 1
+    ws3.append(["", "Item", "", "", "", "", "Amount", f"({sym})"])
+    for col in range(1, 9):
+        ws3.cell(sum_hdr_row, col).fill = PatternFill("solid", fgColor="1e1e3a")
+        ws3.cell(sum_hdr_row, col).font = Font(bold=True, color="9090c0")
+
+    cost_rows = [
+        ("Equipment Supply (incl. 8% supply markup)",   equip_local,   False),
+        (f"Installation Labour ({install_pct}% of supply subtotal)", install_local, False),
+        ("TOTAL CAPEX",                                  total_local,   True),
+        ("Contingency (10%) — advisory",                 total_local * 0.10, False),
+        ("Budget (incl. contingency)",                   total_local * 1.10, False),
+        ("Funding Mode",                                 funding_label, False),
+    ]
+    for label, val, bold in cost_rows:
+        if isinstance(val, str):
+            ws3.append(["", label, "", "", "", "", "", val])
+        else:
+            ws3.append(["", label, "", "", "", "", "", round(val, 0)])
+        lbl_cell = ws3[f"B{ws3.max_row}"]
+        val_cell = ws3[f"H{ws3.max_row}"]
+        if bold:
+            lbl_cell.font = Font(bold=True)
+            val_cell.font = Font(bold=True, color="F59E0B")
+            ws3[f"A{ws3.max_row}"].fill = PatternFill("solid", fgColor="1a1a30")
+            ws3[f"B{ws3.max_row}"].fill = PatternFill("solid", fgColor="1a1a30")
+            ws3[f"H{ws3.max_row}"].fill = PatternFill("solid", fgColor="1a1a30")
+
+    ws3.append([])
+    ws3.append(["BOQ NOTES"])
+    ws3[f"A{ws3.max_row}"].font = Font(bold=True, color="9090c0")
+    for note in [
+        "Total Rate = Basic Rate × 1.08  (8% supply/procurement markup — delivery, overheads & profit)",
+        f"Installation Labour: {install_pct}% of supply subtotal (confirmed West Africa 2025–26 market rate)",
+        "Contingency is advisory — not included in the CAPEX or payback calculation",
+        "Quantities subject to detailed site survey confirmation",
+        "Excludes site-specific VAT, import duties, and permit fees",
+    ]:
+        ws3.append(["", f"• {note}"])
+        ws3[f"B{ws3.max_row}"].font = Font(italic=True, color="808080")
 
     # ── Sheet 4: 25-Year Cash Flow ────────────────────────────────────────────
     ws4 = wb.create_sheet("25-Year Cash Flow")
@@ -3252,7 +3307,7 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364
     md += f"""
 | | | | | | | **GRAND TOTAL** | **{sym} {_fmt(r['boq_grand'],2)}** |
 
-*Note: Total Rate = Basic Rate × 1.20 (delivery, overheads & profit)*
+*Note: Total Rate = Basic Rate × 1.08 (8% supply/procurement markup — delivery, overheads & profit)*
 
 ---
 
@@ -3260,10 +3315,10 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364
 
 | Item | Amount ({sym}) |
 |---|---|
-| Equipment Supply | {_fmt(eco.get("equip_local",0),0)} |
-| Installation (18%) | {_fmt(eco.get("install_local",0),0)} |
+| Equipment Supply (incl. 8% markup) | {_fmt(eco.get("equip_local",0),0)} |
+| Installation Labour ({eco.get("install_rate_pct",15)}%) | {_fmt(eco.get("install_local",0),0)} |
 | **Total CAPEX** | **{_fmt(eco.get("total_local",0),0)}** |
-| Contingency (10%) | {_fmt(eco.get("total_local",0)*0.1,0)} |
+| Contingency (10%) — advisory | {_fmt(eco.get("total_local",0)*0.1,0)} |
 | **Budget (incl. contingency)** | **{_fmt(eco.get("total_local",0)*1.1,0)}** |
 
 ---
@@ -3283,7 +3338,7 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364
 
 # BOQ Notes
 
-- Rates: Total Rate = Basic Rate × 1.20 (delivery + overheads & profit)
+- Rates: Total Rate = Basic Rate × 1.08 (8% supply/procurement markup — delivery + overheads & profit)
 - Quantities subject to detailed design review and site survey
 - Cable lengths are estimated — confirm actual lengths on site
 - Subject to contractor quotation; excludes site-specific VAT / import duties
@@ -3581,8 +3636,8 @@ def export_pdf_economic(pid):
 
 | Item | Amount |
 |---|---|
-| Equipment Cost | {sym} {_fmt(eco["equip_local"],0)} |
-| Installation (18%) | {sym} {_fmt(eco["install_local"],0)} |
+| Equipment Supply (incl. 8% markup) | {sym} {_fmt(eco["equip_local"],0)} |
+| Installation Labour ({eco.get("install_rate_pct",15)}%) | {sym} {_fmt(eco["install_local"],0)} |
 | **Total Capital** | **{sym} {_fmt(eco["total_local"],0)}** |
 
 ---
