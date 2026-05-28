@@ -303,9 +303,13 @@ if r.status_code == 200:
         chk("Solar data: psh > 3",      (d.get("psh") or 0) > 3)
     except: chk("Solar data JSON parse", False)
 
+TEST_EMAIL_GH = "TEST_autotest_gh@solarpro-test.invalid"
+TEST_EMAIL_NG = "TEST_autotest_ng@solarpro-test.invalid"
+test_refs = []   # collect SA-* refs so we can clean up after
+
 print("\n=== 18. Design API — Ghana residential ===")
 payload1 = {
-    "name": "Test User", "email": "test@example.com", "phone": "",
+    "name": "TEST_AutoGhana", "email": TEST_EMAIL_GH, "phone": "",
     "country": "Ghana", "region": "Greater Accra",
     "building_type": "residential",
     "loads": [
@@ -320,17 +324,18 @@ h("Design API Ghana residential", r1)
 if r1.status_code == 200:
     try:
         d1 = r1.json()
-        chk("Ghana design ok",     d1.get("ok") is True)
-        chk("Ghana pv_kw > 0",     (d1.get("pv_kw") or 0) > 0)
-        chk("Ghana bat_kwh > 0",   (d1.get("bat_kwh") or 0) > 0)
-        chk("Ghana currency GHS",  d1.get("currency") == "GHS")
-        chk("Ghana ref SA-*",      str(d1.get("ref", "")).startswith("SA-"))
+        if d1.get("ref"): test_refs.append(d1["ref"])
+        chk("Ghana design ok",      d1.get("ok") is True)
+        chk("Ghana pv_kw > 0",      (d1.get("pv_kw") or 0) > 0)
+        chk("Ghana bat_kwh > 0",    (d1.get("bat_kwh") or 0) > 0)
+        chk("Ghana currency GHS",   d1.get("currency") == "GHS")
+        chk("Ghana ref SA-*",       str(d1.get("ref", "")).startswith("SA-"))
         chk("Ghana payback_yr set", d1.get("payback_yr") is not None)
     except Exception as e: chk(f"Ghana design JSON parse: {e}", False)
 
 print("\n=== 19. Design API — Nigeria commercial (Lagos Southwest) ===")
 payload2 = {
-    "name": "Emeka Obi", "email": "emeka@test.ng", "phone": "",
+    "name": "TEST_AutoNigeria", "email": TEST_EMAIL_NG, "phone": "",
     "country": "Nigeria", "region": "Lagos (Southwest)",
     "building_type": "commercial",
     "loads": [
@@ -339,11 +344,13 @@ payload2 = {
         {"name": "Computers", "watts": 300,  "qty": 10, "hours": 8,  "demand_factor": 0.8 },
     ]
 }
+d2 = {}
 r2 = s.post(BASE + "/api/assess/design", json=payload2, timeout=30)
 h("Design API Nigeria commercial", r2)
 if r2.status_code == 200:
     try:
         d2 = r2.json()
+        if d2.get("ref"): test_refs.append(d2["ref"])
         chk("Nigeria design ok",      d2.get("ok") is True)
         chk("Nigeria currency NGN",   d2.get("currency") == "NGN")
         gh_pv = d1.get("pv_kw") or 0
@@ -361,6 +368,56 @@ if r_bad.status_code in (200, 400):
         d_bad = r_bad.json()
         chk("Validation: ok=False for empty submit", d_bad.get("ok") is False)
     except: chk("Validation JSON parse", False)
+
+# ── Clean up test assessment & lead records ────────────────────────────────────
+print("\n=== 21. Cleanup — delete test assessment & lead records ===")
+def _csrf_meta(url):
+    """Get CSRF token from meta tag (works for all admin pages)."""
+    r = s.get(url, timeout=15)
+    m = re.search(r'name="csrf-token"\s+content="([^"]+)"', r.text)
+    if m: return m.group(1), r.text
+    m = re.search(r'name="_csrf"\s+value="([^"]+)"', r.text)
+    return (m.group(1) if m else ""), r.text
+
+FAKE_MARKERS = ["TEST_Auto", "solarpro-test.invalid"]
+
+# Delete test assessment_requests records
+tok, body = _csrf_meta(BASE + "/admin/assessments")
+deleted_a = 0
+seen_aids = set()
+for m in re.finditer(r'name="aid"\s+value="(\d+)"', body):
+    aid = m.group(1)
+    if aid in seen_aids: continue
+    seen_aids.add(aid)
+    snippet = body[max(0, m.start()-800): m.end()+800]
+    if any(mk in snippet for mk in FAKE_MARKERS):
+        rd = s.post(BASE + "/admin/assessments",
+                    data={"_csrf": tok, "action": "delete", "aid": aid},
+                    allow_redirects=True, timeout=15)
+        chk(f"Deleted test assessment #{aid}", rd.status_code == 200)
+        deleted_a += 1
+        tok, body = _csrf_meta(BASE + "/admin/assessments")
+        seen_aids.clear()
+
+# Delete test leads records
+tok, body = _csrf_meta(BASE + "/admin/leads")
+deleted_l = 0
+seen_lids = set()
+for m in re.finditer(r'name="lid"\s+value="(\d+)"', body):
+    lid = m.group(1)
+    if lid in seen_lids: continue
+    seen_lids.add(lid)
+    snippet = body[max(0, m.start()-800): m.end()+800]
+    if any(mk in snippet for mk in FAKE_MARKERS):
+        rd = s.post(BASE + "/admin/leads",
+                    data={"_csrf": tok, "action": "delete", "lid": lid},
+                    allow_redirects=True, timeout=15)
+        chk(f"Deleted test lead #{lid}", rd.status_code == 200)
+        deleted_l += 1
+        tok, body = _csrf_meta(BASE + "/admin/leads")
+        seen_lids.clear()
+
+chk(f"Cleanup: {deleted_a} assessment(s) + {deleted_l} lead(s) removed", True)
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 total = PASS + FAIL
