@@ -2995,37 +2995,58 @@ def export_excel(pid):
     ws["A3"] = f"{d.get('region','')}, {d.get('country','')}   |   {d.get('system_type','').title()} System"
     ws["A4"] = f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     ws.append([])
-    headers = [("Parameter","",40),("Value","",25)]
+    phase_v = "415V 50Hz" if d.get("phase") == "three" else "230V 50Hz"
     rows = [
-        ("Daily Energy Demand",      f"{r['daily_kwh']:.3f} kWh/day"),
-        ("PV Array Size",            f"{r['pv_kw']:.3f} kWp"),
-        ("No. of Panels",            f"{r['num_panels']} × {r.get('panel_wp',400)} Wp Mono PERC"),
-        ("Battery Chemistry",        r.get('chemistry','LiFePO4')),
-        ("Battery Storage",          f"{r['bat_kwh']:.1f} kWh ({r['num_bat']} × {r['unit_bat_kwh']:.2g} kWh units)"),
-        ("Inverter Rating",          f"{r['inv_kw']:.2f} kW"),
-        ("MPPT Controller",          f"{r.get('mppt_a','—')} A"),
-        ("System Cost",              f"{sym} {eco['total_local']:,.0f}"),
-        ("Annual Savings",           f"{sym} {eco['annual_sav']:,.0f}"),
-        ("Net Annual Benefit (Yr1)", f"{sym} {eco['net_yr1']:,.0f}"),
-        ("Simple Payback",           f"{eco['payback']:.1f} years"),
-        ("NPV (25yr)",               f"{sym} {eco['npv']:,.0f}"),
-        ("IRR",                      f"{eco['irr_pct']:.1f}%" if eco['irr_pct'] else "N/A"),
-        ("DSCR",                     f"{eco['dscr']:.2f}"),
-        ("Bankability",              eco['bankability']),
-        ("Verdict",                  eco['verdict']),
-        ("CO2 Reduction",            f"{eco['co2_yr']:.2f} t/year"),
-        ("25yr Cumulative Savings",  f"{sym} {eco['cumul_25']:,.0f}"),
+        ("── LOCATION & SYSTEM ──",   ""),
+        ("Location",                  f"{d.get('region','')}, {d.get('country','')}"),
+        ("System Type",               d.get("system_type","").title()),
+        ("Phase",                     f"{d.get('phase','single').title()} Phase {phase_v}"),
+        ("DC Bus Voltage",            f"{d.get('voltage',48)} V"),
+        ("Autonomy",                  f"{d.get('autonomy',1)} day(s)"),
+        ("── PV SYSTEM SIZING ──",    ""),
+        ("Daily Energy Demand",       f"{r['daily_kwh']:.3f} kWh/day"),
+        ("Annual Generation",         f"{round(r['daily_kwh']*365,0):,.0f} kWh/yr"),
+        ("PV Array Size",             f"{r['pv_kw']:.3f} kWp"),
+        ("No. of Panels",             f"{r['num_panels']} × {r.get('panel_wp',400)} Wp Mono PERC"),
+        ("Battery Chemistry",         r.get("chemistry","LiFePO4")),
+        ("Battery Storage",           f"{r['bat_kwh']:.1f} kWh ({r['num_bat']} × {r['unit_bat_kwh']:.2g} kWh units)"),
+        ("Inverter Rating",           f"{r['inv_kw']:.2f} kW"),
+        ("MPPT Controller",           f"{r.get('mppt_a','—')} A"),
+        ("── FINANCIAL SUMMARY ──",   ""),
+        ("Funding Mode",              "Self-Funded" if eco.get("funding_mode")=="self" else "Loan Finance"),
+        ("Total System Cost",         f"{sym} {eco['total_local']:,.0f}"),
+        ("Annual Bill Saving",        f"{sym} {eco['annual_sav']:,.0f}"),
+        ("Annual O&M (Yr 1)",         f"{sym} {eco.get('om_yr1',0):,.0f}"),
+        ("Net Annual Benefit (Yr1)",  f"{sym} {eco['net_yr1']:,.0f}"),
+        ("Simple Payback",            f"{eco['payback']:.1f} years"),
+        ("NPV (25yr)",                f"{sym} {eco['npv']:,.0f}"),
+        ("IRR",                       f"{eco['irr_pct']:.1f}%" if eco['irr_pct'] else "N/A"),
+        ("ROI (25yr cumulative)",     f"{eco.get('roi_pct',0):.0f}%"),
+        ("DSCR",                      f"{eco['dscr']:.2f}" if eco.get("funding_mode","loan")=="loan" else "N/A (self-funded)"),
+        ("Bankability",               eco["bankability"]),
+        ("Verdict",                   eco["verdict"]),
+        ("── ENVIRONMENTAL ──",       ""),
+        ("CO₂ Reduction",             f"{eco['co2_yr']:.2f} t/year"),
+        ("CO₂ Reduction (25yr)",      f"{eco['co2_yr']*25:.1f} t total"),
+        ("25yr Cumulative Savings",   f"{sym} {eco['cumul_25']:,.0f}"),
     ]
     hfill = PatternFill("solid", fgColor="0f0f22")
     hfont = Font(bold=True, color="9090c0")
     ws.append(["Parameter", "Value"])
     ws[f"A{ws.max_row}"].font = hfont; ws[f"B{ws.max_row}"].font = hfont
     ws[f"A{ws.max_row}"].fill = hfill; ws[f"B{ws.max_row}"].fill = hfill
-    ws.column_dimensions["A"].width = 36; ws.column_dimensions["B"].width = 30
-    gold = PatternFill("solid", fgColor="1a1a30")
+    ws.column_dimensions["A"].width = 36; ws.column_dimensions["B"].width = 32
+    gold      = PatternFill("solid", fgColor="1a1a30")
+    sec_fill  = PatternFill("solid", fgColor="0f0f1e")
+    sec_font  = Font(bold=True, color="6060a0", italic=True)
     for param, val in rows:
         ws.append([param, val])
-        ws[f"A{ws.max_row}"].fill = gold
+        if param.startswith("──"):          # section divider row
+            ws[f"A{ws.max_row}"].font  = sec_font
+            ws[f"A{ws.max_row}"].fill  = sec_fill
+            ws[f"B{ws.max_row}"].fill  = sec_fill
+        else:
+            ws[f"A{ws.max_row}"].fill  = gold
 
     # ── Sheet 2: Load Schedule ────────────────────────────────────────────────
     ws2 = wb.create_sheet("Load Schedule")
@@ -3122,6 +3143,228 @@ def export_excel(pid):
         if cf["cumul"] >= eco["total_local"]:
             for col in range(1, 7):
                 ws4.cell(ws4.max_row, col).fill = green_fill
+
+    # ── Shared helper: write a labelled section into any sheet ───────────────
+    def _xl_section(ws, title, param_val_pairs):
+        ws.append([title])
+        ws[f"A{ws.max_row}"].font = Font(bold=True, color="9090c0")
+        ws[f"A{ws.max_row}"].fill = PatternFill("solid", fgColor="1e1e3a")
+        ws[f"B{ws.max_row}"].fill = PatternFill("solid", fgColor="1e1e3a")
+        row_fill = PatternFill("solid", fgColor="1a1a30")
+        for param, val in param_val_pairs:
+            ws.append([param, val])
+            ws[f"A{ws.max_row}"].fill = row_fill
+
+    def _xl_notes(ws, notes_list):
+        ws.append([])
+        ws.append(["NOTES"])
+        ws[f"A{ws.max_row}"].font = Font(bold=True, color="9090c0")
+        for note in notes_list:
+            ws.append(["", f"• {note}"])
+            ws[f"B{ws.max_row}"].font = Font(italic=True, color="808080")
+
+    # ── Sheet 5: PV System Design ─────────────────────────────────────────────
+    ws5 = wb.create_sheet("PV System Design")
+    ws5.sheet_view.showGridLines = False
+    ws5["A1"] = "PV System Design Report"; ws5["A1"].font = Font(bold=True, size=14, color="F59E0B")
+    ws5["A2"] = f"{project['name']}  |  {d.get('region','')}, {d.get('country','')}"
+    ws5["A3"] = (f"System: {d.get('system_type','').title()}  |  "
+                 f"Phase: {d.get('phase','single').title()} {phase_v}  |  "
+                 f"DC: {d.get('voltage',48)} V  |  Standard: BS 7671:2018 / IEC 60364")
+    ws5.column_dimensions["A"].width = 36; ws5.column_dimensions["B"].width = 36
+    ws5.append([])
+
+    eff_pct = round(0.75 * r.get("temp_derating", 1.0) * 100, 1)
+    _xl_section(ws5, "1. Design Inputs", [
+        ("Location",                     f"{d.get('region','')}, {d.get('country','')}"),
+        ("System Type",                  d.get("system_type","").title()),
+        ("Phase / AC Voltage",           f"{d.get('phase','single').title()} Phase {phase_v}"),
+        ("DC Bus Voltage",               f"{d.get('voltage',48)} V"),
+        ("Peak Sun Hours (PSH)",         f"{d.get('psh',5.0)} h/day"),
+        ("Avg Ambient Temperature",      f"{d.get('avg_temp',30)} °C"),
+        ("Temperature Derating Factor",  f"{r.get('temp_derating',1.0):.4f}"),
+        ("System Efficiency (BOS)",      "75%"),
+        ("Effective Efficiency",         f"{eff_pct:.1f}%"),
+        ("Daily Energy Demand",          f"{r['daily_kwh']:.3f} kWh/day"),
+        ("Annual Generation",            f"{round(r['daily_kwh']*365, 0):,.0f} kWh/yr"),
+        ("Autonomy Days",                f"{d.get('autonomy',1)} day(s)"),
+    ])
+    ws5.append([])
+    _xl_section(ws5, "2. PV Array — Monocrystalline PERC", [
+        ("Sizing Formula",               "PV (kWp) = Daily Load ÷ (PSH × η_eff)"),
+        ("PV Array Required",            f"{r['pv_kw']:.3f} kWp"),
+        ("Panel Technology",             "Monocrystalline PERC — IEC 61215 certified"),
+        ("Panel Rating",                 f"{r.get('panel_wp',400)} Wp"),
+        ("Module Efficiency",            "21–23%"),
+        ("Temperature Coefficient",      "−0.35 %/°C (Pmax)"),
+        ("Warranty",                     "12 yr product / 25 yr linear power"),
+        ("Recommended Brands",           "JinkoSolar, LONGi, Canadian Solar, Trina, JA Solar"),
+        ("No. of Panels Required",       f"{r['num_panels']} modules"),
+    ])
+    ws5.append([])
+    _xl_section(ws5, f"3. Battery Storage — {r.get('chemistry','LiFePO4')}", [
+        ("Chemistry",                    r.get("chem_name", r.get("chemistry","LiFePO4"))),
+        ("Sizing Formula",               "B = (E × Autonomy) ÷ (DoD × η_bat)"),
+        ("Depth of Discharge (DoD)",     f"{round(r.get('chem_dod',0.8)*100,0):.0f}%"),
+        ("Cycle Life",                   str(r.get("chem_cycles","4000+"))),
+        ("Design Lifetime",              str(r.get("chem_life","10–15 years"))),
+        ("Unit Size",                    f"{r['unit_bat_kwh']:.2g} kWh per unit"),
+        ("No. of Units Required",        f"{r['num_bat']} unit{'s' if r['num_bat']>1 else ''}"),
+        ("Total Storage",                f"{r['bat_kwh']:.1f} kWh"),
+        ("Recommended Brands",           r.get("chem_brands","—")),
+        ("BMS",                          "Integrated (overcharge, over-discharge, thermal)"),
+    ])
+    ws5.append([])
+    _xl_section(ws5, "4. Hybrid Inverter / Charger", [
+        ("Sizing Basis",                 "30% peak demand factor × 1.25 safety factor"),
+        ("Inverter Rating",              f"{r['inv_kw']:.2f} kW"),
+        ("Type",                         "Hybrid MPPT (Solar / Battery / Grid)"),
+        ("AC Output",                    f"{d.get('phase','single').title()} Phase {phase_v}"),
+        ("Recommended",                  r.get("inv_brand","—")),
+    ])
+    ws5.append([])
+    _xl_section(ws5, "5. MPPT Charge Controller & Protection", [
+        ("Controller Type",              "MPPT (Maximum Power Point Tracking)"),
+        ("PV Array Power",               f"{r['pv_kw']:.2f} kWp"),
+        ("DC Bus Voltage",               f"{d.get('voltage',48)} V"),
+        ("MPPT Rating",                  f"{r.get('mppt_a','—')} A"),
+        ("Recommended",                  "Victron BlueSolar / Epever Tracer BN"),
+        ("DC Protection",                "String fuses + DC-rated MCB 1000 V"),
+        ("AC Protection",                "RCCB 30 mA + MCBs + SPD Type 2"),
+        ("Earthing System",              "TT system — BS 7430 / IEC 60364-4-41"),
+        ("Lightning Protection",         "IEC 62305 SPD Type 2, all circuits"),
+    ])
+    ws5.append([])
+    _xl_section(ws5, "6. Installation Notes", [
+        ("Roof Load",                    "Verify structural capacity ≥ 15 kg/m² (IEC 61215)"),
+        ("Panel Tilt",                   "Region-optimised tilt ≈ latitude angle for equatorial sites"),
+        ("Ventilation",                  "≥ 150 mm around inverter; ≥ 300 mm around batteries"),
+        ("Battery Safety",               f"{r.get('chemistry','LiFePO4')} — cool, dry, ventilated area"),
+        ("DC Cabling",                   "UV-resistant 6 mm² twin-core solar cable — IEC 60364"),
+        ("Commissioning",                "Measure Voc, Isc, insulation resistance, earth continuity — log all"),
+    ])
+
+    # ── Sheet 6: Economic Analysis ────────────────────────────────────────────
+    ws6 = wb.create_sheet("Economic Analysis")
+    ws6.sheet_view.showGridLines = False
+    ws6["A1"] = "Economic Analysis & Financial Engineering"; ws6["A1"].font = Font(bold=True, size=14, color="F59E0B")
+    ws6["A2"] = f"{project['name']}  |  {d.get('region','')}, {d.get('country','')}  |  Currency: {d.get('currency','')}"
+    funding_lbl = "Self-Funded" if eco.get("funding_mode") == "self" else "Loan Finance (70/30)"
+    ws6["A3"] = f"Verdict: {eco.get('verdict','')}  |  Bankability: {eco.get('bankability','')}  |  Funding: {funding_lbl}"
+    ws6.column_dimensions["A"].width = 40; ws6.column_dimensions["B"].width = 28
+    ws6.append([])
+
+    install_pct_e = eco.get("install_rate_pct", 15)
+    _xl_section(ws6, "1. Capital Investment (CAPEX)", [
+        ("Equipment Supply (incl. 8% markup)",        round(eco.get("equip_local",0), 0)),
+        (f"Installation Labour ({install_pct_e}%)",   round(eco.get("install_local",0), 0)),
+        ("Total CAPEX",                               round(eco.get("total_local",0), 0)),
+        ("Contingency (10%) — advisory",              round(eco.get("total_local",0)*0.10, 0)),
+        ("Budget incl. contingency — advisory",       round(eco.get("total_local",0)*1.10, 0)),
+        ("Annual O&M (yr 1, 0.8% of CAPEX)",         round(eco.get("om_yr1",0), 0)),
+        ("Discount Rate (WACC)",                      f"{eco.get('disc_rate_pct',12)}% per year"),
+    ])
+    ws6.append([])
+    _xl_section(ws6, "2. Energy & Revenue", [
+        ("Daily Load",                               f"{r['daily_kwh']:.3f} kWh/day"),
+        ("Annual Generation",                        f"{eco.get('annual_kwh',0):,.0f} kWh/yr"),
+        (f"Electricity Tariff ({d.get('currency','')})", eco.get("tariff", 0)),
+        ("Tariff Escalation Assumption",             "8% per year"),
+        ("Annual Bill Saving (yr 1)",                round(eco.get("annual_sav",0), 0)),
+        ("Net Annual Saving (yr 1, after O&M)",      round(eco.get("net_yr1",0), 0)),
+    ])
+    ws6.append([])
+    if eco.get("funding_mode") == "self":
+        _xl_section(ws6, "3. Funding — Self-Funded", [
+            ("Total Own Capital Required",           round(eco.get("total_local",0), 0)),
+            ("Opportunity Cost Rate",                f"{eco.get('disc_rate_pct',10)}% per annum"),
+            (f"Battery Replacement (yr {eco.get('bat_replace_yr','—')})",
+                                                     round(eco.get("bat_replace_cost",0), 0)),
+            ("Inverter Replacement (yr 10)",         round(eco.get("inv_replace_cost",0), 0)),
+            ("Residual / Salvage Value (yr 25)",     round(eco.get("residual_value",0), 0)),
+        ])
+    else:
+        _xl_section(ws6, "3. Loan Financing & Debt Service", [
+            ("Loan Amount (70% of CAPEX)",           round(eco.get("loan_amt",0), 0)),
+            ("Equity Required (30%)",                round(eco.get("equity",0), 0)),
+            ("Interest Rate",                        "15% per annum"),
+            ("Loan Tenor",                           "7 years"),
+            ("Monthly Repayment",                    round(eco.get("pmt",0), 0)),
+            ("Annual Debt Service",                  round(eco.get("annual_pmt",0), 0)),
+            (f"Battery Replacement (yr {eco.get('bat_replace_yr','—')})",
+                                                     round(eco.get("bat_replace_cost",0), 0)),
+            ("Inverter Replacement (yr 10)",         round(eco.get("inv_replace_cost",0), 0)),
+            ("DSCR (Debt Service Coverage Ratio)",   round(eco.get("dscr",0), 2)),
+            ("Bankability",                          eco.get("bankability","")),
+        ])
+    ws6.append([])
+    _xl_section(ws6, "4. Financial Metrics & Viability", [
+        ("Simple Payback Period",                    f"{eco.get('payback',0):.1f} years"),
+        ("NPV (25-year, discounted)",                round(eco.get("npv",0), 0)),
+        ("IRR",                                      f"{eco.get('irr_pct',0):.1f}%" if eco.get("irr_pct") else "N/A"),
+        ("ROI (25-year cumulative)",                 f"{eco.get('roi_pct',0):.1f}%"),
+        ("10-Year Cumulative Net Saving",            round(eco.get("cumul_10",0), 0)),
+        ("25-Year Cumulative Net Saving",            round(eco.get("cumul_25",0), 0)),
+        ("Project Verdict",                          eco.get("verdict","")),
+        ("Bankability",                              eco.get("bankability","")),
+    ])
+    ws6.append([])
+    _xl_section(ws6, "5. Environmental Impact", [
+        ("CO₂ Avoided per Year",                    f"{eco.get('co2_yr',0):.2f} t CO₂/yr"),
+        ("CO₂ Avoided over 25 Years",               f"{eco.get('co2_yr',0)*25:.1f} t CO₂ total"),
+        ("Equivalent Trees Planted",                f"{int(eco.get('co2_yr',0)*25*45):,} trees"),
+        ("Clean Energy Generated (25yr)",           f"{eco.get('annual_kwh',0)*25:,.0f} kWh"),
+    ])
+    ws6.append([])
+    _xl_section(ws6, "6. Model Assumptions", [
+        ("Tariff Escalation",                       "8% per year (utility trend)"),
+        ("Discount Rate — Loan",                    "12% per year (WACC)"),
+        ("Discount Rate — Self-Funded",             "10% per year (opportunity cost)"),
+        ("O&M Cost",                                "0.8% of CAPEX per year"),
+        ("Panel Degradation",                       "0.5% per year"),
+        ("System Lifetime",                         "25 years"),
+        ("Grid CO₂ Emission Factor",                "0.40 kg CO₂/kWh"),
+        ("Battery Replacement Cycle",               f"~{r.get('chem_life','10')} years"),
+        ("Inverter Replacement Cycle",              "Year 10 at 80% of original cost"),
+        ("Residual / Salvage Value",                "5% of CAPEX at year 25 (self-funded only)"),
+        ("Loan — LTV",                              "70% debt / 30% equity"),
+        ("Loan — Interest Rate",                    "15% per annum"),
+        ("Loan — Tenor",                            "7 years"),
+    ])
+
+    # ── Sheet 7: AC Cable Schedule ────────────────────────────────────────────
+    ws7 = wb.create_sheet("AC Cable Schedule")
+    ws7.sheet_view.showGridLines = False
+    ws7["A1"] = "AC Cable Sizing & Voltage Drop Schedule"; ws7["A1"].font = Font(bold=True, size=14, color="F59E0B")
+    ws7["A2"] = (f"{project['name']}  |  Standard: BS 7671:2018 / IEC 60364-5-52  |  "
+                 f"Cable: Copper PVC/XLPE 70°C  |  Method C  |  PF: 0.90")
+    ws7.append([])
+    cols7 = [("Circuit",20),("Power (kW)",10),("Voltage (V)",10),("Ib (A)",8),
+             ("Length (m)",10),("Cable (mm²)",10),("Iz (A)",8),
+             ("VD (V)",8),("VD (%)",8),("Limit (%)",9),("Check",8),("Breaker (A)",11)]
+    _xl_header(ws7, cols7)
+    fail_fill = PatternFill("solid", fgColor="2a0000")
+    for cab in r.get("ac_cables", []):
+        chk = "PASS" if cab.get("vd_ok") else "FAIL"
+        ws7.append([
+            cab.get("circuit",""), cab.get("power_kw",0), cab.get("voltage_v",0),
+            cab.get("design_current",0), cab.get("length_m",0),
+            cab.get("cable_size_mm2",""), cab.get("cable_capacity",0),
+            round(cab.get("vd_volts",0),3), round(cab.get("vd_percent",0),3),
+            cab.get("vd_limit_pct",0), chk, cab.get("breaker_a",0),
+        ])
+        if not cab.get("vd_ok"):
+            for col in range(1, 13):
+                ws7.cell(ws7.max_row, col).fill = fail_fill
+    _xl_notes(ws7, [
+        "Standard: BS 7671:2018 (18th Edition) / IEC 60364-5-52",
+        "Cable type: Copper conductor, PVC or XLPE 70°C insulation — Installation Method C (clipped direct)",
+        "VD Formula (single-phase): VD (V) = mV/A/m × Ib × L ÷ 1000",
+        "VD Formula (three-phase): VD (V) = mV/A/m × 0.866 × Ib × L ÷ 1000",
+        "VD reference: BS 7671 Appendix 4, Tables 4D2B / 4D5B",
+        "Rows highlighted in red = VD FAIL — increase cable size or reduce circuit length",
+        "All lengths are estimates — verify actual cable runs on site before ordering",
+    ])
 
     return _xl_send(wb, f"SolarPro_{project['name'].replace(' ','_')}_Results.xlsx")
 
