@@ -342,6 +342,15 @@
           <i class="bi bi-bar-chart me-1"></i>Results
         </a>
       </div>
+      <!-- Reset results — clears calculated data, returns to loads for re-run -->
+      <form method="POST" action="{{ url_for('project_reset', pid=p.id) }}" class="d-inline"
+            onsubmit="return confirm('Reset results for &quot;{{ p.name }}&quot;?\n\nThis clears the calculated outputs (PV sizing, battery, costs) but keeps your location settings and load schedule.\n\nYou can re-run the calculation after editing.')">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-sm w-100 mb-1"
+                style="background:#7c3aed12;border:1px solid #7c3aed44;color:#a78bfa;font-size:10px;font-weight:700">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Results &amp; Recalculate
+        </button>
+      </form>
       <div class="text-secondary" style="font-size:9px">
         <i class="bi bi-clock me-1"></i>{{ p.updated }}
       </div>

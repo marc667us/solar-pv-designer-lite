@@ -2897,6 +2897,30 @@ def project_clone(pid):
     return redirect(url_for("project_location", pid=new_pid))
 
 
+@app.route("/project/<int:pid>/reset", methods=["POST"])
+@login_required
+def project_reset(pid):
+    """Reset a project's calculated results — clears results/economics so it
+    can be recalculated fresh after editing. Location and loads are kept."""
+    csrf_protect()
+    uid = session["user_id"]
+    with get_db() as c:
+        row = c.execute(
+            "SELECT data_json FROM projects WHERE id=? AND user_id=?",
+            (pid, uid)).fetchone()
+        if not row:
+            flash("Project not found.", "danger")
+            return redirect(url_for("dashboard"))
+        data = json.loads(row["data_json"] or "{}")
+        # Strip only the results blob — keep location settings and loads
+        data.pop("results", None)
+        c.execute(
+            "UPDATE projects SET data_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?",
+            (json.dumps(data), pid, uid))
+    flash("Project results cleared — edit loads and re-run the calculation.", "info")
+    return redirect(url_for("project_loads", pid=pid))
+
+
 # ─── Public solar-data API (no login — used by assessment form) ──────────────
 
 @app.route("/api/solar_regions/<country>")
