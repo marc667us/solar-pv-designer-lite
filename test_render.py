@@ -266,6 +266,99 @@ if r.status_code == 200:
         chk("DF API: Appliances=0.50", data.get("Appliances") == 0.50, str(data.get("Appliances")))
     except: chk("DF API JSON parse", False)
 
+# ── SECTION 6: Assessment form & design API ──────────────────────────────────
+print("\n=== 16. Assessment form ===")
+r = s.get(BASE + "/assess", timeout=20)
+h("Assessment page loads (public)", r)
+if r.status_code == 200:
+    body = r.text
+    chk("Assess: form has name field",      'id="f_name"'      in body)
+    chk("Assess: form has email field",     'id="f_email"'     in body)
+    chk("Assess: form has country select",  'id="f_country"'   in body)
+    chk("Assess: form has region select",   'id="f_region"'    in body)
+    chk("Assess: load table present",       'id="loadTable"'   in body)
+    chk("Assess: calc button present",      'id="calcBtn"'     in body)
+    chk("Assess: results section present",  'id="resultsSection"' in body)
+    chk("Assess: PRESETS JS object",        'const PRESETS'    in body)
+    chk("Assess: recalcTotals function",    'function recalcTotals' in body)
+
+print("\n=== 17. Public solar API (regions + data) ===")
+r = s.get(BASE + "/api/solar_regions/Ghana", timeout=15)
+h("Public regions API — Ghana", r)
+if r.status_code == 200:
+    try:
+        d = r.json()
+        chk("Regions: list returned",        isinstance(d.get("regions"), list))
+        chk("Regions: at least 3 for Ghana", len(d.get("regions", [])) >= 3,
+            str(len(d.get("regions", []))))
+    except: chk("Regions JSON parse", False)
+
+r = s.get(BASE + "/api/solar_data/Ghana/Accra%20(Greater%20Accra)", timeout=15)
+h("Public solar data API — Ghana/Accra", r)
+if r.status_code == 200:
+    try:
+        d = r.json()
+        chk("Solar data: psh present", "psh" in d)
+        chk("Solar data: tariff present", "tariff" in d)
+        chk("Solar data: psh > 3",      (d.get("psh") or 0) > 3)
+    except: chk("Solar data JSON parse", False)
+
+print("\n=== 18. Design API — Ghana residential ===")
+payload1 = {
+    "name": "Test User", "email": "test@example.com", "phone": "",
+    "country": "Ghana", "region": "Accra (Greater Accra)",
+    "building_type": "residential",
+    "loads": [
+        {"name": "LED Lights", "watts": 60, "qty": 6, "hours": 6, "demand_factor": 0.75},
+        {"name": "Fan",        "watts": 80, "qty": 2, "hours": 8, "demand_factor": 0.75},
+        {"name": "Fridge",     "watts": 150,"qty": 1, "hours": 24,"demand_factor": 0.33},
+    ]
+}
+r1 = s.post(BASE + "/api/assess/design", json=payload1, timeout=30)
+h("Design API Ghana residential", r1)
+if r1.status_code == 200:
+    try:
+        d1 = r1.json()
+        chk("Ghana design ok",     d1.get("ok") is True)
+        chk("Ghana pv_kw > 0",     (d1.get("pv_kw") or 0) > 0)
+        chk("Ghana bat_kwh > 0",   (d1.get("bat_kwh") or 0) > 0)
+        chk("Ghana currency GHS",  d1.get("currency") == "GHS")
+        chk("Ghana ref SA-*",      str(d1.get("ref", "")).startswith("SA-"))
+        chk("Ghana payback_yr set", d1.get("payback_yr") is not None)
+    except Exception as e: chk(f"Ghana design JSON parse: {e}", False)
+
+print("\n=== 19. Design API — Nigeria commercial (Lagos Southwest) ===")
+payload2 = {
+    "name": "Emeka Obi", "email": "emeka@test.ng", "phone": "",
+    "country": "Nigeria", "region": "Lagos (Southwest)",
+    "building_type": "commercial",
+    "loads": [
+        {"name": "AC Units",  "watts": 1500, "qty": 4,  "hours": 10, "demand_factor": 0.75},
+        {"name": "Lighting",  "watts": 200,  "qty": 10, "hours": 10, "demand_factor": 1.0 },
+        {"name": "Computers", "watts": 300,  "qty": 10, "hours": 8,  "demand_factor": 0.8 },
+    ]
+}
+r2 = s.post(BASE + "/api/assess/design", json=payload2, timeout=30)
+h("Design API Nigeria commercial", r2)
+if r2.status_code == 200:
+    try:
+        d2 = r2.json()
+        chk("Nigeria design ok",      d2.get("ok") is True)
+        chk("Nigeria currency NGN",   d2.get("currency") == "NGN")
+        chk("Nigeria larger than GH", (d2.get("pv_kw") or 0) > (d1.get("pv_kw") or 0))
+    except Exception as e: chk(f"Nigeria design JSON parse: {e}", False)
+
+print("\n=== 20. Design API — validation errors ===")
+r_bad = s.post(BASE + "/api/assess/design",
+    json={"name":"","email":"","country":"Ghana","region":"Accra (Greater Accra)","loads":[]},
+    timeout=15)
+h("Validation: missing name/email/loads", r_bad)
+if r_bad.status_code in (200, 400):
+    try:
+        d_bad = r_bad.json()
+        chk("Validation: ok=False for empty submit", d_bad.get("ok") is False)
+    except: chk("Validation JSON parse", False)
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 total = PASS + FAIL
 print(f"\n{'='*50}")
