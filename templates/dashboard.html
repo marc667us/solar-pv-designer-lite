@@ -162,10 +162,10 @@
 <!-- ── Quick actions ──────────────────────────────────────────────────── -->
 <div class="row g-2 mb-4">
   {% for href,icon,bg,title,sub in [
+    ('#projects-section',          'bi-folder2-open',            '#22c55e', 'Open Projects',   'View &amp; edit your designs'),
     (url_for('project_new'),       'bi-plus-circle-fill',        '#f59e0b', 'New Project',     'Start a solar design'),
-    (url_for('assessment_request'),'bi-clipboard2-pulse-fill',   '#22c55e', 'Site Assessment', 'Submit a client request'),
-    (url_for('procurement'),       'bi-truck-front-fill',        '#0ea5e9', 'Procurement',     'Source equipment'),
-    (url_for('upgrade'),           'bi-arrow-up-circle-fill',    '#a78bfa', 'Upgrade Plan',    'Unlock all features'),
+    (url_for('assessment_request'),'bi-clipboard2-pulse-fill',   '#0ea5e9', 'Site Assessment', 'Submit a client request'),
+    (url_for('procurement'),       'bi-truck-front-fill',        '#a78bfa', 'Procurement',     'Source equipment'),
   ] %}
   <div class="col-6 col-md-3">
     <a href="{{ href }}" class="qa-tile h-100">
@@ -184,6 +184,8 @@
 <!-- ── Projects ───────────────────────────────────────────────────────── -->
 {% set saved  = projects | selectattr('stage', 'equalto', 'results') | list %}
 {% set drafts = projects | rejectattr('stage', 'equalto', 'results') | list %}
+
+<div id="projects-section"></div>
 
 {% if projects %}
 
@@ -530,7 +532,7 @@
 
 {% else %}
 <!-- ── Empty state ────────────────────────────────────────────────────── -->
-<div class="solar-card p-5 text-center" style="border-style:dashed;border-color:#2a2a5a">
+<div id="projects-section" class="solar-card p-5 text-center" style="border-style:dashed;border-color:#2a2a5a">
   <div style="font-size:64px;margin-bottom:16px;line-height:1;
        background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));
        -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
