@@ -73,7 +73,7 @@
 <span id="user_email" data-v="{{ user.email }}"></span>
 
 <!-- ── Page header ────────────────────────────────────────────────────── -->
-{% set plan_color = '#a78bfa' if current_plan in ('enterprise','business') else '#0ea5e9' if current_plan=='professional' else '#22c55e' if current_plan in ('starter','basic') else '#f59e0b' if current_plan=='demo' else '#6868a0' %}
+{% set plan_color = '#a78bfa' if current_plan in ('enterprise','business') else '#0ea5e9' if current_plan=='professional' else '#f59e0b' if current_plan=='demo' else '#6868a0' %}
 <div class="text-center mb-5">
   <div class="mb-2" style="font-size:40px">⚡</div>
   <h2 class="fw-black mb-2">Upgrade Your Plan</h2>
@@ -113,7 +113,7 @@
         no payment, no strings. Expires automatically after 14 days.
       </p>
       <div class="d-flex flex-wrap gap-2">
-        {% for f in ['25 projects','All 9 reports','Excel & Word export','Procurement planning','Email delivery','Multi-currency BOQ'] %}
+        {% for f in ['10 projects','All 9 reports','Excel & Word export','Procurement planning','Email delivery','Multi-currency BOQ'] %}
         <span class="badge" style="background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa33;font-size:10px">
           <i class="bi bi-check me-1"></i>{{ f }}
         </span>
@@ -144,7 +144,7 @@
         <span class="plan-price text-secondary">$0</span>
         <span class="text-secondary small">/mo</span>
       </div>
-      <div class="text-secondary mb-3" style="font-size:10px">Forever free · No card needed</div>
+      <div class="text-secondary mb-3" style="font-size:10px">14-day trial · No card needed</div>
       <ul class="plan-feat mb-4 flex-grow-1">
         <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>1 project</li>
         <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>Full engineering calculations</li>
@@ -279,8 +279,7 @@
       <thead>
         <tr style="background:#080814">
           <th style="width:35%">Feature</th>
-          <th class="text-center">Free</th>
-          <th class="text-center" style="color:#22c55e">Starter<br><small style="font-size:10px;font-weight:400">$19/mo</small></th>
+          <th class="text-center">Free Trial</th>
           <th class="text-center" style="color:var(--solar-gold);background:rgba(245,158,11,.04)">
             Professional<br><small style="font-size:10px;font-weight:400">$49/mo</small>
           </th>
@@ -292,46 +291,46 @@
         {% set N = '<i class="bi bi-x-circle" style="color:#2a2a4a"></i>' %}
         {% for section, rows in [
           ("Projects & Design", [
-            ("Projects",                    "1",     "5",    "25",   "Unlimited"),
-            ("Full engineering calculations",Y,       Y,      Y,      Y),
-            ("BS 7671 / IEC 60364 cable sizing",Y,   Y,      Y,      Y),
-            ("Financial analysis (NPV/IRR)", Y,       Y,      Y,      Y),
-            ("Bankability verdict",          Y,       Y,      Y,      Y),
-            ("Redesign recommendations",     N,       N,      Y,      Y),
-            ("Multi-currency BOQ",           N,       N,      Y,      Y),
+            ("Projects",                       "1",  "10",   "Unlimited"),
+            ("Full engineering calculations",  Y,    Y,      Y),
+            ("BS 7671 / IEC 60364 cable sizing",Y,   Y,      Y),
+            ("Financial analysis (NPV/IRR)",   Y,    Y,      Y),
+            ("Bankability verdict",            Y,    Y,      Y),
+            ("Redesign recommendations",       N,    Y,      Y),
+            ("Multi-currency BOQ",             N,    Y,      Y),
           ]),
           ("Reports & Exports", [
-            ("Pre-Installation Assessment",  Y,       Y,      Y,      Y),
-            ("All 9 premium PDF reports",    N,       Y,      Y,      Y),
-            ("Excel (.xlsx) export",         N,       Y,      Y,      Y),
-            ("CSV export",                   N,       Y,      Y,      Y),
-            ("Word (.docx) export",          N,       N,      Y,      Y),
-            ("Email report delivery",        N,       N,      Y,      Y),
-            ("White-label / custom branding",N,       N,      N,      Y),
+            ("Pre-Installation Assessment",    Y,    Y,      Y),
+            ("All 9 premium PDF reports",      N,    Y,      Y),
+            ("Excel (.xlsx) export",           N,    Y,      Y),
+            ("CSV export",                     N,    Y,      Y),
+            ("Word (.docx) export",            N,    Y,      Y),
+            ("Email report delivery",          N,    Y,      Y),
+            ("White-label / custom branding",  N,    N,      Y),
           ]),
           ("Procurement", [
-            ("Equipment catalog access",     N,       Y,      Y,      Y),
-            ("Supplier directory",           N,       Y,      Y,      Y),
-            ("Auto procurement plan (BOQ→PO)",N,      N,      Y,      Y),
+            ("Equipment catalog access",       N,    Y,      Y),
+            ("Supplier directory",             N,    Y,      Y),
+            ("Auto procurement plan (BOQ→PO)", N,    Y,      Y),
           ]),
           ("Support & Extras", [
-            ("Email support",                Y,       Y,      Y,      Y),
-            ("Priority support",             N,       N,      Y,      Y),
-            ("Dedicated engineer support",   N,       N,      N,      Y),
-            ("API access",                   N,       N,      N,      Y),
-            ("Team / sub-accounts",          N,       N,      N,      Y),
-            ("Annual billing discount (20%)",N,       Y,      Y,      Y),
+            ("Email support",                  Y,    Y,      Y),
+            ("Priority support",               N,    Y,      Y),
+            ("Dedicated engineer support",     N,    N,      Y),
+            ("API access",                     N,    N,      Y),
+            ("Team / sub-accounts",            N,    N,      Y),
+            ("Annual billing discount (20%)",  N,    Y,      Y),
           ]),
         ] %}
         <tr style="background:#080814">
-          <td colspan="5" class="fw-bold text-uppercase" style="font-size:10px;letter-spacing:.8px;color:#5a5a90;padding:12px 14px 4px">
+          <td colspan="4" class="fw-bold text-uppercase" style="font-size:10px;letter-spacing:.8px;color:#5a5a90;padding:12px 14px 4px">
             {{ section }}
           </td>
         </tr>
-        {% for feat, free_v, basic_v, pro_v, ent_v in rows %}
+        {% for feat, free_v, pro_v, ent_v in rows %}
         <tr>
           <td class="feat-name">{{ feat }}</td>
-          {% for v in [free_v, basic_v, pro_v, ent_v] %}
+          {% for v in [free_v, pro_v, ent_v] %}
           <td class="{% if v == Y %}yes{% elif v == N %}no{% else %}val{% endif %}">
             {{ v|safe }}
           </td>
@@ -443,7 +442,7 @@
         ("Can I really cancel anytime?",
          "Yes. Subscriptions are month-to-month with no minimum term. Cancel before your renewal date and you won't be charged again. Your projects remain accessible on the Free plan after cancellation."),
         ("Is there a free trial?",
-         "Yes — the Free plan is free forever with no credit card required. If DEMO_MODE is enabled (on by default), you can also activate a 14-day Professional trial instantly with no payment."),
+         "Yes — you get a 14-day free trial with 1 project, full engineering calculations, and a Pre-Installation Assessment PDF. No credit card required. After 14 days, upgrade to a paid plan to continue using the platform."),
         ("What happens to my data if I downgrade?",
          "Your project data is always preserved. You simply cannot create new projects above your plan limit. All completed reports and calculations remain fully accessible."),
         ("Can I upgrade mid-month?",
@@ -479,7 +478,7 @@
 <div class="text-center py-4 mb-4" style="background:radial-gradient(ellipse 50% 80% at 50% 50%,rgba(245,158,11,.05),transparent);border-radius:16px">
   <div class="fw-black mb-2" style="font-size:20px">Ready to unlock the full platform?</div>
   <p class="text-secondary small mb-3">
-    Professional at $49/mo gives you everything — 25 projects, 9 reports, Excel, Word, procurement, and email delivery.
+    Professional at $49/mo gives you everything — 10 projects, 9 reports, Excel, Word, procurement, and email delivery.
   </p>
   {% if demo_mode %}
   <form method="POST" action="{{ url_for('upgrade_demo_activate') }}" class="d-inline me-2">

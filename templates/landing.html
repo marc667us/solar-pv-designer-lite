@@ -102,7 +102,7 @@
 
   <!-- Stats -->
   <div class="row g-3 justify-content-center mt-3">
-    {% for num,lbl in [('22+','Countries'),('9','Pro Reports'),('30 min','Design to Proposal'),('100%','Free to Try'),('Live','RFP Search'),('MoMo','Accepted')] %}
+    {% for num,lbl in [('22+','Countries'),('9','Pro Reports'),('30 min','Design to Proposal'),('14 Days','Free Trial'),('Live','RFP Search'),('MoMo','Accepted')] %}
     <div class="col-4 col-md-2">
       <div class="stat-num">{{ num }}</div>
       <div class="stat-lbl">{{ lbl }}</div>
@@ -522,10 +522,10 @@
 
 <div class="row g-4 justify-content-center mb-4">
   {% for plan,price,ghs,color,popular,feats in [
-    ("Free",         "$0",  "GHS 0",  "#6868a0", false,
+    ("Free Trial",   "$0",  "14 days",   "#6868a0", false,
      ["1 active project","Full engineering calculations","Pre-Installation Assessment PDF","AI Prospecting Agent (5 runs/mo)","Standards-compliant outputs"]),
-    ("Professional", "$49", "~GHS 590","#f59e0b", true,
-     ["25 projects","All 9 professional reports","Excel, Word & CSV export","AI Agent unlimited runs","Procurement planning","Email reports to clients","Priority support"]),
+    ("Professional", "$49", "~GHS 590",  "#f59e0b", true,
+     ["10 projects","All 9 professional reports","Excel, Word & CSV export","AI Agent unlimited runs","Procurement planning","Email reports to clients","Priority support"]),
     ("Business",     "$99", "~GHS 1,200","#0ea5e9", false,
      ["Unlimited projects","White-label reports (your brand)","Team accounts","API access","Custom integrations","Dedicated support","Training session included"]),
   ] %}
@@ -541,9 +541,9 @@
       <div class="small fw-bold mb-1" style="color:{{ color }};text-transform:uppercase;letter-spacing:.5px">{{ plan }}</div>
       <div class="mb-1">
         <span style="font-size:38px;font-weight:900;color:{{ color }};line-height:1">{{ price }}</span>
-        <span class="text-secondary small">/month USD</span>
+        <span class="text-secondary small">{% if price == '$0' %}/trial{% else %}/month USD{% endif %}</span>
       </div>
-      <div class="mb-3" style="font-size:11px;color:#6868a0">≈ {{ ghs }}/month · Pay with MTN MoMo</div>
+      <div class="mb-3" style="font-size:11px;color:#6868a0">{% if price == '$0' %}{{ ghs }} · then upgrade to continue{% else %}≈ {{ ghs }}/month · Pay with MTN MoMo{% endif %}</div>
       <ul class="list-unstyled mb-4" style="font-size:13px">
         {% for f in feats %}
         <li class="mb-2 d-flex align-items-center gap-2">
@@ -634,8 +634,8 @@
     </div>
     <div class="solar-card p-4">
       {% for q,a in [
-        ("Is it really free to start?",
-         "Yes. The Free plan gives you 1 project with full engineering calculations, a Pre-Installation Assessment PDF, and 5 AI Agent runs per month — no credit card required."),
+        ("Is there a free trial?",
+         "Yes. You get a 14-day free trial with 1 project, full engineering calculations, a Pre-Installation Assessment PDF, and 5 AI Agent runs — no credit card required. After 14 days, upgrade to a paid plan to continue."),
         ("Can I pay with MTN Mobile Money?",
          "Yes. We accept MTN MoMo, AirtelTigo, and Vodafone Cash in Ghana via Paystack. Payment is in GHS at the current rate. Contact us to activate MoMo billing."),
         ("How does the AI Prospecting Agent work?",
@@ -738,7 +738,7 @@
           ('bi-shield-check-fill','#22c55e','Standards Compliant','BS 7671 · IEC · NEC'),
           ('bi-phone-fill','#f59e0b','MTN MoMo Accepted','Pay in GHS'),
           ('bi-lock-fill','#a78bfa','Your Data is Private','Never shared'),
-          ('bi-stars','#0ea5e9','Free Forever Plan','No card required'),
+          ('bi-stars','#0ea5e9','14-Day Free Trial','No card required'),
         ] %}
         <div class="col-6">
           <div style="font-size:26px;color:{{ color }}" class="mb-1"><i class="bi {{ icon }}"></i></div>
@@ -790,7 +790,7 @@
     </a>
   </div>
   <div class="text-secondary mt-3" style="font-size:12px">
-    Free forever plan · Pay with MTN MoMo · Cancel any time
+    14-day free trial · Pay with MTN MoMo · Cancel any time
   </div>
 </div>
 {% endif %}

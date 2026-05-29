@@ -109,10 +109,8 @@ SMTP_FROM   = os.environ.get("SMTP_FROM", "noreply@solarproglobal.com")
 SMTP_TLS    = os.environ.get("SMTP_TLS", "true").lower() in ("1", "true", "yes")
 
 PLAN_PRICES = {
-    "starter":      {"usd": 19, "label": "Starter",      "projects": 5,
-                     "features": ["5 projects","All calculations","All PDF reports","Email support","Excel & CSV export"]},
-    "professional": {"usd": 49, "label": "Professional", "projects": 25,
-                     "features": ["25 projects","Priority support","Excel & CSV export","Multi-currency BOQ","Redesign recommendations"]},
+    "professional": {"usd": 49, "label": "Professional", "projects": 10,
+                     "features": ["10 projects","Priority support","Excel & CSV export","Multi-currency BOQ","Redesign recommendations"]},
     "business":     {"usd": 99, "label": "Business",     "projects": "Unlimited",
                      "features": ["Unlimited projects","API access","Custom branding","White-label reports","Dedicated engineer support"]},
 }
@@ -2189,7 +2187,7 @@ def dashboard():
 
 # ─── Routes — Project ─────────────────────────────────────────────────────────
 
-PLAN_LIMITS = {"free": 1, "starter": 5, "professional": 25, "business": 9999, "enterprise": 9999}
+PLAN_LIMITS = {"free": 1, "professional": 10, "business": 9999, "enterprise": 9999}
 
 @app.route("/project/new", methods=["GET", "POST"])
 @login_required
@@ -5686,7 +5684,7 @@ _ASSISTANT_SYSTEM = """You are Helpline — the AI customer engagement, assessme
 Design flow: Create Project → Location (country, region, tariff, funding mode) → Loads (appliances, watts, hours, demand factor) → Results (PV/battery/inverter/cable sizing + financials) → Reports
 Funding modes: Loan Finance (DSCR analysis) or Self-Funded (NPV/IRR/payback)
 Battery chemistry: LiFePO4 or Lead-Acid
-Plans: Free (1 project, 5 AI Agent runs/mo), Starter ($19/mo — 5 projects, all 9 reports), Professional ($49/mo — 25 projects, all 9 reports), Business ($99/mo — unlimited + white-label)
+Plans: Free Trial (14 days, 1 project, 5 AI Agent runs/mo), Professional ($49/mo — 10 projects, all 9 reports), Business ($99/mo — unlimited + white-label)
 Reports: BOQ (8% markup, 15% installation), Economic (25-yr, 0.8% O&M, battery/inverter replacement, 8% tariff escalation), Proposal, Cable sizing (BS 7671/IEC 60364), Installation plan, Energy production
 Settings: Organisation profile, Date/Time format, Appearance (5 themes, 7 accent colours, 5 fonts), Email/SMTP, Security
 User management (admin only): Admin → Users — view all accounts, change plan (free/starter/professional/business/enterprise), assign job role (customer/bdo/sales_engineer/design_engineer/proposal_engineer/project_manager/technician/support_engineer/customer_success/admin), toggle admin flag, record manual payments, disable accounts. New users self-register at /register.
@@ -5810,7 +5808,7 @@ def assistant_chat():
         (["utility bill","electricity bill","purc","unit rate","kwh rate","electricity tariff"],
          "The platform uses local utility tariff data for your country/region. For Ghana, PURC rates are pre-loaded by category (Residential, Commercial, Industrial). Enter your monthly bill amount on the Location page to calibrate the financial model."),
         (["upgrade","recommend","which plan","what plan"],
-         "Start with **Starter ($19/mo)** for up to 5 projects and all PDF reports. For 25 projects and team features, **Professional ($49/mo)** is the right step. For unlimited projects and white-label reports, choose **Business ($99/mo)**. All paid plans include unlimited AI Agent tender searches."),
+         "Start with **Professional ($49/mo)** for up to 10 projects and all 9 PDF reports. For unlimited projects and white-label reports, choose **Business ($99/mo)**. All paid plans include unlimited AI Agent tender searches."),
         # Core platform flows
         (["load","appliance","consumption","add load","add appliance"],
          "Go to your project → click **Loads** in the sidebar. Add a row for each appliance: enter the name, watts, quantity, hours/day, and demand factor. Click **Calculate** when done."),
@@ -5821,7 +5819,7 @@ def assistant_chat():
         (["report","pdf","boq","proposal","export","download","bill of quantities"],
          "Reports are in the sidebar under your project. BOQ, Economic Analysis, and Proposal require a **Professional or Enterprise** plan. PDF download is on each report page."),
         (["plan","professional","enterprise","subscription","limit","feature"],
-         "The Free plan gives 1 project + 5 AI Agent runs/month. Starter ($19/mo) gives 5 projects + all 9 reports. Professional ($49/mo) gives 25 projects + team features. Business ($99/mo) is unlimited + white-label. Upgrade at **Settings → Upgrade**."),
+         "The Free Trial gives 1 project + 5 AI Agent runs for 14 days. Professional ($49/mo) gives 10 projects + all 9 reports. Business ($99/mo) is unlimited + white-label. Upgrade at **Settings → Upgrade**."),
         (["payment","momo","mobile money","mtn","paystack","stripe","billing","invoice"],
          "We accept MTN MoMo, AirtelTigo, and Vodafone Cash via Paystack, plus Visa/Mastercard worldwide. Go to **Settings → Upgrade** and choose your payment method."),
         (["add user","add a user","new user","create user","manage user","user management",
