@@ -7724,10 +7724,9 @@ def err_429(e):
 
 @app.errorhandler(500)
 def err_500(e):
-    return render_template("error.html", code=500,
-        title="Internal Server Error",
-        message="Something went wrong on our end. "
-                "Please go back to the dashboard and try again."), 500
+    import traceback as _tb
+    tb = _tb.format_exc()
+    return f"<pre style='background:#111;color:#f88;padding:20px;font-size:12px;white-space:pre-wrap'>500 ERROR:\n{tb}</pre>", 500
 
 
 # ─── Client Prospecting Agent ─────────────────────────────────────────────────
