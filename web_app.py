@@ -4845,7 +4845,7 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62305 · IEC 62
 | **Net Annual Benefit (Yr 1)** | **{sym} {_fmt(eco.get("net_yr1",0),0)}/year** |
 | Simple Payback Period | {_fmt(eco.get("payback",0),1)} years |
 | Net Present Value (25yr) | {sym} {_fmt(eco.get("npv",0),0)} |
-| Internal Rate of Return | {"%.1f"|format(eco.get("irr_pct",0)) if eco.get("irr_pct") else "N/A"}% |
+| Internal Rate of Return | {"%.1f" % eco.get("irr_pct",0) if eco.get("irr_pct") else "N/A"}% |
 | 25-Year ROI | {_fmt(eco.get("roi_pct",0),0)}% |
 | Cumulative Savings (25yr) | {sym} {_fmt(eco.get("cumul_25",0),0)} |
 | Annual CO₂ Avoided | {_fmt(eco.get("co2_yr",0),2)} tonnes/year |
@@ -7140,6 +7140,15 @@ Prepared by: SolarPro Global | Currency: USD (local rates apply × {fx})
 @login_required
 def project_email(pid):
     """Send a PDF report to recipients via SMTP (user settings > env vars)."""
+    try:
+        return _project_email_inner(pid)
+    except Exception as _exc:
+        import traceback as _tb
+        app.logger.error("EMAIL 500: %s\n%s", _exc, _tb.format_exc())
+        return f"<pre>EMAIL ERROR:\n{_tb.format_exc()}</pre>", 500
+
+
+def _project_email_inner(pid):
     project = get_project(pid)
     if not project or "results" not in project["data"]:
         flash("Run calculations first.", "warning")
