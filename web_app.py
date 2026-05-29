@@ -1031,13 +1031,16 @@ def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
     else:
         verdict = "REJECTED"
         v_color = "#f87171"
+        import math as _m
+        _pb_str  = f"{payback:.1f}" if _m.isfinite(payback) else "N/A (savings < O&M costs)"
+        _pb80str = f"{payback*0.80:.1f}" if _m.isfinite(payback) else "improved"
         verdict_reasons = [
-            f"Payback {payback:.1f} years exceeds {_cond_yr}-year threshold",
+            f"Payback {_pb_str} years exceeds {_cond_yr}-year threshold",
             f"NPV {sym} {npv:,.0f} — insufficient return on investment",
             f"Annual savings {sym} {annual_sav:,.0f} cannot justify {sym} {total_local:,.0f} investment",
             "Action required: (1) Audit loads and remove non-essential equipment, "
             "(2) Obtain competitive equipment quotes, (3) Apply for utility grants or tax incentives",
-            f"Reducing system cost by 20% would improve payback to ~{payback*0.80:.1f} years",
+            f"Reducing system cost by 20% would improve payback to ~{_pb80str} years",
         ]
 
     return {
@@ -1120,11 +1123,18 @@ def calc_recommendations(eco, d, r):
     voltage  = d.get("voltage", 48)
     panel_wp = r.get("panel_wp", 400)
 
+    # Guard: payback may be float("inf") when annual savings < O&M costs
+    import math as _math
+    _payback_finite = _math.isfinite(payback)
+    _payback_safe   = min(payback, 200.0) if _payback_finite else 200.0  # cap at 200 yr for display
+
     # 1 ─ Reduce system size / load (most impactful for high payback)
     if payback > 10:
-        reduce = min(35, max(15, int((payback - 8) / payback * 85)))
+        reduce = min(35, max(15, int((_payback_safe - 8) / _payback_safe * 85)))
         new_cost = total * (1 - reduce / 100)
-        new_pb   = new_cost / net_yr1 if net_yr1 > 0 else payback
+        new_pb   = new_cost / net_yr1 if net_yr1 > 0 else _payback_safe
+        pb_str   = f"{payback:.1f}" if _payback_finite else "N/A (no net savings)"
+        new_pb_str = f"{new_pb:.1f}" if net_yr1 > 0 else "improved"
         recs.append({
             "priority": 1, "icon": "bi-arrows-collapse", "color": "#f59e0b",
             "title":  f"Reduce System Size by {reduce}%",
@@ -1132,7 +1142,7 @@ def calc_recommendations(eco, d, r):
                       f"scheduling) to cut daily consumption by {reduce}%, then downsize the PV array "
                       f"and battery bank proportionally.",
             "impact": f"System cost falls to ~{sym} {new_cost:,.0f}. "
-                      f"Payback improves from {payback:.1f} yr to ~{new_pb:.1f} yr.",
+                      f"Payback improves from {pb_str} yr to ~{new_pb_str} yr.",
             "category": "Design",
         })
 
@@ -7724,9 +7734,10 @@ def err_429(e):
 
 @app.errorhandler(500)
 def err_500(e):
-    import traceback as _tb
-    tb = _tb.format_exc()
-    return f"<pre style='background:#111;color:#f88;padding:20px;font-size:12px;white-space:pre-wrap'>500 ERROR:\n{tb}</pre>", 500
+    return render_template("error.html", code=500,
+        title="Internal Server Error",
+        message="Something went wrong on our end. "
+                "Please go back to the dashboard and try again."), 500
 
 
 # ─── Client Prospecting Agent ─────────────────────────────────────────────────
