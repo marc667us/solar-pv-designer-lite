@@ -40,11 +40,15 @@
 {% block content %}
 {% set eco = r.economics %}
 
-<div class="no-print mb-3 d-flex align-items-center gap-3 flex-wrap">
+<div class="no-print mb-3 d-flex align-items-center gap-2 flex-wrap">
   <a href="{{ url_for('project_results', pid=project.id) }}" class="text-secondary small"><i class="bi bi-arrow-left me-1"></i>Results</a>
-  <div class="ms-auto d-flex gap-2">
-    <a href="{{ url_for('export_excel', pid=project.id) }}" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel me-1"></i>Export Excel</a>
-    <button onclick="window.print()" class="btn btn-solar btn-sm"><i class="bi bi-printer me-1"></i>Print Proposal</button>
+  <div class="ms-auto d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('export_pdf_proposal', pid=project.id) }}" class="btn btn-danger btn-sm">
+      <i class="bi bi-file-earmark-pdf me-1"></i>Full Proposal PDF
+    </a>
+    <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-info btn-sm"><i class="bi bi-envelope me-1"></i>Email</a>
+    <a href="{{ url_for('export_excel', pid=project.id) }}" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel me-1"></i>Excel</a>
+    <button onclick="window.print()" class="btn btn-solar btn-sm"><i class="bi bi-printer me-1"></i>Print</button>
   </div>
 </div>
 
@@ -933,6 +937,177 @@
       {% endfor %}
     </div>
   </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════ PART D — REPORT INDEX #}
+<div class="part-head">
+  <div class="part-num" style="background:linear-gradient(135deg,#f97316,#dc2626);color:#fff">D</div>
+  <div>
+    <div style="font-weight:900;font-size:16px;color:#fb923c">PART D — TECHNICAL REPORT INDEX</div>
+    <div class="text-secondary small">All individual reports — each available as PDF, Email, and Excel spreadsheet</div>
+  </div>
+</div>
+
+<div class="prop-section mb-4" style="border-color:#f97316aa">
+  <div class="prop-section-head" style="color:#fb923c;border-color:#f9731622">
+    <i class="bi bi-collection-fill"></i>Complete Report Suite
+  </div>
+  <div class="explain-box mb-3" style="border-color:rgba(249,115,22,0.25);background:rgba(249,115,22,0.05)">
+    <div class="head" style="color:#fb923c"><i class="bi bi-info-circle-fill"></i>How to use these reports</div>
+    Each report below is a full standalone technical document. Use the <strong style="color:#e2e2f0">PDF</strong> button to download a
+    professional-quality PDF, <strong style="color:#e2e2f0">Email</strong> to send any report directly from the platform,
+    and <strong style="color:#e2e2f0">Excel</strong> to get all project data in a structured spreadsheet for further analysis.
+  </div>
+
+  <div class="row g-3">
+
+    {# PV Design Report #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card" style="border-color:#f59e0b44">
+        <div style="font-size:22px mb-1">☀️</div>
+        <div class="component-title mt-1">PV System Design Report</div>
+        <div class="component-sub">Panel, battery, inverter &amp; MPPT sizing</div>
+        <div class="component-desc mb-3">Full engineering calculations: PV array sizing, battery bank sizing, inverter rating, MPPT, string configuration, and performance ratios.</div>
+        <div class="d-flex gap-1 flex-wrap">
+          <a href="{{ url_for('report_pv', pid=project.id) }}" class="btn btn-outline-warning btn-sm" style="font-size:11px"><i class="bi bi-eye me-1"></i>View</a>
+          <a href="{{ url_for('export_pdf_pv', pid=project.id) }}" class="btn btn-danger btn-sm" style="font-size:11px"><i class="bi bi-file-pdf me-1"></i>PDF</a>
+          <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-info btn-sm" style="font-size:11px"><i class="bi bi-envelope me-1"></i>Email</a>
+          <a href="{{ url_for('export_excel', pid=project.id) }}" class="btn btn-success btn-sm" style="font-size:11px"><i class="bi bi-file-excel me-1"></i>Excel</a>
+        </div>
+      </div>
+    </div>
+
+    {# BOQ Report #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card" style="border-color:#f59e0b44">
+        <div style="font-size:22px mb-1">📋</div>
+        <div class="component-title mt-1">Bill of Quantities (BOQ)</div>
+        <div class="component-sub">Itemised equipment list with pricing</div>
+        <div class="component-desc mb-3">Complete BOQ with equipment specifications, quantities, basic rates, supply markup, and total CAPEX in local currency.</div>
+        <div class="d-flex gap-1 flex-wrap">
+          <a href="{{ url_for('report_boq', pid=project.id) }}" class="btn btn-outline-warning btn-sm" style="font-size:11px"><i class="bi bi-eye me-1"></i>View</a>
+          <a href="{{ url_for('export_pdf_boq', pid=project.id) }}" class="btn btn-danger btn-sm" style="font-size:11px"><i class="bi bi-file-pdf me-1"></i>PDF</a>
+          <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-info btn-sm" style="font-size:11px"><i class="bi bi-envelope me-1"></i>Email</a>
+          <a href="{{ url_for('export_excel', pid=project.id) }}" class="btn btn-success btn-sm" style="font-size:11px"><i class="bi bi-file-excel me-1"></i>Excel</a>
+        </div>
+      </div>
+    </div>
+
+    {# Economic Analysis #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card" style="border-color:#22c55e44">
+        <div style="font-size:22px mb-1">💰</div>
+        <div class="component-title mt-1">Economic Analysis</div>
+        <div class="component-sub">NPV, IRR, payback &amp; 25-yr cash flow</div>
+        <div class="component-desc mb-3">Full financial model: CAPEX, annual savings, O&amp;M, NPV, IRR, DSCR, loan structure, and 25-year cumulative cash flow projection.</div>
+        <div class="d-flex gap-1 flex-wrap">
+          <a href="{{ url_for('report_economic', pid=project.id) }}" class="btn btn-outline-warning btn-sm" style="font-size:11px"><i class="bi bi-eye me-1"></i>View</a>
+          <a href="{{ url_for('export_pdf_economic', pid=project.id) }}" class="btn btn-danger btn-sm" style="font-size:11px"><i class="bi bi-file-pdf me-1"></i>PDF</a>
+          <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-info btn-sm" style="font-size:11px"><i class="bi bi-envelope me-1"></i>Email</a>
+          <a href="{{ url_for('export_excel', pid=project.id) }}" class="btn btn-success btn-sm" style="font-size:11px"><i class="bi bi-file-excel me-1"></i>Excel</a>
+        </div>
+      </div>
+    </div>
+
+    {# AC Cable Schedule #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card" style="border-color:#0ea5e944">
+        <div style="font-size:22px mb-1">🔌</div>
+        <div class="component-title mt-1">AC Cable Schedule</div>
+        <div class="component-sub">BS 7671 cable sizing &amp; voltage drop</div>
+        <div class="component-desc mb-3">All AC circuit cables sized per BS 7671, with design current, cable size, capacity, breaker rating, voltage drop % and compliance status.</div>
+        <div class="d-flex gap-1 flex-wrap">
+          <a href="{{ url_for('report_cable', pid=project.id) }}" class="btn btn-outline-warning btn-sm" style="font-size:11px"><i class="bi bi-eye me-1"></i>View</a>
+          <a href="{{ url_for('export_pdf_cable', pid=project.id) }}" class="btn btn-danger btn-sm" style="font-size:11px"><i class="bi bi-file-pdf me-1"></i>PDF</a>
+          <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-info btn-sm" style="font-size:11px"><i class="bi bi-envelope me-1"></i>Email</a>
+          <a href="{{ url_for('export_excel', pid=project.id) }}" class="btn btn-success btn-sm" style="font-size:11px"><i class="bi bi-file-excel me-1"></i>Excel</a>
+        </div>
+      </div>
+    </div>
+
+    {# Energy Impact #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card" style="border-color:#22c55e44">
+        <div style="font-size:22px mb-1">🌱</div>
+        <div class="component-title mt-1">Energy &amp; Environmental Impact</div>
+        <div class="component-sub">CO₂ avoided, generation profile &amp; savings</div>
+        <div class="component-desc mb-3">Annual and monthly generation profile, grid offset, CO₂ avoided, equivalent trees, and 25-year environmental impact summary.</div>
+        <div class="d-flex gap-1 flex-wrap">
+          <a href="{{ url_for('report_energy', pid=project.id) }}" class="btn btn-outline-warning btn-sm" style="font-size:11px"><i class="bi bi-eye me-1"></i>View</a>
+          <a href="{{ url_for('export_pdf_energy', pid=project.id) }}" class="btn btn-danger btn-sm" style="font-size:11px"><i class="bi bi-file-pdf me-1"></i>PDF</a>
+          <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-info btn-sm" style="font-size:11px"><i class="bi bi-envelope me-1"></i>Email</a>
+          <a href="{{ url_for('export_excel', pid=project.id) }}" class="btn btn-success btn-sm" style="font-size:11px"><i class="bi bi-file-excel me-1"></i>Excel</a>
+        </div>
+      </div>
+    </div>
+
+    {# Installation Plan #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card" style="border-color:#a78bfa44">
+        <div style="font-size:22px mb-1">🔧</div>
+        <div class="component-title mt-1">Installation Plan &amp; Wiring Diagrams</div>
+        <div class="component-sub">Methodology, wiring, work plan &amp; staffing</div>
+        <div class="component-desc mb-3">Full installation methodology with wiring diagrams, commissioning checklist, project work plan (Gantt timeline), and staffing plan.</div>
+        <div class="d-flex gap-1 flex-wrap">
+          <a href="{{ url_for('report_installation', pid=project.id) }}" class="btn btn-outline-warning btn-sm" style="font-size:11px"><i class="bi bi-eye me-1"></i>View</a>
+          <a href="{{ url_for('export_pdf_installation', pid=project.id) }}" class="btn btn-danger btn-sm" style="font-size:11px"><i class="bi bi-file-pdf me-1"></i>Diagrams</a>
+          <a href="{{ url_for('export_pdf_workplan', pid=project.id) }}" class="btn btn-solar btn-sm" style="font-size:11px"><i class="bi bi-file-ruled me-1"></i>Work Plan</a>
+          <a href="{{ url_for('export_pdf_staffing', pid=project.id) }}" class="btn btn-outline-info btn-sm" style="font-size:11px"><i class="bi bi-people me-1"></i>Staffing</a>
+          <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-info btn-sm" style="font-size:11px"><i class="bi bi-envelope me-1"></i>Email</a>
+          <a href="{{ url_for('export_excel', pid=project.id) }}" class="btn btn-success btn-sm" style="font-size:11px"><i class="bi bi-file-excel me-1"></i>Excel</a>
+        </div>
+      </div>
+    </div>
+
+    {# Procurement Plan #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card" style="border-color:#0ea5e944">
+        <div style="font-size:22px mb-1">🚛</div>
+        <div class="component-title mt-1">Procurement Plan</div>
+        <div class="component-sub">Equipment sourcing schedule &amp; suppliers</div>
+        <div class="component-desc mb-3">Smart procurement plan mapping each BOQ item to catalog suppliers, with lead times, USD pricing, and purchase order groupings.</div>
+        <div class="d-flex gap-1 flex-wrap">
+          <a href="{{ url_for('project_procurement', pid=project.id) }}" class="btn btn-outline-warning btn-sm" style="font-size:11px"><i class="bi bi-eye me-1"></i>View</a>
+          <a href="{{ url_for('export_pdf_procurement', pid=project.id) }}" class="btn btn-danger btn-sm" style="font-size:11px"><i class="bi bi-file-pdf me-1"></i>PDF</a>
+          <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-info btn-sm" style="font-size:11px"><i class="bi bi-envelope me-1"></i>Email</a>
+          <a href="{{ url_for('export_excel', pid=project.id) }}" class="btn btn-success btn-sm" style="font-size:11px"><i class="bi bi-file-excel me-1"></i>Excel</a>
+        </div>
+      </div>
+    </div>
+
+    {# Site Assessment / Inspection #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card" style="border-color:#f59e0b44">
+        <div style="font-size:22px mb-1">📍</div>
+        <div class="component-title mt-1">Site Assessment &amp; Inspection</div>
+        <div class="component-sub">Pre-installation checklist &amp; site survey</div>
+        <div class="component-desc mb-3">Pre-installation site assessment checklist covering roof/mounting, electrical supply, shading analysis, access, and safety requirements.</div>
+        <div class="d-flex gap-1 flex-wrap">
+          <a href="{{ url_for('report_inspection', pid=project.id) }}" class="btn btn-outline-warning btn-sm" style="font-size:11px"><i class="bi bi-eye me-1"></i>View</a>
+          <a href="{{ url_for('export_pdf_inspection', pid=project.id) }}" class="btn btn-danger btn-sm" style="font-size:11px"><i class="bi bi-file-pdf me-1"></i>PDF</a>
+          <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-info btn-sm" style="font-size:11px"><i class="bi bi-envelope me-1"></i>Email</a>
+          <a href="{{ url_for('export_excel', pid=project.id) }}" class="btn btn-success btn-sm" style="font-size:11px"><i class="bi bi-file-excel me-1"></i>Excel</a>
+        </div>
+      </div>
+    </div>
+
+    {# Full Proposal PDF #}
+    <div class="col-md-6 col-lg-4">
+      <div class="component-card" style="border:2px solid #f59e0b66;background:rgba(245,158,11,0.05)">
+        <div style="font-size:22px mb-1">📄</div>
+        <div class="component-title mt-1" style="color:#f59e0b">Full Proposal (This Document)</div>
+        <div class="component-sub">Complete technical + financial proposal</div>
+        <div class="component-desc mb-3">All Parts A–C combined: Technical design, financial analysis, and project delivery in a single client-ready document.</div>
+        <div class="d-flex gap-1 flex-wrap">
+          <a href="{{ url_for('export_pdf_proposal', pid=project.id) }}" class="btn btn-danger btn-sm" style="font-size:11px"><i class="bi bi-file-pdf me-1"></i>PDF</a>
+          <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-info btn-sm" style="font-size:11px"><i class="bi bi-envelope me-1"></i>Email</a>
+          <a href="{{ url_for('export_excel', pid=project.id) }}" class="btn btn-success btn-sm" style="font-size:11px"><i class="bi bi-file-excel me-1"></i>Excel</a>
+          <button onclick="window.print()" class="btn btn-outline-secondary btn-sm" style="font-size:11px"><i class="bi bi-printer me-1"></i>Print</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row -->
 </div>
 
 {# Footer disclaimer #}
