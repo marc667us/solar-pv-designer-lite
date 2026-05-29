@@ -73,7 +73,7 @@
 <span id="user_email" data-v="{{ user.email }}"></span>
 
 <!-- ── Page header ────────────────────────────────────────────────────── -->
-{% set plan_color = '#a78bfa' if current_plan=='enterprise' else '#0ea5e9' if current_plan=='professional' else '#22c55e' if current_plan=='basic' else '#f59e0b' if current_plan=='demo' else '#6868a0' %}
+{% set plan_color = '#a78bfa' if current_plan in ('enterprise','business') else '#0ea5e9' if current_plan=='professional' else '#22c55e' if current_plan in ('starter','basic') else '#f59e0b' if current_plan=='demo' else '#6868a0' %}
 <div class="text-center mb-5">
   <div class="mb-2" style="font-size:40px">⚡</div>
   <h2 class="fw-black mb-2">Upgrade Your Plan</h2>
@@ -113,7 +113,7 @@
         no payment, no strings. Expires automatically after 14 days.
       </p>
       <div class="d-flex flex-wrap gap-2">
-        {% for f in ['20 projects','All 9 reports','Excel & Word export','Procurement planning','Email delivery','Multi-currency BOQ'] %}
+        {% for f in ['25 projects','All 9 reports','Excel & Word export','Procurement planning','Email delivery','Multi-currency BOQ'] %}
         <span class="badge" style="background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa33;font-size:10px">
           <i class="bi bi-check me-1"></i>{{ f }}
         </span>
@@ -168,7 +168,7 @@
   {% for plan_key, pp in plan_prices.items() %}
   {% set is_current = current_plan == plan_key %}
   {% set is_popular = plan_key == 'professional' %}
-  {% set color = '#a78bfa' if plan_key=='enterprise' else '#0ea5e9' if plan_key=='professional' else '#22c55e' %}
+  {% set color = '#a78bfa' if plan_key=='business' else '#0ea5e9' if plan_key=='professional' else '#22c55e' %}
   <div class="col-md-3">
     <div class="plan-card {% if is_popular %}featured{% endif %} {% if is_current %}current{% endif %} h-100"
          style="{% if is_popular %}border-color:var(--solar-gold){% else %}border-color:{{ color }}44{% endif %}">
@@ -280,11 +280,11 @@
         <tr style="background:#080814">
           <th style="width:35%">Feature</th>
           <th class="text-center">Free</th>
-          <th class="text-center" style="color:#22c55e">Basic<br><small style="font-size:10px;font-weight:400">$9/mo</small></th>
+          <th class="text-center" style="color:#22c55e">Starter<br><small style="font-size:10px;font-weight:400">$19/mo</small></th>
           <th class="text-center" style="color:var(--solar-gold);background:rgba(245,158,11,.04)">
-            Professional<br><small style="font-size:10px;font-weight:400">$29/mo</small>
+            Professional<br><small style="font-size:10px;font-weight:400">$49/mo</small>
           </th>
-          <th class="text-center" style="color:#a78bfa">Enterprise<br><small style="font-size:10px;font-weight:400">$99/mo</small></th>
+          <th class="text-center" style="color:#a78bfa">Business<br><small style="font-size:10px;font-weight:400">$99/mo</small></th>
         </tr>
       </thead>
       <tbody>
@@ -292,7 +292,7 @@
         {% set N = '<i class="bi bi-x-circle" style="color:#2a2a4a"></i>' %}
         {% for section, rows in [
           ("Projects & Design", [
-            ("Projects",                    "1",     "5",    "20",   "Unlimited"),
+            ("Projects",                    "1",     "5",    "25",   "Unlimited"),
             ("Full engineering calculations",Y,       Y,      Y,      Y),
             ("BS 7671 / IEC 60364 cable sizing",Y,   Y,      Y,      Y),
             ("Financial analysis (NPV/IRR)", Y,       Y,      Y,      Y),
@@ -479,7 +479,7 @@
 <div class="text-center py-4 mb-4" style="background:radial-gradient(ellipse 50% 80% at 50% 50%,rgba(245,158,11,.05),transparent);border-radius:16px">
   <div class="fw-black mb-2" style="font-size:20px">Ready to unlock the full platform?</div>
   <p class="text-secondary small mb-3">
-    Professional at $29/mo gives you everything — 20 projects, 9 reports, Excel, Word, procurement, and email delivery.
+    Professional at $49/mo gives you everything — 25 projects, 9 reports, Excel, Word, procurement, and email delivery.
   </p>
   {% if demo_mode %}
   <form method="POST" action="{{ url_for('upgrade_demo_activate') }}" class="d-inline me-2">

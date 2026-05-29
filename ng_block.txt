@@ -1,0 +1,10 @@
+"Nigeria": {
+        "currency": "NGN", "symbol": "₦",
+        "tariff": 180.0,         # NGN/kWh — NERC 2024 weighted avg Band A–C (prev. 100 was outdated)
+        "utility": "Electricity Distribution Companies (DisCos)",
+        "tariff_ref": "NERC Multi-Year Tariff Order (MYTO) 2024 — Bands A–C Weighted Average",
+        "cost_usd_kwp": 1000,    # USD/kWp — import duty + logistics premium
+        "fx_usd": 1600.0,        # NGN/USD (May 2026 — parallel/official converged)
+        "momo": "MTN MoMo Nigeria · Airtel Money · OPay",
+        "regions": {
+            "Lagos (Southwest)":          

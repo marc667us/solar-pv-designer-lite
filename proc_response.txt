@@ -1,0 +1,28 @@
+<pre>PROCUREMENT ERROR:
+Traceback (most recent call last):
+  File "/opt/render/project/src/web_app.py", line 6639, in project_procurement
+    return _project_procurement_inner(pid)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/render/project/src/web_app.py", line 6717, in _project_procurement_inner
+    return render_template("procurement_plan.html", user=current_user(),
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/render/project/src/.venv/lib/python3.11/site-packages/flask/templating.py", line 151, in render_template
+    return _render(app, template, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/render/project/src/.venv/lib/python3.11/site-packages/flask/templating.py", line 132, in _render
+    rv = template.render(context)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/render/project/src/.venv/lib/python3.11/site-packages/jinja2/environment.py", line 1295, in render
+    self.environment.handle_exception()
+  File "/opt/render/project/src/.venv/lib/python3.11/site-packages/jinja2/environment.py", line 942, in handle_exception
+    raise rewrite_traceback_stack(source=source)
+  File "/opt/render/project/src/templates/procurement_plan.html", line 1, in top-level template code
+    {% extends "base.html" %}
+  File "/opt/render/project/src/templates/base.html", line 474, in top-level template code
+    {% block content %}{% endblock %}
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/render/project/src/templates/procurement_plan.html", line 89, in block 'content'
+    {% for item in grp.items %}
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: 'builtin_function_or_method' object is not iterable
+</pre>

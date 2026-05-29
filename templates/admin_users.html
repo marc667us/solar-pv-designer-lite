@@ -28,7 +28,7 @@
 {% block content %}
 
 {% set total = users|length %}
-{% set paid  = users|selectattr('plan','in',['basic','professional','enterprise'])|list|length %}
+{% set paid  = users|selectattr('plan','in',['starter','professional','business','enterprise'])|list|length %}
 {% set free_ = users|selectattr('plan','equalto','free')|list|length + users|selectattr('plan','none')|list|length %}
 {% set admins= users|selectattr('is_admin')|list|length %}
 {% set max_proj = users|map(attribute='proj_count')|max if users else 1 %}
@@ -80,7 +80,7 @@
          oninput="filterUsers()">
   <div class="d-flex gap-1 flex-wrap ms-auto" id="planFilters">
     <button class="plan-filter-btn active" data-plan="all" onclick="setPlanFilter(this)">All</button>
-    {% for p,color in [('free','#6868a0'),('basic','#22c55e'),('professional','#0ea5e9'),('enterprise','#f59e0b'),('disabled','#ef4444')] %}
+    {% for p,color in [('free','#6868a0'),('starter','#22c55e'),('professional','#0ea5e9'),('business','#a78bfa'),('enterprise','#f59e0b'),('disabled','#ef4444')] %}
     <button class="plan-filter-btn" data-plan="{{ p }}" onclick="setPlanFilter(this)"
             style="color:{{ color }}">{{ p|title }}</button>
     {% endfor %}
@@ -104,7 +104,7 @@
         </tr>
       </thead>
       <tbody id="userTableBody">
-      {% set plan_colors = {'free':'#6868a0','demo':'#a78bfa','basic':'#22c55e','professional':'#0ea5e9','enterprise':'#f59e0b','disabled':'#ef4444'} %}
+      {% set plan_colors = {'free':'#6868a0','demo':'#a78bfa','starter':'#22c55e','basic':'#22c55e','professional':'#0ea5e9','business':'#a78bfa','enterprise':'#f59e0b','disabled':'#ef4444'} %}
       {% set avatar_palettes = ['#0ea5e9','#22c55e','#f59e0b','#a78bfa','#ef4444','#06b6d4','#84cc16','#f97316'] %}
       {% for u in users %}
       {% set plan = (u.plan or 'free')|lower %}
@@ -158,7 +158,7 @@
               <input type="hidden" name="uid" value="{{ u.id }}">
               <input type="hidden" name="action" value="set_plan">
               <select name="plan" class="action-select">
-                {% for p in ['free','demo','basic','professional','enterprise','disabled'] %}
+                {% for p in ['free','demo','starter','professional','business','enterprise','disabled'] %}
                 <option value="{{ p }}" {% if plan==p %}selected{% endif %}>{{ p|title }}</option>
                 {% endfor %}
               </select>
@@ -239,9 +239,10 @@
               <label class="form-label small fw-bold text-secondary mb-1">PLAN</label>
               <select name="pay_plan" id="payPlan" class="form-select form-select-sm"
                       style="background:#0a0a1a;border-color:#2a2a5a;color:#d0d0e8">
+                <option value="starter">Starter</option>
                 <option value="professional">Professional</option>
+                <option value="business">Business</option>
                 <option value="enterprise">Enterprise</option>
-                <option value="basic">Basic</option>
               </select>
             </div>
             <div class="col-6">
@@ -327,13 +328,13 @@ function setPlanFilter(btn) {
 }
 
 // ── Payment modal ────────────────────────────────────────────────────────────
-const PLAN_PRICES = { professional: 99, enterprise: 249, basic: 49 };
+const PLAN_PRICES = { starter: 19, professional: 49, business: 99, enterprise: 199 };
 
 function openPayModal(uid, username, currentPlan) {
   document.getElementById('payUid').value      = uid;
   document.getElementById('payModalSub').textContent = 'User: ' + username;
   // Pre-select a higher plan than current
-  const plans = ['basic','professional','enterprise'];
+  const plans = ['starter','professional','business','enterprise'];
   const next  = plans.find(p => p !== currentPlan) || 'professional';
   document.getElementById('payPlan').value     = next;
   document.getElementById('payAmount').value   = PLAN_PRICES[next] || '';

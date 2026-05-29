@@ -524,9 +524,9 @@
   {% for plan,price,ghs,color,popular,feats in [
     ("Free",         "$0",  "GHS 0",  "#6868a0", false,
      ["1 active project","Full engineering calculations","Pre-Installation Assessment PDF","AI Prospecting Agent (5 runs/mo)","Standards-compliant outputs"]),
-    ("Professional", "$29", "~GHS 350","#f59e0b", true,
-     ["20 projects","All 9 professional reports","Excel, Word & CSV export","AI Agent unlimited runs","Procurement planning","Email reports to clients","Priority support"]),
-    ("Enterprise",   "$99", "~GHS 1,200","#0ea5e9", false,
+    ("Professional", "$49", "~GHS 590","#f59e0b", true,
+     ["25 projects","All 9 professional reports","Excel, Word & CSV export","AI Agent unlimited runs","Procurement planning","Email reports to clients","Priority support"]),
+    ("Business",     "$99", "~GHS 1,200","#0ea5e9", false,
      ["Unlimited projects","White-label reports (your brand)","Team accounts","API access","Custom integrations","Dedicated support","Training session included"]),
   ] %}
   <div class="col-md-4">
@@ -647,7 +647,7 @@
         ("What if I find a tender but need help with the proposal?",
          "Submit a request through the platform and our partner installer network can connect with you. You can also use the Contact form to reach our engineering team."),
         ("Can I white-label reports with my company name and logo?",
-         "Yes — on the Enterprise plan ($99/mo). Reports carry your branding. This is popular with consultants who deliver reports to their own clients."),
+         "Yes — on the Business plan ($99/mo). Reports carry your branding. This is popular with consultants who deliver reports to their own clients."),
         ("Do I need to install any software?",
          "No. SolarPro Global is fully web-based. Works on desktop, tablet, and mobile — including low-bandwidth connections common in developing regions."),
       ] %}
@@ -700,8 +700,8 @@
         <select name="interest" class="form-select form-select-sm bg-dark text-light border-secondary mb-2">
           <option value="">I am interested in…</option>
           <option value="Demo request">Free demo walkthrough</option>
-          <option value="Professional plan">Professional plan — $29/mo</option>
-          <option value="Enterprise plan">Enterprise / white-label — $99/mo</option>
+          <option value="Professional plan">Professional plan — $49/mo</option>
+          <option value="Business plan">Business / white-label — $99/mo</option>
           <option value="Training">Team training session</option>
           <option value="General enquiry">General question</option>
         </select>

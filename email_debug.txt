@@ -1,0 +1,10 @@
+<pre>EMAIL ERROR:
+Traceback (most recent call last):
+  File "/opt/render/project/src/web_app.py", line 7144, in project_email
+    return _project_email_inner(pid)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/render/project/src/web_app.py", line 7160, in _project_email_inner
+    u_host = (user.get("smtp_host") or "").strip()
+              ^^^^^^^^
+AttributeError: 'sqlite3.Row' object has no attribute 'get'
+</pre>
