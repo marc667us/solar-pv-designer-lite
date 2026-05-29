@@ -845,12 +845,12 @@ def calc_inverter(daily_kwh, peak_kw=0.0, peak_factor=0.30, safety=1.25):
 def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
                    daily_kwh, tariff, currency, symbol,
                    cost_usd_kwp, fx_usd, autonomy=1, boq_total_local=None,
-                   chemistry="LiFePO4", funding_mode="loan"):
+                   chemistry="LiFePO4", funding_mode="loan", install_rate_pct=15):
     """Full economic analysis: NPV, IRR, payback, DSCR, loan, replacement costs.
 
     Optimised assumptions (West Africa 2025 market basis):
       • O&M: 0.8% of CAPEX/yr (was 1.2% — robust LiFePO4 systems need minimal maintenance)
-      • Install rate: 15% (was 18%)
+      • Install rate: user-adjustable (default 15%)
       • Discount rate: 12% (self-funded can use 10% opportunity cost)
       • Tariff escalation: 8%/yr — consistent with West Africa utility rate trends
       • Battery replacement: LiFePO4 yr 13, NMC yr 8 (at 70% of original cost)
@@ -859,7 +859,7 @@ def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
 
     funding_mode: 'loan' = include DSCR/bankability; 'self' = self-funded, no loan analysis.
     """
-    INSTALL_RATE = 0.15
+    INSTALL_RATE = install_rate_pct / 100.0
     # ── Cost estimation ───────────────────────────────────────────────────────
     if boq_total_local is not None:
         total_local   = boq_total_local        # BOQ already includes installation line
@@ -1044,7 +1044,7 @@ def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
         "total_local":    total_local,
         "equip_local":    equip_local,
         "install_local":  install_local,
-        "install_rate_pct": int(INSTALL_RATE * 100),
+        "install_rate_pct": int(install_rate_pct),
         "annual_kwh":     annual_kwh,
         "annual_sav":     annual_sav,
         "om_yr1":         om_yr1,
@@ -1267,15 +1267,16 @@ def calc_recommendations(eco, d, r):
 
 def calc_boq(num_panels, num_bat, inv_kw, pv_kw, bat_kwh,
              unit_bat_kwh, chemistry, mppt_a, cost_usd_kwp, fx_usd,
-             panel_wp=400, ac_cables=None, voltage=48, num_strings=1):
+             panel_wp=400, ac_cables=None, voltage=48, num_strings=1,
+             supply_markup_pct=8, install_rate_pct=15):
     """Generate BOQ — real equipment specs, brands, optimised costing.
     Pricing basis (West Africa 2025-2026, verified against market data):
       • Basic prices reduced 10% vs previous version
-      • Supply markup: 8% (was 20%)  — realistic for direct-import distribution
-      • Installation labour: 15% of supply (was 18%) — confirmed Ghana/Nigeria market
+      • Supply markup: default 8% (user-adjustable)
+      • Installation labour: default 15% of supply (user-adjustable)
     """
-    SUPPLY_MARKUP  = 0.08   # 8% supply/procurement markup
-    INSTALL_RATE   = 0.15   # 15% installation labour on supply subtotal
+    SUPPLY_MARKUP  = supply_markup_pct / 100.0   # user-set supply/procurement markup
+    INSTALL_RATE   = install_rate_pct  / 100.0   # user-set installation labour rate
     PRICE_FACTOR   = 0.90   # 10% reduction on basic unit prices
 
     chem     = BATTERY_CHEMISTRY.get(chemistry, BATTERY_CHEMISTRY["LiFePO4"])
@@ -2320,6 +2321,9 @@ def project_location(pid):
             "inverter_eff":     float(f.get("inverter_eff", 95)),
             "battery_dod":      float(f.get("battery_dod", 80)),
             "performance_ratio": float(f.get("performance_ratio", 75)),
+            # User-defined BOQ cost rates
+            "supply_markup_pct": max(0, min(50, float(f.get("supply_markup_pct", 8)))),
+            "install_rate_pct":  max(0, min(100, float(f.get("install_rate_pct", 15)))),
         })
         # Save Ghana PURC category if provided
         purc_cat = f.get("purc_category", "").strip()
@@ -2437,6 +2441,8 @@ def project_loads(pid):
         chemistry  = data.get("chemistry", "LiFePO4")
         dc_voltage = data.get("voltage", 48)
         panel_wp   = data.get("panel_wp", 400)
+        supply_markup_pct = float(data.get("supply_markup_pct", 8))
+        install_rate_pct  = float(data.get("install_rate_pct", 15))
 
         pv_kw, num_panels, td      = calc_pv(daily_kwh, psh, temp, panel_wp)
         bat_kwh, num_bat, unit_bat = calc_battery(daily_kwh, autonomy, chemistry)
@@ -2446,17 +2452,19 @@ def project_loads(pid):
                                     ambient_c=temp)
         pps        = 2 if dc_voltage <= 24 else 4 if dc_voltage <= 48 else 8
         num_strings = math.ceil(num_panels / pps)
-        # BOQ uses actual AC cable sizes and DC string count
+        # BOQ uses actual AC cable sizes, DC string count, and user-defined rates
         boq_rows, boq_grand        = calc_boq(
             num_panels, num_bat, inv_kw, pv_kw, bat_kwh,
             unit_bat, chemistry, mppt_a, cost_kwp, fx, panel_wp,
-            ac_cables=ac_cables, voltage=dc_voltage, num_strings=num_strings)
+            ac_cables=ac_cables, voltage=dc_voltage, num_strings=num_strings,
+            supply_markup_pct=supply_markup_pct, install_rate_pct=install_rate_pct)
         economics                  = calc_economics(
             pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
             daily_kwh, tariff, currency, symbol, cost_kwp, fx, autonomy,
             boq_total_local=boq_grand,
             chemistry=chemistry,
-            funding_mode=data.get("funding_mode", "loan"))
+            funding_mode=data.get("funding_mode", "loan"),
+            install_rate_pct=install_rate_pct)
 
         chem_info = BATTERY_CHEMISTRY.get(chemistry, BATTERY_CHEMISTRY["LiFePO4"])
         data["results"] = {

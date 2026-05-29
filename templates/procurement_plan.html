@@ -26,7 +26,7 @@
     ('bi-box-seam','solar-gold','BOQ Line Items', plan_rows|length),
     ('bi-building','solar-blue','Suppliers', by_supplier|length),
     ('bi-currency-dollar','solar-green','Est. Total (USD)', '$'~(grand_usd|int)),
-    ('bi-clock','solar-gold','Max Lead Time', (plan_rows|map(attribute='lead_days')|max)~' days'),
+    ('bi-clock','solar-gold','Max Lead Time', ((plan_rows|map(attribute='lead_days')|max) if plan_rows else 0)~' days'),
   ] %}
   <div class="col-6 col-md-3">
     <div class="kpi-card text-center">

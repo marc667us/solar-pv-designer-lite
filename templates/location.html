@@ -293,6 +293,44 @@
                 {% endfor %}
               </select>
             </div>
+
+            <!-- BOQ Cost Rates -->
+            <div class="col-12">
+              <div class="p-3 rounded mt-1" style="background:#090914;border:1px solid #f59e0b22">
+                <div style="font-size:11px;font-weight:800;color:#f59e0b;margin-bottom:8px">
+                  <i class="bi bi-receipt me-1"></i>BOQ Cost Rates
+                </div>
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="form-lbl" style="font-size:11px">
+                      Supply Markup %
+                      <span data-bs-toggle="tooltip" title="Procurement/overhead charge on equipment supply. Default: 8%" style="cursor:help">ⓘ</span>
+                    </label>
+                    <div class="input-group input-group-sm">
+                      <input name="supply_markup_pct" type="number" min="0" max="50" step="0.5"
+                             value="{{ d.get('supply_markup_pct', 8)|int }}" class="form-ctrl"
+                             style="border-radius:6px 0 0 6px"/>
+                      <span class="input-group-text" style="background:#1a1a30;border-color:#2e2e50;color:#8080c0;font-size:11px">%</span>
+                    </div>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-lbl" style="font-size:11px">
+                      Labour Rate %
+                      <span data-bs-toggle="tooltip" title="Installation labour as % of supply subtotal. Default: 15%" style="cursor:help">ⓘ</span>
+                    </label>
+                    <div class="input-group input-group-sm">
+                      <input name="install_rate_pct" type="number" min="0" max="100" step="0.5"
+                             value="{{ d.get('install_rate_pct', 15)|int }}" class="form-ctrl"
+                             style="border-radius:6px 0 0 6px"/>
+                      <span class="input-group-text" style="background:#1a1a30;border-color:#2e2e50;color:#8080c0;font-size:11px">%</span>
+                    </div>
+                  </div>
+                  <div class="col-12" style="font-size:10px;color:#4a4a7a;margin-top:2px">
+                    Applied to all BOQ line items and installation labour. Re-run calculations to update the BOQ after changing rates.
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
