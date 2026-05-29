@@ -2929,6 +2929,97 @@ def project_reset(pid):
     return redirect(url_for("project_loads", pid=pid))
 
 
+# ─── Project Save / Open (export → JSON file, import ← JSON file) ────────────
+
+@app.route("/project/<int:pid>/save")
+@login_required
+def project_save(pid):
+    """Download the project as a .solarpro JSON backup file."""
+    uid = session["user_id"]
+    with get_db() as c:
+        row = c.execute(
+            "SELECT * FROM projects WHERE id=? AND user_id=?", (pid, uid)
+        ).fetchone()
+    if not row:
+        flash("Project not found.", "danger")
+        return redirect(url_for("dashboard"))
+
+    payload = {
+        "app":      "SolarPro Global",
+        "version":  1,
+        "exported": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "project": {
+            "name":       row["name"],
+            "stage":      row["stage"],
+            "created_at": row["created_at"],
+            "data_json":  json.loads(row["data_json"] or "{}"),
+        }
+    }
+    safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in row["name"])
+    fname = f"SolarPro_{safe_name}.solarpro"
+    resp = make_response(json.dumps(payload, indent=2))
+    resp.headers["Content-Type"]        = "application/json"
+    resp.headers["Content-Disposition"] = f'attachment; filename="{fname}"'
+    return resp
+
+
+@app.route("/project/open", methods=["GET", "POST"])
+@login_required
+def project_open():
+    """Import a .solarpro backup file and create a new project from it."""
+    uid  = session["user_id"]
+    user = current_user()
+    plan = (user["plan"] or "free").lower()
+    limit = PLAN_LIMITS.get(plan, 1)
+
+    if request.method == "GET":
+        # Render a simple upload form
+        return render_template("project_open.html")
+
+    # POST — process uploaded file
+    f = request.files.get("project_file")
+    if not f or not f.filename:
+        flash("Please select a .solarpro file to open.", "warning")
+        return redirect(url_for("project_open"))
+
+    try:
+        payload = json.loads(f.read().decode("utf-8"))
+        if payload.get("app") != "SolarPro Global" or "project" not in payload:
+            raise ValueError("Not a valid SolarPro project file.")
+        proj = payload["project"]
+        name = proj.get("name") or "Imported Project"
+        data = proj.get("data_json") or {}
+        stage = proj.get("stage") or "location"
+    except Exception as ex:
+        flash(f"Could not read project file: {ex}", "danger")
+        return redirect(url_for("project_open"))
+
+    # Check plan limit
+    with get_db() as c:
+        count = c.execute(
+            "SELECT COUNT(*) FROM projects WHERE user_id=?", (uid,)
+        ).fetchone()[0]
+        if count >= limit:
+            flash(f"Project limit reached — upgrade to import more projects.", "warning")
+            return redirect(url_for("upgrade"))
+
+        import_name = f"[Imported] {name}"
+        c.execute(
+            "INSERT INTO projects (user_id, name, stage, data_json) VALUES (?,?,?,?)",
+            (uid, import_name, stage, json.dumps(data))
+        )
+        new_pid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+    flash(f"Project '{import_name}' opened successfully.", "success")
+    # If it has results, go to results; otherwise continue from where it was
+    if data.get("results"):
+        return redirect(url_for("project_results", pid=new_pid))
+    elif data.get("loads"):
+        return redirect(url_for("project_loads", pid=new_pid))
+    else:
+        return redirect(url_for("project_location", pid=new_pid))
+
+
 # ─── Public solar-data API (no login — used by assessment form) ──────────────
 
 @app.route("/api/solar_regions/<country>")

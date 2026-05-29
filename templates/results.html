@@ -106,12 +106,17 @@
   <span class="text-secondary small">{{ project.name }}</span>
   <span class="text-secondary">/</span>
   <span class="text-warning small fw-bold">Results</span>
-  <div class="ms-auto d-flex gap-2">
+  <div class="ms-auto d-flex gap-2 flex-wrap">
     <a href="{{ url_for('project_location', pid=project.id) }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-geo-alt me-1"></i>Location
     </a>
     <a href="{{ url_for('project_loads', pid=project.id) }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-pencil me-1"></i>Edit Loads
+    </a>
+    <a href="{{ url_for('project_save', pid=project.id) }}" class="btn btn-sm"
+       style="background:#22c55e18;border:1px solid #22c55e44;color:#22c55e"
+       title="Download a local backup of this project">
+      <i class="bi bi-floppy me-1"></i>Save to File
     </a>
     {% if not is_free %}
     <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-outline-warning btn-sm">

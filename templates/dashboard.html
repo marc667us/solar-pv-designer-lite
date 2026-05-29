@@ -128,6 +128,11 @@
         <i class="bi bi-plus-lg me-1"></i>New Project
       </a>
       {% endif %}
+      <a href="{{ url_for('project_open') }}" class="btn btn-sm"
+         style="background:#22c55e18;border:1px solid #22c55e44;color:#22c55e"
+         title="Open a previously saved .solarpro backup file">
+        <i class="bi bi-folder2-open me-1"></i>Open File
+      </a>
       <a href="{{ url_for('account') }}" class="btn btn-sm"
          style="background:rgba(255,255,255,.06);border:1px solid #2a2a5a;color:#9090c0">
         <i class="bi bi-person-circle me-1"></i>Account
@@ -162,10 +167,10 @@
 <!-- ── Quick actions ──────────────────────────────────────────────────── -->
 <div class="row g-2 mb-4">
   {% for href,icon,bg,title,sub in [
-    ('#projects-section',          'bi-folder2-open',            '#22c55e', 'Open Projects',   'View &amp; edit your designs'),
+    ('#projects-section',          'bi-folder2-open',            '#22c55e', 'My Projects',     'View &amp; edit your designs'),
     (url_for('project_new'),       'bi-plus-circle-fill',        '#f59e0b', 'New Project',     'Start a solar design'),
-    (url_for('assessment_request'),'bi-clipboard2-pulse-fill',   '#0ea5e9', 'Site Assessment', 'Submit a client request'),
-    (url_for('procurement'),       'bi-truck-front-fill',        '#a78bfa', 'Procurement',     'Source equipment'),
+    (url_for('project_open'),      'bi-floppy-fill',             '#0ea5e9', 'Open File',       'Restore a saved .solarpro file'),
+    (url_for('assessment_request'),'bi-clipboard2-pulse-fill',   '#a78bfa', 'Site Assessment', 'Submit a client request'),
   ] %}
   <div class="col-6 col-md-3">
     <a href="{{ href }}" class="qa-tile h-100">
@@ -316,6 +321,11 @@
       <div class="d-flex align-items-center gap-1 mb-2">
         <a href="{{ url_for('project_results', pid=p.id) }}" class="btn btn-solar btn-sm py-1 px-3 flex-grow-1">
           <i class="bi bi-bar-chart-fill me-1"></i>Open Results
+        </a>
+        <a href="{{ url_for('project_save', pid=p.id) }}" class="icon-btn"
+           title="Save to File — download a local backup of this project"
+           style="border-color:#22c55e44;color:#22c55e">
+          <i class="bi bi-floppy" style="font-size:12px"></i>
         </a>
         <form method="POST" action="{{ url_for('project_clone', pid=p.id) }}" class="d-inline m-0">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">

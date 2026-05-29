@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Open Project File — SolarPro Global{% endblock %}
+
+{% block extra_head %}
+<style>
+  .open-card{background:#0f0f22;border:1px solid #1e1e3a;border-radius:18px;
+    padding:40px;max-width:540px;margin:0 auto}
+  .drop-zone{border:2px dashed #2a2a5a;border-radius:12px;padding:48px 24px;
+    text-align:center;cursor:pointer;transition:.2s;background:#080816}
+  .drop-zone:hover,.drop-zone.drag-over{border-color:#f59e0b;background:#f59e0b08}
+  .drop-zone input[type=file]{display:none}
+  .dz-icon{font-size:48px;color:#2a2a5a;margin-bottom:12px;transition:.2s}
+  .drop-zone:hover .dz-icon,.drop-zone.drag-over .dz-icon{color:#f59e0b}
+  .file-name{font-size:13px;color:#f59e0b;font-weight:700;margin-top:8px;
+    display:none;word-break:break-all}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <a href="{{ url_for('dashboard') }}" class="text-secondary small text-decoration-none">
+    <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+  </a>
+</div>
+
+<div class="open-card">
+  <div class="text-center mb-4">
+    <div style="font-size:40px;color:#f59e0b;margin-bottom:10px">
+      <i class="bi bi-folder2-open"></i>
+    </div>
+    <h4 class="fw-black" style="color:#f0f0f8;margin-bottom:6px">Open Project File</h4>
+    <p class="text-secondary small mb-0">
+      Select a <strong style="color:#f0f0f8">.solarpro</strong> file you previously saved
+      from this app to restore your project.
+    </p>
+  </div>
+
+  <form method="POST" enctype="multipart/form-data" id="openForm">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+    <div class="drop-zone mb-4" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <input type="file" name="project_file" id="fileInput" accept=".solarpro,.json"
+             onchange="showFile(this)">
+      <div class="dz-icon"><i class="bi bi-file-earmark-arrow-up"></i></div>
+      <div style="font-size:14px;color:#8080c0;font-weight:600">
+        Click to browse or drag &amp; drop
+      </div>
+      <div style="font-size:11px;color:#4a4a7a;margin-top:6px">
+        Accepts <em>.solarpro</em> backup files
+      </div>
+      <div class="file-name" id="fileName"></div>
+    </div>
+
+    <button type="submit" class="btn btn-solar w-100 py-2 fw-bold" id="submitBtn" disabled>
+      <i class="bi bi-folder2-open me-2"></i>Open Project
+    </button>
+  </form>
+
+  <hr style="border-color:#1e1e3a;margin:28px 0">
+
+  <div class="text-center">
+    <p class="text-secondary small mb-2">
+      <i class="bi bi-info-circle me-1" style="color:#0ea5e9"></i>
+      Projects are saved to your server account and persist across sessions.
+      Use <strong style="color:#f0f0f8">Save to File</strong> on your project results page
+      to download a local backup.
+    </p>
+    <a href="{{ url_for('project_new') }}" class="btn btn-sm"
+       style="background:#1e1e3a;border:1px solid #2a2a5a;color:#8080c0">
+      <i class="bi bi-plus-lg me-1"></i>Create New Project Instead
+    </a>
+  </div>
+</div>
+
+<script>
+function showFile(input) {
+  const fn = input.files[0] ? input.files[0].name : '';
+  document.getElementById('fileName').textContent = fn;
+  document.getElementById('fileName').style.display = fn ? 'block' : 'none';
+  document.getElementById('submitBtn').disabled = !fn;
+}
+
+// Drag-and-drop support
+const dz = document.getElementById('dropZone');
+const fi = document.getElementById('fileInput');
+
+['dragenter','dragover'].forEach(ev => {
+  dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag-over'); });
+});
+['dragleave','drop'].forEach(ev => {
+  dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag-over'); });
+});
+dz.addEventListener('drop', e => {
+  const files = e.dataTransfer.files;
+  if (files.length) {
+    fi.files = files;
+    showFile(fi);
+  }
+});
+</script>
+{% endblock %}
