@@ -86,7 +86,7 @@
       <div class="fw-bold">{{ grp.supplier }}</div>
       <div class="fw-black" style="color:var(--solar-gold)">${{ '%.0f'|format(grp.total_usd) }}</div>
     </div>
-    {% for item in grp.items %}
+    {% for item in grp.rows %}
     <div class="data-row mb-1">
       <span class="lbl small">{{ item.desc[:40] }}{% if item.desc|length > 40 %}…{% endif %}</span>
       <span class="val small">{{ item.qty }} × ${{ '%.0f'|format(item.unit_usd) }}</span>

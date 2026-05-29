@@ -6635,15 +6635,6 @@ def procurement_catalog():
 @login_required
 def project_procurement(pid):
     """Generate a smart procurement plan from the project BOQ, matched to suppliers."""
-    try:
-        return _project_procurement_inner(pid)
-    except Exception as _exc:
-        import traceback as _tb
-        app.logger.error("PROCUREMENT 500: %s\n%s", _exc, _tb.format_exc())
-        return f"<pre>PROCUREMENT ERROR:\n{_tb.format_exc()}</pre>", 500
-
-
-def _project_procurement_inner(pid):
     project = get_project(pid)
     if not project or "results" not in project["data"]:
         flash("Run calculations first.", "warning")
@@ -6710,8 +6701,8 @@ def _project_procurement_inner(pid):
     by_supplier = {}
     for row in plan_rows:
         key = row["supplier"]
-        by_supplier.setdefault(key, {"supplier": key, "items": [], "total_usd": 0.0})
-        by_supplier[key]["items"].append(row)
+        by_supplier.setdefault(key, {"supplier": key, "rows": [], "total_usd": 0.0})
+        by_supplier[key]["rows"].append(row)
         by_supplier[key]["total_usd"] += row["total_usd"]
 
     return render_template("procurement_plan.html", user=current_user(),
