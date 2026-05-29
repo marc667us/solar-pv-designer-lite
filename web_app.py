@@ -1519,7 +1519,7 @@ We respond within 24 hours.
 
 Welcome aboard!
 — The SolarPro Global Team
-solarpro-global.onrender.com
+solarpro.aiappinvent.com
 """)
             except Exception:
                 pass  # Email failure must never block registration
@@ -1690,7 +1690,7 @@ def support_user_guide_pdf():
 _TUTORIAL_EMAIL_SETUP_MD = """# Email & SMTP Setup Guide
 ## SolarPro Global Help Centre
 
-**Version 1.0 · solarpro-global.onrender.com**
+**Version 1.0 · solarpro.aiappinvent.com**
 
 ---
 
@@ -1882,7 +1882,7 @@ to configure SMTP_HOST, SMTP_USER, and SMTP_PASS in the Render dashboard.
 _TUTORIAL_USER_GUIDE_MD = """# SolarPro Global — Complete User Guide
 ## Intelligent Solar PV Design & Financial Engineering Platform
 
-**Version 1.0 · solarpro-global.onrender.com**
+**Version 1.0 · solarpro.aiappinvent.com**
 
 ---
 
@@ -1896,7 +1896,7 @@ in a single workflow. This guide walks you through every step.
 
 # Step 1 — Create Your Account
 
-1. Go to **solarpro-global.onrender.com**
+1. Go to **solarpro.aiappinvent.com**
 2. Click **Start Free** on the homepage.
 3. Fill in your name, company, country, and choose a plan.
 4. Enter your email address and a secure password.
@@ -2114,7 +2114,7 @@ projects and premium features.
 
 ---
 
-*SolarPro Global · solarpro-global.onrender.com · support@solarproglobal.com*
+*SolarPro Global · solarpro.aiappinvent.com · support@solarproglobal.com*
 """
 
 
@@ -5498,7 +5498,7 @@ def account_invoice(payment_id):
 *Thank you for your subscription to SolarPro Global.*
 
 For billing questions contact us at **support@solarproglobal.com**
-or visit **https://solarpro-global.onrender.com**
+or visit **https://solarpro.aiappinvent.com**
 
 ---
 
@@ -6582,7 +6582,7 @@ def assess_design():
     </div>
 
     <div style="text-align:center;margin:28px 0">
-      <a href="https://solarpro-global.onrender.com/register" style="display:inline-block;background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#0f0f22;font-weight:800;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px">
+      <a href="https://solarpro.aiappinvent.com/register" style="display:inline-block;background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#0f0f22;font-weight:800;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px">
         Request Full Consultation →
       </a>
       <div style="color:#888;font-size:12px;margin-top:10px">Create a free account to book your consultation</div>
@@ -6607,7 +6607,7 @@ def assess_design():
             f"Hi {first}, your preliminary design is ready. Ref: {ref}\n"
             f"PV: {pv_kw:.1f}kWp | Battery: {bat_kwh:.1f}kWh | Inverter: {inv_kw:.0f}kW\n"
             f"Estimated cost: {symbol}{total_local:,.0f} {currency} | Payback: {payback_yr} yrs\n"
-            f"Visit https://solarpro-global.onrender.com to book a consultation.", "plain"))
+            f"Visit https://solarpro.aiappinvent.com to book a consultation.", "plain"))
         emsg.attach(_MIMEText(html_email, "html"))
         if SMTP_HOST and SMTP_USER:
             if SMTP_TLS:
@@ -8916,7 +8916,7 @@ def _send_prospect_notification(subject, body_lines, admin_email=None):
   <h2 style="color:#a78bfa;margin-top:0"><span style="margin-right:8px">🤖</span>{subject}</h2>
   <ul style="padding-left:20px;color:#c8c8e8">{html_rows}</ul>
   <hr style="border-color:#1e1e3a;margin:20px 0">
-  <a href="https://solarpro-global.onrender.com/admin/agent" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:700">
+  <a href="https://solarpro.aiappinvent.com/admin/agent" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:700">
     Open Agent Dashboard →
   </a>
   <p style="color:#6868a0;font-size:11px;margin-top:20px">SolarPro Global · AI Prospect Agent</p>

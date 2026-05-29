@@ -1,10 +1,10 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What this is
 
-**SolarPro Global** — Intelligent Global PV Solar System Design Platform. Flask web SaaS for residential, commercial, and industrial solar PV design, financial engineering, and project management. Deployed live at **https://solarpro-global.onrender.com**.
+**SolarPro Global** â€” Intelligent Global PV Solar System Design Platform. Flask web SaaS for residential, commercial, and industrial solar PV design, financial engineering, and project management. Deployed live at **https://solarpro.aiappinvent.com**.
 
 Everything lives in a single file: `web_app.py` (~5 800 lines). SQLite database (`solar.db` locally, `/opt/render/project/src/solar.db` on Render).
 
@@ -12,7 +12,7 @@ Everything lives in a single file: `web_app.py` (~5 800 lines). SQLite database 
 
 ## Running locally
 
-**Quick start (Windows — opens Cloudflare tunnel automatically):**
+**Quick start (Windows â€” opens Cloudflare tunnel automatically):**
 
 ```
 "START SERVER.bat"
@@ -52,7 +52,7 @@ SQLite. Schema auto-created by `init_db()` in `web_app.py` (line ~170) on every 
 
 `users`, `projects`, `tickets`, `ticket_replies`, `appliances`, `payments`, `leads`, `newsletter_subscribers`, `news_posts`, `suppliers`, `equipment_catalog`, `email_logs`, `upgrade_codes`, `assessment_requests`, `installers`, `monitor_alerts`, `monitor_state`
 
-`init_db()` also runs `ALTER TABLE … ADD COLUMN` migration stubs for columns added post-launch — safe to re-run on existing DBs.
+`init_db()` also runs `ALTER TABLE â€¦ ADD COLUMN` migration stubs for columns added post-launch â€” safe to re-run on existing DBs.
 
 All project engineering data is stored as a JSON blob in `projects.data_json`.
 
@@ -60,24 +60,24 @@ All project engineering data is stored as a JSON blob in `projects.data_json`.
 
 ## Architecture
 
-Single-file Flask app — no blueprints. Structure inside `web_app.py`:
+Single-file Flask app â€” no blueprints. Structure inside `web_app.py`:
 
 | Section | What it does |
 |---|---|
-| Lines 1–168 | Imports, Flask config, rate limiter, CSRF, security headers |
-| Lines 169–1153 | `init_db()`, `get_db()`, helper functions, calculation orchestration |
-| Lines 1154–1828 | Core project routes (register/login/dashboard/project/results/reports) |
-| Lines 1829–3173 | Export routes (Excel, CSV, PDF reports via `markdown-pdf`) |
-| Lines 3174–3823 | Admin routes (users, tickets, appliances, codes, leads, news, newsletter, platform stats) |
-| Lines 3824–4942 | Business routes (assess, installer register, procurement, email, upgrade/payments) |
-| Lines 4943–5813 | AI Prospecting Agent (scraping, Claude API analysis, monitoring) |
+| Lines 1â€“168 | Imports, Flask config, rate limiter, CSRF, security headers |
+| Lines 169â€“1153 | `init_db()`, `get_db()`, helper functions, calculation orchestration |
+| Lines 1154â€“1828 | Core project routes (register/login/dashboard/project/results/reports) |
+| Lines 1829â€“3173 | Export routes (Excel, CSV, PDF reports via `markdown-pdf`) |
+| Lines 3174â€“3823 | Admin routes (users, tickets, appliances, codes, leads, news, newsletter, platform stats) |
+| Lines 3824â€“4942 | Business routes (assess, installer register, procurement, email, upgrade/payments) |
+| Lines 4943â€“5813 | AI Prospecting Agent (scraping, Claude API analysis, monitoring) |
 
 Supporting modules (in project root):
 
-- `calculation/ac_cable_sizing.py` — AC cable sizing calculations
-- `config/global_solar_data.py` — country/region solar irradiance database
-- `battery_sizing.py`, `pv_sizing.py`, `inverter_sizing.py`, `load_estimation.py` — legacy calculation modules (still imported by some code paths)
-- `wsgi.py` — Render/Gunicorn entrypoint
+- `calculation/ac_cable_sizing.py` â€” AC cable sizing calculations
+- `config/global_solar_data.py` â€” country/region solar irradiance database
+- `battery_sizing.py`, `pv_sizing.py`, `inverter_sizing.py`, `load_estimation.py` â€” legacy calculation modules (still imported by some code paths)
+- `wsgi.py` â€” Render/Gunicorn entrypoint
 
 Templates: all `.html` files in the project root (Flask `templates/` subdirectory is also present for base layouts).
 
@@ -106,16 +106,16 @@ Templates: all `.html` files in the project root (Flask `templates/` subdirector
 | `/stripe/webhook` | Stripe webhook receiver |
 | `/admin/*` | Admin-only: users, tickets, appliances, codes, leads, news, assessments, installers, pipeline, sales, newsletter, platform stats, AI agent |
 | `/admin/agent` | AI Prospecting Agent dashboard |
-| `/admin/agent/run` | Run the agent (Claude API — scrapes procurement portals, scores leads) |
+| `/admin/agent/run` | Run the agent (Claude API â€” scrapes procurement portals, scores leads) |
 | `/admin/agent/monitor/status` | Agent monitor SSE-like status polling |
 
 ---
 
 ## Payments
 
-- **Stripe** — checkout via `stripe.checkout.Session.create`; webhook at `/stripe/webhook` with signature verification.
-- **Paystack** — `POST /api.paystack.co/transaction/initialize`; callback at `/paystack/callback`; verify at `/paystack/verify`.
-- **Upgrade codes** — admin-issued redemption codes at `/upgrade/redeem`.
+- **Stripe** â€” checkout via `stripe.checkout.Session.create`; webhook at `/stripe/webhook` with signature verification.
+- **Paystack** â€” `POST /api.paystack.co/transaction/initialize`; callback at `/paystack/callback`; verify at `/paystack/verify`.
+- **Upgrade codes** â€” admin-issued redemption codes at `/upgrade/redeem`.
 - Plans: `free`, `professional`, `enterprise` (stored on `users.plan`).
 
 ---
@@ -129,7 +129,7 @@ Uses the **Anthropic SDK** (`anthropic` package). Route `POST /admin/agent/run` 
 ## Environment variables (`.env`)
 
 ```
-SECRET_KEY=...          # Flask session key — generated on first run if absent
+SECRET_KEY=...          # Flask session key â€” generated on first run if absent
 ANTHROPIC_API_KEY=...   # Required for AI agent; app runs without it (agent returns error)
 STRIPE_SECRET_KEY=...
 STRIPE_WEBHOOK_SECRET=...
@@ -149,20 +149,20 @@ Configured in `render.yaml`. Branch: `master`. On push to `master`:
 
 1. `pip install -r requirements.txt`
 2. `gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120`
-3. GitHub Actions (`.github/workflows/`) syncs `ANTHROPIC_API_KEY` from GitHub Secrets → Render env vars via Render API.
+3. GitHub Actions (`.github/workflows/`) syncs `ANTHROPIC_API_KEY` from GitHub Secrets â†’ Render env vars via Render API.
 
-Persistent disk mounted at `/opt/render/project/src` (1 GB) — this is where `solar.db` lives on Render.
+Persistent disk mounted at `/opt/render/project/src` (1 GB) â€” this is where `solar.db` lives on Render.
 
 ---
 
 ## Engineering calculation flow
 
-1. User enters project location → `/api/solar/<country>/<region>` returns irradiance data from `config/global_solar_data.py`.
-2. User enters load schedule → saved as JSON in `projects.data_json`.
+1. User enters project location â†’ `/api/solar/<country>/<region>` returns irradiance data from `config/global_solar_data.py`.
+2. User enters load schedule â†’ saved as JSON in `projects.data_json`.
 3. `/project/<pid>/results` triggers full calculation inline:
-   - Load analysis (sum of daily Wh per appliance × quantity × hours)
+   - Load analysis (sum of daily Wh per appliance Ã— quantity Ã— hours)
    - PV array sizing (peak load / PSH / derating)
-   - Battery bank sizing (autonomy days × daily Wh / DoD / voltage)
+   - Battery bank sizing (autonomy days Ã— daily Wh / DoD / voltage)
    - Inverter / charge controller sizing
    - AC cable sizing via `calculation/ac_cable_sizing.py`
    - Financial model (CAPEX, OPEX, savings, NPV, IRR, payback)
@@ -172,13 +172,13 @@ Persistent disk mounted at `/opt/render/project/src` (1 GB) — this is where `s
 
 ## Testing
 
-`test_render.py` — 72-check end-to-end test suite against the live Render site. Requires admin account (enterprise plan). Run with:
+`test_render.py` â€” 72-check end-to-end test suite against the live Render site. Requires admin account (enterprise plan). Run with:
 
 ```powershell
 python test_render.py
 ```
 
-To wait for a deploy to finish before testing (uses GitHub public API — no auth needed):
+To wait for a deploy to finish before testing (uses GitHub public API â€” no auth needed):
 
 ```bash
 # Poll GitHub Actions for current HEAD commit, wait for success, then test
@@ -191,14 +191,14 @@ do sleep 10; done && sleep 40 && python test_render.py
 
 ---
 
-## Helpline — AI Technical Assistant
+## Helpline â€” AI Technical Assistant
 
 Floating chat widget on every logged-in page (bottom-right, `#sp-asst-btn`). Powered by Claude `claude-opus-4-7`.
 
 - **Routes**: `POST /api/assistant/chat` (no login required), `POST /api/assistant/escalate` (`@login_required`)
 - **CSRF**: passed via `X-CSRF-Token` header (meta tag `name="csrf-token"` in base.html)
 - **GitHub context**: `_fetch_github_context()` fetches last 10 commits from public GitHub API, 5-min cache (`_gh_ctx_cache`), appended to system prompt so Helpline knows recent fixes
-- **Escalation**: AI includes `[ESCALATE]` tag → red banner → one-click creates high-priority ticket with chat transcript
+- **Escalation**: AI includes `[ESCALATE]` tag â†’ red banner â†’ one-click creates high-priority ticket with chat transcript
 - **ANTHROPIC_API_KEY**: must be set in Render dashboard (CI no longer overwrites it with empty value)
 
 ---
@@ -207,7 +207,7 @@ Floating chat widget on every logged-in page (bottom-right, `#sp-asst-btn`). Pow
 
 `.github/workflows/deploy.yml`:
 1. Triggers Render deploy via `POST /v1/services/$RENDER_SERVICE_ID/deploys`
-2. Syncs non-empty GitHub Secrets to Render env vars (skips secrets not configured as GitHub Secrets — safe for keys set directly in Render dashboard)
+2. Syncs non-empty GitHub Secrets to Render env vars (skips secrets not configured as GitHub Secrets â€” safe for keys set directly in Render dashboard)
 
 Required GitHub Secrets: `RENDER_API_KEY`, `RENDER_SERVICE_ID`. Others optional (only synced if set).
 
@@ -215,6 +215,6 @@ Required GitHub Secrets: `RENDER_API_KEY`, `RENDER_SERVICE_ID`. Others optional 
 
 ## Notes
 
-- The legacy tkinter desktop app files (`ui.py`, `main.py`, `solar_pv_designer/`, `build/`, `dist*/`) are still present — ignore them; the web app (`web_app.py`) is the live product.
-- `SPEC.md` contains the original functional spec — useful background but may lag the implementation.
+- The legacy tkinter desktop app files (`ui.py`, `main.py`, `solar_pv_designer/`, `build/`, `dist*/`) are still present â€” ignore them; the web app (`web_app.py`) is the live product.
+- `SPEC.md` contains the original functional spec â€” useful background but may lag the implementation.
 - `assumptions.md` documents engineering calculation assumptions (derating factors, autonomy days, etc.).

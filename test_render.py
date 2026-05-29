@@ -1,10 +1,10 @@
-"""End-to-end test against https://solarpro-global.onrender.com
+﻿"""End-to-end test against https://solarpro.aiappinvent.com
    Uses the enterprise-plan admin account so report gates don't block.
 """
 import sys, re, time
 import requests
 
-BASE = "https://solarpro-global.onrender.com"
+BASE = "https://solarpro.aiappinvent.com"
 s = requests.Session()
 s.headers.update({"User-Agent": "solar-test/1.0"})
 
@@ -48,7 +48,7 @@ def extract_pid(url):
             except: pass
     return None
 
-# ── Wake + login as admin (enterprise plan) ───────────────────────────────────
+# â”€â”€ Wake + login as admin (enterprise plan) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 print("\n=== 0. Wake & Login (admin / enterprise) ===")
 r = s.get(BASE + "/", timeout=60)
 h("Home page reachable", r)
@@ -57,7 +57,7 @@ r = post(BASE + "/login", {"username": "admin", "password": "SolarAdmin2026!"})
 h("Admin login", r)
 chk("Landed on dashboard", "dashboard" in r.url or "project" in r.url, r.url)
 
-# ── SECTION 1: Loan-funded project ───────────────────────────────────────────
+# â”€â”€ SECTION 1: Loan-funded project â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 TS = str(int(time.time()))[-5:]
 print("\n=== 1. Create loan-funded Ghana project ===")
 r = post(BASE + "/project/new", {"name": f"LoanTest-{TS}", "client_name": "Test Client"})
@@ -96,7 +96,7 @@ if pid:
     h("Results page", r)
     chk("Results: no error heading", "500" not in r.text[:500] and "Error" not in r.text[:300])
 
-    # ── BOQ report ──────────────────────────────────────────────────────────
+    # â”€â”€ BOQ report â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     print("\n=== 5. BOQ report ===")
     r = s.get(BASE + f"/project/{pid}/report/boq", timeout=30)
     h("BOQ report loads", r)
@@ -108,7 +108,7 @@ if pid:
     chk("BOQ: Loan Finance funding mode shown",    "Loan Finance" in body)
     chk("BOQ: grand total row present",            "GRAND TOTAL" in body)
 
-    # ── Economic report ─────────────────────────────────────────────────────
+    # â”€â”€ Economic report â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     print("\n=== 6. Economic report (loan-funded) ===")
     r = s.get(BASE + f"/project/{pid}/report/economic", timeout=30)
     h("Economic report loads", r)
@@ -122,7 +122,7 @@ if pid:
     chk("Eco: 15% install label",                      "15%" in body)
     chk("Eco: old 'Installation (18%)' gone",          "Installation (18%)" not in body)
 
-    # ── Proposal report ─────────────────────────────────────────────────────
+    # â”€â”€ Proposal report â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     print("\n=== 7. Proposal report ===")
     r = s.get(BASE + f"/project/{pid}/report/proposal", timeout=30)
     h("Proposal report loads", r)
@@ -130,7 +130,7 @@ if pid:
     chk("Proposal: 15% install shown",    "15%" in body)
     chk("Proposal: hard-coded 'Installation (18%)' gone",  "Installation (18%)" not in body)
 
-# ── SECTION 2: Self-funded project ───────────────────────────────────────────
+# â”€â”€ SECTION 2: Self-funded project â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 print("\n=== 8. Create self-funded project ===")
 r = post(BASE + "/project/new", {"name": f"SelfTest-{TS}", "client_name": "Self Client"})
 h("Create self-funded project", r)
@@ -164,8 +164,8 @@ if pid2:
     chk("Location: funding_mode field present",  "funding_mode" in body)
     chk("Location: Self-Funded option present",  "Self-Funded" in body or 'value="self"' in body)
 
-# ── SECTION 3: Settings – Date & Time ────────────────────────────────────────
-print("\n=== 11. Settings – Date & Time ===")
+# â”€â”€ SECTION 3: Settings â€“ Date & Time â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+print("\n=== 11. Settings â€“ Date & Time ===")
 r = s.get(BASE + "/settings?tab=datetime", timeout=20)
 h("Settings page loads", r)
 body = r.text
@@ -200,7 +200,7 @@ chk("Settings: saved time format shown selected",
     'value="12h"' in body and
     ('checked' in body[body.find('value="12h"'):body.find('value="12h"')+60]))
 
-# ── SECTION 4: AI Assistant widget ───────────────────────────────────────────
+# â”€â”€ SECTION 4: AI Assistant widget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 print("\n=== 12. AI Assistant widget ===")
 # Widget markup present in base template
 r = s.get(BASE + "/dashboard", timeout=20)
@@ -244,7 +244,7 @@ if r.status_code == 200:
         chk("Escalate: ticket_id returned", isinstance(d.get("ticket_id"), int))
     except: chk("Escalate JSON parse", False)
 
-# ── SECTION 5: API endpoints ──────────────────────────────────────────────────
+# â”€â”€ SECTION 5: API endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 print("\n=== 15. API endpoints ===")
 r = s.get(BASE + "/api/purc-tariffs", timeout=15)
 h("PURC tariffs API", r)
@@ -266,7 +266,7 @@ if r.status_code == 200:
         chk("DF API: Appliances=0.50", data.get("Appliances") == 0.50, str(data.get("Appliances")))
     except: chk("DF API JSON parse", False)
 
-# ── SECTION 6: Assessment form & design API ──────────────────────────────────
+# â”€â”€ SECTION 6: Assessment form & design API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 print("\n=== 16. Assessment form ===")
 r = s.get(BASE + "/assess", timeout=20)
 h("Assessment page loads (public)", r)
@@ -284,7 +284,7 @@ if r.status_code == 200:
 
 print("\n=== 17. Public solar API (regions + data) ===")
 r = s.get(BASE + "/api/solar_regions/Ghana", timeout=15)
-h("Public regions API — Ghana", r)
+h("Public regions API â€” Ghana", r)
 if r.status_code == 200:
     try:
         d = r.json()
@@ -294,7 +294,7 @@ if r.status_code == 200:
     except: chk("Regions JSON parse", False)
 
 r = s.get(BASE + "/api/solar_data/Ghana/Greater%20Accra", timeout=15)
-h("Public solar data API — Ghana/Greater Accra", r)
+h("Public solar data API â€” Ghana/Greater Accra", r)
 if r.status_code == 200:
     try:
         d = r.json()
@@ -307,7 +307,7 @@ TEST_EMAIL_GH = "TEST_autotest_gh@solarpro-test.invalid"
 TEST_EMAIL_NG = "TEST_autotest_ng@solarpro-test.invalid"
 test_refs = []   # collect SA-* refs so we can clean up after
 
-print("\n=== 18. Design API — Ghana residential ===")
+print("\n=== 18. Design API â€” Ghana residential ===")
 payload1 = {
     "name": "TEST_AutoGhana", "email": TEST_EMAIL_GH, "phone": "",
     "country": "Ghana", "region": "Greater Accra",
@@ -333,7 +333,7 @@ if r1.status_code == 200:
         chk("Ghana payback_yr set", d1.get("payback_yr") is not None)
     except Exception as e: chk(f"Ghana design JSON parse: {e}", False)
 
-print("\n=== 19. Design API — Nigeria commercial (Lagos Southwest) ===")
+print("\n=== 19. Design API â€” Nigeria commercial (Lagos Southwest) ===")
 payload2 = {
     "name": "TEST_AutoNigeria", "email": TEST_EMAIL_NG, "phone": "",
     "country": "Nigeria", "region": "Lagos (Southwest)",
@@ -358,7 +358,7 @@ if r2.status_code == 200:
             f"NG={d2.get('pv_kw')} GH={gh_pv}")
     except Exception as e: chk(f"Nigeria design JSON parse: {e}", False)
 
-print("\n=== 20. Design API — validation errors ===")
+print("\n=== 20. Design API â€” validation errors ===")
 r_bad = s.post(BASE + "/api/assess/design",
     json={"name":"","email":"","country":"Ghana","region":"Greater Accra","loads":[]},
     timeout=15)
@@ -369,8 +369,8 @@ if r_bad.status_code in (200, 400):
         chk("Validation: ok=False for empty submit", d_bad.get("ok") is False)
     except: chk("Validation JSON parse", False)
 
-# ── Clean up test assessment & lead records ────────────────────────────────────
-print("\n=== 21. Cleanup — delete test assessment & lead records ===")
+# â”€â”€ Clean up test assessment & lead records â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+print("\n=== 21. Cleanup â€” delete test assessment & lead records ===")
 def _csrf_meta(url):
     """Get CSRF token from meta tag (works for all admin pages)."""
     r = s.get(url, timeout=15)
@@ -419,7 +419,7 @@ for m in re.finditer(r'name="lid"\s+value="(\d+)"', body):
 
 chk(f"Cleanup: {deleted_a} assessment(s) + {deleted_l} lead(s) removed", True)
 
-# ── Summary ───────────────────────────────────────────────────────────────────
+# â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 total = PASS + FAIL
 print(f"\n{'='*50}")
 print(f"  PASSED: {PASS}/{total}")

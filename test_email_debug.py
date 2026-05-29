@@ -1,6 +1,6 @@
-import requests, re
+﻿import requests, re
 
-BASE = "https://solarpro-global.onrender.com"
+BASE = "https://solarpro.aiappinvent.com"
 s = requests.Session()
 
 def get_csrf(url):
