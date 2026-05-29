@@ -6635,15 +6635,16 @@ def project_procurement(pid):
     r   = project["data"]["results"]
     d   = project["data"]
     sym = d.get("symbol", "$")
-    fx  = d.get("fx_usd", 1.0)
+    fx  = float(d.get("fx_usd") or 1.0)
 
+    # Eagerly convert all DB rows to plain dicts to avoid sqlite3.Row issues
     with get_db() as c:
-        suppliers = {r2["id"]: dict(r2) for r2 in
+        suppliers = {row["id"]: dict(row) for row in
                      c.execute("SELECT * FROM suppliers WHERE is_active=1").fetchall()}
-        catalog   = c.execute(
-            "SELECT * FROM equipment_catalog WHERE is_active=1 ORDER BY category").fetchall()
+        catalog   = [dict(row) for row in
+                     c.execute("SELECT * FROM equipment_catalog WHERE is_active=1 "
+                               "ORDER BY category").fetchall()]
 
-    # Map BOQ items to catalog / suppliers
     CAT_MAP = {
         "PV": "PV Modules", "Battery": "Batteries", "Inverter": "Inverters",
         "MPPT": "MPPT", "Cable": "Cables", "Earth": "Earthing",
@@ -6653,31 +6654,40 @@ def project_procurement(pid):
     plan_rows = []
     grand_usd = 0.0
     for boq in r.get("boq_rows", []):
-        desc = boq["desc"]
-        # Find category match
-        cat = next((v for k, v in CAT_MAP.items() if k.lower() in desc.lower()), "Sundries")
-        # Find best catalog match
-        match = next((c2 for c2 in catalog if c2["category"] == cat), None)
-        sup   = suppliers.get(match["supplier_id"]) if match else None
-        unit_usd  = match["price_usd"] if match else boq["total_r"] / fx
-        total_usd = unit_usd * boq["qty"]
-        grand_usd += total_usd
-        plan_rows.append({
-            "no":        boq["no"],
-            "desc":      desc,
-            "spec":      boq["spec"],
-            "qty":       boq["qty"],
-            "unit":      boq["unit"],
-            "category":  cat,
-            "catalog":   match["name"] if match else "— specify on quotation",
-            "brand":     match["brand"] if match else "",
-            "supplier":  sup["name"] if sup else "Open market / RFQ",
-            "supplier_id": sup["id"] if sup else 0,
-            "lead_days": match["lead_time_days"] if match else 30,
-            "unit_usd":  unit_usd,
-            "total_usd": total_usd,
-            "total_local": total_usd * fx,
-        })
+        try:
+            desc  = boq.get("desc", "")
+            cat   = next((v for k, v in CAT_MAP.items() if k.lower() in desc.lower()),
+                         "Sundries")
+            match = next((ci for ci in catalog if ci.get("category") == cat), None)
+            sup   = suppliers.get(match["supplier_id"]) if match else None
+
+            # Unit price: prefer catalog price, fall back to BOQ rate converted to USD
+            total_r   = float(boq.get("total_r") or boq.get("rate") or 0)
+            unit_usd  = float(match["price_usd"]) if match else (total_r / fx if fx else 0)
+            qty       = float(boq.get("qty") or 1)
+            total_usd = unit_usd * qty
+            lead_days = int(match.get("lead_time_days") or 30) if match else 30
+
+            grand_usd += total_usd
+            plan_rows.append({
+                "no":          boq.get("no", len(plan_rows) + 1),
+                "desc":        desc,
+                "spec":        boq.get("spec", ""),
+                "qty":         qty,
+                "unit":        boq.get("unit", "No."),
+                "category":    cat,
+                "catalog":     match["name"] if match else "— specify on quotation",
+                "brand":       match.get("brand", "") if match else "",
+                "supplier":    sup["name"] if sup else "Open market / RFQ",
+                "supplier_id": sup["id"] if sup else 0,
+                "lead_days":   lead_days,
+                "unit_usd":    unit_usd,
+                "total_usd":   total_usd,
+                "total_local": total_usd * fx,
+            })
+        except Exception as exc:
+            app.logger.warning("procurement: skipping BOQ row %s — %s", boq, exc)
+            continue
 
     # Group by supplier for purchase orders
     by_supplier = {}
