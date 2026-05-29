@@ -7140,21 +7140,13 @@ Prepared by: SolarPro Global | Currency: USD (local rates apply × {fx})
 @login_required
 def project_email(pid):
     """Send a PDF report to recipients via SMTP (user settings > env vars)."""
-    try:
-        return _project_email_inner(pid)
-    except Exception as _exc:
-        import traceback as _tb
-        app.logger.error("EMAIL 500: %s\n%s", _exc, _tb.format_exc())
-        return f"<pre>EMAIL ERROR:\n{_tb.format_exc()}</pre>", 500
-
-
-def _project_email_inner(pid):
     project = get_project(pid)
     if not project or "results" not in project["data"]:
         flash("Run calculations first.", "warning")
         return redirect(url_for("project_results", pid=pid))
 
-    user = current_user()
+    # Convert sqlite3.Row → plain dict so .get() works
+    user = dict(current_user() or {})
 
     # Resolve SMTP: user DB settings take priority over env vars
     u_host = (user.get("smtp_host") or "").strip()
