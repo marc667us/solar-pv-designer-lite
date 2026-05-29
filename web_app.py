@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Intelligent Global PV Solar System Design Platform
-Flask web application — complete engineering + financial SaaS
+Flask web application â€” complete engineering + financial SaaS
 """
 import os, json, math, sqlite3, csv, secrets, io, threading
 from datetime import datetime, timedelta
@@ -40,7 +40,7 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME = timedelta(hours=8),
 )
 
-# ─── Rate limiter ──────────────────────────────────────────────────────────────
+# â”€â”€â”€ Rate limiter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _get_real_ip():
     """Use X-Forwarded-For when behind serveo/proxy, else remote address."""
     xff = request.headers.get("X-Forwarded-For", "")
@@ -55,7 +55,7 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
-# ─── Security headers (applied after every response) ──────────────────────────
+# â”€â”€â”€ Security headers (applied after every response) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.after_request
 def set_security_headers(resp):
     resp.headers["X-Content-Type-Options"] = "nosniff"
@@ -65,7 +65,7 @@ def set_security_headers(resp):
     resp.headers["Cache-Control"]          = "no-store, no-cache, must-revalidate"
     return resp
 
-# ─── CSRF protection ───────────────────────────────────────────────────────────
+# â”€â”€â”€ CSRF protection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def generate_csrf():
     if "_csrf" not in session:
         session["_csrf"] = secrets.token_hex(24)
@@ -83,7 +83,7 @@ app.jinja_env.globals["enumerate"]  = enumerate
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "solar_web.db")
 
-# ─── Phase 4 config ───────────────────────────────────────────────────────────
+# â”€â”€â”€ Phase 4 config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 STRIPE_SECRET    = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK   = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
@@ -95,9 +95,9 @@ STRIPE_PRICES    = {
 PAYSTACK_SECRET  = os.environ.get("PAYSTACK_SECRET_KEY", "")
 PAYSTACK_PUBLIC  = os.environ.get("PAYSTACK_PUBLIC_KEY", "")
 
-# ─── Free / demo mode & SMTP ──────────────────────────────────────────────────
+# â”€â”€â”€ Free / demo mode & SMTP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # DEMO_MODE=true lets any user instantly activate a Professional plan for
-# testing — no payment API calls required.
+# testing â€” no payment API calls required.
 DEMO_MODE   = os.environ.get("DEMO_MODE", "true").lower() in ("1", "true", "yes")
 DEMO_DAYS   = int(os.environ.get("DEMO_DAYS", "14"))
 
@@ -105,7 +105,7 @@ SMTP_HOST   = os.environ.get("SMTP_HOST", "")
 SMTP_PORT   = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER   = os.environ.get("SMTP_USER", "")
 SMTP_PASS   = os.environ.get("SMTP_PASS", "")
-SMTP_FROM   = os.environ.get("SMTP_FROM", "noreply@solarproglobal.com")
+SMTP_FROM   = os.environ.get("SMTP_FROM", "support@aiappinvent.com")
 SMTP_TLS    = os.environ.get("SMTP_TLS", "true").lower() in ("1", "true", "yes")
 
 PLAN_PRICES = {
@@ -157,7 +157,7 @@ _DEFAULT_APPLIANCES = [
     ("Heating",     "Electric Oven 2kW",         2000),
 ]
 
-# ─── Database ─────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Database â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -391,7 +391,7 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
         """)
-    # Migrate older DBs — ignore if column already exists
+    # Migrate older DBs â€” ignore if column already exists
     for stmt in [
         "ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN stripe_customer_id TEXT DEFAULT ''",
@@ -419,7 +419,7 @@ def init_db():
         "ALTER TABLE assessment_requests ADD COLUMN building_type TEXT DEFAULT ''",
         "ALTER TABLE assessment_requests ADD COLUMN pipeline_stage TEXT DEFAULT 'assessment_submitted'",
         "ALTER TABLE assessment_requests ADD COLUMN region TEXT DEFAULT ''",
-        # User roles (job function — separate from plan/billing tier)
+        # User roles (job function â€” separate from plan/billing tier)
         "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'customer'",
     ]:
         try:
@@ -457,7 +457,7 @@ def init_db():
                 c.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT {defval}")
         except Exception:
             pass
-    # Seed default users — ensure admin and owner accounts always exist
+    # Seed default users â€” ensure admin and owner accounts always exist
     _SEED_USERS = [
         ("admin",    "admin@solarpro.global", "Administrator", "SolarAdmin2026!", "enterprise", 1),
         ("marc667us","marc667us@yahoo.com",   "Marc",          "marc667us",       "enterprise", 1),
@@ -521,7 +521,7 @@ def init_db():
                 ("Batteries","Pylontech US3000C 3.5kWh","Pylontech","US3000C","3.5 kWh LiFePO4, 48V, BMS, stackable","No.",620, sup.get("Pylontech",0),30),
                 ("Batteries","BYD Battery-Box Premium HVS 10","BYD","HVS 10.2","10.2 kWh, HV LiFePO4, IP55","No.",1850, sup.get("BYD Battery",0),45),
                 ("MPPT","Victron SmartSolar 100/50","Victron","MPPT 100/50","100V 50A MPPT, Bluetooth","No.",120, sup.get("Victron Energy",0),14),
-                ("Cables","DC Solar Cable 6mm² (100m)","General","TUV 6mm²","6mm² TÜV 1.8kV DC solar cable, UV-rated","Roll",85, sup.get("RS Components",0),14),
+                ("Cables","DC Solar Cable 6mmÂ² (100m)","General","TUV 6mmÂ²","6mmÂ² TÃœV 1.8kV DC solar cable, UV-rated","Roll",85, sup.get("RS Components",0),14),
                 ("Protection","Schneider iC60N MCB 32A","Schneider","iC60N-32A","32A MCB Type C, 6kA, DIN","No.",12, sup.get("Schneider Electric",0),14),
                 ("Earthing","Copper Earth Rod 1.2m","Generic","CER-12","16mm dia copper-clad steel, 1.2m","No.",8, sup.get("RS Components",0),7),
             ]
@@ -536,10 +536,10 @@ def init_db():
                 ("Global Solar Capacity Hits 2 TW Milestone",
                  "The world has surpassed 2 terawatts of installed solar photovoltaic capacity, a landmark that took decades but accelerated rapidly in recent years. Africa and Southeast Asia are leading new deployment growth.",
                  "industry"),
-                ("LiFePO4 Battery Prices Fall 40% — Storage Projects Now More Bankable",
+                ("LiFePO4 Battery Prices Fall 40% â€” Storage Projects Now More Bankable",
                  "Lithium iron phosphate battery pack prices dropped 40% year-on-year, making solar-plus-storage projects significantly more financially attractive and bankable for commercial and industrial clients.",
                  "market"),
-                ("IEC 61215:2021 Update — What Solar Designers Must Know",
+                ("IEC 61215:2021 Update â€” What Solar Designers Must Know",
                  "The updated IEC 61215 standard introduces new temperature cycling and thermal shock tests for PV modules. Engineers specifying panels should ensure module certifications reference the 2021 edition.",
                  "technology"),
                 ("Solar Financing: New Concessional Loan Facilities for Sub-Saharan Africa",
@@ -551,7 +551,7 @@ def init_db():
                 _default_news)
 
 
-# ─── System email helper ─────────────────────────────────────────────────────
+# â”€â”€â”€ System email helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _send_system_email(to_addr, subject, body_text):
     """Send a transactional system email (password reset, alerts) via env-var SMTP."""
@@ -580,7 +580,7 @@ def _send_system_email(to_addr, subject, body_text):
         return False, str(ex)
 
 
-# ─── Auth helpers ─────────────────────────────────────────────────────────────
+# â”€â”€â”€ Auth helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def login_required(f):
     @wraps(f)
@@ -622,18 +622,18 @@ def save_project_data(pid, data):
                       (json.dumps(data), datetime.now().isoformat(), pid))
 
 
-# ─── Equipment specifications ─────────────────────────────────────────────────
+# â”€â”€â”€ Equipment specifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-# Battery chemistry parameters — per lithium spec document (pv1/)
+# Battery chemistry parameters â€” per lithium spec document (pv1/)
 BATTERY_CHEMISTRY = {
     "LiFePO4": {
         "name":        "Lithium Iron Phosphate (LiFePO4)",
         "dod":         0.90,
         "efficiency":  0.96,
-        "cycle_life":  "4,000–8,000 cycles",
-        "lifetime_yr": "10–15 years",
+        "cycle_life":  "4,000â€“8,000 cycles",
+        "lifetime_yr": "10â€“15 years",
         "cell_v":      3.2,
-        "temp_range":  "-20°C to +55°C",
+        "temp_range":  "-20Â°C to +55Â°C",
         "brands":      "BYD Battery-Box, Pylontech Force H, Dyness BX51100, Sungrow SBH, Huawei Luna2000",
         "sizes_kwh":   [5.12, 10.24, 13.5, 15.36, 20.48, 30.72],
         "usd_per_kwh": 120,
@@ -642,10 +642,10 @@ BATTERY_CHEMISTRY = {
         "name":        "Lithium Nickel Manganese Cobalt (NMC)",
         "dod":         0.85,
         "efficiency":  0.95,
-        "cycle_life":  "2,000–4,000 cycles",
-        "lifetime_yr": "8–12 years",
+        "cycle_life":  "2,000â€“4,000 cycles",
+        "lifetime_yr": "8â€“12 years",
         "cell_v":      3.7,
-        "temp_range":  "-20°C to +45°C",
+        "temp_range":  "-20Â°C to +45Â°C",
         "brands":      "LG RESU, Samsung SDI, Panasonic EverVolt",
         "sizes_kwh":   [9.8, 16.0, 19.6],
         "usd_per_kwh": 140,
@@ -654,23 +654,23 @@ BATTERY_CHEMISTRY = {
         "name":        "Lithium Titanate (LTO)",
         "dod":         0.95,
         "efficiency":  0.98,
-        "cycle_life":  "15,000–30,000 cycles",
-        "lifetime_yr": "20–25 years",
+        "cycle_life":  "15,000â€“30,000 cycles",
+        "lifetime_yr": "20â€“25 years",
         "cell_v":      2.4,
-        "temp_range":  "-40°C to +65°C",
+        "temp_range":  "-40Â°C to +65Â°C",
         "brands":      "Toshiba SCiB, Microvast, Yabo Power",
         "sizes_kwh":   [10.0, 20.0, 40.0],
         "usd_per_kwh": 210,
     },
 }
 
-# PV Panel specification — monocrystalline PERC (IEC 61215)
+# PV Panel specification â€” monocrystalline PERC (IEC 61215)
 PANEL_SPEC = {
     "technology":   "Monocrystalline PERC",
-    "temp_coeff":   -0.0035,          # %/°C power temperature coefficient
+    "temp_coeff":   -0.0035,          # %/Â°C power temperature coefficient
     "standard_wp":  [400, 450, 500, 550],
     "default_wp":   400,
-    "eff_pct":      "21–23%",
+    "eff_pct":      "21â€“23%",
     "warranty_yr":  "12 yr product / 25 yr linear power",
     "brands":       "JinkoSolar, LONGi Solar, Canadian Solar, Trina Solar, JA Solar",
 }
@@ -684,7 +684,7 @@ INVERTER_BRANDS = [
     (9999,"Huawei SUN2000-20KTL, SMA Sunny Tripower CORE1, Sungrow SG25CX"),
 ]
 
-# ─── Ghana PURC Tariff Schedule (Q2 2026, effective April 1 2026) ─────────────
+# â”€â”€â”€ Ghana PURC Tariff Schedule (Q2 2026, effective April 1 2026) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Source: Public Utilities Regulatory Commission (PURC) Ghana
 GHANA_PURC_TARIFFS = {
     "Residential Lifeline (0-30 kWh/month)": {
@@ -732,7 +732,7 @@ GHANA_PURC_TARIFFS = {
     "Industrial - LV (factories, warehouses)": {
         "rate_ghc":   2.2000,
         "fixed_ghc":  300.00,
-        "description": "Industrial users on low-voltage supply — factories, warehouses",
+        "description": "Industrial users on low-voltage supply â€” factories, warehouses",
         "bldg_hint":  ["industrial", "factory", "warehouse", "manufacturing"],
     },
     "Industrial - HV (large industries)": {
@@ -749,7 +749,7 @@ GHANA_PURC_TARIFFS = {
     },
 }
 
-# ─── Demand Factors by load category ─────────────────────────────────────────
+# â”€â”€â”€ Demand Factors by load category â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Fraction of connected load actually operating simultaneously (IEC 60364 / BS 7671)
 DEMAND_FACTORS = {
     "Lighting":    0.75,   # Not all lights on at once
@@ -769,7 +769,7 @@ def inverter_brand(inv_kw):
     return INVERTER_BRANDS[-1][1]
 
 
-# ─── Engineering calculations ─────────────────────────────────────────────────
+# â”€â”€â”€ Engineering calculations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def calc_loads(loads):
     """Sum diversified daily energy demand.
@@ -782,7 +782,7 @@ def calc_loads(loads):
         h  = float(ld.get("hours", 0))
         df = float(ld.get("demand_factor",
                    DEMAND_FACTORS.get(ld.get("category", "Other"), 0.70)))
-        df = max(0.10, min(1.0, df))   # clamp 10%–100%
+        df = max(0.10, min(1.0, df))   # clamp 10%â€“100%
         total += (w * q * h * df) / 1000
     return round(total, 3)
 
@@ -797,7 +797,7 @@ def calc_pv(daily_kwh, psh, temp_c, panel_wp=400, sys_eff=0.75):
 
 
 def calc_battery(daily_kwh, autonomy=1, chemistry="LiFePO4"):
-    """Size lithium battery bank — fewest compact units, chemistry-aware."""
+    """Size lithium battery bank â€” fewest compact units, chemistry-aware."""
     chem     = BATTERY_CHEMISTRY.get(chemistry, BATTERY_CHEMISTRY["LiFePO4"])
     dod      = chem["dod"]
     eff      = chem["efficiency"]
@@ -820,7 +820,7 @@ def calc_battery(daily_kwh, autonomy=1, chemistry="LiFePO4"):
 
 
 def calc_mppt(pv_kw, dc_voltage):
-    """Size MPPT charge controller (A) — 1.25× safety factor."""
+    """Size MPPT charge controller (A) â€” 1.25Ã— safety factor."""
     i_max = (pv_kw * 1000) / dc_voltage * 1.25
     for size in [20, 30, 40, 50, 60, 80, 100, 120, 150, 200]:
         if size >= i_max:
@@ -831,7 +831,7 @@ def calc_mppt(pv_kw, dc_voltage):
 def calc_inverter(daily_kwh, peak_kw=0.0, peak_factor=0.30, safety=1.25):
     """Inverter must satisfy both energy-based sizing and peak demand."""
     from_energy = daily_kwh * peak_factor * safety
-    # Must handle connected peak load — inverter rating ≥ peak demand
+    # Must handle connected peak load â€” inverter rating â‰¥ peak demand
     inv_kw = max(from_energy, peak_kw * 1.0)
     # Round up to nearest standard size
     for std in [3.0, 5.0, 8.0, 10.0, 12.0, 15.0, 20.0, 30.0, 50.0, 100.0]:
@@ -847,21 +847,21 @@ def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
     """Full economic analysis: NPV, IRR, payback, DSCR, loan, replacement costs.
 
     Optimised assumptions (West Africa 2025 market basis):
-      • O&M: 0.8% of CAPEX/yr (was 1.2% — robust LiFePO4 systems need minimal maintenance)
-      • Install rate: user-adjustable (default 15%)
-      • Discount rate: 12% (self-funded can use 10% opportunity cost)
-      • Tariff escalation: 8%/yr — consistent with West Africa utility rate trends
-      • Battery replacement: LiFePO4 yr 13, NMC yr 8 (at 70% of original cost)
-      • Inverter replacement: yr 10 (at 80% of original cost)
-      • Residual value: 5% of CAPEX at yr 25
+      â€¢ O&M: 0.8% of CAPEX/yr (was 1.2% â€” robust LiFePO4 systems need minimal maintenance)
+      â€¢ Install rate: user-adjustable (default 15%)
+      â€¢ Discount rate: 12% (self-funded can use 10% opportunity cost)
+      â€¢ Tariff escalation: 8%/yr â€” consistent with West Africa utility rate trends
+      â€¢ Battery replacement: LiFePO4 yr 13, NMC yr 8 (at 70% of original cost)
+      â€¢ Inverter replacement: yr 10 (at 80% of original cost)
+      â€¢ Residual value: 5% of CAPEX at yr 25
 
     funding_mode: 'loan' = include DSCR/bankability; 'self' = self-funded, no loan analysis.
     """
     INSTALL_RATE = install_rate_pct / 100.0
-    # ── Cost estimation ───────────────────────────────────────────────────────
+    # â”€â”€ Cost estimation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if boq_total_local is not None:
         total_local   = boq_total_local        # BOQ already includes installation line
-        install_local = total_local * (INSTALL_RATE / (1 + INSTALL_RATE))  # ≈ 13% of total
+        install_local = total_local * (INSTALL_RATE / (1 + INSTALL_RATE))  # â‰ˆ 13% of total
         equip_local   = total_local - install_local
     else:
         equip_usd     = pv_kw * cost_usd_kwp
@@ -871,7 +871,7 @@ def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
         equip_local   = equip_usd * fx_usd
         install_local = install_usd * fx_usd
 
-    # ── Model constants ───────────────────────────────────────────────────────
+    # â”€â”€ Model constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     DISC   = 0.10 if funding_mode == "self" else 0.12   # self-funded: lower opportunity cost
     ESC    = 0.08   # utility tariff escalation %/yr (Ghana PURC trend)
     DEGRAD = 0.005  # PV panel degradation 0.5%/yr (IEC 61215)
@@ -879,7 +879,7 @@ def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
     OM_ESC = 0.04   # O&M cost escalation 4%/yr
     LIFE   = 25
 
-    # ── Component replacement cost estimates ──────────────────────────────────
+    # â”€â”€ Component replacement cost estimates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     chem_data = BATTERY_CHEMISTRY.get(chemistry, BATTERY_CHEMISTRY["LiFePO4"])
     bat_replace_yr = {"LiFePO4": 13, "NMC": 8, "LTO": 99}.get(chemistry, 13)
     bat_replace_cost = bat_kwh * chem_data["usd_per_kwh"] * 0.70 * fx_usd  # 70% (prices declining)
@@ -897,12 +897,12 @@ def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
     annual_kwh = daily_kwh * 365
     annual_sav = annual_kwh * tariff
     om_yr1     = total_local * OM_PCT
-    # Simple payback (undiscounted, yr-1 basis — quick screening metric)
+    # Simple payback (undiscounted, yr-1 basis â€” quick screening metric)
     net_yr1    = annual_sav - om_yr1
     payback    = total_local / net_yr1 if net_yr1 > 0 else float("inf")
     co2_yr     = annual_kwh * 0.40 / 1000   # tonnes CO2 (Ghana grid intensity 0.4 kgCO2/kWh)
 
-    # ── 25-year cash flow model ───────────────────────────────────────────────
+    # â”€â”€ 25-year cash flow model â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     cashflows  = [-total_local]
     npv        = -total_local
     cumul      = -total_local
@@ -940,7 +940,7 @@ def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
 
     sym = symbol
 
-    # ── Loan / bankability analysis ───────────────────────────────────────────
+    # â”€â”€ Loan / bankability analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if funding_mode == "self":
         loan_amt  = 0.0
         equity    = total_local
@@ -950,7 +950,7 @@ def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
         bankability = "SELF-FUNDED"
         bank_color  = "#818cf8"
         bank_reasons = [
-            "This project is fully self-funded — no debt service analysis required.",
+            "This project is fully self-funded â€” no debt service analysis required.",
             f"Total capital investment: {sym} {total_local:,.0f}",
             f"Opportunity cost of capital: {int(DISC*100)}% per annum",
             f"NPV accounts for full investment over {LIFE}-year system life.",
@@ -980,24 +980,24 @@ def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
             bankability  = "MARGINAL"
             bank_color   = "#fbbf24"
             bank_reasons = [
-                f"DSCR {dscr:.2f} below lender minimum of 1.25 — additional security may be required",
+                f"DSCR {dscr:.2f} below lender minimum of 1.25 â€” additional security may be required",
                 f"Net savings {sym} {net_yr1:,.0f}/yr barely cover debt service {sym} {annual_pmt:,.0f}/yr",
                 "Consider increasing equity contribution or extending loan tenor to 10 years",
                 f"A 10-year tenor reduces annual payments to ~{sym} {annual_pmt*0.72:,.0f}",
-                "Development finance (IFC, AfDB) offers concessional rates 6–9% for viable solar projects",
+                "Development finance (IFC, AfDB) offers concessional rates 6â€“9% for viable solar projects",
             ]
         else:
             bankability  = "NOT BANKABLE"
             bank_color   = "#f87171"
             bank_reasons = [
-                f"DSCR {dscr:.2f} below 1.00 — debt service exceeds net savings",
+                f"DSCR {dscr:.2f} below 1.00 â€” debt service exceeds net savings",
                 f"Annual shortfall: {sym} {max(0, annual_pmt - net_yr1):,.0f}",
                 "Recommendation: switch to self-funded mode, or seek grant/subsidy financing",
-                f"At 70% self-funded equity, loan reduces to {sym} {loan_amt*0.30:,.0f} — recheck DSCR",
+                f"At 70% self-funded equity, loan reduces to {sym} {loan_amt*0.30:,.0f} â€” recheck DSCR",
                 "Alternative: review load schedule to right-size system and reduce CAPEX",
             ]
 
-    # ── Project verdict ───────────────────────────────────────────────────────
+    # â”€â”€ Project verdict â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Self-funded: more lenient thresholds (no debt burden, pure ROI)
     # Loan-funded: standard thresholds
     if funding_mode == "self":
@@ -1010,21 +1010,21 @@ def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
         v_color = "#34d399"
         verdict_reasons = [
             f"Payback of {payback:.1f} years is within the {_approve_yr}-year target",
-            f"Positive NPV {sym} {npv:,.0f} — the project creates real economic value",
+            f"Positive NPV {sym} {npv:,.0f} â€” the project creates real economic value",
             (f"IRR {irr*100:.1f}% exceeds discount rate {int(DISC*100)}%" if irr else "Strong positive returns"),
             f"25-year net return: {sym} {cumul_25:,.0f} | ROI: {roi_pct:.0f}%",
-            f"Avoids {co2_yr*LIFE:.0f} t CO₂ over system life",
+            f"Avoids {co2_yr*LIFE:.0f} t COâ‚‚ over system life",
         ]
     elif payback <= _cond_yr:
         verdict = "CONDITIONAL"
         v_color = "#fbbf24"
         npv_str = f"positive ({sym} {int(npv):,})" if npv > 0 else f"negative ({sym} {int(npv):,})"
         verdict_reasons = [
-            f"Payback {payback:.1f} years — within {_cond_yr}-yr maximum but above {_approve_yr}-yr target",
+            f"Payback {payback:.1f} years â€” within {_cond_yr}-yr maximum but above {_approve_yr}-yr target",
             f"NPV is {npv_str}",
             "Approval recommended subject to: verified tariff data and full load audit",
             f"If utility tariff rises 10%/yr, payback improves to ~{payback*0.87:.1f} years",
-            "Review load schedule — demand factor optimisation can reduce system size 15–25%",
+            "Review load schedule â€” demand factor optimisation can reduce system size 15â€“25%",
         ]
     else:
         verdict = "REJECTED"
@@ -1034,7 +1034,7 @@ def calc_economics(pv_kw, num_panels, bat_kwh, num_bat, inv_kw,
         _pb80str = f"{payback*0.80:.1f}" if _m.isfinite(payback) else "improved"
         verdict_reasons = [
             f"Payback {_pb_str} years exceeds {_cond_yr}-year threshold",
-            f"NPV {sym} {npv:,.0f} — insufficient return on investment",
+            f"NPV {sym} {npv:,.0f} â€” insufficient return on investment",
             f"Annual savings {sym} {annual_sav:,.0f} cannot justify {sym} {total_local:,.0f} investment",
             "Action required: (1) Audit loads and remove non-essential equipment, "
             "(2) Obtain competitive equipment quotes, (3) Apply for utility grants or tax incentives",
@@ -1126,7 +1126,7 @@ def calc_recommendations(eco, d, r):
     _payback_finite = _math.isfinite(payback)
     _payback_safe   = min(payback, 200.0) if _payback_finite else 200.0  # cap at 200 yr for display
 
-    # 1 ─ Reduce system size / load (most impactful for high payback)
+    # 1 â”€ Reduce system size / load (most impactful for high payback)
     if payback > 10:
         reduce = min(35, max(15, int((_payback_safe - 8) / _payback_safe * 85)))
         new_cost = total * (1 - reduce / 100)
@@ -1150,7 +1150,7 @@ def calc_recommendations(eco, d, r):
     om_yr1   = eco.get("om_yr1", 0)
     co2_yr   = eco.get("co2_yr", 0)
 
-    # 2 ─ Increase equity to achieve DSCR ≥ 1.25
+    # 2 â”€ Increase equity to achieve DSCR â‰¥ 1.25
     if dscr < 1.25 and ann_pmt > 0 and loan_amt > 0:
         loan_factor  = ann_pmt / loan_amt
         needed_pmt   = net_yr1 / 1.25
@@ -1165,11 +1165,11 @@ def calc_recommendations(eco, d, r):
                           f"{new_eq_pct:.0f}% ({sym} {new_eq_amt:,.0f}) to reduce the loan "
                           f"amount and annual debt service.",
                 "impact": f"Annual debt service reduces to {sym} {needed_pmt:,.0f}/yr. "
-                          f"DSCR improves to 1.25 — project becomes BANKABLE.",
+                          f"DSCR improves to 1.25 â€” project becomes BANKABLE.",
                 "category": "Finance",
             })
 
-    # 3 ─ Extend loan tenor to 10 years
+    # 3 â”€ Extend loan tenor to 10 years
     if 0.7 <= dscr < 1.25:
         r_m   = 0.15 / 12
         n10   = 10 * 12
@@ -1187,21 +1187,21 @@ def calc_recommendations(eco, d, r):
             "category": "Finance",
         })
 
-    # 4 ─ Verify / improve electricity tariff
+    # 4 â”€ Verify / improve electricity tariff
     if tariff < 0.12 and payback > 10 and ann_kwh > 0:
         needed_tariff = (total / 8 + om_yr1) / ann_kwh
         recs.append({
             "priority": 2, "icon": "bi-receipt", "color": "#a78bfa",
             "title":  "Verify Electricity Tariff & Include Diesel Savings",
             "action": f"Confirm current tariff ({sym}{tariff:.3f}/kWh) is the real commercial rate. "
-                      f"If displacing diesel generation, add fuel cost savings (typically $0.25–0.40/kWh "
+                      f"If displacing diesel generation, add fuel cost savings (typically $0.25â€“0.40/kWh "
                       f"equivalent). Use peak Time-of-Use (ToU) rate if applicable.",
             "impact": f"A blended effective tariff of {sym}{needed_tariff:.3f}/kWh achieves an 8-year payback. "
                       f"Including diesel offsets typically doubles the effective tariff.",
             "category": "Revenue",
         })
 
-    # 5 ─ Reduce battery autonomy (if > 1 day)
+    # 5 â”€ Reduce battery autonomy (if > 1 day)
     if autonomy > 1 and payback > 10:
         bat_cost_share = 0.35
         new_cost = total * (1 - bat_cost_share * (autonomy - 1) / autonomy)
@@ -1218,16 +1218,16 @@ def calc_recommendations(eco, d, r):
             "category": "Design",
         })
 
-    # 6 ─ Upgrade panel wattage
+    # 6 â”€ Upgrade panel wattage
     if panel_wp < 500 and payback > 10:
-        saving_pct = (500 - panel_wp) / panel_wp * 0.5  # fewer panels → less BOS cost
+        saving_pct = (500 - panel_wp) / panel_wp * 0.5  # fewer panels â†’ less BOS cost
         new_cost = total * (1 - saving_pct)
         new_pb   = new_cost / net_yr1 if net_yr1 > 0 else payback
         recs.append({
             "priority": 3, "icon": "bi-sun-fill", "color": "#fbbf24",
             "title":  "Upgrade to 500 Wp High-Efficiency Panels",
             "action": f"Switch from {panel_wp} Wp to 500 Wp TOPCon panels. Fewer panels required "
-                      f"({r['num_panels']} → ~{int(r['num_panels']*panel_wp/500)} modules), "
+                      f"({r['num_panels']} â†’ ~{int(r['num_panels']*panel_wp/500)} modules), "
                       f"reducing mounting, cabling, and labour costs.",
             "impact": f"Balance-of-system cost saving ~{saving_pct*100:.0f}%. "
                       f"System cost reduces to ~{sym} {new_cost:,.0f}. "
@@ -1235,7 +1235,7 @@ def calc_recommendations(eco, d, r):
             "category": "Design",
         })
 
-    # 7 ─ Switch to grid-tied (if off-grid)
+    # 7 â”€ Switch to grid-tied (if off-grid)
     if d.get("system_type") == "off-grid" and payback > 12:
         bat_saving = total * 0.35
         new_cost   = total - bat_saving
@@ -1252,7 +1252,7 @@ def calc_recommendations(eco, d, r):
             "category": "Design",
         })
 
-    # 8 ─ Apply for grants / concessional finance
+    # 8 â”€ Apply for grants / concessional finance
     if eco["verdict"] in ("REJECTED", "CONDITIONAL") or eco["bankability"] in ("NOT BANKABLE", "MARGINAL"):
         grant_pct = 20
         new_cost  = total * (1 - grant_pct / 100)
@@ -1260,8 +1260,8 @@ def calc_recommendations(eco, d, r):
         recs.append({
             "priority": 3, "icon": "bi-bank", "color": "#34d399",
             "title":  "Apply for Grants, Subsidies & Concessional Finance",
-            "action": f"Investigate: (a) Government capital grants (15–30% of cost), "
-                      f"(b) Development bank loans at 6–9% vs 15% commercial, "
+            "action": f"Investigate: (a) Government capital grants (15â€“30% of cost), "
+                      f"(b) Development bank loans at 6â€“9% vs 15% commercial, "
                       f"(c) Carbon credits under Gold Standard / VCS (~{sym}{co2_yr*15:,.0f}/yr), "
                       f"(d) Green bonds or impact investment at preferential rates.",
             "impact": f"A 20% grant reduces capital to {sym} {new_cost:,.0f}, improving payback to "
@@ -1277,11 +1277,11 @@ def calc_boq(num_panels, num_bat, inv_kw, pv_kw, bat_kwh,
              unit_bat_kwh, chemistry, mppt_a, cost_usd_kwp, fx_usd,
              panel_wp=400, ac_cables=None, voltage=48, num_strings=1,
              supply_markup_pct=8, install_rate_pct=15):
-    """Generate BOQ — real equipment specs, brands, optimised costing.
+    """Generate BOQ â€” real equipment specs, brands, optimised costing.
     Pricing basis (West Africa 2025-2026, verified against market data):
-      • Basic prices reduced 10% vs previous version
-      • Supply markup: default 8% (user-adjustable)
-      • Installation labour: default 15% of supply (user-adjustable)
+      â€¢ Basic prices reduced 10% vs previous version
+      â€¢ Supply markup: default 8% (user-adjustable)
+      â€¢ Installation labour: default 15% of supply (user-adjustable)
     """
     SUPPLY_MARKUP  = supply_markup_pct / 100.0   # user-set supply/procurement markup
     INSTALL_RATE   = install_rate_pct  / 100.0   # user-set installation labour rate
@@ -1300,43 +1300,43 @@ def calc_boq(num_panels, num_bat, inv_kw, pv_kw, bat_kwh,
 
     def local(usd): return usd * fx_usd
 
-    # ── DC cable sizing ───────────────────────────────────────────────────────
-    # String cable: 6 mm² is standard for all residential/commercial PV strings
-    # (panel Isc ≈ panel_wp/40 A; TÜV-rated 1.8 kV DC, max 17 A per string)
-    dc_str_qty = num_panels * 8          # ≈ 4 m pos + 4 m neg per panel
-    dc_str_spec = ("6 mm² Twin-core UV-resistant PV Solar Cable, TÜV 2Pfg1169, "
-                   "1.8 kV DC, −40 °C to +90 °C, IEC 62930 — red & black")
+    # â”€â”€ DC cable sizing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # String cable: 6 mmÂ² is standard for all residential/commercial PV strings
+    # (panel Isc â‰ˆ panel_wp/40 A; TÃœV-rated 1.8 kV DC, max 17 A per string)
+    dc_str_qty = num_panels * 8          # â‰ˆ 4 m pos + 4 m neg per panel
+    dc_str_spec = ("6 mmÂ² Twin-core UV-resistant PV Solar Cable, TÃœV 2Pfg1169, "
+                   "1.8 kV DC, âˆ’40 Â°C to +90 Â°C, IEC 62930 â€” red & black")
 
-    # DC main cable (string combiner → DC isolator → inverter)
+    # DC main cable (string combiner â†’ DC isolator â†’ inverter)
     panel_isc_a = panel_wp / 40.0
     total_dc_a  = num_strings * panel_isc_a * 1.25
     _DC = [(20,4),(30,6),(45,10),(60,16),(80,25),(120,35),(999,50)]
     dc_main_mm2 = next(s for lim,s in _DC if total_dc_a <= lim)
     dc_main_qty = 35                     # combiner-to-inverter run + slack
-    dc_main_spec = (f"{dc_main_mm2} mm² Twin-core UV-resistant PV Solar Cable, "
-                    f"TÜV 1.8 kV DC — {num_strings} strings × {panel_isc_a:.0f} A Isc, "
-                    f"design current {total_dc_a:.0f} A (incl. 1.25 × safety factor)")
+    dc_main_spec = (f"{dc_main_mm2} mmÂ² Twin-core UV-resistant PV Solar Cable, "
+                    f"TÃœV 1.8 kV DC â€” {num_strings} strings Ã— {panel_isc_a:.0f} A Isc, "
+                    f"design current {total_dc_a:.0f} A (incl. 1.25 Ã— safety factor)")
 
-    # Battery DC cable (battery bank → inverter DC bus)
+    # Battery DC cable (battery bank â†’ inverter DC bus)
     bat_a   = inv_kw * 1000 / max(voltage, 12) * 1.25
     _BAT = [(40,10),(65,16),(100,25),(150,35),(200,50),(999,70)]
     bat_mm2 = next(s for lim,s in _BAT if bat_a <= lim)
     bat_qty = num_bat * 3 + 5
-    bat_spec = (f"{bat_mm2} mm² Flexible Multi-strand Cu, PVC 105 °C, 1 kV DC — "
+    bat_spec = (f"{bat_mm2} mmÂ² Flexible Multi-strand Cu, PVC 105 Â°C, 1 kV DC â€” "
                 f"{voltage} V bus, design current {bat_a:.0f} A, "
-                f"ANL fuse-protected per string — red & black")
+                f"ANL fuse-protected per string â€” red & black")
 
-    # ── Items list (non-cable) ────────────────────────────────────────────────
+    # â”€â”€ Items list (non-cable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def p(usd): return local(usd * PRICE_FACTOR)   # price with 10% reduction + convert
 
     items = [
-        ("PV Modules — Mono PERC",
-         f"{num_panels} × {panel_wp} Wp | {PANEL_SPEC['brands'].split(',')[0].strip()}",
+        ("PV Modules â€” Mono PERC",
+         f"{num_panels} Ã— {panel_wp} Wp | {PANEL_SPEC['brands'].split(',')[0].strip()}",
          num_panels, "No.", local(panel_usd)),         # panel_usd already has PRICE_FACTOR
         ("Hybrid Inverter / Charger",
          f"{inv_kw:.1f} kW | {inverter_brand(inv_kw).split(',')[0].strip()}",
          1, "No.", local(inv_usd)),                    # inv_usd already has PRICE_FACTOR
-        (f"Battery — {chemistry}",
+        (f"Battery â€” {chemistry}",
          f"{unit_bat_kwh:.4g} kWh unit | {chem['brands'].split(',')[0].strip()}",
          num_bat, "No.", local(bat_usd)),               # bat_usd already has PRICE_FACTOR
         ("MPPT Charge Controller",
@@ -1348,24 +1348,24 @@ def calc_boq(num_panels, num_bat, inv_kw, pv_kw, bat_kwh,
         ("DC Combiner / String Box",
          f"{min(num_strings,4)}-string, 15 A DC fuses, DC SPD Type 2, IP65, IEC 61173",
          1, "No.", p(42)),                  # was 48
-        # ── DC Cables ─────────────────────────────────────────────────────────
-        ("DC String Cable — 6 mm²", dc_str_spec, dc_str_qty, "m", p(1.30)),   # was 1.50
-        (f"DC Main Cable — {dc_main_mm2} mm²", dc_main_spec, dc_main_qty, "m",
+        # â”€â”€ DC Cables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        ("DC String Cable â€” 6 mmÂ²", dc_str_spec, dc_str_qty, "m", p(1.30)),   # was 1.50
+        (f"DC Main Cable â€” {dc_main_mm2} mmÂ²", dc_main_spec, dc_main_qty, "m",
          p(1.6 + dc_main_mm2 * 0.035)),                                        # was 1.8 + 0.04
-        (f"Battery DC Cable — {bat_mm2} mm²", bat_spec, bat_qty, "m",
+        (f"Battery DC Cable â€” {bat_mm2} mmÂ²", bat_spec, bat_qty, "m",
          p(2.0 + bat_mm2 * 0.045)),                                            # was 2.2 + 0.05
-        ("Earthing Cable — 16 mm² G/Y",
-         "16 mm² Green/Yellow Cu PVC, main earthing conductor, BS 7430 / IEC 60364-5-54",
+        ("Earthing Cable â€” 16 mmÂ² G/Y",
+         "16 mmÂ² Green/Yellow Cu PVC, main earthing conductor, BS 7430 / IEC 60364-5-54",
          15, "m", p(1.6)),                 # was 1.8
-        ("Bonding Cable — 6 mm² G/Y",
-         "6 mm² Green/Yellow Cu PVC, panel frame & equipment bonding, BS 7671 Ch.54",
+        ("Bonding Cable â€” 6 mmÂ² G/Y",
+         "6 mmÂ² Green/Yellow Cu PVC, panel frame & equipment bonding, BS 7671 Ch.54",
          int(num_panels * 3), "m", p(1.05)),   # was 1.2
         ("DC MCB / Isolator",
          "DC-rated, 1000 V, BS EN 60947-2",
          4, "No.", p(3.6)),                # was 4.0
     ]
 
-    # ── AC Cables — per sized circuit ─────────────────────────────────────────
+    # â”€â”€ AC Cables â€” per sized circuit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if ac_cables:
         for c in ac_cables:
             sz  = c["cable_size_mm2"]
@@ -1376,41 +1376,41 @@ def calc_boq(num_panels, num_bat, inv_kw, pv_kw, bat_kwh,
             Ib  = c.get("design_current", 0)
             cores = "3-core" if ph == "three" else "2-core + E"
             if sz <= 16:
-                insul = f"Cu PVC 70 °C, BS EN 50525-2-31, Method {Im}"
+                insul = f"Cu PVC 70 Â°C, BS EN 50525-2-31, Method {Im}"
             else:
                 insul = f"Cu XLPE/SWA/PVC, BS 5467, 0.6/1 kV, Method {Im}"
-            spec = (f"{sz} mm² {cores} {insul} | "
+            spec = (f"{sz} mmÂ² {cores} {insul} | "
                     f"Ib={Ib:.1f} A, {brk} A MCB/RCCB | VD={vd:.2f}%")
             qty  = c["length_m"] + 5
             rate = p(1.1 + sz * 0.055)    # was 1.2 + 0.06
-            items.append((f"AC Cable — {c['circuit']}", spec, qty, "m", rate))
+            items.append((f"AC Cable â€” {c['circuit']}", spec, qty, "m", rate))
     else:
-        items.append(("AC Cables — All Circuits",
+        items.append(("AC Cables â€” All Circuits",
                       "Cu PVC/XLPE, BS EN 50525 / BS 5467 (sizes per cable schedule)",
                       25, "m", p(1.35)))   # was 1.5
 
     items += [
         ("AC RCCB + MCBs",
-         "30 mA RCCB (BS EN 61008 Type A) + 6 × MCB (BS EN 60898), 6 kA",
+         "30 mA RCCB (BS EN 61008 Type A) + 6 Ã— MCB (BS EN 60898), 6 kA",
          1, "Set", p(48)),              # was 55
         ("Surge Protection Device",
          "DC Type 2 (IEC 61643-31, 1000 VDC) + AC Type 2 (BS EN 61643, 230/415 V)",
          2, "No.", p(19)),              # was 22
         ("Earthing & Bonding Kit",
-         "2 × 16 mm dia. Cu earth rod 2.4 m, rod driver, clamps, earth busbar — BS 7430",
+         "2 Ã— 16 mm dia. Cu earth rod 2.4 m, rod driver, clamps, earth busbar â€” BS 7430",
          1, "Set", p(30)),              # was 35
         ("Battery Enclosure / Rack",
          "IP44 powder-coated steel rack, ventilated, lockable",
          1, "No.", p(48)),              # was 55
         ("Cable Trunking & Conduit",
-         "20 mm & 32 mm metallic conduit + 50×50 mm galvanised steel trunking",
+         "20 mm & 32 mm metallic conduit + 50Ã—50 mm galvanised steel trunking",
          1, "Lot", p(52)),              # was 60
         ("Hardware, Fixings & Misc",
          "MC4 connectors (IP67, 1000 VDC), cable ties, glands, labels, consumables",
          1, "Lot", p(36)),              # was 42
     ]
 
-    # ── Build supply rows (basic × supply markup) ─────────────────────────────
+    # â”€â”€ Build supply rows (basic Ã— supply markup) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     rows = []
     supply_grand = 0.0
     for no, (desc, spec, qty, unit, basic) in enumerate(items, 1):
@@ -1421,7 +1421,7 @@ def calc_boq(num_panels, num_bat, inv_kw, pv_kw, bat_kwh,
                      "unit": unit, "basic": basic, "total_r": total_r,
                      "amount": amount})
 
-    # ── Installation Labour row (15% of supply subtotal) ─────────────────────
+    # â”€â”€ Installation Labour row (15% of supply subtotal) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     install_amount = supply_grand * INSTALL_RATE
     rows.append({
         "no":      len(rows) + 1,
@@ -1439,7 +1439,7 @@ def calc_boq(num_panels, num_bat, inv_kw, pv_kw, bat_kwh,
     return rows, grand
 
 
-# ─── Routes — Auth ────────────────────────────────────────────────────────────
+# â”€â”€â”€ Routes â€” Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/")
 def landing():
@@ -1470,7 +1470,7 @@ def register():
         ph = generate_password_hash(f["password"])
         try:
             with get_db() as c:
-                # All new signups begin on 'free' plan — upgrade later
+                # All new signups begin on 'free' plan â€” upgrade later
                 c.execute(
                     "INSERT INTO users (username,email,password_hash,name,company,country,plan) "
                     "VALUES (?,?,?,?,?,?,?)",
@@ -1480,45 +1480,45 @@ def register():
                 uid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
             session["user_id"] = uid
             session["username"] = f["username"]
-            # Send welcome email — non-blocking
+            # Send welcome email â€” non-blocking
             try:
                 _send_system_email(
                     f["email"],
-                    "Welcome to SolarPro Global ☀️ — Your account is ready",
+                    "Welcome to SolarPro Global â˜€ï¸ â€” Your account is ready",
                     f"""Hello {f.get('name', f['username'])},
 
 Welcome to SolarPro Global! Your free account has been created successfully.
 
-─────────────────────────────────────
-GETTING STARTED — 4 quick steps
-─────────────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+GETTING STARTED â€” 4 quick steps
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 1. Complete your Organisation Profile
-   → Settings → Organization tab
+   â†’ Settings â†’ Organization tab
    (Your org name appears on all PDF reports)
 
 2. Create your first solar project
-   → Click "New Project" on your dashboard
-   → Enter location, load schedule → get full design
+   â†’ Click "New Project" on your dashboard
+   â†’ Enter location, load schedule â†’ get full design
 
 3. Configure email to send reports to clients
-   → Settings → Email / SMTP tab
-   → Supports Gmail, Outlook, Brevo, Mailgun
+   â†’ Settings â†’ Email / SMTP tab
+   â†’ Supports Gmail, Outlook, Brevo, Mailgun
 
 4. Explore tutorials and user guides
-   → Support → Resources (audio narration + PDF download)
+   â†’ Support â†’ Resources (audio narration + PDF download)
 
-─────────────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 YOUR ACCOUNT
-─────────────────────────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Username:  {f['username']}
 Plan:      Free (upgrade anytime)
 Dashboard: {url_for('dashboard', _external=True)}
 
-Need help? Open a support ticket or email support@solarproglobal.com
+Need help? Open a support ticket or email support@aiappinvent.com
 We respond within 24 hours.
 
 Welcome aboard!
-— The SolarPro Global Team
+â€” The SolarPro Global Team
 solarpro.aiappinvent.com
 """)
             except Exception:
@@ -1553,7 +1553,7 @@ def login():
 def logout():
     uid = session.get("user_id")
     if uid:
-        # Purge draft/incomplete projects — only completed (stage='results') persist
+        # Purge draft/incomplete projects â€” only completed (stage='results') persist
         with get_db() as _db:
             _db.execute(
                 "DELETE FROM projects WHERE user_id=? AND stage NOT IN ('results')",
@@ -1562,7 +1562,7 @@ def logout():
     return redirect(url_for("landing"))
 
 
-# ─── Password Reset ───────────────────────────────────────────────────────────
+# â”€â”€â”€ Password Reset â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/forgot-password", methods=["GET", "POST"])
 @limiter.limit("5 per hour")
@@ -1589,8 +1589,8 @@ def forgot_password():
                     f"A password reset was requested for your SolarPro Global account.\n\n"
                     f"Click the link below to set a new password (valid for 1 hour):\n\n"
                     f"  {reset_url}\n\n"
-                    f"If you did not request this, ignore this email — your password has not changed.\n\n"
-                    f"— SolarPro Global"
+                    f"If you did not request this, ignore this email â€” your password has not changed.\n\n"
+                    f"â€” SolarPro Global"
                 )
                 ok, err = _send_system_email(
                     user["email"], "Reset your SolarPro password", body)
@@ -1598,10 +1598,10 @@ def forgot_password():
                     flash(
                         "Reset link sent! Check your inbox (and spam folder).", "success")
                 else:
-                    # SMTP not configured — show link directly so admins can share it securely
+                    # SMTP not configured â€” show link directly so admins can share it securely
                     flash(
                         f"SMTP not configured on the server. "
-                        f"Admin: share this link securely with the user → {reset_url}", "warning")
+                        f"Admin: share this link securely with the user â†’ {reset_url}", "warning")
             else:
                 # Always show the same message to avoid email enumeration
                 flash(
@@ -1649,7 +1649,7 @@ def reset_password(token):
     return render_template("reset_password.html", token=token)
 
 
-# ─── Support / Help Centre ───────────────────────────────────────────────────
+# â”€â”€â”€ Support / Help Centre â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/support")
 @login_required
@@ -1667,7 +1667,7 @@ def support_email_setup():
 @login_required
 def support_email_setup_pdf():
     return _render_pdf(
-        "Email SMTP Setup Guide — SolarPro Global",
+        "Email SMTP Setup Guide â€” SolarPro Global",
         _TUTORIAL_EMAIL_SETUP_MD,
         "SolarPro_Email_Setup_Guide.pdf")
 
@@ -1682,7 +1682,7 @@ def support_user_guide():
 @login_required
 def support_user_guide_pdf():
     return _render_pdf(
-        "User Guide — SolarPro Global",
+        "User Guide â€” SolarPro Global",
         _TUTORIAL_USER_GUIDE_MD,
         "SolarPro_User_Guide.pdf")
 
@@ -1690,14 +1690,14 @@ def support_user_guide_pdf():
 _TUTORIAL_EMAIL_SETUP_MD = """# Email & SMTP Setup Guide
 ## SolarPro Global Help Centre
 
-**Version 1.0 · solarpro.aiappinvent.com**
+**Version 1.0 Â· solarpro.aiappinvent.com**
 
 ---
 
 ## Why Set Up Email?
 
-SolarPro Global can send your solar project PDF reports — BOQ, Economic Analysis,
-Energy Impact, and more — directly to clients, banks, and installers. To do this,
+SolarPro Global can send your solar project PDF reports â€” BOQ, Economic Analysis,
+Energy Impact, and more â€” directly to clients, banks, and installers. To do this,
 the platform needs to connect to your outbound mail server (SMTP).
 
 Once configured you can:
@@ -1708,7 +1708,7 @@ Once configured you can:
 
 ---
 
-# Step 1 — Open Settings
+# Step 1 â€” Open Settings
 
 1. Log in to your SolarPro account.
 2. Click your **username** in the top-right navigation bar.
@@ -1720,7 +1720,7 @@ password, encryption mode, and From address.
 
 ---
 
-# Step 2 — Choose Your Email Provider
+# Step 2 â€” Choose Your Email Provider
 
 SolarPro supports any standard SMTP provider. Use the **Quick-Fill buttons** on the
 settings page to auto-fill the host and port for popular providers.
@@ -1738,21 +1738,21 @@ settings page to auto-fill the host and port for popular providers.
 
 ---
 
-# Step 3A — Set Up Gmail
+# Step 3A â€” Set Up Gmail
 
-Gmail requires an **App Password** — a special 16-character code separate from
+Gmail requires an **App Password** â€” a special 16-character code separate from
 your normal Google account password.
 
-**Step-by-step — generate a Gmail App Password:**
+**Step-by-step â€” generate a Gmail App Password:**
 
 1. Go to **myaccount.google.com**
 2. Click **Security** in the left sidebar.
 3. Under "How you sign in to Google", click **2-Step Verification** (must be on).
-4. Scroll to the bottom → click **App passwords**.
-5. App: **Mail** · Device: **Other** → type "SolarPro" → click **Generate**.
+4. Scroll to the bottom â†’ click **App passwords**.
+5. App: **Mail** Â· Device: **Other** â†’ type "SolarPro" â†’ click **Generate**.
 6. Copy the 16-character password shown (no spaces).
 
-**Enter these values in SolarPro Settings → Email / SMTP:**
+**Enter these values in SolarPro Settings â†’ Email / SMTP:**
 
 | Field | Value |
 |---|---|
@@ -1764,18 +1764,18 @@ your normal Google account password.
 | From Address | your.email@gmail.com |
 
 > If you paste the App Password, remove any spaces. Google displays it in groups
-> of 4 characters — it is one continuous string.
+> of 4 characters â€” it is one continuous string.
 
 ---
 
-# Step 3B — Set Up Brevo (Recommended)
+# Step 3B â€” Set Up Brevo (Recommended)
 
 1. Sign up free at **brevo.com**.
-2. After logging in, go to **Senders & IP** → **SMTP & API**.
+2. After logging in, go to **Senders & IP** â†’ **SMTP & API**.
 3. Copy your **SMTP Login** (your Brevo email) and **Master Password**,
    or generate a dedicated SMTP key.
 
-**Enter these values in SolarPro Settings → Email / SMTP:**
+**Enter these values in SolarPro Settings â†’ Email / SMTP:**
 
 | Field | Value |
 |---|---|
@@ -1787,11 +1787,11 @@ your normal Google account password.
 | From Address | A verified sender in your Brevo account |
 
 > You must verify your sender email address or domain in Brevo before emails
-> will be delivered. Go to **Brevo → Senders → Add a sender**.
+> will be delivered. Go to **Brevo â†’ Senders â†’ Add a sender**.
 
 ---
 
-# Step 3C — Set Up Outlook / Microsoft 365
+# Step 3C â€” Set Up Outlook / Microsoft 365
 
 | Field | Value |
 |---|---|
@@ -1807,29 +1807,29 @@ your normal Google account password.
 
 ---
 
-# Step 4 — Test the Connection
+# Step 4 â€” Test the Connection
 
 After filling in all fields, click **Test Connection** (the blue button).
 
-- **✓ "Connection successful"** — SMTP is working. Click **Save SMTP**.
-- **✗ "Authentication failed"** — check your username and password.
+- **âœ“ "Connection successful"** â€” SMTP is working. Click **Save SMTP**.
+- **âœ— "Authentication failed"** â€” check your username and password.
   For Gmail, ensure you used the App Password, not your regular password.
-- **✗ "Connection refused / timed out"** — check the host and port.
+- **âœ— "Connection refused / timed out"** â€” check the host and port.
   Port 587 may be blocked by your network firewall.
 
 Always click **Save SMTP** after a successful test.
 
 ---
 
-# Step 5 — Send a Test Report
+# Step 5 â€” Send a Test Report
 
 1. Open any project with completed calculations.
-2. Click **Results** → **Email Reports**.
+2. Click **Results** â†’ **Email Reports**.
 3. Enter your own email address in the **Recipients** field.
 4. Select any report (e.g. BOQ Report).
 5. Click **Send Email**.
 
-The email should arrive within 1–2 minutes. Check your spam folder if it does
+The email should arrive within 1â€“2 minutes. Check your spam folder if it does
 not appear in your inbox.
 
 ---
@@ -1837,7 +1837,7 @@ not appear in your inbox.
 # Troubleshooting
 
 ## "SMTP not configured" warning on the Email Reports page
-Your SMTP settings have not been saved yet. Go to **Settings → Email / SMTP**
+Your SMTP settings have not been saved yet. Go to **Settings â†’ Email / SMTP**
 and complete setup, then click **Test Connection** before saving.
 
 ## "Authentication failed" error
@@ -1875,32 +1875,32 @@ to configure SMTP_HOST, SMTP_USER, and SMTP_PASS in the Render dashboard.
 
 ---
 
-*SolarPro Global Help Centre · support@solarproglobal.com*
+*SolarPro Global Help Centre Â· support@aiappinvent.com*
 """
 
 
-_TUTORIAL_USER_GUIDE_MD = """# SolarPro Global — Complete User Guide
+_TUTORIAL_USER_GUIDE_MD = """# SolarPro Global â€” Complete User Guide
 ## Intelligent Solar PV Design & Financial Engineering Platform
 
-**Version 1.0 · solarpro.aiappinvent.com**
+**Version 1.0 Â· solarpro.aiappinvent.com**
 
 ---
 
 ## Welcome to SolarPro Global
 
 SolarPro Global is a professional solar PV design platform that takes you from
-initial site assessment all the way through to a bankable financial proposal —
+initial site assessment all the way through to a bankable financial proposal â€”
 in a single workflow. This guide walks you through every step.
 
 ---
 
-# Step 1 — Create Your Account
+# Step 1 â€” Create Your Account
 
 1. Go to **solarpro.aiappinvent.com**
 2. Click **Start Free** on the homepage.
 3. Fill in your name, company, country, and choose a plan.
 4. Enter your email address and a secure password.
-5. Click **Create Account** — you are automatically logged in.
+5. Click **Create Account** â€” you are automatically logged in.
 
 **Plans available:**
 
@@ -1912,12 +1912,12 @@ in a single workflow. This guide walks you through every step.
 
 ---
 
-# Step 2 — Set Up Your Organisation Profile
+# Step 2 â€” Set Up Your Organisation Profile
 
 Before creating your first project, configure your organisation details so they
 appear on all generated reports.
 
-1. Click your **username** (top right) → **Settings**.
+1. Click your **username** (top right) â†’ **Settings**.
 2. On the **Organization** tab, fill in:
    - Company name and email
    - Street address
@@ -1931,54 +1931,54 @@ proposal, and email sent from the platform.
 
 ---
 
-# Step 3 — Create a New Project
+# Step 3 â€” Create a New Project
 
 1. Click **New Project** in the navigation bar (or the **+** button on the dashboard).
-2. Enter a project name (e.g. "Accra Commercial Office — 50 kW").
-3. Click **Create Project** — you are taken to the Location form.
+2. Enter a project name (e.g. "Accra Commercial Office â€” 50 kW").
+3. Click **Create Project** â€” you are taken to the Location form.
 
 ---
 
-# Step 4 — Set the Location & Solar Resource
+# Step 4 â€” Set the Location & Solar Resource
 
 The Location form captures where the system will be installed and pulls in
 solar irradiance data for that region.
 
 **Fields to complete:**
 
-- **Country** — select from the 22 supported countries.
-- **Region / City** — the region dropdown populates automatically after you select a country.
+- **Country** â€” select from the 22 supported countries.
+- **Region / City** â€” the region dropdown populates automatically after you select a country.
 - **Solar resource data** loads automatically once country and region are selected,
   showing Peak Sun Hours (PSH), average irradiance, and the local electricity tariff.
-- **System Type** — Off-grid, On-grid (grid-tied), or Hybrid.
-- **DC Bus Voltage** — 12V, 24V, or 48V (for off-grid/hybrid).
-- **Currency** — shown on all financial outputs.
+- **System Type** â€” Off-grid, On-grid (grid-tied), or Hybrid.
+- **DC Bus Voltage** â€” 12V, 24V, or 48V (for off-grid/hybrid).
+- **Currency** â€” shown on all financial outputs.
 
 **Solar Design Parameters** (on the right panel):
 
-- **Panel Tilt** — degrees from horizontal (typically 10–20° for equatorial regions).
-- **Azimuth** — 0° = south-facing (northern hemisphere); adjust for your roof orientation.
-- **System Losses** — default 14% (wiring, soiling, temperature derating).
-- **Inverter Efficiency** — default 95%.
-- **Battery Depth of Discharge (DoD)** — default 80% for lithium, 50% for lead-acid.
-- **Performance Ratio** — overall system efficiency factor (default 75%).
+- **Panel Tilt** â€” degrees from horizontal (typically 10â€“20Â° for equatorial regions).
+- **Azimuth** â€” 0Â° = south-facing (northern hemisphere); adjust for your roof orientation.
+- **System Losses** â€” default 14% (wiring, soiling, temperature derating).
+- **Inverter Efficiency** â€” default 95%.
+- **Battery Depth of Discharge (DoD)** â€” default 80% for lithium, 50% for lead-acid.
+- **Performance Ratio** â€” overall system efficiency factor (default 75%).
 
 Click **Save & Continue** when the location is set.
 
 ---
 
-# Step 5 — Enter the Load Schedule
+# Step 5 â€” Enter the Load Schedule
 
-The load schedule is the heart of the design — it defines how much energy the
+The load schedule is the heart of the design â€” it defines how much energy the
 building consumes and when.
 
 1. Click **Add Appliance** to add each electrical load.
 2. For each appliance enter:
    - **Name** (e.g. Air Conditioner, Refrigerator, LED Lights)
-   - **Quantity** — number of identical units
-   - **Power (Watts)** — rated wattage per unit
-   - **Hours per day** — average daily run time
-   - **Days per week** — operating days
+   - **Quantity** â€” number of identical units
+   - **Power (Watts)** â€” rated wattage per unit
+   - **Hours per day** â€” average daily run time
+   - **Days per week** â€” operating days
 3. The **Daily Load (Wh)** calculates automatically.
 4. Add all appliances, then click **Save Loads**.
 
@@ -1987,14 +1987,14 @@ The platform separates loads into **critical** (must run during outages) and
 
 ---
 
-# Step 6 — Review Engineering Results
+# Step 6 â€” Review Engineering Results
 
 Click **Results** to see the full system design. The platform calculates:
 
 **PV Array:**
 - Required PV capacity (kWp)
 - Number of solar panels
-- Suggested panel configuration (series × parallel strings)
+- Suggested panel configuration (series Ã— parallel strings)
 
 **Battery Bank:**
 - Required capacity (kWh and Ah)
@@ -2017,7 +2017,7 @@ Click **Results** to see the full system design. The platform calculates:
 
 ---
 
-# Step 7 — Access Reports
+# Step 7 â€” Access Reports
 
 From the Results page, click any report in the left panel:
 
@@ -2036,17 +2036,17 @@ Every report can be **exported as PDF** or printed directly from the browser.
 
 ---
 
-# Step 8 — Export to Excel
+# Step 8 â€” Export to Excel
 
 From the Results page, click **Export Excel** to download a full workbook
-containing all results in tabular format — useful for clients and banks who
+containing all results in tabular format â€” useful for clients and banks who
 need the numbers in a spreadsheet.
 
 ---
 
-# Step 9 — Email Reports to Clients
+# Step 9 â€” Email Reports to Clients
 
-Once your SMTP is configured in **Settings → Email / SMTP**, you can send any
+Once your SMTP is configured in **Settings â†’ Email / SMTP**, you can send any
 PDF report directly to clients, banks, or installers.
 
 1. From the Results page, click **Email Reports**.
@@ -2060,31 +2060,31 @@ the Email Reports page.
 
 ---
 
-# Step 10 — Request a Site Assessment
+# Step 10 â€” Request a Site Assessment
 
 Before designing a system, you may want a formal site assessment.
 
 1. Click **Free Assessment** in the navigation (or on the homepage).
 2. Fill in the client's details: name, phone, country, region, building type,
    floor count, and a description of the site.
-3. Submit — you receive a reference code immediately.
+3. Submit â€” you receive a reference code immediately.
 4. The admin team reviews the assessment and can create a project directly
    from the assessment record in the pipeline.
 
 ---
 
-# Step 11 — Manage Your Account
+# Step 11 â€” Manage Your Account
 
-**Dashboard** — shows all your projects with their status, system size, and
+**Dashboard** â€” shows all your projects with their status, system size, and
 quick-access buttons.
 
-**Account page** (click username → Account) — view your subscription plan,
+**Account page** (click username â†’ Account) â€” view your subscription plan,
 payment history, and support tickets.
 
-**Settings** — configure organisation profile, date/time format, appearance
+**Settings** â€” configure organisation profile, date/time format, appearance
 theme, SMTP email, and change your password.
 
-**Upgrade** — move from Free to Professional or Enterprise to unlock more
+**Upgrade** â€” move from Free to Professional or Enterprise to unlock more
 projects and premium features.
 
 ---
@@ -2092,33 +2092,33 @@ projects and premium features.
 # Tips for Professional Reports
 
 - Fill in your **organisation name and logo details** in Settings before exporting
-  any PDFs — these appear on the report header.
-- Set the correct **currency and electricity tariff** in the Location form —
+  any PDFs â€” these appear on the report header.
+- Set the correct **currency and electricity tariff** in the Location form â€”
   all financial figures depend on these inputs.
 - Use the **Hybrid** system type for grid-connected systems with battery backup;
   use **Off-grid** only for sites with no grid connection at all.
 - Always run **Test Connection** after saving SMTP settings before trying to send
   your first report.
-- For the most accurate BOQ pricing, use **Settings → Equipment Catalog** (admin)
+- For the most accurate BOQ pricing, use **Settings â†’ Equipment Catalog** (admin)
   to set current local market prices.
 
 ---
 
 # Getting Help
 
-- **Support Tickets** — click **Support** in the navigation to open a ticket.
+- **Support Tickets** â€” click **Support** in the navigation to open a ticket.
   The support team responds within 24 hours.
-- **Email** — contact support@solarproglobal.com
-- **Help Centre** — visit **Support → Help Centre** for step-by-step tutorials
+- **Email** â€” contact support@aiappinvent.com
+- **Help Centre** â€” visit **Support â†’ Help Centre** for step-by-step tutorials
   on specific features.
 
 ---
 
-*SolarPro Global · solarpro.aiappinvent.com · support@solarproglobal.com*
+*SolarPro Global Â· solarpro.aiappinvent.com Â· support@aiappinvent.com*
 """
 
 
-# ─── Routes — Dashboard ───────────────────────────────────────────────────────
+# â”€â”€â”€ Routes â€” Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/dashboard")
 @login_required
@@ -2185,7 +2185,7 @@ def dashboard():
                            total_kwh=round(total_kwh, 1))
 
 
-# ─── Routes — Project ─────────────────────────────────────────────────────────
+# â”€â”€â”€ Routes â€” Project â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 PLAN_LIMITS = {"free": 1, "professional": 10, "business": 9999, "enterprise": 9999}
 
@@ -2257,9 +2257,9 @@ def project_from_assessment(ref):
         btype   = ar.get("building_type") or ar.get("system_type") or "Solar"
         loc     = ar.get("country") or ""
         client  = ar.get("name") or "Client"
-        proj_name = f"{btype} Solar Design — {client} [{ref}]"
+        proj_name = f"{btype} Solar Design â€” {client} [{ref}]"
         if loc:
-            proj_name = f"{loc} · {proj_name}"
+            proj_name = f"{loc} Â· {proj_name}"
         # Pre-fill data_json with known information
         initial_data = {
             "from_assessment_ref":  ref,
@@ -2402,32 +2402,32 @@ def project_loads(pid):
         if purc_cat:
             data["purc_category"] = purc_cat
 
-        # Connected peak load (wattage × qty, no DF — used for phase selection & cable sizing)
+        # Connected peak load (wattage Ã— qty, no DF â€” used for phase selection & cable sizing)
         peak_kw = sum(
             float(ld.get("wattage", 0)) * float(ld.get("quantity", 1))
             for ld in loads
         ) / 1000.0
 
-        # Diversified peak (with demand factors — used for inverter sizing)
+        # Diversified peak (with demand factors â€” used for inverter sizing)
         div_peak_kw = sum(
             float(ld.get("wattage", 0)) * float(ld.get("quantity", 1)) * float(ld.get("demand_factor", 0.70))
             for ld in loads
         ) / 1000.0
 
-        # Auto phase selection: > 8 kW connected load → 3-phase (BS 7671 / IEC 60364)
+        # Auto phase selection: > 8 kW connected load â†’ 3-phase (BS 7671 / IEC 60364)
         auto_phase = "three" if peak_kw > 8.0 else "single"
         prev_phase = data.get("phase", "single")
         if auto_phase != prev_phase:
             if auto_phase == "three":
                 flash(
-                    f"Phase automatically set to 3-phase 415V — connected peak load "
+                    f"Phase automatically set to 3-phase 415V â€” connected peak load "
                     f"{peak_kw:.1f} kW exceeds the 8 kW single-phase limit. "
                     f"Single-phase limit: 8 kW (IEC 60364 / BS 7671).",
                     "info"
                 )
             else:
                 flash(
-                    f"Phase set to single-phase 230V — connected peak load "
+                    f"Phase set to single-phase 230V â€” connected peak load "
                     f"{peak_kw:.1f} kW is within single-phase range.",
                     "info"
                 )
@@ -2525,7 +2525,7 @@ def project_results(pid):
                            r=r, recommendations=recs)
 
 
-# ─── Routes — Reports ─────────────────────────────────────────────────────────
+# â”€â”€â”€ Routes â€” Reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _plan_gate(pid):
     """Return (project, user, plan) or redirect if project missing/no results."""
@@ -2553,7 +2553,7 @@ def report_inspection(pid):
 @login_required
 @limiter.limit("10 per minute")
 def export_pdf_inspection(pid):
-    """PDF export — Field Inspection Report (available on free plan)."""
+    """PDF export â€” Field Inspection Report (available on free plan)."""
     project = get_project(pid)
     if not project or "results" not in project["data"]:
         return redirect(url_for("project_results", pid=pid))
@@ -2563,19 +2563,19 @@ def export_pdf_inspection(pid):
     v_ac   = 415 if phase == "three" else 230
 
     def _chk():
-        return "☐ Pass  ☐ Fail  ☐ N/A"
+        return "â˜ Pass  â˜ Fail  â˜ N/A"
 
     def _section(num, title, items):
         rows = f"\n\n### {num}. {title}\n\n"
         rows += "| # | Inspection Item | Pass | Fail | N/A | Remarks |\n"
         rows += "|---|---|:---:|:---:|:---:|---|\n"
         for i, item in items:
-            rows += f"| {num}.{i} | {item} | ☐ | ☐ | ☐ | |\n"
+            rows += f"| {num}.{i} | {item} | â˜ | â˜ | â˜ | |\n"
         return rows
 
     ac_cables = r.get("ac_cables", [])
-    first_breaker = ac_cables[0]["breaker_a"] if ac_cables else "—"
-    first_cable   = ac_cables[0]["cable_size_mm2"] if ac_cables else "—"
+    first_breaker = ac_cables[0]["breaker_a"] if ac_cables else "â€”"
+    first_cable   = ac_cables[0]["cable_size_mm2"] if ac_cables else "â€”"
 
     md = f"""# Pre-Installation Site Assessment - {project["name"]}
 
@@ -2851,7 +2851,7 @@ def report_energy(pid):
     r   = project["data"]["results"]
     eco = r["economics"]
     d   = project["data"]
-    # Monthly generation breakdown (simple seasonal variation ±10%)
+    # Monthly generation breakdown (simple seasonal variation Â±10%)
     monthly_factors = [0.88,0.90,0.95,1.00,1.05,1.08,1.10,1.08,1.03,0.98,0.92,0.88]
     base_monthly    = r["daily_kwh"] * 30.44
     months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
@@ -2899,7 +2899,7 @@ def project_clone(pid):
             "SELECT COUNT(*) FROM projects WHERE user_id=?", (uid,)
         ).fetchone()[0]
         if count >= limit:
-            flash(f"Project limit reached — upgrade to create more.", "warning")
+            flash(f"Project limit reached â€” upgrade to create more.", "warning")
             return redirect(url_for("upgrade"))
 
         new_name = f"Copy of {src['name']}"
@@ -2909,14 +2909,14 @@ def project_clone(pid):
             (uid, new_name, src["data_json"] or "{}"))
         new_pid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-    flash(f"'{new_name}' created — update location or loads then recalculate.", "success")
+    flash(f"'{new_name}' created â€” update location or loads then recalculate.", "success")
     return redirect(url_for("project_location", pid=new_pid))
 
 
 @app.route("/project/<int:pid>/reset", methods=["POST"])
 @login_required
 def project_reset(pid):
-    """Reset a project's calculated results — clears results/economics so it
+    """Reset a project's calculated results â€” clears results/economics so it
     can be recalculated fresh after editing. Location and loads are kept."""
     csrf_protect()
     uid = session["user_id"]
@@ -2928,16 +2928,16 @@ def project_reset(pid):
             flash("Project not found.", "danger")
             return redirect(url_for("dashboard"))
         data = json.loads(row["data_json"] or "{}")
-        # Strip only the results blob — keep location settings and loads
+        # Strip only the results blob â€” keep location settings and loads
         data.pop("results", None)
         c.execute(
             "UPDATE projects SET data_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?",
             (json.dumps(data), pid, uid))
-    flash("Project results cleared — edit loads and re-run the calculation.", "info")
+    flash("Project results cleared â€” edit loads and re-run the calculation.", "info")
     return redirect(url_for("project_loads", pid=pid))
 
 
-# ─── Project Save / Open (export → JSON file, import ← JSON file) ────────────
+# â”€â”€â”€ Project Save / Open (export â†’ JSON file, import â† JSON file) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/project/<int:pid>/save")
 @login_required
@@ -2984,7 +2984,7 @@ def project_open():
         # Render a simple upload form
         return render_template("project_open.html")
 
-    # POST — process uploaded file
+    # POST â€” process uploaded file
     f = request.files.get("project_file")
     if not f or not f.filename:
         flash("Please select a .solarpro file to open.", "warning")
@@ -3008,7 +3008,7 @@ def project_open():
             "SELECT COUNT(*) FROM projects WHERE user_id=?", (uid,)
         ).fetchone()[0]
         if count >= limit:
-            flash(f"Project limit reached — upgrade to import more projects.", "warning")
+            flash(f"Project limit reached â€” upgrade to import more projects.", "warning")
             return redirect(url_for("upgrade"))
 
         import_name = f"[Imported] {name}"
@@ -3028,7 +3028,7 @@ def project_open():
         return redirect(url_for("project_location", pid=new_pid))
 
 
-# ─── Public solar-data API (no login — used by assessment form) ──────────────
+# â”€â”€â”€ Public solar-data API (no login â€” used by assessment form) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/api/solar_regions/<country>")
 @limiter.limit("60 per minute")
@@ -3049,13 +3049,13 @@ def api_solar_data_public(country, region):
     return jsonify(sd)
 
 
-# ─── API endpoints (login-required, rate-limited) ─────────────────────────────
+# â”€â”€â”€ API endpoints (login-required, rate-limited) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/api/regions/<country>")
 @login_required
 @limiter.limit("60 per minute")
 def api_regions(country):
-    # Validate input — only allow known countries
+    # Validate input â€” only allow known countries
     if country not in GLOBAL_DATA:
         abort(400)
     return jsonify(get_regions(country))
@@ -3094,7 +3094,7 @@ def api_demand_factors():
     return jsonify(DEMAND_FACTORS)
 
 
-# ─── Export endpoints ─────────────────────────────────────────────────────────
+# â”€â”€â”€ Export endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _xl_header(ws, cols, fill_color="1e1e3a", font_color="F59E0B"):
     fill = PatternFill("solid", fgColor=fill_color)
@@ -3130,33 +3130,33 @@ def export_excel(pid):
     sym = d.get("symbol", "$")
     wb  = openpyxl.Workbook()
 
-    # ── Sheet 1: Summary ──────────────────────────────────────────────────────
+    # â”€â”€ Sheet 1: Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ws = wb.active; ws.title = "Summary"
     ws.sheet_view.showGridLines = False
     title_font = Font(bold=True, size=14, color="F59E0B")
-    ws["A1"] = "SolarPro Global — Project Summary"; ws["A1"].font = title_font
+    ws["A1"] = "SolarPro Global â€” Project Summary"; ws["A1"].font = title_font
     ws["A2"] = project["name"]
     ws["A3"] = f"{d.get('region','')}, {d.get('country','')}   |   {d.get('system_type','').title()} System"
     ws["A4"] = f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     ws.append([])
     phase_v = "415V 50Hz" if d.get("phase") == "three" else "230V 50Hz"
     rows = [
-        ("── LOCATION & SYSTEM ──",   ""),
+        ("â”€â”€ LOCATION & SYSTEM â”€â”€",   ""),
         ("Location",                  f"{d.get('region','')}, {d.get('country','')}"),
         ("System Type",               d.get("system_type","").title()),
         ("Phase",                     f"{d.get('phase','single').title()} Phase {phase_v}"),
         ("DC Bus Voltage",            f"{d.get('voltage',48)} V"),
         ("Autonomy",                  f"{d.get('autonomy',1)} day(s)"),
-        ("── PV SYSTEM SIZING ──",    ""),
+        ("â”€â”€ PV SYSTEM SIZING â”€â”€",    ""),
         ("Daily Energy Demand",       f"{r['daily_kwh']:.3f} kWh/day"),
         ("Annual Generation",         f"{round(r['daily_kwh']*365,0):,.0f} kWh/yr"),
         ("PV Array Size",             f"{r['pv_kw']:.3f} kWp"),
-        ("No. of Panels",             f"{r['num_panels']} × {r.get('panel_wp',400)} Wp Mono PERC"),
+        ("No. of Panels",             f"{r['num_panels']} Ã— {r.get('panel_wp',400)} Wp Mono PERC"),
         ("Battery Chemistry",         r.get("chemistry","LiFePO4")),
-        ("Battery Storage",           f"{r['bat_kwh']:.1f} kWh ({r['num_bat']} × {r['unit_bat_kwh']:.2g} kWh units)"),
+        ("Battery Storage",           f"{r['bat_kwh']:.1f} kWh ({r['num_bat']} Ã— {r['unit_bat_kwh']:.2g} kWh units)"),
         ("Inverter Rating",           f"{r['inv_kw']:.2f} kW"),
-        ("MPPT Controller",           f"{r.get('mppt_a','—')} A"),
-        ("── FINANCIAL SUMMARY ──",   ""),
+        ("MPPT Controller",           f"{r.get('mppt_a','â€”')} A"),
+        ("â”€â”€ FINANCIAL SUMMARY â”€â”€",   ""),
         ("Funding Mode",              "Self-Funded" if eco.get("funding_mode")=="self" else "Loan Finance"),
         ("Total System Cost",         f"{sym} {eco['total_local']:,.0f}"),
         ("Annual Bill Saving",        f"{sym} {eco['annual_sav']:,.0f}"),
@@ -3169,9 +3169,9 @@ def export_excel(pid):
         ("DSCR",                      f"{eco['dscr']:.2f}" if eco.get("funding_mode","loan")=="loan" else "N/A (self-funded)"),
         ("Bankability",               eco["bankability"]),
         ("Verdict",                   eco["verdict"]),
-        ("── ENVIRONMENTAL ──",       ""),
-        ("CO₂ Reduction",             f"{eco['co2_yr']:.2f} t/year"),
-        ("CO₂ Reduction (25yr)",      f"{eco['co2_yr']*25:.1f} t total"),
+        ("â”€â”€ ENVIRONMENTAL â”€â”€",       ""),
+        ("COâ‚‚ Reduction",             f"{eco['co2_yr']:.2f} t/year"),
+        ("COâ‚‚ Reduction (25yr)",      f"{eco['co2_yr']*25:.1f} t total"),
         ("25yr Cumulative Savings",   f"{sym} {eco['cumul_25']:,.0f}"),
     ]
     hfill = PatternFill("solid", fgColor="0f0f22")
@@ -3185,14 +3185,14 @@ def export_excel(pid):
     sec_font  = Font(bold=True, color="6060a0", italic=True)
     for param, val in rows:
         ws.append([param, val])
-        if param.startswith("──"):          # section divider row
+        if param.startswith("â”€â”€"):          # section divider row
             ws[f"A{ws.max_row}"].font  = sec_font
             ws[f"A{ws.max_row}"].fill  = sec_fill
             ws[f"B{ws.max_row}"].fill  = sec_fill
         else:
             ws[f"A{ws.max_row}"].fill  = gold
 
-    # ── Sheet 2: Load Schedule ────────────────────────────────────────────────
+    # â”€â”€ Sheet 2: Load Schedule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ws2 = wb.create_sheet("Load Schedule")
     ws2.sheet_view.showGridLines = False
     cols2 = [("Category",14),("Load Name",22),("Wattage (W)",14),
@@ -3207,7 +3207,7 @@ def export_excel(pid):
     ws2.append(["","","","","","TOTAL",round(r["daily_kwh"],3)])
     ws2[f"F{ws2.max_row}"].font = Font(bold=True, color="F59E0B")
 
-    # ── Sheet 3: BOQ ─────────────────────────────────────────────────────────
+    # â”€â”€ Sheet 3: BOQ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ws3 = wb.create_sheet("Bill of Quantities")
     ws3.sheet_view.showGridLines = False
     cols3 = [("No.",5),("Description",28),("Specification",30),
@@ -3222,7 +3222,7 @@ def export_excel(pid):
     ws3[f"G{ws3.max_row}"].font = Font(bold=True, color="F59E0B")
     ws3[f"H{ws3.max_row}"].font = Font(bold=True, color="F59E0B")
 
-    # ── Cost Summary below BOQ ────────────────────────────────────────────────
+    # â”€â”€ Cost Summary below BOQ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     install_pct   = eco.get("install_rate_pct", 15)
     equip_local   = eco.get("equip_local", 0)
     install_local = eco.get("install_local", 0)
@@ -3243,7 +3243,7 @@ def export_excel(pid):
         ("Equipment Supply (incl. 8% supply markup)",   equip_local,   False),
         (f"Installation Labour ({install_pct}% of supply subtotal)", install_local, False),
         ("TOTAL CAPEX",                                  total_local,   True),
-        ("Contingency (10%) — advisory",                 total_local * 0.10, False),
+        ("Contingency (10%) â€” advisory",                 total_local * 0.10, False),
         ("Budget (incl. contingency)",                   total_local * 1.10, False),
         ("Funding Mode",                                 funding_label, False),
     ]
@@ -3265,16 +3265,16 @@ def export_excel(pid):
     ws3.append(["BOQ NOTES"])
     ws3[f"A{ws3.max_row}"].font = Font(bold=True, color="9090c0")
     for note in [
-        "Total Rate = Basic Rate × 1.08  (8% supply/procurement markup — delivery, overheads & profit)",
-        f"Installation Labour: {install_pct}% of supply subtotal (confirmed West Africa 2025–26 market rate)",
-        "Contingency is advisory — not included in the CAPEX or payback calculation",
+        "Total Rate = Basic Rate Ã— 1.08  (8% supply/procurement markup â€” delivery, overheads & profit)",
+        f"Installation Labour: {install_pct}% of supply subtotal (confirmed West Africa 2025â€“26 market rate)",
+        "Contingency is advisory â€” not included in the CAPEX or payback calculation",
         "Quantities subject to detailed site survey confirmation",
         "Excludes site-specific VAT, import duties, and permit fees",
     ]:
-        ws3.append(["", f"• {note}"])
+        ws3.append(["", f"â€¢ {note}"])
         ws3[f"B{ws3.max_row}"].font = Font(italic=True, color="808080")
 
-    # ── Sheet 4: 25-Year Cash Flow ────────────────────────────────────────────
+    # â”€â”€ Sheet 4: 25-Year Cash Flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ws4 = wb.create_sheet("25-Year Cash Flow")
     ws4.sheet_view.showGridLines = False
     cols4 = [("Year",6),(f"Gross Saving ({sym})",18),(f"O&M ({sym})",14),
@@ -3288,7 +3288,7 @@ def export_excel(pid):
             for col in range(1, 7):
                 ws4.cell(ws4.max_row, col).fill = green_fill
 
-    # ── Shared helper: write a labelled section into any sheet ───────────────
+    # â”€â”€ Shared helper: write a labelled section into any sheet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def _xl_section(ws, title, param_val_pairs):
         ws.append([title])
         ws[f"A{ws.max_row}"].font = Font(bold=True, color="9090c0")
@@ -3304,10 +3304,10 @@ def export_excel(pid):
         ws.append(["NOTES"])
         ws[f"A{ws.max_row}"].font = Font(bold=True, color="9090c0")
         for note in notes_list:
-            ws.append(["", f"• {note}"])
+            ws.append(["", f"â€¢ {note}"])
             ws[f"B{ws.max_row}"].font = Font(italic=True, color="808080")
 
-    # ── Sheet 5: PV System Design ─────────────────────────────────────────────
+    # â”€â”€ Sheet 5: PV System Design â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ws5 = wb.create_sheet("PV System Design")
     ws5.sheet_view.showGridLines = False
     ws5["A1"] = "PV System Design Report"; ws5["A1"].font = Font(bold=True, size=14, color="F59E0B")
@@ -3325,7 +3325,7 @@ def export_excel(pid):
         ("Phase / AC Voltage",           f"{d.get('phase','single').title()} Phase {phase_v}"),
         ("DC Bus Voltage",               f"{d.get('voltage',48)} V"),
         ("Peak Sun Hours (PSH)",         f"{d.get('psh',5.0)} h/day"),
-        ("Avg Ambient Temperature",      f"{d.get('avg_temp',30)} °C"),
+        ("Avg Ambient Temperature",      f"{d.get('avg_temp',30)} Â°C"),
         ("Temperature Derating Factor",  f"{r.get('temp_derating',1.0):.4f}"),
         ("System Efficiency (BOS)",      "75%"),
         ("Effective Efficiency",         f"{eff_pct:.1f}%"),
@@ -3334,61 +3334,61 @@ def export_excel(pid):
         ("Autonomy Days",                f"{d.get('autonomy',1)} day(s)"),
     ])
     ws5.append([])
-    _xl_section(ws5, "2. PV Array — Monocrystalline PERC", [
-        ("Sizing Formula",               "PV (kWp) = Daily Load ÷ (PSH × η_eff)"),
+    _xl_section(ws5, "2. PV Array â€” Monocrystalline PERC", [
+        ("Sizing Formula",               "PV (kWp) = Daily Load Ã· (PSH Ã— Î·_eff)"),
         ("PV Array Required",            f"{r['pv_kw']:.3f} kWp"),
-        ("Panel Technology",             "Monocrystalline PERC — IEC 61215 certified"),
+        ("Panel Technology",             "Monocrystalline PERC â€” IEC 61215 certified"),
         ("Panel Rating",                 f"{r.get('panel_wp',400)} Wp"),
-        ("Module Efficiency",            "21–23%"),
-        ("Temperature Coefficient",      "−0.35 %/°C (Pmax)"),
+        ("Module Efficiency",            "21â€“23%"),
+        ("Temperature Coefficient",      "âˆ’0.35 %/Â°C (Pmax)"),
         ("Warranty",                     "12 yr product / 25 yr linear power"),
         ("Recommended Brands",           "JinkoSolar, LONGi, Canadian Solar, Trina, JA Solar"),
         ("No. of Panels Required",       f"{r['num_panels']} modules"),
     ])
     ws5.append([])
-    _xl_section(ws5, f"3. Battery Storage — {r.get('chemistry','LiFePO4')}", [
+    _xl_section(ws5, f"3. Battery Storage â€” {r.get('chemistry','LiFePO4')}", [
         ("Chemistry",                    r.get("chem_name", r.get("chemistry","LiFePO4"))),
-        ("Sizing Formula",               "B = (E × Autonomy) ÷ (DoD × η_bat)"),
+        ("Sizing Formula",               "B = (E Ã— Autonomy) Ã· (DoD Ã— Î·_bat)"),
         ("Depth of Discharge (DoD)",     f"{round(r.get('chem_dod',0.8)*100,0):.0f}%"),
         ("Cycle Life",                   str(r.get("chem_cycles","4000+"))),
-        ("Design Lifetime",              str(r.get("chem_life","10–15 years"))),
+        ("Design Lifetime",              str(r.get("chem_life","10â€“15 years"))),
         ("Unit Size",                    f"{r['unit_bat_kwh']:.2g} kWh per unit"),
         ("No. of Units Required",        f"{r['num_bat']} unit{'s' if r['num_bat']>1 else ''}"),
         ("Total Storage",                f"{r['bat_kwh']:.1f} kWh"),
-        ("Recommended Brands",           r.get("chem_brands","—")),
+        ("Recommended Brands",           r.get("chem_brands","â€”")),
         ("BMS",                          "Integrated (overcharge, over-discharge, thermal)"),
     ])
     ws5.append([])
     _xl_section(ws5, "4. Hybrid Inverter / Charger", [
-        ("Sizing Basis",                 "30% peak demand factor × 1.25 safety factor"),
+        ("Sizing Basis",                 "30% peak demand factor Ã— 1.25 safety factor"),
         ("Inverter Rating",              f"{r['inv_kw']:.2f} kW"),
         ("Type",                         "Hybrid MPPT (Solar / Battery / Grid)"),
         ("AC Output",                    f"{d.get('phase','single').title()} Phase {phase_v}"),
-        ("Recommended",                  r.get("inv_brand","—")),
+        ("Recommended",                  r.get("inv_brand","â€”")),
     ])
     ws5.append([])
     _xl_section(ws5, "5. MPPT Charge Controller & Protection", [
         ("Controller Type",              "MPPT (Maximum Power Point Tracking)"),
         ("PV Array Power",               f"{r['pv_kw']:.2f} kWp"),
         ("DC Bus Voltage",               f"{d.get('voltage',48)} V"),
-        ("MPPT Rating",                  f"{r.get('mppt_a','—')} A"),
+        ("MPPT Rating",                  f"{r.get('mppt_a','â€”')} A"),
         ("Recommended",                  "Victron BlueSolar / Epever Tracer BN"),
         ("DC Protection",                "String fuses + DC-rated MCB 1000 V"),
         ("AC Protection",                "RCCB 30 mA + MCBs + SPD Type 2"),
-        ("Earthing System",              "TT system — BS 7430 / IEC 60364-4-41"),
+        ("Earthing System",              "TT system â€” BS 7430 / IEC 60364-4-41"),
         ("Lightning Protection",         "IEC 62305 SPD Type 2, all circuits"),
     ])
     ws5.append([])
     _xl_section(ws5, "6. Installation Notes", [
-        ("Roof Load",                    "Verify structural capacity ≥ 15 kg/m² (IEC 61215)"),
-        ("Panel Tilt",                   "Region-optimised tilt ≈ latitude angle for equatorial sites"),
-        ("Ventilation",                  "≥ 150 mm around inverter; ≥ 300 mm around batteries"),
-        ("Battery Safety",               f"{r.get('chemistry','LiFePO4')} — cool, dry, ventilated area"),
-        ("DC Cabling",                   "UV-resistant 6 mm² twin-core solar cable — IEC 60364"),
-        ("Commissioning",                "Measure Voc, Isc, insulation resistance, earth continuity — log all"),
+        ("Roof Load",                    "Verify structural capacity â‰¥ 15 kg/mÂ² (IEC 61215)"),
+        ("Panel Tilt",                   "Region-optimised tilt â‰ˆ latitude angle for equatorial sites"),
+        ("Ventilation",                  "â‰¥ 150 mm around inverter; â‰¥ 300 mm around batteries"),
+        ("Battery Safety",               f"{r.get('chemistry','LiFePO4')} â€” cool, dry, ventilated area"),
+        ("DC Cabling",                   "UV-resistant 6 mmÂ² twin-core solar cable â€” IEC 60364"),
+        ("Commissioning",                "Measure Voc, Isc, insulation resistance, earth continuity â€” log all"),
     ])
 
-    # ── Sheet 6: Economic Analysis ────────────────────────────────────────────
+    # â”€â”€ Sheet 6: Economic Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ws6 = wb.create_sheet("Economic Analysis")
     ws6.sheet_view.showGridLines = False
     ws6["A1"] = "Economic Analysis & Financial Engineering"; ws6["A1"].font = Font(bold=True, size=14, color="F59E0B")
@@ -3403,8 +3403,8 @@ def export_excel(pid):
         ("Equipment Supply (incl. 8% markup)",        round(eco.get("equip_local",0), 0)),
         (f"Installation Labour ({install_pct_e}%)",   round(eco.get("install_local",0), 0)),
         ("Total CAPEX",                               round(eco.get("total_local",0), 0)),
-        ("Contingency (10%) — advisory",              round(eco.get("total_local",0)*0.10, 0)),
-        ("Budget incl. contingency — advisory",       round(eco.get("total_local",0)*1.10, 0)),
+        ("Contingency (10%) â€” advisory",              round(eco.get("total_local",0)*0.10, 0)),
+        ("Budget incl. contingency â€” advisory",       round(eco.get("total_local",0)*1.10, 0)),
         ("Annual O&M (yr 1, 0.8% of CAPEX)",         round(eco.get("om_yr1",0), 0)),
         ("Discount Rate (WACC)",                      f"{eco.get('disc_rate_pct',12)}% per year"),
     ])
@@ -3419,10 +3419,10 @@ def export_excel(pid):
     ])
     ws6.append([])
     if eco.get("funding_mode") == "self":
-        _xl_section(ws6, "3. Funding — Self-Funded", [
+        _xl_section(ws6, "3. Funding â€” Self-Funded", [
             ("Total Own Capital Required",           round(eco.get("total_local",0), 0)),
             ("Opportunity Cost Rate",                f"{eco.get('disc_rate_pct',10)}% per annum"),
-            (f"Battery Replacement (yr {eco.get('bat_replace_yr','—')})",
+            (f"Battery Replacement (yr {eco.get('bat_replace_yr','â€”')})",
                                                      round(eco.get("bat_replace_cost",0), 0)),
             ("Inverter Replacement (yr 10)",         round(eco.get("inv_replace_cost",0), 0)),
             ("Residual / Salvage Value (yr 25)",     round(eco.get("residual_value",0), 0)),
@@ -3435,7 +3435,7 @@ def export_excel(pid):
             ("Loan Tenor",                           "7 years"),
             ("Monthly Repayment",                    round(eco.get("pmt",0), 0)),
             ("Annual Debt Service",                  round(eco.get("annual_pmt",0), 0)),
-            (f"Battery Replacement (yr {eco.get('bat_replace_yr','—')})",
+            (f"Battery Replacement (yr {eco.get('bat_replace_yr','â€”')})",
                                                      round(eco.get("bat_replace_cost",0), 0)),
             ("Inverter Replacement (yr 10)",         round(eco.get("inv_replace_cost",0), 0)),
             ("DSCR (Debt Service Coverage Ratio)",   round(eco.get("dscr",0), 2)),
@@ -3454,37 +3454,37 @@ def export_excel(pid):
     ])
     ws6.append([])
     _xl_section(ws6, "5. Environmental Impact", [
-        ("CO₂ Avoided per Year",                    f"{eco.get('co2_yr',0):.2f} t CO₂/yr"),
-        ("CO₂ Avoided over 25 Years",               f"{eco.get('co2_yr',0)*25:.1f} t CO₂ total"),
+        ("COâ‚‚ Avoided per Year",                    f"{eco.get('co2_yr',0):.2f} t COâ‚‚/yr"),
+        ("COâ‚‚ Avoided over 25 Years",               f"{eco.get('co2_yr',0)*25:.1f} t COâ‚‚ total"),
         ("Equivalent Trees Planted",                f"{int(eco.get('co2_yr',0)*25*45):,} trees"),
         ("Clean Energy Generated (25yr)",           f"{eco.get('annual_kwh',0)*25:,.0f} kWh"),
     ])
     ws6.append([])
     _xl_section(ws6, "6. Model Assumptions", [
         ("Tariff Escalation",                       "8% per year (utility trend)"),
-        ("Discount Rate — Loan",                    "12% per year (WACC)"),
-        ("Discount Rate — Self-Funded",             "10% per year (opportunity cost)"),
+        ("Discount Rate â€” Loan",                    "12% per year (WACC)"),
+        ("Discount Rate â€” Self-Funded",             "10% per year (opportunity cost)"),
         ("O&M Cost",                                "0.8% of CAPEX per year"),
         ("Panel Degradation",                       "0.5% per year"),
         ("System Lifetime",                         "25 years"),
-        ("Grid CO₂ Emission Factor",                "0.40 kg CO₂/kWh"),
+        ("Grid COâ‚‚ Emission Factor",                "0.40 kg COâ‚‚/kWh"),
         ("Battery Replacement Cycle",               f"~{r.get('chem_life','10')} years"),
         ("Inverter Replacement Cycle",              "Year 10 at 80% of original cost"),
         ("Residual / Salvage Value",                "5% of CAPEX at year 25 (self-funded only)"),
-        ("Loan — LTV",                              "70% debt / 30% equity"),
-        ("Loan — Interest Rate",                    "15% per annum"),
-        ("Loan — Tenor",                            "7 years"),
+        ("Loan â€” LTV",                              "70% debt / 30% equity"),
+        ("Loan â€” Interest Rate",                    "15% per annum"),
+        ("Loan â€” Tenor",                            "7 years"),
     ])
 
-    # ── Sheet 7: AC Cable Schedule ────────────────────────────────────────────
+    # â”€â”€ Sheet 7: AC Cable Schedule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ws7 = wb.create_sheet("AC Cable Schedule")
     ws7.sheet_view.showGridLines = False
     ws7["A1"] = "AC Cable Sizing & Voltage Drop Schedule"; ws7["A1"].font = Font(bold=True, size=14, color="F59E0B")
     ws7["A2"] = (f"{project['name']}  |  Standard: BS 7671:2018 / IEC 60364-5-52  |  "
-                 f"Cable: Copper PVC/XLPE 70°C  |  Method C  |  PF: 0.90")
+                 f"Cable: Copper PVC/XLPE 70Â°C  |  Method C  |  PF: 0.90")
     ws7.append([])
     cols7 = [("Circuit",20),("Power (kW)",10),("Voltage (V)",10),("Ib (A)",8),
-             ("Length (m)",10),("Cable (mm²)",10),("Iz (A)",8),
+             ("Length (m)",10),("Cable (mmÂ²)",10),("Iz (A)",8),
              ("VD (V)",8),("VD (%)",8),("Limit (%)",9),("Check",8),("Breaker (A)",11)]
     _xl_header(ws7, cols7)
     fail_fill = PatternFill("solid", fgColor="2a0000")
@@ -3502,12 +3502,12 @@ def export_excel(pid):
                 ws7.cell(ws7.max_row, col).fill = fail_fill
     _xl_notes(ws7, [
         "Standard: BS 7671:2018 (18th Edition) / IEC 60364-5-52",
-        "Cable type: Copper conductor, PVC or XLPE 70°C insulation — Installation Method C (clipped direct)",
-        "VD Formula (single-phase): VD (V) = mV/A/m × Ib × L ÷ 1000",
-        "VD Formula (three-phase): VD (V) = mV/A/m × 0.866 × Ib × L ÷ 1000",
+        "Cable type: Copper conductor, PVC or XLPE 70Â°C insulation â€” Installation Method C (clipped direct)",
+        "VD Formula (single-phase): VD (V) = mV/A/m Ã— Ib Ã— L Ã· 1000",
+        "VD Formula (three-phase): VD (V) = mV/A/m Ã— 0.866 Ã— Ib Ã— L Ã· 1000",
         "VD reference: BS 7671 Appendix 4, Tables 4D2B / 4D5B",
-        "Rows highlighted in red = VD FAIL — increase cable size or reduce circuit length",
-        "All lengths are estimates — verify actual cable runs on site before ordering",
+        "Rows highlighted in red = VD FAIL â€” increase cable size or reduce circuit length",
+        "All lengths are estimates â€” verify actual cable runs on site before ordering",
     ])
 
     return _xl_send(wb, f"SolarPro_{project['name'].replace(' ','_')}_Results.xlsx")
@@ -3532,7 +3532,7 @@ def export_csv(pid):
     output = io.StringIO()
     w = csv.writer(output)
 
-    w.writerow(["SolarPro Global — Results Export"])
+    w.writerow(["SolarPro Global â€” Results Export"])
     w.writerow([project["name"], f"{d.get('region','')}, {d.get('country','')}", datetime.now().strftime('%Y-%m-%d')])
     w.writerow([])
     w.writerow(["=== SYSTEM SUMMARY ==="])
@@ -3546,7 +3546,7 @@ def export_csv(pid):
         ("Battery Units", r["num_bat"]),
         ("Unit Size (kWh)", r["unit_bat_kwh"]),
         ("Inverter (kW)", r["inv_kw"]),
-        ("MPPT (A)", r.get("mppt_a","—")),
+        ("MPPT (A)", r.get("mppt_a","â€”")),
         (f"System Cost ({sym})", round(eco["total_local"],2)),
         (f"Annual Savings ({sym})", round(eco["annual_sav"],2)),
         ("Payback (years)", round(eco["payback"],1)),
@@ -3587,7 +3587,7 @@ def export_csv(pid):
                      download_name=f"SolarPro_{project['name'].replace(' ','_')}_Results.csv")
 
 
-# ─── Template helpers ─────────────────────────────────────────────────────────
+# â”€â”€â”€ Template helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.template_filter("fmt")
 def fmt(v, dec=2):
@@ -3605,10 +3605,10 @@ def fmti(v):
         return str(v)
 
 
-# ─── PDF helper ───────────────────────────────────────────────────────────────
+# â”€â”€â”€ PDF helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _render_pdf(title, md_content, filename):
-    """Convert markdown string → PDF bytes and return as Flask download."""
+    """Convert markdown string â†’ PDF bytes and return as Flask download."""
     from markdown_pdf import MarkdownPdf, Section
 
     CSS = """
@@ -3654,13 +3654,13 @@ def _fmt(v, dec=2):
         return str(v)
 
 
-# ─── PDF export routes ─────────────────────────────────────────────────────────
+# â”€â”€â”€ PDF export routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/project/<int:pid>/report/boq/pdf")
 @login_required
 @limiter.limit("10 per minute")
 def export_pdf_boq(pid):
-    """PDF export — Bill of Quantities & CAPEX."""
+    """PDF export â€” Bill of Quantities & CAPEX."""
     gate = _paid_only(pid)
     if gate: return gate
     project = get_project(pid)
@@ -3671,11 +3671,11 @@ def export_pdf_boq(pid):
     eco = r["economics"]
     sym = d.get("symbol", "$")
 
-    md = f"""# Bill of Quantities (BOQ) & CAPEX — {project["name"]}
+    md = f"""# Bill of Quantities (BOQ) & CAPEX â€” {project["name"]}
 
 **{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","").title()} System | {_fmt(r["pv_kw"],2)} kWp | {_fmt(r["bat_kwh"],2)} kWh | Currency: {d.get("currency","USD")}
 
-Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364
+Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364
 
 ---
 
@@ -3685,7 +3685,7 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364
 |---|---|---|---|---|---|---|---|
 """
     for row in r.get("boq_rows", []):
-        spec = str(row["spec"]).replace("|", "·")   # pipes break markdown tables
+        spec = str(row["spec"]).replace("|", "Â·")   # pipes break markdown tables
         md += (f"| {row['no']} | {row['desc']} | {spec} | "
                f"{row['qty']} | {row['unit']} | "
                f"{_fmt(row['basic'],2)} | {_fmt(row['total_r'],2)} | "
@@ -3694,7 +3694,7 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364
     md += f"""
 | | | | | | | **GRAND TOTAL** | **{sym} {_fmt(r['boq_grand'],2)}** |
 
-*Note: Total Rate = Basic Rate × 1.08 (8% supply/procurement markup — delivery, overheads & profit)*
+*Note: Total Rate = Basic Rate Ã— 1.08 (8% supply/procurement markup â€” delivery, overheads & profit)*
 
 ---
 
@@ -3705,7 +3705,7 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364
 | Equipment Supply (incl. 8% markup) | {_fmt(eco.get("equip_local",0),0)} |
 | Installation Labour ({eco.get("install_rate_pct",15)}%) | {_fmt(eco.get("install_local",0),0)} |
 | **Total CAPEX** | **{_fmt(eco.get("total_local",0),0)}** |
-| Contingency (10%) — advisory | {_fmt(eco.get("total_local",0)*0.1,0)} |
+| Contingency (10%) â€” advisory | {_fmt(eco.get("total_local",0)*0.1,0)} |
 | **Budget (incl. contingency)** | **{_fmt(eco.get("total_local",0)*1.1,0)}** |
 
 ---
@@ -3715,8 +3715,8 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364
 | Parameter | Value |
 |---|---|
 | PV Capacity | {_fmt(r["pv_kw"],2)} kWp |
-| PV Panels | {r["num_panels"]} × {r.get("panel_wp",400)} Wp Monocrystalline PERC |
-| Battery Storage | {_fmt(r["bat_kwh"],2)} kWh — {r["num_bat"]} × {_fmt(r["unit_bat_kwh"],2)} kWh {r.get("chemistry","LiFePO4")} |
+| PV Panels | {r["num_panels"]} Ã— {r.get("panel_wp",400)} Wp Monocrystalline PERC |
+| Battery Storage | {_fmt(r["bat_kwh"],2)} kWh â€” {r["num_bat"]} Ã— {_fmt(r["unit_bat_kwh"],2)} kWh {r.get("chemistry","LiFePO4")} |
 | Inverter / Charger | {_fmt(r["inv_kw"],1)} kW {d.get("phase","single").title()}-Phase |
 | DC Bus Voltage | {d.get("voltage",48)} V |
 | Standard | BS 7671:2018 / IEC 60364 / IEC 61215 |
@@ -3725,23 +3725,23 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364
 
 # BOQ Notes
 
-- Rates: Total Rate = Basic Rate × 1.08 (8% supply/procurement markup — delivery + overheads & profit)
+- Rates: Total Rate = Basic Rate Ã— 1.08 (8% supply/procurement markup â€” delivery + overheads & profit)
 - Quantities subject to detailed design review and site survey
-- Cable lengths are estimated — confirm actual lengths on site
+- Cable lengths are estimated â€” confirm actual lengths on site
 - Subject to contractor quotation; excludes site-specific VAT / import duties
 - DC cable sizes and AC cable sizes are calculated from actual system design
 
-*Report generated by SolarPro Global · {d.get("region","")}, {d.get("country","")}*
+*Report generated by SolarPro Global Â· {d.get("region","")}, {d.get("country","")}*
 """
     fname = f"BOQ_{project['name'].replace(' ','_')}.pdf"
-    return _render_pdf(f"Bill of Quantities — {project['name']}", md, fname)
+    return _render_pdf(f"Bill of Quantities â€” {project['name']}", md, fname)
 
 
 @app.route("/project/<int:pid>/report/cable/pdf")
 @login_required
 @limiter.limit("10 per minute")
 def export_pdf_cable(pid):
-    """PDF export — AC cable sizing & voltage drop calculation working."""
+    """PDF export â€” AC cable sizing & voltage drop calculation working."""
     gate = _paid_only(pid)
     if gate: return gate
     project = get_project(pid)
@@ -3752,11 +3752,11 @@ def export_pdf_cable(pid):
     phase = d.get("phase", "single")
     v_ac  = 415 if phase == "three" else 230
 
-    md = f"""# AC Cable Sizing & Voltage Drop Report — {project["name"]}
+    md = f"""# AC Cable Sizing & Voltage Drop Report â€” {project["name"]}
 
-**{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","").title()} System | {phase.title()} Phase {v_ac} V | Ambient: {d.get("avg_temp",30)}°C
+**{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","").title()} System | {phase.title()} Phase {v_ac} V | Ambient: {d.get("avg_temp",30)}Â°C
 
-Standard: **BS 7671:2018 / IEC 60364-5-52** | Cable: Copper PVC/XLPE 70°C | PF: 0.90
+Standard: **BS 7671:2018 / IEC 60364-5-52** | Cable: Copper PVC/XLPE 70Â°C | PF: 0.90
 
 ---
 
@@ -3765,12 +3765,12 @@ Standard: **BS 7671:2018 / IEC 60364-5-52** | Cable: Copper PVC/XLPE 70°C | PF:
 | Parameter | Value |
 |---|---|
 | Standard | BS 7671:2018 (18th Edition) / IEC 60364-5-52 |
-| Cable Type | Copper conductor, PVC or XLPE 70°C insulation |
-| Installation Method | Method C — clipped direct to surface (default) |
-| Ambient Temperature | {d.get("avg_temp",30)}°C |
+| Cable Type | Copper conductor, PVC or XLPE 70Â°C insulation |
+| Installation Method | Method C â€” clipped direct to surface (default) |
+| Ambient Temperature | {d.get("avg_temp",30)}Â°C |
 | Power Factor | 0.90 (lagging) |
-| VD Formula (single-phase) | VD (V) = mV/A/m × Ib × L / 1000 |
-| VD Formula (three-phase) | VD (V) = mV/A/m × 0.866 × Ib × L / 1000 |
+| VD Formula (single-phase) | VD (V) = mV/A/m Ã— Ib Ã— L / 1000 |
+| VD Formula (three-phase) | VD (V) = mV/A/m Ã— 0.866 Ã— Ib Ã— L / 1000 |
 | VD Reference | BS 7671 Appendix 4, Tables 4D2B / 4D5B |
 | Inverter | {_fmt(r["inv_kw"],1)} kW {phase.title()}-Phase |
 | PV Array | {_fmt(r["pv_kw"],2)} kWp |
@@ -3779,7 +3779,7 @@ Standard: **BS 7671:2018 / IEC 60364-5-52** | Cable: Copper PVC/XLPE 70°C | PF:
 
 # Circuit Summary
 
-| Circuit | Power (kW) | Vn (V) | Ib (A) | L (m) | Cable (mm²) | Iz (A) | VD (V) | VD (%) | Limit | Check | Breaker |
+| Circuit | Power (kW) | Vn (V) | Ib (A) | L (m) | Cable (mmÂ²) | Iz (A) | VD (V) | VD (%) | Limit | Check | Breaker |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 """
     for c in r.get("ac_cables", []):
@@ -3789,15 +3789,15 @@ Standard: **BS 7671:2018 / IEC 60364-5-52** | Cable: Copper PVC/XLPE 70°C | PF:
                f"{c['cable_capacity']} | {c['vd_volts']:.3f} | {c['vd_percent']:.3f}% | "
                f"{c['vd_limit_pct']}% | **{chk}** | {c['breaker_a']} A |\n")
 
-    md += "\n---\n\n# Voltage Drop Calculation — Step-by-Step Working\n\n"
+    md += "\n---\n\n# Voltage Drop Calculation â€” Step-by-Step Working\n\n"
 
     for c in r.get("ac_cables", []):
         vd_limit_v = c["vd_limit_pct"] / 100 * c["voltage_v"]
-        phase_note = "(×0.866 three-phase factor already applied)" if c["phase"] == "three" else ""
-        result_str = "✓ PASS" if c["vd_ok"] else "✗ FAIL — increase cable size"
+        phase_note = "(Ã—0.866 three-phase factor already applied)" if c["phase"] == "three" else ""
+        result_str = "âœ“ PASS" if c["vd_ok"] else "âœ— FAIL â€” increase cable size"
         md += f"""## {c["circuit"]}
 
-**Cable selected: {c["cable_size_mm2"]} mm² {c["core_type"]}** &nbsp;|&nbsp; {c["cable_capacity"]} A capacity &nbsp;|&nbsp; {c["breaker_a"]} A protective device
+**Cable selected: {c["cable_size_mm2"]} mmÂ² {c["core_type"]}** &nbsp;|&nbsp; {c["cable_capacity"]} A capacity &nbsp;|&nbsp; {c["breaker_a"]} A protective device
 
 ### Circuit Parameters
 
@@ -3807,33 +3807,33 @@ Standard: **BS 7671:2018 / IEC 60364-5-52** | Cable: Copper PVC/XLPE 70°C | PF:
 | Load power | P | {c["power_kw"]} kW |
 | Design current | Ib | **{c["design_current"]} A** |
 | Cable length | L | **{c["length_m"]} m** |
-| Installation method | — | Method {c["install_method"]} — {c["install_desc"]} |
-| Ambient temperature | Ta | {c["ambient_c"]}°C |
+| Installation method | â€” | Method {c["install_method"]} â€” {c["install_desc"]} |
+| Ambient temperature | Ta | {c["ambient_c"]}Â°C |
 | Temperature factor | Ct | {c["temp_factor"]} |
 | Grouping factor | Cg | {c["group_factor"]} |
 | Minimum Iz required | Iz_min | {c["i_z_required"]} A |
 
 ### Voltage Drop Working
 
-**Step 1 — Tabulated mV/A/m (BS 7671 Appendix 4)**
+**Step 1 â€” Tabulated mV/A/m (BS 7671 Appendix 4)**
 
-For {c["cable_size_mm2"]} mm² {c["core_type"]} copper cable:
+For {c["cable_size_mm2"]} mmÂ² {c["core_type"]} copper cable:
 
 > mV/A/m = **{c["vd_mv_am"]}** mV/A/m {phase_note}
 
-**Step 2 — Actual voltage drop**
+**Step 2 â€” Actual voltage drop**
 
-> VD = mV/A/m × Ib × L / 1000
+> VD = mV/A/m Ã— Ib Ã— L / 1000
 >
-> VD = {c["vd_mv_am"]} × {c["design_current"]} × {c["length_m"]} / 1000 = **{c["vd_volts"]:.3f} V**
+> VD = {c["vd_mv_am"]} Ã— {c["design_current"]} Ã— {c["length_m"]} / 1000 = **{c["vd_volts"]:.3f} V**
 >
-> VD% = ({c["vd_volts"]:.3f} / {c["voltage_v"]}) × 100 = **{c["vd_percent"]:.3f}%**
+> VD% = ({c["vd_volts"]:.3f} / {c["voltage_v"]}) Ã— 100 = **{c["vd_percent"]:.3f}%**
 
-**Step 3 — Check against permitted limit**
+**Step 3 â€” Check against permitted limit**
 
 > Permitted limit = {c["vd_limit_pct"]}% of {c["voltage_v"]} V = **{vd_limit_v:.2f} V**
 >
-> Actual VD = **{c["vd_volts"]:.3f} V** — Limit = {vd_limit_v:.2f} V — **{result_str}**
+> Actual VD = **{c["vd_volts"]:.3f} V** â€” Limit = {vd_limit_v:.2f} V â€” **{result_str}**
 
 ---
 
@@ -3844,18 +3844,18 @@ For {c["cable_size_mm2"]} mm² {c["core_type"]} copper cable:
 | Item | Reference |
 |---|---|
 | VD tabulated values | BS 7671:2018 Appendix 4, Tables 4D2B / 4D5B |
-| 3-phase VD factor ×0.866 | = √3/2, IEC 60364-5-52 |
-| Temperature correction | BS 7671 Table 4B2 (ref 30°C) |
+| 3-phase VD factor Ã—0.866 | = âˆš3/2, IEC 60364-5-52 |
+| Temperature correction | BS 7671 Table 4B2 (ref 30Â°C) |
 | Grouping correction | BS 7671 Table 4B1 |
-| VD limits | Inverter→DB: 1.5% · Main feeder: 2.5% · Sub-distribution: 3.0% · Grid/Gen: 2.0% |
-| Breaker coordination | Next standard size above Ib × 1.05; must not exceed cable Iz |
+| VD limits | Inverterâ†’DB: 1.5% Â· Main feeder: 2.5% Â· Sub-distribution: 3.0% Â· Grid/Gen: 2.0% |
+| Breaker coordination | Next standard size above Ib Ã— 1.05; must not exceed cable Iz |
 
 *All installations must comply with BS 7671:2018 (18th Edition), IEC 60364-5-52, and local regulations.*
 
 *Report generated by SolarPro Global*
 """
     fname = f"AC_Cable_VD_{project['name'].replace(' ','_')}.pdf"
-    return _render_pdf(f"AC Cable Sizing & Voltage Drop — {project['name']}", md, fname)
+    return _render_pdf(f"AC Cable Sizing & Voltage Drop â€” {project['name']}", md, fname)
 
 
 @app.route("/project/<int:pid>/report/energy/pdf")
@@ -3883,7 +3883,7 @@ def export_pdf_energy(pid):
     offset_factor = 1.0 if d.get("system_type") == "off-grid" else 0.8
     annual_offset_kwh = r["daily_kwh"] * 365 * offset_factor
 
-    md = f"""# Energy Impact Analysis — {project["name"]}
+    md = f"""# Energy Impact Analysis â€” {project["name"]}
 
 **{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","").title()} System | {d.get("psh",0)} PSH | Generated by SolarPro Global
 
@@ -3897,7 +3897,7 @@ def export_pdf_energy(pid):
 | Annual Solar Generation | {_fmt(r["daily_kwh"]*365,0)} | kWh/year |
 | Annual Grid Offset | {_fmt(annual_offset_kwh,0)} | kWh/year |
 | Annual Savings (Yr 1) | {sym} {_fmt(eco["annual_sav"],0)} | /year |
-| CO₂ Reduction | {_fmt(eco["co2_yr"],2)} | tonnes/year |
+| COâ‚‚ Reduction | {_fmt(eco["co2_yr"],2)} | tonnes/year |
 | Trees Equivalent | {int(trees)} | trees/year |
 | Grid Offset | {"100" if d.get("system_type")=="off-grid" else "~80"} | % |
 
@@ -3913,7 +3913,7 @@ def export_pdf_energy(pid):
         base_avg   = r["daily_kwh"] * 365 / 12
         pct        = min(int(m['kwh'] / base_avg * 100), 100)
         md += f"| {m['month']} | {m['kwh']} | {offset_kwh} | {pct}% | {sym} {m['saving']} |\n"
-    md += f"| **ANNUAL TOTAL** | **{_fmt(r['daily_kwh']*365,0)} kWh** | **{_fmt(annual_offset_kwh,0)} kWh** | — | **{sym} {_fmt(eco['annual_sav'],0)}** |\n"
+    md += f"| **ANNUAL TOTAL** | **{_fmt(r['daily_kwh']*365,0)} kWh** | **{_fmt(annual_offset_kwh,0)} kWh** | â€” | **{sym} {_fmt(eco['annual_sav'],0)}** |\n"
 
     md += f"""
 ---
@@ -3924,7 +3924,7 @@ def export_pdf_energy(pid):
 |---|---|
 | Daily Solar Generation | {_fmt(r["daily_kwh"],2)} kWh/day |
 | Annual Solar Generation | {_fmt(r["daily_kwh"]*365,0)} kWh/year |
-| Electricity Tariff | {sym}{d.get("tariff",0):.3f}/kWh — {d.get("utility","") or "Grid Utility"} |
+| Electricity Tariff | {sym}{d.get("tariff",0):.3f}/kWh â€” {d.get("utility","") or "Grid Utility"} |
 | Tariff Reference | {d.get("tariff_ref","") or "Published utility schedule"} |
 | Gross Annual Savings | {sym} {_fmt(eco["annual_sav"],0)} |
 | Annual O&M Cost | {sym} {_fmt(eco["om_yr1"],0)} |
@@ -3939,11 +3939,11 @@ def export_pdf_energy(pid):
 
 | Metric | Value |
 |---|---|
-| Annual CO₂ Avoided | {_fmt(eco["co2_yr"],2)} tonnes/year |
-| 25-Year CO₂ Avoided | {_fmt(eco["co2_yr"]*25,1)} tonnes |
+| Annual COâ‚‚ Avoided | {_fmt(eco["co2_yr"],2)} tonnes/year |
+| 25-Year COâ‚‚ Avoided | {_fmt(eco["co2_yr"]*25,1)} tonnes |
 | Equivalent Trees Planted | {int(trees)} trees/year |
 | Equivalent Cars Removed | {cars} cars/year |
-| Grid Emission Factor | 0.40 kg CO₂/kWh |
+| Grid Emission Factor | 0.40 kg COâ‚‚/kWh |
 | Carbon Status | **Carbon Positive** |
 
 ---
@@ -3954,13 +3954,13 @@ def export_pdf_energy(pid):
 |---|---|---|---|---|
 """
     for cf in eco["cf_rows"]:
-        flag = " ◄ BREAK-EVEN" if eco.get("breakeven") and cf["yr"] == eco["breakeven"] else ""
+        flag = " â—„ BREAK-EVEN" if eco.get("breakeven") and cf["yr"] == eco["breakeven"] else ""
         md += f"| {cf['yr']} | {sym}{_fmt(cf['gross'],0)} | {sym}{_fmt(cf['om'],0)} | {sym}{_fmt(cf['net'],0)} | {sym}{_fmt(cf['cumul'],0)}{flag} |\n"
 
-    md += f"\n---\n\n*Report generated by SolarPro Global · BS 7671 · IEC 60364 · IEEE*\n"
+    md += f"\n---\n\n*Report generated by SolarPro Global Â· BS 7671 Â· IEC 60364 Â· IEEE*\n"
 
     fname = f"Energy_Impact_{project['name'].replace(' ','_')}.pdf"
-    return _render_pdf(f"Energy Impact Analysis — {project['name']}", md, fname)
+    return _render_pdf(f"Energy Impact Analysis â€” {project['name']}", md, fname)
 
 
 @app.route("/project/<int:pid>/report/economic/pdf")
@@ -3978,18 +3978,18 @@ def export_pdf_economic(pid):
     sym = d.get("symbol", "$")
     recs = calc_recommendations(eco, d, r)
 
-    verdict_icon = "✅ APPROVED" if eco["verdict"]=="APPROVED" else "⚠️ CONDITIONAL" if eco["verdict"]=="CONDITIONAL" else "❌ REJECTED"
-    bank_icon    = "✅ BANKABLE" if eco["bankability"]=="BANKABLE" else "⚠️ MARGINAL" if eco["bankability"]=="MARGINAL" else "❌ NOT BANKABLE"
+    verdict_icon = "âœ… APPROVED" if eco["verdict"]=="APPROVED" else "âš ï¸ CONDITIONAL" if eco["verdict"]=="CONDITIONAL" else "âŒ REJECTED"
+    bank_icon    = "âœ… BANKABLE" if eco["bankability"]=="BANKABLE" else "âš ï¸ MARGINAL" if eco["bankability"]=="MARGINAL" else "âŒ NOT BANKABLE"
 
-    md = f"""# Economic Analysis — {project["name"]}
+    md = f"""# Economic Analysis â€” {project["name"]}
 
-**{d.get("region","")}, {d.get("country","")}** | {_fmt(r["pv_kw"],2)} kWp · {_fmt(r["bat_kwh"],2)} kWh · {_fmt(r["inv_kw"],1)} kW | Currency: {d.get("currency","")}
+**{d.get("region","")}, {d.get("country","")}** | {_fmt(r["pv_kw"],2)} kWp Â· {_fmt(r["bat_kwh"],2)} kWh Â· {_fmt(r["inv_kw"],1)} kW | Currency: {d.get("currency","")}
 
 ---
 
 ## Project Verdict: {verdict_icon} | Bankability: {bank_icon}
 
-**Payback** {_fmt(eco["payback"],1)} yr | **NPV** {sym} {_fmt(eco["npv"],0)} | **IRR** {f'{eco["irr_pct"]:.1f}%' if eco["irr_pct"] else "N/A"} | **DSCR** {_fmt(eco["dscr"],2)} | **CO₂** {_fmt(eco["co2_yr"],2)} t/yr
+**Payback** {_fmt(eco["payback"],1)} yr | **NPV** {sym} {_fmt(eco["npv"],0)} | **IRR** {f'{eco["irr_pct"]:.1f}%' if eco["irr_pct"] else "N/A"} | **DSCR** {_fmt(eco["dscr"],2)} | **COâ‚‚** {_fmt(eco["co2_yr"],2)} t/yr
 
 ### Project Assessment
 """
@@ -3997,7 +3997,7 @@ def export_pdf_economic(pid):
         md += f"- {reason}\n"
 
     if eco["bankability"] != "BANKABLE":
-        md += f"\n### Bankability — {eco['bankability']}\n"
+        md += f"\n### Bankability â€” {eco['bankability']}\n"
         for reason in eco["bank_reasons"]:
             md += f"- {reason}\n"
 
@@ -4015,7 +4015,7 @@ def export_pdf_economic(pid):
 | IRR | {f'{eco["irr_pct"]:.1f}%' if eco["irr_pct"] else "N/A"} |
 | ROI (25yr) | {_fmt(eco["roi_pct"],0)}% |
 | DSCR | {_fmt(eco["dscr"],2)} |
-| CO₂ Saved | {_fmt(eco["co2_yr"],2)} t/yr |
+| COâ‚‚ Saved | {_fmt(eco["co2_yr"],2)} t/yr |
 
 ---
 
@@ -4052,7 +4052,7 @@ def export_pdf_economic(pid):
 | Loan Tenor | 7 years |
 | Monthly Repayment | {sym} {_fmt(eco["pmt"],0)}/mo |
 | Annual Debt Service | {sym} {_fmt(eco["annual_pmt"],0)}/yr |
-| **DSCR** | **{_fmt(eco["dscr"],2)} — {eco["bankability"]}** |
+| **DSCR** | **{_fmt(eco["dscr"],2)} â€” {eco["bankability"]}** |
 
 ---
 
@@ -4062,7 +4062,7 @@ def export_pdf_economic(pid):
 |---|---|---|---|---|
 """
     for cf in eco["cf_rows"]:
-        flag = " ◄ BREAK-EVEN" if eco.get("breakeven") and cf["yr"] == eco["breakeven"] else ""
+        flag = " â—„ BREAK-EVEN" if eco.get("breakeven") and cf["yr"] == eco["breakeven"] else ""
         md += f"| {cf['yr']} | {sym}{_fmt(cf['gross'],0)} | {sym}{_fmt(cf['om'],0)} | {sym}{_fmt(cf['net'],0)} | {sym}{_fmt(cf['cumul'],0)}{flag} |\n"
 
     if recs:
@@ -4074,11 +4074,11 @@ def export_pdf_economic(pid):
             md += f"**Action:** {rec['action']}\n\n"
             md += f"**Expected Impact:** {rec['impact']}\n\n"
 
-    md += f"\n---\n\n*Report generated by SolarPro Global · BS 7671 · IEC 60364 · IEEE*\n"
+    md += f"\n---\n\n*Report generated by SolarPro Global Â· BS 7671 Â· IEC 60364 Â· IEEE*\n"
     md += f"\n*Assumptions: Tariff escalation 8%/yr, Discount rate 12%, O&M 1.2%/yr, Degradation 0.5%/yr, Life 25 years*\n"
 
     fname = f"Economic_Analysis_{project['name'].replace(' ','_')}.pdf"
-    return _render_pdf(f"Economic Analysis — {project['name']}", md, fname)
+    return _render_pdf(f"Economic Analysis â€” {project['name']}", md, fname)
 
 
 @app.route("/project/<int:pid>/report/installation/pdf")
@@ -4169,8 +4169,8 @@ def export_pdf_installation(pid):
 
 | Component | Specification |
 |---|---|
-| PV Array | {_fmt(r["pv_kw"],2)} kWp ({r["num_panels"]} × {r.get("panel_wp",400)} Wp Mono PERC) |
-| Battery Bank | {_fmt(r["bat_kwh"],2)} kWh ({r["num_bat"]} × {_fmt(r["unit_bat_kwh"],2)} kWh {chem}) |
+| PV Array | {_fmt(r["pv_kw"],2)} kWp ({r["num_panels"]} Ã— {r.get("panel_wp",400)} Wp Mono PERC) |
+| Battery Bank | {_fmt(r["bat_kwh"],2)} kWh ({r["num_bat"]} Ã— {_fmt(r["unit_bat_kwh"],2)} kWh {chem}) |
 | Inverter/Charger | {_fmt(r["inv_kw"],1)} kW {phase.title()}-Phase |
 | MPPT Rating | {r.get("mppt_a",0)} A |
 | AC Voltage | {v_ac} V / 50 Hz |
@@ -4188,9 +4188,9 @@ def export_pdf_installation(pid):
 | Last String Panels | {last_panels} modules |
 | Array Size | {_fmt(r["pv_kw"],2)} kWp |
 | String Voc (est.) | {pps*24} V |
-| DC Cable (strings) | 6 mm² UV solar cable (TÜV certified) |
-| DC Cable (main run) | 10 mm² to isolator |
-| Tilt Angle | 10–15° minimum (self-cleaning) |
+| DC Cable (strings) | 6 mmÂ² UV solar cable (TÃœV certified) |
+| DC Cable (main run) | 10 mmÂ² to isolator |
+| Tilt Angle | 10â€“15Â° minimum (self-cleaning) |
 | Orientation | Equator-facing (south in N. hemisphere) |
 
 ---
@@ -4204,7 +4204,7 @@ def export_pdf_installation(pid):
 | Number of Units | {r["num_bat"]} |
 | Unit Capacity | {_fmt(r["unit_bat_kwh"],2)} kWh |
 | DC Voltage | {d.get("voltage",48)} V |
-| Mounting | Ventilated steel rack, ≥ 300mm clearance |
+| Mounting | Ventilated steel rack, â‰¥ 300mm clearance |
 | BMS | Built-in Battery Management System |
 
 ---
@@ -4213,12 +4213,12 @@ def export_pdf_installation(pid):
 
 | Circuit | Protection | Cable | Load |
 |---|---|---|---|
-| Incoming (Inverter output) | {r["ac_cables"][0]["breaker_a"] if r.get("ac_cables") else "—"}A RCCB 30mA | {r["ac_cables"][0]["cable_size_mm2"] if r.get("ac_cables") else "—"} mm² | {_fmt(r["inv_kw"],1)} kW |
-| Lighting & Emergency | 10A MCB | 1.5 mm² | ~1.0 kW |
-| Power Sockets | 16A MCB | 2.5 mm² | ~2.0 kW |
-| Air Conditioning | 32A MCB | {r["ac_cables"][-1]["cable_size_mm2"] if r.get("ac_cables") else "—"} mm² | ~3.5 kW |
-| Water / Borehole Pump | 16A MCB | 2.5 mm² | ~1.5 kW |
-| Office Equipment | 16A MCB | 2.5 mm² | ~1.5 kW |
+| Incoming (Inverter output) | {r["ac_cables"][0]["breaker_a"] if r.get("ac_cables") else "â€”"}A RCCB 30mA | {r["ac_cables"][0]["cable_size_mm2"] if r.get("ac_cables") else "â€”"} mmÂ² | {_fmt(r["inv_kw"],1)} kW |
+| Lighting & Emergency | 10A MCB | 1.5 mmÂ² | ~1.0 kW |
+| Power Sockets | 16A MCB | 2.5 mmÂ² | ~2.0 kW |
+| Air Conditioning | 32A MCB | {r["ac_cables"][-1]["cable_size_mm2"] if r.get("ac_cables") else "â€”"} mmÂ² | ~3.5 kW |
+| Water / Borehole Pump | 16A MCB | 2.5 mmÂ² | ~1.5 kW |
+| Office Equipment | 16A MCB | 2.5 mmÂ² | ~1.5 kW |
 
 ---
 
@@ -4227,7 +4227,7 @@ def export_pdf_installation(pid):
 | Conductor | Colour |
 |---|---|
 | DC Positive (+) | Red |
-| DC Negative (−) | Blue |
+| DC Negative (âˆ’) | Blue |
 | AC Line / Phase | Brown |
 | AC Neutral | Grey |
 | Protective Earth (PE) | Green/Yellow |
@@ -4251,37 +4251,37 @@ def export_pdf_installation(pid):
 - Inter-row shading distance = panel height x tan(solar elevation)
 - All panel frames bonded to earth bar with >= 6 mm2 green/yellow cable
 
-## 2. DC Wiring — Combiner to Equipment Room
+## 2. DC Wiring â€” Combiner to Equipment Room
 - All DC cables in metallic conduit or cable tray
-- Segregate DC from AC cables — separate conduits or ≥ 50 mm separation
-- String fuses rated at 1.25 × Isc in combiner box
+- Segregate DC from AC cables â€” separate conduits or â‰¥ 50 mm separation
+- String fuses rated at 1.25 Ã— Isc in combiner box
 - DC isolator must be DC-rated (AC isolators MUST NOT be used on DC circuits)
 - DC SPD (Type 2) in combiner box and again at inverter DC input
 
 ## 3. Battery Installation
 - Mount on purpose-built steel rack, bolted to floor or wall
 - Minimum 300 mm clearance from walls and ceiling on all sides
-- Ensure mechanical ventilation — {chem} has low gas risk but ventilate regardless
+- Ensure mechanical ventilation â€” {chem} has low gas risk but ventilate regardless
 - No ignition sources within 1 m. Class D fire extinguisher within 5 m
-- Battery fuse: 1.25 × maximum charge current
+- Battery fuse: 1.25 Ã— maximum charge current
 
 ## 4. AC Distribution Board
 - RCCB 30 mA on incomer (BS EN 61008 Type A)
-- Type 2 AC SPD (BS EN 61643) inside DB — connection cable ≤ 0.5 m
-- All MCBs coordinated — incomer trips last (discrimination)
-- DB top edge ≤ 1.8 m from finished floor level
+- Type 2 AC SPD (BS EN 61643) inside DB â€” connection cable â‰¤ 0.5 m
+- All MCBs coordinated â€” incomer trips last (discrimination)
+- DB top edge â‰¤ 1.8 m from finished floor level
 
 ## 5. Earthing & Bonding (BS 7430)
-- TT earthing arrangement — copper earth rod ≥ 2.4 m, driven vertically
-- Earth rod ≥ 2 m from building structure
-- Electrode resistance ≤ 10 Ω (test with earth clamp meter)
+- TT earthing arrangement â€” copper earth rod â‰¥ 2.4 m, driven vertically
+- Earth rod â‰¥ 2 m from building structure
+- Electrode resistance â‰¤ 10 Î© (test with earth clamp meter)
 - All metalwork bonded: panel frames, inverter chassis, battery rack, DB enclosure
-- Minimum 6 mm² green/yellow bonding cable throughout
+- Minimum 6 mmÂ² green/yellow bonding cable throughout
 
 ## 6. Testing & Commissioning
-- Insulation resistance test: ≥ 1 MΩ per IEC 60364-6
-- Earth continuity: ≤ 0.1 Ω on all bonding connections
-- RCD trip test: ≤ 40 ms at rated current (BS EN 61008)
+- Insulation resistance test: â‰¥ 1 MÎ© per IEC 60364-6
+- Earth continuity: â‰¤ 0.1 Î© on all bonding connections
+- RCD trip test: â‰¤ 40 ms at rated current (BS EN 61008)
 - Polarity check on all DC circuits before energising inverter
 - Functional test of all MCBs, RCCB, and SPDs
 
@@ -4292,14 +4292,14 @@ def export_pdf_installation(pid):
 *Report generated by SolarPro Global*
 """
     fname = f"Installation_{project['name'].replace(' ','_')}.pdf"
-    return _render_pdf(f"Installation Report — {project['name']}", md, fname)
+    return _render_pdf(f"Installation Report â€” {project['name']}", md, fname)
 
 
 @app.route("/project/<int:pid>/report/workplan/pdf")
 @login_required
 @limiter.limit("10 per minute")
 def export_pdf_workplan(pid):
-    """PDF export — Installation Work Plan (material schedule, programme, staffing)."""
+    """PDF export â€” Installation Work Plan (material schedule, programme, staffing)."""
     gate = _paid_only(pid)
     if gate: return gate
     project = get_project(pid)
@@ -4314,30 +4314,30 @@ def export_pdf_workplan(pid):
     sym         = d.get("symbol", "$")
     eco         = r["economics"]
 
-    md = f"""# Installation Work Plan — {project["name"]}
+    md = f"""# Installation Work Plan â€” {project["name"]}
 
 **{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","").title()} System | {_fmt(r["pv_kw"],2)} kWp | {r["num_panels"]} Panels | {_fmt(r["bat_kwh"],2)} kWh Battery
 
-Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62446
+Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62446
 
 ---
 
-# Section 1 — Material & Equipment Schedule
+# Section 1 â€” Material & Equipment Schedule
 
-## 1A — PV Array & Mounting
+## 1A â€” PV Array & Mounting
 
 | # | Description | Specification | Qty | Unit |
 |---|---|---|---|---|
-| 1.1 | Solar PV Panels | {r.get("panel_wp",400)} Wp Monocrystalline PERC, Tier 1, Voc ≈ 24 V | {r["num_panels"]} | Modules |
-| 1.2 | Aluminium Mounting Rails | 40×40 mm anodised aluminium | {int(r["num_panels"]*1.2)} | m |
+| 1.1 | Solar PV Panels | {r.get("panel_wp",400)} Wp Monocrystalline PERC, Tier 1, Voc â‰ˆ 24 V | {r["num_panels"]} | Modules |
+| 1.2 | Aluminium Mounting Rails | 40Ã—40 mm anodised aluminium | {int(r["num_panels"]*1.2)} | m |
 | 1.3 | Mid & End Clamps | Stainless steel SS304 | {r["num_panels"]*4} | Sets |
 | 1.4 | Roof Mounting Brackets | Galvanised steel, tilt-adjustable | {int(r["num_panels"]*1.5)} | No. |
-| 1.5 | DC Solar Cable (strings) | 6 mm² TÜV UV-resistant, red & black | {int(r["num_panels"]*8)} | m |
+| 1.5 | DC Solar Cable (strings) | 6 mmÂ² TÃœV UV-resistant, red & black | {int(r["num_panels"]*8)} | m |
 | 1.6 | MC4 Connectors | IP67, 1000 VDC rated | {r["num_panels"]*4} | Pairs |
-| 1.7 | DC Main Cable (combiner→inverter) | 10 mm² DC solar cable | 30 | m |
-| 1.8 | Earthing Cable for Panel Frames | 6 mm² green/yellow | {int(r["num_panels"]*3)} | m |
+| 1.7 | DC Main Cable (combinerâ†’inverter) | 10 mmÂ² DC solar cable | 30 | m |
+| 1.8 | Earthing Cable for Panel Frames | 6 mmÂ² green/yellow | {int(r["num_panels"]*3)} | m |
 
-## 1B — DC Combiner & Protection
+## 1B â€” DC Combiner & Protection
 
 | # | Description | Specification | Qty | Unit |
 |---|---|---|---|---|
@@ -4346,21 +4346,21 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62446
 | 2.3 | DC Surge Protection Device | Type 2, 1000 VDC, IEC 61643-31 | 1 | No. |
 | 2.4 | DC Main Isolator | 3-pole DC-rated, lockable | 1 | No. |
 | 2.5 | Metallic Cable Conduit | 20 mm steel conduit | 25 | m |
-| 2.6 | Cable Tray / Trunking | 50×50 mm galvanised steel | 10 | m |
+| 2.6 | Cable Tray / Trunking | 50Ã—50 mm galvanised steel | 10 | m |
 
-## 1C — Inverter, Battery & MPPT
+## 1C â€” Inverter, Battery & MPPT
 
 | # | Description | Specification | Qty | Unit |
 |---|---|---|---|---|
-| 3.1 | Hybrid Inverter / Charger | {_fmt(r["inv_kw"],1)} kW, {d.get("voltage",48)}V DC, built-in MPPT {r.get("mppt_a","—")}A | 1 | No. |
+| 3.1 | Hybrid Inverter / Charger | {_fmt(r["inv_kw"],1)} kW, {d.get("voltage",48)}V DC, built-in MPPT {r.get("mppt_a","â€”")}A | 1 | No. |
 | 3.2 | Lithium Battery Units | {_fmt(r["unit_bat_kwh"],2)} kWh {chem}, {d.get("voltage",48)}V, BMS | {r["num_bat"]} | No. |
 | 3.3 | Battery Steel Rack | Powder-coated, for {r["num_bat"]} units | {max(1,(r["num_bat"]+1)//2)} | No. |
-| 3.4 | Battery DC Fuse (ANL) | 1.25 × max charge current | {r["num_bat"]} | No. |
-| 3.5 | Battery DC Cable | 25 mm² flexible, red & black | {r["num_bat"]*4} | m |
+| 3.4 | Battery DC Fuse (ANL) | 1.25 Ã— max charge current | {r["num_bat"]} | No. |
+| 3.5 | Battery DC Cable | 25 mmÂ² flexible, red & black | {r["num_bat"]*4} | m |
 | 3.6 | BMS Communication Cable | RS485 / CAN bus | {r["num_bat"]} | Cables |
 | 3.7 | Inverter Wall Bracket | Heavy-duty steel | 1 | Set |
 
-## 1D — AC Distribution & Protection
+## 1D â€” AC Distribution & Protection
 
 | # | Description | Specification | Qty | Unit |
 |---|---|---|---|---|
@@ -4373,40 +4373,40 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62446
 | 4.7 | AC Surge Protection Device | Type 2, 230/415V, BS EN 61643 | 1 | No. |
 """
     for i, c in enumerate(r.get("ac_cables", []), start=8):
-        md += f"| 4.{i} | AC Cable — {c['circuit']} | {c['cable_size_mm2']} mm² Cu XLPE/PVC | {c.get('length_m',20)+5} | m |\n"
+        md += f"| 4.{i} | AC Cable â€” {c['circuit']} | {c['cable_size_mm2']} mmÂ² Cu XLPE/PVC | {c.get('length_m',20)+5} | m |\n"
 
     md += f"""
-## 1E — Earthing, Bonding & Sundries
+## 1E â€” Earthing, Bonding & Sundries
 
 | # | Description | Qty | Unit |
 |---|---|---|---|
 | 5.1 | Copper Earth Rod (16 mm dia., 2.4 m) | 2 | No. |
 | 5.2 | Earth Rod Clamp & Driver | 2 | Sets |
 | 5.3 | Earth Busbar (10-way copper) | 1 | No. |
-| 5.4 | Main Earthing Conductor (16 mm² G/Y) | 15 | m |
-| 5.5 | Bonding Cables (6 mm² G/Y) | 40 | m |
+| 5.4 | Main Earthing Conductor (16 mmÂ² G/Y) | 15 | m |
+| 5.5 | Bonding Cables (6 mmÂ² G/Y) | 40 | m |
 | 5.6 | Cable Labels (PVC self-laminating) | 200 | No. |
 | 5.7 | Cable Ties UV-resistant | 1 | Box (200) |
 | 5.8 | Warning / Safety Labels (BS EN 60445) | 1 | Set |
-| 5.9 | IP65 Cable Glands (M20–M32) | 20 | No. |
+| 5.9 | IP65 Cable Glands (M20â€“M32) | 20 | No. |
 | 5.10 | UV-Resistant Silicone Sealant | 4 | Tubes |
 
-## 1F — Test & Commissioning Instruments
+## 1F â€” Test & Commissioning Instruments
 
 | Instrument | Purpose | Acceptance Standard |
 |---|---|---|
-| Insulation Resistance Tester (Megger) | Cable insulation integrity | ≥ 1 MΩ (IEC 60364-6) |
-| Earth Electrode Resistance Tester | Earth rod resistance | ≤ 10 Ω (BS 7430) |
-| Clamp Earth Tester | Non-invasive earth continuity | ≤ 0.1 Ω (BS 7671 Ch.61) |
+| Insulation Resistance Tester (Megger) | Cable insulation integrity | â‰¥ 1 MÎ© (IEC 60364-6) |
+| Earth Electrode Resistance Tester | Earth rod resistance | â‰¤ 10 Î© (BS 7430) |
+| Clamp Earth Tester | Non-invasive earth continuity | â‰¤ 0.1 Î© (BS 7671 Ch.61) |
 | Digital Multimeter (1000V DC) | String Voc, polarity | CAT III 1000V |
 | DC Clamp Meter (1000V / 60A DC) | String Isc, battery current | CAT III 600V |
-| RCD Tester | Trip time verification | ≤ 40 ms (BS EN 61008) |
-| Voltage Drop Tester | Full-load volt drop | ≤ 3% (BS 7671 App 4) |
+| RCD Tester | Trip time verification | â‰¤ 40 ms (BS EN 61008) |
+| Voltage Drop Tester | Full-load volt drop | â‰¤ 3% (BS 7671 App 4) |
 | Thermal Imaging Camera | Hot-spot detection | IEC 62446-3 |
 
 ---
 
-# Section 2 — Approach to Installation Work & Programme
+# Section 2 â€” Approach to Installation Work & Programme
 
 ## Method Statement Summary
 
@@ -4416,40 +4416,40 @@ Total programme: **12 working days** (weather permitting).
 
 | Phase | Activity | Days | Duration |
 |---|---|---|---|
-| 1 | Mobilisation & Site Preparation | Days 1–2 | 2 days |
-| 2 | Civil & Structural Works | Days 2–4 | 3 days |
-| 3 | PV Panel Installation | Days 4–6 | 3 days |
-| 4 | Equipment Room Fit-Out | Days 5–7 | 3 days |
-| 5 | DC & AC Wiring | Days 7–9 | 3 days |
-| 6 | Earthing, Bonding & Pre-commissioning Tests | Days 9–10 | 2 days |
-| 7 | Commissioning, Testing & Handover | Days 10–12 | 3 days |
+| 1 | Mobilisation & Site Preparation | Days 1â€“2 | 2 days |
+| 2 | Civil & Structural Works | Days 2â€“4 | 3 days |
+| 3 | PV Panel Installation | Days 4â€“6 | 3 days |
+| 4 | Equipment Room Fit-Out | Days 5â€“7 | 3 days |
+| 5 | DC & AC Wiring | Days 7â€“9 | 3 days |
+| 6 | Earthing, Bonding & Pre-commissioning Tests | Days 9â€“10 | 2 days |
+| 7 | Commissioning, Testing & Handover | Days 10â€“12 | 3 days |
 
 ## Phase Detail
 
-### Phase 1 — Mobilisation & Site Preparation (Days 1–2)
+### Phase 1 â€” Mobilisation & Site Preparation (Days 1â€“2)
 
 **Activities:**
 - Deliver and inventory all equipment on site
 - Set up site compound, secure storage for panels and batteries
 - Install temporary power and lighting for working area
 - Brief all staff on HSE plan and emergency procedures
-- Prepare roof access — scaffold or MEWP
+- Prepare roof access â€” scaffold or MEWP
 - Mark out equipment room layout and cable routes
 
 **Sign-off outputs:** Signed delivery notes, site induction records, HSE risk assessment signed
 
-### Phase 2 — Civil & Structural Works (Days 2–4)
+### Phase 2 â€” Civil & Structural Works (Days 2â€“4)
 
 **Activities:**
 - Install roof mounting brackets/L-feet at designed spacing
 - Assemble and level aluminium mounting rails; verify tilt angle
-- Core through roof/walls for DC cable entry — seal immediately
+- Core through roof/walls for DC cable entry â€” seal immediately
 - Fix conduit supports and tray brackets along cable route
 - Install metallic conduit from roof to equipment room
 
 **Sign-off outputs:** Waterproofing test, structural load check (if required), as-installed conduit sketch
 
-### Phase 3 — PV Panel Installation (Days 4–6)
+### Phase 3 â€” PV Panel Installation (Days 4â€“6)
 
 **Activities:**
 - Mount panels row-by-row, bottom to top; torque clamps to spec
@@ -4457,9 +4457,9 @@ Total programme: **12 working days** (weather permitting).
 - Install string fuses in combiner box; record fuse ratings
 - Run and label DC string cables in conduit
 
-**Sign-off outputs:** String cable labels at both ends, visual inspection — no cracked panels
+**Sign-off outputs:** String cable labels at both ends, visual inspection â€” no cracked panels
 
-### Phase 4 — Equipment Room Fit-Out (Days 5–7)
+### Phase 4 â€” Equipment Room Fit-Out (Days 5â€“7)
 
 **Activities:**
 - Fix inverter wall bracket; mount and level inverter
@@ -4471,37 +4471,37 @@ Total programme: **12 working days** (weather permitting).
 
 **Sign-off outputs:** Inverter mounting record, battery connection torque check, room layout photo
 
-### Phase 5 — DC & AC Wiring (Days 7–9)
+### Phase 5 â€” DC & AC Wiring (Days 7â€“9)
 
 **Activities:**
-- Run DC main cable combiner → inverter; double-check polarity
+- Run DC main cable combiner â†’ inverter; double-check polarity
 - Connect battery cables with ANL fuses
-- Wire AC output inverter → DB incomer
+- Wire AC output inverter â†’ DB incomer
 - Install RCCB, MCBs, SPD in DB
 - Run all AC final circuit cables; label both ends at every junction
 
 **Sign-off outputs:** As-installed wiring diagram, cable schedule with actual lengths, labels verified
 
-### Phase 6 — Earthing, Bonding & Pre-commissioning Tests (Days 9–10)
+### Phase 6 â€” Earthing, Bonding & Pre-commissioning Tests (Days 9â€“10)
 
 **Activities:**
-- Drive earth rods to ≥ 2.4 m depth; connect to earth busbar
-- Bond all metalwork — panel frames, inverter, battery rack, DB
-- Test earth electrode resistance (≤ 10 Ω before proceeding)
-- Insulation resistance test — all circuits ≥ 1 MΩ
-- Continuity — all earth/bonding conductors ≤ 0.1 Ω
+- Drive earth rods to â‰¥ 2.4 m depth; connect to earth busbar
+- Bond all metalwork â€” panel frames, inverter, battery rack, DB
+- Test earth electrode resistance (â‰¤ 10 Î© before proceeding)
+- Insulation resistance test â€” all circuits â‰¥ 1 MÎ©
+- Continuity â€” all earth/bonding conductors â‰¤ 0.1 Î©
 - Polarity check on all DC strings (signed by two technicians)
 
 **Sign-off outputs:** Earth resistance certificate, IR test schedule, polarity check record
 
-### Phase 7 — Commissioning, Testing & Handover (Days 10–12)
+### Phase 7 â€” Commissioning, Testing & Handover (Days 10â€“12)
 
 **Activities:**
 - Energise inverter; verify AC output voltage and frequency
 - Test MPPT tracking; confirm generation on inverter display
-- RCD trip time test ≤ 40 ms; MCB overload test per circuit
-- Voltage drop test under full load ≤ 3%
-- 7-day performance monitoring — generation vs design
+- RCD trip time test â‰¤ 40 ms; MCB overload test per circuit
+- Voltage drop test under full load â‰¤ 3%
+- 7-day performance monitoring â€” generation vs design
 - Client handover training; issue O&M manual and warranties
 
 **Sign-off outputs:** Full commissioning test schedule, 7-day monitoring log, Installation Completion Certificate, O&M manual issued
@@ -4510,12 +4510,12 @@ Total programme: **12 working days** (weather permitting).
 
 - **Total duration:** 12 working days (weather-permitting)
 - **Weather hold:** No roof work in rain, lightning, or wind > 25 mph
-- **Working hours:** 07:30–17:30 Mon–Fri; 07:30–13:00 Sat if required
-- **Parallel working:** Phases 3 and 4 overlap (Days 5–7) — civil and electrical teams work simultaneously
+- **Working hours:** 07:30â€“17:30 Monâ€“Fri; 07:30â€“13:00 Sat if required
+- **Parallel working:** Phases 3 and 4 overlap (Days 5â€“7) â€” civil and electrical teams work simultaneously
 
 ---
 
-# Section 3 — Staffing Plan
+# Section 3 â€” Staffing Plan
 
 ## Project Team
 
@@ -4524,22 +4524,22 @@ Total programme: **12 working days** (weather permitting).
 | Project Engineer / Site Manager | 1 | BEng Electrical, 18th Ed BS 7671, Solar PV cert, IOSH | All 12 days |
 | Senior Electrical Technician | 1 | C&G 2365 NVQ L3, 18th Ed + 2391, ECS Gold, Work at Height | All 12 days |
 | Electrical Apprentice / Assistant | 1 | NVQ L2 Electrical, Manual Handling, CSCS Green | All 12 days |
-| Structural / Civil Technician | 1 | Roof mounting experience, PASMA/IPAF, CSCS | Days 1–6 |
-| HSE Officer (part-time) | 1 | NEBOSH General, First Aid at Work | Days 1–2, 9–10 |
+| Structural / Civil Technician | 1 | Roof mounting experience, PASMA/IPAF, CSCS | Days 1â€“6 |
+| HSE Officer (part-time) | 1 | NEBOSH General, First Aid at Work | Days 1â€“2, 9â€“10 |
 
-**Total peak headcount: 5 persons on site (Days 1–2 and 4–6)**
+**Total peak headcount: 5 persons on site (Days 1â€“2 and 4â€“6)**
 
 ## Staff Deployment by Phase
 
 | Phase | Activity | Proj. Eng. | Sr. Tech | Apprentice | Civil Tech | HSE Officer |
 |---|---|---|---|---|---|---|
-| 1 | Mobilisation | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 2 | Civil Works | ✓ (part) | — | ✓ | ✓ | ✓ (part) |
-| 3 | PV Installation | ✓ | ✓ | ✓ | ✓ | ✓ (part) |
-| 4 | Equipment Fit-Out | ✓ | ✓ | ✓ | — | — |
-| 5 | DC & AC Wiring | ✓ | ✓ | ✓ | — | — |
-| 6 | Earthing & Testing | ✓ | ✓ | ✓ | — | ✓ (part) |
-| 7 | Commissioning | ✓ | ✓ | ✓ | — | — |
+| 1 | Mobilisation | âœ“ | âœ“ | âœ“ | âœ“ | âœ“ |
+| 2 | Civil Works | âœ“ (part) | â€” | âœ“ | âœ“ | âœ“ (part) |
+| 3 | PV Installation | âœ“ | âœ“ | âœ“ | âœ“ | âœ“ (part) |
+| 4 | Equipment Fit-Out | âœ“ | âœ“ | âœ“ | â€” | â€” |
+| 5 | DC & AC Wiring | âœ“ | âœ“ | âœ“ | â€” | â€” |
+| 6 | Earthing & Testing | âœ“ | âœ“ | âœ“ | â€” | âœ“ (part) |
+| 7 | Commissioning | âœ“ | âœ“ | âœ“ | â€” | â€” |
 
 ## Key Responsibilities
 
@@ -4563,9 +4563,9 @@ and waterproofing of all roof penetrations.
 Conducts daily toolbox talks. Inspects PPE and access equipment. Maintains site accident log.
 Emergency response coordinator.
 
-## Mandatory PPE — All Personnel
+## Mandatory PPE â€” All Personnel
 
-- Safety helmet (EN 397) — all roof and overhead work
+- Safety helmet (EN 397) â€” all roof and overhead work
 - Safety boots, steel toe cap, anti-slip (EN ISO 20345)
 - High-visibility vest or jacket (EN ISO 20471 Class 2)
 - Safety glasses when drilling, cutting, or using chemicals
@@ -4575,30 +4575,30 @@ Emergency response coordinator.
 
 ## Site Safety Procedures
 
-- Daily toolbox talk before work — attendance signed
+- Daily toolbox talk before work â€” attendance signed
 - Written risk assessment and method statement on site at all times
 - Permit to work before any work on energised equipment
-- Two-person rule — no solo working on roof or electrical equipment
-- All access equipment inspected daily — defective equipment tagged out
+- Two-person rule â€” no solo working on roof or electrical equipment
+- All access equipment inspected daily â€” defective equipment tagged out
 - Emergency evacuation plan posted at site entrance
-- First aid kit and CO₂ fire extinguisher on site at all times
+- First aid kit and COâ‚‚ fire extinguisher on site at all times
 - Any near-miss reported within 2 hours
 
 ---
 
-*Installation Work Plan — {project["name"]}*
-*Generated by SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62446 · IEC 62305*
+*Installation Work Plan â€” {project["name"]}*
+*Generated by SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62446 Â· IEC 62305*
 """
 
     fname = f"WorkPlan_{project['name'].replace(' ','_')}.pdf"
-    return _render_pdf(f"Installation Work Plan — {project['name']}", md, fname)
+    return _render_pdf(f"Installation Work Plan â€” {project['name']}", md, fname)
 
 
 @app.route("/project/<int:pid>/report/staffing/pdf")
 @login_required
 @limiter.limit("10 per minute")
 def export_pdf_staffing(pid):
-    """PDF export — Staffing Plan only (roles, deployment matrix, responsibilities, PPE)."""
+    """PDF export â€” Staffing Plan only (roles, deployment matrix, responsibilities, PPE)."""
     gate = _paid_only(pid)
     if gate: return gate
     project = get_project(pid)
@@ -4609,11 +4609,11 @@ def export_pdf_staffing(pid):
     phase  = d.get("phase", "single")
     v_ac   = 415 if phase == "three" else 230
 
-    md = f"""# Staffing Plan — {project["name"]}
+    md = f"""# Staffing Plan â€” {project["name"]}
 
 **{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","").title()} System | {_fmt(r["pv_kw"],2)} kWp | {r["num_panels"]} Panels | {_fmt(r["bat_kwh"],2)} kWh Battery
 
-Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62446
+Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62446
 
 ---
 
@@ -4624,10 +4624,10 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62446
 | Project Engineer / Site Manager | 1 | BEng Electrical, 18th Ed BS 7671, Solar PV cert, IOSH | All 12 days |
 | Senior Electrical Technician | 1 | C&G 2365 NVQ L3, 18th Ed + 2391, ECS Gold, Work at Height | All 12 days |
 | Electrical Apprentice / Assistant | 1 | NVQ L2 Electrical, Manual Handling, CSCS Green | All 12 days |
-| Structural / Civil Technician | 1 | Roof mounting, PASMA/IPAF, CSCS | Days 1–6 |
-| HSE Officer (part-time) | 1 | NEBOSH General, First Aid at Work | Days 1–2, 9–10 |
+| Structural / Civil Technician | 1 | Roof mounting, PASMA/IPAF, CSCS | Days 1â€“6 |
+| HSE Officer (part-time) | 1 | NEBOSH General, First Aid at Work | Days 1â€“2, 9â€“10 |
 
-**Total peak headcount: 5 persons on site (Days 1–2 and 4–6)**
+**Total peak headcount: 5 persons on site (Days 1â€“2 and 4â€“6)**
 
 ---
 
@@ -4635,13 +4635,13 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62446
 
 | Phase | Activity | Days | Proj. Eng. | Sr. Tech | Apprentice | Civil Tech | HSE Officer |
 |---|---|---|---|---|---|---|---|
-| 1 | Mobilisation | 1–2 | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 2 | Civil Works | 2–4 | ✓ (part) | — | ✓ | ✓ | ✓ (part) |
-| 3 | PV Installation | 4–6 | ✓ | ✓ | ✓ | ✓ | ✓ (part) |
-| 4 | Equipment Fit-Out | 5–7 | ✓ | ✓ | ✓ | — | — |
-| 5 | DC & AC Wiring | 7–9 | ✓ | ✓ | ✓ | — | — |
-| 6 | Earthing & Testing | 9–10 | ✓ | ✓ | ✓ | — | ✓ (part) |
-| 7 | Commissioning | 10–12 | ✓ | ✓ | ✓ | — | — |
+| 1 | Mobilisation | 1â€“2 | âœ“ | âœ“ | âœ“ | âœ“ | âœ“ |
+| 2 | Civil Works | 2â€“4 | âœ“ (part) | â€” | âœ“ | âœ“ | âœ“ (part) |
+| 3 | PV Installation | 4â€“6 | âœ“ | âœ“ | âœ“ | âœ“ | âœ“ (part) |
+| 4 | Equipment Fit-Out | 5â€“7 | âœ“ | âœ“ | âœ“ | â€” | â€” |
+| 5 | DC & AC Wiring | 7â€“9 | âœ“ | âœ“ | âœ“ | â€” | â€” |
+| 6 | Earthing & Testing | 9â€“10 | âœ“ | âœ“ | âœ“ | â€” | âœ“ (part) |
+| 7 | Commissioning | 10â€“12 | âœ“ | âœ“ | âœ“ | â€” | â€” |
 
 ---
 
@@ -4662,7 +4662,7 @@ Assists the senior technician and updates the material schedule as items are ins
 
 ## Structural / Civil Technician
 Installs all roof mounting structure. Responsible for panel mounting, tilt angle accuracy,
-and weatherproofing of all roof penetrations. Engaged for Days 1–6.
+and weatherproofing of all roof penetrations. Engaged for Days 1â€“6.
 
 ## HSE Officer (Part-Time / Shared)
 Conducts daily toolbox talks. Inspects PPE and access equipment. Maintains site accident log.
@@ -4670,11 +4670,11 @@ Acts as emergency response coordinator.
 
 ---
 
-# Mandatory PPE — All Personnel
+# Mandatory PPE â€” All Personnel
 
 | Item | Standard |
 |---|---|
-| Safety helmet | EN 397 — all roof and overhead work |
+| Safety helmet | EN 397 â€” all roof and overhead work |
 | Safety boots (steel toe cap, anti-slip) | EN ISO 20345 |
 | High-visibility vest / jacket (Class 2) | EN ISO 20471 |
 | Safety glasses (drilling, cutting, chemicals) | EN 166 |
@@ -4686,30 +4686,30 @@ Acts as emergency response coordinator.
 
 # Site Safety Procedures
 
-- Daily toolbox talk before work — attendance signed by all personnel
+- Daily toolbox talk before work â€” attendance signed by all personnel
 - Written risk assessment and method statement on site at all times
 - Permit to work before any work on or near energised equipment
-- Two-person rule — no solo working on roof or electrical equipment
+- Two-person rule â€” no solo working on roof or electrical equipment
 - All access equipment inspected daily; defective items tagged out of service
 - Emergency evacuation plan posted at site entrance and briefed on Day 1
-- First aid kit and CO₂ fire extinguisher on site at all times
+- First aid kit and COâ‚‚ fire extinguisher on site at all times
 - Any near-miss reported within 2 hours; incident report completed within 24 hours
 
 ---
 
-*Staffing Plan — {project["name"]}*
-*Generated by SolarPro Global · BS 7671:2018 · IEC 62446 · NEBOSH / HSE Guidance*
+*Staffing Plan â€” {project["name"]}*
+*Generated by SolarPro Global Â· BS 7671:2018 Â· IEC 62446 Â· NEBOSH / HSE Guidance*
 """
 
     fname = f"StaffingPlan_{project['name'].replace(' ','_')}.pdf"
-    return _render_pdf(f"Staffing Plan — {project['name']}", md, fname)
+    return _render_pdf(f"Staffing Plan â€” {project['name']}", md, fname)
 
 
 @app.route("/project/<int:pid>/report/pv/pdf")
 @login_required
 @limiter.limit("10 per minute")
 def export_pdf_pv(pid):
-    """PDF export — PV System Design Report."""
+    """PDF export â€” PV System Design Report."""
     gate = _paid_only(pid)
     if gate: return gate
     project = get_project(pid)
@@ -4720,11 +4720,11 @@ def export_pdf_pv(pid):
     eco = r.get("economics", {})
     sym = d.get("symbol", "$")
 
-    md = f"""# PV System Design Report — {project["name"]}
+    md = f"""# PV System Design Report â€” {project["name"]}
 
 **{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","off-grid").title()} System | Currency: {d.get("currency","USD")}
 
-Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 61215
+Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 61215
 
 ---
 
@@ -4734,7 +4734,7 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 61215
 |---|---|
 | Location | {d.get("region","")}, {d.get("country","")} |
 | Peak Sun Hours (PSH) | {d.get("psh",5.0)} h/day |
-| Average Ambient Temperature | {d.get("avg_temp",28)}°C |
+| Average Ambient Temperature | {d.get("avg_temp",28)}Â°C |
 | System Type | {d.get("system_type","off-grid").title()} |
 | Phase | {d.get("phase","single").title()}-Phase |
 | DC Bus Voltage | {d.get("voltage",48)} V |
@@ -4759,9 +4759,9 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 61215
 | Parameter | Value |
 |---|---|
 | PV Array Capacity | {_fmt(r.get("pv_kw",0),2)} kWp |
-| Number of Panels | {r.get("num_panels",0)} × {r.get("panel_wp",400)} Wp |
+| Number of Panels | {r.get("num_panels",0)} Ã— {r.get("panel_wp",400)} Wp |
 | Panel Technology | Monocrystalline PERC, BS EN 61215 |
-| Temperature Derating Factor | {r.get("temp_derating","—")} |
+| Temperature Derating Factor | {r.get("temp_derating","â€”")} |
 | BOS Efficiency | 75% |
 | Design Standard | IEC 61215 / IEC 61730 |
 
@@ -4772,7 +4772,7 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 61215
 | Parameter | Value |
 |---|---|
 | Total Battery Capacity | {_fmt(r.get("bat_kwh",0),2)} kWh |
-| Number of Units | {r.get("num_bat",0)} × {_fmt(r.get("unit_bat_kwh",0),2)} kWh each |
+| Number of Units | {r.get("num_bat",0)} Ã— {_fmt(r.get("unit_bat_kwh",0),2)} kWh each |
 | Chemistry | {r.get("chemistry","LiFePO4")} |
 | Depth of Discharge (DoD) | {int((r.get("chem_dod",0.9))*100)}% |
 | Cycle Life | {r.get("chem_cycles","4,000+")} cycles |
@@ -4789,10 +4789,10 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 61215
 | Inverter Rating | {_fmt(r.get("inv_kw",0),1)} kW |
 | Type | Hybrid Inverter/Charger |
 | Recommended Brands | {r.get("inv_brand","Victron / Growatt / Deye")} |
-| MPPT Rating | {r.get("mppt_a","—")} A |
+| MPPT Rating | {r.get("mppt_a","â€”")} A |
 | DC Input Voltage | {d.get("voltage",48)} V |
 | AC Output | {"415 V three-phase" if d.get("phase")=="three" else "230 V single-phase"} |
-| Inverter Efficiency | ≥ 95% |
+| Inverter Efficiency | â‰¥ 95% |
 
 ---
 
@@ -4806,22 +4806,22 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 61215
 | Performance Ratio | {d.get("performance_ratio",75)}% |
 | Simple Payback | {_fmt(eco.get("payback",0),1)} years |
 | Total CAPEX | {sym} {_fmt(eco.get("total_local",0),0)} |
-| Project Verdict | {eco.get("verdict","—")} |
+| Project Verdict | {eco.get("verdict","â€”")} |
 
 ---
 
-*PV System Design Report — {project["name"]}*
-*Generated by SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 61215*
+*PV System Design Report â€” {project["name"]}*
+*Generated by SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 61215*
 """
     fname = f"PV_Report_{project['name'].replace(' ','_')}.pdf"
-    return _render_pdf(f"PV System Design Report — {project['name']}", md, fname)
+    return _render_pdf(f"PV System Design Report â€” {project['name']}", md, fname)
 
 
 @app.route("/project/<int:pid>/report/proposal/pdf")
 @login_required
 @limiter.limit("5 per minute")
 def export_pdf_proposal(pid):
-    """PDF export — Full Technical & Financial Proposal."""
+    """PDF export â€” Full Technical & Financial Proposal."""
     gate = _paid_only(pid)
     if gate: return gate
     project = get_project(pid)
@@ -4838,18 +4838,18 @@ def export_pdf_proposal(pid):
     months_list     = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
     monthly         = [(m, round(base_monthly * f, 1)) for m, f in zip(months_list, monthly_factors)]
 
-    md = f"""# Solar PV System Proposal — {project["name"]}
+    md = f"""# Solar PV System Proposal â€” {project["name"]}
 
 **Location:** {d.get("region","")}, {d.get("country","")}
 **System Type:** {d.get("system_type","off-grid").title()} | **PV Capacity:** {_fmt(r["pv_kw"],2)} kWp
 **Battery:** {_fmt(r["bat_kwh"],2)} kWh {r.get("chemistry","LiFePO4")} | **Inverter:** {_fmt(r["inv_kw"],1)} kW
-**Project Verdict:** {eco.get("verdict","—")} | **Bankability:** {eco.get("bankability","—")}
+**Project Verdict:** {eco.get("verdict","â€”")} | **Bankability:** {eco.get("bankability","â€”")}
 
-Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62305 · IEC 62446 · IEEE
+Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â· IEC 62446 Â· IEEE
 
 ---
 
-# PART A — TECHNICAL PROPOSAL
+# PART A â€” TECHNICAL PROPOSAL
 
 # A1. Site Assessment & Solar Resource
 
@@ -4857,7 +4857,7 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62305 · IEC 62
 |---|---|
 | Location | {d.get("region","")}, {d.get("country","")} |
 | Peak Sun Hours | {d.get("psh",5.0)} h/day |
-| Average Temperature | {d.get("avg_temp",28)}°C |
+| Average Temperature | {d.get("avg_temp",28)}Â°C |
 | Electricity Tariff | {sym}{d.get("tariff",0)}/kWh |
 | System Type | {d.get("system_type","off-grid").title()} |
 | Phase | {d.get("phase","single").title()}-Phase |
@@ -4891,25 +4891,25 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62305 · IEC 62
 
 | Component | Calculation | Result |
 |---|---|---|
-| PV Array | {_fmt(r["daily_kwh"],3)} kWh ÷ ({d.get("psh",5)} h × 75% BOS) | **{_fmt(r["pv_kw"],2)} kWp → {r["num_panels"]} × {r.get("panel_wp",400)} Wp** |
-| Battery | {_fmt(r["daily_kwh"],3)} × {d.get("autonomy",1)} day ÷ ({int(r.get("chem_dod",0.9)*100)}% DoD) | **{_fmt(r["bat_kwh"],2)} kWh → {r["num_bat"]} × {_fmt(r["unit_bat_kwh"],2)} kWh** |
-| Inverter | Peak load {_fmt(r.get("peak_kw",0),2)} kW × 1.25 SF | **{_fmt(r["inv_kw"],1)} kW** |
-| MPPT | Array {_fmt(r["pv_kw"],2)} kWp ÷ {d.get("voltage",48)} V bus | **{r.get("mppt_a","—")} A** |
+| PV Array | {_fmt(r["daily_kwh"],3)} kWh Ã· ({d.get("psh",5)} h Ã— 75% BOS) | **{_fmt(r["pv_kw"],2)} kWp â†’ {r["num_panels"]} Ã— {r.get("panel_wp",400)} Wp** |
+| Battery | {_fmt(r["daily_kwh"],3)} Ã— {d.get("autonomy",1)} day Ã· ({int(r.get("chem_dod",0.9)*100)}% DoD) | **{_fmt(r["bat_kwh"],2)} kWh â†’ {r["num_bat"]} Ã— {_fmt(r["unit_bat_kwh"],2)} kWh** |
+| Inverter | Peak load {_fmt(r.get("peak_kw",0),2)} kW Ã— 1.25 SF | **{_fmt(r["inv_kw"],1)} kW** |
+| MPPT | Array {_fmt(r["pv_kw"],2)} kWp Ã· {d.get("voltage",48)} V bus | **{r.get("mppt_a","â€”")} A** |
 
 # A4. AC Cable Schedule (BS 7671)
 
-| Circuit | Size (mm²) | Capacity (A) | Breaker (A) | Volt Drop | Compliant |
+| Circuit | Size (mmÂ²) | Capacity (A) | Breaker (A) | Volt Drop | Compliant |
 |---|---|---|---|---|---|
 """
     for c in r.get("ac_cables", []):
-        md += (f"| {c.get('circuit','')} | {c.get('cable_size_mm2','')} mm² | "
+        md += (f"| {c.get('circuit','')} | {c.get('cable_size_mm2','')} mmÂ² | "
                f"{c.get('cable_capacity','')} A | {c.get('breaker_a','')} A | "
-               f"{c.get('vd_percent','')}% | {'✓ Yes' if c.get('vd_ok') else '✗ Review'} |\n")
+               f"{c.get('vd_percent','')}% | {'âœ“ Yes' if c.get('vd_ok') else 'âœ— Review'} |\n")
 
     md += f"""
 ---
 
-# PART B — FINANCIAL PROPOSAL
+# PART B â€” FINANCIAL PROPOSAL
 
 # B1. Bill of Quantities (BOQ)
 
@@ -4947,7 +4947,7 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62305 · IEC 62
 | Internal Rate of Return | {"%.1f" % eco.get("irr_pct",0) if eco.get("irr_pct") else "N/A"}% |
 | 25-Year ROI | {_fmt(eco.get("roi_pct",0),0)}% |
 | Cumulative Savings (25yr) | {sym} {_fmt(eco.get("cumul_25",0),0)} |
-| Annual CO₂ Avoided | {_fmt(eco.get("co2_yr",0),2)} tonnes/year |
+| Annual COâ‚‚ Avoided | {_fmt(eco.get("co2_yr",0),2)} tonnes/year |
 
 # B4. Loan Structure & Bankability
 
@@ -4960,7 +4960,7 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62305 · IEC 62
 | Loan Tenor | 7 years |
 | Monthly Repayment | {sym} {_fmt(eco.get("pmt",0),0)}/month |
 | Annual Debt Service | {sym} {_fmt(eco.get("annual_pmt",0),0)}/year |
-| **DSCR** | **{_fmt(eco.get("dscr",0),2)} — {eco.get("bankability","—")}** |
+| **DSCR** | **{_fmt(eco.get("dscr",0),2)} â€” {eco.get("bankability","â€”")}** |
 
 # B5. Monthly Generation & Savings Profile
 
@@ -4976,47 +4976,47 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62305 · IEC 62
     md += f"""
 ---
 
-# PART C — PROJECT DELIVERY
+# PART C â€” PROJECT DELIVERY
 
 # C1. Installation Methodology
 
-**Phase 1 — Site Preparation & Civil Works:** Prepare mounting surfaces, install aluminium racking on roof at correct tilt angle. Install conduit runs.
+**Phase 1 â€” Site Preparation & Civil Works:** Prepare mounting surfaces, install aluminium racking on roof at correct tilt angle. Install conduit runs.
 
-**Phase 2 — PV Panel Installation:** Mount and connect panels in designed string configuration. All strings individually fused in DC combiner. Double-check polarity.
+**Phase 2 â€” PV Panel Installation:** Mount and connect panels in designed string configuration. All strings individually fused in DC combiner. Double-check polarity.
 
-**Phase 3 — Battery & Inverter Installation:** Install inverter on wall bracket. Mount battery rack, connect with correctly rated fuse. Install BMS communication.
+**Phase 3 â€” Battery & Inverter Installation:** Install inverter on wall bracket. Mount battery rack, connect with correctly rated fuse. Install BMS communication.
 
-**Phase 4 — AC Wiring & Distribution Board:** Install and wire main AC DB with RCCB, MCBs, and SPD. Run all AC final circuits in containment.
+**Phase 4 â€” AC Wiring & Distribution Board:** Install and wire main AC DB with RCCB, MCBs, and SPD. Run all AC final circuits in containment.
 
-**Phase 5 — Earthing & Bonding:** Drive copper earth rod ≥2.4m. Bond all metalwork to earth bar. Test electrode resistance ≤10Ω. (BS 7430)
+**Phase 5 â€” Earthing & Bonding:** Drive copper earth rod â‰¥2.4m. Bond all metalwork to earth bar. Test electrode resistance â‰¤10Î©. (BS 7430)
 
-**Phase 6 — Pre-commissioning Tests:** Insulation resistance (≥1MΩ), continuity, polarity, earth fault loop impedance. All results documented.
+**Phase 6 â€” Pre-commissioning Tests:** Insulation resistance (â‰¥1MÎ©), continuity, polarity, earth fault loop impedance. All results documented.
 
-**Phase 7 — System Commissioning:** Power up inverter. Test all protection devices — RCD trip ≤40ms, MCB overload, SPD. Verify MPPT and battery charging.
+**Phase 7 â€” System Commissioning:** Power up inverter. Test all protection devices â€” RCD trip â‰¤40ms, MCB overload, SPD. Verify MPPT and battery charging.
 
-**Phase 8 — Handover & Monitoring:** Provide O&M manual, test certificates, warranties. Configure remote monitoring for 7-day performance verification.
+**Phase 8 â€” Handover & Monitoring:** Provide O&M manual, test certificates, warranties. Configure remote monitoring for 7-day performance verification.
 
 # C2. Testing & Verification Schedule
 
 | Test | Standard | Acceptance Criteria |
 |---|---|---|
-| Insulation Resistance | IEC 60364-6 | ≥ 1 MΩ |
-| Earth Continuity | BS 7671 | ≤ 0.1 Ω |
-| Earth Electrode Resistance | BS 7430 | ≤ 10 Ω |
-| RCD Trip Time | BS EN 61008 | ≤ 40ms |
+| Insulation Resistance | IEC 60364-6 | â‰¥ 1 MÎ© |
+| Earth Continuity | BS 7671 | â‰¤ 0.1 Î© |
+| Earth Electrode Resistance | BS 7430 | â‰¤ 10 Î© |
+| RCD Trip Time | BS EN 61008 | â‰¤ 40ms |
 | DC String Polarity | IEC 62446 | No reversed polarity |
 | DC Open-Circuit Voltage | IEC 62446 | Within 5% of Voc |
-| AC Output Voltage | BS 7671 | 230V ±10% |
-| Voltage Drop | BS 7671 | ≤ 3% final circuits |
-| 7-Day Performance Check | IEC 62446 | ≥ 90% design output |
+| AC Output Voltage | BS 7671 | 230V Â±10% |
+| Voltage Drop | BS 7671 | â‰¤ 3% final circuits |
+| 7-Day Performance Check | IEC 62446 | â‰¥ 90% design output |
 
 # C3. Warranties & O&M
 
 | Item | Warranty |
 |---|---|
-| PV Panels — Product | 12 years |
-| PV Panels — Performance | 25 years (≥80% output) |
-| Battery — Cycle Life | {r.get("chem_cycles","4,000+")} cycles / {r.get("chem_life","12")} years |
+| PV Panels â€” Product | 12 years |
+| PV Panels â€” Performance | 25 years (â‰¥80% output) |
+| Battery â€” Cycle Life | {r.get("chem_cycles","4,000+")} cycles / {r.get("chem_life","12")} years |
 | Inverter | 5 years (extendable) |
 | Installation Workmanship | 2 years |
 | Annual O&M Cost (Yr 1) | {sym} {_fmt(eco.get("om_yr1",0),0)} |
@@ -5025,7 +5025,7 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62305 · IEC 62
 
 # PROJECT VERDICT
 
-**Verdict:** {eco.get("verdict","—")} | **Bankability:** {eco.get("bankability","—")}
+**Verdict:** {eco.get("verdict","â€”")} | **Bankability:** {eco.get("bankability","â€”")}
 
 {chr(10).join("- " + r2 for r2 in eco.get("verdict_reasons",[]))}
 
@@ -5033,16 +5033,16 @@ Prepared by: SolarPro Global · BS 7671:2018 · IEC 60364 · IEC 62305 · IEC 62
 
 ---
 
-*Full Technical & Financial Proposal — {project["name"]}*
-*Generated by SolarPro Global · Intelligent PV Solar Design Platform*
-*BS 7671:2018 · IEC 60364 · IEC 62305 · IEC 62446 · IEC 61215 · IEEE*
+*Full Technical & Financial Proposal â€” {project["name"]}*
+*Generated by SolarPro Global Â· Intelligent PV Solar Design Platform*
+*BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â· IEC 62446 Â· IEC 61215 Â· IEEE*
 *All figures are indicative and subject to final site survey and detailed design.*
 """
     fname = f"Proposal_{project['name'].replace(' ','_')}.pdf"
-    return _render_pdf(f"Solar PV Proposal — {project['name']}", md, fname)
+    return _render_pdf(f"Solar PV Proposal â€” {project['name']}", md, fname)
 
 
-# ─── Phase 4: Admin panel ─────────────────────────────────────────────────────
+# â”€â”€â”€ Phase 4: Admin panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def admin_required(f):
     @wraps(f)
@@ -5260,7 +5260,7 @@ def admin_helpline_kb():
     return render_template("admin_helpline_kb.html", user=current_user(), entries=entries)
 
 
-# ─── Phase 4: Account / subscription management ───────────────────────────────
+# â”€â”€â”€ Phase 4: Account / subscription management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _record_payment(uid, gateway, plan, amount_usd, currency="USD",
                     reference="", status="success"):
@@ -5395,7 +5395,7 @@ def test_smtp_connection():
         if pwd:
             srv.login(usr, pwd)
         srv.quit()
-        return jsonify(ok=True, msg="Connection successful — SMTP is working correctly.")
+        return jsonify(ok=True, msg="Connection successful â€” SMTP is working correctly.")
     except Exception as ex:
         return jsonify(ok=False, msg=str(ex))
 
@@ -5415,7 +5415,7 @@ def account_cancel():
     return redirect(url_for("account"))
 
 
-# ─── Invoice / Receipt PDF ────────────────────────────────────────────────────
+# â”€â”€â”€ Invoice / Receipt PDF â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/account/invoice/<int:payment_id>")
 @login_required
@@ -5440,19 +5440,19 @@ def account_invoice(payment_id):
     plan_label = (pay["plan"] or "").title() or "Subscription"
     amount_usd = float(pay["amount_usd"] or 0)
     currency   = (pay["currency"] or "USD").upper()
-    gateway    = (pay["gateway"]  or "—").title()
-    status_str = (pay["status"]   or "—").upper()
+    gateway    = (pay["gateway"]  or "â€”").title()
+    status_str = (pay["status"]   or "â€”").upper()
 
     PLAN_LABELS = {
-        "starter":      "SolarPro Global — Starter Plan (Monthly)",
-        "professional": "SolarPro Global — Professional Plan (Monthly)",
-        "business":     "SolarPro Global — Business Plan (Monthly)",
-        "enterprise":   "SolarPro Global — Enterprise Plan (Monthly)",
-        "free":         "SolarPro Global — Free Plan",
+        "starter":      "SolarPro Global â€” Starter Plan (Monthly)",
+        "professional": "SolarPro Global â€” Professional Plan (Monthly)",
+        "business":     "SolarPro Global â€” Business Plan (Monthly)",
+        "enterprise":   "SolarPro Global â€” Enterprise Plan (Monthly)",
+        "free":         "SolarPro Global â€” Free Plan",
     }
-    description = PLAN_LABELS.get((pay["plan"] or "").lower(), f"SolarPro Global — {plan_label} Plan")
+    description = PLAN_LABELS.get((pay["plan"] or "").lower(), f"SolarPro Global â€” {plan_label} Plan")
 
-    md = f"""# SolarPro Global — Payment Receipt
+    md = f"""# SolarPro Global â€” Payment Receipt
 
 ---
 
@@ -5497,20 +5497,20 @@ def account_invoice(payment_id):
 
 *Thank you for your subscription to SolarPro Global.*
 
-For billing questions contact us at **support@solarproglobal.com**
+For billing questions contact us at **support@aiappinvent.com**
 or visit **https://solarpro.aiappinvent.com**
 
 ---
 
-*SolarPro Global — Intelligent PV Solar System Design Platform*
+*SolarPro Global â€” Intelligent PV Solar System Design Platform*
 *This is a computer-generated receipt and is valid without a signature.*
 """
 
     filename = f"SolarPro_Receipt_{ref.replace(' ','_')}.pdf"
-    return _render_pdf(f"Payment Receipt — {ref}", md, filename)
+    return _render_pdf(f"Payment Receipt â€” {ref}", md, filename)
 
 
-# ─── Phase 4: Ticketing ───────────────────────────────────────────────────────
+# â”€â”€â”€ Phase 4: Ticketing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/tickets", methods=["GET", "POST"])
 @login_required
@@ -5565,9 +5565,9 @@ def ticket_detail(tid):
                            ticket=ticket, replies=replies)
 
 
-# ─── AI Technical Assistant ───────────────────────────────────────────────────
+# â”€â”€â”€ AI Technical Assistant â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-# ── GitHub public API context cache (no auth needed — public repo) ────────────
+# â”€â”€ GitHub public API context cache (no auth needed â€” public repo) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _gh_ctx_cache = {"data": None, "expires": 0.0}
 
 def _fetch_github_context():
@@ -5591,7 +5591,7 @@ def _fetch_github_context():
             msg  = ((c.get("commit") or {}).get("message") or "").split("\n")[0][:120]
             date = ((c.get("commit") or {}).get("committer") or {}).get("date", "")[:10]
             lines.append(f"  {sha} ({date}): {msg}")
-        ctx = "Recent platform changes (live from GitHub — use to confirm fixes/releases):\n" + "\n".join(lines)
+        ctx = "Recent platform changes (live from GitHub â€” use to confirm fixes/releases):\n" + "\n".join(lines)
         _gh_ctx_cache["data"]    = ctx
         _gh_ctx_cache["expires"] = now + 300   # 5-minute cache
         return ctx
@@ -5629,12 +5629,12 @@ def _learn_from_conversation(msgs, api_key, agent="helpline"):
 CONVERSATION:
 {convo}
 
-TASK: Extract 0–3 reusable Q&A pairs that future helpdesk users might ask.
+TASK: Extract 0â€“3 reusable Q&A pairs that future helpdesk users might ask.
 Rules:
 - Only extract if the answer in the conversation was genuinely helpful and accurate.
 - Skip generic greetings, acknowledgements, and vague exchanges.
-- Each question must be a short phrase (≤15 words) a real user would type.
-- Each answer must be concise (2–4 sentences) and self-contained.
+- Each question must be a short phrase (â‰¤15 words) a real user would type.
+- Each answer must be concise (2â€“4 sentences) and self-contained.
 - Do NOT invent information not present in the conversation.
 
 Return ONLY valid JSON, no markdown fences:
@@ -5678,23 +5678,23 @@ If nothing worth extracting, return {{"learned":[]}}"""
         app.logger.warning(f"helpline learning failed (agent={agent}): {e}")
 
 
-_ASSISTANT_SYSTEM = """You are Helpline — the AI customer engagement, assessment, and technical support agent for SolarPro Global (IntelInfraAI Solar Platform). Your mission: guide, engage, assess, support, and convert prospects into real solar projects.
+_ASSISTANT_SYSTEM = """You are Helpline â€” the AI customer engagement, assessment, and technical support agent for SolarPro Global (IntelInfraAI Solar Platform). Your mission: guide, engage, assess, support, and convert prospects into real solar projects.
 
 === PLATFORM KNOWLEDGE ===
-Design flow: Create Project → Location (country, region, tariff, funding mode) → Loads (appliances, watts, hours, demand factor) → Results (PV/battery/inverter/cable sizing + financials) → Reports
+Design flow: Create Project â†’ Location (country, region, tariff, funding mode) â†’ Loads (appliances, watts, hours, demand factor) â†’ Results (PV/battery/inverter/cable sizing + financials) â†’ Reports
 Funding modes: Loan Finance (DSCR analysis) or Self-Funded (NPV/IRR/payback)
 Battery chemistry: LiFePO4 or Lead-Acid
-Plans: Free Trial (14 days, 1 project, 5 AI Agent runs/mo), Professional ($49/mo — 10 projects, all 9 reports), Business ($99/mo — unlimited + white-label)
+Plans: Free Trial (14 days, 1 project, 5 AI Agent runs/mo), Professional ($49/mo â€” 10 projects, all 9 reports), Business ($99/mo â€” unlimited + white-label)
 Reports: BOQ (8% markup, 15% installation), Economic (25-yr, 0.8% O&M, battery/inverter replacement, 8% tariff escalation), Proposal, Cable sizing (BS 7671/IEC 60364), Installation plan, Energy production
 Settings: Organisation profile, Date/Time format, Appearance (5 themes, 7 accent colours, 5 fonts), Email/SMTP, Security
-User management (admin only): Admin → Users — view all accounts, change plan (free/starter/professional/business/enterprise), assign job role (customer/bdo/sales_engineer/design_engineer/proposal_engineer/project_manager/technician/support_engineer/customer_success/admin), toggle admin flag, record manual payments, disable accounts. New users self-register at /register.
+User management (admin only): Admin â†’ Users â€” view all accounts, change plan (free/starter/professional/business/enterprise), assign job role (customer/bdo/sales_engineer/design_engineer/proposal_engineer/project_manager/technician/support_engineer/customer_success/admin), toggle admin flag, record manual payments, disable accounts. New users self-register at /register.
 22+ countries with local tariff data; Standards: BS 7671, IEC 60364, NEC 2023, IEEE 1547
 
 === YOUR TASK AREAS ===
 
 A. CUSTOMER ENGAGEMENT
 - Welcome visitors and explain the platform's capabilities
-- Guide new users through onboarding (Create Project → Location → Loads → Results → Reports)
+- Guide new users through onboarding (Create Project â†’ Location â†’ Loads â†’ Results â†’ Reports)
 - Answer FAQs about features, pricing, and workflow
 - Recommend the right plan or service based on the user's stated needs
 
@@ -5705,10 +5705,10 @@ B. ASSESSMENT GUIDANCE
 - Validate assessment inputs: flag missing country/region, missing loads, zero-watt entries
 - Guide users to upload utility bills or share monthly kWh consumption if available
 
-C. PRELIMINARY SOLAR DESIGN ESTIMATES (conversational only — full calculations done by the engine)
-- Give rough estimates: a 5 kW home needs ~15–20 × 350 Wp panels, ~10–20 kWh battery, ~5 kW inverter
-- Estimate simple ROI: typical payback 3–7 years depending on tariff and system cost
-- Estimate savings: daily kWh × local tariff × 365 = annual saving
+C. PRELIMINARY SOLAR DESIGN ESTIMATES (conversational only â€” full calculations done by the engine)
+- Give rough estimates: a 5 kW home needs ~15â€“20 Ã— 350 Wp panels, ~10â€“20 kWh battery, ~5 kW inverter
+- Estimate simple ROI: typical payback 3â€“7 years depending on tariff and system cost
+- Estimate savings: daily kWh Ã— local tariff Ã— 365 = annual saving
 - Always direct user to the full design engine for accurate sizing
 
 D. PROPOSAL ASSISTANCE
@@ -5717,17 +5717,17 @@ D. PROPOSAL ASSISTANCE
 - Guide users to the Proposal report under their project
 
 E. FOLLOW-UP & ENGAGEMENT
-- Remind users to complete unfinished steps (e.g. "You've added loads — click View Results next")
+- Remind users to complete unfinished steps (e.g. "You've added loads â€” click View Results next")
 - Encourage booking a consultation for complex projects
 - Promote the Professional plan for users who need more than 1 project
 
-F. LEVEL 1–2 TECHNICAL SUPPORT
-- Password/login issues → Forgot Password link on login page
-- Portal navigation issues → guide step by step
-- Monitoring explanation → Results page shows live system metrics after commissioning
-- Alarm interpretation → high-priority alerts mean system fault; check inverter and battery status
+F. LEVEL 1â€“2 TECHNICAL SUPPORT
+- Password/login issues â†’ Forgot Password link on login page
+- Portal navigation issues â†’ guide step by step
+- Monitoring explanation â†’ Results page shows live system metrics after commissioning
+- Alarm interpretation â†’ high-priority alerts mean system fault; check inverter and battery status
 - Basic troubleshooting: location not saving (both country AND region must be selected), loads page error (add at least one row), reports locked (requires Professional/Enterprise plan)
-- Ticket generation → escalate confirmed bugs or account-level issues
+- Ticket generation â†’ escalate confirmed bugs or account-level issues
 
 G. CUSTOMER SUCCESS
 - Promote annual maintenance plans for installed systems
@@ -5736,14 +5736,14 @@ G. CUSTOMER SUCCESS
 - Promote renewals and expansion for existing customers
 
 === COMMON ISSUES ===
-- Location form not saving → both country AND region must be selected
-- Loads page error → add at least one appliance row before calculating
-- Reports locked → Professional/Enterprise plan required for BOQ and Economic reports
-- Date/Time picker unresponsive → clear browser cache
-- SMTP test failing → use App Passwords for Gmail; Brevo recommended for 300 free emails/day
+- Location form not saving â†’ both country AND region must be selected
+- Loads page error â†’ add at least one appliance row before calculating
+- Reports locked â†’ Professional/Enterprise plan required for BOQ and Economic reports
+- Date/Time picker unresponsive â†’ clear browser cache
+- SMTP test failing â†’ use App Passwords for Gmail; Brevo recommended for 300 free emails/day
 
 === RULES ===
-- Be concise and warm — 2–5 sentences per reply
+- Be concise and warm â€” 2â€“5 sentences per reply
 - Always try to answer using the knowledge above before anything else
 - For rough estimates, give a sensible range and direct to the engine for accuracy
 - Only include [ESCALATE] when the issue genuinely requires a human to access the user's account data (payment not applied, data corruption, confirmed bug after cache clear)
@@ -5752,7 +5752,7 @@ G. CUSTOMER SUCCESS
 
 @app.route("/api/assistant/chat", methods=["POST"])
 def assistant_chat():
-    """AI technical assistant chat — no login required (widget only renders for logged-in users)."""
+    """AI technical assistant chat â€” no login required (widget only renders for logged-in users)."""
     csrf_protect()
     data    = request.get_json(silent=True) or {}
     message = (data.get("message") or "").strip()
@@ -5775,7 +5775,7 @@ def assistant_chat():
     msgs.append({"role": "user", "content": message})
     gh_ctx = _fetch_github_context()
 
-    # ── Inject learned KB into system prompt ─────────────────────────────────
+    # â”€â”€ Inject learned KB into system prompt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     learned_entries = _load_learned_kb(agent="helpline", limit=20)
     learned_section = ""
     if learned_entries:
@@ -5784,34 +5784,34 @@ def assistant_chat():
 
     system = _ASSISTANT_SYSTEM + learned_section + (f"\n\n{gh_ctx}" if gh_ctx else "")
 
-    # ── Rule-based fallback answers (no API needed) ───────────────────────────
+    # â”€â”€ Rule-based fallback answers (no API needed) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _KB = [
-        # Acknowledgements first — prevent "need/ok/thanks" matching other entries
+        # Acknowledgements first â€” prevent "need/ok/thanks" matching other entries
         (["thank","thanks","okay","great","got it","understood","perfect","sorted","all good",
           "no problem","that's all","that's fine","i'm fine","im fine","i'm good","im good",
           "never mind","nevermind","bye","goodbye","cheers","appreciate","that is all"],
-         "Great, glad I could help! Feel free to ask any time if you have more questions. 😊"),
+         "Great, glad I could help! Feel free to ask any time if you have more questions. ðŸ˜Š"),
         # Monitoring/alarms before project (both mention "dashboard")
         (["maintenance","service","fault","alarm","monitoring","alert"],
          "For installed systems: check the **Monitoring** section in your project. Red alerts = critical fault (check inverter display and battery status). Amber = warning (low battery, high temp). For recurring faults, raise a support ticket and our technical team will assist."),
         # Assessment & design guidance
         (["assess","site assessment","consultation","building","house","office","hospital","school","warehouse","apartment"],
-         "Start with a **Free Site Assessment** — click the Assessment button on the homepage or go to the Assessment section. Provide your building type, location, and approximate size. Our team will follow up with a preliminary design."),
+         "Start with a **Free Site Assessment** â€” click the Assessment button on the homepage or go to the Assessment section. Provide your building type, location, and approximate size. Our team will follow up with a preliminary design."),
         (["panel","solar panel","pv panel","how many panel","wp","watt peak"],
-         "A rough guide: divide your daily kWh demand by your peak sun hours (e.g. 5h for West Africa) and add 25% derating — that gives you the array kWp. Divide by your panel wattage (e.g. 400 Wp) for panel count. Use the **Results** page for the accurate calculation."),
+         "A rough guide: divide your daily kWh demand by your peak sun hours (e.g. 5h for West Africa) and add 25% derating â€” that gives you the array kWp. Divide by your panel wattage (e.g. 400 Wp) for panel count. Use the **Results** page for the accurate calculation."),
         (["battery","storage","autonomy","backup","off-grid","days"],
-         "Battery size = daily kWh × autonomy days ÷ depth of discharge (80% for LiFePO4). For a 10 kWh/day home wanting 2 days backup: 10 × 2 ÷ 0.8 = 25 kWh. Use the **Results** page for the precise figure including temperature derating."),
+         "Battery size = daily kWh Ã— autonomy days Ã· depth of discharge (80% for LiFePO4). For a 10 kWh/day home wanting 2 days backup: 10 Ã— 2 Ã· 0.8 = 25 kWh. Use the **Results** page for the precise figure including temperature derating."),
         (["inverter","charge controller","mppt","hybrid"],
          "Inverter size must cover your peak simultaneous load (sum of all loads running at once). MPPT charge controller rating = PV array current. For hybrid systems, the inverter handles both grid and battery. The Results page calculates this automatically."),
         (["roi","savings","payback","return on investment","investment cost"],
-         "Typical solar payback in Africa: 3–6 years for commercial, 5–8 years for residential, depending on local tariff and system cost. The **Economic Analysis** report gives you 25-year NPV, IRR, and annual savings based on your actual load and local tariff data."),
+         "Typical solar payback in Africa: 3â€“6 years for commercial, 5â€“8 years for residential, depending on local tariff and system cost. The **Economic Analysis** report gives you 25-year NPV, IRR, and annual savings based on your actual load and local tariff data."),
         (["utility bill","electricity bill","purc","unit rate","kwh rate","electricity tariff"],
          "The platform uses local utility tariff data for your country/region. For Ghana, PURC rates are pre-loaded by category (Residential, Commercial, Industrial). Enter your monthly bill amount on the Location page to calibrate the financial model."),
         (["upgrade","recommend","which plan","what plan"],
          "Start with **Professional ($49/mo)** for up to 10 projects and all 9 PDF reports. For unlimited projects and white-label reports, choose **Business ($99/mo)**. All paid plans include unlimited AI Agent tender searches."),
         # Core platform flows
         (["load","appliance","consumption","add load","add appliance"],
-         "Go to your project → click **Loads** in the sidebar. Add a row for each appliance: enter the name, watts, quantity, hours/day, and demand factor. Click **Calculate** when done."),
+         "Go to your project â†’ click **Loads** in the sidebar. Add a row for each appliance: enter the name, watts, quantity, hours/day, and demand factor. Click **Calculate** when done."),
         (["location","country","region","irradiance","solar resource","tariff","grid zone"],
          "On the **Location** step, select your country then your region from the dropdown. Both fields must be filled before the form saves."),
         (["result","calcul","sizing","pv array","battery bank","inverter size"],
@@ -5819,17 +5819,17 @@ def assistant_chat():
         (["report","pdf","boq","proposal","export","download","bill of quantities"],
          "Reports are in the sidebar under your project. BOQ, Economic Analysis, and Proposal require a **Professional or Enterprise** plan. PDF download is on each report page."),
         (["plan","professional","enterprise","subscription","limit","feature"],
-         "The Free Trial gives 1 project + 5 AI Agent runs for 14 days. Professional ($49/mo) gives 10 projects + all 9 reports. Business ($99/mo) is unlimited + white-label. Upgrade at **Settings → Upgrade**."),
+         "The Free Trial gives 1 project + 5 AI Agent runs for 14 days. Professional ($49/mo) gives 10 projects + all 9 reports. Business ($99/mo) is unlimited + white-label. Upgrade at **Settings â†’ Upgrade**."),
         (["payment","momo","mobile money","mtn","paystack","stripe","billing","invoice"],
-         "We accept MTN MoMo, AirtelTigo, and Vodafone Cash via Paystack, plus Visa/Mastercard worldwide. Go to **Settings → Upgrade** and choose your payment method."),
+         "We accept MTN MoMo, AirtelTigo, and Vodafone Cash via Paystack, plus Visa/Mastercard worldwide. Go to **Settings â†’ Upgrade** and choose your payment method."),
         (["add user","add a user","new user","create user","manage user","user management",
           "user account","user role","assign role","assign a role","user list","staff account",
           "team member","add staff","user admin","admin users"],
-         "To add or manage users, go to **Admin → Users** (admin accounts only). From there you can view all accounts, change a user's plan, assign a job role (e.g. Design Engineer, Sales Engineer), toggle admin rights, record payments, or disable an account. New users can self-register at the **Register** page on the homepage."),
+         "To add or manage users, go to **Admin â†’ Users** (admin accounts only). From there you can view all accounts, change a user's plan, assign a job role (e.g. Design Engineer, Sales Engineer), toggle admin rights, record payments, or disable an account. New users can self-register at the **Register** page on the homepage."),
         (["login","password","forgot","reset","sign in","account","register"],
          "Use the **Forgot Password** link on the login page to reset. For new accounts, click **Register** on the homepage."),
         (["agent","tender","rfp","prospect","scan","bid","procurement"],
-         "The AI Prospecting Agent is at **Admin → Agent** (admin accounts). Click **Run Agent** to scan live solar tender portals. Results appear in the Alerts table with source links."),
+         "The AI Prospecting Agent is at **Admin â†’ Agent** (admin accounts). Click **Run Agent** to scan live solar tender portals. Results appear in the Alerts table with source links."),
         (["setting","theme","colour","color","font","appearance","smtp","email config","profile"],
          "Go to **Settings** (top-right menu) to change appearance, date/time format, and email/SMTP configuration."),
         (["economic","npv","irr","dscr","loan","financ","25 year","analysis"],
@@ -5837,12 +5837,12 @@ def assistant_chat():
         (["cable","wiring","bs 7671","iec","standard","voltage drop"],
          "The AC Cable Sizing report is generated automatically. It follows BS 7671 / IEC 60364 and shows cable size, current rating, voltage drop, and protection device rating."),
         (["project","new project","create","start"],
-         "From the **Dashboard**, click **New Project** to start. Each project goes through: Location → Loads → Results → Reports. Saved projects appear in the dashboard list."),
+         "From the **Dashboard**, click **New Project** to start. Each project goes through: Location â†’ Loads â†’ Results â†’ Reports. Saved projects appear in the dashboard list."),
         (["hi","hello","help","hey","what can","how does","how do"],
-         "Hi! I'm Helpline, SolarPro's AI assistant. I can help with: solar system sizing estimates, assessment guidance, the design flow (Location → Loads → Results → Reports), reports & exports, plans & pricing, payments, settings, and the AI Prospecting Agent. What do you need?"),
-        # Bare "ok" last — least specific
+         "Hi! I'm Helpline, SolarPro's AI assistant. I can help with: solar system sizing estimates, assessment guidance, the design flow (Location â†’ Loads â†’ Results â†’ Reports), reports & exports, plans & pricing, payments, settings, and the AI Prospecting Agent. What do you need?"),
+        # Bare "ok" last â€” least specific
         (["ok"],
-         "Great, glad I could help! Feel free to ask any time if you have more questions. 😊"),
+         "Great, glad I could help! Feel free to ask any time if you have more questions. ðŸ˜Š"),
     ]
     def _rule_reply(msg_lower):
         import re as _re
@@ -5863,7 +5863,7 @@ def assistant_chat():
 
     try:
         if api_key:
-            # ── Anthropic Claude — try Haiku first (fast/cheap), Opus as fallback ──
+            # â”€â”€ Anthropic Claude â€” try Haiku first (fast/cheap), Opus as fallback â”€â”€
             import anthropic as _ant
             _ac = _ant.Anthropic(api_key=api_key)
             for _model in ("claude-haiku-4-5-20251001", "claude-opus-4-7"):
@@ -5879,7 +5879,7 @@ def assistant_chat():
             if not reply:
                 raise RuntimeError("all Claude models failed")
         elif gh_token:
-            # ── GitHub Models API (fallback — free via GitHub token) ───────
+            # â”€â”€ GitHub Models API (fallback â€” free via GitHub token) â”€â”€â”€â”€â”€â”€â”€
             import urllib.request as _ur2, json as _json2
             payload = _json2.dumps({
                 "model":       "openai/gpt-4.1-mini",
@@ -5900,13 +5900,13 @@ def assistant_chat():
                 result = _json2.loads(r2.read())
             reply = result["choices"][0]["message"]["content"]
         else:
-            # ── Rule-based (no API configured) ────────────────────────────
+            # â”€â”€ Rule-based (no API configured) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             reply = _rule_reply(message.lower()) or _GENERIC
 
         escalate = "[ESCALATE]" in reply
         reply    = reply.replace("[ESCALATE]", "").strip()
 
-        # ── Background learning — extract Q&A from conversation if long enough ──
+        # â”€â”€ Background learning â€” extract Q&A from conversation if long enough â”€â”€
         if api_key and len(msgs) >= 4:
             import threading as _th
             _app = app._get_current_object()
@@ -5921,7 +5921,7 @@ def assistant_chat():
 
     except Exception as e:
         app.logger.error(f"assistant_chat error ({type(e).__name__}): {e}")
-        # Always serve a useful answer — never show a raw error to the user
+        # Always serve a useful answer â€” never show a raw error to the user
         reply = _rule_reply(message.lower()) or _GENERIC
         return jsonify({"reply": reply, "escalate": False})
 
@@ -5957,7 +5957,7 @@ def assistant_escalate():
     return jsonify({"ok": True, "ticket_id": tid})
 
 
-# ─── Phase 4: Subscription upgrade & payment ─────────────────────────────────
+# â”€â”€â”€ Phase 4: Subscription upgrade & payment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/upgrade")
 @login_required
@@ -6009,7 +6009,7 @@ def upgrade_checkout():
 
     elif gateway == "paystack" and PAYSTACK_SECRET:
         import urllib.request as _ur
-        amount_kobo = price_usd * 100 * 100  # USD → Paystack expects NGN kobo; adjust per currency
+        amount_kobo = price_usd * 100 * 100  # USD â†’ Paystack expects NGN kobo; adjust per currency
         payload = json.dumps({
             "email": user["email"],
             "amount": amount_kobo,
@@ -6032,10 +6032,10 @@ def upgrade_checkout():
             flash(f"Paystack error: {e}", "danger")
         return redirect(url_for("upgrade"))
 
-    # No gateway configured — demo mode
+    # No gateway configured â€” demo mode
     flash(f"Payment gateway not configured. To activate, set STRIPE_SECRET_KEY or "
           f"PAYSTACK_SECRET_KEY environment variables. "
-          f"Contact support@solarproglobal.com to upgrade your plan manually.", "info")
+          f"Contact support@aiappinvent.com to upgrade your plan manually.", "info")
     return redirect(url_for("upgrade"))
 
 
@@ -6061,7 +6061,7 @@ def upgrade_success():
                     return redirect(url_for("dashboard"))
         except Exception:
             pass
-    flash("Payment verified. If your plan has not updated, contact support@solarproglobal.com.", "info")
+    flash("Payment verified. If your plan has not updated, contact support@aiappinvent.com.", "info")
     return redirect(url_for("dashboard"))
 
 
@@ -6074,7 +6074,7 @@ def paystack_verify():
     ref  = request.form.get("reference", "")
     plan = request.form.get("plan", "").lower()
     if not ref or not PAYSTACK_SECRET or plan not in PLAN_PRICES:
-        flash("Payment verification failed — invalid request.", "danger")
+        flash("Payment verification failed â€” invalid request.", "danger")
         return redirect(url_for("upgrade"))
     import urllib.request as _ur
     req = _ur.Request(f"https://api.paystack.co/transaction/verify/{ref}",
@@ -6092,7 +6092,7 @@ def paystack_verify():
             return redirect(url_for("dashboard"))
     except Exception as e:
         flash(f"Verification error: {e}", "danger")
-    flash("Payment verification failed. Contact support@solarproglobal.com with reference: " + ref, "warning")
+    flash("Payment verification failed. Contact support@aiappinvent.com with reference: " + ref, "warning")
     return redirect(url_for("upgrade"))
 
 
@@ -6119,7 +6119,7 @@ def paystack_callback():
                 return redirect(url_for("dashboard"))
         except Exception:
             pass
-    flash("Payment verification failed. Contact support@solarproglobal.com with your reference.", "warning")
+    flash("Payment verification failed. Contact support@aiappinvent.com with your reference.", "warning")
     return redirect(url_for("upgrade"))
 
 
@@ -6155,13 +6155,13 @@ def stripe_webhook():
     return "", 200
 
 
-# ─── Demo Mode & Upgrade Codes ───────────────────────────────────────────────
+# â”€â”€â”€ Demo Mode & Upgrade Codes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/upgrade/demo-activate", methods=["POST"])
 @login_required
 @limiter.limit("5 per hour")
 def upgrade_demo_activate():
-    """Instantly activate Professional plan for DEMO_DAYS days — no payment needed."""
+    """Instantly activate Professional plan for DEMO_DAYS days â€” no payment needed."""
     csrf_protect()
     if not DEMO_MODE:
         flash("Demo mode is not enabled.", "warning")
@@ -6176,7 +6176,7 @@ def upgrade_demo_activate():
                   (expires, user["id"]))
     _record_payment(user["id"], "demo", "professional", 0,
                     reference=f"DEMO-{DEMO_DAYS}d")
-    flash(f"Demo Professional plan activated for {DEMO_DAYS} days — all features unlocked!", "success")
+    flash(f"Demo Professional plan activated for {DEMO_DAYS} days â€” all features unlocked!", "success")
     return redirect(url_for("dashboard"))
 
 
@@ -6240,12 +6240,12 @@ def admin_codes():
                            codes=codes, plan_prices=PLAN_PRICES)
 
 
-# ─── Sales & Marketing Module ─────────────────────────────────────────────────
+# â”€â”€â”€ Sales & Marketing Module â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/contact", methods=["POST"])
 @limiter.limit("10 per hour")
 def contact_lead():
-    """Public contact form → lead capture."""
+    """Public contact form â†’ lead capture."""
     name    = request.form.get("name", "").strip()
     email   = request.form.get("email", "").strip()
     phone   = request.form.get("phone", "").strip()
@@ -6283,10 +6283,10 @@ def newsletter_subscribe():
     return redirect(url_for("landing") + "#newsletter")
 
 
-# ─── Assessment Request (public) ──────────────────────────────────────────────
+# â”€â”€â”€ Assessment Request (public) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _qualify_lead(name, company, phone, system_type, size_kw, budget_usd, message):
-    """Rule-based lead scoring → (score 0-100, grade A/B/C/D, notes str)."""
+    """Rule-based lead scoring â†’ (score 0-100, grade A/B/C/D, notes str)."""
     score = 0
     reasons = []
     # Budget scoring
@@ -6324,7 +6324,7 @@ def _qualify_lead(name, company, phone, system_type, size_kw, budget_usd, messag
 @app.route("/assess/quick", methods=["POST"])
 @limiter.limit("10 per hour")
 def assess_quick():
-    """AJAX popup assessment intake — landing page modal.
+    """AJAX popup assessment intake â€” landing page modal.
     Returns JSON {ok, ref, name} on success or {ok, error} on failure.
     """
     import random, string as _str
@@ -6426,7 +6426,7 @@ def assessment_request():
 @limiter.limit("10 per hour")
 def assess_design():
     """
-    AJAX — runs full preliminary solar sizing from the assessment form.
+    AJAX â€” runs full preliminary solar sizing from the assessment form.
     Accepts JSON payload, returns JSON with sizing + cost + financial results.
     Also saves lead to DB and emails the results to the user.
     """
@@ -6460,7 +6460,7 @@ def assess_design():
     cost_kwp = sd["cost_usd_kwp"]
     fx       = sd["fx_usd"]
 
-    # ── Load calculation ──────────────────────────────────────────────────────
+    # â”€â”€ Load calculation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     daily_kwh = 0.0
     peak_kw   = 0.0
     for ld in loads:
@@ -6477,12 +6477,12 @@ def assess_design():
     if daily_kwh <= 0:
         return jsonify({"ok": False, "error": "Total daily load is zero. Please check appliance wattage and hours."}), 400
 
-    # ── Sizing ────────────────────────────────────────────────────────────────
+    # â”€â”€ Sizing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     pv_kw, num_panels, _td = calc_pv(daily_kwh, psh, temp)
     bat_kwh, num_bat, unit_kwh = calc_battery(daily_kwh, autonomy=1.5)
     inv_kw = calc_inverter(daily_kwh, peak_kw)
 
-    # ── Cost estimate ─────────────────────────────────────────────────────────
+    # â”€â”€ Cost estimate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     pv_usd  = pv_kw * cost_kwp
     bat_usd = bat_kwh * BATTERY_CHEMISTRY["LiFePO4"]["usd_per_kwh"]
     if   inv_kw <= 3:   inv_usd = 280
@@ -6491,19 +6491,19 @@ def assess_design():
     elif inv_kw <= 12:  inv_usd = 820
     else:               inv_usd = 1180
     equip_usd   = pv_usd + bat_usd + inv_usd
-    total_usd   = equip_usd * 1.24           # +8% markup +15% install ≈ ×1.24
+    total_usd   = equip_usd * 1.24           # +8% markup +15% install â‰ˆ Ã—1.24
     total_local = total_usd * fx
 
-    # ── Financials ────────────────────────────────────────────────────────────
+    # â”€â”€ Financials â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     annual_kwh = daily_kwh * 365
     annual_sav = annual_kwh * tariff
     payback_yr = round(total_local / annual_sav, 1) if annual_sav > 0 else 0
     co2_yr     = round(annual_kwh * 0.40 / 1000, 2)
 
-    # ── Reference ─────────────────────────────────────────────────────────────
+    # â”€â”€ Reference â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ref = "SA-" + "".join(random.choices(_str.ascii_uppercase + _str.digits, k=6))
 
-    # ── Save to DB ────────────────────────────────────────────────────────────
+    # â”€â”€ Save to DB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try:
         score, grade, notes = _qualify_lead(name, "", phone, bldg_type, str(pv_kw), "", "")
         with get_db() as c:
@@ -6529,24 +6529,24 @@ def assess_design():
     except Exception as db_e:
         app.logger.error("assess_design DB: %s", db_e)
 
-    # ── Email results to user ─────────────────────────────────────────────────
+    # â”€â”€ Email results to user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     first = name.split()[0]
     html_email = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="font-family:Arial,sans-serif;background:#f4f4f8;margin:0;padding:20px">
 <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
   <div style="background:linear-gradient(135deg,#0f0f22,#1a1a3e);padding:32px;text-align:center">
-    <div style="font-size:32px;margin-bottom:8px">☀️</div>
+    <div style="font-size:32px;margin-bottom:8px">â˜€ï¸</div>
     <h1 style="color:#f59e0b;margin:0;font-size:22px;font-weight:800">Preliminary Solar Design</h1>
     <div style="color:#a0a0c8;font-size:13px;margin-top:6px">Reference: {ref}</div>
   </div>
   <div style="padding:28px 32px">
     <p style="color:#333;font-size:15px">Hi {first},</p>
     <p style="color:#555;font-size:14px">Here is your preliminary solar system design for <strong>{region}, {country}</strong>
-    based on the load schedule you provided. This is an indicative estimate — our engineers will refine it during consultation.</p>
+    based on the load schedule you provided. This is an indicative estimate â€” our engineers will refine it during consultation.</p>
 
     <h3 style="color:#1a1a3e;font-size:15px;margin:24px 0 12px;border-bottom:2px solid #f59e0b;padding-bottom:6px">
-      📊 Preliminary System Sizing
+      ðŸ“Š Preliminary System Sizing
     </h3>
     <table style="width:100%;border-collapse:collapse;font-size:14px">
       <tr style="background:#f8f8fc"><td style="padding:10px 14px;color:#555;width:50%">Daily Energy Demand</td>
@@ -6554,43 +6554,43 @@ def assess_design():
       <tr><td style="padding:10px 14px;color:#555">Peak Sun Hours ({region})</td>
         <td style="padding:10px 14px;font-weight:700;color:#1a1a3e">{psh} hrs/day</td></tr>
       <tr style="background:#f8f8fc"><td style="padding:10px 14px;color:#555">PV Array Size</td>
-        <td style="padding:10px 14px;font-weight:700;color:#f59e0b">{pv_kw:.1f} kWp ({num_panels} panels × 400Wp)</td></tr>
+        <td style="padding:10px 14px;font-weight:700;color:#f59e0b">{pv_kw:.1f} kWp ({num_panels} panels Ã— 400Wp)</td></tr>
       <tr><td style="padding:10px 14px;color:#555">Battery Bank (1.5 days autonomy)</td>
-        <td style="padding:10px 14px;font-weight:700;color:#0ea5e9">{bat_kwh:.1f} kWh ({num_bat} × {unit_kwh}kWh units)</td></tr>
+        <td style="padding:10px 14px;font-weight:700;color:#0ea5e9">{bat_kwh:.1f} kWh ({num_bat} Ã— {unit_kwh}kWh units)</td></tr>
       <tr style="background:#f8f8fc"><td style="padding:10px 14px;color:#555">Inverter / Charger</td>
         <td style="padding:10px 14px;font-weight:700;color:#1a1a3e">{inv_kw:.0f} kW</td></tr>
     </table>
 
     <h3 style="color:#1a1a3e;font-size:15px;margin:24px 0 12px;border-bottom:2px solid #22c55e;padding-bottom:6px">
-      💰 Estimated Cost &amp; Savings
+      ðŸ’° Estimated Cost &amp; Savings
     </h3>
     <table style="width:100%;border-collapse:collapse;font-size:14px">
       <tr style="background:#f8f8fc"><td style="padding:10px 14px;color:#555">Estimated System Cost</td>
-        <td style="padding:10px 14px;font-weight:700;color:#1a1a3e">{symbol}{total_local:,.0f} {currency} (≈ USD {total_usd:,.0f})</td></tr>
+        <td style="padding:10px 14px;font-weight:700;color:#1a1a3e">{symbol}{total_local:,.0f} {currency} (â‰ˆ USD {total_usd:,.0f})</td></tr>
       <tr><td style="padding:10px 14px;color:#555">Estimated Annual Savings</td>
         <td style="padding:10px 14px;font-weight:700;color:#22c55e">{symbol}{annual_sav:,.0f} {currency}/year</td></tr>
       <tr style="background:#f8f8fc"><td style="padding:10px 14px;color:#555">Simple Payback Period</td>
         <td style="padding:10px 14px;font-weight:700;color:#1a1a3e">{payback_yr} years</td></tr>
-      <tr><td style="padding:10px 14px;color:#555">Annual CO₂ Offset</td>
-        <td style="padding:10px 14px;font-weight:700;color:#22c55e">{co2_yr} tonnes CO₂/year</td></tr>
+      <tr><td style="padding:10px 14px;color:#555">Annual COâ‚‚ Offset</td>
+        <td style="padding:10px 14px;font-weight:700;color:#22c55e">{co2_yr} tonnes COâ‚‚/year</td></tr>
     </table>
 
     <div style="background:#fffbeb;border:1px solid #f59e0b44;border-radius:8px;padding:16px;margin:24px 0;font-size:13px;color:#555">
-      <strong style="color:#f59e0b">⚠ Note:</strong> This is a preliminary estimate based on standard assumptions.
+      <strong style="color:#f59e0b">âš  Note:</strong> This is a preliminary estimate based on standard assumptions.
       A detailed site survey and full engineering design may adjust these figures.
       Local taxes, import duties, and civil works are not included in the cost estimate.
     </div>
 
     <div style="text-align:center;margin:28px 0">
       <a href="https://solarpro.aiappinvent.com/register" style="display:inline-block;background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#0f0f22;font-weight:800;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px">
-        Request Full Consultation →
+        Request Full Consultation â†’
       </a>
       <div style="color:#888;font-size:12px;margin-top:10px">Create a free account to book your consultation</div>
     </div>
   </div>
   <div style="background:#f8f8fc;padding:16px 32px;text-align:center;border-top:1px solid #e8e8f0">
-    <div style="color:#888;font-size:12px">SolarPro Global · AI-Powered Solar Design Platform</div>
-    <div style="color:#aaa;font-size:11px;margin-top:4px">Reference: {ref} · {region}, {country}</div>
+    <div style="color:#888;font-size:12px">SolarPro Global Â· AI-Powered Solar Design Platform</div>
+    <div style="color:#aaa;font-size:11px;margin-top:4px">Reference: {ref} Â· {region}, {country}</div>
   </div>
 </div>
 </body></html>"""
@@ -6602,7 +6602,7 @@ def assess_design():
         emsg = MIMEMultipart("alternative")
         emsg["From"]    = SMTP_FROM
         emsg["To"]      = email
-        emsg["Subject"] = f"Your Preliminary Solar Design ({ref}) — SolarPro Global"
+        emsg["Subject"] = f"Your Preliminary Solar Design ({ref}) â€” SolarPro Global"
         emsg.attach(_MIMEText(
             f"Hi {first}, your preliminary design is ready. Ref: {ref}\n"
             f"PV: {pv_kw:.1f}kWp | Battery: {bat_kwh:.1f}kWh | Inverter: {inv_kw:.0f}kW\n"
@@ -6650,7 +6650,7 @@ def assess_design():
 @app.route("/assess/consultation", methods=["POST"])
 @login_required
 def assess_consultation():
-    """Authenticated — submit consultation request from assessment results page."""
+    """Authenticated â€” submit consultation request from assessment results page."""
     csrf_protect()
     ref     = request.form.get("ref", "").strip()
     message = request.form.get("message", "").strip()
@@ -6662,14 +6662,14 @@ def assess_consultation():
         c.execute(
             "INSERT INTO tickets (user_id, subject, body, status, priority) VALUES (?,?,?,?,?)",
             (u["id"],
-             f"Consultation Request — {ref or 'Assessment'}",
+             f"Consultation Request â€” {ref or 'Assessment'}",
              f"Assessment Ref: {ref}\n\n{message}",
              "open", "high"))
     flash("Consultation request submitted! Our team will contact you within 24 hours.", "success")
     return redirect(url_for("assessment_request"))
 
 
-# ─── Installer Registration (public) ──────────────────────────────────────────
+# â”€â”€â”€ Installer Registration (public) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/installer/register", methods=["GET", "POST"])
 @limiter.limit("10 per hour")
@@ -6718,7 +6718,7 @@ def installer_register():
     return render_template("installer_register.html", user=current_user(), countries=get_countries())
 
 
-# ─── Admin: Assessment Requests ───────────────────────────────────────────────
+# â”€â”€â”€ Admin: Assessment Requests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/admin/assessments", methods=["GET", "POST"])
 @admin_required
@@ -6759,7 +6759,7 @@ def admin_assessments():
                            requests=rows, stage_filter=stage_f, counts=counts)
 
 
-# ─── Admin: Installer Management ──────────────────────────────────────────────
+# â”€â”€â”€ Admin: Installer Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/admin/installers", methods=["GET", "POST"])
 @admin_required
@@ -6793,12 +6793,12 @@ def admin_installers():
                            pending=pending, approved=approved)
 
 
-# ─── Admin: CRM Pipeline ──────────────────────────────────────────────────────
+# â”€â”€â”€ Admin: CRM Pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/admin/pipeline")
 @admin_required
 def admin_pipeline():
-    """Kanban-style CRM pipeline across all leads + assessment requests — 9-stage."""
+    """Kanban-style CRM pipeline across all leads + assessment requests â€” 9-stage."""
     # 9-stage pipeline from spec + lost for dropped records
     STAGES = [
         "assessment_submitted", "assessment_reviewed", "lead_qualified",
@@ -6851,7 +6851,7 @@ def admin_pipeline():
 @app.route("/admin/sales")
 @admin_required
 def admin_sales():
-    """Sales & Marketing dashboard — KPIs, leads pipeline, revenue, conversions."""
+    """Sales & Marketing dashboard â€” KPIs, leads pipeline, revenue, conversions."""
     with get_db() as c:
         leads      = c.execute("SELECT * FROM leads ORDER BY created_at DESC").fetchall()
         subs       = c.execute("SELECT COUNT(*) FROM newsletter_subscribers WHERE status='active'").fetchone()[0]
@@ -6971,7 +6971,7 @@ def admin_newsletter_unsub(sid):
     return redirect(url_for("admin_newsletter"))
 
 
-# ─── Procurement Module ───────────────────────────────────────────────────────
+# â”€â”€â”€ Procurement Module â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/procurement")
 @login_required
@@ -7121,7 +7121,7 @@ def project_procurement(pid):
                 "qty":         qty,
                 "unit":        boq.get("unit", "No."),
                 "category":    cat,
-                "catalog":     match["name"] if match else "— specify on quotation",
+                "catalog":     match["name"] if match else "â€” specify on quotation",
                 "brand":       match.get("brand", "") if match else "",
                 "supplier":    sup["name"] if sup else "Open market / RFQ",
                 "supplier_id": sup["id"] if sup else 0,
@@ -7131,7 +7131,7 @@ def project_procurement(pid):
                 "total_local": total_usd * fx,
             })
         except Exception as exc:
-            app.logger.warning("procurement: skipping BOQ row %s — %s", boq, exc)
+            app.logger.warning("procurement: skipping BOQ row %s â€” %s", boq, exc)
             continue
 
     # Group by supplier for purchase orders
@@ -7153,7 +7153,7 @@ def project_procurement(pid):
 @login_required
 @limiter.limit("10 per minute")
 def export_pdf_procurement(pid):
-    """PDF Procurement Plan — maps BOQ to suppliers, generates sourcing schedule."""
+    """PDF Procurement Plan â€” maps BOQ to suppliers, generates sourcing schedule."""
     project = get_project(pid)
     if not project or "results" not in project["data"]:
         return redirect(url_for("project_results", pid=pid))
@@ -7182,16 +7182,16 @@ def export_pdf_procurement(pid):
         total_usd = unit_usd * boq["qty"]
         grand_usd += total_usd
         rows.append((boq["no"], desc, boq["qty"], boq["unit"],
-                     match["brand"] if match else "—",
+                     match["brand"] if match else "â€”",
                      sup["name"] if sup else "RFQ",
                      match["lead_time_days"] if match else 30,
                      unit_usd, total_usd))
 
-    md = f"""# Procurement Plan — {project["name"]}
+    md = f"""# Procurement Plan â€” {project["name"]}
 
 **{d.get("region","")}, {d.get("country","")}** | {_fmt(r["pv_kw"],2)} kWp | {d.get("system_type","").title()} System
 
-Prepared by: SolarPro Global | Currency: USD (local rates apply × {fx})
+Prepared by: SolarPro Global | Currency: USD (local rates apply Ã— {fx})
 
 ---
 
@@ -7210,7 +7210,7 @@ Prepared by: SolarPro Global | Currency: USD (local rates apply × {fx})
 
 # Procurement Notes
 
-- Lead times are indicative — confirm with suppliers on order placement
+- Lead times are indicative â€” confirm with suppliers on order placement
 - All equipment must meet IEC 61215, IEC 62109, IEC 62619, BS 7671 as applicable
 - Request formal technical data sheets (TDS) and test certificates before approval
 - Payment terms subject to commercial negotiation with each supplier
@@ -7229,12 +7229,12 @@ Prepared by: SolarPro Global | Currency: USD (local rates apply × {fx})
             if sup_obj:
                 md += f"**{sup_name}** | {sup_obj.get('country','')} | {sup_obj.get('email','')} | Lead: {lead} days | Terms: {sup_obj.get('payment_terms','TT 30 days')}\n\n"
 
-    md += f"\n---\n\n*Procurement Plan generated by SolarPro Global · {project['name']}*\n"
+    md += f"\n---\n\n*Procurement Plan generated by SolarPro Global Â· {project['name']}*\n"
     fname = f"Procurement_{project['name'].replace(' ','_')}.pdf"
-    return _render_pdf(f"Procurement Plan — {project['name']}", md, fname)
+    return _render_pdf(f"Procurement Plan â€” {project['name']}", md, fname)
 
 
-# ─── Email Report Sending ─────────────────────────────────────────────────────
+# â”€â”€â”€ Email Report Sending â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/project/<int:pid>/email", methods=["GET", "POST"])
 @login_required
@@ -7245,7 +7245,7 @@ def project_email(pid):
         flash("Run calculations first.", "warning")
         return redirect(url_for("project_results", pid=pid))
 
-    # Convert sqlite3.Row → plain dict so .get() works
+    # Convert sqlite3.Row â†’ plain dict so .get() works
     user = dict(current_user() or {})
 
     # Resolve SMTP: user DB settings take priority over env vars
@@ -7281,7 +7281,7 @@ def project_email(pid):
     if request.method == "POST":
         csrf_protect()
         recipients = [e.strip() for e in request.form.get("recipients","").split(",") if e.strip()]
-        subject    = request.form.get("subject","").strip() or f"Solar Project Report — {project['name']}"
+        subject    = request.form.get("subject","").strip() or f"Solar Project Report â€” {project['name']}"
         body_text  = request.form.get("body","").strip()
 
         if not recipients:
@@ -7296,7 +7296,7 @@ def project_email(pid):
                     (session["user_id"], pid, ",".join(recipients), subject,
                      "failed", "SMTP not configured"))
             flash(
-                "SMTP not configured. Go to Settings → Email / SMTP to add your mail credentials.", "warning")
+                "SMTP not configured. Go to Settings â†’ Email / SMTP to add your mail credentials.", "warning")
             return redirect(url_for("project_email", pid=pid))
 
         try:
@@ -7350,13 +7350,13 @@ def project_email(pid):
                            smtp_ok=smtp_ok, logs=logs)
 
 
-# ─── DOCX Export ─────────────────────────────────────────────────────────────
+# â”€â”€â”€ DOCX Export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/project/<int:pid>/export/docx")
 @login_required
 @limiter.limit("10 per minute")
 def export_docx(pid):
-    """Full Word document report — Summary + Load Schedule + BOQ + Financial + Cable."""
+    """Full Word document report â€” Summary + Load Schedule + BOQ + Financial + Cable."""
     gate = _paid_only(pid)
     if gate: return gate
     project = get_project(pid)
@@ -7385,7 +7385,7 @@ def export_docx(pid):
 
     doc = Document()
 
-    # ── Page layout ────────────────────────────────────────────────────────────
+    # â”€â”€ Page layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     section = doc.sections[0]
     section.page_width  = Inches(8.27)
     section.page_height = Inches(11.69)
@@ -7450,7 +7450,7 @@ def export_docx(pid):
             run._r.append(itext)
             run._r.append(fc2)
 
-    # ── Header (all pages except title) ───────────────────────────────────────
+    # â”€â”€ Header (all pages except title) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     header = section.header
     header.is_linked_to_previous = False
     hp = header.paragraphs[0]
@@ -7459,7 +7459,7 @@ def export_docx(pid):
     hp_run.font.size = Pt(8)
     hp_run.font.color.rgb = GREY
 
-    # ── Footer (all pages) ────────────────────────────────────────────────────
+    # â”€â”€ Footer (all pages) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     footer = section.footer
     footer.is_linked_to_previous = False
     fp = footer.paragraphs[0]
@@ -7470,7 +7470,7 @@ def export_docx(pid):
         run.font.size = Pt(8)
         run.font.color.rgb = GREY
 
-    # ── Title page ────────────────────────────────────────────────────────────
+    # â”€â”€ Title page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Org banner
     if org_name and org_name != "SolarPro Global":
         to = doc.add_paragraph()
@@ -7508,7 +7508,7 @@ def export_docx(pid):
 
     doc.add_page_break()
 
-    # ── 1. Project Summary ────────────────────────────────────────────────────
+    # â”€â”€ 1. Project Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _heading("1. Project Summary")
     tbl = doc.add_table(rows=1, cols=2)
     tbl.style = "Table Grid"
@@ -7518,8 +7518,8 @@ def export_docx(pid):
         ("System Type",      d.get("system_type","").title()),
         ("Phase",            "Three-Phase 415V" if d.get("phase")=="three" else "Single-Phase 230V"),
         ("Daily Demand",     f"{r['daily_kwh']:.3f} kWh/day"),
-        ("PV Array",         f"{r['pv_kw']:.3f} kWp ({r['num_panels']} × {r.get('panel_wp',400)} Wp)"),
-        ("Battery",          f"{r['bat_kwh']:.2f} kWh ({r['num_bat']} × {r['unit_bat_kwh']:.2g} kWh {r.get('chemistry','')})"),
+        ("PV Array",         f"{r['pv_kw']:.3f} kWp ({r['num_panels']} Ã— {r.get('panel_wp',400)} Wp)"),
+        ("Battery",          f"{r['bat_kwh']:.2f} kWh ({r['num_bat']} Ã— {r['unit_bat_kwh']:.2g} kWh {r.get('chemistry','')})"),
         ("Inverter",         f"{r['inv_kw']:.1f} kW"),
         ("System Cost",      f"{sym} {eco['total_local']:,.0f}"),
         ("Simple Payback",   f"{eco['payback']:.1f} years"),
@@ -7528,14 +7528,14 @@ def export_docx(pid):
         ("DSCR",             f"{eco['dscr']:.2f}"),
         ("Bankability",      eco["bankability"]),
         ("Verdict",          eco["verdict"]),
-        ("CO₂ Reduction",    f"{eco['co2_yr']:.2f} t/year"),
+        ("COâ‚‚ Reduction",    f"{eco['co2_yr']:.2f} t/year"),
     ]:
         _table_row(tbl, [k, v])
 
     _set_col_widths(tbl, [2.8, 3.5])
     doc.add_paragraph()
 
-    # ── 2. Load Schedule ─────────────────────────────────────────────────────
+    # â”€â”€ 2. Load Schedule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _heading("2. Electrical Load Schedule")
     tbl2 = doc.add_table(rows=1, cols=7)
     tbl2.style = "Table Grid"
@@ -7553,7 +7553,7 @@ def export_docx(pid):
     _set_col_widths(tbl2, [1.0, 1.8, 0.6, 0.5, 0.7, 0.7, 0.6])
     doc.add_paragraph()
 
-    # ── 3. Bill of Quantities ─────────────────────────────────────────────────
+    # â”€â”€ 3. Bill of Quantities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _heading("3. Bill of Quantities (BOQ)")
     tbl3 = doc.add_table(rows=1, cols=6)
     tbl3.style = "Table Grid"
@@ -7567,7 +7567,7 @@ def export_docx(pid):
     _set_col_widths(tbl3, [0.4, 2.6, 0.5, 0.5, 1.0, 1.0])
     doc.add_paragraph()
 
-    # ── 4. Financial Analysis ─────────────────────────────────────────────────
+    # â”€â”€ 4. Financial Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _heading("4. Financial Engineering & Economic Analysis")
     tbl4 = doc.add_table(rows=1, cols=2)
     tbl4.style = "Table Grid"
@@ -7586,7 +7586,7 @@ def export_docx(pid):
         ("DSCR",                    f"{eco['dscr']:.2f}"),
         ("Bankability",             eco["bankability"]),
         ("Verdict",                 eco["verdict"]),
-        ("CO₂ Savings",             f"{eco['co2_yr']:.2f} t/year"),
+        ("COâ‚‚ Savings",             f"{eco['co2_yr']:.2f} t/year"),
         ("25-yr Cumulative Saving", f"{sym} {eco['cumul_25']:,.0f}"),
     ]:
         _table_row(tbl4, [k, v])
@@ -7599,26 +7599,26 @@ def export_docx(pid):
     _table_row(tbl5, ["Year", f"Gross ({sym})", f"O&M ({sym})", f"Net ({sym})", f"Cumulative ({sym})"],
                bold=True, shade="1E3A8A")
     for cf in eco.get("cf_rows", []):
-        flag = " ← BREAK-EVEN" if eco.get("breakeven") and cf["yr"] == eco["breakeven"] else ""
+        flag = " â† BREAK-EVEN" if eco.get("breakeven") and cf["yr"] == eco["breakeven"] else ""
         _table_row(tbl5, [cf["yr"], f"{cf['gross']:,.0f}", f"{cf['om']:,.0f}",
                           f"{cf['net']:,.0f}", f"{cf['cumul']:,.0f}{flag}"])
     _set_col_widths(tbl5, [0.5, 1.5, 1.3, 1.3, 1.7])
     doc.add_paragraph()
 
-    # ── 5. AC Cable Schedule ──────────────────────────────────────────────────
+    # â”€â”€ 5. AC Cable Schedule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _heading("5. AC Cable Sizing Schedule")
     tbl6 = doc.add_table(rows=1, cols=7)
     tbl6.style = "Table Grid"
-    _table_row(tbl6, ["Circuit", "Power (kW)", "Ib (A)", "L (m)", "Cable (mm²)", "VD (%)", "Breaker"],
+    _table_row(tbl6, ["Circuit", "Power (kW)", "Ib (A)", "L (m)", "Cable (mmÂ²)", "VD (%)", "Breaker"],
                bold=True, shade="1E3A8A")
     for c2 in r.get("ac_cables", []):
         _table_row(tbl6, [c2["circuit"], c2["power_kw"], c2["design_current"],
-                          c2["length_m"], f"{c2['cable_size_mm2']} mm²",
+                          c2["length_m"], f"{c2['cable_size_mm2']} mmÂ²",
                           f"{c2['vd_percent']:.2f}%", f"{c2['breaker_a']} A"])
     _set_col_widths(tbl6, [1.5, 0.9, 0.7, 0.7, 0.9, 0.7, 0.7])
     doc.add_paragraph()
 
-    # ── 6. Energy Impact Analysis ─────────────────────────────────────────────
+    # â”€â”€ 6. Energy Impact Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _heading("6. Energy Impact & Environmental Analysis")
     monthly_factors = [0.88, 0.90, 0.95, 1.00, 1.05, 1.08, 1.10, 1.08, 1.03, 0.98, 0.92, 0.88]
     base_monthly    = r["daily_kwh"] * 30.44
@@ -7644,14 +7644,14 @@ def export_docx(pid):
 
     trees_equiv = round(eco["co2_yr"] / 21.77, 0)
     cars_equiv  = round(eco["co2_yr"] / 4.6, 2)
-    _para(f"Annual CO₂ Reduction: {eco['co2_yr']:.2f} tonnes  |  "
+    _para(f"Annual COâ‚‚ Reduction: {eco['co2_yr']:.2f} tonnes  |  "
           f"Equivalent to planting {int(trees_equiv):,} trees or removing {cars_equiv} cars.",
           size=9)
     doc.add_paragraph()
 
     _para("Standard: BS 7671:2018 / IEC 60364-5-52 | Temperature derating and grouping factors applied.",
           size=9)
-    _para(f"Report generated by {org_name} using SolarPro Global — {datetime.now().strftime('%d %B %Y')}",
+    _para(f"Report generated by {org_name} using SolarPro Global â€” {datetime.now().strftime('%d %B %Y')}",
           size=9)
 
     buf = io.BytesIO()
@@ -7663,12 +7663,12 @@ def export_docx(pid):
                      as_attachment=True, download_name=fname)
 
 
-# ─── SaaS Platform Stats API (admin) ─────────────────────────────────────────
+# â”€â”€â”€ SaaS Platform Stats API (admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.route("/admin/platform")
 @admin_required
 def admin_platform():
-    """SaaS platform metrics — MRR, churn, active users, project pipeline."""
+    """SaaS platform metrics â€” MRR, churn, active users, project pipeline."""
     with get_db() as c:
         users       = c.execute("SELECT * FROM users ORDER BY created_at DESC").fetchall()
         total_users = len(users)
@@ -7690,7 +7690,7 @@ def admin_platform():
             "SELECT strftime('%Y-%m', created_at) as mo, SUM(amount_usd) as rev "
             "FROM payments WHERE status='success' GROUP BY mo ORDER BY mo DESC LIMIT 12").fetchall()
 
-        # MRR estimate — sum of current paid plan monthly prices
+        # MRR estimate â€” sum of current paid plan monthly prices
         MRR = sum(PLAN_PRICES.get((u["plan"] or "free").lower(), {}).get("usd", 0)
                   for u in users if (u["plan"] or "free") not in ("free","disabled","demo"))
 
@@ -7709,7 +7709,7 @@ def admin_platform():
                            plan_prices=PLAN_PRICES)
 
 
-# ─── Error handlers ───────────────────────────────────────────────────────────
+# â”€â”€â”€ Error handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @app.errorhandler(403)
 def err_403(e):
@@ -7739,13 +7739,13 @@ def err_500(e):
                 "Please go back to the dashboard and try again."), 500
 
 
-# ─── Client Prospecting Agent ─────────────────────────────────────────────────
+# â”€â”€â”€ Client Prospecting Agent â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 import re as _re
 
 # All country names recognised for the hard foreign-country gate.
-# "benin" omitted → collision with Benin City (Nigeria).
-# "niger" omitted → collision with Nigeria.
+# "benin" omitted â†’ collision with Benin City (Nigeria).
+# "niger" omitted â†’ collision with Nigeria.
 _ALL_COUNTRY_NAMES = frozenset([
     "zambia", "zimbabwe", "togo", "cameroon", "senegal", "gambia", "liberia",
     "burkina faso", "mali", "guinea", "sierra leone", "ivory coast",
@@ -7834,7 +7834,7 @@ _CITY_MAP = {
     "tanzania":     ["dar es salaam", "dodoma", "arusha", "mwanza", "zanzibar"],
     "zambia":       ["lusaka", "ndola", "kitwe", "kabwe", "livingstone"],
     "ethiopia":     ["addis ababa", "dire dawa", "mekele", "gondar", "hawassa"],
-    "senegal":      ["dakar", "thiès", "kaolack", "saint-louis", "ziguinchor"],
+    "senegal":      ["dakar", "thiÃ¨s", "kaolack", "saint-louis", "ziguinchor"],
     "cameroon":     ["douala", "yaounde", "bamenda", "bafoussam", "garoua"],
     "uganda":       ["kampala", "gulu", "mbarara", "jinja", "entebbe"],
     "rwanda":       ["kigali", "butare", "gisenyi", "ruhengeri"],
@@ -7862,7 +7862,7 @@ def _foreign_country_in_text(title, loc_lower, full_content=None):
 
     With full_content:
       Even if selected country is in the title, block if any foreign country is
-      mentioned MORE TIMES than the selected country in the full page text — that
+      mentioned MORE TIMES than the selected country in the full page text â€” that
       means the page is really about the foreign country (e.g. a Sudan tender
       that has 'Ghana' once in a sidebar nav).
     """
@@ -7883,7 +7883,7 @@ def _foreign_country_in_text(title, loc_lower, full_content=None):
                 return True
         return False
 
-    # No full content — title-only check
+    # No full content â€” title-only check
     if loc_lower in t:
         return False
     for name in _ALL_COUNTRY_NAMES:
@@ -7938,13 +7938,13 @@ def admin_agent_run():
     loc_q     = f'"{loc}"'
     loc_label = loc
 
-    # ── Step 1: Deep multi-source search ─────────────────────────────────────────
+    # â”€â”€ Step 1: Deep multi-source search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     search_results = []
     search_error   = None
 
-    # ── Country aliases: include major cities so results aren't missed ────────
+    # â”€â”€ Country aliases: include major cities so results aren't missed â”€â”€â”€â”€â”€â”€â”€â”€
     COUNTRY_CITIES = {
-        # No single-letter or 2-letter aliases — they match inside any English word
+        # No single-letter or 2-letter aliases â€” they match inside any English word
         "ghana":        ["ghana", "ghanaian", "accra", "kumasi", "takoradi", "tema",
                          "tamale", "cape coast", "koforidua", "bolgatanga", ".gh"],
         "nigeria":      ["nigeria", "nigerian", "lagos", "abuja", "kano", "ibadan",
@@ -7970,7 +7970,7 @@ def admin_agent_run():
     try:
         from ddgs import DDGS
 
-        # ── Pure procurement portals only (no narrative-heavy DFI sites) ──────
+        # â”€â”€ Pure procurement portals only (no narrative-heavy DFI sites) â”€â”€â”€â”€â”€â”€
         PROCUREMENT_PORTALS = (
             "site:ungm.org OR site:devex.com OR site:reliefweb.int "
             "OR site:dgmarket.com OR site:tendersinfo.com "
@@ -7983,12 +7983,12 @@ def admin_agent_run():
         SOCIAL_DOMAINS = ["facebook.com", "linkedin.com", "twitter.com", "x.com"]
 
         # intitle: forces the search engine itself to find pages where the
-        # tender/RFP keyword is IN the page title — strongest possible gate
+        # tender/RFP keyword is IN the page title â€” strongest possible gate
         queries = [
             # === Procurement portals (pure tender databases) ==================
             f'({PROCUREMENT_PORTALS}) {loc_q} solar tender OR RFP OR ITB 2026',
             f'({PROCUREMENT_PORTALS}) {loc_q} solar "invitation to bid" OR "expression of interest" 2026',
-            # === intitle: — search engine enforces keyword in page title ======
+            # === intitle: â€” search engine enforces keyword in page title ======
             f'intitle:tender {loc_q} solar installation 2026',
             f'intitle:"invitation to bid" {loc_q} solar 2026',
             f'intitle:"request for proposals" {loc_q} solar 2026',
@@ -8014,7 +8014,7 @@ def admin_agent_run():
         if focus:
             queries.insert(0, f'intitle:tender {loc_q} "{focus}" solar 2026')
 
-        # ── Domains to always skip ────────────────────────────────────────────
+        # â”€â”€ Domains to always skip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         skip_domains = [
             # News / editorial
             "pv-magazine", "pvtech", "reuters.com", "bloomberg.com",
@@ -8029,13 +8029,13 @@ def admin_agent_run():
             "nairametrics.com", "businessday.ng",
             "zawya.com", "menafn.com", "arabnews.com",
             "esi-africa.com", "theafricareport.com", "energy-pedia.com",
-            # DFI narrative sites — overwhelmingly project stories, not tenders.
+            # DFI narrative sites â€” overwhelmingly project stories, not tenders.
             # Their actual tenders appear on UNGM/Devex which we already search.
             "worldbank.org", "afdb.org", "ifc.org", "esmap.org",
             "adb.org", "iadb.org", "ebrd.com", "eib.org",
             "irena.org", "iea.org", "undp.org", "unep.org",
         ]
-        # ── News/editorial URL path patterns ──────────────────────────────────
+        # â”€â”€ News/editorial URL path patterns â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         news_url_paths = [
             "/news/", "/news-release", "/press-release", "/press/",
             "/blog/", "/article/", "/articles/",
@@ -8051,20 +8051,20 @@ def admin_agent_run():
             "ifc.org/en/stories", "ifc.org/wps/wcm",
             "esmap.org/node", "esmap.org/story",
         ]
-        # ── Category/index page patterns ─────────────────────────────────────
+        # â”€â”€ Category/index page patterns â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         listing_patterns = [
             "global-solar-tenders", "/tenders/search", "/tenders/adminShow",
             "globaltenders.com/gh/", "tendersontime.com/ghana-tenders/page",
             "developmentaid.org/tenders/search", "devex.com/funding/r?report=grant",
         ]
-        # ── Completed-project title patterns (past tense = not open) ─────────
+        # â”€â”€ Completed-project title patterns (past tense = not open) â”€â”€â”€â”€â”€â”€â”€â”€â”€
         news_title_words = [
             "awarded", "wins contract", "signs agreement", "signed agreement",
             "completes", "completed", "inaugurates", "inaugurated",
             "commissioned", "connected to grid", "goes live",
             "breaks ground", "broke ground", "milestone",
         ]
-        # ── Procurement signals for formal sources ────────────────────────────
+        # â”€â”€ Procurement signals for formal sources â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         rfp_keywords = [
             "tender", "rfp", "itb", "eoi",
             "invitation to bid", "invitation to tender",
@@ -8075,14 +8075,14 @@ def admin_agent_run():
             "solicitation", "prequalif", "bidding document",
             "installation works", "epc contract", "works contract",
         ]
-        # ── Opportunity signals for social/job/open-web sources ───────────────
+        # â”€â”€ Opportunity signals for social/job/open-web sources â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         opportunity_keywords = [
             "solar", "install", "installer", "installation", "technician",
             "contractor", "supply", "design", "panel", "pv", "quote",
             "looking for", "need", "seeking", "required", "wanted",
             "vacancy", "hiring", "job", "project", "engineer",
         ]
-        # ── Solar keyword gate ────────────────────────────────────────────────
+        # â”€â”€ Solar keyword gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         solar_keywords = [
             "solar", "photovoltaic", "pv system", "solar pv",
             "solar power", "solar energy", "solar plant", "solar farm",
@@ -8137,7 +8137,7 @@ def admin_agent_run():
                             continue
                         # 5. Country gate
                         # Formal: ONLY the country name itself must appear in title or URL.
-                        #   City aliases (tema, accra, etc.) are NOT used here — short strings
+                        #   City aliases (tema, accra, etc.) are NOT used here â€” short strings
                         #   like "tema" are substrings of common words ("systematic") causing
                         #   Zambia/Togo pages to pass the Ghana check.
                         # Social/job: full alias list checked in title+body+url (cities useful
@@ -8174,8 +8174,8 @@ def admin_agent_run():
     except Exception as e:
         search_error = str(e)
 
-    # ── Step 1.5: Fetch actual page content for each candidate ───────────────────
-    # Search snippets are only 200-400 chars — not enough to confirm a real tender.
+    # â”€â”€ Step 1.5: Fetch actual page content for each candidate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # Search snippets are only 200-400 chars â€” not enough to confirm a real tender.
     # We fetch the actual page (first 6000 chars of text) so Claude and our filters
     # work on the real document, not a teaser.
     if search_results:
@@ -8203,7 +8203,7 @@ def admin_agent_run():
 
         def _fetch_page(r):
             url = r.get("href", "")
-            # Skip social/job — require login or are dynamic
+            # Skip social/job â€” require login or are dynamic
             if any(d in url for d in SOCIAL_DOMAINS + JOB_DOMAINS):
                 return r
             try:
@@ -8217,7 +8217,7 @@ def admin_agent_run():
                 pass
             return r
 
-        # Fetch in parallel — max 12 pages, 5 workers
+        # Fetch in parallel â€” max 12 pages, 5 workers
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
             search_results = list(pool.map(_fetch_page, search_results[:12]))
 
@@ -8242,7 +8242,7 @@ def admin_agent_run():
         if refined:
             search_results = refined
 
-    # ── Step 2: AI analyses real search results → structured prospects ──────────
+    # â”€â”€ Step 2: AI analyses real search results â†’ structured prospects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     api_key  = os.environ.get("ANTHROPIC_API_KEY", "")
     gh_token = os.environ.get("GITHUB_TOKEN", "")
     if (api_key or gh_token) and search_results:
@@ -8255,7 +8255,7 @@ def admin_agent_run():
             prompt = f"""You are a solar PV procurement intelligence analyst. Your job is to READ and ANALYSE the full content of each result below, then extract ONLY genuine, currently open procurement opportunities.
 
 Search criteria:
-- Target country: {loc_label} — results must be FOR THIS COUNTRY ONLY
+- Target country: {loc_label} â€” results must be FOR THIS COUNTRY ONLY
 - Sector: {sector}
 - System size: {system_kw} kW
 - Budget: {budget}
@@ -8265,24 +8265,24 @@ RESULTS TO ANALYSE:
 
 {snippets}
 
-INSTRUCTIONS — read each result's CONTENT carefully before deciding:
+INSTRUCTIONS â€” read each result's CONTENT carefully before deciding:
 1. READ the full content provided. If it does not clearly confirm an open, active procurement for solar works IN {loc_label}, SKIP IT entirely.
-2. SKIP if the content is about a different country — even if {loc_label} appears once in a header or navigation. The TENDER ITSELF must be in {loc_label}.
+2. SKIP if the content is about a different country â€” even if {loc_label} appears once in a header or navigation. The TENDER ITSELF must be in {loc_label}.
 3. SKIP news articles, project completion stories, country overviews, funding announcements.
 4. SKIP if the closing/deadline date has already passed (today is {__import__('datetime').date.today()}).
 5. ONLY include results where the content confirms: what is being procured, who is issuing it, and how to respond.
-6. source_url = exact URL, copied verbatim — do not modify
+6. source_url = exact URL, copied verbatim â€” do not modify
 7. company_name = the issuing organisation extracted from the content
-8. Never invent data — use "" if a field is not stated in the content
+8. Never invent data â€” use "" if a field is not stated in the content
 9. Extract ALL contact intelligence: named persons, office names, GPS/addresses, websites, submission methods, mandatory documents, certifications required.
-10. Score each opportunity: classify as hot (deadline ≤14 days OR budget confirmed high), warm (deadline ≤45 days OR medium budget), cold (distant deadline or vague budget). urgency_score 1–10 (10=closes within 7 days). revenue_potential = realistic contract value in USD if stated, else estimate from system size.
+10. Score each opportunity: classify as hot (deadline â‰¤14 days OR budget confirmed high), warm (deadline â‰¤45 days OR medium budget), cold (distant deadline or vague budget). urgency_score 1â€“10 (10=closes within 7 days). revenue_potential = realistic contract value in USD if stated, else estimate from system size.
 
-PRIORITY RULE — score based on how many of these 5 key fields are present in the result:
-  1. work_description  — scope / what is being procured
-  2. requirements      — eligibility or technical requirements
-  3. tor               — terms of reference or detailed scope
-  4. deadline          — submission closing date
-  5. submission_address OR contact_details — where/how to submit or who to contact
+PRIORITY RULE â€” score based on how many of these 5 key fields are present in the result:
+  1. work_description  â€” scope / what is being procured
+  2. requirements      â€” eligibility or technical requirements
+  3. tor               â€” terms of reference or detailed scope
+  4. deadline          â€” submission closing date
+  5. submission_address OR contact_details â€” where/how to submit or who to contact
   Priority: "high" = all 5 present; "medium" = 3 or 4 present; "low" = 2 or fewer present
 
 Return up to {count} results. Return ONLY valid JSON, no markdown:
@@ -8292,21 +8292,21 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
       "company_name": "Issuing organisation",
       "type": "RFP / Tender / EOI / ITB / Contract Notice / Grant / Installation Job",
       "project_category": "Rooftop / Ground-mount / Hybrid / Off-grid / Mini-grid / Street lighting / Water pumping / Other",
-      "location": "city AND country from result, e.g. 'Accra, Ghana' — use city name if stated, else just country. Do NOT invent.",
+      "location": "city AND country from result, e.g. 'Accra, Ghana' â€” use city name if stated, else just country. Do NOT invent.",
       "estimated_kw": 0,
       "estimated_usd": 0,
       "budget": "stated budget exactly as written, e.g. 'USD 500,000' or ''",
       "revenue_potential": 0,
       "pain_points": [],
       "pitch": "one sentence: what they are procuring",
-      "work_description": "full scope of work as stated — supply and install, design only, EPC, etc. Use '' if not stated.",
+      "work_description": "full scope of work as stated â€” supply and install, design only, EPC, etc. Use '' if not stated.",
       "requirements": "eligibility or technical requirements stated in result. Use '' if not stated.",
       "mandatory_documents": "list of mandatory documents stated, e.g. 'Company registration, Tax clearance, PURC licence'. Use '' if not stated.",
       "certifications": "certifications or accreditations required, e.g. 'ISO 9001, ECG approved installer'. Use '' if not stated.",
       "tor": "terms of reference or scope details if stated. Use '' if not stated.",
       "deadline": "closing/submission date exactly as stated, e.g. '30 June 2026'. Use '' if not stated.",
       "submission_address": "where/how to submit: email, portal URL, physical address. Use '' if not stated.",
-      "submission_method": "email / online portal / physical drop-off / courier / hand-deliver — as stated. Use '' if not stated.",
+      "submission_method": "email / online portal / physical drop-off / courier / hand-deliver â€” as stated. Use '' if not stated.",
       "contact_details": "procurement contact name, email, phone if stated. Use '' if not stated.",
       "contact_person": "named contact person extracted from result. Use '' if not stated.",
       "procurement_office": "procurement office or department name. Use '' if not stated.",
@@ -8326,7 +8326,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
   ]
 }}"""
             if api_key:
-                # ── Anthropic Claude (primary) ─────────────────────────────
+                # â”€â”€ Anthropic Claude (primary) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 import anthropic as _ant
                 client = _ant.Anthropic(api_key=api_key)
                 msg    = client.messages.create(
@@ -8336,7 +8336,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                 raw = msg.content[0].text.strip()
                 ai_source = "web+claude"
             else:
-                # ── GitHub Models (fallback — free) ────────────────────────
+                # â”€â”€ GitHub Models (fallback â€” free) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 import urllib.request as _ur3, json as _json3
                 _payload3 = _json3.dumps({
                     "model":       "openai/gpt-4.1-mini",
@@ -8368,7 +8368,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
         except Exception as e:
             pass  # fall through to raw results
 
-    # ── Step 3: Template extraction (no AI key) ──────────────────────────────────
+    # â”€â”€ Step 3: Template extraction (no AI key) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     def _classify_source(url):
         u = url.lower()
         if any(d in u for d in ["facebook.com", "twitter.com", "x.com"]):
@@ -8377,7 +8377,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
             return "LinkedIn Lead"
         if any(d in u for d in ["jobberman.com", "myjobmag.com", "brightermonday.com",
                                   "indeed.com", "jobsinghana.com", "ghanaiansjobs.com"]):
-            return "Job Board — Active Project"
+            return "Job Board â€” Active Project"
         if any(d in u for d in [".gov.gh", ".gov.ng", ".gov.ke", "gov.", "district",
                                   "assembly", "council", "ministry"]):
             return "Government / Public Sector"
@@ -8389,16 +8389,16 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
 
     def _contact_strategy(source_type, url):
         if source_type == "Social Media Lead":
-            return "Respond directly to the post — offer free site assessment and quote"
+            return "Respond directly to the post â€” offer free site assessment and quote"
         if source_type == "LinkedIn Lead":
             return "Connect on LinkedIn, message offering a no-obligation solar audit"
-        if source_type == "Job Board — Active Project":
-            return "Company is hiring for a solar project — contact HR/procurement directly"
+        if source_type == "Job Board â€” Active Project":
+            return "Company is hiring for a solar project â€” contact HR/procurement directly"
         if source_type == "Government / Public Sector":
             return "Submit formal expression of interest or bid via the government procurement portal"
         if source_type == "Tender Portal":
             return "Download tender documents and submit bid before closing date"
-        return "Contact via source link — offer free survey and detailed quotation"
+        return "Contact via source link â€” offer free survey and detailed quotation"
 
     def _infer_type(title, body):
         t = (title + " " + body).lower()
@@ -8407,9 +8407,9 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
         if any(w in t for w in ["expression of interest", "eoi", "prequalif"]):
             return "Expression of Interest"
         if any(w in t for w in ["job", "vacancy", "hiring", "technician", "installer"]):
-            return "Job Post — Active Project"
+            return "Job Post â€” Active Project"
         if any(w in t for w in ["looking for", "need", "quote", "recommend", "how much"]):
-            return "Social Media — Seeking Installer"
+            return "Social Media â€” Seeking Installer"
         return "Solar Project Opportunity"
 
     def _extract_deadline(text):
@@ -8522,7 +8522,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
         return jsonify({"ok": True, "prospects": prospects,
                         "source": "web_search", "result_count": len(search_results)})
 
-    # ── Step 4: Last resort — inform user search failed ─────────────────────────
+    # â”€â”€ Step 4: Last resort â€” inform user search failed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     return jsonify({"ok": False,
                     "error": f"Web search returned no results. {search_error or ''} "
                              "Try different search criteria or add an ANTHROPIC_API_KEY."})
@@ -8549,7 +8549,7 @@ def admin_agent_notify():
                     "GitHub Models + Claude" if "github" in source else "Live Web Search"
         def _send():
             _send_prospect_notification(
-                f"Agent Run Complete — {count} Prospect{'s' if count!=1 else ''} Found",
+                f"Agent Run Complete â€” {count} Prospect{'s' if count!=1 else ''} Found",
                 [f"<strong>{count}</strong> solar prospect{'s' if count!=1 else ''} found for <strong>{country}</strong>.",
                  f"Source: {src_label}",
                  "Open the Agent Dashboard to review results and save the best leads to your CRM."]
@@ -8583,7 +8583,7 @@ def admin_agent_save():
     return jsonify({"ok": True})
 
 
-# ─── Background Monitor: actively listens for new solar postings ───────────────
+# â”€â”€â”€ Background Monitor: actively listens for new solar postings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _monitor_search(loc="Ghana"):
     """Run the same search pipeline as admin_agent_run for a given country.
@@ -8651,7 +8651,7 @@ def _monitor_search(loc="Ghana"):
     news_url_paths = [
         "/news/", "/blog/", "/article/", "/story/", "/stories/",
         "/press/", "/newsroom/", "/publication/", "/en/news",
-        # AfDB/WorldBank narrative paths — project/country pages are NOT procurement notices
+        # AfDB/WorldBank narrative paths â€” project/country pages are NOT procurement notices
         "afdb.org/en/news", "afdb.org/en/projects", "afdb.org/en/countries",
         "afdb.org/en/documents", "afdb.org/en/topics",
         "worldbank.org/en/news", "worldbank.org/en/results",
@@ -8703,7 +8703,7 @@ def _monitor_search(loc="Ghana"):
                 return "LinkedIn Lead"
             return "Social Media Lead"
         if _is_job_board(url):
-            return "Job Board — Active Project"
+            return "Job Board â€” Active Project"
         if any(p in url for p in ["gov.", ".gov", "assembly", "council", "ministry"]):
             return "Government / Public Sector"
         if any(p in url for p in ["ungm", "devex", "reliefweb", "afdb", "worldbank"]):
@@ -8733,7 +8733,7 @@ def _monitor_search(loc="Ghana"):
                             continue
                         if _foreign_country_in_text(title, loc_lower):
                             continue
-                        # Country gate — formal: country name in title/url; social: alias list
+                        # Country gate â€” formal: country name in title/url; social: alias list
                         if _is_social(url) or _is_job_board(url):
                             combined = title + " " + body + " " + url_lower
                             if not any(alias in combined for alias in loc_aliases):
@@ -8913,13 +8913,13 @@ def _send_prospect_notification(subject, body_lines, admin_email=None):
         txt = "\n".join(body_lines)
         html_rows = "".join(f"<li style='margin-bottom:6px'>{l}</li>" for l in body_lines)
         html = f"""<div style="font-family:sans-serif;background:#0a0a14;color:#e2e2f0;padding:28px;border-radius:12px;max-width:600px">
-  <h2 style="color:#a78bfa;margin-top:0"><span style="margin-right:8px">🤖</span>{subject}</h2>
+  <h2 style="color:#a78bfa;margin-top:0"><span style="margin-right:8px">ðŸ¤–</span>{subject}</h2>
   <ul style="padding-left:20px;color:#c8c8e8">{html_rows}</ul>
   <hr style="border-color:#1e1e3a;margin:20px 0">
   <a href="https://solarpro.aiappinvent.com/admin/agent" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:700">
-    Open Agent Dashboard →
+    Open Agent Dashboard â†’
   </a>
-  <p style="color:#6868a0;font-size:11px;margin-top:20px">SolarPro Global · AI Prospect Agent</p>
+  <p style="color:#6868a0;font-size:11px;margin-top:20px">SolarPro Global Â· AI Prospect Agent</p>
 </div>"""
         msg.attach(MIMEText(txt, "plain"))
         msg.attach(MIMEText(html, "html"))
@@ -8983,7 +8983,7 @@ _monitor_thread = threading.Thread(target=_monitor_loop, daemon=True)
 _monitor_thread.start()
 
 
-# ─── Entry point ──────────────────────────────────────────────────────────────
+# â”€â”€â”€ Entry point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 if __name__ == "__main__":
     init_db()

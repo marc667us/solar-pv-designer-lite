@@ -1,13 +1,13 @@
-{% extends "base.html" %}
-{% block title %}My Account — SolarPro Global{% endblock %}
+﻿{% extends "base.html" %}
+{% block title %}My Account â€” SolarPro Global{% endblock %}
 
 {% block extra_head %}
 <style>
-  /* ── Layout ── */
+  /* â”€â”€ Layout â”€â”€ */
   .account-layout{display:grid;grid-template-columns:300px 1fr;gap:24px;align-items:start}
   @media(max-width:860px){.account-layout{grid-template-columns:1fr}}
 
-  /* ── Profile card ── */
+  /* â”€â”€ Profile card â”€â”€ */
   .profile-avatar{width:64px;height:64px;border-radius:50%;
     background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));
     display:flex;align-items:center;justify-content:center;
@@ -15,37 +15,37 @@
   .profile-meta{display:flex;align-items:center;gap:6px;font-size:11px;
     color:#5a5a8a;margin-top:4px}
 
-  /* ── Plan badge ── */
+  /* â”€â”€ Plan badge â”€â”€ */
   .plan-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;
     border-radius:20px;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
 
-  /* ── Usage bar ── */
+  /* â”€â”€ Usage bar â”€â”€ */
   .usage-track{height:8px;border-radius:4px;background:#1e1e3a;overflow:hidden;margin:8px 0}
   .usage-fill{height:100%;border-radius:4px;
     background:linear-gradient(90deg,var(--solar-gold),var(--solar-orange));transition:.4s}
   .usage-fill.danger{background:linear-gradient(90deg,#ef4444,#f97316)}
 
-  /* ── Sidebar card ── */
+  /* â”€â”€ Sidebar card â”€â”€ */
   .side-card{background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px;
     padding:20px;margin-bottom:16px}
   .side-card-head{font-size:10px;font-weight:700;text-transform:uppercase;
     letter-spacing:.5px;color:#4a4a7a;margin-bottom:14px}
 
-  /* ── Feature list ── */
+  /* â”€â”€ Feature list â”€â”€ */
   .feat-row{display:flex;align-items:center;gap:8px;padding:5px 0;
     font-size:12px;border-bottom:1px solid #111128}
   .feat-row:last-child{border-bottom:none}
   .feat-check{color:#22c55e;font-size:11px;flex-shrink:0}
   .feat-cross{color:#2a2a5a;font-size:11px;flex-shrink:0}
 
-  /* ── Action buttons ── */
+  /* â”€â”€ Action buttons â”€â”€ */
   .act-btn{display:flex;align-items:center;gap:8px;padding:10px 14px;
     border-radius:10px;font-size:12px;font-weight:700;border:1px solid transparent;
     cursor:pointer;transition:.15s;text-decoration:none;width:100%;margin-bottom:8px}
   .act-btn:last-child{margin-bottom:0}
   .act-btn:hover{text-decoration:none}
 
-  /* ── KPI strip ── */
+  /* â”€â”€ KPI strip â”€â”€ */
   .stat-tile{background:#0f0f22;border:1px solid #1e1e3a;border-radius:12px;
     padding:18px;text-align:center}
   .stat-num{font-size:26px;font-weight:900;
@@ -54,13 +54,13 @@
   .stat-lbl{font-size:10px;color:#5050a0;font-weight:700;text-transform:uppercase;
     letter-spacing:.5px;margin-top:4px}
 
-  /* ── Section cards ── */
+  /* â”€â”€ Section cards â”€â”€ */
   .section-panel{background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px;
     overflow:hidden;margin-bottom:20px}
   .section-panel-head{padding:14px 18px;border-bottom:1px solid #1e1e3a;
     background:#0a0a1a;display:flex;align-items:center;justify-content:space-between}
 
-  /* ── Payment table ── */
+  /* â”€â”€ Payment table â”€â”€ */
   .pay-table{width:100%;border-collapse:collapse;font-size:12px}
   .pay-table th{padding:10px 14px;color:#4a4a7a;font-weight:600;font-size:10px;
     text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #1e1e3a;
@@ -79,7 +79,7 @@
   .pay-status-cancelled{color:#f87171}
   .pay-status-failed{color:#fb923c}
 
-  /* ── Info rows ── */
+  /* â”€â”€ Info rows â”€â”€ */
   .info-row{display:flex;justify-content:space-between;align-items:center;
     padding:8px 0;border-bottom:1px solid #111128;font-size:12px}
   .info-row:last-child{border-bottom:none}
@@ -95,7 +95,7 @@
 {% set plan_info   = plan_prices.get(plan, {}) %}
 {% set pl_color    = plan_colors.get(plan, '#6868a0') %}
 {% set pl_icon     = plan_icons.get(plan, 'bi-person-fill') %}
-{% set proj_limit  = limit if limit < 9999 else '∞' %}
+{% set proj_limit  = limit if limit < 9999 else 'âˆž' %}
 {% set usage_pct   = ([proj_count / limit * 100, 100]|min)|int if limit < 9999 else 0 %}
 
 <!-- Page header -->
@@ -114,7 +114,7 @@
 <!-- Two-column layout -->
 <div class="account-layout">
 
-  <!-- ── LEFT sidebar ──────────────────────────────────────────────────── -->
+  <!-- â”€â”€ LEFT sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div>
 
     <!-- Profile -->
@@ -150,7 +150,7 @@
 
       <div class="info-row">
         <span class="info-lbl">Member since</span>
-        <span class="info-val">{{ user.created_at[:10] if user.created_at else '—' }}</span>
+        <span class="info-val">{{ user.created_at[:10] if user.created_at else 'â€”' }}</span>
       </div>
       <div class="info-row">
         <span class="info-lbl">Username</span>
@@ -183,7 +183,7 @@
       </div>
       {% if usage_pct >= 90 and limit < 9999 %}
       <div class="text-danger" style="font-size:10px;margin-top:4px">
-        <i class="bi bi-exclamation-triangle me-1"></i>Near project limit — upgrade to add more.
+        <i class="bi bi-exclamation-triangle me-1"></i>Near project limit â€” upgrade to add more.
       </div>
       {% endif %}
 
@@ -258,7 +258,7 @@
 
   </div><!-- /sidebar -->
 
-  <!-- ── RIGHT main ────────────────────────────────────────────────────── -->
+  <!-- â”€â”€ RIGHT main â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div>
 
     <!-- KPI strip -->
@@ -296,9 +296,9 @@
              style="background:#f59e0b08;border:1px solid #f59e0b22">
           <i class="bi bi-info-circle-fill" style="color:#f59e0b;font-size:16px;margin-top:2px;flex-shrink:0"></i>
           <div style="font-size:12px;color:#b0a080">
-            You're on the <strong style="color:#f0d080">Free plan</strong> — only the Pre-Installation Site Assessment
+            You're on the <strong style="color:#f0d080">Free plan</strong> â€” only the Pre-Installation Site Assessment
             is available. Upgrade to unlock all 9 reports, Excel export, procurement planning, and more.
-            <a href="{{ url_for('upgrade') }}" class="ms-1 fw-bold" style="color:#f59e0b">Upgrade now →</a>
+            <a href="{{ url_for('upgrade') }}" class="ms-1 fw-bold" style="color:#f59e0b">Upgrade now â†’</a>
           </div>
         </div>
         {% endif %}
@@ -345,8 +345,8 @@
         <div class="mt-3 pt-2" style="border-top:1px solid #111128">
           <p class="text-secondary mb-0" style="font-size:11px">
             For billing questions or plan changes contact
-            <a href="mailto:support@solarproglobal.com" class="text-warning text-decoration-none">
-              support@solarproglobal.com
+            <a href="mailto:support@aiappinvent.com" class="text-warning text-decoration-none">
+              support@aiappinvent.com
             </a>
           </p>
         </div>
@@ -383,19 +383,19 @@
           {% for pay in payments %}
           {% set pc2 = plan_colors2.get(pay.plan or 'free', '#6868a0') %}
           <tr>
-            <td class="text-secondary">{{ pay.created_at[:10] if pay.created_at else '—' }}</td>
+            <td class="text-secondary">{{ pay.created_at[:10] if pay.created_at else 'â€”' }}</td>
             <td>
               <span style="font-size:10px;font-weight:800;color:{{ pc2 }};
                     background:{{ pc2 }}15;border:1px solid {{ pc2 }}30;
                     padding:2px 7px;border-radius:8px;text-transform:uppercase">
-                {{ pay.plan or '—' }}
+                {{ pay.plan or 'â€”' }}
               </span>
             </td>
             <td>
               {% if pay.amount_usd and pay.amount_usd > 0 %}
               <span style="color:var(--solar-gold);font-weight:700">${{ "%.0f"|format(pay.amount_usd) }}</span>
               {% else %}
-              <span class="text-secondary">—</span>
+              <span class="text-secondary">â€”</span>
               {% endif %}
             </td>
             <td>
@@ -409,7 +409,7 @@
             </td>
             <td class="text-secondary" style="font-size:10px;max-width:110px;
                 overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-              {{ pay.reference[:18] if pay.reference else '—' }}
+              {{ pay.reference[:18] if pay.reference else 'â€”' }}
             </td>
             <td>
               {% if pay.status == 'success' %}

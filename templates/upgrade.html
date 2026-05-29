@@ -1,5 +1,5 @@
-{% extends "base.html" %}
-{% block title %}Upgrade Plan — SolarPro Global{% endblock %}
+﻿{% extends "base.html" %}
+{% block title %}Upgrade Plan â€” SolarPro Global{% endblock %}
 
 {% block extra_head %}
 {% if paystack_public_key %}
@@ -72,17 +72,17 @@
 <span id="csrf_val"   data-v="{{ csrf_token() }}"></span>
 <span id="user_email" data-v="{{ user.email }}"></span>
 
-<!-- ── Page header ────────────────────────────────────────────────────── -->
+<!-- â”€â”€ Page header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
 {% set plan_color = '#a78bfa' if current_plan in ('enterprise','business') else '#0ea5e9' if current_plan=='professional' else '#f59e0b' if current_plan=='demo' else '#6868a0' %}
 <div class="text-center mb-5">
-  <div class="mb-2" style="font-size:40px">⚡</div>
+  <div class="mb-2" style="font-size:40px">âš¡</div>
   <h2 class="fw-black mb-2">Upgrade Your Plan</h2>
   <p class="text-secondary mb-3">
     You are on the
     <span class="badge" style="background:{{ plan_color }}22;color:{{ plan_color }};border:1px solid {{ plan_color }}44;padding:4px 10px;font-size:12px">
       {{ current_plan|upper }}
     </span>
-    plan &nbsp;·&nbsp; Upgrade anytime &nbsp;·&nbsp; Cancel anytime
+    plan &nbsp;Â·&nbsp; Upgrade anytime &nbsp;Â·&nbsp; Cancel anytime
   </p>
   <div class="d-flex gap-3 justify-content-center flex-wrap" style="font-size:12px">
     {% for icon,color,text in [
@@ -92,24 +92,24 @@
     ] %}
     <span style="color:{{ color }}"><i class="bi {{ icon }} me-1"></i></span>
     <span class="text-secondary">{{ text }}</span>
-    {% if not loop.last %}<span class="text-secondary">·</span>{% endif %}
+    {% if not loop.last %}<span class="text-secondary">Â·</span>{% endif %}
     {% endfor %}
   </div>
 </div>
 
-<!-- ── Demo trial banner (free users only) ────────────────────────────── -->
+<!-- â”€â”€ Demo trial banner (free users only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
 {% if demo_mode and current_plan == 'free' %}
 <div class="demo-banner mb-5">
   <div class="row align-items-center g-4">
     <div class="col-md-2 text-center">
-      <div style="font-size:52px">🚀</div>
+      <div style="font-size:52px">ðŸš€</div>
     </div>
     <div class="col-md-7">
       <div class="fw-black mb-1" style="font-size:22px;color:#a78bfa">
         Try Professional Free for 14 Days
       </div>
       <p class="text-secondary mb-2" style="font-size:14px">
-        Instantly unlock <strong class="text-light">all Professional features</strong> — no credit card,
+        Instantly unlock <strong class="text-light">all Professional features</strong> â€” no credit card,
         no payment, no strings. Expires automatically after 14 days.
       </p>
       <div class="d-flex flex-wrap gap-2">
@@ -126,14 +126,14 @@
         <button class="btn fw-bold w-100 py-3" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;border:none;border-radius:12px;font-size:15px">
           <i class="bi bi-rocket-takeoff me-2"></i>Activate Free Trial
         </button>
-        <div class="text-secondary mt-2" style="font-size:10px">No card · No payment · Instant activation</div>
+        <div class="text-secondary mt-2" style="font-size:10px">No card Â· No payment Â· Instant activation</div>
       </form>
     </div>
   </div>
 </div>
 {% endif %}
 
-<!-- ── Plan cards ──────────────────────────────────────────────────────── -->
+<!-- â”€â”€ Plan cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
 <div class="row g-4 justify-content-center mb-5">
 
   <!-- Free -->
@@ -144,7 +144,7 @@
         <span class="plan-price text-secondary">$0</span>
         <span class="text-secondary small">/mo</span>
       </div>
-      <div class="text-secondary mb-3" style="font-size:10px">14-day trial · No card needed</div>
+      <div class="text-secondary mb-3" style="font-size:10px">14-day trial Â· No card needed</div>
       <ul class="plan-feat mb-4 flex-grow-1">
         <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>1 project</li>
         <li class="highlighted"><i class="bi bi-check-circle-fill check"></i>Full engineering calculations</li>
@@ -173,7 +173,7 @@
     <div class="plan-card {% if is_popular %}featured{% endif %} {% if is_current %}current{% endif %} h-100"
          style="{% if is_popular %}border-color:var(--solar-gold){% else %}border-color:{{ color }}44{% endif %}">
       {% if is_popular %}
-      <span class="popular-badge">⭐ MOST POPULAR</span>
+      <span class="popular-badge">â­ MOST POPULAR</span>
       {% endif %}
 
       <div class="small fw-bold mb-1" style="color:{{ color }};text-transform:uppercase;letter-spacing:.5px">
@@ -216,7 +216,7 @@
                 style="background:{% if is_popular %}linear-gradient(135deg,var(--solar-gold),var(--solar-orange)){% else %}{{ color }}{% endif %};color:#000;border-radius:10px"
                 onclick="payWithPaystack('{{ plan_key }}', {{ pp.usd }})">
           <i class="bi bi-{% if is_popular %}stars{% else %}phone{% endif %} me-2"></i>
-          Pay ${{ pp.usd }}/mo — Card / MoMo
+          Pay ${{ pp.usd }}/mo â€” Card / MoMo
         </button>
 
         {% elif stripe_key %}
@@ -240,7 +240,7 @@
         </form>
 
         {% else %}
-        <a href="mailto:support@solarproglobal.com?subject=Upgrade to {{ pp.label }} Plan"
+        <a href="mailto:support@aiappinvent.com?subject=Upgrade to {{ pp.label }} Plan"
            class="btn btn-outline-warning w-100 fw-bold py-2">
           <i class="bi bi-envelope me-2"></i>Contact to Upgrade
         </a>
@@ -252,7 +252,7 @@
         {% if demo_mode and current_plan == 'free' and plan_key == 'professional' %}
         <div class="text-center" style="font-size:11px;color:#a78bfa">
           or <a href="#" style="color:#a78bfa" onclick="document.querySelector('.demo-banner').scrollIntoView({behavior:'smooth'});return false">
-            try Professional free for 14 days ↑
+            try Professional free for 14 days â†‘
           </a>
         </div>
         {% endif %}
@@ -266,11 +266,11 @@
 
 </div>
 
-<!-- ── Feature comparison table ─────────────────────────────────────── -->
+<!-- â”€â”€ Feature comparison table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
 <div class="grad-sep"></div>
 <div class="text-center mb-4">
   <h4 class="fw-black mb-1">Full Feature Comparison</h4>
-  <p class="text-secondary small">Every feature — across all plans</p>
+  <p class="text-secondary small">Every feature â€” across all plans</p>
 </div>
 
 <div class="solar-card p-0 overflow-hidden mb-5">
@@ -311,7 +311,7 @@
           ("Procurement", [
             ("Equipment catalog access",       N,    Y,      Y),
             ("Supplier directory",             N,    Y,      Y),
-            ("Auto procurement plan (BOQ→PO)", N,    Y,      Y),
+            ("Auto procurement plan (BOQâ†’PO)", N,    Y,      Y),
           ]),
           ("Support & Extras", [
             ("Email support",                  Y,    Y,      Y),
@@ -343,7 +343,7 @@
   </div>
 </div>
 
-<!-- ── Upgrade code + Demo ─────────────────────────────────────────────── -->
+<!-- â”€â”€ Upgrade code + Demo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
 <div class="row g-4 justify-content-center mb-5">
 
   <!-- Upgrade code -->
@@ -369,7 +369,7 @@
         <div class="text-secondary mt-2" style="font-size:11px">
           <i class="bi bi-info-circle me-1"></i>
           Codes are issued by SolarPro Global. Contact
-          <a href="mailto:support@solarproglobal.com" class="text-warning">support</a> to request one.
+          <a href="mailto:support@aiappinvent.com" class="text-warning">support</a> to request one.
         </div>
       </form>
     </div>
@@ -384,11 +384,11 @@
       <div class="row g-3">
         {% for icon,color,title,subs in [
           ('bi-credit-card-2-front-fill','#0ea5e9','Card Payments',
-           ['Visa · Mastercard · Verve','All countries · Billed USD','Powered by Paystack (PCI-DSS L1)']),
-          ('bi-phone-fill','#f59e0b','Mobile Money — West Africa',
-           ['Ghana: MTN · AirtelTigo · Vodafone','Nigeria: MTN · OPay · Airtel','Billed in local currency']),
-          ('bi-phone-fill','#a78bfa','Mobile Money — More Africa',
-           ['Senegal: Orange · Wave · Free','Cameroon: MTN · Orange','Gambia · Liberia via Paystack']),
+           ['Visa Â· Mastercard Â· Verve','All countries Â· Billed USD','Powered by Paystack (PCI-DSS L1)']),
+          ('bi-phone-fill','#f59e0b','Mobile Money â€” West Africa',
+           ['Ghana: MTN Â· AirtelTigo Â· Vodafone','Nigeria: MTN Â· OPay Â· Airtel','Billed in local currency']),
+          ('bi-phone-fill','#a78bfa','Mobile Money â€” More Africa',
+           ['Senegal: Orange Â· Wave Â· Free','Cameroon: MTN Â· Orange','Gambia Â· Liberia via Paystack']),
         ] %}
         <div class="col-md-4">
           <div class="text-center">
@@ -405,8 +405,8 @@
       <div class="mt-3 p-3 rounded text-center" style="background:rgba(14,165,233,.07);border:1px solid #0ea5e922">
         <div class="small text-secondary">
           <i class="bi bi-info-circle me-2 text-info"></i>
-          No payment gateway configured — contact
-          <a href="mailto:support@solarproglobal.com" class="text-warning fw-bold">support@solarproglobal.com</a>
+          No payment gateway configured â€” contact
+          <a href="mailto:support@aiappinvent.com" class="text-warning fw-bold">support@aiappinvent.com</a>
           to upgrade manually.
         </div>
       </div>
@@ -416,14 +416,14 @@
 
 </div>
 
-<!-- ── Trust strip ────────────────────────────────────────────────────── -->
+<!-- â”€â”€ Trust strip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
 <div class="row g-0 mb-5" style="background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px;overflow:hidden">
   {% for icon,color,title,sub in [
     ('bi-arrow-counterclockwise','#22c55e','Cancel Anytime',         'No lock-in. Monthly rolling subscription.'),
     ('bi-folder2-open',          '#0ea5e9','Data Always Yours',       'All projects preserved on any plan.'),
     ('bi-shield-fill',           '#a78bfa','PCI-DSS Compliant',       'Paystack Level 1 certified processor.'),
     ('bi-headset',               '#f59e0b','24-hr Support',           'Email support on all paid plans.'),
-    ('bi-patch-check-fill',      '#22c55e','Engineering Standards',   'BS 7671 · IEC 60364 · NEC · IEEE.'),
+    ('bi-patch-check-fill',      '#22c55e','Engineering Standards',   'BS 7671 Â· IEC 60364 Â· NEC Â· IEEE.'),
   ] %}
   <div class="col trust-item">
     <div class="trust-icon" style="color:{{ color }}"><i class="bi {{ icon }}"></i></div>
@@ -433,7 +433,7 @@
   {% endfor %}
 </div>
 
-<!-- ── FAQ ────────────────────────────────────────────────────────────── -->
+<!-- â”€â”€ FAQ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
 <div class="row justify-content-center mb-5">
   <div class="col-lg-8">
     <h4 class="fw-black text-center mb-4">Frequently Asked Questions</h4>
@@ -442,21 +442,21 @@
         ("Can I really cancel anytime?",
          "Yes. Subscriptions are month-to-month with no minimum term. Cancel before your renewal date and you won't be charged again. Your projects remain accessible on the Free plan after cancellation."),
         ("Is there a free trial?",
-         "Yes — you get a 14-day free trial with 1 project, full engineering calculations, and a Pre-Installation Assessment PDF. No credit card required. After 14 days, upgrade to a paid plan to continue using the platform."),
+         "Yes â€” you get a 14-day free trial with 1 project, full engineering calculations, and a Pre-Installation Assessment PDF. No credit card required. After 14 days, upgrade to a paid plan to continue using the platform."),
         ("What happens to my data if I downgrade?",
          "Your project data is always preserved. You simply cannot create new projects above your plan limit. All completed reports and calculations remain fully accessible."),
         ("Can I upgrade mid-month?",
-         "Yes. Upgrade any time and your new plan is activated immediately. You won't be double-charged — billing starts on your next cycle."),
+         "Yes. Upgrade any time and your new plan is activated immediately. You won't be double-charged â€” billing starts on your next cycle."),
         ("Do MoMo payments auto-renew?",
          "Mobile Money billing is currently manual. Contact support before your renewal date to extend your plan. We'll send a reminder 5 days before expiry."),
         ("Is there a discount for annual billing?",
-         "Yes — contact support@solarproglobal.com for annual pricing and save up to 20% compared to monthly billing."),
+         "Yes â€” contact support@aiappinvent.com for annual pricing and save up to 20% compared to monthly billing."),
         ("Is my payment secure?",
          "Absolutely. Payments are processed by Paystack, a PCI-DSS Level 1 certified payment processor. We never store card details on our servers."),
         ("What is the Enterprise API?",
          "Enterprise plan users get API key access to programmatically create projects, retrieve calculation results, and generate reports. Contact support for API documentation and onboarding."),
         ("Can I get a custom or white-label version?",
-         "Yes — Enterprise plan includes white-label report branding with your company name and logo. For a fully customised platform deployment, contact support@solarproglobal.com for pricing."),
+         "Yes â€” Enterprise plan includes white-label report branding with your company name and logo. For a fully customised platform deployment, contact support@aiappinvent.com for pricing."),
         ("Which engineering standards are used?",
          "BS 7671:2018 (UK IET Wiring Regulations), IEC 60364, NEC 2023, IEEE 1547, and MCS. Cable sizing uses the tabulated method with correction factors for temperature, grouping, and installation method."),
       ] %}
@@ -473,12 +473,12 @@
   </div>
 </div>
 
-<!-- ── Final CTA (for free users) ────────────────────────────────────── -->
+<!-- â”€â”€ Final CTA (for free users) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
 {% if current_plan == 'free' %}
 <div class="text-center py-4 mb-4" style="background:radial-gradient(ellipse 50% 80% at 50% 50%,rgba(245,158,11,.05),transparent);border-radius:16px">
   <div class="fw-black mb-2" style="font-size:20px">Ready to unlock the full platform?</div>
   <p class="text-secondary small mb-3">
-    Professional at $49/mo gives you everything — 10 projects, 9 reports, Excel, Word, procurement, and email delivery.
+    Professional at $49/mo gives you everything â€” 10 projects, 9 reports, Excel, Word, procurement, and email delivery.
   </p>
   {% if demo_mode %}
   <form method="POST" action="{{ url_for('upgrade_demo_activate') }}" class="d-inline me-2">
@@ -488,7 +488,7 @@
     </button>
   </form>
   {% endif %}
-  <a href="mailto:support@solarproglobal.com?subject=Upgrade enquiry" class="btn btn-outline-secondary px-4 py-2">
+  <a href="mailto:support@aiappinvent.com?subject=Upgrade enquiry" class="btn btn-outline-secondary px-4 py-2">
     <i class="bi bi-envelope me-2"></i>Contact Sales
   </a>
 </div>
