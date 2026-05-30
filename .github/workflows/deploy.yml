@@ -31,6 +31,7 @@ jobs:
           OLLAMA_MODEL:            ${{ secrets.OLLAMA_MODEL }}
           SECRET_KEY:              ${{ secrets.SECRET_KEY }}
           PAYSTACK_SECRET_KEY:     ${{ secrets.PAYSTACK_SECRET_KEY }}
+          RESEND_API_KEY:          ${{ secrets.RESEND_API_KEY }}
           SMTP_HOST:               ${{ secrets.SMTP_HOST }}
           SMTP_PORT:               ${{ secrets.SMTP_PORT }}
           SMTP_USER:               ${{ secrets.SMTP_USER }}
@@ -52,6 +53,7 @@ jobs:
           add OLLAMA_MODEL       "$OLLAMA_MODEL"
           add SECRET_KEY         "$SECRET_KEY"
           add PAYSTACK_SECRET_KEY "$PAYSTACK_SECRET_KEY"
+          add RESEND_API_KEY     "$RESEND_API_KEY"
           add SMTP_HOST          "$SMTP_HOST"
           add SMTP_PORT          "$SMTP_PORT"
           add SMTP_USER          "$SMTP_USER"

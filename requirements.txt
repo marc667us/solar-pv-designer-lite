@@ -9,3 +9,4 @@ anthropic
 markdown-pdf
 ddgs
 pytest>=9.0
+resend

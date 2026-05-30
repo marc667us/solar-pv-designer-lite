@@ -386,11 +386,56 @@
 <!-- ════════════════════════════════════════════════════════════════════════ -->
 <div class="settings-pane" id="pane-smtp" style="display:none">
 <div class="solar-card p-4">
-  <div class="section-head mb-1"><i class="bi bi-envelope-at me-1"></i>Email / SMTP Configuration</div>
-  <div class="sp-hint mb-3">Configure your outbound mail server to send project reports. Your settings override any server-level defaults.</div>
+  <div class="section-head mb-1"><i class="bi bi-envelope-at me-1"></i>Email Configuration</div>
+  <div class="sp-hint mb-4">Configure email delivery. <strong>Resend is recommended</strong> — just paste your API key. SMTP is the fallback if no Resend key is set.</div>
+
+  <!-- Resend block -->
+  <div class="rounded-3 p-3 mb-4" style="background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.3)">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <span style="font-size:18px">✉️</span>
+      <strong style="color:var(--sp-accent)">Resend (Recommended)</strong>
+      <span class="badge" style="background:rgba(124,58,237,.2);color:#a78bfa;font-size:10px;border-radius:6px;padding:2px 8px">Simple · Reliable · Free tier</span>
+    </div>
+    <div class="sp-hint mb-2">Get a free API key at <a href="https://resend.com" target="_blank" style="color:var(--sp-accent)">resend.com</a> — verify your domain <code>aiappinvent.com</code> and paste the key below.</div>
+    <div class="row g-2">
+      <div class="col-md-9">
+        <label class="sp-label">Resend API Key</label>
+        <div class="input-group">
+          <input type="password" name="resend_api_key" id="resendKey" class="form-control sp-input"
+                 placeholder="{% if user.resend_api_key %}re_••••••••••••{% else %}re_xxxxxxxxxxxxxxxx{% endif %}"
+                 autocomplete="off">
+          <button type="button" class="btn btn-outline-secondary" onclick="toggleResendKey()" style="border-color:var(--sp-border)">
+            <i class="bi bi-eye" id="resendEye"></i>
+          </button>
+        </div>
+        {% if user.resend_api_key %}
+        <div class="sp-hint mt-1"><i class="bi bi-check-circle text-success me-1"></i>Key saved — leave blank to keep existing.</div>
+        {% endif %}
+      </div>
+      <div class="col-md-3 d-flex align-items-end">
+        {% if user.resend_api_key %}
+        <span class="badge w-100 text-center py-2" style="background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.3);border-radius:8px;font-size:12px">
+          <i class="bi bi-check-circle me-1"></i>Resend Active
+        </span>
+        {% else %}
+        <span class="badge w-100 text-center py-2" style="background:rgba(99,102,241,.1);color:#818cf8;border:1px solid rgba(99,102,241,.2);border-radius:8px;font-size:12px">
+          Not configured
+        </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- SMTP section (collapsible) -->
+  <div class="d-flex align-items-center gap-2 mb-2" style="cursor:pointer" onclick="toggleSmtpSection()">
+    <i class="bi bi-server" style="color:var(--sp-accent)"></i>
+    <span style="font-size:13px;font-weight:600">SMTP Fallback</span>
+    <i class="bi bi-chevron-down" id="smtpChevron" style="font-size:12px;color:var(--sp-muted);margin-left:auto"></i>
+  </div>
+  <div id="smtpSection" style="display:{% if user.smtp_host %}block{% else %}none{% endif %}">
 
   <!-- Quick-fill hints -->
-  <div class="row g-2 mb-4">
+  <div class="row g-2 mb-3 mt-1">
     {% for name, host, port, tls, hint in [
       ('Gmail',   'smtp.gmail.com',     '587', 'starttls', 'Use an App Password (not your Google password)'),
       ('Outlook', 'smtp.office365.com', '587', 'starttls', 'Works with Microsoft 365 / Outlook.com accounts'),
@@ -463,16 +508,20 @@
     <!-- Test result -->
     <div id="smtpTestResult" class="mt-3" style="display:none"></div>
 
-    <div class="d-flex align-items-center justify-content-between mt-4">
+    <div class="d-flex align-items-center justify-content-between mt-3">
       <div class="sp-hint">
         <i class="bi bi-info-circle me-1"></i>
         Gmail: use <a href="https://myaccount.google.com/apppasswords" target="_blank" class="text-warning">App Passwords</a>.
         Brevo: sign up free for 300 emails/day.
       </div>
-      <button type="submit" class="btn btn-solar btn-sm px-4">
-        <i class="bi bi-check-lg me-1"></i>Save SMTP
-      </button>
     </div>
+  </div><!-- /smtpSection -->
+
+  <div class="d-flex justify-content-end mt-4">
+    <button type="submit" class="btn btn-solar btn-sm px-4">
+      <i class="bi bi-check-lg me-1"></i>Save Email Settings
+    </button>
+  </div>
   </form>
 </div>
 </div><!-- /pane-smtp -->
@@ -727,6 +776,24 @@ function selectTimeFmt(label, val){
     l.querySelector('.tf-dot').style.background = active ? 'var(--sp-accent)' : 'transparent';
     l.querySelector('input').checked = active;
   });
+}
+
+// ── Resend key toggle ────────────────────────────────────────────────────────
+function toggleResendKey(){
+  const f = document.getElementById('resendKey');
+  const e = document.getElementById('resendEye');
+  if(f.type === 'password'){ f.type = 'text'; e.className = 'bi bi-eye-slash'; }
+  else { f.type = 'password'; e.className = 'bi bi-eye'; }
+}
+
+// ── SMTP section expand/collapse ─────────────────────────────────────────────
+function toggleSmtpSection(){
+  const s = document.getElementById('smtpSection');
+  const c = document.getElementById('smtpChevron');
+  const open = s.style.display !== 'none';
+  s.style.display = open ? 'none' : 'block';
+  c.className = open ? 'bi bi-chevron-down' : 'bi bi-chevron-up';
+  c.style.color = open ? 'var(--sp-muted)' : 'var(--sp-accent)';
 }
 
 // ── SMTP quick-fill ──────────────────────────────────────────────────────────

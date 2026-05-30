@@ -107,6 +107,7 @@ SMTP_USER   = os.environ.get("SMTP_USER", "")
 SMTP_PASS   = os.environ.get("SMTP_PASS", "")
 SMTP_FROM   = os.environ.get("SMTP_FROM", "support@aiappinvent.com")
 SMTP_TLS    = os.environ.get("SMTP_TLS", "true").lower() in ("1", "true", "yes")
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 
 PLAN_PRICES = {
     "professional": {"usd": 49, "label": "Professional", "projects": 10,
@@ -452,6 +453,7 @@ def init_db():
         ("smtp_pass",   "''"),
         ("smtp_from",   "''"),
         ("smtp_tls",    "'starttls'"),
+        ("resend_api_key", "''"),
     ]:
         try:
             with get_db() as c:
@@ -554,31 +556,58 @@ def init_db():
 
 # â”€â”€â”€ System email helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-def _send_system_email(to_addr, subject, body_text):
-    """Send a transactional system email (password reset, alerts) via env-var SMTP."""
+def _send_email(to_addr, subject, html_body, text_body=None, from_addr=None, resend_key=None):
+    """Send email via Resend (preferred) with SMTP fallback.
+    to_addr may be a str or list. Returns (ok: bool, message: str).
+    """
+    _from = from_addr or SMTP_FROM
+    _to   = [to_addr] if isinstance(to_addr, str) else list(to_addr)
+    eff_resend = resend_key or RESEND_API_KEY
+
+    if eff_resend:
+        try:
+            import resend as _resend
+            _resend.api_key = eff_resend
+            params = {"from": _from, "to": _to, "subject": subject, "html": html_body}
+            if text_body:
+                params["text"] = text_body
+            _resend.Emails.send(params)
+            return True, "sent"
+        except Exception as ex:
+            return False, str(ex)
+
+    # SMTP fallback
     if not SMTP_HOST or not SMTP_USER:
-        return False, "SMTP not configured"
+        return False, "Email not configured - add a Resend API key or SMTP settings."
     try:
         import smtplib
         from email.mime.multipart import MIMEMultipart
-        from email.mime.text import MIMEText
-        msg = MIMEMultipart()
-        msg["From"]    = SMTP_FROM
-        msg["To"]      = to_addr
+        from email.mime.text import MIMEText as _MIMEText2
+        msg = MIMEMultipart("alternative")
+        msg["From"]    = _from
+        msg["To"]      = ", ".join(_to)
         msg["Subject"] = subject
-        msg.attach(MIMEText(body_text, "plain"))
+        if text_body:
+            msg.attach(_MIMEText2(text_body, "plain"))
+        msg.attach(_MIMEText2(html_body, "html"))
         if SMTP_TLS:
             srv = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15)
-            srv.ehlo()
-            srv.starttls()
+            srv.ehlo(); srv.starttls()
         else:
             srv = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15)
         srv.login(SMTP_USER, SMTP_PASS)
-        srv.sendmail(SMTP_FROM, [to_addr], msg.as_string())
+        srv.sendmail(_from, _to, msg.as_string())
         srv.quit()
         return True, "sent"
     except Exception as ex:
         return False, str(ex)
+
+
+def _send_system_email(to_addr, subject, body_text):
+    """Send a transactional system email (password reset, alerts)."""
+    html = ("<div style='font-family:sans-serif;padding:24px;color:#1a1a2e'>"
+            "<pre style='white-space:pre-wrap'>" + body_text + "</pre></div>")
+    return _send_email(to_addr, subject, html, text_body=body_text)
 
 
 # â”€â”€â”€ Auth helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -5333,22 +5362,27 @@ def settings():
             return redirect(url_for("settings") + "?tab=datetime")
 
         elif section == "smtp":
-            smtp_host = request.form.get("smtp_host", "").strip()
-            smtp_port = request.form.get("smtp_port", "587").strip() or "587"
-            smtp_user = request.form.get("smtp_user", "").strip()
-            smtp_pass = request.form.get("smtp_pass", "").strip()
-            smtp_from = request.form.get("smtp_from", "").strip()
-            smtp_tls  = request.form.get("smtp_tls", "starttls").strip()
+            resend_key = request.form.get("resend_api_key", "").strip()
+            smtp_host  = request.form.get("smtp_host", "").strip()
+            smtp_port  = request.form.get("smtp_port", "587").strip() or "587"
+            smtp_user  = request.form.get("smtp_user", "").strip()
+            smtp_pass  = request.form.get("smtp_pass", "").strip()
+            smtp_from  = request.form.get("smtp_from", "").strip()
+            smtp_tls   = request.form.get("smtp_tls", "starttls").strip()
             with get_db() as c:
                 if not smtp_pass:
                     existing = c.execute("SELECT smtp_pass FROM users WHERE id=?", (uid,)).fetchone()
                     if existing:
                         smtp_pass = existing["smtp_pass"] or ""
+                if not resend_key:
+                    existing2 = c.execute("SELECT resend_api_key FROM users WHERE id=?", (uid,)).fetchone()
+                    if existing2:
+                        resend_key = existing2["resend_api_key"] or ""
                 c.execute(
-                    "UPDATE users SET smtp_host=?, smtp_port=?, smtp_user=?, "
+                    "UPDATE users SET resend_api_key=?, smtp_host=?, smtp_port=?, smtp_user=?, "
                     "smtp_pass=?, smtp_from=?, smtp_tls=? WHERE id=?",
-                    (smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_tls, uid))
-            flash("SMTP configuration saved.", "success")
+                    (resend_key, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_tls, uid))
+            flash("Email configuration saved.", "success")
             return redirect(url_for("settings") + "?tab=smtp")
 
         elif section == "password":
@@ -6630,28 +6664,14 @@ def assess_design():
 </body></html>"""
 
     try:
-        import smtplib
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.text import MIMEText as _MIMEText
-        emsg = MIMEMultipart("alternative")
-        emsg["From"]    = SMTP_FROM
-        emsg["To"]      = email
-        emsg["Subject"] = f"Your Preliminary Solar Design ({ref}) â€” SolarPro Global"
-        emsg.attach(_MIMEText(
-            f"Hi {first}, your preliminary design is ready. Ref: {ref}\n"
-            f"PV: {pv_kw:.1f}kWp | Battery: {bat_kwh:.1f}kWh | Inverter: {inv_kw:.0f}kW\n"
-            f"Estimated cost: {symbol}{total_local:,.0f} {currency} | Payback: {payback_yr} yrs\n"
-            f"Visit https://solarpro.aiappinvent.com to book a consultation.", "plain"))
-        emsg.attach(_MIMEText(html_email, "html"))
-        if SMTP_HOST and SMTP_USER:
-            if SMTP_TLS:
-                srv = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15)
-                srv.ehlo(); srv.starttls()
-            else:
-                srv = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15)
-            srv.login(SMTP_USER, SMTP_PASS)
-            srv.sendmail(SMTP_FROM, [email], emsg.as_string())
-            srv.quit()
+        _subj = ("Your Preliminary Solar Design (" + ref + ") - SolarPro Global")
+        _pl = ("Hi " + str(first) + ", design ready. Ref: " + ref + ". "
+               "PV: " + str(round(pv_kw,1)) + "kWp | Battery: " + str(round(bat_kwh,1)) + "kWh | Inverter: " + str(round(inv_kw)) + "kW. "
+               "Cost: " + symbol + "{:,.0f}".format(total_local) + " " + currency + ". "
+               "Visit https://solarpro.aiappinvent.com to book a consultation.")
+        _ok, _err = _send_email(email, _subj, html_email, text_body=_pl)
+        if not _ok:
+            app.logger.warning("assess_design email failed: %s", _err)
     except Exception as mail_e:
         app.logger.warning("assess_design email failed: %s", mail_e)
 
@@ -7282,21 +7302,23 @@ def project_email(pid):
     # Convert sqlite3.Row â†’ plain dict so .get() works
     user = dict(current_user() or {})
 
-    # Resolve SMTP: user DB settings take priority over env vars
-    u_host = (user.get("smtp_host") or "").strip()
-    u_user = (user.get("smtp_user") or "").strip()
-    u_pass = (user.get("smtp_pass") or "").strip()
-    u_from = (user.get("smtp_from") or "").strip()
+    # Resolve email: Resend key > SMTP user settings > SMTP env vars
+    u_resend = (user.get("resend_api_key") or "").strip()
+    u_host   = (user.get("smtp_host") or "").strip()
+    u_user   = (user.get("smtp_user") or "").strip()
+    u_pass   = (user.get("smtp_pass") or "").strip()
+    u_from   = (user.get("smtp_from") or "").strip()
     u_port_s = (user.get("smtp_port") or "587").strip()
-    u_port = int(u_port_s) if u_port_s.isdigit() else 587
-    u_tls  = (user.get("smtp_tls") or "starttls") == "starttls"
+    u_port   = int(u_port_s) if u_port_s.isdigit() else 587
+    u_tls    = (user.get("smtp_tls") or "starttls") == "starttls"
 
-    eff_host = u_host or SMTP_HOST
-    eff_user = u_user or SMTP_USER
-    eff_pass = u_pass or SMTP_PASS
-    eff_from = u_from or SMTP_FROM
-    eff_port = u_port if u_host else SMTP_PORT
-    eff_tls  = u_tls  if u_host else SMTP_TLS
+    eff_resend = u_resend or RESEND_API_KEY
+    eff_host   = u_host or SMTP_HOST
+    eff_user   = u_user or SMTP_USER
+    eff_pass   = u_pass or SMTP_PASS
+    eff_from   = u_from or SMTP_FROM
+    eff_port   = u_port if u_host else SMTP_PORT
+    eff_tls    = u_tls  if u_host else SMTP_TLS
 
     REPORT_OPTIONS = [
         ("Full Proposal (All Reports)", url_for("export_pdf_proposal",    pid=pid)),
@@ -7322,53 +7344,45 @@ def project_email(pid):
             flash("Enter at least one recipient email.", "warning")
             return redirect(url_for("project_email", pid=pid))
 
-        if not eff_host or not eff_user:
+        if not eff_resend and not (eff_host and eff_user):
             with get_db() as c:
                 c.execute(
                     "INSERT INTO email_logs (user_id,project_id,recipients,subject,status,error_msg) "
                     "VALUES (?,?,?,?,?,?)",
                     (session["user_id"], pid, ",".join(recipients), subject,
-                     "failed", "SMTP not configured"))
+                     "failed", "Email not configured"))
             flash(
-                "SMTP not configured. Go to Settings â†’ Email / SMTP to add your mail credentials.", "warning")
+                "Email not configured. Add a Resend API key or SMTP settings in Settings.",
+                "warning")
             return redirect(url_for("project_email", pid=pid))
 
-        try:
-            import smtplib
-            from email.mime.multipart import MIMEMultipart
-            from email.mime.text import MIMEText
-
-            msg = MIMEMultipart()
-            msg["From"]    = eff_from
-            msg["To"]      = ", ".join(recipients)
-            msg["Subject"] = subject
-            msg.attach(MIMEText(body_text or
-                f"Please find the solar project report for {project['name']} attached.\n\n"
-                f"Generated by SolarPro Global.", "plain"))
-
-            if eff_tls:
-                srv = smtplib.SMTP(eff_host, eff_port, timeout=15)
-                srv.ehlo()
-                srv.starttls()
-            else:
-                srv = smtplib.SMTP_SSL(eff_host, eff_port, timeout=15)
-            srv.login(eff_user, eff_pass)
-            srv.sendmail(eff_from, recipients, msg.as_string())
-            srv.quit()
-
+        _ptxt = body_text or (
+            "Please find the solar project report for " + project["name"] + " attached. "
+            "Generated by SolarPro Global."
+        )
+        _phtml = (
+            "<div style='font-family:sans-serif;padding:24px'>"
+            "<p>" + _ptxt + "</p>"
+            "<hr><p style='color:#888;font-size:12px'>SolarPro Global</p></div>"
+        )
+        _ok, _err = _send_email(
+            recipients, subject, _phtml, text_body=_ptxt,
+            from_addr=eff_from, resend_key=eff_resend or None,
+        )
+        if _ok:
             with get_db() as c:
                 c.execute(
                     "INSERT INTO email_logs (user_id,project_id,recipients,subject,status) "
                     "VALUES (?,?,?,?,?)",
                     (session["user_id"], pid, ",".join(recipients), subject, "sent"))
-            flash(f"Email sent to: {', '.join(recipients)}", "success")
-        except Exception as ex:
+            flash("Email sent to: " + ", ".join(recipients), "success")
+        else:
             with get_db() as c:
                 c.execute(
                     "INSERT INTO email_logs (user_id,project_id,recipients,subject,status,error_msg) "
                     "VALUES (?,?,?,?,?,?)",
-                    (session["user_id"], pid, ",".join(recipients), subject, "failed", str(ex)))
-            flash(f"Email failed: {ex}", "danger")
+                    (session["user_id"], pid, ",".join(recipients), subject, "failed", _err))
+            flash("Email failed: " + str(_err), "danger")
 
         return redirect(url_for("project_email", pid=pid))
 
@@ -7376,7 +7390,7 @@ def project_email(pid):
         logs = c.execute(
             "SELECT * FROM email_logs WHERE project_id=? ORDER BY created_at DESC LIMIT 10",
             (pid,)).fetchall()
-    smtp_ok = bool(eff_host and eff_user)
+    smtp_ok = bool(eff_resend or (eff_host and eff_user))
     d = project["data"]
     r = d.get("results", {})
     return render_template("email_report.html", user=user, project=project,
@@ -8966,44 +8980,26 @@ def monitor_run_now():
 def _send_prospect_notification(subject, body_lines, admin_email=None):
     """Send email notification to admin for prospect agent events."""
     try:
-        host = os.environ.get("SMTP_HOST", "")
-        port = int(os.environ.get("SMTP_PORT", 587))
-        user = os.environ.get("SMTP_USER", "")
-        pw   = os.environ.get("SMTP_PASS", "")
-        frm  = os.environ.get("SMTP_FROM", user)
-        if not (host and user and pw):
+        to = admin_email or SMTP_USER or SMTP_FROM
+        if not to:
             return False
-        to = admin_email or user
-        import smtplib
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"[SolarPro Agent] {subject}"
-        msg["From"]    = frm
-        msg["To"]      = to
-        txt = "\n".join(body_lines)
-        html_rows = "".join(f"<li style='margin-bottom:6px'>{l}</li>" for l in body_lines)
-        html = f"""<div style="font-family:sans-serif;background:#0a0a14;color:#e2e2f0;padding:28px;border-radius:12px;max-width:600px">
-  <h2 style="color:#a78bfa;margin-top:0"><span style="margin-right:8px">ðŸ¤–</span>{subject}</h2>
-  <ul style="padding-left:20px;color:#c8c8e8">{html_rows}</ul>
-  <hr style="border-color:#1e1e3a;margin:20px 0">
-  <a href="https://solarpro.aiappinvent.com/admin/agent" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:700">
-    Open Agent Dashboard â†’
-  </a>
-  <p style="color:#6868a0;font-size:11px;margin-top:20px">SolarPro Global Â· AI Prospect Agent</p>
-</div>"""
-        msg.attach(MIMEText(txt, "plain"))
-        msg.attach(MIMEText(html, "html"))
-        tls_mode = os.environ.get("SMTP_TLS", "starttls").lower()
-        if tls_mode == "ssl":
-            sv = smtplib.SMTP_SSL(host, port, timeout=15)
-        else:
-            sv = smtplib.SMTP(host, port, timeout=15)
-            sv.starttls()
-        sv.login(user, pw)
-        sv.sendmail(frm, [to], msg.as_string())
-        sv.quit()
-        return True
+        txt = chr(10).join(body_lines)
+        html_rows = "".join("<li style='margin-bottom:6px'>" + l + "</li>" for l in body_lines)
+        html = (
+            "<div style='font-family:sans-serif;background:#0a0a14;color:#e2e2f0;"
+            "padding:28px;border-radius:12px;max-width:600px'>"
+            "<h2 style='color:#a78bfa;margin-top:0'>AI Agent - " + subject + "</h2>"
+            "<ul style='padding-left:20px;color:#c8c8e8'>" + html_rows + "</ul>"
+            "<hr style='border-color:#1e1e3a;margin:20px 0'>"
+            "<a href='https://solarpro.aiappinvent.com/admin/agent' "
+            "style='background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;"
+            "padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:700'>"
+            "Open Agent Dashboard</a>"
+            "<p style='color:#6868a0;font-size:11px;margin-top:20px'>SolarPro Global - AI Prospect Agent</p>"
+            "</div>"
+        )
+        ok, _ = _send_email(to, "[SolarPro Agent] " + subject, html, text_body=txt)
+        return ok
     except Exception:
         return False
 
