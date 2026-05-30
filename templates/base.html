@@ -544,6 +544,114 @@
 }
 </style>
 
+<!-- Feedback button (bottom-left, only for logged-in users) -->
+{% if session.get('user_id') %}
+<button id="sp-fb-btn" onclick="spFbToggle()" title="Send Feedback" class="no-print"
+  style="position:fixed;bottom:24px;left:24px;z-index:9990;padding:8px 16px;border-radius:24px;
+         border:1px solid rgba(14,165,233,.4);cursor:pointer;background:rgba(14,165,233,.1);
+         color:#0ea5e9;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;
+         transition:all .2s;backdrop-filter:blur(8px)">
+  <i class="bi bi-chat-dots-fill"></i> Feedback
+</button>
+
+<!-- Feedback modal -->
+<div id="sp-fb-panel" class="no-print"
+  style="display:none;position:fixed;bottom:72px;left:24px;z-index:9989;width:320px;
+         border-radius:16px;background:var(--sp-card-bg);border:1px solid #1e1e3a;
+         box-shadow:0 16px 56px rgba(0,0,0,.75);overflow:hidden">
+  <div style="padding:14px 16px;background:linear-gradient(135deg,#0f0f22,#0a1628);
+              border-bottom:1px solid #1e1e3a;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="width:30px;height:30px;border-radius:50%;background:rgba(14,165,233,.2);
+                  display:flex;align-items:center;justify-content:center">
+        <i class="bi bi-chat-dots-fill" style="color:#0ea5e9;font-size:14px"></i>
+      </div>
+      <div>
+        <div style="font-weight:700;font-size:14px;color:#e2e2f0">Beta Feedback</div>
+        <div style="font-size:11px;color:#6868a0">Help us improve SolarPro</div>
+      </div>
+    </div>
+    <button onclick="spFbToggle()" style="background:none;border:none;color:#6868a0;font-size:18px;cursor:pointer;padding:0">&times;</button>
+  </div>
+  <div style="padding:16px">
+    <div id="sp-fb-success" style="display:none;text-align:center;padding:16px 0">
+      <i class="bi bi-check-circle-fill" style="font-size:32px;color:#22c55e"></i>
+      <p style="margin-top:8px;color:#e2e2f0;font-size:14px">Thanks for your feedback!</p>
+    </div>
+    <div id="sp-fb-form">
+      <div class="d-flex gap-2 mb-3">
+        {% for t,lbl,clr in [('bug','Bug','#ef4444'),('suggestion','Idea','#a78bfa'),('general','General','#0ea5e9')] %}
+        <label style="flex:1;cursor:pointer">
+          <input type="radio" name="fb_type" value="{{ t }}" style="display:none" class="sp-fb-type"
+                 {% if t=='general' %}checked{% endif %}>
+          <div class="sp-fb-type-btn" data-type="{{ t }}"
+               style="text-align:center;padding:6px 4px;border-radius:8px;font-size:12px;font-weight:600;
+                      border:1px solid {% if t=='bug' %}rgba(239,68,68,.4){% elif t=='suggestion' %}rgba(167,139,250,.4){% else %}rgba(14,165,233,.4){% endif %};
+                      color:{{ clr }};background:{% if t=='general' %}rgba(14,165,233,.15){% else %}transparent{% endif %};
+                      transition:background .15s">
+            <i class="bi bi-{% if t=='bug' %}bug{% elif t=='suggestion' %}lightbulb{% else %}chat{% endif %} d-block mb-1" style="font-size:16px"></i>
+            {{ lbl }}
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+      <textarea id="sp-fb-msg" rows="4" placeholder="Describe the issue or suggestion..."
+        style="width:100%;background:#1a1a2e;border:1px solid #2d2d50;border-radius:10px;
+               color:#e2e2f0;padding:10px;font-size:13px;resize:none;outline:none"></textarea>
+      <button onclick="spFbSubmit()" style="width:100%;margin-top:10px;padding:10px;border:none;
+              border-radius:10px;background:linear-gradient(135deg,#0ea5e9,#0284c7);
+              color:#fff;font-weight:600;font-size:14px;cursor:pointer">
+        <i class="bi bi-send-fill me-1"></i> Send Feedback
+      </button>
+    </div>
+  </div>
+</div>
+<script>
+function spFbToggle(){
+  var p=document.getElementById('sp-fb-panel');
+  p.style.display = p.style.display==='none' ? 'block' : 'none';
+}
+// Type selector highlight
+document.querySelectorAll('.sp-fb-type').forEach(function(r){
+  r.addEventListener('change',function(){
+    document.querySelectorAll('.sp-fb-type-btn').forEach(function(b){
+      b.style.background='transparent';
+    });
+    var t=this.value;
+    var colors={'bug':'rgba(239,68,68,.15)','suggestion':'rgba(167,139,250,.15)','general':'rgba(14,165,233,.15)'};
+    document.querySelector('.sp-fb-type-btn[data-type="'+t+'"]').style.background=colors[t]||'transparent';
+  });
+});
+function spFbSubmit(){
+  var msg=document.getElementById('sp-fb-msg').value.trim();
+  if(!msg)return;
+  var type=document.querySelector('.sp-fb-type:checked');
+  var fbType=type?type.value:'general';
+  var csrf=document.querySelector('meta[name="csrf-token"]');
+  var token=csrf?csrf.getAttribute('content'):'';
+  var fd=new FormData();
+  fd.append('type',fbType);
+  fd.append('message',msg);
+  fd.append('page',window.location.pathname);
+  fd.append('_csrf',token);
+  fetch('/feedback',{method:'POST',body:fd})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.ok){
+        document.getElementById('sp-fb-form').style.display='none';
+        document.getElementById('sp-fb-success').style.display='block';
+        setTimeout(function(){
+          spFbToggle();
+          document.getElementById('sp-fb-form').style.display='block';
+          document.getElementById('sp-fb-success').style.display='none';
+          document.getElementById('sp-fb-msg').value='';
+        },2500);
+      }
+    });
+}
+</script>
+{% endif %}
+
 <!-- Floating bubble -->
 <button id="sp-asst-btn" onclick="spAsstToggle()" title="Helpline — SolarPro AI Assistant" class="no-print"
   style="position:fixed;bottom:24px;right:24px;z-index:9990;width:56px;height:56px;border-radius:50%;

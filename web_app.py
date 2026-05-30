@@ -398,6 +398,28 @@ def init_db():
             use_count  INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS beta_signups (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL,
+            email       TEXT UNIQUE NOT NULL,
+            company     TEXT DEFAULT '',
+            role        TEXT DEFAULT '',
+            status      TEXT DEFAULT 'pending',
+            invited_at  TEXT DEFAULT '',
+            notes       TEXT DEFAULT '',
+            created_at  TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS beta_feedback (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER DEFAULT NULL,
+            username    TEXT DEFAULT '',
+            email       TEXT DEFAULT '',
+            type        TEXT DEFAULT 'general',
+            message     TEXT NOT NULL,
+            page        TEXT DEFAULT '',
+            status      TEXT DEFAULT 'new',
+            created_at  TEXT DEFAULT CURRENT_TIMESTAMP
+        );
         """)
     # Migrate older DBs â€” ignore if column already exists
     for stmt in [
@@ -9088,6 +9110,217 @@ _monitor_thread.start()
 
 
 # â”€â”€â”€ Entry point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+# -- Beta Testing ----------------------------------------------------------
+
+@app.route("/beta-signup", methods=["POST"])
+@limiter.limit("3 per hour")
+def beta_signup():
+    csrf_protect()
+    name    = request.form.get("name", "").strip()
+    email   = request.form.get("email", "").strip().lower()
+    company = request.form.get("company", "").strip()
+    role    = request.form.get("role", "").strip()
+    if not name or not email:
+        flash("Name and email are required.", "danger")
+        return redirect(url_for("landing") + "#beta")
+    with get_db() as c:
+        exists = c.execute("SELECT id FROM beta_signups WHERE email=?", (email,)).fetchone()
+        if exists:
+            flash("You're already on the beta waitlist!", "info")
+            return redirect(url_for("landing") + "#beta")
+        c.execute(
+            "INSERT INTO beta_signups (name, email, company, role) VALUES (?,?,?,?)",
+            (name, email, company, role))
+    _send_email(
+        EMAIL_SALES, "New Beta Signup: " + name,
+        "<h3>New Beta Signup</h3><p><b>Name:</b> " + name + "<br><b>Email:</b> " + email +
+        "<br><b>Company:</b> " + (company or "N/A") + "<br><b>Role:</b> " + (role or "N/A") + "</p>"
+        "<p><a href='https://solarpro.aiappinvent.com/admin/beta'>View in Admin</a></p>",
+        from_addr=EMAIL_SUPPORT)
+    _send_email(
+        email, "You're on the SolarPro Beta Waitlist!",
+        "<h2>Thanks, " + name + "!</h2>"
+        "<p>You've been added to the SolarPro Global beta waitlist. "
+        "We'll send your invite to <b>" + email + "</b> soon.</p>"
+        "<p>Visit: <a href='https://solarpro.aiappinvent.com'>solarpro.aiappinvent.com</a></p>"
+        "<p>-- The SolarPro Team</p>",
+        from_addr=EMAIL_SALES)
+    flash("You're on the list! Check your email for confirmation.", "success")
+    return redirect(url_for("landing") + "#beta")
+
+
+@app.route("/feedback", methods=["POST"])
+@login_required
+def submit_feedback():
+    csrf_protect()
+    fb_type = request.form.get("type", "general")
+    message = request.form.get("message", "").strip()
+    page    = request.form.get("page", "").strip()
+    if not message:
+        return jsonify({"ok": False, "msg": "Message required"}), 400
+    with get_db() as c:
+        u = c.execute("SELECT username, email FROM users WHERE id=?",
+                      (session["user_id"],)).fetchone()
+    username = u["username"] if u else ""
+    uemail   = u["email"]    if u else ""
+    with get_db() as c:
+        c.execute(
+            "INSERT INTO beta_feedback (user_id, username, email, type, message, page) "
+            "VALUES (?,?,?,?,?,?)",
+            (session["user_id"], username, uemail, fb_type, message, page))
+    _send_email(
+        EMAIL_SUPPORT,
+        "[" + fb_type.upper() + "] Beta Feedback from " + username,
+        "<h3>Beta Feedback</h3><p><b>From:</b> " + username + " (" + uemail + ")<br>"
+        "<b>Type:</b> " + fb_type + "<br><b>Page:</b> " + (page or "N/A") + "</p>"
+        "<p><b>Message:</b><br>" + message + "</p>"
+        "<p><a href='https://solarpro.aiappinvent.com/admin/feedback'>View feedback</a></p>",
+        from_addr=EMAIL_SUPPORT)
+    return jsonify({"ok": True, "msg": "Feedback submitted. Thank you!"})
+
+
+@app.route("/admin/beta")
+@admin_required
+def admin_beta():
+    with get_db() as c:
+        signups = c.execute(
+            "SELECT * FROM beta_signups ORDER BY created_at DESC").fetchall()
+    counts = {
+        "total":    len(signups),
+        "pending":  sum(1 for s in signups if s["status"] == "pending"),
+        "approved": sum(1 for s in signups if s["status"] == "approved"),
+        "rejected": sum(1 for s in signups if s["status"] == "rejected"),
+        "invited":  sum(1 for s in signups if s["invited_at"]),
+    }
+    return render_template("admin_beta.html", signups=signups, counts=counts)
+
+
+@app.route("/admin/beta/invite", methods=["POST"])
+@admin_required
+def admin_beta_invite():
+    csrf_protect()
+    signup_id = request.form.get("signup_id", type=int)
+    if not signup_id:
+        flash("Invalid request.", "danger")
+        return redirect(url_for("admin_beta"))
+    with get_db() as c:
+        s = c.execute("SELECT * FROM beta_signups WHERE id=?", (signup_id,)).fetchone()
+    if not s:
+        flash("Signup not found.", "danger")
+        return redirect(url_for("admin_beta"))
+    reg_url = "https://solarpro.aiappinvent.com/register"
+    ok, msg = _send_email(
+        s["email"], "You're Invited to SolarPro Beta!",
+        "<h2>Your Beta Invite is Here, " + s["name"] + "!</h2>"
+        "<p>You've been approved for early access to <b>SolarPro Global</b>.</p>"
+        "<p><a href='" + reg_url + "' style='background:#f59e0b;color:#000;"
+        "padding:12px 24px;border-radius:8px;text-decoration:none;"
+        "font-weight:bold;display:inline-block;margin:16px 0'>Create Beta Account</a></p>"
+        "<p>Or visit: " + reg_url + "</p>"
+        "<p>-- The SolarPro Team</p>",
+        from_addr=EMAIL_SALES)
+    if ok:
+        from datetime import datetime as _dt
+        with get_db() as c:
+            c.execute(
+                "UPDATE beta_signups SET status='approved', invited_at=? WHERE id=?",
+                (_dt.utcnow().strftime("%Y-%m-%d %H:%M:%S"), signup_id))
+        flash("Invite sent to " + s["email"] + ".", "success")
+    else:
+        flash("Failed to send invite: " + msg, "danger")
+    return redirect(url_for("admin_beta"))
+
+
+@app.route("/admin/beta/manual-invite", methods=["POST"])
+@admin_required
+def admin_beta_manual_invite():
+    csrf_protect()
+    name  = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip().lower()
+    if not name or not email:
+        flash("Name and email required.", "danger")
+        return redirect(url_for("admin_beta"))
+    with get_db() as c:
+        exists = c.execute("SELECT id FROM beta_signups WHERE email=?", (email,)).fetchone()
+        if not exists:
+            c.execute(
+                "INSERT INTO beta_signups (name, email, status) VALUES (?,?,'approved')",
+                (name, email))
+            signup_id = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+        else:
+            signup_id = exists["id"]
+    reg_url = "https://solarpro.aiappinvent.com/register"
+    ok, msg = _send_email(
+        email, "You're Invited to SolarPro Beta!",
+        "<h2>Hi " + name + ", your SolarPro Beta invite is ready!</h2>"
+        "<p>You've been personally invited to try <b>SolarPro Global</b>.</p>"
+        "<p><a href='" + reg_url + "' style='background:#f59e0b;color:#000;"
+        "padding:12px 24px;border-radius:8px;text-decoration:none;"
+        "font-weight:bold;display:inline-block;margin:16px 0'>Create Free Account</a></p>"
+        "<p>-- The SolarPro Team</p>",
+        from_addr=EMAIL_SALES)
+    if ok:
+        from datetime import datetime as _dt
+        with get_db() as c:
+            c.execute("UPDATE beta_signups SET invited_at=? WHERE id=?",
+                      (_dt.utcnow().strftime("%Y-%m-%d %H:%M:%S"), signup_id))
+        flash("Invite sent to " + email + ".", "success")
+    else:
+        flash("Failed: " + msg, "danger")
+    return redirect(url_for("admin_beta"))
+
+
+@app.route("/admin/beta/status", methods=["POST"])
+@admin_required
+def admin_beta_status():
+    csrf_protect()
+    signup_id = request.form.get("signup_id", type=int)
+    status    = request.form.get("status", "")
+    if status not in ("pending", "approved", "rejected"):
+        flash("Invalid status.", "danger")
+        return redirect(url_for("admin_beta"))
+    with get_db() as c:
+        c.execute("UPDATE beta_signups SET status=? WHERE id=?", (status, signup_id))
+    flash("Status updated.", "success")
+    return redirect(url_for("admin_beta"))
+
+
+@app.route("/admin/feedback")
+@admin_required
+def admin_feedback():
+    sf = request.args.get("status", "all")
+    with get_db() as c:
+        if sf == "all":
+            items = c.execute(
+                "SELECT * FROM beta_feedback ORDER BY created_at DESC").fetchall()
+        else:
+            items = c.execute(
+                "SELECT * FROM beta_feedback WHERE status=? ORDER BY created_at DESC",
+                (sf,)).fetchall()
+        counts = {
+            "all":      c.execute("SELECT COUNT(*) FROM beta_feedback").fetchone()[0],
+            "new":      c.execute("SELECT COUNT(*) FROM beta_feedback WHERE status='new'").fetchone()[0],
+            "reviewed": c.execute("SELECT COUNT(*) FROM beta_feedback WHERE status='reviewed'").fetchone()[0],
+            "resolved": c.execute("SELECT COUNT(*) FROM beta_feedback WHERE status='resolved'").fetchone()[0],
+        }
+    return render_template("admin_feedback.html", items=items, counts=counts, status_filter=sf)
+
+
+@app.route("/admin/feedback/update", methods=["POST"])
+@admin_required
+def admin_feedback_update():
+    csrf_protect()
+    fb_id  = request.form.get("fb_id", type=int)
+    status = request.form.get("status", "")
+    if status not in ("new", "reviewed", "resolved"):
+        flash("Invalid status.", "danger")
+        return redirect(url_for("admin_feedback"))
+    with get_db() as c:
+        c.execute("UPDATE beta_feedback SET status=? WHERE id=?", (status, fb_id))
+    flash("Feedback updated.", "success")
+    return redirect(url_for("admin_feedback"))
+
 
 if __name__ == "__main__":
     init_db()

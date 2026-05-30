@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Beta Testers — SolarPro Admin{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
+    <div>
+      <h4 class="mb-0 fw-bold" style="color:#f59e0b"><i class="bi bi-people-fill me-2"></i>Beta Testers</h4>
+      <small class="text-muted">Manage waitlist signups and send invites</small>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/admin" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Admin</a>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="row g-3 mb-4">
+    {% for label, key, color, icon in [
+      ("Total Signups","total","#f59e0b","people"),
+      ("Pending","pending","#0ea5e9","hourglass"),
+      ("Approved","approved","#22c55e","check-circle"),
+      ("Invited","invited","#a78bfa","envelope-check"),
+      ("Rejected","rejected","#ef4444","x-circle")
+    ] %}
+    <div class="col-6 col-md-2">
+      <div class="card h-100" style="background:#0f0f22;border:1px solid #1e1e3a;border-radius:12px">
+        <div class="card-body text-center p-3">
+          <i class="bi bi-{{ icon }}" style="font-size:22px;color:{{ color }}"></i>
+          <div class="fw-bold fs-4 mt-1" style="color:{{ color }}">{{ counts[key] }}</div>
+          <div class="text-muted" style="font-size:11px">{{ label }}</div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Direct Invite Form -->
+  <div class="card mb-4" style="background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px">
+    <div class="card-body p-4">
+      <h6 class="fw-bold mb-3" style="color:#a78bfa"><i class="bi bi-send me-2"></i>Send Direct Invite</h6>
+      <form method="POST" action="/admin/beta/manual-invite" class="row g-3 align-items-end">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="col-md-4">
+          <label class="form-label text-muted" style="font-size:12px">Full Name</label>
+          <input type="text" name="name" class="form-control" placeholder="e.g. Jane Smith" required
+                 style="background:#1a1a2e;border-color:#2d2d50;color:#e2e2f0">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label text-muted" style="font-size:12px">Email Address</label>
+          <input type="email" name="email" class="form-control" placeholder="jane@company.com" required
+                 style="background:#1a1a2e;border-color:#2d2d50;color:#e2e2f0">
+        </div>
+        <div class="col-md-4">
+          <button type="submit" class="btn w-100" style="background:#7c3aed;color:#fff;border:none">
+            <i class="bi bi-envelope-fill me-2"></i>Send Invite Email
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Waitlist Table -->
+  <div class="card" style="background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px">
+    <div class="card-body p-0">
+      <div class="p-4 pb-2">
+        <h6 class="fw-bold mb-0" style="color:#e2e2f0"><i class="bi bi-list-check me-2"></i>Waitlist
+          <span class="badge ms-2" style="background:#1e1e3a;color:#9090c0">{{ signups|length }}</span>
+        </h6>
+      </div>
+      {% if signups %}
+      <div class="table-responsive">
+        <table class="table mb-0" style="color:#e2e2f0">
+          <thead style="background:#0a0a14;font-size:12px;color:#6868a0">
+            <tr>
+              <th class="px-4 py-3">Name</th>
+              <th class="py-3">Email</th>
+              <th class="py-3">Company / Role</th>
+              <th class="py-3">Status</th>
+              <th class="py-3">Signed Up</th>
+              <th class="py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in signups %}
+            <tr style="border-top:1px solid #1e1e3a">
+              <td class="px-4 py-3 fw-semibold">{{ s.name }}</td>
+              <td class="py-3">
+                <a href="mailto:{{ s.email }}" style="color:#a78bfa">{{ s.email }}</a>
+              </td>
+              <td class="py-3 text-muted" style="font-size:13px">
+                {% if s.company %}{{ s.company }}{% endif %}
+                {% if s.company and s.role %} / {% endif %}
+                {% if s.role %}{{ s.role }}{% endif %}
+                {% if not s.company and not s.role %}<span style="color:#3a3a5c">—</span>{% endif %}
+              </td>
+              <td class="py-3">
+                {% if s.status == "approved" %}
+                  <span class="badge" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.3)">Approved</span>
+                {% elif s.status == "rejected" %}
+                  <span class="badge" style="background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3)">Rejected</span>
+                {% else %}
+                  <span class="badge" style="background:rgba(14,165,233,.15);color:#0ea5e9;border:1px solid rgba(14,165,233,.3)">Pending</span>
+                {% endif %}
+                {% if s.invited_at %}
+                  <span class="badge ms-1" style="background:rgba(167,139,250,.15);color:#a78bfa;border:1px solid rgba(167,139,250,.3)">Invited</span>
+                {% endif %}
+              </td>
+              <td class="py-3 text-muted" style="font-size:12px">{{ s.created_at[:10] }}</td>
+              <td class="py-3">
+                <div class="d-flex gap-1 flex-wrap">
+                  <!-- Send invite -->
+                  {% if s.status != "rejected" %}
+                  <form method="POST" action="/admin/beta/invite" class="d-inline">
+                    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                    <input type="hidden" name="signup_id" value="{{ s.id }}">
+                    <button type="submit" class="btn btn-sm"
+                            style="background:rgba(167,139,250,.15);color:#a78bfa;border:1px solid rgba(167,139,250,.3);font-size:11px"
+                            title="Send invite email">
+                      <i class="bi bi-envelope"></i> Invite
+                    </button>
+                  </form>
+                  {% endif %}
+                  <!-- Status buttons -->
+                  {% if s.status != "approved" %}
+                  <form method="POST" action="/admin/beta/status" class="d-inline">
+                    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                    <input type="hidden" name="signup_id" value="{{ s.id }}">
+                    <input type="hidden" name="status" value="approved">
+                    <button type="submit" class="btn btn-sm"
+                            style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.3);font-size:11px">
+                      <i class="bi bi-check"></i> Approve
+                    </button>
+                  </form>
+                  {% endif %}
+                  {% if s.status != "rejected" %}
+                  <form method="POST" action="/admin/beta/status" class="d-inline">
+                    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                    <input type="hidden" name="signup_id" value="{{ s.id }}">
+                    <input type="hidden" name="status" value="rejected">
+                    <button type="submit" class="btn btn-sm"
+                            style="background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);font-size:11px">
+                      <i class="bi bi-x"></i> Reject
+                    </button>
+                  </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-people" style="font-size:40px;opacity:.3"></i>
+        <p class="mt-3">No beta signups yet. Share the landing page to get signups.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}
