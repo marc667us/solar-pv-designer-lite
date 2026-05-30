@@ -8335,6 +8335,35 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                 )
                 raw = msg.content[0].text.strip()
                 ai_source = "web+claude"
+            elif mistral_key:
+                # Mistral AI (secondary fallback)
+                from mistralai.client.sdk import Mistral as _Mistral
+                _mc  = _Mistral(api_key=mistral_key)
+                _mr  = _mc.chat.complete(
+                    model="mistral-large-latest",
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                raw = _mr.choices[0].message.content.strip()
+                ai_source = "web+mistral"
+            elif os.environ.get("OLLAMA_URL"):
+                # Ollama (local inference)
+                import urllib.request as _ur4, json as _json4
+                _ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+                _ollama_model = os.environ.get("OLLAMA_MODEL", "mistral")
+                _payload4 = _json4.dumps({
+                    "model": _ollama_model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False
+                }).encode()
+                _req4 = _ur4.Request(
+                    f"{_ollama_url}/api/chat",
+                    data=_payload4,
+                    headers={"Content-Type": "application/json"}
+                )
+                with _ur4.urlopen(_req4, timeout=120) as _r4:
+                    _result4 = _json4.loads(_r4.read())
+                raw = _result4["message"]["content"].strip()
+                ai_source = "web+ollama"
             else:
                 # â”€â”€ GitHub Models (fallback â€” free) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 import urllib.request as _ur3, json as _json3
@@ -8545,8 +8574,16 @@ def admin_agent_notify():
             "SELECT notify_email FROM monitor_state WHERE id=1"
         ).fetchone()
     if state and state[0] and count > 0:
-        src_label = "Web Search + Claude AI" if source == "web+claude" else \
-                    "GitHub Models + Claude" if "github" in source else "Live Web Search"
+        if source == "web+claude":
+            src_label = "Web Search + Claude AI"
+        elif source == "web+mistral":
+            src_label = "Web Search + Mistral AI"
+        elif source == "web+ollama":
+            src_label = "Web Search + Ollama (local)"
+        elif "github" in source:
+            src_label = "GitHub Models + GPT"
+        else:
+            src_label = "Live Web Search"
         def _send():
             _send_prospect_notification(
                 f"Agent Run Complete â€” {count} Prospect{'s' if count!=1 else ''} Found",
