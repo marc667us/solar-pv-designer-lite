@@ -5311,6 +5311,35 @@ def _record_payment(uid, gateway, plan, amount_usd, currency="USD",
             "INSERT INTO payments (user_id,gateway,plan,amount_usd,currency,reference,status) "
             "VALUES (?,?,?,?,?,?,?)",
             (uid, gateway, plan, amount_usd, currency, reference, status))
+        user_row = c.execute("SELECT email, username FROM users WHERE id=?", (uid,)).fetchone()
+    if status == "success" and amount_usd and user_row:
+        try:
+            plan_label = PLAN_PRICES.get(plan, {}).get("label", plan.title())
+            _subj = "Payment Confirmed - SolarPro " + plan_label + " Plan"
+            _html = (
+                "<div style='font-family:sans-serif;background:#0a0a14;color:#e2e2f0;"
+                "padding:28px;border-radius:12px;max-width:600px'>"
+                "<h2 style='color:#a78bfa'>Payment Confirmed</h2>"
+                "<p>Hi " + str(user_row["username"]) + ", thank you for your payment.</p>"
+                "<table style='width:100%;border-collapse:collapse;margin:16px 0'>"
+                "<tr><td style='padding:8px;border-bottom:1px solid #1e1e3a'>Plan</td>"
+                "<td style='padding:8px;border-bottom:1px solid #1e1e3a;color:#a78bfa'><b>" + plan_label + "</b></td></tr>"
+                "<tr><td style='padding:8px;border-bottom:1px solid #1e1e3a'>Amount</td>"
+                "<td style='padding:8px;border-bottom:1px solid #1e1e3a'><b>" + currency + " " + str(amount_usd) + "</b></td></tr>"
+                "<tr><td style='padding:8px;border-bottom:1px solid #1e1e3a'>Gateway</td>"
+                "<td style='padding:8px;border-bottom:1px solid #1e1e3a'>" + gateway.title() + "</td></tr>"
+                "<tr><td style='padding:8px'>Reference</td>"
+                "<td style='padding:8px;font-size:12px'>" + (reference or "N/A") + "</td></tr>"
+                "</table>"
+                "<p>Your subscription is now active. <a href='https://solarpro.aiappinvent.com/account' "
+                "style='color:#a78bfa'>View your account</a>.</p>"
+                "<hr style='border-color:#1e1e3a'>"
+                "<p style='color:#6868a0;font-size:12px'>Questions? Email billing@aiappinvent.com</p>"
+                "</div>"
+            )
+            _send_email(user_row["email"], _subj, _html, from_addr=EMAIL_BILLING)
+        except Exception:
+            pass
 
 
 @app.route("/account")
@@ -5545,7 +5574,7 @@ def account_invoice(payment_id):
 
 *Thank you for your subscription to SolarPro Global.*
 
-For billing questions contact us at **support@aiappinvent.com**
+For billing questions contact us at **billing@aiappinvent.com**
 or visit **https://solarpro.aiappinvent.com**
 
 ---
@@ -6110,7 +6139,7 @@ def upgrade_checkout():
     # No gateway configured â€” demo mode
     flash(f"Payment gateway not configured. To activate, set STRIPE_SECRET_KEY or "
           f"PAYSTACK_SECRET_KEY environment variables. "
-          f"Contact support@aiappinvent.com to upgrade your plan manually.", "info")
+          f"Contact billing@aiappinvent.com to upgrade your plan manually.", "info")
     return redirect(url_for("upgrade"))
 
 
@@ -6136,7 +6165,7 @@ def upgrade_success():
                     return redirect(url_for("dashboard"))
         except Exception:
             pass
-    flash("Payment verified. If your plan has not updated, contact support@aiappinvent.com.", "info")
+    flash("Payment verified. If your plan has not updated, contact billing@aiappinvent.com.", "info")
     return redirect(url_for("dashboard"))
 
 
@@ -6167,7 +6196,7 @@ def paystack_verify():
             return redirect(url_for("dashboard"))
     except Exception as e:
         flash(f"Verification error: {e}", "danger")
-    flash("Payment verification failed. Contact support@aiappinvent.com with reference: " + ref, "warning")
+    flash("Payment verification failed. Contact billing@aiappinvent.com with reference: " + ref, "warning")
     return redirect(url_for("upgrade"))
 
 
@@ -6194,7 +6223,7 @@ def paystack_callback():
                 return redirect(url_for("dashboard"))
         except Exception:
             pass
-    flash("Payment verification failed. Contact support@aiappinvent.com with your reference.", "warning")
+    flash("Payment verification failed. Contact billing@aiappinvent.com with your reference.", "warning")
     return redirect(url_for("upgrade"))
 
 
