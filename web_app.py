@@ -18,6 +18,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from config.global_solar_data import (GLOBAL_DATA, get_countries, get_regions,
                                       get_solar_data, temp_derating)
 from calculation.ac_cable_sizing import size_all_cables
+from api_manager import api as _api
 
 # Load .env file if present (stable SECRET_KEY across restarts)
 _env_path = os.path.join(os.path.dirname(__file__), ".env")
@@ -586,50 +587,10 @@ def init_db():
 # â”€â”€â”€ System email helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _send_email(to_addr, subject, html_body, text_body=None, from_addr=None, resend_key=None):
-    """Send email via Resend (preferred) with SMTP fallback.
-    to_addr may be a str or list. Returns (ok: bool, message: str).
-    """
-    _from = from_addr or EMAIL_SUPPORT or SMTP_FROM
-    _to   = [to_addr] if isinstance(to_addr, str) else list(to_addr)
-    eff_resend = resend_key or RESEND_API_KEY
-
-    if eff_resend:
-        try:
-            import resend as _resend
-            _resend.api_key = eff_resend
-            params = {"from": _from, "to": _to, "subject": subject, "html": html_body}
-            if text_body:
-                params["text"] = text_body
-            _resend.Emails.send(params)
-            return True, "sent"
-        except Exception as ex:
-            return False, str(ex)
-
-    # SMTP fallback
-    if not SMTP_HOST or not SMTP_USER:
-        return False, "Email not configured - add a Resend API key or SMTP settings."
-    try:
-        import smtplib
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.text import MIMEText as _MIMEText2
-        msg = MIMEMultipart("alternative")
-        msg["From"]    = _from
-        msg["To"]      = ", ".join(_to)
-        msg["Subject"] = subject
-        if text_body:
-            msg.attach(_MIMEText2(text_body, "plain"))
-        msg.attach(_MIMEText2(html_body, "html"))
-        if SMTP_TLS:
-            srv = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15)
-            srv.ehlo(); srv.starttls()
-        else:
-            srv = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15)
-        srv.login(SMTP_USER, SMTP_PASS)
-        srv.sendmail(_from, _to, msg.as_string())
-        srv.quit()
-        return True, "sent"
-    except Exception as ex:
-        return False, str(ex)
+    """Delegate to api_manager (single source). Resend -> SMTP fallback."""
+    return _api.email.send(to_addr, subject, html_body,
+                           text_body=text_body, from_addr=from_addr,
+                           resend_key_override=resend_key)
 
 
 def _send_system_email(to_addr, subject, body_text):
@@ -5674,33 +5635,12 @@ def ticket_detail(tid):
 _gh_ctx_cache = {"data": None, "expires": 0.0}
 
 def _fetch_github_context():
-    """Return recent commit messages from the public GitHub repo (cached 5 min).
-    Gives Helpline live awareness of recent fixes and changes."""
-    import time as _time, urllib.request as _ur, json as _json
-    now = _time.time()
-    if _gh_ctx_cache["data"] and now < _gh_ctx_cache["expires"]:
-        return _gh_ctx_cache["data"]
-    try:
-        REPO = "marc667us/solar-pv-designer-lite"
-        req  = _ur.Request(
-            f"https://api.github.com/repos/{REPO}/commits?per_page=10",
-            headers={"Accept": "application/vnd.github+json",
-                     "User-Agent": "solarpro-helpline/1.0"})
-        with _ur.urlopen(req, timeout=6) as r:
-            commits = _json.loads(r.read())
-        lines = []
-        for c in commits[:10]:
-            sha  = (c.get("sha") or "")[:7]
-            msg  = ((c.get("commit") or {}).get("message") or "").split("\n")[0][:120]
-            date = ((c.get("commit") or {}).get("committer") or {}).get("date", "")[:10]
-            lines.append(f"  {sha} ({date}): {msg}")
-        ctx = "Recent platform changes (live from GitHub â€” use to confirm fixes/releases):\n" + "\n".join(lines)
-        _gh_ctx_cache["data"]    = ctx
-        _gh_ctx_cache["expires"] = now + 300   # 5-minute cache
-        return ctx
-    except Exception:
-        return _gh_ctx_cache["data"] or ""   # serve stale on error
-
+    """Delegate to api_manager GitHub client (cached 5 min)."""
+    commits = _api.github.recent_commits(10)
+    if not commits:
+        return ""
+    lines = [f"  {c}" for c in commits]
+    return "Recent platform changes (live from GitHub):\n" + "\n".join(lines)
 
 def _load_learned_kb(agent="helpline", limit=20):
     """Return the top-N most-used learned KB entries for a given agent."""
@@ -5965,73 +5905,19 @@ def assistant_chat():
                 "Could you give me a bit more detail about what you need?")
 
     try:
-        if api_key:
-            # â”€â”€ Anthropic Claude â€” try Haiku first (fast/cheap), Opus as fallback â”€â”€
-            import anthropic as _ant
-            _ac = _ant.Anthropic(api_key=api_key)
-            for _model in ("claude-haiku-4-5-20251001", "claude-opus-4-7"):
-                try:
-                    resp = _ac.messages.create(model=_model, max_tokens=500,
-                                               system=system, messages=msgs)
-                    reply = resp.content[0].text if resp.content else None
-                    if reply:
-                        break
-                except Exception as _me:
-                    app.logger.warning(f"helpline model {_model} failed: {_me}")
-                    reply = None
-            if not reply:
-                raise RuntimeError("all Claude models failed")
-            elif openrouter_key:
-                # OpenRouter cloud AI
-                import urllib.request as _ur_or, json as _json_or
-                _or_model = os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
-                _or_payload = _json_or.dumps({"model": _or_model,
-                    "messages": [{"role": "system", "content": system}] + msgs,
-                    "max_tokens": 500, "temperature": 0.7}).encode()
-                _or_req = _ur_or.Request(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    data=_or_payload,
-                    headers={"Authorization": f"Bearer {openrouter_key}",
-                             "Content-Type": "application/json",
-                             "HTTP-Referer": "https://solarpro-global.onrender.com",
-                             "X-Title": "SolarPro Helpline"})
-                with _ur_or.urlopen(_or_req, timeout=30) as _r_or:
-                    reply = _json_or.loads(_r_or.read())["choices"][0]["message"]["content"]
-            elif ollama_url_hl:
-                # Ollama local AI
-                import urllib.request as _ur_ol, json as _json_ol
-                _ol_payload = _json_ol.dumps({"model": ollama_model_hl,
-                    "messages": [{"role": "system", "content": system}] + msgs,
-                    "stream": False}).encode()
-                _ol_req = _ur_ol.Request(f"{ollama_url_hl}/api/chat",
-                    data=_ol_payload,
-                    headers={"Content-Type": "application/json"})
-                with _ur_ol.urlopen(_ol_req, timeout=60) as _r_ol:
-                    reply = _json_ol.loads(_r_ol.read())["message"]["content"].strip()
-        elif gh_token:
-            # â”€â”€ GitHub Models API (fallback â€” free via GitHub token) â”€â”€â”€â”€â”€â”€â”€
-            import urllib.request as _ur2, json as _json2
-            payload = _json2.dumps({
-                "model":       "openai/gpt-4.1-mini",
-                "messages":    [{"role": "system", "content": system}] + msgs,
-                "max_tokens":  500,
-                "temperature": 0.7
-            }).encode()
-            req2 = _ur2.Request(
-                "https://models.inference.ai.azure.com/chat/completions",
-                data=payload,
-                headers={
-                    "Authorization": f"Bearer {gh_token}",
-                    "Content-Type":  "application/json",
-                    "Accept":        "application/json",
-                    "User-Agent":    "solarpro-helpline/1.0"
-                })
-            with _ur2.urlopen(req2, timeout=30) as r2:
-                result = _json2.loads(r2.read())
-            reply = result["choices"][0]["message"]["content"]
-        else:
-            # â”€â”€ Rule-based (no API configured) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            reply = _rule_reply(message.lower()) or _GENERIC
+        # -- api_manager handles full fallback chain --
+        # Claude -> OpenRouter -> Ollama -> GitHub Models -> rule-based
+        reply, _ai_provider = _api.ai.chat(msgs, system=system, max_tokens=500)
+        if _ai_provider == "rule_based":
+            _rule = _rule_reply(message.lower())
+            if _rule:
+                reply = _rule
+            else:
+                reply = (
+                    "**We'll be back in a moment — sorry for any "
+                    "inconvenience while we switch AI providers. "
+                    "In the meantime I can help with sizing, pricing, "
+                    "and getting started. What do you need?")
 
         escalate = "[ESCALATE]" in reply
         reply    = reply.replace("[ESCALATE]", "").strip()
@@ -6138,28 +6024,15 @@ def upgrade_checkout():
             return redirect(url_for("upgrade"))
 
     elif gateway == "paystack" and PAYSTACK_SECRET:
-        import urllib.request as _ur
-        amount_kobo = price_usd * 100 * 100  # USD â†’ Paystack expects NGN kobo; adjust per currency
-        payload = json.dumps({
-            "email": user["email"],
-            "amount": amount_kobo,
-            "currency": "USD",
-            "metadata": {"user_id": user["id"], "plan": plan},
-            "callback_url": request.host_url.rstrip("/") + url_for("paystack_callback"),
-        }).encode()
-        req = _ur.Request("https://api.paystack.co/transaction/initialize",
-                          data=payload, headers={
-                              "Authorization": f"Bearer {PAYSTACK_SECRET}",
-                              "Content-Type": "application/json"})
-        try:
-            with _ur.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read())
-            if data.get("status"):
-                session["paystack_plan"] = plan
-                return redirect(data["data"]["authorization_url"], 303)
-            flash("Paystack initialization failed. Try again.", "danger")
-        except Exception as e:
-            flash(f"Paystack error: {e}", "danger")
+        amount_kobo = int(price_usd * 100 * 100)
+        callback = request.host_url.rstrip("/") + url_for("paystack_callback")
+        _ps_ok, _ps_data = _api.payment.initialize(
+            user["email"], amount_kobo, callback,
+            metadata={"user_id": user["id"], "plan": plan})
+        if _ps_ok and _ps_data.get("authorization_url"):
+            session["paystack_plan"] = plan
+            return redirect(_ps_data["authorization_url"], 303)
+        flash("Paystack initialization failed. Please try again.", "danger")
         return redirect(url_for("upgrade"))
 
     # No gateway configured â€” demo mode
@@ -6206,31 +6079,14 @@ def paystack_verify():
     if not ref or not PAYSTACK_SECRET or plan not in PLAN_PRICES:
         flash("Payment verification failed â€” invalid request.", "danger")
         return redirect(url_for("upgrade"))
-    import urllib.request as _ur
-    req = _ur.Request(f"https://api.paystack.co/transaction/verify/{ref}",
-                      headers={"Authorization": f"Bearer {PAYSTACK_SECRET}"})
-    try:
-        with _ur.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-        if data.get("status") and data["data"].get("status") == "success":
-            with get_db() as c:
-                c.execute("UPDATE users SET plan=? WHERE id=?",
-                          (plan, session["user_id"]))
-            _record_payment(session["user_id"], "paystack", plan,
-                            PLAN_PRICES[plan]["usd"], reference=ref)
-            flash(f"Payment confirmed! Welcome to {PLAN_PRICES[plan]['label']}.", "success")
-            return redirect(url_for("dashboard"))
-    except Exception as e:
-        flash(f"Verification error: {e}", "danger")
-    flash("Payment verification failed. Contact billing@aiappinvent.com with reference: " + ref, "warning")
-    return redirect(url_for("upgrade"))
-
-
-@app.route("/paystack/callback")
-@login_required
-def paystack_callback():
-    ref = request.args.get("reference", "")
+    _ps_ok, _ps_txn = _api.payment.verify(ref)
+    if not _ps_ok:
+        flash("Payment verification failed — please contact billing@aiappinvent.com.", "danger")
+        return redirect(url_for("upgrade"))
     plan = session.pop("paystack_plan", "")
+    if not plan:
+        plan = (_ps_txn.get("metadata") or {}).get("plan", "")
+
     if ref and PAYSTACK_SECRET and plan:
         import urllib.request as _ur
         req = _ur.Request(f"https://api.paystack.co/transaction/verify/{ref}",
@@ -8078,209 +7934,15 @@ def admin_agent_run():
     loc_aliases = COUNTRY_CITIES.get(loc_lower, [loc_lower])
 
     try:
-        from ddgs import DDGS
-
-        # â”€â”€ Pure procurement portals only (no narrative-heavy DFI sites) â”€â”€â”€â”€â”€â”€
-        PROCUREMENT_PORTALS = (
-            "site:ungm.org OR site:devex.com OR site:reliefweb.int "
-            "OR site:dgmarket.com OR site:tendersinfo.com "
-            "OR site:africatenders.com OR site:tendersontime.com "
-            "OR site:globaltenders.com OR site:ecreee.org"
-        )
-        JOB_DOMAINS    = ["jobberman.com", "myjobmag.com", "brightermonday.com",
-                          "ghanaiansjobs.com", "jobsinghana.com", "indeed.com",
-                          "jobsgha.com", "joblistghana.com"]
-        SOCIAL_DOMAINS = ["facebook.com", "linkedin.com", "twitter.com", "x.com"]
-
-        # intitle: forces the search engine itself to find pages where the
-        # tender/RFP keyword is IN the page title â€” strongest possible gate
-        queries = [
-            # === Procurement portals (pure tender databases) ==================
-            f'({PROCUREMENT_PORTALS}) {loc_q} solar tender OR RFP OR ITB 2026',
-            f'({PROCUREMENT_PORTALS}) {loc_q} solar "invitation to bid" OR "expression of interest" 2026',
-            # === intitle: â€” search engine enforces keyword in page title ======
-            f'intitle:tender {loc_q} solar installation 2026',
-            f'intitle:"invitation to bid" {loc_q} solar 2026',
-            f'intitle:"request for proposals" {loc_q} solar 2026',
-            f'intitle:"expression of interest" {loc_q} solar installation 2026',
-            f'intitle:"call for tenders" {loc_q} solar 2026',
-            f'intitle:"tender notice" {loc_q} solar 2026',
-            f'intitle:"invitation to tender" {loc_q} solar 2026',
-            f'intitle:"request for quotation" {loc_q} solar 2026',
-            # === With explicit closing date (ensures deadline is present) =====
-            f'{loc_q} solar "closing date" 2026 tender OR RFP OR installation',
-            f'{loc_q} solar "submission deadline" 2026 tender OR installation',
-            f'{loc_q} solar "public procurement" tender OR RFP 2026',
-            f'{loc_q} solar "district assembly" OR "metropolitan assembly" tender 2026',
-            # === Social / job (loose gate applied separately) =================
-            f'site:facebook.com {loc_q} solar "looking for installer" OR "need solar" 2026',
-            f'site:facebook.com {loc_q} solar "dumsor" OR "light bill" OR "generator" 2026',
-            f'site:linkedin.com {loc_q} solar contractor OR tender OR "supply and install" 2026',
-            f'{loc_q} "solar technician" OR "solar installer" job vacancy 2026',
-            # === Open web with clear procurement signals ======================
-            f'{loc_q} solar "supply and install" "closing date" OR "contact us" 2026',
-            f'{loc_q} "off-grid solar" OR "solar backup" installation "quote" OR "tender" 2026',
-        ]
-        if focus:
-            queries.insert(0, f'intitle:tender {loc_q} "{focus}" solar 2026')
-
-        # â”€â”€ Domains to always skip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        skip_domains = [
-            # News / editorial
-            "pv-magazine", "pvtech", "reuters.com", "bloomberg.com",
-            "wikipedia.org", "youtube.com", "tiktok.com",
-            "solarpowerworldonline", "greentechmedia", "renewableenergyworld",
-            "pv-tech.org", "cleantechnica.com", "energymonitor.ai",
-            "spglobal.com", "woodmac.com",
-            "theguardian.com", "bbc.com", "cnn.com", "aljazeera.com",
-            "businessghana.com", "ghanaweb.com", "myjoyonline.com",
-            "modernghana.com", "ghanaiantimes.com", "graphic.com.gh",
-            "punchng.com", "vanguardngr.com", "thecable.ng", "premiumtimesng.com",
-            "nairametrics.com", "businessday.ng",
-            "zawya.com", "menafn.com", "arabnews.com",
-            "esi-africa.com", "theafricareport.com", "energy-pedia.com",
-            # DFI narrative sites â€” overwhelmingly project stories, not tenders.
-            # Their actual tenders appear on UNGM/Devex which we already search.
-            "worldbank.org", "afdb.org", "ifc.org", "esmap.org",
-            "adb.org", "iadb.org", "ebrd.com", "eib.org",
-            "irena.org", "iea.org", "undp.org", "unep.org",
-        ]
-        # â”€â”€ News/editorial URL path patterns â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        news_url_paths = [
-            "/news/", "/news-release", "/press-release", "/press/",
-            "/blog/", "/article/", "/articles/",
-            "/story/", "/stories/", "/newsroom/", "/en/news",
-            "/feature/", "/highlights/", "/publication/",
-            "/project-story", "/success-story", "/case-study",
-            # AfDB/WorldBank narrative paths (projects, country pages, results = NOT tenders)
-            "afdb.org/en/news", "afdb.org/en/projects", "afdb.org/en/countries",
-            "afdb.org/en/documents", "afdb.org/en/topics",
-            "worldbank.org/en/news", "worldbank.org/en/results",
-            "worldbank.org/en/country", "worldbank.org/en/project",
-            "worldbank.org/en/topic", "worldbank.org/en/about",
-            "ifc.org/en/stories", "ifc.org/wps/wcm",
-            "esmap.org/node", "esmap.org/story",
-        ]
-        # â”€â”€ Category/index page patterns â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        listing_patterns = [
-            "global-solar-tenders", "/tenders/search", "/tenders/adminShow",
-            "globaltenders.com/gh/", "tendersontime.com/ghana-tenders/page",
-            "developmentaid.org/tenders/search", "devex.com/funding/r?report=grant",
-        ]
-        # â”€â”€ Completed-project title patterns (past tense = not open) â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        news_title_words = [
-            "awarded", "wins contract", "signs agreement", "signed agreement",
-            "completes", "completed", "inaugurates", "inaugurated",
-            "commissioned", "connected to grid", "goes live",
-            "breaks ground", "broke ground", "milestone",
-        ]
-        # â”€â”€ Procurement signals for formal sources â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        rfp_keywords = [
-            "tender", "rfp", "itb", "eoi",
-            "invitation to bid", "invitation to tender",
-            "request for proposal", "request for proposals",
-            "request for quotation", "expression of interest",
-            "call for tenders", "call for bids", "call for proposals",
-            "tender notice", "procurement notice", "contract notice",
-            "solicitation", "prequalif", "bidding document",
-            "installation works", "epc contract", "works contract",
-        ]
-        # â”€â”€ Opportunity signals for social/job/open-web sources â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        opportunity_keywords = [
-            "solar", "install", "installer", "installation", "technician",
-            "contractor", "supply", "design", "panel", "pv", "quote",
-            "looking for", "need", "seeking", "required", "wanted",
-            "vacancy", "hiring", "job", "project", "engineer",
-        ]
-        # â”€â”€ Solar keyword gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        solar_keywords = [
-            "solar", "photovoltaic", "pv system", "solar pv",
-            "solar power", "solar energy", "solar plant", "solar farm",
-            "mini grid", "minigrid", "off-grid solar", "renewable energy",
-            "solar installation",
-        ]
-
-        def _real_url(raw):
-            if not raw:
-                return raw
-            from urllib.parse import urlparse, parse_qs, unquote
-            p = urlparse(raw)
-            if "duckduckgo.com" in p.netloc:
-                qs = parse_qs(p.query)
-                for key in ("uddg", "u"):
-                    if key in qs:
-                        return unquote(qs[key][0])
-            return raw
-
-        def _is_social(url):
-            return any(d in url for d in SOCIAL_DOMAINS)
-
-        def _is_job_board(url):
-            return any(d in url for d in JOB_DOMAINS)
-
-        with DDGS() as ddgs:
-            for q in queries:
-                try:
-                    for r in ddgs.text(q, max_results=10, safesearch="off"):
-                        url   = _real_url(r.get("href", ""))
-                        body  = r.get("body", "").lower()
-                        title = r.get("title", "").lower()
-                        # 1. Skip always-blocked news/editorial domains
-                        if any(d in url for d in skip_domains):
-                            continue
-                        # 2. Skip news/editorial URL paths (not for social media)
-                        url_lower = url.lower()
-                        if not _is_social(url):
-                            if any(p in url_lower for p in news_url_paths):
-                                continue
-                        # 3. Skip category/index listing pages
-                        if any(p in url_lower for p in listing_patterns):
-                            continue
-                        # 4. Skip completed-project titles (past tense)
-                        if any(w in title for w in news_title_words):
-                            continue
-                        # 4b. Skip if detectable deadline has already passed
-                        if _is_past_deadline(title + " " + body):
-                            continue
-                        # 4c. Hard foreign-country gate
-                        if _foreign_country_in_text(title, loc_lower):
-                            continue
-                        # 5. Country gate
-                        # Formal: ONLY the country name itself must appear in title or URL.
-                        #   City aliases (tema, accra, etc.) are NOT used here â€” short strings
-                        #   like "tema" are substrings of common words ("systematic") causing
-                        #   Zambia/Togo pages to pass the Ghana check.
-                        # Social/job: full alias list checked in title+body+url (cities useful
-                        #   for "Looking for installer in Kumasi" type posts).
-                        if _is_social(url) or _is_job_board(url):
-                            combined = title + " " + body + " " + url_lower
-                            if not any(alias in combined for alias in loc_aliases):
-                                continue
-                        else:
-                            title_url = title + " " + url_lower
-                            if loc_lower not in title_url:
-                                continue
-                        # 5b. Solar keyword required in title or body
-                        if not any(kw in title or kw in body for kw in solar_keywords):
-                            continue
-                        # 6. Source-aware gate
-                        if _is_social(url) or _is_job_board(url):
-                            # Social/job: opportunity signal anywhere in title or body
-                            if not any(kw in title or kw in body for kw in opportunity_keywords):
-                                continue
-                        else:
-                            # Formal/government/portals: rfp keyword MUST be in TITLE
-                            # Narratives and initiative pages never name themselves as tenders
-                            if not any(kw in title for kw in rfp_keywords):
-                                continue
-                        # 7. Deduplicate
-                        if url and not any(x.get("href") == url for x in search_results):
-                            r["href"] = url
-                            search_results.append(r)
-                except Exception:
-                    continue
-                if len(search_results) >= 50:
-                    break
+        # -- api_manager search (DuckDuckGo + 6h cache + stale fallback) --
+        _raw_results = []
+        for q in queries:
+            try:
+                _hits = _api.search.query(q, max_results=15)
+                _raw_results.extend(_hits)
+            except Exception:
+                pass
+        search_results = _raw_results[:50]
     except Exception as e:
         search_error = str(e)
 
@@ -9113,6 +8775,34 @@ _monitor_thread.start()
 
 
 # â”€â”€â”€ Entry point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+# -- API Manager Admin Routes ---------------------------------------------
+
+@app.route("/admin/api-status")
+@admin_required
+def admin_api_status():
+    status = _api.status()
+    return render_template("admin_api.html", status=status)
+
+
+@app.route("/admin/api/reload", methods=["POST"])
+@admin_required
+def admin_api_reload():
+    csrf_protect()
+    _api.reload()
+    flash("All API keys reloaded from environment.", "success")
+    return redirect(url_for("admin_api_status"))
+
+
+@app.route("/admin/api/clear-cache", methods=["POST"])
+@admin_required
+def admin_api_clear_cache():
+    csrf_protect()
+    provider = request.form.get("provider") or None
+    _api.clear_cache(provider)
+    flash("Cache cleared" + (f" for {provider}" if provider else " (all)") + ".", "success")
+    return redirect(url_for("admin_api_status"))
+
 
 # -- Legal Pages ----------------------------------------------------------
 

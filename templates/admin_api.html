@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}API Status — SolarPro Admin{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+
+  <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
+    <div>
+      <h4 class="mb-0 fw-bold" style="color:#22c55e"><i class="bi bi-hdd-network me-2"></i>API Manager</h4>
+      <small class="text-muted">All external API calls go through a single secure source</small>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <form method="POST" action="/admin/api/reload">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="btn btn-sm" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.3)">
+          <i class="bi bi-arrow-clockwise me-1"></i>Reload Keys
+        </button>
+      </form>
+      <form method="POST" action="/admin/api/clear-cache">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="btn btn-sm" style="background:rgba(245,158,11,.1);color:#f59e0b;border:1px solid rgba(245,158,11,.3)">
+          <i class="bi bi-trash me-1"></i>Clear All Cache
+        </button>
+      </form>
+      <a href="/admin" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Admin</a>
+    </div>
+  </div>
+
+  <!-- Provider Status Cards -->
+  <div class="row g-3 mb-4">
+    {% for name, info in status.providers.items() %}
+    {% set configured = info.get('configured', False) %}
+    {% set ok_count   = info.get('ok', 0) %}
+    {% set err_count  = info.get('error', 0) %}
+    {% set total      = ok_count + err_count %}
+    {% set pct        = ((ok_count / total * 100) | int) if total > 0 else 0 %}
+    <div class="col-6 col-md-3">
+      <div class="card h-100" style="background:#0f0f22;border:1px solid
+        {% if not configured %}#2d2d50
+        {% elif err_count > ok_count %}rgba(239,68,68,.4)
+        {% elif ok_count > 0 %}rgba(34,197,94,.3)
+        {% else %}#1e1e3a{% endif %};border-radius:14px">
+        <div class="card-body p-3">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <span class="fw-bold" style="font-size:13px;color:#e2e2f0">{{ name.replace('_',' ').title() }}</span>
+            <span class="badge" style="font-size:10px;
+              background:{% if not configured %}rgba(104,104,160,.2){% elif ok_count > 0 %}rgba(34,197,94,.2){% else %}rgba(239,68,68,.2){% endif %};
+              color:{% if not configured %}#6868a0{% elif ok_count > 0 %}#22c55e{% else %}#ef4444{% endif %}">
+              {% if not configured %}Not Set{% elif ok_count > 0 %}Active{% else %}Error{% endif %}
+            </span>
+          </div>
+          {% if total > 0 %}
+          <div style="font-size:11px;color:#6868a0">
+            <span style="color:#22c55e">✓ {{ ok_count }}</span>
+            &nbsp;|&nbsp;
+            <span style="color:#ef4444">✗ {{ err_count }}</span>
+            &nbsp;|&nbsp;{{ pct }}% ok
+          </div>
+          <div class="mt-2" style="height:4px;background:#1e1e3a;border-radius:2px">
+            <div style="height:4px;border-radius:2px;width:{{ pct }}%;
+                        background:{% if pct >= 90 %}#22c55e{% elif pct >= 50 %}#f59e0b{% else %}#ef4444{% endif %}"></div>
+          </div>
+          {% else %}
+          <div style="font-size:11px;color:#3a3a5c">No calls in 24h</div>
+          {% endif %}
+          {% if not configured %}
+          <div class="mt-2" style="font-size:10px;color:#3a3a5c">
+            {% if name == 'claude' %}Set ANTHROPIC_API_KEY
+            {% elif name == 'openrouter' %}Set OPENROUTER_API_KEY
+            {% elif name == 'ollama' %}Set OLLAMA_URL
+            {% elif name == 'github_models' %}Set GITHUB_TOKEN
+            {% elif name == 'resend' %}Set RESEND_API_KEY
+            {% elif name == 'smtp' %}Set SMTP_HOST + SMTP_USER
+            {% elif name == 'paystack' %}Set PAYSTACK_SECRET_KEY
+            {% endif %}
+          </div>
+          <form method="POST" action="/admin/api/clear-cache" class="mt-2">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="provider" value="{{ name }}">
+            <button type="submit" style="background:none;border:none;color:#3a3a5c;font-size:10px;cursor:pointer;padding:0">
+              Clear cache
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Fallback Chain Info -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="solar-card p-4">
+        <h6 class="fw-bold mb-3" style="color:#a78bfa"><i class="bi bi-diagram-3 me-2"></i>AI Fallback Chain</h6>
+        <div class="d-flex flex-column gap-2">
+          {% for step, prov, note in [
+            (1,'Claude (Anthropic)','Primary — fastest, most capable'),
+            (2,'OpenRouter','Cloud fallback — free Llama models'),
+            (3,'Ollama','Local model via Cloudflare tunnel'),
+            (4,'GitHub Models','Free GPT-4.1-mini via GitHub token'),
+            (5,'Rule-based','Offline fallback — always works'),
+          ] %}
+          <div class="d-flex align-items-center gap-3">
+            <div style="width:22px;height:22px;border-radius:50%;background:rgba(167,139,250,.2);
+                        display:flex;align-items:center;justify-content:center;flex-shrink:0;
+                        font-size:11px;color:#a78bfa;font-weight:700">{{ step }}</div>
+            <div>
+              <div style="font-size:13px;color:#e2e2f0;font-weight:600">{{ prov }}</div>
+              <div style="font-size:11px;color:#6868a0">{{ note }}</div>
+            </div>
+          </div>
+          {% if not loop.last %}
+          <div style="margin-left:10px;color:#2d2d50;font-size:12px">↓ if fails</div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="solar-card p-4">
+        <h6 class="fw-bold mb-3" style="color:#0ea5e9"><i class="bi bi-envelope me-2"></i>Email Fallback Chain</h6>
+        <div class="d-flex flex-column gap-2">
+          {% for step, prov, note in [
+            (1,'Resend','Primary — best deliverability, DKIM signed'),
+            (2,'SMTP (Namecheap)','Fallback — mail.privateemail.com:465'),
+          ] %}
+          <div class="d-flex align-items-center gap-3">
+            <div style="width:22px;height:22px;border-radius:50%;background:rgba(14,165,233,.2);
+                        display:flex;align-items:center;justify-content:center;flex-shrink:0;
+                        font-size:11px;color:#0ea5e9;font-weight:700">{{ step }}</div>
+            <div>
+              <div style="font-size:13px;color:#e2e2f0;font-weight:600">{{ prov }}</div>
+              <div style="font-size:11px;color:#6868a0">{{ note }}</div>
+            </div>
+          </div>
+          {% if not loop.last %}<div style="margin-left:10px;color:#2d2d50;font-size:12px">↓ if fails</div>{% endif %}
+          {% endfor %}
+        </div>
+        <hr style="border-color:#1e1e3a;margin:16px 0">
+        <h6 class="fw-bold mb-2" style="color:#22c55e;font-size:13px"><i class="bi bi-credit-card me-1"></i>Caching</h6>
+        <ul style="font-size:12px;color:#6868a0;margin:0;padding-left:16px">
+          <li>AI responses — optional per-call TTL</li>
+          <li>Web search — 6 hours (stale served on failure)</li>
+          <li>GitHub commits — 5 minutes</li>
+          <li>Paystack verify — 24 hours (idempotent)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Logs -->
+  <div class="card" style="background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px">
+    <div class="card-body p-0">
+      <div class="p-4 pb-2 d-flex justify-content-between align-items-center">
+        <h6 class="fw-bold mb-0" style="color:#e2e2f0">
+          <i class="bi bi-journal-text me-2"></i>Recent API Calls (last 50)
+        </h6>
+        <small class="text-muted">All calls logged — single source of truth</small>
+      </div>
+      {% if status.logs %}
+      <div class="table-responsive">
+        <table class="table mb-0" style="color:#e2e2f0;font-size:12px">
+          <thead style="background:#0a0a14;color:#6868a0">
+            <tr>
+              <th class="px-4 py-2">Provider</th>
+              <th class="py-2">Operation</th>
+              <th class="py-2">Status</th>
+              <th class="py-2">Duration</th>
+              <th class="py-2">Error</th>
+              <th class="py-2">Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in status.logs %}
+            <tr style="border-top:1px solid #1e1e3a">
+              <td class="px-4 py-2 fw-semibold" style="color:#a78bfa">{{ log.provider }}</td>
+              <td class="py-2 text-muted">{{ log.operation }}</td>
+              <td class="py-2">
+                {% if log.status == 'ok' %}
+                <span style="color:#22c55e">✓ ok</span>
+                {% else %}
+                <span style="color:#ef4444">✗ error</span>
+                {% endif %}
+              </td>
+              <td class="py-2 text-muted">{{ log.duration_ms }}ms</td>
+              <td class="py-2" style="color:#ef4444;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                {{ log.error or '' }}
+              </td>
+              <td class="py-2 text-muted">{{ log.created_at[11:19] if log.created_at else '' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-journal" style="font-size:32px;opacity:.3"></i>
+        <p class="mt-2">No API calls logged yet.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}
