@@ -105,9 +105,16 @@ SMTP_HOST   = os.environ.get("SMTP_HOST", "")
 SMTP_PORT   = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER   = os.environ.get("SMTP_USER", "")
 SMTP_PASS   = os.environ.get("SMTP_PASS", "")
-SMTP_FROM   = os.environ.get("SMTP_FROM", "support@aiappinvent.com")
-SMTP_TLS    = os.environ.get("SMTP_TLS", "true").lower() in ("1", "true", "yes")
+SMTP_FROM      = os.environ.get("SMTP_FROM",      "support@aiappinvent.com")
+SMTP_TLS       = os.environ.get("SMTP_TLS",       "true").lower() in ("1", "true", "yes")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+
+# Dedicated per-purpose sender addresses
+EMAIL_SALES     = os.environ.get("EMAIL_SALES",     "sales@aiappinvent.com")
+EMAIL_SUPPORT   = os.environ.get("EMAIL_SUPPORT",   "support@aiappinvent.com")
+EMAIL_BILLING   = os.environ.get("EMAIL_BILLING",   "billing@aiappinvent.com")
+EMAIL_HELLO     = os.environ.get("EMAIL_HELLO",     "hello@aiappinvent.com")
+EMAIL_PROPOSALS = os.environ.get("EMAIL_PROPOSALS", "proposals@aiappinvent.com")
 
 PLAN_PRICES = {
     "professional": {"usd": 49, "label": "Professional", "projects": 10,
@@ -560,7 +567,7 @@ def _send_email(to_addr, subject, html_body, text_body=None, from_addr=None, res
     """Send email via Resend (preferred) with SMTP fallback.
     to_addr may be a str or list. Returns (ok: bool, message: str).
     """
-    _from = from_addr or SMTP_FROM
+    _from = from_addr or EMAIL_SUPPORT or SMTP_FROM
     _to   = [to_addr] if isinstance(to_addr, str) else list(to_addr)
     eff_resend = resend_key or RESEND_API_KEY
 
@@ -6669,7 +6676,7 @@ def assess_design():
                "PV: " + str(round(pv_kw,1)) + "kWp | Battery: " + str(round(bat_kwh,1)) + "kWh | Inverter: " + str(round(inv_kw)) + "kW. "
                "Cost: " + symbol + "{:,.0f}".format(total_local) + " " + currency + ". "
                "Visit https://solarpro.aiappinvent.com to book a consultation.")
-        _ok, _err = _send_email(email, _subj, html_email, text_body=_pl)
+        _ok, _err = _send_email(email, _subj, html_email, text_body=_pl, from_addr=EMAIL_SALES)
         if not _ok:
             app.logger.warning("assess_design email failed: %s", _err)
     except Exception as mail_e:
@@ -8980,7 +8987,7 @@ def monitor_run_now():
 def _send_prospect_notification(subject, body_lines, admin_email=None):
     """Send email notification to admin for prospect agent events."""
     try:
-        to = admin_email or SMTP_USER or SMTP_FROM
+        to = admin_email or SMTP_USER or EMAIL_SUPPORT
         if not to:
             return False
         txt = chr(10).join(body_lines)
