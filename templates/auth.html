@@ -54,6 +54,21 @@
         </div>
         <input name="password" type="password" class="form-control" placeholder="••••••••" required autocomplete="{% if mode=='register' %}new-password{% else %}current-password{% endif %}"/>
       </div>
+      {% if mode == "register" %}
+      <div class="mb-3 p-3" style="background:rgba(167,139,250,.07);border:1px solid rgba(167,139,250,.25);border-radius:10px">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="terms_agreed" id="termsCheck" required
+                 style="margin-top:3px;border-color:#7c3aed">
+          <label class="form-check-label" for="termsCheck" style="font-size:12px;color:#9090c0;line-height:1.6">
+            I have read and agree to the
+            <a href="/terms" target="_blank" style="color:#a78bfa;font-weight:600">Terms of Service &amp; Acceptable Use Policy</a>
+            and the
+            <a href="/privacy" target="_blank" style="color:#a78bfa;font-weight:600">Privacy Policy</a>.
+            I understand that platform outputs are for planning purposes only and require professional engineering review before use.
+          </label>
+        </div>
+      </div>
+      {% endif %}
       <button type="submit" class="btn btn-solar w-100 mt-2">
         {{ "Create Account" if mode=="register" else "Sign In" }}
       </button>

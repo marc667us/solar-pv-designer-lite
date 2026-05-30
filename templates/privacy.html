@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy — SolarPro Global{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:860px">
+
+  <div class="mb-5 text-center">
+    <div style="font-size:40px">🔒</div>
+    <h2 class="fw-black mt-3">Privacy Policy</h2>
+    <p class="text-muted">Last updated: 30 May 2026 &nbsp;|&nbsp; Effective for all accounts</p>
+    <div class="d-flex justify-content-center gap-3 mt-3">
+      <a href="/terms" class="btn btn-sm btn-outline-secondary">Terms of Service</a>
+      <a href="/register" class="btn btn-sm" style="background:#f59e0b;color:#000;font-weight:700">Create Account</a>
+    </div>
+  </div>
+
+  <div class="solar-card p-4 mb-4" style="border-color:rgba(14,165,233,.3)">
+    <p class="mb-0" style="color:#0ea5e9;font-weight:600;font-size:14px">
+      <i class="bi bi-shield-check me-2"></i>
+      We take your privacy seriously. This Policy explains what personal data we collect, how we use it, and your rights. We do not sell your personal data to third parties.
+    </p>
+  </div>
+
+  {% macro section(id, title) %}
+  <div id="{{ id }}" class="solar-card p-4 mb-3">
+    <h5 class="fw-bold mb-3" style="color:#0ea5e9">{{ title }}</h5>
+  {% endmacro %}
+
+  <!-- 1 -->
+  {{ section("p1","1. Who We Are") }}
+    <p class="mb-0">SolarPro Global / AI App Invent ("we", "us", "our") operates the platform at <a href="https://solarpro.aiappinvent.com" style="color:#a78bfa">https://solarpro.aiappinvent.com</a>. For privacy enquiries: <a href="mailto:support@aiappinvent.com" style="color:#a78bfa">support@aiappinvent.com</a>.</p>
+  </div>
+
+  <!-- 2 -->
+  {{ section("p2","2. Data We Collect") }}
+    <p><strong>2.1 Account Data</strong> — When you register, we collect: full name, email address, username, company/organisation name, and country.</p>
+    <p><strong>2.2 Project Data</strong> — Solar system design inputs you submit: site location, load schedules, appliance data, system sizing parameters, and financial inputs.</p>
+    <p><strong>2.3 Payment Data</strong> — When you purchase a subscription, payment is processed by Paystack or Stripe. We store only a transaction reference and subscription status. We do not store full card numbers, CVV codes, or bank account details.</p>
+    <p><strong>2.4 Usage Data</strong> — We automatically collect: IP address, browser type, pages visited, time of access, and error logs. This is used to diagnose issues and improve the Platform.</p>
+    <p><strong>2.5 Communications</strong> — If you contact us (support ticket, email), we retain the content of your communication to resolve your enquiry.</p>
+    <p class="mb-0"><strong>2.6 Feedback</strong> — Feedback submitted through the Platform's beta feedback widget is stored and attributed to your account.</p>
+  </div>
+
+  <!-- 3 -->
+  {{ section("p3","3. How We Use Your Data") }}
+    <table class="table table-sm" style="color:#9090c0;font-size:13px">
+      <thead style="color:#6868a0">
+        <tr><th>Purpose</th><th>Legal Basis</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Providing and operating the Platform</td><td>Contract performance</td></tr>
+        <tr><td>Processing payments and managing subscriptions</td><td>Contract performance</td></tr>
+        <tr><td>Sending transactional emails (welcome, password reset, invoices)</td><td>Contract performance</td></tr>
+        <tr><td>Sending marketing newsletters (if opted in)</td><td>Consent (withdrawable)</td></tr>
+        <tr><td>Responding to support tickets</td><td>Legitimate interest</td></tr>
+        <tr><td>Detecting fraud and enforcing these Terms</td><td>Legitimate interest</td></tr>
+        <tr><td>Improving the Platform via analytics and feedback</td><td>Legitimate interest</td></tr>
+        <tr><td>Complying with legal obligations</td><td>Legal obligation</td></tr>
+      </tbody>
+    </table>
+    <p class="mb-0">We will not use your personal data for any purpose incompatible with those listed above without your prior consent.</p>
+  </div>
+
+  <!-- 4 -->
+  {{ section("p4","4. Third-Party Services") }}
+    <p>We share data with the following third parties only to the extent necessary to provide the Service:</p>
+    <div class="table-responsive">
+      <table class="table table-sm" style="color:#9090c0;font-size:13px">
+        <thead style="color:#6868a0">
+          <tr><th>Provider</th><th>Purpose</th><th>Data Shared</th><th>Privacy Policy</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Render.com</strong></td><td>Cloud hosting & database</td><td>All platform data (encrypted at rest)</td><td><a href="https://render.com/privacy" target="_blank" style="color:#a78bfa">render.com/privacy</a></td></tr>
+          <tr><td><strong>Paystack</strong></td><td>Payment processing</td><td>Name, email, payment details</td><td><a href="https://paystack.com/privacy" target="_blank" style="color:#a78bfa">paystack.com/privacy</a></td></tr>
+          <tr><td><strong>Stripe</strong></td><td>Payment processing</td><td>Name, email, payment details</td><td><a href="https://stripe.com/privacy" target="_blank" style="color:#a78bfa">stripe.com/privacy</a></td></tr>
+          <tr><td><strong>Resend / Namecheap</strong></td><td>Transactional email delivery</td><td>Name, email address</td><td><a href="https://resend.com/privacy" target="_blank" style="color:#a78bfa">resend.com/privacy</a></td></tr>
+          <tr><td><strong>Anthropic</strong></td><td>AI assistant features</td><td>Message content (not linked to identity)</td><td><a href="https://www.anthropic.com/privacy" target="_blank" style="color:#a78bfa">anthropic.com/privacy</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="mb-0">We do not sell, rent, or trade your personal data with any party for marketing purposes.</p>
+  </div>
+
+  <!-- 5 -->
+  {{ section("p5","5. Data Retention") }}
+    <p><strong>Active accounts:</strong> We retain your data for as long as your account is active.</p>
+    <p><strong>Deleted accounts:</strong> Upon account deletion, personal data is removed within 90 days, except where retention is required by law (e.g., financial transaction records may be retained for up to 7 years).</p>
+    <p class="mb-0"><strong>Anonymised analytics:</strong> Anonymised usage data may be retained indefinitely for research and product improvement.</p>
+  </div>
+
+  <!-- 6 -->
+  {{ section("p6","6. Data Security") }}
+    <p>We implement industry-standard security measures including:</p>
+    <ul style="color:#9090c0">
+      <li>HTTPS/TLS encryption for all data in transit</li>
+      <li>Password hashing using Werkzeug's PBKDF2-SHA256 algorithm</li>
+      <li>CSRF protection on all form submissions</li>
+      <li>Rate limiting on authentication endpoints</li>
+      <li>Encrypted environment variables for all API keys and secrets</li>
+    </ul>
+    <p class="mb-0">No method of electronic transmission or storage is 100% secure. We cannot guarantee absolute security of your data. In the event of a data breach affecting your personal data, we will notify you as required by applicable law.</p>
+  </div>
+
+  <!-- 7 -->
+  {{ section("p7","7. Cookies and Tracking") }}
+    <p><strong>Session cookies:</strong> We use a single session cookie to keep you logged in. This is strictly necessary for the Platform to function and does not require your consent.</p>
+    <p><strong>No tracking cookies:</strong> We do not currently use third-party advertising cookies, analytics cookies (e.g., Google Analytics), or tracking pixels.</p>
+    <p class="mb-0"><strong>Local storage:</strong> We use your browser's local storage to remember your display preferences (theme, font size). No personal data is stored in local storage.</p>
+  </div>
+
+  <!-- 8 -->
+  {{ section("p8","8. Your Rights") }}
+    <p>Depending on your jurisdiction, you may have the following rights regarding your personal data:</p>
+    <div class="row g-3">
+      {% for right, desc in [
+        ("Access", "Request a copy of the personal data we hold about you."),
+        ("Rectification", "Request correction of inaccurate or incomplete data."),
+        ("Erasure", "Request deletion of your personal data ('right to be forgotten')."),
+        ("Restriction", "Request that we limit processing of your data in certain circumstances."),
+        ("Portability", "Request your data in a structured, machine-readable format."),
+        ("Objection", "Object to processing based on legitimate interests or for direct marketing."),
+        ("Withdraw Consent", "Withdraw consent for newsletter emails at any time via unsubscribe link."),
+      ] %}
+      <div class="col-md-6">
+        <div class="p-3" style="background:#0a0a14;border:1px solid #1e1e3a;border-radius:10px">
+          <div class="fw-bold small mb-1" style="color:#a78bfa">{{ right }}</div>
+          <div class="text-muted" style="font-size:12px">{{ desc }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="mt-3 mb-0">To exercise any of these rights, email <a href="mailto:support@aiappinvent.com" style="color:#a78bfa">support@aiappinvent.com</a>. We will respond within 30 days.</p>
+  </div>
+
+  <!-- 9 -->
+  {{ section("p9","9. Children's Privacy") }}
+    <p class="mb-0">The Platform is not directed at children under the age of 16. We do not knowingly collect personal data from children. If you believe a child has provided us with personal data, please contact us and we will delete it promptly.</p>
+  </div>
+
+  <!-- 10 -->
+  {{ section("p10","10. International Transfers") }}
+    <p class="mb-0">Your data may be stored and processed in countries other than your own (including the United States and the European Union) via our cloud infrastructure provider (Render.com). Where data is transferred internationally, we rely on appropriate safeguards such as Standard Contractual Clauses or equivalent mechanisms as required by applicable law.</p>
+  </div>
+
+  <!-- 11 -->
+  {{ section("p11","11. Changes to This Policy") }}
+    <p class="mb-0">We may update this Privacy Policy from time to time. Material changes will be notified to you by email or via a prominent notice on the Platform at least 14 days before the change takes effect. Continued use of the Platform after the effective date constitutes acceptance of the revised Policy.</p>
+  </div>
+
+  <!-- 12 -->
+  {{ section("p12","12. Contact and Complaints") }}
+    <p>For privacy enquiries or complaints:</p>
+    <ul style="color:#9090c0">
+      <li><strong>Email:</strong> <a href="mailto:support@aiappinvent.com" style="color:#a78bfa">support@aiappinvent.com</a></li>
+      <li><strong>Platform:</strong> <a href="https://solarpro.aiappinvent.com" style="color:#a78bfa">https://solarpro.aiappinvent.com</a></li>
+    </ul>
+    <p class="mb-0 text-muted" style="font-size:12px">If you are not satisfied with our response, you have the right to lodge a complaint with your local data protection authority.</p>
+  </div>
+
+  <div class="text-center mt-5 pb-3">
+    <a href="/terms" class="btn btn-outline-secondary me-2">Read Terms of Service</a>
+    <a href="/register" class="btn" style="background:#f59e0b;color:#000;font-weight:700">
+      <i class="bi bi-check-circle me-1"></i>I Agree — Create My Account
+    </a>
+  </div>
+
+</div>
+{% endblock %}

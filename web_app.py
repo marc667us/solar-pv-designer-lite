@@ -1532,6 +1532,9 @@ def register():
     if request.method == "POST":
         csrf_protect()
         f = request.form
+        if not f.get("terms_agreed"):
+            flash("You must read and accept the Terms of Service and Privacy Policy to create an account.", "danger")
+            return render_template("auth.html", mode="register", countries=get_countries())
         ph = generate_password_hash(f["password"])
         try:
             with get_db() as c:
@@ -9110,6 +9113,18 @@ _monitor_thread.start()
 
 
 # â”€â”€â”€ Entry point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+# -- Legal Pages ----------------------------------------------------------
+
+@app.route("/terms")
+def terms():
+    return render_template("terms.html")
+
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
 
 # -- Beta Testing ----------------------------------------------------------
 
