@@ -25,6 +25,9 @@ jobs:
           RENDER_API_KEY:          ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID:       ${{ secrets.RENDER_SERVICE_ID }}
           ANTHROPIC_API_KEY:       ${{ secrets.ANTHROPIC_API_KEY }}
+          MISTRAL_API_KEY:         ${{ secrets.MISTRAL_API_KEY }}
+          OLLAMA_URL:              ${{ secrets.OLLAMA_URL }}
+          OLLAMA_MODEL:            ${{ secrets.OLLAMA_MODEL }}
           SECRET_KEY:              ${{ secrets.SECRET_KEY }}
           PAYSTACK_SECRET_KEY:     ${{ secrets.PAYSTACK_SECRET_KEY }}
           STRIPE_SECRET_KEY:       ${{ secrets.STRIPE_SECRET_KEY }}
@@ -45,6 +48,9 @@ jobs:
             fi
           }
           add ANTHROPIC_API_KEY     "$ANTHROPIC_API_KEY"
+          add MISTRAL_API_KEY       "$MISTRAL_API_KEY"
+          add OLLAMA_URL            "$OLLAMA_URL"
+          add OLLAMA_MODEL          "$OLLAMA_MODEL"
           add SECRET_KEY            "$SECRET_KEY"
           add PAYSTACK_SECRET_KEY   "$PAYSTACK_SECRET_KEY"
           add STRIPE_SECRET_KEY     "$STRIPE_SECRET_KEY"
