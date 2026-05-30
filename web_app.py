@@ -106,7 +106,7 @@ SMTP_PORT   = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER   = os.environ.get("SMTP_USER", "")
 SMTP_PASS   = os.environ.get("SMTP_PASS", "")
 SMTP_FROM      = os.environ.get("SMTP_FROM",      "support@aiappinvent.com")
-SMTP_TLS       = os.environ.get("SMTP_TLS",       "true").lower() in ("1", "true", "yes")
+SMTP_TLS       = os.environ.get("SMTP_TLS",       "false").lower() in ("1", "true", "yes")  # false=SSL/465, true=STARTTLS/587
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 
 # Dedicated per-purpose sender addresses (3 Namecheap mailboxes)
@@ -7323,7 +7323,7 @@ def project_email(pid):
     eff_host   = u_host or SMTP_HOST
     eff_user   = u_user or SMTP_USER
     eff_pass   = u_pass or SMTP_PASS
-    eff_from   = u_from or SMTP_FROM
+    eff_from   = u_from or EMAIL_SALES or SMTP_FROM
     eff_port   = u_port if u_host else SMTP_PORT
     eff_tls    = u_tls  if u_host else SMTP_TLS
 
