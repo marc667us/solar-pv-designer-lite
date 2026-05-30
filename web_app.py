@@ -109,12 +109,12 @@ SMTP_FROM      = os.environ.get("SMTP_FROM",      "support@aiappinvent.com")
 SMTP_TLS       = os.environ.get("SMTP_TLS",       "true").lower() in ("1", "true", "yes")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 
-# Dedicated per-purpose sender addresses
+# Dedicated per-purpose sender addresses (3 Namecheap mailboxes)
 EMAIL_SALES     = os.environ.get("EMAIL_SALES",     "sales@aiappinvent.com")
 EMAIL_SUPPORT   = os.environ.get("EMAIL_SUPPORT",   "support@aiappinvent.com")
 EMAIL_BILLING   = os.environ.get("EMAIL_BILLING",   "billing@aiappinvent.com")
-EMAIL_HELLO     = os.environ.get("EMAIL_HELLO",     "hello@aiappinvent.com")
-EMAIL_PROPOSALS = os.environ.get("EMAIL_PROPOSALS", "proposals@aiappinvent.com")
+EMAIL_HELLO     = os.environ.get("EMAIL_HELLO",     "sales@aiappinvent.com")   # no hello@ mailbox -> route to sales
+EMAIL_PROPOSALS = os.environ.get("EMAIL_PROPOSALS", "sales@aiappinvent.com")   # no proposals@ mailbox -> route to sales
 
 PLAN_PRICES = {
     "professional": {"usd": 49, "label": "Professional", "projects": 10,
