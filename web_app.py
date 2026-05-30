@@ -1490,7 +1490,8 @@ def landing():
     wa_number = (admin["org_whatsapp"] if admin and admin["org_whatsapp"] else "233535068102")
     return render_template("landing.html", user=current_user(),
                            countries=get_countries(), news_posts=news,
-                           wa_number=wa_number)
+                           wa_number=wa_number,
+                           sales_email=EMAIL_SALES)
 
 
 @app.route("/platform")

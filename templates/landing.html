@@ -679,6 +679,15 @@
         <i class="bi bi-whatsapp" style="font-size:20px"></i>
         Chat on WhatsApp
       </a>
+
+      <!-- Email CTA -->
+      <a href="mailto:{{ sales_email }}"
+         class="btn w-100 mb-3 d-flex align-items-center justify-content-center gap-2"
+         style="background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.4);color:#a78bfa;border-radius:12px;padding:12px;font-weight:700">
+        <i class="bi bi-envelope-fill" style="font-size:18px"></i>
+        {{ sales_email }}
+      </a>
+
       <div class="text-center text-secondary mb-4" style="font-size:11px">— or fill the form below —</div>
 
       <form method="POST" action="{{ url_for('contact_lead') }}">
