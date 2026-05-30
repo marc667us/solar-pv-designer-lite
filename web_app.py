@@ -435,6 +435,7 @@ def init_db():
         ("org_phone",   "''"),
         ("org_website", "''"),
         ("timezone",    "'UTC'"),
+        ("org_whatsapp","''"),
     ]:
         try:
             with get_db() as c:
@@ -1447,8 +1448,13 @@ def landing():
         news = c.execute(
             "SELECT * FROM news_posts WHERE is_published=1 ORDER BY created_at DESC LIMIT 3"
         ).fetchall()
+        admin = c.execute(
+            "SELECT org_whatsapp FROM users WHERE is_admin=1 ORDER BY id LIMIT 1"
+        ).fetchone()
+    wa_number = (admin["org_whatsapp"] if admin and admin["org_whatsapp"] else "233535068102")
     return render_template("landing.html", user=current_user(),
-                           countries=get_countries(), news_posts=news)
+                           countries=get_countries(), news_posts=news,
+                           wa_number=wa_number)
 
 
 @app.route("/platform")
@@ -5305,14 +5311,15 @@ def settings():
         uid = session["user_id"]
 
         if section == "profile":
-            fields = ["org_name", "org_address", "org_email", "org_phone", "org_website", "timezone"]
+            fields = ["org_name", "org_address", "org_email", "org_phone", "org_website", "timezone", "org_whatsapp"]
             vals = {f: request.form.get(f, "").strip() for f in fields}
             with get_db() as c:
                 c.execute(
                     "UPDATE users SET org_name=?, org_address=?, org_email=?, "
-                    "org_phone=?, org_website=?, timezone=? WHERE id=?",
+                    "org_phone=?, org_website=?, timezone=?, org_whatsapp=? WHERE id=?",
                     (vals["org_name"], vals["org_address"], vals["org_email"],
-                     vals["org_phone"], vals["org_website"], vals["timezone"], uid))
+                     vals["org_phone"], vals["org_website"], vals["timezone"],
+                     vals["org_whatsapp"], uid))
             flash("Organisation profile saved.", "success")
             return redirect(url_for("settings") + "?tab=org")
 
@@ -5878,6 +5885,33 @@ def assistant_chat():
                     reply = None
             if not reply:
                 raise RuntimeError("all Claude models failed")
+            elif openrouter_key:
+                # OpenRouter cloud AI
+                import urllib.request as _ur_or, json as _json_or
+                _or_model = os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
+                _or_payload = _json_or.dumps({"model": _or_model,
+                    "messages": [{"role": "system", "content": system}] + msgs,
+                    "max_tokens": 500, "temperature": 0.7}).encode()
+                _or_req = _ur_or.Request(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    data=_or_payload,
+                    headers={"Authorization": f"Bearer {openrouter_key}",
+                             "Content-Type": "application/json",
+                             "HTTP-Referer": "https://solarpro-global.onrender.com",
+                             "X-Title": "SolarPro Helpline"})
+                with _ur_or.urlopen(_or_req, timeout=30) as _r_or:
+                    reply = _json_or.loads(_r_or.read())["choices"][0]["message"]["content"]
+            elif ollama_url_hl:
+                # Ollama local AI
+                import urllib.request as _ur_ol, json as _json_ol
+                _ol_payload = _json_ol.dumps({"model": ollama_model_hl,
+                    "messages": [{"role": "system", "content": system}] + msgs,
+                    "stream": False}).encode()
+                _ol_req = _ur_ol.Request(f"{ollama_url_hl}/api/chat",
+                    data=_ol_payload,
+                    headers={"Content-Type": "application/json"})
+                with _ur_ol.urlopen(_ol_req, timeout=60) as _r_ol:
+                    reply = _json_ol.loads(_r_ol.read())["message"]["content"].strip()
         elif gh_token:
             # â”€â”€ GitHub Models API (fallback â€” free via GitHub token) â”€â”€â”€â”€â”€â”€â”€
             import urllib.request as _ur2, json as _json2

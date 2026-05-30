@@ -69,17 +69,23 @@
         <textarea name="org_address" class="form-control sp-input" rows="2"
                   placeholder="Street, City, Region, Country, Postcode">{{ user.org_address or '' }}</textarea>
       </div>
-      <div class="col-md-4">
-        <label class="sp-label">Phone / WhatsApp</label>
+      <div class="col-md-3">
+        <label class="sp-label">Phone</label>
         <input type="tel" name="org_phone" class="form-control sp-input"
                value="{{ user.org_phone or '' }}" placeholder="+44 20 1234 5678">
       </div>
-      <div class="col-md-4">
+      <div class="col-md-3">
+        <label class="sp-label">WhatsApp Number</label>
+        <input type="tel" name="org_whatsapp" class="form-control sp-input"
+               value="{{ user.org_whatsapp or '' }}" placeholder="233535068102">
+        <div class="sp-hint">Digits only — used for wa.me links on landing page.</div>
+      </div>
+      <div class="col-md-3">
         <label class="sp-label">Website</label>
         <input type="url" name="org_website" class="form-control sp-input"
                value="{{ user.org_website or '' }}" placeholder="https://yourcompany.com">
       </div>
-      <div class="col-md-4">
+      <div class="col-md-3">
         <label class="sp-label">Time Zone</label>
         <select name="timezone" class="form-select sp-input">
           {% set tz_groups = [

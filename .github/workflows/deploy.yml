@@ -16,7 +16,7 @@ jobs:
           curl -sf -X POST \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
-            -d '{}' \
+            -d '{"clearCache":"do_not_clear"}' \
             "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
             | jq '{id: .id, status: .status}'
 
@@ -26,19 +26,17 @@ jobs:
           RENDER_SERVICE_ID:       ${{ secrets.RENDER_SERVICE_ID }}
           ANTHROPIC_API_KEY:       ${{ secrets.ANTHROPIC_API_KEY }}
           MISTRAL_API_KEY:         ${{ secrets.MISTRAL_API_KEY }}
+          OPENROUTER_API_KEY:      ${{ secrets.OPENROUTER_API_KEY }}
           OLLAMA_URL:              ${{ secrets.OLLAMA_URL }}
           OLLAMA_MODEL:            ${{ secrets.OLLAMA_MODEL }}
           SECRET_KEY:              ${{ secrets.SECRET_KEY }}
           PAYSTACK_SECRET_KEY:     ${{ secrets.PAYSTACK_SECRET_KEY }}
-          STRIPE_SECRET_KEY:       ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_WEBHOOK_SECRET:   ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           SMTP_HOST:               ${{ secrets.SMTP_HOST }}
           SMTP_PORT:               ${{ secrets.SMTP_PORT }}
           SMTP_USER:               ${{ secrets.SMTP_USER }}
           SMTP_PASS:               ${{ secrets.SMTP_PASS }}
+          SMTP_FROM:               ${{ secrets.SMTP_FROM }}
         run: |
-          # Build update list — only include secrets with non-empty values
-          # so missing GitHub Secrets never overwrite values set in Render dashboard
           NEW_VARS='[]'
           add() {
             local key="$1" val="$2"
@@ -47,31 +45,36 @@ jobs:
                 jq --arg k "$key" --arg v "$val" '. + [{"key":$k,"value":$v}]')
             fi
           }
-          add ANTHROPIC_API_KEY     "$ANTHROPIC_API_KEY"
-          add MISTRAL_API_KEY       "$MISTRAL_API_KEY"
-          add OLLAMA_URL            "$OLLAMA_URL"
-          add OLLAMA_MODEL          "$OLLAMA_MODEL"
-          add SECRET_KEY            "$SECRET_KEY"
-          add PAYSTACK_SECRET_KEY   "$PAYSTACK_SECRET_KEY"
-          add STRIPE_SECRET_KEY     "$STRIPE_SECRET_KEY"
-          add STRIPE_WEBHOOK_SECRET "$STRIPE_WEBHOOK_SECRET"
-          add SMTP_HOST             "$SMTP_HOST"
-          add SMTP_PORT             "$SMTP_PORT"
-          add SMTP_USER             "$SMTP_USER"
-          add SMTP_PASS             "$SMTP_PASS"
+          add ANTHROPIC_API_KEY  "$ANTHROPIC_API_KEY"
+          add MISTRAL_API_KEY    "$MISTRAL_API_KEY"
+          add OPENROUTER_API_KEY "$OPENROUTER_API_KEY"
+          add OLLAMA_URL         "$OLLAMA_URL"
+          add OLLAMA_MODEL       "$OLLAMA_MODEL"
+          add SECRET_KEY         "$SECRET_KEY"
+          add PAYSTACK_SECRET_KEY "$PAYSTACK_SECRET_KEY"
+          add SMTP_HOST          "$SMTP_HOST"
+          add SMTP_PORT          "$SMTP_PORT"
+          add SMTP_USER          "$SMTP_USER"
+          add SMTP_PASS          "$SMTP_PASS"
+          add SMTP_FROM          "$SMTP_FROM"
 
           if [ "$NEW_VARS" = '[]' ]; then
-            echo "No GitHub Secrets configured — skipping Render env-var sync"
+            echo "No GitHub Secrets configured — skipping env-var sync"
             exit 0
           fi
 
           echo "Syncing $(echo "$NEW_VARS" | jq 'length') secret(s) to Render..."
 
-          CURRENT=$(curl -sf \
+          # GET current vars — strip Render's internal fields (id, serviceId, etc.)
+          CURRENT=$(curl -s \
             -H "Authorization: Bearer $RENDER_API_KEY" \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars")
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars" \
+            || echo '[]')
+          CURRENT_CLEAN=$(echo "$CURRENT" | \
+            jq '[.[] | {key: .key, value: .value}]' 2>/dev/null || echo '[]')
 
-          UPDATED=$(echo "$CURRENT" | jq \
+          # Merge: keep existing vars not in NEW_VARS, then append NEW_VARS
+          UPDATED=$(echo "$CURRENT_CLEAN" | jq \
             --argjson new "$NEW_VARS" \
             'map(select(.key as $k | ($new | map(.key) | index($k)) == null)) + $new')
 
@@ -79,4 +82,5 @@ jobs:
             -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$UPDATED" \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars"
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars" \
+            && echo "Env vars synced." || echo "Env-var sync failed (non-fatal)"
