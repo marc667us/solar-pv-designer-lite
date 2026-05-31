@@ -155,6 +155,57 @@
   </div>
 </div>
 
+{% if mt in ['ground_fixed','ground_tracking'] %}
+{# ── GROUND MOUNT AREA CALCULATOR ── #}
+{% set _gnd_panels = r.num_panels %}
+{% set _gnd_area_net = (_gnd_panels * 2.0)|round(1) %}
+{% set _gnd_area_gross = (_gnd_panels * 4 * 1.3)|int %}
+{% set _gnd_area_incl = (_gnd_area_gross + 20)|int %}
+<div class="solar-card p-4 mb-4" style="border-left:4px solid #f87171">
+  <div class="section-head mb-3"><i class="bi bi-rulers me-2" style="color:#f87171"></i>
+    Ground Mount — Site Area Calculator
+    <span class="badge ms-2" style="font-size:10px;background:#f8717122;color:#f87171;border:1px solid #f8717144">{{ mt_title }}</span>
+  </div>
+  <div class="row g-3">
+    <div class="col-md-3">
+      <div class="p-3 rounded text-center" style="background:#0a0a18;border:1px solid #f8717144">
+        <div style="font-size:28px;font-weight:900;color:#f87171">{{ _gnd_panels }}</div>
+        <div class="text-secondary small">Panels</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="p-3 rounded text-center" style="background:#0a0a18;border:1px solid #f8717144">
+        <div style="font-size:28px;font-weight:900;color:#f87171">{{ _gnd_area_net }} m²</div>
+        <div class="text-secondary small">Panel surface area (net)</div>
+        <div class="text-secondary" style="font-size:10px">{{ _gnd_panels }} × 2.0 m²/panel</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="p-3 rounded text-center" style="background:#0a0a18;border:1px solid #f8717144">
+        <div style="font-size:28px;font-weight:900;color:#f87171">{{ _gnd_area_gross }} m²</div>
+        <div class="text-secondary small">Array footprint (gross)</div>
+        <div class="text-secondary" style="font-size:10px">Incl. row spacing ×1.3</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="p-3 rounded text-center" style="background:#0a0a18;border:1px solid #f8717144">
+        <div style="font-size:28px;font-weight:900;color:#f87171">{{ _gnd_area_incl }} m²</div>
+        <div class="text-secondary small">Total site area required</div>
+        <div class="text-secondary" style="font-size:10px">Array + 5m perimeter buffer</div>
+      </div>
+    </div>
+  </div>
+  <div class="mt-3 small text-secondary" style="font-size:11px">
+    <strong style="color:#f87171">Note:</strong>
+    Gross footprint assumes <strong>1.3× row-spacing factor</strong> (tilt ~15°, latitude-optimised inter-row gap).
+    For steeper tilt angles or higher latitudes, increase to 1.5–2.0×.
+    DC cables must be buried in <strong>armoured conduit at 600 mm depth</strong> from array to equipment room.
+    Confirm <strong>no underground services</strong> in excavation zone before breaking ground.
+    {% if mt == 'ground_tracking' %}For single-axis trackers, site must be graded to ≤ 2% slope.{% endif %}
+  </div>
+</div>
+{% endif %}
+
 {# ═══════════════════════════════════════════════════════════════
    DIAGRAM 1 — COMPLETE SYSTEM SINGLE-LINE DIAGRAM
    ═══════════════════════════════════════════════════════════════ #}
@@ -365,14 +416,14 @@
 <div class="diag-wrap">
   <div class="diag-head">
     <div class="num">2</div>
-    <div class="ttl">PV Array String Configuration &amp; Roof Layout</div>
+    <div class="ttl">PV Array String Configuration &amp; {% if mt in ['ground_fixed','ground_tracking'] %}Ground Array Layout{% else %}Roof Layout{% endif %}</div>
   </div>
   <div class="diag-body">
     <svg viewBox="0 0 960 360" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;background:#07071a">
 
-      {# ── ROOF OUTLINE ── #}
+      {# ── MOUNTING SURFACE OUTLINE ── #}
       <rect x="20" y="20" width="560" height="320" rx="8" fill="#0a0f1a" stroke="#334155" stroke-width="1.5"/>
-      <text x="300" y="14" text-anchor="middle" fill="#64748b" font-size="11" font-weight="700">ROOF / MOUNTING SURFACE (TOP VIEW)</text>
+      <text x="300" y="14" text-anchor="middle" fill="#64748b" font-size="11" font-weight="700">{% if mt in ['ground_fixed','ground_tracking'] %}GROUND MOUNT ARRAY (TOP VIEW){% else %}ROOF / MOUNTING SURFACE (TOP VIEW){% endif %}</text>
 
       {# ── PANEL GRID ── #}
       {% set panel_w = 52 %}
@@ -408,17 +459,19 @@
       {% endfor %}
 
       {# ── TILT DIRECTION ARROW ── #}
-      <text x="300" y="340" text-anchor="middle" fill="#64748b" font-size="10">▼ South / Equator-facing (optimal tilt)</text>
+      <text x="300" y="340" text-anchor="middle" fill="#64748b" font-size="10">▼ South / Equator-facing (optimal tilt{% if mt in ['ground_fixed','ground_tracking'] %} — inter-row spacing calculated for ≥ 4 h shade-free{% endif %})</text>
 
       {# ── CLEARANCE ANNOTATIONS ── #}
       <line x1="20" y1="20" x2="20" y2="340" stroke="#334155" stroke-width="1" stroke-dasharray="3,3"/>
-      <text x="15" y="190" text-anchor="middle" fill="#475569" font-size="9" transform="rotate(-90,15,190)">600mm min clearance (edge)</text>
+      <text x="15" y="190" text-anchor="middle" fill="#475569" font-size="9" transform="rotate(-90,15,190)">{% if mt in ['ground_fixed','ground_tracking'] %}1 000mm min perimeter clearance{% else %}600mm min clearance (edge){% endif %}</text>
       <line x1="580" y1="20" x2="580" y2="340" stroke="#334155" stroke-width="1" stroke-dasharray="3,3"/>
 
       {# ── SPECS PANEL (right) ── #}
       <rect x="612" y="20" width="330" height="310" rx="8" fill="#0a0f1a" stroke="#1e293b" stroke-width="1"/>
       <text x="777" y="40" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="800">ARRAY SPECIFICATIONS</text>
 
+      {% set _ground = mt in ['ground_fixed','ground_tracking'] %}
+      {% set _area_m2 = (r.num_panels * 4 * 1.3)|int %}
       {% for y,lbl,val in [
         (65,"Total Panels", r.num_panels|string + " modules"),
         (90,"Panels per String", pps|string + " in series"),
@@ -430,7 +483,10 @@
         (240,"String Isc (est.)", "10–12 A typical"),
         (265,"DC Cable (strings)", "6 mm² UV solar cable"),
         (290,"DC Cable (main)", "10 mm² to isolator"),
-        (315,"Tilt Angle", "10–15° min (self-cleaning)"),
+        (315,
+          "Land Area Required" if _ground else "Tilt Angle",
+          (_area_m2|string + " m² (incl. row spacing)") if _ground else "Optimised for location latitude"
+        ),
       ] %}
       <text x="625" y="{{ y }}" fill="#6b7280" font-size="10">{{ lbl }}</text>
       <text x="930" y="{{ y }}" text-anchor="end" fill="#e2e8f0" font-size="10" font-weight="700">{{ val }}</text>
@@ -445,7 +501,11 @@
         <div class="note-item"><span class="dot">②</span><span class="txt"><strong>Parallel Strings:</strong> {{ num_strings }} strings are connected in parallel at the combiner box. Parallel connection multiplies current while voltage remains the same. Total array Isc ≈ {{ num_strings }} × 10A = {{ num_strings*10 }}A DC.</span></div>
       </div>
       <div class="col-md-6">
+        {% if mt in ['ground_fixed','ground_tracking'] %}
+        <div class="note-item"><span class="dot">③</span><span class="txt"><strong>Ground Array Clearances:</strong> Maintain ≥ 1 000mm perimeter access path around the array. Allow ≥ 500mm ground clearance under panels for airflow and mowing access. Inter-row spacing = panel height × cos(tilt) / tan(winter solstice elevation) — typically 2.5–3.5× panel row width. Land area required: ≈ {{ (r.num_panels * 4 * 1.3)|int }} m² ({{ r.num_panels }} panels × 4 m²/panel × 1.3 row-spacing factor).</span></div>
+        {% else %}
         <div class="note-item"><span class="dot">③</span><span class="txt"><strong>Mounting Clearances:</strong> Maintain ≥ 600mm from all roof edges (wind uplift). Allow ≥ 150mm gap under panels for airflow (reduces temperature and improves output). Inter-row shading distance = panel height × tan(elevation angle).</span></div>
+        {% endif %}
         <div class="note-item"><span class="dot">④</span><span class="txt"><strong>Orientation:</strong> Face panels toward the equator (south in northern hemisphere, north in southern hemisphere). Use region-specific tilt angle from solar data. Avoid shading from 09:00–15:00 (peak generation window).</span></div>
       </div>
     </div>

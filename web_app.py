@@ -8179,15 +8179,17 @@ def admin_agent_run():
             search_results = refined
 
     # ── Step 2: AI analyses real search results → structured prospects ──────────
-    api_key  = os.environ.get("ANTHROPIC_API_KEY", "")
     or_key   = os.environ.get("OPENROUTER_API_KEY", "")
+    api_key  = os.environ.get("ANTHROPIC_API_KEY", "")
     gh_token = os.environ.get("GITHUB_TOKEN", "")
-    if (api_key or or_key or gh_token) and search_results:
+    _has_any_ai = bool(or_key or api_key or gh_token or os.environ.get("OLLAMA_URL"))
+    if _has_any_ai and search_results:
         try:
+            # Trim snippets: max 1500 chars each so total prompt stays under ~20k tokens
             snippets = "\n\n".join(
                 f"[{i+1}] TITLE: {r.get('title','')}\nURL: {r.get('href','')}\n"
-                f"CONTENT:\n{(r.get('full_content') or r.get('body',''))[:3000]}"
-                for i, r in enumerate(search_results[:12])
+                f"CONTENT:\n{(r.get('full_content') or r.get('body',''))[:1500]}"
+                for i, r in enumerate(search_results[:10])
             )
             prompt = f"""You are a solar PV procurement intelligence analyst. Your job is to READ and ANALYSE the full content of each result below, then extract ONLY genuine, currently open procurement opportunities.
 
@@ -8262,25 +8264,27 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
     }}
   ]
 }}"""
-            if or_key:
-                # ── 1. OpenRouter — free Llama (primary) ───────────────────
-                # Try models in order; first success wins
-                import urllib.request as _ur_or, urllib.error as _ue_or, json as _json_or
+            import urllib.request as _ur_ai, urllib.error as _ue_ai, json as _json_ai
+            raw = None
+            ai_source = None
+
+            # ── 1. OpenRouter — free Llama (primary) ─────────────────────
+            # Each model tried; on any error, continue to next model then next provider
+            if or_key and raw is None:
                 _or_models = [
-                    "meta-llama/llama-3.3-70b-instruct:free",
                     "meta-llama/llama-3.1-8b-instruct:free",
                     "google/gemma-2-9b-it:free",
                     "mistralai/mistral-7b-instruct:free",
+                    "meta-llama/llama-3.3-70b-instruct:free",
                 ]
-                raw = None
                 for _or_model in _or_models:
                     try:
-                        _or_payload = _json_or.dumps({
+                        _or_payload = _json_ai.dumps({
                             "model":      _or_model,
                             "messages":   [{"role": "user", "content": prompt}],
                             "max_tokens": 3000,
                         }).encode()
-                        _or_req = _ur_or.Request(
+                        _or_req = _ur_ai.Request(
                             "https://openrouter.ai/api/v1/chat/completions",
                             data=_or_payload,
                             headers={
@@ -8290,68 +8294,76 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                                 "X-Title":       "SolarPro Prospecting Agent"
                             }
                         )
-                        with _ur_or.urlopen(_or_req, timeout=90) as _or_resp:
-                            _or_result = _json_or.loads(_or_resp.read())
+                        with _ur_ai.urlopen(_or_req, timeout=90) as _or_resp:
+                            _or_result = _json_ai.loads(_or_resp.read())
                         raw = _or_result["choices"][0]["message"]["content"].strip()
                         ai_source = f"web+openrouter({_or_model.split('/')[1]})"
                         break
-                    except _ue_or.HTTPError as _e_or:
-                        _err_body = _e_or.read().decode("utf-8", errors="ignore")
-                        raise RuntimeError(f"OpenRouter {_or_model} {_e_or.code}: {_err_body[:300]}")
-                if raw is None:
-                    raise RuntimeError("All OpenRouter models failed")
-            elif os.environ.get("OLLAMA_URL"):
-                # ── 2. Ollama (local inference) ────────────────────────────
-                import urllib.request as _ur4, json as _json4
-                _ollama_url   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-                _ollama_model = os.environ.get("OLLAMA_MODEL", "mistral")
-                _payload4 = _json4.dumps({
-                    "model":    _ollama_model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "stream":   False
-                }).encode()
-                _req4 = _ur4.Request(
-                    f"{_ollama_url}/api/chat",
-                    data=_payload4,
-                    headers={"Content-Type": "application/json"}
-                )
-                with _ur4.urlopen(_req4, timeout=120) as _r4:
-                    _result4 = _json4.loads(_r4.read())
-                raw = _result4["message"]["content"].strip()
-                ai_source = "web+ollama"
-            elif gh_token:
-                # ── 3. GitHub Models — free GPT-4.1-mini ───────────────────
-                import urllib.request as _ur3, json as _json3
-                _payload3 = _json3.dumps({
-                    "model":       "openai/gpt-4.1-mini",
-                    "messages":    [{"role": "user", "content": prompt}],
-                    "max_tokens":  4000,
-                    "temperature": 0.3
-                }).encode()
-                _req3 = _ur3.Request(
-                    "https://models.inference.ai.azure.com/chat/completions",
-                    data=_payload3,
-                    headers={
-                        "Authorization": f"Bearer {gh_token}",
-                        "Content-Type":  "application/json",
-                        "Accept":        "application/json",
-                        "User-Agent":    "solarpro-agent/1.0"
-                    })
-                with _ur3.urlopen(_req3, timeout=60) as _r3:
-                    _result3 = _json3.loads(_r3.read())
-                raw = _result3["choices"][0]["message"]["content"].strip()
-                ai_source = "web+github-models"
-            elif api_key:
-                # ── 4. Anthropic Claude (last resort — saves API credits) ──
-                import anthropic as _ant
-                client = _ant.Anthropic(api_key=api_key)
-                msg    = client.messages.create(
-                    model="claude-opus-4-7", max_tokens=4000,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                raw = msg.content[0].text.strip()
-                ai_source = "web+claude"
-            else:
+                    except Exception:
+                        continue  # try next model; fall through to next provider if all fail
+
+            # ── 2. Ollama (local inference) ───────────────────────────────
+            if os.environ.get("OLLAMA_URL") and raw is None:
+                try:
+                    _ollama_url   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+                    _ollama_model = os.environ.get("OLLAMA_MODEL", "mistral")
+                    _payload4 = _json_ai.dumps({
+                        "model":    _ollama_model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "stream":   False
+                    }).encode()
+                    _req4 = _ur_ai.Request(
+                        f"{_ollama_url}/api/chat",
+                        data=_payload4,
+                        headers={"Content-Type": "application/json"}
+                    )
+                    with _ur_ai.urlopen(_req4, timeout=120) as _r4:
+                        _result4 = _json_ai.loads(_r4.read())
+                    raw = _result4["message"]["content"].strip()
+                    ai_source = "web+ollama"
+                except Exception:
+                    pass
+
+            # ── 3. GitHub Models — free GPT-4.1-mini ──────────────────────
+            if gh_token and raw is None:
+                try:
+                    _payload3 = _json_ai.dumps({
+                        "model":       "openai/gpt-4.1-mini",
+                        "messages":    [{"role": "user", "content": prompt}],
+                        "max_tokens":  4000,
+                        "temperature": 0.3
+                    }).encode()
+                    _req3 = _ur_ai.Request(
+                        "https://models.inference.ai.azure.com/chat/completions",
+                        data=_payload3,
+                        headers={
+                            "Authorization": f"Bearer {gh_token}",
+                            "Content-Type":  "application/json",
+                            "Accept":        "application/json",
+                            "User-Agent":    "solarpro-agent/1.0"
+                        })
+                    with _ur_ai.urlopen(_req3, timeout=60) as _r3:
+                        _result3 = _json_ai.loads(_r3.read())
+                    raw = _result3["choices"][0]["message"]["content"].strip()
+                    ai_source = "web+github-models"
+                except Exception:
+                    pass
+
+            # ── 4. Anthropic Claude (last resort — saves API credits) ─────
+            if api_key and raw is None:
+                try:
+                    import anthropic as _ant
+                    client = _ant.Anthropic(api_key=api_key)
+                    msg    = client.messages.create(
+                        model="claude-opus-4-7", max_tokens=4000,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    raw = msg.content[0].text.strip()
+                    ai_source = "web+claude"
+                except Exception:
+                    pass
+
+            if raw is None:
                 raise ValueError("No AI provider available")
 
             if raw.startswith("```"):

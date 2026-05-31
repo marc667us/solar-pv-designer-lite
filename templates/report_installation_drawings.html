@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set mt = d.get('mounting_type','rooftop_pitched') %}
 {% block title %}Equipment Drawings — {{ project.name }}{% endblock %}
 {% block extra_head %}
 <style>
@@ -604,15 +605,146 @@
 <div class="diag-wrap">
   <div class="diag-head">
     <div class="num" style="background:linear-gradient(135deg,#22c55e,#15803d)">4</div>
-    <div class="ttl">Mounting Supports &amp; Coupling Accessories — Component Details &amp; Specifications</div>
+    <div class="ttl">{% if mt in ['ground_fixed','ground_tracking'] %}Ground Mount Structure &amp; Hardware — Component Details{% else %}Mounting Supports &amp; Coupling Accessories — Component Details{% endif %} &amp; Specifications</div>
   </div>
   <div class="diag-body">
     <svg viewBox="0 0 960 620" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;background:#07071a">
-      <text x="480" y="16" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="700">MOUNTING HARDWARE, CONDUIT &amp; CABLE MANAGEMENT ACCESSORIES</text>
+      <text x="480" y="16" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="700">{% if mt in ['ground_fixed','ground_tracking'] %}GROUND MOUNT STRUCTURE, HARDWARE &amp; CABLE MANAGEMENT{% else %}MOUNTING HARDWARE, CONDUIT &amp; CABLE MANAGEMENT ACCESSORIES{% endif %}</text>
 
       {# ── ROW HEADERS ── #}
-      <text x="10" y="42" fill="#f59e0b" font-size="10" font-weight="800">A — PV MOUNTING SYSTEM</text>
+      <text x="10" y="42" fill="#f59e0b" font-size="10" font-weight="800">{% if mt in ['ground_fixed','ground_tracking'] %}A — GROUND MOUNT STRUCTURE{% else %}A — PV MOUNTING SYSTEM{% endif %}</text>
       <line x1="10" y1="46" x2="950" y2="46" stroke="#1e1e3a" stroke-width="1"/>
+
+      {% if mt in ['ground_fixed','ground_tracking'] %}
+      {# ─── GROUND MOUNT HARDWARE ITEMS ─────────────────────────────────── #}
+
+      {# A1 — STEEL POST / COLUMN #}
+      {% set ax=30 %}
+      <rect x="{{ ax }}" y="60" width="90" height="100" rx="4" fill="#0a0a18" stroke="#1e1e3a" stroke-width="1"/>
+      {# Post body (RHS section) #}
+      <rect x="{{ ax+28 }}" y="62" width="24" height="80" rx="2" fill="#334155" stroke="#64748b" stroke-width="1.5"/>
+      <rect x="{{ ax+31 }}" y="65" width="18" height="74" rx="1" fill="#1e293b"/>
+      {# Base plate #}
+      <rect x="{{ ax+14 }}" y="140" width="52" height="8" rx="2" fill="#475569" stroke="#64748b" stroke-width="1.5"/>
+      {# Anchor bolts #}
+      <line x1="{{ ax+20 }}" y1="148" x2="{{ ax+20 }}" y2="162" stroke="#94a3b8" stroke-width="2"/>
+      <line x1="{{ ax+60 }}" y1="148" x2="{{ ax+60 }}" y2="162" stroke="#94a3b8" stroke-width="2"/>
+      {# Tilt bracket at top #}
+      <rect x="{{ ax+14 }}" y="56" width="52" height="10" rx="2" fill="#f59e0b" opacity="0.7" stroke="#f59e0b" stroke-width="1"/>
+      <text x="{{ ax+45 }}" y="175" text-anchor="middle" fill="#f59e0b" font-size="9" font-weight="800">STEEL POST</text>
+      <text x="{{ ax+45 }}" y="185" text-anchor="middle" fill="#6b7280" font-size="7">100×100 RHS or 90Ø CHS</text>
+      <text x="{{ ax+45 }}" y="194" text-anchor="middle" fill="#22c55e" font-size="7">Hot-dip galv. • base plate</text>
+
+      {# A2 — CONCRETE FOOTING #}
+      {% set ax=138 %}
+      <rect x="{{ ax }}" y="60" width="90" height="100" rx="4" fill="#0a0a18" stroke="#1e1e3a" stroke-width="1"/>
+      {# Footing cross-section #}
+      <rect x="{{ ax+10 }}" y="90" width="70" height="60" rx="3" fill="#1e293b" stroke="#475569" stroke-width="1.5"/>
+      {# Concrete texture #}
+      {% for ci in range(5) %}
+      <line x1="{{ ax+12+ci*12 }}" y1="92" x2="{{ ax+14+ci*12 }}" y2="148" stroke="#334155" stroke-width="0.8"/>
+      {% endfor %}
+      {# Anchor bolt in concrete #}
+      <line x1="{{ ax+45 }}" y1="62" x2="{{ ax+45 }}" y2="90" stroke="#94a3b8" stroke-width="4"/>
+      <circle cx="{{ ax+45 }}" cy="120" r="8" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="{{ ax+45 }}" y="125" text-anchor="middle" fill="#fbbf24" font-size="8" font-weight="700">M16</text>
+      {# Depth annotation #}
+      <line x1="{{ ax+84 }}" y1="90" x2="{{ ax+84 }}" y2="150" stroke="#0ea5e9" stroke-width="1"/>
+      <text x="{{ ax+88 }}" y="124" fill="#0ea5e9" font-size="7">600mm</text>
+      <text x="{{ ax+45 }}" y="175" text-anchor="middle" fill="#f59e0b" font-size="9" font-weight="800">CONCRETE FOOTING</text>
+      <text x="{{ ax+45 }}" y="185" text-anchor="middle" fill="#6b7280" font-size="7">400mm dia. × 600mm deep</text>
+      <text x="{{ ax+45 }}" y="194" text-anchor="middle" fill="#6b7280" font-size="7">C25/30 concrete · M16 HD bolts</text>
+
+      {# A3 — PURLIN / RAFTER BEAM #}
+      {% set ax=246 %}
+      <rect x="{{ ax }}" y="60" width="90" height="100" rx="4" fill="#0a0a18" stroke="#1e1e3a" stroke-width="1"/>
+      {# Beam cross-section + length #}
+      <rect x="{{ ax+8 }}" y="92" width="74" height="16" rx="2" fill="#475569" stroke="#64748b" stroke-width="1.5"/>
+      <rect x="{{ ax+14 }}" y="96" width="62" height="8" rx="1" fill="#334155"/>
+      {# Splice bolt holes #}
+      <circle cx="{{ ax+22 }}" cy="100" r="3" fill="#0a0a18" stroke="#64748b" stroke-width="1"/>
+      <circle cx="{{ ax+68 }}" cy="100" r="3" fill="#0a0a18" stroke="#64748b" stroke-width="1"/>
+      {# Tilt angle cut at end #}
+      <path d="M {{ ax+76 }} 92 L {{ ax+82 }} 92 L {{ ax+76 }} 108 Z" fill="#f59e0b" opacity="0.6"/>
+      <text x="{{ ax+45 }}" y="175" text-anchor="middle" fill="#f59e0b" font-size="9" font-weight="800">PURLIN BEAM</text>
+      <text x="{{ ax+45 }}" y="185" text-anchor="middle" fill="#6b7280" font-size="7">50×100 RHS, 3m spans</text>
+      <text x="{{ ax+45 }}" y="194" text-anchor="middle" fill="#6b7280" font-size="7">Top rail sets tilt angle</text>
+
+      {# A4 — MID-CLAMP (same as rooftop) #}
+      {% set ax=354 %}
+      <rect x="{{ ax }}" y="60" width="90" height="100" rx="4" fill="#0a0a18" stroke="#1e1e3a" stroke-width="1"/>
+      <rect x="{{ ax+8 }}" y="84" width="30" height="16" rx="1" fill="#0f172a" stroke="#f59e0b" stroke-width="1.2"/>
+      <rect x="{{ ax+52 }}" y="84" width="30" height="16" rx="1" fill="#0f172a" stroke="#f59e0b" stroke-width="1.2"/>
+      <rect x="{{ ax+30 }}" y="80" width="30" height="24" rx="3" fill="#475569" stroke="#64748b" stroke-width="1.5"/>
+      <rect x="{{ ax+32 }}" y="80" width="8" height="5" rx="1" fill="#334155"/>
+      <rect x="{{ ax+50 }}" y="80" width="8" height="5" rx="1" fill="#334155"/>
+      <circle cx="{{ ax+45 }}" cy="96" r="5" fill="#fbbf24" stroke="#f59e0b" stroke-width="1.2"/>
+      <line x1="{{ ax+45 }}" y1="104" x2="{{ ax+45 }}" y2="116" stroke="#fbbf24" stroke-width="1.5"/>
+      <rect x="{{ ax+8 }}" y="100" width="74" height="10" rx="2" fill="#475569" stroke="#64748b" stroke-width="1"/>
+      <text x="{{ ax+45 }}" y="175" text-anchor="middle" fill="#f59e0b" font-size="9" font-weight="800">MID-CLAMP</text>
+      <text x="{{ ax+45 }}" y="185" text-anchor="middle" fill="#6b7280" font-size="7">Between panels</text>
+      <text x="{{ ax+45 }}" y="194" text-anchor="middle" fill="#6b7280" font-size="7">20 Nm torque • SS304</text>
+
+      {# A5 — END-CLAMP #}
+      {% set ax=462 %}
+      <rect x="{{ ax }}" y="60" width="90" height="100" rx="4" fill="#0a0a18" stroke="#1e1e3a" stroke-width="1"/>
+      <rect x="{{ ax+8 }}" y="84" width="36" height="16" rx="1" fill="#0f172a" stroke="#f59e0b" stroke-width="1.2"/>
+      <rect x="{{ ax+44 }}" y="79" width="30" height="22" rx="3" fill="#475569" stroke="#64748b" stroke-width="1.5"/>
+      <rect x="{{ ax+44 }}" y="79" width="12" height="6" rx="1" fill="#334155"/>
+      <circle cx="{{ ax+55 }}" cy="94" r="5" fill="#fbbf24" stroke="#f59e0b" stroke-width="1.2"/>
+      <line x1="{{ ax+55 }}" y1="101" x2="{{ ax+55 }}" y2="115" stroke="#fbbf24" stroke-width="1.5"/>
+      <rect x="{{ ax+8 }}" y="100" width="68" height="10" rx="2" fill="#475569" stroke="#64748b" stroke-width="1"/>
+      <text x="{{ ax+45 }}" y="175" text-anchor="middle" fill="#f59e0b" font-size="9" font-weight="800">END-CLAMP</text>
+      <text x="{{ ax+45 }}" y="185" text-anchor="middle" fill="#6b7280" font-size="7">Array perimeter</text>
+      <text x="{{ ax+45 }}" y="194" text-anchor="middle" fill="#6b7280" font-size="7">100–150mm from edge</text>
+
+      {# A6 — EARTH STAKE / BOND STRIP #}
+      {% set ax=570 %}
+      <rect x="{{ ax }}" y="60" width="90" height="100" rx="4" fill="#0a0a18" stroke="#1e1e3a" stroke-width="1"/>
+      {# Earth rod #}
+      <line x1="{{ ax+45 }}" y1="62" x2="{{ ax+45 }}" y2="140" stroke="#94a3b8" stroke-width="6"/>
+      {# Ground level #}
+      <line x1="{{ ax+10 }}" y1="110" x2="{{ ax+80 }}" y2="110" stroke="#334155" stroke-width="1.5" stroke-dasharray="4,2"/>
+      <text x="{{ ax+85 }}" y="113" fill="#334155" font-size="7">GL</text>
+      {# Earth clamp #}
+      <rect x="{{ ax+30 }}" y="100" width="30" height="14" rx="4" fill="#22c55e" opacity="0.7" stroke="#22c55e" stroke-width="1.5"/>
+      {# Bond cable #}
+      <line x1="{{ ax+45 }}" y1="100" x2="{{ ax+15 }}" y2="78" stroke="#22c55e" stroke-width="2.5" stroke-dasharray="4,2"/>
+      <text x="{{ ax+45 }}" y="175" text-anchor="middle" fill="#22c55e" font-size="9" font-weight="800">EARTH ROD</text>
+      <text x="{{ ax+45 }}" y="185" text-anchor="middle" fill="#6b7280" font-size="7">16mm dia. copper-bonded</text>
+      <text x="{{ ax+45 }}" y="194" text-anchor="middle" fill="#6b7280" font-size="7">2.4m deep · 1 at each end</text>
+
+      {% if mt == 'ground_tracking' %}
+      {# A7 — TRACKER TORQUE TUBE #}
+      {% set ax=678 %}
+      <rect x="{{ ax }}" y="60" width="90" height="100" rx="4" fill="#0a0a18" stroke="#1e1e3a" stroke-width="1"/>
+      {# Torque tube #}
+      <ellipse cx="{{ ax+45 }}" cy="100" rx="18" ry="28" fill="#0f172a" stroke="#0ea5e9" stroke-width="1.5"/>
+      <ellipse cx="{{ ax+45 }}" cy="100" rx="12" ry="22" fill="#07071a" stroke="#0ea5e9" stroke-width="0.8"/>
+      {# Drive motor #}
+      <rect x="{{ ax+10 }}" y="88" width="22" height="24" rx="4" fill="#0c1829" stroke="#38bdf8" stroke-width="1.2"/>
+      <text x="{{ ax+21 }}" y="103" text-anchor="middle" fill="#38bdf8" font-size="7" font-weight="700">MTR</text>
+      <text x="{{ ax+45 }}" y="175" text-anchor="middle" fill="#0ea5e9" font-size="9" font-weight="800">TORQUE TUBE</text>
+      <text x="{{ ax+45 }}" y="185" text-anchor="middle" fill="#6b7280" font-size="7">Single-axis tracker shaft</text>
+      <text x="{{ ax+45 }}" y="194" text-anchor="middle" fill="#6b7280" font-size="7">E→W sweep · drive motor</text>
+      {% else %}
+      {# A7 — INTER-ROW SPACER #}
+      {% set ax=678 %}
+      <rect x="{{ ax }}" y="60" width="90" height="100" rx="4" fill="#0a0a18" stroke="#1e1e3a" stroke-width="1"/>
+      <rect x="{{ ax+10 }}" y="72" width="70" height="14" rx="2" fill="#0f172a" stroke="#f59e0b" stroke-width="1"/>
+      <rect x="{{ ax+10 }}" y="102" width="70" height="14" rx="2" fill="#0f172a" stroke="#f59e0b" stroke-width="1"/>
+      <line x1="{{ ax+35 }}" y1="86" x2="{{ ax+35 }}" y2="102" stroke="#475569" stroke-width="3"/>
+      <line x1="{{ ax+55 }}" y1="86" x2="{{ ax+55 }}" y2="102" stroke="#475569" stroke-width="3"/>
+      <line x1="{{ ax+8 }}" y1="86" x2="{{ ax+8 }}" y2="102" stroke="#0ea5e9" stroke-width="1"/>
+      <line x1="{{ ax+5 }}" y1="86" x2="{{ ax+11 }}" y2="86" stroke="#0ea5e9" stroke-width="1"/>
+      <line x1="{{ ax+5 }}" y1="102" x2="{{ ax+11 }}" y2="102" stroke="#0ea5e9" stroke-width="1"/>
+      <text x="{{ ax+45 }}" y="175" text-anchor="middle" fill="#f59e0b" font-size="9" font-weight="800">ROW SPACER</text>
+      <text x="{{ ax+45 }}" y="185" text-anchor="middle" fill="#6b7280" font-size="7">Inter-row standoff</text>
+      <text x="{{ ax+45 }}" y="194" text-anchor="middle" fill="#6b7280" font-size="7">≥ 2.5× row width (GND)</text>
+      {% endif %}
+
+      {% else %}
+      {# ─── ROOFTOP MOUNTING HARDWARE ITEMS ─────────────────────────────── #}
 
       {# A1 — L-FOOT BRACKET #}
       {% set ax=30 %}
@@ -716,22 +848,7 @@
       <text x="{{ ax+45 }}" y="175" text-anchor="middle" fill="#f59e0b" font-size="9" font-weight="800">BIRD MESH</text>
       <text x="{{ ax+45 }}" y="185" text-anchor="middle" fill="#6b7280" font-size="7">SS304 wire mesh + clip</text>
       <text x="{{ ax+45 }}" y="194" text-anchor="middle" fill="#6b7280" font-size="7">Perimeter of array</text>
-
-      {# A7 — INTER-ROW SPACER #}
-      {% set ax=678 %}
-      <rect x="{{ ax }}" y="60" width="90" height="100" rx="4" fill="#0a0a18" stroke="#1e1e3a" stroke-width="1"/>
-      <rect x="{{ ax+10 }}" y="72" width="70" height="14" rx="2" fill="#0f172a" stroke="#f59e0b" stroke-width="1"/>
-      <rect x="{{ ax+10 }}" y="102" width="70" height="14" rx="2" fill="#0f172a" stroke="#f59e0b" stroke-width="1"/>
-      {# spacer rails #}
-      <line x1="{{ ax+35 }}" y1="86" x2="{{ ax+35 }}" y2="102" stroke="#475569" stroke-width="3"/>
-      <line x1="{{ ax+55 }}" y1="86" x2="{{ ax+55 }}" y2="102" stroke="#475569" stroke-width="3"/>
-      {# measurement #}
-      <line x1="{{ ax+8 }}" y1="86" x2="{{ ax+8 }}" y2="102" stroke="#0ea5e9" stroke-width="1"/>
-      <line x1="{{ ax+5 }}" y1="86" x2="{{ ax+11 }}" y2="86" stroke="#0ea5e9" stroke-width="1"/>
-      <line x1="{{ ax+5 }}" y1="102" x2="{{ ax+11 }}" y2="102" stroke="#0ea5e9" stroke-width="1"/>
-      <text x="{{ ax+45 }}" y="175" text-anchor="middle" fill="#f59e0b" font-size="9" font-weight="800">ROW SPACER</text>
-      <text x="{{ ax+45 }}" y="185" text-anchor="middle" fill="#6b7280" font-size="7">Inter-row standoff</text>
-      <text x="{{ ax+45 }}" y="194" text-anchor="middle" fill="#6b7280" font-size="7">≥150mm air gap</text>
+      {% endif %}
 
       {# ── ROW B — DC CABLE MANAGEMENT ── #}
       <text x="10" y="218" fill="#ef4444" font-size="10" font-weight="800">B — DC CABLE MANAGEMENT</text>
@@ -982,10 +1099,18 @@
   <div class="notes-panel">
     <div class="row g-3">
       <div class="col-md-3">
+        {% if mt in ['ground_fixed','ground_tracking'] %}
+        <div class="note-item"><span class="dot">①</span><span class="txt"><strong>Ground structure:</strong> Use galvanised steel posts (100×100 RHS or 90mm CHS) on C25/30 concrete footings 600mm deep × 400mm diameter. All bolts M16 stainless. Plumb posts within 2mm/m tolerance. Set tilt angle on top rail — latitude ±5° optimal. Weld or hot-dip galvanise all structural joints. Re-torque after first wet season.</span></div>
+        {% else %}
         <div class="note-item"><span class="dot">①</span><span class="txt"><strong>Mounting system compatibility:</strong> Always use the same manufacturer's L-feet, rails, mid-clamps, and end-clamps as a complete system. Mixing brands risks incompatible tolerances and loss of wind-load certification. Torque all clamp bolts to specification (typically 20 Nm) and re-check after first storm season.</span></div>
+        {% endif %}
       </div>
       <div class="col-md-3">
+        {% if mt in ['ground_fixed','ground_tracking'] %}
+        <div class="note-item"><span class="dot">②</span><span class="txt"><strong>DC cable management (buried):</strong> All DC string cables must be routed in <strong>IP67 armoured conduit buried ≥ 600mm below grade</strong> from array to equipment room. Use cable draw-pits every 20m for pulling cables. At array edge, cables exit grade in IP65 rigid conduit with sweep bend and weatherproof gland. Lock all MC4 connectors with MC4 spanners.</span></div>
+        {% else %}
         <div class="note-item"><span class="dot">②</span><span class="txt"><strong>DC cable management:</strong> Route DC cables in IP44 metallic conduit from roof to equipment room. Use IP67 cable glands at every enclosure entry. Separate DC and AC conduits by ≥ 50mm. Lock all MC4 connectors with MC4 spanners — finger-tightened connectors arc and cause fires. Cable ties every 200mm on rails.</span></div>
+        {% endif %}
       </div>
       <div class="col-md-3">
         <div class="note-item"><span class="dot">③</span><span class="txt"><strong>AC containment:</strong> Route AC cables in PVC trunking (50×50mm minimum for main run). Use pre-formed corners and junction boxes — do not nick cable insulation with cutter. Cable tray for horizontal equipment room runs. All trunking/tray must be fixed at ≤ 500mm centres. Label trunking lid with circuit references.</span></div>
