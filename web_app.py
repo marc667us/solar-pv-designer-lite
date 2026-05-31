@@ -8334,7 +8334,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
             if gh_token and raw is None:
                 try:
                     _payload3 = _json_ai.dumps({
-                        "model":       "openai/gpt-4.1-mini",
+                        "model":       "gpt-4.1-mini",
                         "messages":    [{"role": "user", "content": prompt}],
                         "max_tokens":  4000,
                         "temperature": 0.3

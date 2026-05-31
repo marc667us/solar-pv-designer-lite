@@ -77,22 +77,34 @@ jobs:
 
           echo "Syncing $(echo "$NEW_VARS" | jq 'length') secret(s) to Render..."
 
-          # GET current vars — strip Render's internal fields (id, serviceId, etc.)
-          CURRENT=$(curl -s \
+          # GET current vars — Render v1 returns array of objects with nested envVar
+          # Format: [{"cursor":"...", "envVar":{"key":"K","value":"V"}},...] OR flat [{key,value},...]
+          CURRENT_RAW=$(curl -s \
             -H "Authorization: Bearer $RENDER_API_KEY" \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars" \
-            || echo '[]')
-          CURRENT_CLEAN=$(echo "$CURRENT" | \
-            jq '[.[] | {key: .key, value: .value}]' 2>/dev/null || echo '[]')
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars")
+          echo "GET response (first 200): ${CURRENT_RAW:0:200}"
+
+          # Normalise both flat [{key,value}] and nested [{envVar:{key,value}}] formats
+          CURRENT_CLEAN=$(echo "$CURRENT_RAW" | \
+            jq 'if (.[0] | has("envVar")) then [.[].envVar | {key:.key,value:.value}]
+                else [.[] | {key:.key,value:.value}] end' 2>/dev/null || echo '[]')
+          echo "Parsed $(echo "$CURRENT_CLEAN" | jq 'length') existing vars"
 
           # Merge: keep existing vars not in NEW_VARS, then append NEW_VARS
           UPDATED=$(echo "$CURRENT_CLEAN" | jq \
             --argjson new "$NEW_VARS" \
             'map(select(.key as $k | ($new | map(.key) | index($k)) == null)) + $new')
+          echo "PUT payload has $(echo "$UPDATED" | jq 'length') vars total"
 
-          curl -sf -X PUT \
+          HTTP_STATUS=$(curl -s -o /tmp/render_put.txt -w "%{http_code}" -X PUT \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$UPDATED" \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars" \
-            && echo "Env vars synced." || echo "Env-var sync failed (non-fatal)"
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars")
+          echo "PUT status: $HTTP_STATUS"
+          cat /tmp/render_put.txt | head -c 300
+          if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "201" ]; then
+            echo "Env vars synced successfully."
+          else
+            echo "Env-var sync failed (non-fatal) — set vars manually in Render dashboard if needed"
+          fi
