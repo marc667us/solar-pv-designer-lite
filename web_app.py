@@ -8347,7 +8347,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
             return jsonify({"ok": True, "prospects": data["prospects"],
                             "source": ai_source, "result_count": len(search_results)})
         except Exception as e:
-            pass  # fall through to raw results
+            _ai_error = str(e)  # captured for debug; fall through to template extraction
 
     # ── Step 3: Template extraction (no AI key) ──────────────────────────────────
     def _classify_source(url):
@@ -8501,7 +8501,8 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                 "verified":           True,
             })
         return jsonify({"ok": True, "prospects": prospects,
-                        "source": "web_search", "result_count": len(search_results)})
+                        "source": "web_search", "result_count": len(search_results),
+                        "ai_error": _ai_error if '_ai_error' in dir() else None})
 
     # ── Step 4: Last resort — inform user search failed ─────────────────────────
     return jsonify({"ok": False,
