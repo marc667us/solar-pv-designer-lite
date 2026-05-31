@@ -8263,28 +8263,43 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
   ]
 }}"""
             if or_key:
-                # ── 1. OpenRouter — Llama-3.3-70b free (primary) ──────────
-                import urllib.request as _ur_or, json as _json_or
-                _or_payload = _json_or.dumps({
-                    "model":       "meta-llama/llama-3.3-70b-instruct:free",
-                    "messages":    [{"role": "user", "content": prompt}],
-                    "max_tokens":  4000,
-                    "temperature": 0.2
-                }).encode()
-                _or_req = _ur_or.Request(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    data=_or_payload,
-                    headers={
-                        "Authorization": f"Bearer {or_key}",
-                        "Content-Type":  "application/json",
-                        "HTTP-Referer":  "https://solarpro.aiappinvent.com",
-                        "X-Title":       "SolarPro Prospecting Agent"
-                    }
-                )
-                with _ur_or.urlopen(_or_req, timeout=90) as _or_resp:
-                    _or_result = _json_or.loads(_or_resp.read())
-                raw = _or_result["choices"][0]["message"]["content"].strip()
-                ai_source = "web+openrouter"
+                # ── 1. OpenRouter — free Llama (primary) ───────────────────
+                # Try models in order; first success wins
+                import urllib.request as _ur_or, urllib.error as _ue_or, json as _json_or
+                _or_models = [
+                    "meta-llama/llama-3.3-70b-instruct:free",
+                    "meta-llama/llama-3.1-8b-instruct:free",
+                    "google/gemma-2-9b-it:free",
+                    "mistralai/mistral-7b-instruct:free",
+                ]
+                raw = None
+                for _or_model in _or_models:
+                    try:
+                        _or_payload = _json_or.dumps({
+                            "model":      _or_model,
+                            "messages":   [{"role": "user", "content": prompt}],
+                            "max_tokens": 3000,
+                        }).encode()
+                        _or_req = _ur_or.Request(
+                            "https://openrouter.ai/api/v1/chat/completions",
+                            data=_or_payload,
+                            headers={
+                                "Authorization": f"Bearer {or_key}",
+                                "Content-Type":  "application/json",
+                                "HTTP-Referer":  "https://solarpro.aiappinvent.com",
+                                "X-Title":       "SolarPro Prospecting Agent"
+                            }
+                        )
+                        with _ur_or.urlopen(_or_req, timeout=90) as _or_resp:
+                            _or_result = _json_or.loads(_or_resp.read())
+                        raw = _or_result["choices"][0]["message"]["content"].strip()
+                        ai_source = f"web+openrouter({_or_model.split('/')[1]})"
+                        break
+                    except _ue_or.HTTPError as _e_or:
+                        _err_body = _e_or.read().decode("utf-8", errors="ignore")
+                        raise RuntimeError(f"OpenRouter {_or_model} {_e_or.code}: {_err_body[:300]}")
+                if raw is None:
+                    raise RuntimeError("All OpenRouter models failed")
             elif os.environ.get("OLLAMA_URL"):
                 # ── 2. Ollama (local inference) ────────────────────────────
                 import urllib.request as _ur4, json as _json4
