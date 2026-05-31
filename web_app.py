@@ -8050,6 +8050,53 @@ def admin_agent_run():
     loc_lower   = loc.lower()
     loc_aliases = COUNTRY_CITIES.get(loc_lower, [loc_lower])
 
+    # ── Search infrastructure ─────────────────────────────────────────────────
+    UN_PORTALS = (
+        "site:ungm.org OR site:devex.com OR site:reliefweb.int "
+        "OR site:dgmarket.com OR site:tendersinfo.com"
+    )
+    DFI_PORTALS = (
+        "site:worldbank.org OR site:afdb.org OR site:ifc.org "
+        "OR site:esmap.org OR site:geapp.org"
+    )
+    AFRICA_PORTALS = (
+        "site:africatenders.com OR site:tendersontime.com "
+        "OR site:globaltenders.com OR site:ecreee.org"
+    )
+    JOB_DOMAINS    = ["jobberman.com", "myjobmag.com", "brightermonday.com",
+                      "ghanaiansjobs.com", "jobsinghana.com", "indeed.com"]
+    SOCIAL_DOMAINS = ["facebook.com", "linkedin.com", "twitter.com", "x.com"]
+
+    sector_q = sector.lower() if sector else "commercial"
+    focus_q  = focus if focus else f"solar PV {sector_q}"
+
+    queries = [
+        f'"tender for" solar installation {loc_q} 2026 2027',
+        f'"invitation to bid" solar PV {loc_q} 2026 2027',
+        f'"request for proposals" solar {loc_q} 2026 2027',
+        f'"expression of interest" solar {loc_q} installation 2026 2027',
+        f'({UN_PORTALS}) solar {loc_q} tender OR RFP 2026 2027',
+        f'({DFI_PORTALS}) solar {loc_q} tender OR "invitation to bid" 2026 2027',
+        f'({AFRICA_PORTALS}) solar {loc_q} tender OR RFP 2026 2027',
+        f'{loc_q} {sector_q} solar "supply and install" tender OR RFP 2026 2027',
+        f'site:facebook.com {loc_q} solar "looking for installer" OR "need solar" 2026',
+        f'site:linkedin.com {loc_q} solar contractor OR seeking OR tender 2026',
+        f'{loc_q} {focus_q} solar procurement OR bid OR tender 2026 2027',
+    ]
+
+    rfp_keywords = [
+        "tender", "rfp", "itb", "eoi", "invitation to bid",
+        "request for proposal", "expression of interest",
+        "call for tenders", "procurement notice", "bidding document",
+        "installation works", "epc contract",
+    ]
+
+    def _is_social(url):
+        return any(d in url for d in SOCIAL_DOMAINS)
+
+    def _is_job_board(url):
+        return any(d in url for d in JOB_DOMAINS)
+
     try:
         # -- api_manager search (DuckDuckGo + 6h cache + stale fallback) --
         _raw_results = []
