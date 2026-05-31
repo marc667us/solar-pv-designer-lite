@@ -7994,9 +7994,9 @@ def admin_agent():
     _has_claude = bool(os.environ.get("ANTHROPIC_API_KEY"))
     _has_or     = bool(os.environ.get("OPENROUTER_API_KEY"))
     _has_gh     = bool(os.environ.get("GITHUB_TOKEN"))
-    _ai_label   = ("Claude" if _has_claude
-                   else "OpenRouter" if _has_or
+    _ai_label   = ("OpenRouter" if _has_or
                    else "GitHub Models" if _has_gh
+                   else "Claude" if _has_claude
                    else "none")
     return render_template("admin_agent.html", user=current_user(),
                            saved_leads=saved, total_saved=total_saved,
@@ -8215,18 +8215,8 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
     }}
   ]
 }}"""
-            if api_key:
-                # ── 1. Anthropic Claude (primary) ──────────────────────────
-                import anthropic as _ant
-                client = _ant.Anthropic(api_key=api_key)
-                msg    = client.messages.create(
-                    model="claude-opus-4-7", max_tokens=4000,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                raw = msg.content[0].text.strip()
-                ai_source = "web+claude"
-            elif or_key:
-                # ── 2. OpenRouter — free Llama models (cloud fallback) ─────
+            if or_key:
+                # ── 1. OpenRouter — Llama-3.3-70b free (primary) ──────────
                 import urllib.request as _ur_or, json as _json_or
                 _or_payload = _json_or.dumps({
                     "model":       "meta-llama/llama-3.3-70b-instruct:free",
@@ -8249,7 +8239,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                 raw = _or_result["choices"][0]["message"]["content"].strip()
                 ai_source = "web+openrouter"
             elif os.environ.get("OLLAMA_URL"):
-                # ── 3. Ollama (local inference) ────────────────────────────
+                # ── 2. Ollama (local inference) ────────────────────────────
                 import urllib.request as _ur4, json as _json4
                 _ollama_url   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
                 _ollama_model = os.environ.get("OLLAMA_MODEL", "mistral")
@@ -8268,7 +8258,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                 raw = _result4["message"]["content"].strip()
                 ai_source = "web+ollama"
             elif gh_token:
-                # ── 4. GitHub Models — free GPT-4.1-mini ───────────────────
+                # ── 3. GitHub Models — free GPT-4.1-mini ───────────────────
                 import urllib.request as _ur3, json as _json3
                 _payload3 = _json3.dumps({
                     "model":       "openai/gpt-4.1-mini",
@@ -8289,6 +8279,16 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                     _result3 = _json3.loads(_r3.read())
                 raw = _result3["choices"][0]["message"]["content"].strip()
                 ai_source = "web+github-models"
+            elif api_key:
+                # ── 4. Anthropic Claude (last resort — saves API credits) ──
+                import anthropic as _ant
+                client = _ant.Anthropic(api_key=api_key)
+                msg    = client.messages.create(
+                    model="claude-opus-4-7", max_tokens=4000,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                raw = msg.content[0].text.strip()
+                ai_source = "web+claude"
             else:
                 raise ValueError("No AI provider available")
 
