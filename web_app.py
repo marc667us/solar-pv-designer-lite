@@ -7991,9 +7991,17 @@ def admin_agent():
         "last_agent_run":  mstate[4] if mstate else "",
         "agent_run_count": mstate[5] if mstate else 0,
     }
+    _has_claude = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    _has_or     = bool(os.environ.get("OPENROUTER_API_KEY"))
+    _has_gh     = bool(os.environ.get("GITHUB_TOKEN"))
+    _ai_label   = ("Claude" if _has_claude
+                   else "OpenRouter" if _has_or
+                   else "GitHub Models" if _has_gh
+                   else "none")
     return render_template("admin_agent.html", user=current_user(),
                            saved_leads=saved, total_saved=total_saved,
-                           has_ai=bool(os.environ.get("ANTHROPIC_API_KEY")),
+                           has_ai=bool(_has_claude or _has_or or _has_gh),
+                           ai_provider=_ai_label,
                            ms=ms)
 
 
@@ -8123,10 +8131,11 @@ def admin_agent_run():
         if refined:
             search_results = refined
 
-    # ── Step 2: AI analyses real search results â†' structured prospects ──────────
+    # ── Step 2: AI analyses real search results → structured prospects ──────────
     api_key  = os.environ.get("ANTHROPIC_API_KEY", "")
+    or_key   = os.environ.get("OPENROUTER_API_KEY", "")
     gh_token = os.environ.get("GITHUB_TOKEN", "")
-    if (api_key or gh_token) and search_results:
+    if (api_key or or_key or gh_token) and search_results:
         try:
             snippets = "\n\n".join(
                 f"[{i+1}] TITLE: {r.get('title','')}\nURL: {r.get('href','')}\n"
@@ -8207,7 +8216,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
   ]
 }}"""
             if api_key:
-                # ── Anthropic Claude (primary) ─────────────────────────────
+                # ── 1. Anthropic Claude (primary) ──────────────────────────
                 import anthropic as _ant
                 client = _ant.Anthropic(api_key=api_key)
                 msg    = client.messages.create(
@@ -8216,25 +8225,38 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                 )
                 raw = msg.content[0].text.strip()
                 ai_source = "web+claude"
-            elif mistral_key:
-                # Mistral AI (secondary fallback)
-                from mistralai.client.sdk import Mistral as _Mistral
-                _mc  = _Mistral(api_key=mistral_key)
-                _mr  = _mc.chat.complete(
-                    model="mistral-large-latest",
-                    messages=[{"role": "user", "content": prompt}]
+            elif or_key:
+                # ── 2. OpenRouter — free Llama models (cloud fallback) ─────
+                import urllib.request as _ur_or, json as _json_or
+                _or_payload = _json_or.dumps({
+                    "model":       "meta-llama/llama-3.3-70b-instruct:free",
+                    "messages":    [{"role": "user", "content": prompt}],
+                    "max_tokens":  4000,
+                    "temperature": 0.2
+                }).encode()
+                _or_req = _ur_or.Request(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    data=_or_payload,
+                    headers={
+                        "Authorization": f"Bearer {or_key}",
+                        "Content-Type":  "application/json",
+                        "HTTP-Referer":  "https://solarpro.aiappinvent.com",
+                        "X-Title":       "SolarPro Prospecting Agent"
+                    }
                 )
-                raw = _mr.choices[0].message.content.strip()
-                ai_source = "web+mistral"
+                with _ur_or.urlopen(_or_req, timeout=90) as _or_resp:
+                    _or_result = _json_or.loads(_or_resp.read())
+                raw = _or_result["choices"][0]["message"]["content"].strip()
+                ai_source = "web+openrouter"
             elif os.environ.get("OLLAMA_URL"):
-                # Ollama (local inference)
+                # ── 3. Ollama (local inference) ────────────────────────────
                 import urllib.request as _ur4, json as _json4
-                _ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+                _ollama_url   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
                 _ollama_model = os.environ.get("OLLAMA_MODEL", "mistral")
                 _payload4 = _json4.dumps({
-                    "model": _ollama_model,
+                    "model":    _ollama_model,
                     "messages": [{"role": "user", "content": prompt}],
-                    "stream": False
+                    "stream":   False
                 }).encode()
                 _req4 = _ur4.Request(
                     f"{_ollama_url}/api/chat",
@@ -8245,8 +8267,8 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                     _result4 = _json4.loads(_r4.read())
                 raw = _result4["message"]["content"].strip()
                 ai_source = "web+ollama"
-            else:
-                # ── GitHub Models (fallback — free) ────────────────────────
+            elif gh_token:
+                # ── 4. GitHub Models — free GPT-4.1-mini ───────────────────
                 import urllib.request as _ur3, json as _json3
                 _payload3 = _json3.dumps({
                     "model":       "openai/gpt-4.1-mini",
@@ -8267,6 +8289,8 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                     _result3 = _json3.loads(_r3.read())
                 raw = _result3["choices"][0]["message"]["content"].strip()
                 ai_source = "web+github-models"
+            else:
+                raise ValueError("No AI provider available")
 
             if raw.startswith("```"):
                 raw = "\n".join(raw.split("\n")[1:])
