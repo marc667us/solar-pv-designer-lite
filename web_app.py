@@ -8267,6 +8267,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
             import urllib.request as _ur_ai, urllib.error as _ue_ai, json as _json_ai
             raw = None
             ai_source = None
+            _provider_errors = []  # accumulate errors for debugging
 
             # ── 1. OpenRouter — free Llama (primary) ─────────────────────
             # Each model tried; on any error, continue to next model then next provider
@@ -8299,7 +8300,12 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                         raw = _or_result["choices"][0]["message"]["content"].strip()
                         ai_source = f"web+openrouter({_or_model.split('/')[1]})"
                         break
-                    except Exception:
+                    except _ue_ai.HTTPError as _oe:
+                        _ob = _oe.read().decode("utf-8", errors="ignore")[:200]
+                        _provider_errors.append(f"OR {_or_model} HTTP{_oe.code}: {_ob}")
+                        continue
+                    except Exception as _oe:
+                        _provider_errors.append(f"OR {_or_model}: {_oe}")
                         continue  # try next model; fall through to next provider if all fail
 
             # ── 2. Ollama (local inference) ───────────────────────────────
@@ -8321,8 +8327,8 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                         _result4 = _json_ai.loads(_r4.read())
                     raw = _result4["message"]["content"].strip()
                     ai_source = "web+ollama"
-                except Exception:
-                    pass
+                except Exception as _oe4:
+                    _provider_errors.append(f"Ollama: {_oe4}")
 
             # ── 3. GitHub Models — free GPT-4.1-mini ──────────────────────
             if gh_token and raw is None:
@@ -8346,8 +8352,8 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                         _result3 = _json_ai.loads(_r3.read())
                     raw = _result3["choices"][0]["message"]["content"].strip()
                     ai_source = "web+github-models"
-                except Exception:
-                    pass
+                except Exception as _oe3:
+                    _provider_errors.append(f"GitHub: {_oe3}")
 
             # ── 4. Anthropic Claude (last resort — saves API credits) ─────
             if api_key and raw is None:
@@ -8360,11 +8366,11 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                     )
                     raw = msg.content[0].text.strip()
                     ai_source = "web+claude"
-                except Exception:
-                    pass
+                except Exception as _oe_ant:
+                    _provider_errors.append(f"Claude: {_oe_ant}")
 
             if raw is None:
-                raise ValueError("No AI provider available")
+                raise ValueError("No AI provider available; errors: " + " | ".join(_provider_errors))
 
             if raw.startswith("```"):
                 raw = "\n".join(raw.split("\n")[1:])
