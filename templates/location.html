@@ -570,58 +570,110 @@ function drawFrame() {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
+  const cx = W / 2, cy = H / 2;
   const sc = Math.min(W, H) * 0.42;
 
+  /* Build projection fresh each frame — clipAngle(90) clips back hemisphere */
   const proj = d3.geoOrthographic()
-    .scale(sc).translate([W/2, H/2])
+    .scale(sc).translate([cx, cy])
     .rotate(rotation).clipAngle(90);
-  const geo = d3.geoPath(proj, ctx);
+  /* Use chained API — guaranteed to apply projection + clipping to canvas */
+  const path = d3.geoPath().projection(proj).context(ctx);
 
   ctx.clearRect(0, 0, W, H);
 
-  /* Atmosphere glow */
-  const ag = ctx.createRadialGradient(W/2,H/2,sc*.88,W/2,H/2,sc*1.24);
-  ag.addColorStop(0,'rgba(245,158,11,.18)'); ag.addColorStop(1,'rgba(7,7,30,0)');
-  ctx.beginPath(); ctx.arc(W/2,H/2,sc*1.24,0,Math.PI*2);
-  ctx.fillStyle=ag; ctx.fill();
+  /* ── Atmosphere glow ── */
+  const ag = ctx.createRadialGradient(cx, cy, sc * .88, cx, cy, sc * 1.24);
+  ag.addColorStop(0, 'rgba(245,158,11,.18)');
+  ag.addColorStop(1, 'rgba(7,7,30,0)');
+  ctx.beginPath();
+  ctx.arc(cx, cy, sc * 1.24, 0, Math.PI * 2);
+  ctx.fillStyle = ag;
+  ctx.fill();
 
-  /* Ocean */
-  ctx.beginPath(); geo({type:'Sphere'});
-  ctx.fillStyle='#07071e'; ctx.fill();
+  /* ── Ocean base ── */
+  ctx.beginPath();
+  path({type: 'Sphere'});
+  ctx.fillStyle = '#07071e';
+  ctx.fill();
 
-  /* Graticule */
-  ctx.beginPath(); geo(d3.geoGraticule()());
-  ctx.strokeStyle='rgba(245,158,11,.06)'; ctx.lineWidth=0.4; ctx.stroke();
+  /* ── Clip ALL subsequent drawing to sphere circle ──
+     This prevents any back-hemisphere geometry bleeding outside the globe */
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, sc, 0, Math.PI * 2);
+  ctx.clip();
 
-  /* Land */
+  /* ── Ocean depth shading (makes sphere look 3-D) ── */
+  const od = ctx.createRadialGradient(cx - sc * .35, cy - sc * .35, 0, cx, cy, sc);
+  od.addColorStop(0, 'rgba(14,165,233,.10)');
+  od.addColorStop(1, 'rgba(0,0,30,.55)');
+  ctx.beginPath();
+  ctx.arc(cx, cy, sc, 0, Math.PI * 2);
+  ctx.fillStyle = od;
+  ctx.fill();
+
+  /* ── Graticule ── */
+  ctx.beginPath();
+  path(d3.geoGraticule()());
+  ctx.strokeStyle = 'rgba(245,158,11,.07)';
+  ctx.lineWidth = 0.4;
+  ctx.stroke();
+
+  /* ── Land ── */
   if (landGeo) {
-    ctx.beginPath(); geo(landGeo);
-    ctx.fillStyle='#151538'; ctx.fill();
-    ctx.strokeStyle='rgba(245,158,11,.65)'; ctx.lineWidth=0.6; ctx.stroke();
+    ctx.beginPath();
+    path(landGeo);
+    ctx.fillStyle = '#1a1a40';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(245,158,11,.7)';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
   }
 
-  /* Border */
-  ctx.beginPath(); geo({type:'Sphere'});
-  ctx.strokeStyle='rgba(245,158,11,.4)'; ctx.lineWidth=1.8; ctx.stroke();
+  /* ── Specular highlight (top-left bright spot → 3-D sphere feel) ── */
+  const hl = ctx.createRadialGradient(cx - sc * .38, cy - sc * .40, 0, cx - sc * .1, cy - sc * .1, sc * .9);
+  hl.addColorStop(0, 'rgba(255,255,255,.13)');
+  hl.addColorStop(.4, 'rgba(255,255,255,.03)');
+  hl.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.arc(cx, cy, sc, 0, Math.PI * 2);
+  ctx.fillStyle = hl;
+  ctx.fill();
 
-  /* Marker */
+  ctx.restore(); /* end sphere clip */
+
+  /* ── Globe border ── */
+  ctx.beginPath();
+  path({type: 'Sphere'});
+  ctx.strokeStyle = 'rgba(245,158,11,.45)';
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  /* ── Location marker ── */
   if (marker) {
-    const cLon=-rotation[0]*Math.PI/180, cLat=-rotation[1]*Math.PI/180;
-    const mLon=marker.lon*Math.PI/180,   mLat=marker.lat*Math.PI/180;
-    const cosD=Math.sin(cLat)*Math.sin(mLat)+Math.cos(cLat)*Math.cos(mLat)*Math.cos(mLon-cLon);
+    const cLon = -rotation[0] * Math.PI / 180;
+    const cLat = -rotation[1] * Math.PI / 180;
+    const mLon = marker.lon * Math.PI / 180;
+    const mLat = marker.lat * Math.PI / 180;
+    const cosD = Math.sin(cLat) * Math.sin(mLat) +
+                 Math.cos(cLat) * Math.cos(mLat) * Math.cos(mLon - cLon);
     if (cosD > 0) {
-      const [mx,my]=proj([marker.lon,marker.lat]);
-      const mc=marker.saved?'#22c55e':'#f59e0b';
-      const mg=ctx.createRadialGradient(mx,my,0,mx,my,28);
-      mg.addColorStop(0,mc+'99'); mg.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.beginPath(); ctx.arc(mx,my,28,0,Math.PI*2);
-      ctx.fillStyle=mg; ctx.fill();
-      ctx.beginPath(); ctx.arc(mx,my,7,0,Math.PI*2);
-      ctx.fillStyle=mc; ctx.fill();
-      ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+      const [mx, my] = proj([marker.lon, marker.lat]);
+      const mc = marker.saved ? '#22c55e' : '#f59e0b';
+      /* Halo */
+      const mg = ctx.createRadialGradient(mx, my, 0, mx, my, 28);
+      mg.addColorStop(0, mc + '99');
+      mg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath(); ctx.arc(mx, my, 28, 0, Math.PI * 2);
+      ctx.fillStyle = mg; ctx.fill();
+      /* Dot */
+      ctx.beginPath(); ctx.arc(mx, my, 7, 0, Math.PI * 2);
+      ctx.fillStyle = mc; ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
       /* Pulse ring */
-      ctx.beginPath(); ctx.arc(mx,my,14,0,Math.PI*2);
-      ctx.strokeStyle=mc+'66'; ctx.lineWidth=2; ctx.stroke();
+      ctx.beginPath(); ctx.arc(mx, my, 14, 0, Math.PI * 2);
+      ctx.strokeStyle = mc + '66'; ctx.lineWidth = 2; ctx.stroke();
     }
   }
 }
