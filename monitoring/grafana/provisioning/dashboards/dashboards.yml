@@ -1,0 +1,10 @@
+---
+apiVersion: 1
+providers:
+  - name: SolarPro Dashboards
+    folder: SolarPro Global
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

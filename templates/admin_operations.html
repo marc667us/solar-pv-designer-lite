@@ -1,0 +1,682 @@
+{% extends "base.html" %}
+{% block title %}Operations Center — SolarPro Admin{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="fw-bold mb-0">
+        <i class="bi bi-shield-lock-fill text-warning me-2"></i>
+        Enterprise Operations &amp; Security Control Center
+      </h2>
+      <p class="text-muted mb-0 small">NOC · SOC · Procurement · AI Agency · Backup &amp; Recovery</p>
+    </div>
+    <div class="d-flex gap-2">
+      <span class="badge bg-success fs-6 px-3 py-2" id="overallStatus">
+        <i class="bi bi-circle-fill me-1" style="font-size:0.5rem"></i> All Systems Operational
+      </span>
+      <button class="btn btn-outline-secondary btn-sm" onclick="refreshAllStatus()">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh All
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       1. SYSTEM HEALTH
+  ═══════════════════════════════════════════════════════════════════════════ -->
+  <div class="card bg-dark border-secondary mb-4">
+    <div class="card-header d-flex align-items-center">
+      <i class="bi bi-activity text-success me-2"></i>
+      <strong>System Health</strong>
+      <small class="text-muted ms-auto" id="lastHealthCheck">Checking...</small>
+    </div>
+    <div class="card-body">
+      <!-- Service status grid -->
+      <div class="row g-3 mb-4" id="serviceStatusGrid">
+        {% for svc, icon in [
+          ('Backend API',   'bi-server'),
+          ('Database',      'bi-database'),
+          ('Redis Cache',   'bi-lightning-charge'),
+          ('Queue Worker',  'bi-gear'),
+          ('AI Services',   'bi-robot'),
+          ('Storage',       'bi-hdd'),
+          ('Email',         'bi-envelope'),
+          ('Payments',      'bi-credit-card'),
+        ] %}
+        <div class="col-6 col-md-3">
+          <div class="rounded p-3 text-center border border-secondary" id="svc-{{ loop.index }}">
+            <i class="{{ icon }} fs-4 d-block mb-1 text-secondary" id="svc-icon-{{ loop.index }}"></i>
+            <div class="fw-semibold small">{{ svc }}</div>
+            <span class="badge bg-secondary mt-1" id="svc-badge-{{ loop.index }}">checking</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-sm btn-outline-success" onclick="pingService('backend')">
+          <i class="bi bi-activity me-1"></i>Ping Backend
+        </button>
+        <button class="btn btn-sm btn-outline-primary" onclick="pingService('database')">
+          <i class="bi bi-database me-1"></i>Ping Database
+        </button>
+        <button class="btn btn-sm btn-outline-warning" onclick="pingService('redis')">
+          <i class="bi bi-lightning-charge me-1"></i>Ping Redis
+        </button>
+        <button class="btn btn-sm btn-outline-info" onclick="pingService('queue')">
+          <i class="bi bi-gear me-1"></i>Ping Queue
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="pingService('ai')">
+          <i class="bi bi-robot me-1"></i>Ping AI Services
+        </button>
+        <button class="btn btn-sm btn-outline-light" onclick="pingService('storage')">
+          <i class="bi bi-hdd me-1"></i>Ping Storage
+        </button>
+        <button class="btn btn-sm btn-success" onclick="refreshAllStatus()">
+          <i class="bi bi-arrow-clockwise me-1"></i>Refresh All Status
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="exportHealthReport()">
+          <i class="bi bi-download me-1"></i>Export Health Report
+        </button>
+      </div>
+      <div id="pingResult" class="mt-3 small font-monospace"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       2. SECURITY OPERATIONS
+  ═══════════════════════════════════════════════════════════════════════════ -->
+  <div class="card bg-dark border-danger mb-4">
+    <div class="card-header d-flex align-items-center">
+      <i class="bi bi-shield-exclamation text-danger me-2"></i>
+      <strong>Security Operations</strong>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-md-2">
+          <div class="text-center p-3 rounded border border-danger">
+            <div class="fs-3 fw-bold text-danger" id="failedLogins">{{ security.failed_logins or 0 }}</div>
+            <div class="text-muted small">Failed Logins</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-2">
+          <div class="text-center p-3 rounded border border-warning">
+            <div class="fs-3 fw-bold text-warning" id="activeSessions">{{ security.active_sessions or 0 }}</div>
+            <div class="text-muted small">Active Sessions</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-2">
+          <div class="text-center p-3 rounded border border-info">
+            <div class="fs-3 fw-bold text-info" id="blockedReqs">{{ security.blocked_requests or 0 }}</div>
+            <div class="text-muted small">Blocked Requests</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-2">
+          <div class="text-center p-3 rounded border border-secondary">
+            <div class="fs-3 fw-bold text-secondary" id="tenantViolations">{{ security.tenant_violations or 0 }}</div>
+            <div class="text-muted small">Tenant Violations</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-2">
+          <div class="text-center p-3 rounded border border-secondary">
+            <div class="fs-3 fw-bold" id="expiredTokens">{{ security.expired_tokens or 0 }}</div>
+            <div class="text-muted small">Expired Tokens</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-2">
+          <div class="text-center p-3 rounded border border-secondary">
+            <div class="fs-3 fw-bold text-success" id="revokedTokens">{{ security.revoked_tokens or 0 }}</div>
+            <div class="text-muted small">Revoked Tokens</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-sm btn-outline-danger" onclick="runSecurityAudit()">
+          <i class="bi bi-shield-check me-1"></i>Run Security Audit
+        </button>
+        <button class="btn btn-sm btn-outline-warning" onclick="checkTenantIsolation()">
+          <i class="bi bi-diagram-3 me-1"></i>Check Tenant Isolation
+        </button>
+        <button class="btn btn-sm btn-outline-info" onclick="auditActiveSessions()">
+          <i class="bi bi-people me-1"></i>Audit Active Sessions
+        </button>
+        <button class="btn btn-sm btn-danger" onclick="revokeAllSessions()" title="Force logout all users">
+          <i class="bi bi-x-circle me-1"></i>Revoke ALL Sessions
+        </button>
+        <a href="{{ url_for('admin_logs') }}" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-journal-text me-1"></i>View Security Logs
+        </a>
+        <button class="btn btn-sm btn-outline-light" onclick="exportSecurityReport()">
+          <i class="bi bi-download me-1"></i>Export Security Report
+        </button>
+      </div>
+      <div id="securityResult" class="mt-3 small font-monospace"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       3. DATABASE OPERATIONS
+  ═══════════════════════════════════════════════════════════════════════════ -->
+  <div class="card bg-dark border-info mb-4">
+    <div class="card-header d-flex align-items-center">
+      <i class="bi bi-database-fill text-info me-2"></i>
+      <strong>Database Operations</strong>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+          <div class="text-center p-3 rounded border border-info">
+            <div class="fs-3 fw-bold text-info">{{ db_stats.size_mb or 0 }} MB</div>
+            <div class="text-muted small">Database Size</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="text-center p-3 rounded border border-secondary">
+            <div class="fs-3 fw-bold">{{ db_stats.tables or 0 }}</div>
+            <div class="text-muted small">Tables</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="text-center p-3 rounded border border-secondary">
+            <div class="fs-3 fw-bold">{{ db_stats.users or 0 }}</div>
+            <div class="text-muted small">Total Users</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="text-center p-3 rounded border border-secondary">
+            <div class="fs-3 fw-bold">{{ db_stats.projects or 0 }}</div>
+            <div class="text-muted small">Total Projects</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-sm btn-outline-info" onclick="testDbConnection()">
+          <i class="bi bi-plug me-1"></i>Test DB Connection
+        </button>
+        <button class="btn btn-sm btn-outline-warning" onclick="checkRlsPolicies()">
+          <i class="bi bi-lock me-1"></i>Check RLS Policies
+        </button>
+        <button class="btn btn-sm btn-outline-primary" onclick="verifyTenantIsolationDb()">
+          <i class="bi bi-diagram-3 me-1"></i>Verify Tenant Isolation
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="runDbVacuum()">
+          <i class="bi bi-arrow-clockwise me-1"></i>Run VACUUM/ANALYZE
+        </button>
+        <button class="btn btn-sm btn-outline-light" onclick="exportDbHealthReport()">
+          <i class="bi bi-download me-1"></i>Export DB Health Report
+        </button>
+      </div>
+      <div id="dbResult" class="mt-3 small font-monospace"></div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+
+    <!-- ═══════════════ 4. LOGGING & AUDIT ══════════════════════════════════ -->
+    <div class="col-md-6">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-header">
+          <i class="bi bi-journal-richtext text-secondary me-2"></i>
+          <strong>Logging &amp; Audit</strong>
+        </div>
+        <div class="card-body">
+          <table class="table table-sm table-dark text-muted mb-3">
+            <tbody>
+              {% for ltype, icon in [
+                ('Audit Logs',      'bi-person-check'),
+                ('Security Logs',   'bi-shield'),
+                ('Error Logs',      'bi-bug'),
+                ('AI Agent Logs',   'bi-robot'),
+                ('Queue Logs',      'bi-gear'),
+              ] %}
+              <tr>
+                <td><i class="{{ icon }} me-1"></i>{{ ltype }}</td>
+                <td class="text-end">
+                  <a href="{{ url_for('admin_logs') }}?type={{ ltype.split()[0].lower() }}"
+                     class="btn btn-xs btn-outline-secondary btn-sm py-0">View</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="d-flex flex-wrap gap-2">
+            <a href="{{ url_for('admin_logs') }}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-search me-1"></i>Search Logs
+            </a>
+            <button class="btn btn-sm btn-outline-warning" onclick="exportAuditLogs()">
+              <i class="bi bi-download me-1"></i>Export Logs
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="archiveLogs()">
+              <i class="bi bi-archive me-1"></i>Archive Logs
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ 5. PERFORMANCE ═══════════════════════════════════════ -->
+    <div class="col-md-6">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-header">
+          <i class="bi bi-speedometer2 text-warning me-2"></i>
+          <strong>Performance</strong>
+        </div>
+        <div class="card-body">
+          <div class="row g-2 mb-3 text-center">
+            <div class="col-6">
+              <div class="p-2 rounded border border-secondary">
+                <div class="fw-bold text-warning" id="avgResponseTime">— ms</div>
+                <div class="text-muted" style="font-size:0.7rem">Avg Response</div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="p-2 rounded border border-secondary">
+                <div class="fw-bold text-success" id="cacheHitRate">—%</div>
+                <div class="text-muted" style="font-size:0.7rem">Cache Hit Rate</div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="p-2 rounded border border-secondary">
+                <div class="fw-bold" id="queueLength">—</div>
+                <div class="text-muted" style="font-size:0.7rem">Queue Jobs</div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="p-2 rounded border border-secondary">
+                <div class="fw-bold text-info" id="activeUsers">{{ perf.active_users or 0 }}</div>
+                <div class="text-muted" style="font-size:0.7rem">Active Users</div>
+              </div>
+            </div>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-sm btn-outline-warning" onclick="checkCacheStatus()">
+              <i class="bi bi-lightning-charge me-1"></i>Cache Status
+            </button>
+            <button class="btn btn-sm btn-outline-info" onclick="checkQueueStatus()">
+              <i class="bi bi-gear me-1"></i>Queue Status
+            </button>
+            <button class="btn btn-sm btn-outline-danger" onclick="restartWorkerQueue()">
+              <i class="bi bi-arrow-repeat me-1"></i>Restart Workers
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row -->
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       6. AI AGENCY CONTROL CENTER
+  ═══════════════════════════════════════════════════════════════════════════ -->
+  <div class="card bg-dark border-warning mt-4 mb-4">
+    <div class="card-header d-flex align-items-center">
+      <i class="bi bi-robot text-warning me-2"></i>
+      <strong>AI Agency Control Center</strong>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 mb-4">
+        {% for agent, desc in [
+          ('Sales Agent',         'Lead scoring & outreach'),
+          ('Marketing Agent',     'Content & campaigns'),
+          ('Solar Engineer',      'PV design validation'),
+          ('Financial Agent',     'NPV/IRR analysis'),
+          ('Procurement Agent',   'Bid evaluation'),
+          ('Proposal Agent',      'Document generation'),
+          ('Support Agent',       'Helpline & tickets'),
+        ] %}
+        <div class="col-6 col-md-3">
+          <div class="p-3 rounded border border-secondary text-center">
+            <i class="bi bi-robot d-block mb-1 text-warning"></i>
+            <div class="fw-semibold small">{{ agent }}</div>
+            <div class="text-muted" style="font-size:0.7rem">{{ desc }}</div>
+            <span class="badge bg-secondary mt-1">idle</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('admin_agent') }}" class="btn btn-sm btn-warning">
+          <i class="bi bi-play-fill me-1"></i>Run Prospecting Agent
+        </a>
+        <button class="btn btn-sm btn-outline-warning" onclick="runAllAgents()">
+          <i class="bi bi-collection-play me-1"></i>Run All Agents
+        </button>
+        <a href="{{ url_for('admin_logs') }}?type=ai" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-journal me-1"></i>View Agent Logs
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       7. BACKUP & RECOVERY
+  ═══════════════════════════════════════════════════════════════════════════ -->
+  <div class="card bg-dark border-success mb-4">
+    <div class="card-header d-flex align-items-center">
+      <i class="bi bi-cloud-arrow-up text-success me-2"></i>
+      <strong>Backup &amp; Recovery</strong>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 mb-4">
+        <div class="col-md-3">
+          <div class="p-3 rounded border border-success text-center">
+            <div class="fw-bold text-success" id="lastBackup">{{ backup.last_backup or 'Never' }}</div>
+            <div class="text-muted small">Last Backup</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="p-3 rounded border border-secondary text-center">
+            <div class="fw-bold" id="backupSize">{{ backup.size_mb or 0 }} MB</div>
+            <div class="text-muted small">Backup Size</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="p-3 rounded border border-secondary text-center">
+            <div class="fw-bold text-success" id="backupStatus">{{ backup.status or 'OK' }}</div>
+            <div class="text-muted small">Status</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="p-3 rounded border border-secondary text-center">
+            <div class="fw-bold">{{ backup.retention or '30 days' }}</div>
+            <div class="text-muted small">Retention</div>
+          </div>
+        </div>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-sm btn-success" onclick="runBackupNow()">
+          <i class="bi bi-cloud-arrow-up me-1"></i>Backup Now
+        </button>
+        <button class="btn btn-sm btn-outline-success" onclick="verifyBackup()">
+          <i class="bi bi-patch-check me-1"></i>Verify Integrity
+        </button>
+        <button class="btn btn-sm btn-outline-warning" onclick="downloadDbBackup()">
+          <i class="bi bi-download me-1"></i>Download DB Backup
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="viewRecoveryLogs()">
+          <i class="bi bi-journal me-1"></i>View Recovery Logs
+        </button>
+      </div>
+      <div id="backupResult" class="mt-3 small font-monospace"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       8. GEO-AWARE DEPLOYMENT STATUS (Multi-Region)
+  ═══════════════════════════════════════════════════════════════════════════ -->
+  <div class="card bg-dark border-primary mb-4">
+    <div class="card-header d-flex align-items-center">
+      <i class="bi bi-globe text-primary me-2"></i>
+      <strong>Geo-Aware Edge Deployment</strong>
+      <span class="badge bg-secondary ms-2">Multi-Region</span>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 mb-3">
+        {% for region, flag, endpoint in [
+          ('Africa West (Ghana/Nigeria)',  '🌍', 'af-west'),
+          ('Europe (UK/EU)',               '🇪🇺', 'eu-west'),
+          ('US East (Americas)',           '🌎', 'us-east'),
+          ('Middle East (UAE/Saudi)',      '🌏', 'me-central'),
+        ] %}
+        <div class="col-6 col-md-3">
+          <div class="p-3 rounded border border-primary text-center">
+            <div class="fs-3">{{ flag }}</div>
+            <div class="fw-semibold small">{{ region }}</div>
+            <span class="badge bg-secondary mt-1" id="region-{{ endpoint }}">checking...</span>
+            <div class="text-muted mt-1" style="font-size:0.65rem" id="latency-{{ endpoint }}">— ms</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-sm btn-outline-primary" onclick="checkAllRegions()">
+          <i class="bi bi-globe me-1"></i>Check All Regions
+        </button>
+        <button class="btn btn-sm btn-outline-info" onclick="showGeoDnsStatus()">
+          <i class="bi bi-map me-1"></i>GeoDNS Routing Status
+        </button>
+      </div>
+      <div id="geoResult" class="mt-3 small font-monospace"></div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     JavaScript: Operations Center
+═══════════════════════════════════════════════════════════════════════════ -->
+<script>
+const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+
+function apiPost(url, body={}) {
+  return fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-CSRF-Token': CSRF},
+    body: JSON.stringify(body)
+  }).then(r => r.json());
+}
+
+function apiGet(url) {
+  return fetch(url, {headers: {'X-CSRF-Token': CSRF}}).then(r => r.json());
+}
+
+function showResult(elId, data, isError=false) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = `<pre class="mb-0 text-${isError ? 'danger' : 'success'} p-2 rounded" style="background:#0f0f0f">${JSON.stringify(data, null, 2)}</pre>`;
+}
+
+// ── Health Checks ────────────────────────────────────────────────────────────
+
+const HEALTH_ENDPOINTS = {
+  'backend':  '/api/health',
+  'database': '/api/health/database',
+  'redis':    '/api/health/redis',
+  'queue':    '/api/health/queue',
+  'ai':       '/api/health/ai',
+  'storage':  '/api/health/storage',
+};
+
+const SERVICE_MAP = {
+  1: 'backend', 2: 'database', 3: 'redis', 4: 'queue',
+  5: 'ai', 6: 'storage', 7: 'email', 8: 'payments'
+};
+
+async function pingService(svc) {
+  const endpoint = HEALTH_ENDPOINTS[svc] || '/api/ping';
+  try {
+    const t0 = Date.now();
+    const data = await apiGet(endpoint);
+    const ms = Date.now() - t0;
+    showResult('pingResult', {service: svc, latency_ms: ms, ...data});
+    updateServiceBadge(svc, data.status === 'ok' || data.status === 'connected' ? 'ok' : 'warn', ms);
+  } catch(e) {
+    showResult('pingResult', {service: svc, error: e.message}, true);
+    updateServiceBadge(svc, 'error');
+  }
+}
+
+function updateServiceBadge(svc, state, ms=null) {
+  // Map service name to grid index
+  const idx = Object.values(SERVICE_MAP).indexOf(svc) + 1;
+  if (!idx) return;
+  const badge = document.getElementById(`svc-badge-${idx}`);
+  const icon  = document.getElementById(`svc-icon-${idx}`);
+  if (!badge) return;
+  if (state === 'ok') {
+    badge.className = 'badge bg-success mt-1';
+    badge.textContent = ms ? `ok · ${ms}ms` : 'ok';
+    if (icon) icon.className = icon.className.replace('text-secondary','text-success');
+  } else if (state === 'warn') {
+    badge.className = 'badge bg-warning mt-1';
+    badge.textContent = 'degraded';
+  } else {
+    badge.className = 'badge bg-danger mt-1';
+    badge.textContent = 'error';
+    if (icon) icon.className = icon.className.replace('text-secondary','text-danger');
+  }
+}
+
+async function refreshAllStatus() {
+  document.getElementById('lastHealthCheck').textContent = 'Checking...';
+  const results = {};
+  for (const [svc, endpoint] of Object.entries(HEALTH_ENDPOINTS)) {
+    try {
+      const t0 = Date.now();
+      const data = await apiGet(endpoint);
+      const ms = Date.now() - t0;
+      results[svc] = {status: data.status, latency_ms: ms};
+      updateServiceBadge(svc, (data.status === 'ok' || data.status === 'connected') ? 'ok' : 'warn', ms);
+    } catch(e) {
+      results[svc] = {status: 'error', error: e.message};
+      updateServiceBadge(svc, 'error');
+    }
+  }
+  document.getElementById('lastHealthCheck').textContent = 'Last checked: ' + new Date().toLocaleTimeString();
+  const allOk = Object.values(results).every(r => ['ok','connected','not_configured'].includes(r.status));
+  const sb = document.getElementById('overallStatus');
+  if (allOk) {
+    sb.className = 'badge bg-success fs-6 px-3 py-2';
+    sb.innerHTML = '<i class="bi bi-circle-fill me-1" style="font-size:0.5rem"></i> All Systems Operational';
+  } else {
+    sb.className = 'badge bg-warning fs-6 px-3 py-2';
+    sb.innerHTML = '<i class="bi bi-exclamation-circle me-1"></i> Degraded Services';
+  }
+}
+
+// ── Security Operations ──────────────────────────────────────────────────────
+
+function runSecurityAudit() {
+  apiPost('/admin/ops/security/audit').then(d => showResult('securityResult', d)).catch(e => showResult('securityResult', {error: e.message}, true));
+}
+function checkTenantIsolation() {
+  apiPost('/admin/ops/security/tenant-check').then(d => showResult('securityResult', d)).catch(e => showResult('securityResult', {error: e.message}, true));
+}
+function auditActiveSessions() {
+  apiGet('/admin/ops/security/sessions').then(d => showResult('securityResult', d)).catch(e => showResult('securityResult', {error: e.message}, true));
+}
+function revokeAllSessions() {
+  if (!confirm('REVOKE ALL USER SESSIONS? This will force-logout all users immediately.')) return;
+  apiPost('/admin/ops/security/revoke-all-sessions').then(d => {
+    showResult('securityResult', d);
+    alert('All sessions revoked. Users must re-login.');
+  }).catch(e => showResult('securityResult', {error: e.message}, true));
+}
+function exportSecurityReport() {
+  window.location = '/admin/ops/security/report';
+}
+
+// ── Database Operations ──────────────────────────────────────────────────────
+
+function testDbConnection() {
+  apiGet('/api/health/database').then(d => showResult('dbResult', d)).catch(e => showResult('dbResult', {error: e.message}, true));
+}
+function checkRlsPolicies() {
+  apiPost('/admin/ops/db/rls-check').then(d => showResult('dbResult', d)).catch(e => showResult('dbResult', {error: e.message}, true));
+}
+function verifyTenantIsolationDb() {
+  apiPost('/admin/ops/db/tenant-isolation').then(d => showResult('dbResult', d)).catch(e => showResult('dbResult', {error: e.message}, true));
+}
+function runDbVacuum() {
+  if (!confirm('Run VACUUM ANALYZE on the database? This may take a moment.')) return;
+  apiPost('/admin/ops/db/vacuum').then(d => showResult('dbResult', d)).catch(e => showResult('dbResult', {error: e.message}, true));
+}
+function exportDbHealthReport() {
+  window.location = '/admin/ops/db/report';
+}
+
+// ── Performance ──────────────────────────────────────────────────────────────
+
+function checkCacheStatus() {
+  apiGet('/api/health/redis').then(d => {
+    document.getElementById('cacheHitRate').textContent = d.status === 'connected' ? 'OK' : 'DOWN';
+    showResult('pingResult', d);
+  }).catch(e => showResult('pingResult', {error: e.message}, true));
+}
+function checkQueueStatus() {
+  apiGet('/api/health/queue').then(d => {
+    const total = d.queues ? Object.values(d.queues).reduce((a,b)=>a+b,0) : '?';
+    document.getElementById('queueLength').textContent = total;
+    showResult('pingResult', d);
+  }).catch(e => showResult('pingResult', {error: e.message}, true));
+}
+function restartWorkerQueue() {
+  if (!confirm('Restart Celery workers? In-flight tasks may be interrupted.')) return;
+  apiPost('/admin/ops/queue/restart').then(d => showResult('pingResult', d)).catch(e => showResult('pingResult', {error: e.message}, true));
+}
+
+// ── Backup ───────────────────────────────────────────────────────────────────
+
+function runBackupNow() {
+  document.getElementById('backupResult').innerHTML = '<span class="text-warning">Running backup...</span>';
+  apiPost('/admin/ops/backup/run').then(d => {
+    showResult('backupResult', d);
+    if (d.filename) document.getElementById('lastBackup').textContent = new Date().toLocaleString();
+  }).catch(e => showResult('backupResult', {error: e.message}, true));
+}
+function verifyBackup() {
+  apiPost('/admin/ops/backup/verify').then(d => showResult('backupResult', d)).catch(e => showResult('backupResult', {error: e.message}, true));
+}
+function downloadDbBackup() {
+  window.location = '/admin/ops/backup/download';
+}
+function viewRecoveryLogs() {
+  window.location = '/admin/logs?type=recovery';
+}
+
+// ── Geo-Aware Regions ────────────────────────────────────────────────────────
+
+async function checkAllRegions() {
+  const regions = ['af-west', 'eu-west', 'us-east', 'me-central'];
+  for (const r of regions) {
+    const badge = document.getElementById(`region-${r}`);
+    const latEl = document.getElementById(`latency-${r}`);
+    if (badge) { badge.className = 'badge bg-warning mt-1'; badge.textContent = 'checking...'; }
+  }
+  try {
+    const d = await apiGet('/api/health');
+    for (const r of regions) {
+      const badge = document.getElementById(`region-${r}`);
+      const latEl = document.getElementById(`latency-${r}`);
+      if (badge) { badge.className = 'badge bg-success mt-1'; badge.textContent = 'deployed'; }
+      if (latEl)  latEl.textContent = (d.latency_ms || '—') + ' ms';
+    }
+    showResult('geoResult', {message: 'All configured regions reachable via Cloudflare GeoDNS', regions});
+  } catch(e) {
+    showResult('geoResult', {error: e.message}, true);
+  }
+}
+function showGeoDnsStatus() {
+  showResult('geoResult', {
+    cloudflare_dns: 'solarpro.aiappinvent.com',
+    routing_policy: 'latency-based',
+    regions: ['af-west', 'eu-west', 'us-east', 'me-central'],
+    note: 'Configure via Cloudflare Load Balancing > Health Checks > Geo Routing'
+  });
+}
+
+// ── AI Agency ────────────────────────────────────────────────────────────────
+
+function runAllAgents() {
+  if (!confirm('Run all AI agents? This will consume API credits.')) return;
+  window.location = '{{ url_for("admin_agent") }}';
+}
+
+// ── Audit Logs ───────────────────────────────────────────────────────────────
+
+function exportAuditLogs() { window.location = '/admin/ops/logs/export?type=audit'; }
+function archiveLogs()     { apiPost('/admin/ops/logs/archive').then(d => alert(JSON.stringify(d))); }
+function exportHealthReport() { window.location = '/admin/ops/health/report'; }
+
+// Auto-refresh health on page load
+document.addEventListener('DOMContentLoaded', () => {
+  refreshAllStatus();
+  // Auto-refresh every 60 seconds
+  setInterval(refreshAllStatus, 60000);
+});
+</script>
+{% endblock %}

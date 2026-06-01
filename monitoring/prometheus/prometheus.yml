@@ -1,0 +1,66 @@
+---
+# SolarPro Global — Prometheus Configuration
+# Scrapes metrics from: Flask backend, Redis, Celery, Node exporter
+
+global:
+  scrape_interval: 15s          # How often to scrape targets
+  evaluation_interval: 15s      # How often to evaluate rules
+  scrape_timeout: 10s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []            # Add alertmanager URL here
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+
+  # ── SolarPro Backend ──────────────────────────────────────────────────────
+  - job_name: "solarpro-backend"
+    static_configs:
+      - targets: ["backend:5000"]
+        labels:
+          service: "solarpro-backend"
+          environment: "local"
+    metrics_path: /metrics
+    scrape_interval: 15s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels:
+          service: "redis"
+    scrape_interval: 15s
+
+  # ── Prometheus Self-Monitoring ────────────────────────────────────────────
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── Health Check Probing ─────────────────────────────────────────────────
+  - job_name: "solarpro-health-probes"
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://backend:5000/api/health
+          - http://backend:5000/api/health/database
+          - http://backend:5000/api/health/redis
+          - http://backend:5000/api/health/queue
+          - http://backend:5000/api/health/ai
+        labels:
+          service: "solarpro-health"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

@@ -1,0 +1,122 @@
+---
+# SolarPro Global — NetworkPolicy
+# Enforces zero-trust pod communication:
+#   - Backend pods: accept traffic from Ingress only
+#   - Redis: accept traffic from backend + celery only
+#   - Celery: accept no inbound (outbound only to DB, Redis, AI APIs)
+
+# Backend NetworkPolicy: only Ingress controller can reach backend pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: solarpro-backend-netpol
+  namespace: solar-production
+spec:
+  podSelector:
+    matchLabels:
+      app: solarpro-backend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from Ingress controller namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 5000
+    # Allow health checks from kube-system (liveness/readiness probes)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: TCP
+          port: 5000
+  egress:
+    # Allow to Neon PostgreSQL (external — requires port 5432 to internet)
+    - ports:
+        - protocol: TCP
+          port: 5432
+    # Allow to Redis service within namespace
+    - to:
+        - podSelector:
+            matchLabels:
+              app: solarpro-redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow HTTPS for external APIs (Paystack, OpenRouter, Resend, Anthropic)
+    - ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 465    # SMTP SSL
+---
+# Redis NetworkPolicy: only backend and celery can reach Redis
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: solarpro-redis-netpol
+  namespace: solar-production
+spec:
+  podSelector:
+    matchLabels:
+      app: solarpro-redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: solarpro-backend
+        - podSelector:
+            matchLabels:
+              app: solarpro-celery
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+# Celery NetworkPolicy: no inbound connections
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: solarpro-celery-netpol
+  namespace: solar-production
+spec:
+  podSelector:
+    matchLabels:
+      app: solarpro-celery
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []    # No inbound — workers pull from Redis queue
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: solarpro-redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - ports:
+        - protocol: TCP
+          port: 5432   # Neon PostgreSQL
+        - protocol: TCP
+          port: 443    # External APIs
+        - protocol: TCP
+          port: 465    # SMTP
+        - protocol: UDP
+          port: 53     # DNS
+        - protocol: TCP
+          port: 53

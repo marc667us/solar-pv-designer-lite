@@ -1,0 +1,25 @@
+---
+# SolarPro Global — PodDisruptionBudget
+# Ensures at least 2 backend pods remain available during node maintenance / rolling updates
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: solarpro-backend-pdb
+  namespace: solar-production
+spec:
+  minAvailable: 2         # at least 2 pods always available
+  selector:
+    matchLabels:
+      app: solarpro-backend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: solarpro-celery-pdb
+  namespace: solar-production
+spec:
+  minAvailable: 1         # at least 1 celery worker always running
+  selector:
+    matchLabels:
+      app: solarpro-celery

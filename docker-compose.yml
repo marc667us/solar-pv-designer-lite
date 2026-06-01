@@ -1,0 +1,141 @@
+# SolarPro Global — Local Development docker-compose
+# Runs: Flask backend + Redis + Celery worker
+# For monitoring stack: docker-compose -f docker-compose.monitoring.yml up
+
+version: "3.9"
+
+services:
+
+  # ── Flask Backend ─────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: solarpro-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      # Override with your local .env file
+      - APP_ENV=development
+      - LOG_LEVEL=DEBUG
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/solar.db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-devpassword}@redis:6379/0
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - PAYSTACK_SECRET_KEY=${PAYSTACK_SECRET_KEY:-}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    env_file:
+      - .env.local    # create from .env.example — DO NOT commit
+    volumes:
+      - ./solar.db:/app/solar.db    # SQLite for local dev
+      - ./logs:/app/logs
+      - ./static:/app/static        # live static files
+      - ./templates:/app/templates  # live template reload
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - solarpro-net
+
+  # ── Redis (cache + queue broker) ──────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: solarpro-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-devpassword}
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-devpassword}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - solarpro-net
+
+  # ── Celery Worker (background tasks) ──────────────────────────────────────
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: solarpro-celery
+    restart: unless-stopped
+    command: >
+      celery -A web_app.celery_app worker
+      --loglevel=info
+      --concurrency=2
+      --queues=default,heavy,ai_tasks,email,reports
+    environment:
+      - APP_ENV=development
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/solar.db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-devpassword}@redis:6379/0
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+    env_file:
+      - .env.local
+    volumes:
+      - ./solar.db:/app/solar.db
+      - ./logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - solarpro-net
+
+  # ── Celery Beat (scheduled tasks) ─────────────────────────────────────────
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: solarpro-beat
+    restart: unless-stopped
+    command: >
+      celery -A web_app.celery_app beat
+      --loglevel=info
+      --schedule=/tmp/celerybeat-schedule
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/solar.db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-devpassword}@redis:6379/0
+    env_file:
+      - .env.local
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - solarpro-net
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  solarpro-net:
+    driver: bridge

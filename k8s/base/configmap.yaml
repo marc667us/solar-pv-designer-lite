@@ -1,0 +1,54 @@
+---
+# SolarPro Global — Base ConfigMap (non-secret environment settings)
+# Override values per environment in k8s/dev|staging|production/configmap.yaml
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: solarpro-config
+  namespace: solar-production       # overridden per env
+  labels:
+    app.kubernetes.io/name: solarpro
+    app.kubernetes.io/component: config
+data:
+  # Application settings
+  APP_NAME: "SolarPro Global"
+  APP_ENV: "production"             # overridden per env
+  LOG_LEVEL: "INFO"                 # DEBUG in dev, INFO in staging/prod
+  LOG_FORMAT: "json"
+
+  # Server settings
+  WORKERS: "2"                      # gunicorn workers
+  TIMEOUT: "120"
+  PORT: "5000"
+
+  # Solar engineering
+  DEFAULT_AUTONOMY_DAYS: "1.5"
+  DEFAULT_DERATING_FACTOR: "0.80"
+  DEFAULT_BATTERY_EFFICIENCY: "0.85"
+  DEFAULT_INVERTER_EFFICIENCY: "0.95"
+
+  # Cache TTLs (seconds)
+  CACHE_TTL_SOLAR_DATA: "86400"    # 24 hours — solar irradiance data
+  CACHE_TTL_DASHBOARD: "300"       # 5 minutes — dashboard summaries
+  CACHE_TTL_PERMISSIONS: "600"     # 10 minutes — RBAC permissions
+
+  # Tenant-aware Redis key prefixes
+  REDIS_KEY_PREFIX_TENANT: "tenant"
+  REDIS_KEY_PREFIX_GLOBAL: "global"
+
+  # Health check endpoints
+  HEALTH_CHECK_PATH: "/api/health"
+  HEALTH_DB_PATH: "/api/health/database"
+  HEALTH_REDIS_PATH: "/api/health/redis"
+  HEALTH_QUEUE_PATH: "/api/health/queue"
+  HEALTH_AI_PATH: "/api/health/ai"
+
+  # Monitoring
+  METRICS_ENABLED: "true"
+  SENTRY_TRACES_SAMPLE_RATE: "0.1"
+
+  # Rate limiting
+  RATE_LIMIT_LOGIN: "5 per minute"
+  RATE_LIMIT_API: "60 per minute"
+  RATE_LIMIT_AI: "10 per minute"

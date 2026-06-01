@@ -1,0 +1,197 @@
+---
+# SolarPro Global — Backend Deployment (Flask / gunicorn)
+# Base manifest — kustomize overlays per environment adjust replicas, image tag, namespace
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: solarpro-backend
+  namespace: solar-production       # overridden per env
+  labels:
+    app.kubernetes.io/name: solarpro
+    app.kubernetes.io/component: backend
+    app: solarpro-backend
+spec:
+  replicas: 3                       # production: 3 min | staging: 2 | dev: 1
+  selector:
+    matchLabels:
+      app: solarpro-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0             # zero-downtime deploys
+  template:
+    metadata:
+      labels:
+        app: solarpro-backend
+        app.kubernetes.io/name: solarpro
+        app.kubernetes.io/component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "5000"
+    spec:
+      # Security context — run as non-root
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: solarpro-backend
+          image: ghcr.io/marc667us/solarpro-backend:latest   # replaced by CI/CD
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+
+          # Load non-secret config from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: solarpro-config
+
+          # Load secrets
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: SECRET_KEY
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: REDIS_URL
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: OPENROUTER_API_KEY
+            - name: PAYSTACK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: PAYSTACK_SECRET_KEY
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: STRIPE_SECRET_KEY
+            - name: RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: RESEND_API_KEY
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: SMTP_HOST
+            - name: SMTP_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: SMTP_PORT
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: SMTP_USER
+            - name: SMTP_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: SMTP_PASS
+            - name: SENTRY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: SENTRY_DSN
+
+          # Health probes
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+              httpHeaders:
+                - name: X-Health-Check
+                  value: "k8s-readiness"
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+              httpHeaders:
+                - name: X-Health-Check
+                  value: "k8s-liveness"
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            failureThreshold: 12
+            periodSeconds: 10
+
+          # Resource limits — adjust per environment
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+          # Read-only filesystem where possible
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false   # Flask writes temp files
+            capabilities:
+              drop:
+                - ALL
+
+          volumeMounts:
+            - name: tmp-dir
+              mountPath: /tmp
+            - name: log-dir
+              mountPath: /app/logs
+
+      volumes:
+        - name: tmp-dir
+          emptyDir: {}
+        - name: log-dir
+          emptyDir: {}
+
+      # Graceful termination
+      terminationGracePeriodSeconds: 30
+
+      # Spread pods across nodes for HA
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: solarpro-backend
+
+      # Restart policy
+      restartPolicy: Always

@@ -1,0 +1,62 @@
+name: Deploy — Development (solar-dev)
+
+on:
+  push:
+    branches: ["dev"]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: marc667us/solarpro-backend
+
+jobs:
+  deploy-dev:
+    name: Deploy to solar-dev namespace
+    runs-on: ubuntu-latest
+    environment: development
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_DEV }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Set image tag
+        run: |
+          echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Apply Kubernetes manifests (dev)
+        run: |
+          kubectl kustomize k8s/dev/ | \
+            sed "s|newTag: dev-latest|newTag: dev-${{ github.sha }}|g" | \
+            kubectl apply -f -
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/solarpro-backend -n solar-dev --timeout=120s
+
+      - name: Smoke test — health endpoint
+        run: |
+          sleep 10
+          kubectl port-forward service/solarpro-backend-service 8080:80 -n solar-dev &
+          PF_PID=$!
+          sleep 5
+          curl -f http://localhost:8080/api/health || (echo "Health check FAILED" && kill $PF_PID && exit 1)
+          kill $PF_PID
+          echo "Dev deploy health check PASSED"
+
+      # Also trigger Render deploy (for Render-hosted dev environment)
+      - name: Trigger Render deploy (if configured)
+        if: ${{ secrets.RENDER_API_KEY != '' && secrets.RENDER_SERVICE_ID != '' }}
+        run: |
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+            -d '{"clearCache":"do_not_clear"}' | jq .

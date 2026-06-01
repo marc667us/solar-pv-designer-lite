@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}System Log Viewer — SolarPro Admin{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="fw-bold mb-0">
+        <i class="bi bi-journal-text text-info me-2"></i>
+        System Logs &amp; Audit Viewer
+      </h2>
+      <p class="text-muted small mb-0">
+        Super Admin: all logs &nbsp;|&nbsp; Tenant Owner: own tenant audit logs only
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin_operations') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Ops Center
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <form method="get" class="card bg-dark border-secondary mb-4">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-2">
+          <label class="form-label small text-muted">Log Type</label>
+          <select name="type" class="form-select form-select-sm bg-dark text-white border-secondary">
+            <option value="audit"    {{ 'selected' if log_type=='audit' }}>Audit</option>
+            <option value="security" {{ 'selected' if log_type=='security' }}>Security</option>
+            <option value="error"    {{ 'selected' if log_type=='error' }}>Errors</option>
+            <option value="ai"       {{ 'selected' if log_type=='ai' }}>AI Agent</option>
+            <option value="queue"    {{ 'selected' if log_type=='queue' }}>Queue</option>
+            <option value="engineering" {{ 'selected' if log_type=='engineering' }}>Engineering</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small text-muted">Date From</label>
+          <input type="date" name="date_from" value="{{ date_from }}"
+                 class="form-control form-control-sm bg-dark text-white border-secondary">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small text-muted">Date To</label>
+          <input type="date" name="date_to" value="{{ date_to }}"
+                 class="form-control form-control-sm bg-dark text-white border-secondary">
+        </div>
+        {% if user.is_admin %}
+        <div class="col-md-2">
+          <label class="form-label small text-muted">User</label>
+          <input type="text" name="user_filter" value="{{ user_filter }}" placeholder="username or ID"
+                 class="form-control form-control-sm bg-dark text-white border-secondary">
+        </div>
+        {% endif %}
+        <div class="col-md-2">
+          <label class="form-label small text-muted">Action / Event</label>
+          <input type="text" name="action" value="{{ action_filter }}" placeholder="e.g. login, boq_generated"
+                 class="form-control form-control-sm bg-dark text-white border-secondary">
+        </div>
+        <div class="col-md-1 d-flex align-items-end">
+          <button type="submit" class="btn btn-sm btn-primary w-100">
+            <i class="bi bi-search"></i>
+          </button>
+        </div>
+        <div class="col-md-1 d-flex align-items-end">
+          <a href="{{ url_for('admin_ops_export_logs') }}?{{ request.query_string.decode() }}"
+             class="btn btn-sm btn-outline-secondary w-100">
+            <i class="bi bi-download"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <!-- Log entries table -->
+  <div class="card bg-dark border-secondary">
+    <div class="card-body p-0">
+      {% if log_entries %}
+      <div class="table-responsive">
+        <table class="table table-sm table-dark table-hover mb-0">
+          <thead class="table-secondary">
+            <tr>
+              <th style="width:160px">Timestamp</th>
+              <th>Level</th>
+              <th>Action / Event</th>
+              {% if user.is_admin %}<th>User ID</th>{% endif %}
+              <th>Module</th>
+              <th>Status</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in log_entries %}
+            <tr class="{{ 'table-danger' if entry.level == 'ERROR' else ('table-warning' if entry.level == 'WARNING' else '') }}">
+              <td class="font-monospace small">{{ entry.timestamp[:19] if entry.timestamp else '' }}</td>
+              <td>
+                <span class="badge {{ 'bg-danger' if entry.level=='ERROR' else ('bg-warning text-dark' if entry.level=='WARNING' else 'bg-secondary') }}">
+                  {{ entry.level or 'INFO' }}
+                </span>
+              </td>
+              <td class="font-monospace">{{ entry.action or entry.event_type or entry.message or '—' }}</td>
+              {% if user.is_admin %}
+              <td class="text-muted small">{{ entry.user_id or '—' }}</td>
+              {% endif %}
+              <td class="text-muted small">{{ entry.module or '—' }}</td>
+              <td>
+                {% if entry.status == 'success' %}
+                  <span class="text-success small">success</span>
+                {% elif entry.status == 'error' %}
+                  <span class="text-danger small">error</span>
+                {% else %}
+                  <span class="text-muted small">{{ entry.status or '—' }}</span>
+                {% endif %}
+              </td>
+              <td>
+                <button class="btn btn-xs btn-outline-secondary btn-sm py-0"
+                        onclick="showLogDetail(this)"
+                        data-detail="{{ entry | tojson | e }}">
+                  <i class="bi bi-eye"></i>
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center text-muted py-5">
+        <i class="bi bi-journal-x fs-1 d-block mb-2"></i>
+        No log entries found for the selected filters.
+      </div>
+      {% endif %}
+    </div>
+    {% if total_entries is defined %}
+    <div class="card-footer text-muted small d-flex justify-content-between">
+      <span>{{ log_entries | length }} entries shown of {{ total_entries }} total</span>
+      <span>Log type: <strong>{{ log_type }}</strong></span>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Detail modal -->
+  <div class="modal fade" id="logDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content bg-dark">
+        <div class="modal-header border-secondary">
+          <h6 class="modal-title">Log Entry Detail</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <pre id="logDetailContent" class="text-white" style="font-size:0.8rem;overflow:auto;max-height:400px"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script>
+function showLogDetail(btn) {
+  try {
+    const detail = JSON.parse(btn.getAttribute('data-detail'));
+    document.getElementById('logDetailContent').textContent = JSON.stringify(detail, null, 2);
+    new bootstrap.Modal(document.getElementById('logDetailModal')).show();
+  } catch(e) {
+    console.error(e);
+  }
+}
+</script>
+{% endblock %}

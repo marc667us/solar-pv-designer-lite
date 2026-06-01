@@ -1,0 +1,76 @@
+---
+# SolarPro Global — Production environment overlay (Kustomize)
+# DEPLOY ONLY from tagged release via GitHub Actions with manual approval
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: solar-production
+
+resources:
+  - ../base/namespace.yaml
+  - ../base/configmap.yaml
+  - ../base/secret-template.yaml
+  - ../base/backend-deployment.yaml
+  - ../base/backend-service.yaml
+  - ../base/redis-deployment.yaml
+  - ../base/celery-deployment.yaml
+  - ../base/ingress.yaml
+  - ../base/hpa.yaml
+  - ../base/network-policy.yaml
+  - poddisruptionbudget.yaml
+
+patches:
+  # Production: minimum 3 backend pods
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+    target:
+      kind: Deployment
+      name: solarpro-backend
+
+  # Production: 2 celery workers minimum
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+    target:
+      kind: Deployment
+      name: solarpro-celery-worker
+
+  # Production HPA: min 3, max 20
+  - patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 20
+    target:
+      kind: HorizontalPodAutoscaler
+      name: solarpro-backend-hpa
+
+  - patch: |-
+      - op: replace
+        path: /data/APP_ENV
+        value: production
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: INFO
+      - op: replace
+        path: /data/SENTRY_TRACES_SAMPLE_RATE
+        value: "0.1"
+      - op: replace
+        path: /data/WORKERS
+        value: "4"
+    target:
+      kind: ConfigMap
+      name: solarpro-config
+
+commonLabels:
+  environment: production
+
+images:
+  - name: ghcr.io/marc667us/solarpro-backend
+    newTag: "SET_BY_CI_CD"    # replaced by GitHub Actions with git tag

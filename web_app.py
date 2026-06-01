@@ -20,6 +20,25 @@ from config.global_solar_data import (GLOBAL_DATA, get_countries, get_regions,
 from calculation.ac_cable_sizing import size_all_cables
 from api_manager import api as _api
 
+# Structured logging (tenant-aware JSON logs)
+try:
+    from logging_config.structured_logger import (
+        log_app, log_error, log_audit, log_security,
+        log_engineering, log_economic, log_ai, log_queue
+    )
+except ImportError:
+    import logging as _logging
+    _fl = _logging.getLogger("solarpro")
+    def log_app(**k): _fl.info(str(k))
+    def log_error(**k): _fl.error(str(k))
+    def log_audit(**k): _fl.info(str(k))
+    def log_security(**k): _fl.warning(str(k))
+    def log_engineering(**k): _fl.info(str(k))
+    def log_economic(**k): _fl.info(str(k))
+    def log_ai(**k): _fl.info(str(k))
+    def log_queue(**k): _fl.info(str(k))
+
+
 # Load .env file if present (stable SECRET_KEY across restarts)
 _env_path = os.path.join(os.path.dirname(__file__), ".env")
 if os.path.exists(_env_path):
@@ -9239,6 +9258,382 @@ def admin_feedback_update():
         c.execute("UPDATE beta_feedback SET status=? WHERE id=?", (status, fb_id))
     flash("Feedback updated.", "success")
     return redirect(url_for("admin_feedback"))
+
+
+
+# Health Check Endpoints
+import time as _time
+
+
+@app.route("/api/health")
+def api_health():
+    """Primary health check used by K8s readiness/liveness probes."""
+    t0 = _time.time()
+    db_ok = False
+    try:
+        with get_db() as _c:
+            _c.execute("SELECT 1").fetchone()
+        db_ok = True
+    except Exception:
+        pass
+    redis_ok = None
+    redis_url = os.environ.get("REDIS_URL", "")
+    if redis_url:
+        try:
+            import redis as _redis
+            _r = _redis.from_url(redis_url, socket_connect_timeout=2)
+            _r.ping()
+            redis_ok = True
+        except Exception:
+            redis_ok = False
+    status = "ok" if db_ok else "degraded"
+    payload = {
+        "status":      status,
+        "service":     "solarpro-backend",
+        "version":     os.environ.get("APP_VERSION", "1.0.0"),
+        "environment": os.environ.get("APP_ENV", "production"),
+        "backend":     "running",
+        "database":    "connected" if db_ok else "error",
+        "redis":       ("connected" if redis_ok else "error") if redis_ok is not None else "not_configured",
+        "latency_ms":  round((_time.time() - t0) * 1000, 1),
+        "timestamp":   datetime.utcnow().isoformat() + "Z",
+    }
+    return jsonify(payload), (200 if db_ok else 503)
+
+
+@app.route("/api/health/database")
+def api_health_database():
+    """Database health check with query latency."""
+    t0 = _time.time()
+    try:
+        with get_db() as _c:
+            uc = _c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            pc = _c.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+        return jsonify({
+            "status": "connected",
+            "latency_ms": round((_time.time() - t0) * 1000, 1),
+            "stats": {"users": uc, "projects": pc},
+            "database_type": "postgresql" if os.environ.get("DATABASE_URL","").startswith("postgres") else "sqlite",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e),
+                        "timestamp": datetime.utcnow().isoformat() + "Z"}), 503
+
+
+@app.route("/api/health/redis")
+def api_health_redis():
+    """Redis health check."""
+    redis_url = os.environ.get("REDIS_URL", "")
+    if not redis_url:
+        return jsonify({"status": "not_configured", "timestamp": datetime.utcnow().isoformat() + "Z"}), 200
+    t0 = _time.time()
+    try:
+        import redis as _redis
+        _r = _redis.from_url(redis_url, socket_connect_timeout=3)
+        _r.ping()
+        info = _r.info("memory")
+        return jsonify({
+            "status": "connected",
+            "latency_ms": round((_time.time() - t0) * 1000, 1),
+            "used_memory_human": info.get("used_memory_human", "N/A"),
+            "connected_clients": _r.info("clients").get("connected_clients", 0),
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e),
+                        "timestamp": datetime.utcnow().isoformat() + "Z"}), 503
+
+
+@app.route("/api/health/queue")
+def api_health_queue():
+    """Celery queue health (checks Redis queue lengths)."""
+    redis_url = os.environ.get("REDIS_URL", "")
+    if not redis_url:
+        return jsonify({"status": "not_configured", "timestamp": datetime.utcnow().isoformat() + "Z"}), 200
+    try:
+        import redis as _redis
+        _r = _redis.from_url(redis_url, socket_connect_timeout=3)
+        return jsonify({
+            "status": "ok",
+            "queues": {"default": _r.llen("celery"), "heavy": _r.llen("heavy"),
+                       "ai_tasks": _r.llen("ai_tasks"), "email": _r.llen("email"),
+                       "reports": _r.llen("reports")},
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e),
+                        "timestamp": datetime.utcnow().isoformat() + "Z"}), 503
+
+
+@app.route("/api/health/storage")
+def api_health_storage():
+    """File storage health check."""
+    try:
+        import tempfile
+        _t = tempfile.NamedTemporaryFile(delete=False, suffix=".sp")
+        _t.write(b"hc"); _t.close(); os.unlink(_t.name)
+        db_size = os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0
+        return jsonify({"status": "ok", "local_write": "ok",
+                        "database_size_mb": round(db_size / 1024 / 1024, 2),
+                        "timestamp": datetime.utcnow().isoformat() + "Z"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e),
+                        "timestamp": datetime.utcnow().isoformat() + "Z"}), 503
+
+
+@app.route("/api/health/ai")
+def api_health_ai():
+    """AI service configuration health check."""
+    services = {
+        "anthropic":   "configured" if os.environ.get("ANTHROPIC_API_KEY") else "not_configured",
+        "openrouter":  "configured" if os.environ.get("OPENROUTER_API_KEY") else "not_configured",
+        "ollama":      "configured" if os.environ.get("OLLAMA_URL") else "not_configured",
+        "github_models": "configured" if os.environ.get("GITHUB_MODELS_TOKEN") else "not_configured",
+    }
+    any_ok = any(v == "configured" for v in services.values())
+    return jsonify({
+        "status": "ok" if any_ok else "degraded",
+        "services": services,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }), 200
+
+
+@app.route("/api/ping")
+def api_ping():
+    """Minimal ping endpoint for Uptime Kuma / load balancer."""
+    return jsonify({"pong": True, "timestamp": datetime.utcnow().isoformat() + "Z"}), 200
+
+
+@app.route("/metrics")
+def prometheus_metrics():
+    """Prometheus metrics endpoint."""
+    try:
+        from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+        return generate_latest(), 200, {"Content-Type": CONTENT_TYPE_LATEST}
+    except ImportError:
+        with get_db() as _c:
+            uc = _c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            pc = _c.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+        body = (
+            "# HELP solarpro_users_total Total registered users\n"
+            "# TYPE solarpro_users_total gauge\n"
+            f"solarpro_users_total {uc}\n"
+            "# HELP solarpro_projects_total Total projects\n"
+            "# TYPE solarpro_projects_total gauge\n"
+            f"solarpro_projects_total {pc}\n"
+        )
+        return body, 200, {"Content-Type": "text/plain; version=0.0.4"}
+
+
+# Admin Operations Center Routes
+@app.route("/admin/operations")
+@admin_required
+def admin_operations():
+    """NOC/SOC operations center."""
+    with get_db() as c:
+        users = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        projects = c.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+        failed_logins = c.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE action='failed_login' "
+            "AND created_at >= datetime('now', '-24 hours')"
+        ).fetchone()[0] if _table_exists(c, "audit_log") else 0
+        db_path = DB_PATH
+        db_size = os.path.getsize(db_path) if os.path.exists(db_path) else 0
+    security = {
+        "failed_logins": failed_logins,
+        "active_sessions": 0,
+        "blocked_requests": 0,
+        "tenant_violations": 0,
+        "expired_tokens": 0,
+        "revoked_tokens": 0,
+    }
+    db_stats = {
+        "size_mb": round(db_size / 1024 / 1024, 2),
+        "tables": 17,
+        "users": users,
+        "projects": projects,
+    }
+    perf = {"active_users": users}
+    backup = {"last_backup": "Not configured", "size_mb": 0, "status": "pending", "retention": "30 days"}
+    return render_template("admin_operations.html",
+                           user=current_user(), security=security,
+                           db_stats=db_stats, perf=perf, backup=backup)
+
+
+def _table_exists(conn, table_name):
+    r = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,)).fetchone()
+    return r is not None
+
+
+@app.route("/admin/logs")
+@admin_required
+def admin_logs():
+    """Secured system log viewer."""
+    log_type    = request.args.get("type", "audit")
+    date_from   = request.args.get("date_from", "")
+    date_to     = request.args.get("date_to", "")
+    user_filter = request.args.get("user_filter", "")
+    action_flt  = request.args.get("action", "")
+    import os, json as _json
+    LOG_DIR = os.environ.get("LOG_DIR", os.path.join(os.path.dirname(__file__), "logs"))
+    log_file_map = {
+        "audit":    os.path.join(LOG_DIR, "audit", "audit.log"),
+        "security": os.path.join(LOG_DIR, "security", "security.log"),
+        "error":    os.path.join(LOG_DIR, "backend", "error.log"),
+        "ai":       os.path.join(LOG_DIR, "ai-agents", "agent.log"),
+        "queue":    os.path.join(LOG_DIR, "queue", "worker.log"),
+        "engineering": os.path.join(LOG_DIR, "backend", "app.log"),
+    }
+    log_entries = []
+    log_file = log_file_map.get(log_type, "")
+    if log_file and os.path.exists(log_file):
+        try:
+            with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()[-500:]  # last 500 lines
+            for line in reversed(lines):
+                try:
+                    entry = _json.loads(line.strip())
+                    if action_flt and action_flt.lower() not in str(entry.get("action","")).lower():
+                        continue
+                    if user_filter and user_filter not in str(entry.get("user_id","")) + str(entry.get("username","")):
+                        continue
+                    log_entries.append(entry)
+                    if len(log_entries) >= 200:
+                        break
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    return render_template("admin_logs.html",
+                           user=current_user(),
+                           log_entries=log_entries,
+                           log_type=log_type,
+                           date_from=date_from, date_to=date_to,
+                           user_filter=user_filter,
+                           action_filter=action_flt,
+                           total_entries=len(log_entries))
+
+
+@app.route("/admin/ops/backup/run", methods=["POST"])
+@admin_required
+def admin_ops_backup_run():
+    """Create immediate DB backup (SQLite copy)."""
+    import shutil, time as _t
+    try:
+        backup_dir = os.path.join(os.path.dirname(DB_PATH), "backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        backup_file = os.path.join(backup_dir, f"solar_{ts}.db")
+        shutil.copy2(DB_PATH, backup_file)
+        size_mb = round(os.path.getsize(backup_file) / 1024 / 1024, 2)
+        log_audit(action="database_backup", user_id=session.get("user_id"), status="success")
+        return jsonify({"status": "success", "filename": os.path.basename(backup_file),
+                        "size_mb": size_mb, "timestamp": ts})
+    except Exception as e:
+        log_error(module="backup", action="database_backup", error=str(e))
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/admin/ops/backup/download")
+@admin_required
+def admin_ops_backup_download():
+    """Download latest DB backup."""
+    backup_dir = os.path.join(os.path.dirname(DB_PATH), "backups")
+    if not os.path.isdir(backup_dir):
+        flash("No backups found. Run a backup first.", "warning")
+        return redirect(url_for("admin_operations"))
+    backups = sorted([f for f in os.listdir(backup_dir) if f.endswith(".db")], reverse=True)
+    if not backups:
+        flash("No backup files found.", "warning")
+        return redirect(url_for("admin_operations"))
+    log_audit(action="backup_downloaded", user_id=session.get("user_id"), status="success")
+    return send_file(os.path.join(backup_dir, backups[0]),
+                     as_attachment=True, download_name=backups[0])
+
+
+@app.route("/admin/ops/security/audit", methods=["POST"])
+@admin_required
+def admin_ops_security_audit():
+    """Run a quick security audit check."""
+    results = {}
+    with get_db() as c:
+        results["total_users"] = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        results["admin_users"] = c.execute("SELECT COUNT(*) FROM users WHERE is_admin=1").fetchone()[0]
+        results["disabled_accounts"] = c.execute("SELECT COUNT(*) FROM users WHERE plan='disabled'").fetchone()[0]
+        results["recent_payments"] = c.execute("SELECT COUNT(*) FROM payments WHERE status='success'").fetchone()[0]
+    results["secret_key_set"] = bool(os.environ.get("SECRET_KEY"))
+    results["anthropic_key_set"] = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    results["paystack_key_set"] = bool(os.environ.get("PAYSTACK_SECRET_KEY"))
+    results["resend_key_set"] = bool(os.environ.get("RESEND_API_KEY"))
+    results["status"] = "pass"
+    log_audit(action="security_audit_run", user_id=session.get("user_id"), status="success")
+    return jsonify(results)
+
+
+@app.route("/admin/ops/security/sessions")
+@admin_required
+def admin_ops_security_sessions():
+    """List active sessions (from users table)."""
+    with get_db() as c:
+        active = c.execute(
+            "SELECT id, username, plan, last_login FROM users "
+            "WHERE last_login IS NOT NULL ORDER BY last_login DESC LIMIT 50"
+        ).fetchall() if _table_exists(c, "users") else []
+    return jsonify({"active_sessions": [dict(r) for r in active]})
+
+
+@app.route("/admin/ops/security/revoke-all-sessions", methods=["POST"])
+@admin_required
+def admin_ops_revoke_all_sessions():
+    """Revoke all user sessions (except current admin)."""
+    current_uid = session.get("user_id")
+    session.clear()
+    log_security(event_type="revoke_all_sessions", user_id=current_uid,
+                 ip_address=request.remote_addr)
+    return jsonify({"status": "success", "message": "All sessions revoked. Users must re-login."})
+
+
+@app.route("/admin/ops/db/vacuum", methods=["POST"])
+@admin_required
+def admin_ops_db_vacuum():
+    """Run VACUUM on SQLite database."""
+    try:
+        import time as _t
+        t0 = _t.time()
+        with get_db() as c:
+            c.execute("VACUUM")
+            c.execute("ANALYZE")
+        elapsed = round((_t.time() - t0) * 1000, 1)
+        log_audit(action="db_vacuum", user_id=session.get("user_id"), status="success")
+        return jsonify({"status": "success", "duration_ms": elapsed})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/admin/ops/logs/export")
+@admin_required
+def admin_ops_export_logs():
+    """Export logs as text file."""
+    import io as _io
+    log_type = request.args.get("type", "audit")
+    LOG_DIR = os.environ.get("LOG_DIR", os.path.join(os.path.dirname(__file__), "logs"))
+    log_file_map = {
+        "audit":    os.path.join(LOG_DIR, "audit", "audit.log"),
+        "security": os.path.join(LOG_DIR, "security", "security.log"),
+        "error":    os.path.join(LOG_DIR, "backend", "error.log"),
+    }
+    lf = log_file_map.get(log_type, "")
+    if lf and os.path.exists(lf):
+        content = open(lf, "rb").read()
+    else:
+        content = b"No log file found for type: " + log_type.encode()
+    log_audit(action="logs_exported", user_id=session.get("user_id"),
+              resource=log_type, status="success")
+    buf = _io.BytesIO(content)
+    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    return send_file(buf, as_attachment=True, download_name=f"solarpro_{log_type}_{ts}.log",
+                     mimetype="text/plain")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,95 @@
+---
+# SolarPro Global — Promtail Configuration (ships app logs → Loki)
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+
+  # ── SolarPro App Log ──────────────────────────────────────────────────────
+  - job_name: solarpro-app
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: solarpro-app
+          service: backend
+          __path__: /app/logs/backend/app.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            tenant_id: tenant_id
+            user_id: user_id
+            module: module
+            action: action
+            status: status
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+      - labels:
+          level:
+          tenant_id:
+          module:
+
+  # ── Audit Log ─────────────────────────────────────────────────────────────
+  - job_name: solarpro-audit
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: solarpro-audit
+          service: backend
+          log_type: audit
+          __path__: /app/logs/audit/audit.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            tenant_id: tenant_id
+            user_id: user_id
+            action: action
+            resource: resource
+      - labels:
+          tenant_id:
+          action:
+
+  # ── Security Log ──────────────────────────────────────────────────────────
+  - job_name: solarpro-security
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: solarpro-security
+          service: backend
+          log_type: security
+          __path__: /app/logs/security/security.log
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            event_type: event_type
+            ip_address: ip_address
+            user_id: user_id
+      - labels:
+          event_type:
+          level:
+
+  # ── Error Log ─────────────────────────────────────────────────────────────
+  - job_name: solarpro-errors
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: solarpro-errors
+          service: backend
+          log_type: error
+          __path__: /app/logs/backend/error.log

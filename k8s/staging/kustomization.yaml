@@ -1,0 +1,79 @@
+---
+# SolarPro Global — Staging environment overlay (Kustomize)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: solar-staging
+
+resources:
+  - ../base/namespace.yaml
+  - ../base/configmap.yaml
+  - ../base/secret-template.yaml
+  - ../base/backend-deployment.yaml
+  - ../base/backend-service.yaml
+  - ../base/redis-deployment.yaml
+  - ../base/celery-deployment.yaml
+  - ../base/ingress.yaml
+  - ../base/hpa.yaml
+  - ../base/network-policy.yaml
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+    target:
+      kind: Deployment
+      name: solarpro-backend
+
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+    target:
+      kind: Deployment
+      name: solarpro-celery-worker
+
+  # Staging HPA: min 2, max 5
+  - patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+      - op: replace
+        path: /spec/maxReplicas
+        value: 5
+    target:
+      kind: HorizontalPodAutoscaler
+      name: solarpro-backend-hpa
+
+  - patch: |-
+      - op: replace
+        path: /data/APP_ENV
+        value: staging
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: INFO
+      - op: replace
+        path: /data/SENTRY_TRACES_SAMPLE_RATE
+        value: "0.05"
+    target:
+      kind: ConfigMap
+      name: solarpro-config
+
+  - patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: staging.solarpro.aiappinvent.com
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: staging.solarpro.aiappinvent.com
+    target:
+      kind: Ingress
+      name: solarpro-ingress
+
+commonLabels:
+  environment: staging
+
+images:
+  - name: ghcr.io/marc667us/solarpro-backend
+    newTag: staging-latest

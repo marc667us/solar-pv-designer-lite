@@ -1,0 +1,117 @@
+---
+# SolarPro Global — Celery Worker Deployment
+# Runs heavy background tasks: BOQ generation, economic analysis, proposal PDFs,
+# procurement AI evaluation, report export, email notifications, AI agent workflows
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: solarpro-celery-worker
+  namespace: solar-production
+  labels:
+    app.kubernetes.io/name: solarpro
+    app.kubernetes.io/component: celery-worker
+    app: solarpro-celery
+spec:
+  replicas: 2                       # production: 2 | staging: 1 | dev: 1
+  selector:
+    matchLabels:
+      app: solarpro-celery
+  template:
+    metadata:
+      labels:
+        app: solarpro-celery
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: celery-worker
+          image: ghcr.io/marc667us/solarpro-backend:latest   # same image as backend
+          command:
+            - celery
+            - -A
+            - web_app.celery_app
+            - worker
+            - --loglevel=info
+            - --concurrency=4
+            - --queues=default,heavy,ai_tasks,email,reports
+            - --hostname=worker@%h
+
+          envFrom:
+            - configMapRef:
+                name: solarpro-config
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: SECRET_KEY
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: REDIS_URL
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: OPENROUTER_API_KEY
+            - name: RESEND_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: RESEND_API_KEY
+            - name: SENTRY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: solarpro-secrets
+                  key: SENTRY_DSN
+
+          # Celery liveness — check worker heartbeat
+          livenessProbe:
+            exec:
+              command:
+                - celery
+                - -A
+                - web_app.celery_app
+                - inspect
+                - ping
+                - -d
+                - "worker@$(hostname)"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 15
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+
+          volumeMounts:
+            - name: tmp-dir
+              mountPath: /tmp
+            - name: log-dir
+              mountPath: /app/logs
+
+      volumes:
+        - name: tmp-dir
+          emptyDir: {}
+        - name: log-dir
+          emptyDir: {}
+
+      terminationGracePeriodSeconds: 60   # allow running jobs to finish

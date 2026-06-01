@@ -1,0 +1,30 @@
+---
+# SolarPro Global — Kubernetes Namespace Definitions
+# Creates solar-dev, solar-staging, solar-production namespaces
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: solar-dev
+  labels:
+    app.kubernetes.io/name: solarpro
+    environment: development
+    managed-by: github-actions
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: solar-staging
+  labels:
+    app.kubernetes.io/name: solarpro
+    environment: staging
+    managed-by: github-actions
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: solar-production
+  labels:
+    app.kubernetes.io/name: solarpro
+    environment: production
+    managed-by: github-actions

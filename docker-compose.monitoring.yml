@@ -1,0 +1,125 @@
+# SolarPro Global — Monitoring Stack
+# Runs: Prometheus + Grafana + Loki + Promtail + Uptime Kuma
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up
+#
+# Dashboards:
+#   Grafana:     http://localhost:3000  (admin / admin — change on first login)
+#   Prometheus:  http://localhost:9090
+#   Uptime Kuma: http://localhost:3001
+#   Flower:      http://localhost:5555  (Celery queue monitor)
+
+version: "3.9"
+
+services:
+
+  # ── Prometheus (metrics collection) ───────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: solarpro-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+    networks:
+      - solarpro-net
+
+  # ── Grafana (dashboards + alerting) ───────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: solarpro-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-SolarGrafana2026!}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - solarpro-net
+
+  # ── Loki (log aggregation) ────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:2.9.5
+    container_name: solarpro-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/config.yml
+    networks:
+      - solarpro-net
+
+  # ── Promtail (log shipper: app logs → Loki) ────────────────────────────────
+  promtail:
+    image: grafana/promtail:2.9.5
+    container_name: solarpro-promtail
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - ./logs:/app/logs:ro    # app log directory
+      - /var/log:/var/log:ro   # host system logs
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - solarpro-net
+
+  # ── Uptime Kuma (ping / uptime monitoring) ────────────────────────────────
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: solarpro-uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime-kuma-data:/app/data
+    networks:
+      - solarpro-net
+
+  # ── Celery Flower (queue dashboard) ───────────────────────────────────────
+  flower:
+    image: mher/flower:2.0
+    container_name: solarpro-flower
+    restart: unless-stopped
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-devpassword}@redis:6379/0
+      - FLOWER_BASIC_AUTH=${FLOWER_USER:-admin}:${FLOWER_PASS:-FlowerAdmin2026!}
+    command: celery flower --broker=redis://:${REDIS_PASSWORD:-devpassword}@redis:6379/0
+    depends_on:
+      - redis
+    networks:
+      - solarpro-net
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  uptime-kuma-data:
+
+networks:
+  solarpro-net:
+    external: true    # uses network from docker-compose.yml

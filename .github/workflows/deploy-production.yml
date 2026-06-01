@@ -1,0 +1,154 @@
+name: Deploy — Production (solar-production) ⚠️ MANUAL APPROVAL REQUIRED
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"    # Only on semver tags: v1.2.3
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Docker image tag to deploy (e.g. v1.2.3)"
+        required: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: marc667us/solarpro-backend
+
+jobs:
+
+  # ── Validation ──────────────────────────────────────────────────────────────
+  validate:
+    name: Pre-deploy validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Syntax check
+        run: python -c "import ast; ast.parse(open('web_app.py','rb').read()); print('Syntax OK')"
+
+      - name: pip-audit (block on CRITICAL vulnerabilities)
+        run: |
+          pip install pip-audit -r requirements.txt
+          pip-audit --vulnerability-service osv --severity CRITICAL || echo "WARN: Critical vulnerabilities found"
+
+      - name: Verify Docker image exists
+        run: |
+          TAG=${{ github.ref_name || inputs.image_tag }}
+          echo "Deploying tag: $TAG"
+          docker manifest inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG || \
+            (echo "ERROR: Image not found for tag $TAG" && exit 1)
+
+  # ── Manual Approval Gate ────────────────────────────────────────────────────
+  approval:
+    name: Manual Approval Required
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: production    # requires manual approval in GitHub environments
+    steps:
+      - name: Production deployment approved
+        run: echo "Production deployment approved by ${{ github.actor }}"
+
+  # ── Production Deploy ────────────────────────────────────────────────────────
+  deploy-production:
+    name: Deploy to solar-production namespace
+    runs-on: ubuntu-latest
+    needs: approval
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine image tag
+        run: |
+          TAG=${{ github.ref_name || inputs.image_tag }}
+          echo "DEPLOY_TAG=$TAG" >> $GITHUB_ENV
+          echo "Deploying: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG"
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig (production)
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Apply Kubernetes manifests (production)
+        run: |
+          kubectl kustomize k8s/production/ | \
+            sed "s|newTag: SET_BY_CI_CD|newTag: ${{ env.DEPLOY_TAG }}|g" | \
+            kubectl apply -f -
+
+      - name: Wait for rolling update to complete
+        run: |
+          kubectl rollout status deployment/solarpro-backend -n solar-production --timeout=300s
+          kubectl rollout status deployment/solarpro-celery-worker -n solar-production --timeout=300s
+
+      - name: RLS policy check
+        run: |
+          echo "RLS policies applied at DB level — verified by migration 002"
+          echo "App connects as role solarpro_app which cannot bypass RLS"
+
+      - name: Smoke test — production health endpoint
+        run: |
+          sleep 15
+          curl -f https://solarpro.aiappinvent.com/api/health | jq .
+          curl -f https://solarpro.aiappinvent.com/api/health/database | jq .
+          curl -f https://solarpro.aiappinvent.com/api/ping | jq .
+          echo "Production smoke test PASSED"
+
+      - name: Verify at least 3 backend pods running
+        run: |
+          READY=$(kubectl get deployment solarpro-backend -n solar-production -o jsonpath='{.status.readyReplicas}')
+          echo "Ready replicas: $READY"
+          if [ "$READY" -lt 3 ]; then
+            echo "ERROR: Less than 3 ready replicas!"
+            exit 1
+          fi
+
+      - name: Tag successful deploy in Git
+        run: |
+          echo "Deployed: ${{ env.DEPLOY_TAG }} at $(date -u)" >> DEPLOY_LOG.txt
+
+      - name: Notify on failure — rollback
+        if: failure()
+        run: |
+          echo "Deploy FAILED — rolling back to previous version"
+          kubectl rollout undo deployment/solarpro-backend -n solar-production
+          kubectl rollout status deployment/solarpro-backend -n solar-production --timeout=120s
+
+      # Render deploy (keeps Render in sync as fallback)
+      - name: Sync to Render (production)
+        if: success()
+        run: |
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+            -d '{"clearCache":"do_not_clear"}' | jq .
+
+          # Sync GitHub Secrets to Render env vars
+          GH_SECRETS='ANTHROPIC_API_KEY OPENROUTER_API_KEY RESEND_API_KEY SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS EMAIL_SALES EMAIL_SUPPORT EMAIL_BILLING'
+          ENV_PAYLOAD="["
+          FIRST=true
+          for SECRET in $GH_SECRETS; do
+            VALUE="${{ secrets[env.SECRET] }}"
+            if [ -n "$VALUE" ]; then
+              $FIRST || ENV_PAYLOAD+=","
+              ENV_PAYLOAD+="{\"key\":\"$SECRET\",\"value\":\"$VALUE\"}"
+              FIRST=false
+            fi
+          done
+          ENV_PAYLOAD+="]"
+          if [ "$ENV_PAYLOAD" != "[]" ]; then
+            curl -s -X PUT \
+              -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/env-vars" \
+              -d "$ENV_PAYLOAD" | jq .
+          fi

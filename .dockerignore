@@ -1,0 +1,75 @@
+# SolarPro Global — Docker ignore
+
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+dist2/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env
+
+# Secrets — NEVER include in image
+.env.*
+*.env
+*secret*
+*secrets*
+secrets/
+
+# Development files
+*.log
+logs/
+solar.db
+*.db
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+test_*.py
+*_test.py
+pytest.ini
+.pytest_cache/
+
+# CI/CD
+.github/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Legacy desktop app
+main.py
+ui.py
+solar_pv_designer/
+
+# Node (if any)
+node_modules/
+npm-debug.log
+
+# Temp
+tmp/
+temp/
+*.tmp
