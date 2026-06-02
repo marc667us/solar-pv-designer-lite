@@ -1,0 +1,103 @@
+name: Delete & Recreate Render Service
+
+# Run manually only — triggered once to escape the stuck disk
+on:
+  workflow_dispatch:
+
+jobs:
+  delete-and-recreate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Get current service details (ownerId, etc.)
+        id: svc
+        env:
+          RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          curl -s \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID" \
+            -o /tmp/svc.json
+          cat /tmp/svc.json | python3 -m json.tool 2>/dev/null | head -40 || cat /tmp/svc.json | head -c 400
+          OWNER_ID=$(python3 -c "import json; d=json.load(open('/tmp/svc.json')); print(d.get('ownerId',''))" 2>/dev/null || true)
+          echo "owner_id=$OWNER_ID" >> $GITHUB_OUTPUT
+          echo "Owner ID: $OWNER_ID"
+
+      - name: Delete existing Render service
+        env:
+          RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          echo "Deleting service $RENDER_SERVICE_ID ..."
+          HTTP=$(curl -s -o /tmp/del_resp.json -w "%{http_code}" -X DELETE \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID")
+          echo "DELETE HTTP: $HTTP"
+          cat /tmp/del_resp.json | head -c 400 || true
+          if [ "$HTTP" = "204" ] || [ "$HTTP" = "200" ] || [ "$HTTP" = "202" ]; then
+            echo "Service deleted ✓"
+          else
+            echo "::error::Delete failed (HTTP $HTTP) — check Render dashboard"
+            exit 1
+          fi
+
+      - name: Wait 15 s for deletion to propagate
+        run: sleep 15
+
+      - name: Create new Render service (no disk, free tier)
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          OWNER_ID: ${{ steps.svc.outputs.owner_id }}
+        run: |
+          cat > /tmp/create_payload.json <<EOF
+          {
+            "type": "web_service",
+            "name": "solarpro-global",
+            "ownerId": "$OWNER_ID",
+            "repo": "https://github.com/marc667us/solar-pv-designer-lite",
+            "branch": "master",
+            "autoDeploy": "yes",
+            "runtime": "python",
+            "buildCommand": "pip install -r requirements.txt",
+            "startCommand": "gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120",
+            "healthCheckPath": "/api/ping",
+            "plan": "free",
+            "region": "oregon",
+            "envVars": [
+              {"key": "DEMO_MODE", "value": "true"},
+              {"key": "SECRET_KEY", "generateValue": true}
+            ]
+          }
+          EOF
+
+          echo "Creating new service..."
+          HTTP=$(curl -s -o /tmp/create_resp.json -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @/tmp/create_payload.json \
+            "https://api.render.com/v1/services")
+
+          echo "CREATE HTTP: $HTTP"
+          cat /tmp/create_resp.json | python3 -m json.tool 2>/dev/null || cat /tmp/create_resp.json | head -c 800
+
+          NEW_ID=$(python3 -c "import json; d=json.load(open('/tmp/create_resp.json')); print(d.get('service',{}).get('id',''))" 2>/dev/null || true)
+          NEW_URL=$(python3 -c "import json; d=json.load(open('/tmp/create_resp.json')); print(d.get('service',{}).get('serviceDetails',{}).get('url',''))" 2>/dev/null || true)
+
+          echo ""
+          echo "================================================"
+          echo " NEW SERVICE ID : $NEW_ID"
+          echo " NEW SERVICE URL: $NEW_URL"
+          echo "================================================"
+          echo ""
+          if [ -z "$NEW_ID" ]; then
+            echo "::error::Service creation failed — check output above"
+            exit 1
+          fi
+          echo "NEXT STEPS:"
+          echo "  1. Update GitHub Secret RENDER_SERVICE_ID to: $NEW_ID"
+          echo "  2. In Render dashboard -> solarpro-global -> Settings -> Custom Domains:"
+          echo "     Add: solarpro.aiappinvent.com"
+          echo "  3. Re-run deploy.yml to sync all env vars to the new service"
