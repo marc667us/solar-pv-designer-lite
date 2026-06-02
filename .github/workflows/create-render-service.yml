@@ -13,18 +13,15 @@ jobs:
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
         run: |
-          # List all owners (teams/accounts) associated with this API key
           curl -s \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             "https://api.render.com/v1/owners?limit=5" \
             -o /tmp/owners.json
           cat /tmp/owners.json | python3 -m json.tool 2>/dev/null | head -30 || cat /tmp/owners.json | head -c 400
 
-          # Extract first owner ID
           OWNER_ID=$(python3 -c "
-          import json, sys
+          import json
           data = json.load(open('/tmp/owners.json'))
-          # Response may be [{cursor:..., owner:{id:..., name:...}}, ...]
           if isinstance(data, list) and len(data) > 0:
               item = data[0]
               if 'owner' in item:
@@ -42,49 +39,41 @@ jobs:
           OWNER_ID: ${{ steps.owner.outputs.owner_id }}
         run: |
           if [ -z "$OWNER_ID" ]; then
-            echo "::error::Could not determine owner ID — check owners response above"
+            echo "::error::Could not determine owner ID"
             exit 1
           fi
 
-          # Build payload via python to avoid $PORT shell-expansion issues
-          python3 - << 'PYEOF'
-import json
-payload = {
-  "type": "web_service",
-  "name": "solarpro-global",
-  "ownerId": "__OWNER_ID__",
-  "repo": "https://github.com/marc667us/solar-pv-designer-lite",
-  "branch": "master",
-  "autoDeploy": "yes",
-  "serviceDetails": {
-    "env": "python",
-    "envSpecificDetails": {
-      "pythonVersion": "3.11.0"
-    },
-    "buildCommand": "pip install -r requirements.txt",
-    "startCommand": "gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120",
-    "healthCheckPath": "/api/ping",
-    "plan": "free",
-    "region": "oregon",
-    "numInstances": 1,
-    "envVars": [
-      {"key": "DEMO_MODE", "value": "true"},
-      {"key": "SECRET_KEY", "generateValue": True}
-    ]
-  }
-}
-with open('/tmp/create_payload.json', 'w') as f:
-  json.dump(payload, f, indent=2)
-print("Payload written")
-PYEOF
-          # Substitute the real owner ID (safe — no shell metacharacters in tea-...)
-          sed -i "s/__OWNER_ID__/$OWNER_ID/" /tmp/create_payload.json
+          # Build payload with jq (handles $PORT literally via --arg; no heredoc needed)
+          jq -n \
+            --arg owner  "$OWNER_ID" \
+            --arg build  "pip install -r requirements.txt" \
+            --arg start  'gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120' \
+            '{
+              type: "web_service",
+              name: "solarpro-global",
+              ownerId: $owner,
+              repo: "https://github.com/marc667us/solar-pv-designer-lite",
+              branch: "master",
+              autoDeploy: "yes",
+              serviceDetails: {
+                env: "python",
+                envSpecificDetails: { pythonVersion: "3.11.0" },
+                buildCommand: $build,
+                startCommand: $start,
+                healthCheckPath: "/api/ping",
+                plan: "free",
+                region: "oregon",
+                numInstances: 1,
+                envVars: [
+                  { key: "DEMO_MODE", value: "true" },
+                  { key: "SECRET_KEY", generateValue: true }
+                ]
+              }
+            }' > /tmp/create_payload.json
 
           echo "Payload:"
           cat /tmp/create_payload.json | python3 -m json.tool
 
-          echo ""
-          echo "Creating service..."
           HTTP=$(curl -s -o /tmp/create_resp.json -w "%{http_code}" -X POST \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
@@ -102,7 +91,6 @@ PYEOF
           NEW_ID=$(python3 -c "
           import json
           d = json.load(open('/tmp/create_resp.json'))
-          # Response: {service: {id:..., ...}, deployId: ...}
           svc = d.get('service', d)
           print(svc.get('id',''))
           " 2>/dev/null || echo '')
@@ -123,10 +111,8 @@ PYEOF
           echo "========================================================"
           echo ""
           echo "NEXT STEPS:"
-          echo "  1. Go to Render dashboard → solarpro-global → Settings"
-          echo "     → Custom Domains → Add: solarpro.aiappinvent.com"
-          echo "  2. Update GitHub Secret RENDER_SERVICE_ID to: $NEW_ID"
-          echo "     (Settings → Secrets → RENDER_SERVICE_ID → update value)"
-          echo "  3. Re-run deploy.yml to push all API keys / env vars to the new service"
-          echo "  4. Delete the aiappinvent.com DNS CNAME for solarpro and re-add it"
-          echo "     pointing to: $NEW_URL"
+          echo "  1. Update GitHub Secret RENDER_SERVICE_ID to: $NEW_ID"
+          echo "  2. Render dashboard → solarpro-global → Settings → Custom Domains"
+          echo "     Add: solarpro.aiappinvent.com  (replaces old .onrender.com URL)"
+          echo "  3. Namecheap DNS: update CNAME for solarpro → $NEW_URL"
+          echo "  4. Re-run Deploy to Render workflow to sync all API keys to new service"
