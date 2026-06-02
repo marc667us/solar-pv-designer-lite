@@ -46,29 +46,39 @@ jobs:
             exit 1
           fi
 
-          cat > /tmp/create_payload.json << JSONEOF
-          {
-            "type": "web_service",
-            "name": "solarpro-global",
-            "ownerId": "$OWNER_ID",
-            "repo": "https://github.com/marc667us/solar-pv-designer-lite",
-            "branch": "master",
-            "autoDeploy": "yes",
-            "serviceDetails": {
-              "env": "python",
-              "buildCommand": "pip install -r requirements.txt",
-              "startCommand": "gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120",
-              "healthCheckPath": "/api/ping",
-              "plan": "free",
-              "region": "oregon",
-              "numInstances": 1,
-              "envVars": [
-                {"key": "DEMO_MODE", "value": "true"},
-                {"key": "SECRET_KEY", "generateValue": true}
-              ]
-            }
-          }
-          JSONEOF
+          # Build payload via python to avoid $PORT shell-expansion issues
+          python3 - << 'PYEOF'
+import json
+payload = {
+  "type": "web_service",
+  "name": "solarpro-global",
+  "ownerId": "__OWNER_ID__",
+  "repo": "https://github.com/marc667us/solar-pv-designer-lite",
+  "branch": "master",
+  "autoDeploy": "yes",
+  "serviceDetails": {
+    "env": "python",
+    "envSpecificDetails": {
+      "pythonVersion": "3.11.0"
+    },
+    "buildCommand": "pip install -r requirements.txt",
+    "startCommand": "gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120",
+    "healthCheckPath": "/api/ping",
+    "plan": "free",
+    "region": "oregon",
+    "numInstances": 1,
+    "envVars": [
+      {"key": "DEMO_MODE", "value": "true"},
+      {"key": "SECRET_KEY", "generateValue": True}
+    ]
+  }
+}
+with open('/tmp/create_payload.json', 'w') as f:
+  json.dump(payload, f, indent=2)
+print("Payload written")
+PYEOF
+          # Substitute the real owner ID (safe — no shell metacharacters in tea-...)
+          sed -i "s/__OWNER_ID__/$OWNER_ID/" /tmp/create_payload.json
 
           echo "Payload:"
           cat /tmp/create_payload.json | python3 -m json.tool
