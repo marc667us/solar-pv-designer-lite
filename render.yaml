@@ -12,7 +12,3 @@ services:
         value: "true"
       - key: ANTHROPIC_API_KEY
         sync: false
-    disk:
-      name: solar-db-v2
-      mountPath: /opt/render/project/src/data
-      sizeGB: 1
