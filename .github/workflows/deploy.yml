@@ -8,19 +8,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Render deploy
-        env:
-          RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
-          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-        run: |
-          curl -sf -X POST \
-            -H "Authorization: Bearer $RENDER_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d '{"clearCache":"do_not_clear"}' \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
-            | jq '{id: .id, status: .status}'
-
       - name: Sync secrets to Render (skips empty values)
+        # IMPORTANT: sync env vars BEFORE triggering deploy so new container gets fresh vars
         env:
           RENDER_API_KEY:          ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID:       ${{ secrets.RENDER_SERVICE_ID }}
@@ -110,3 +99,15 @@ jobs:
           else
             echo "Env-var sync failed (non-fatal) — set vars manually in Render dashboard if needed"
           fi
+
+      - name: Trigger Render deploy (after env vars are synced)
+        env:
+          RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}' \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            | jq '{id: .id, status: .status}'
