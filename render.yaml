@@ -2,8 +2,9 @@ services:
   - type: web
     name: solarpro-global
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    buildCommand: pip install -r requirements.txt && python -c "from web_app import app, init_db; print('Import OK')"
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    healthCheckPath: /api/ping
     envVars:
       - key: SECRET_KEY
         generateValue: true
@@ -12,6 +13,6 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
     disk:
-      name: solar-db
+      name: solar-db-v2
       mountPath: /opt/render/project/src/data
       sizeGB: 1
