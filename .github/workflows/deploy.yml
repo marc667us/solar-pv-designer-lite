@@ -107,12 +107,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Trigger deploy with cache clear to force fresh pip install
+          # Trigger deploy — do NOT clear cache (clearCache causes runtime crash with unpinned packages)
           HTTP_CODE=$(curl -s -o /tmp/deploy_resp.json -w "%{http_code}" \
             -X POST \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
-            -d '{"clearCache":"clear"}' \
+            -d '{"clearCache":"do_not_clear"}' \
             "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys")
 
           echo "Render API response (HTTP $HTTP_CODE):"

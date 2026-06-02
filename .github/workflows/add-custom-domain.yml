@@ -1,0 +1,37 @@
+name: Add Custom Domain to Render
+
+# Run once to restore solarpro.aiappinvent.com on the new service
+on:
+  workflow_dispatch:
+
+jobs:
+  add-domain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add solarpro.aiappinvent.com to Render service
+        env:
+          RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          HTTP=$(curl -s -o /tmp/domain_resp.json -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"solarpro.aiappinvent.com"}' \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/custom-domains")
+
+          echo "HTTP: $HTTP"
+          cat /tmp/domain_resp.json | python3 -m json.tool 2>/dev/null || cat /tmp/domain_resp.json | head -c 400
+
+          if [ "$HTTP" = "201" ] || [ "$HTTP" = "200" ] || [ "$HTTP" = "409" ]; then
+            echo "Custom domain added (or already exists) ✓"
+          else
+            echo "::error::Failed to add custom domain (HTTP $HTTP)"
+            exit 1
+          fi
+
+          echo ""
+          echo "Also verifying domain list:"
+          curl -s \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/custom-domains" \
+            | python3 -m json.tool 2>/dev/null | head -30
