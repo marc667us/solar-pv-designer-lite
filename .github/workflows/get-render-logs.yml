@@ -1,0 +1,55 @@
+name: Get Render Deploy Logs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  get-logs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch latest deploy and logs
+        env:
+          RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          echo "=== Latest deploys ==="
+          curl -s \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?limit=3" \
+            -o /tmp/deploys.json
+          cat /tmp/deploys.json | python3 -m json.tool 2>/dev/null | head -60 || cat /tmp/deploys.json | head -c 800
+
+          DEPLOY_ID=$(python3 -c "
+          import json
+          data = json.load(open('/tmp/deploys.json'))
+          if isinstance(data, list) and len(data) > 0:
+              item = data[0]
+              if 'deploy' in item:
+                  print(item['deploy']['id'])
+              elif 'id' in item:
+                  print(item['id'])
+          " 2>/dev/null || echo '')
+          echo ""
+          echo "=== Latest deploy ID: $DEPLOY_ID ==="
+
+          if [ -n "$DEPLOY_ID" ]; then
+            echo "=== Deploy detail ==="
+            curl -s \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$DEPLOY_ID" \
+              | python3 -m json.tool 2>/dev/null | head -40
+
+            echo ""
+            echo "=== Deploy logs ==="
+            curl -s \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$DEPLOY_ID/logs" \
+              | python3 -m json.tool 2>/dev/null | head -100 || echo "(no log endpoint)"
+          fi
+
+          echo ""
+          echo "=== Service events / recent logs ==="
+          curl -s \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/events?limit=10" \
+            | python3 -m json.tool 2>/dev/null | head -80 || echo "(events not available)"
