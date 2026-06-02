@@ -111,7 +111,8 @@ def csrf_protect():
 app.jinja_env.globals["csrf_token"] = generate_csrf
 app.jinja_env.globals["enumerate"]  = enumerate
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "solar_web.db")
+DB_PATH = os.path.join(os.path.dirname(__file__), "data", "solar_web.db")
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 # ─── Phase 4 config ───────────────────────────────────────────────────────────
 
