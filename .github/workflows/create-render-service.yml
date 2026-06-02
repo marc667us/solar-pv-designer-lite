@@ -57,9 +57,11 @@ jobs:
               autoDeploy: "yes",
               serviceDetails: {
                 env: "python",
-                envSpecificDetails: { pythonVersion: "3.11.0" },
-                buildCommand: $build,
-                startCommand: $start,
+                envSpecificDetails: {
+                  pythonVersion: "3.11.0",
+                  buildCommand: $build,
+                  startCommand: $start
+                },
                 healthCheckPath: "/api/ping",
                 plan: "free",
                 region: "oregon",
