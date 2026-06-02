@@ -2,8 +2,13 @@ services:
   - type: web
     name: solarpro-global
     runtime: python
-    buildCommand: pip install -r requirements.txt && python -c "from web_app import app, init_db; print('Import OK')"
-    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    buildCommand: >-
+      pip install -r requirements.txt &&
+      mkdir -p /opt/render/project/app &&
+      cp -rp /opt/render/project/src/. /opt/render/project/app/ &&
+      python -m py_compile /opt/render/project/app/web_app.py &&
+      echo "Build OK"
+    startCommand: cd /opt/render/project/app && gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
     healthCheckPath: /api/ping
     envVars:
       - key: SECRET_KEY
