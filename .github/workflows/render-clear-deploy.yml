@@ -1,0 +1,49 @@
+# Force-deploy with clearCache: clear.
+# - The normal force-deploy uses do_not_clear, which can let stale build cache linger.
+# - This variant forces Render to rebuild from scratch and restart the container
+#   so env vars set via the API are picked up on the next live process start.
+# Inputs:  RENDER_API_KEY + RENDER_SERVICE_ID
+# Outputs: deploy id + final status after polling
+name: Render Deploy (Clear Cache)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger clear-cache deploy
+        env:
+          RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        # bash flags: -e exit on first error, -u unbound var = error, -o pipefail catch broken pipes
+        run: |
+          set -euo pipefail
+          # curl: -s silent, -o body to file, -w gives us the HTTP status code on stdout
+          HTTP=$(curl -s -o /tmp/d.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"clear"}' \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys")
+          echo "POST deploys -> HTTP $HTTP"
+          cat /tmp/d.json
+          echo
+          [ "$HTTP" = "201" ] || [ "$HTTP" = "200" ] || { echo "::error::Deploy trigger failed"; exit 1; }
+          # python3 -c reads stdin and prints the deploy id (JSON field "id")
+          DEPLOY_ID=$(cat /tmp/d.json | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+          echo "Deploy ID: $DEPLOY_ID"
+          # Poll every 30s for up to 12 minutes
+          for i in $(seq 1 24); do
+            sleep 30
+            STATUS=$(curl -s -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$DEPLOY_ID" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null)
+            echo "  [$i/24] $STATUS"
+            if [ "$STATUS" = "live" ]; then echo "Deploy LIVE"; exit 0; fi
+            if [ "$STATUS" = "build_failed" ] || [ "$STATUS" = "canceled" ] || [ "$STATUS" = "deactivated" ]; then
+              echo "::error::Deploy failed: $STATUS"; exit 1
+            fi
+          done
+          echo "::warning::Timed out"
