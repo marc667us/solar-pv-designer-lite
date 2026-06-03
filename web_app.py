@@ -10161,6 +10161,24 @@ def admin_ops_email_test():
     })
 
 
+
+@app.route("/admin/ops/email/env-keys")
+@admin_required
+def admin_ops_env_keys():
+    """Temporary: list env var keys the running process sees.
+    Inputs:  none (GET, admin only)
+    Output:  JSON {keys: [...], smtp_keys: {KEY: len(value), ...}}
+    """
+    import os
+    keys = sorted(os.environ.keys())
+    smtp_keys = {k: len(os.environ.get(k, "")) for k in keys
+                 if k.startswith(("SMTP_", "RESEND_", "EMAIL_", "PAYSTACK_", "OLLAMA_", "SECRET"))}
+    return jsonify({
+        "total_count": len(keys),
+        "all_keys": keys,
+        "interesting_keys_and_lengths": smtp_keys,
+    })
+
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=5000, debug=False)
