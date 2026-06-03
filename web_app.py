@@ -733,7 +733,7 @@ BATTERY_CHEMISTRY = {
 PANEL_SPEC = {
     "technology":   "Monocrystalline PERC",
     "temp_coeff":   -0.0035,          # %/Â°C power temperature coefficient
-    "standard_wp":  [400, 450, 500, 550],
+    "standard_wp":  [110, 250, 330, 400, 450, 500, 550],
     "default_wp":   400,
     "eff_pct":      "21—23%",
     "warranty_yr":  "12 yr product / 25 yr linear power",

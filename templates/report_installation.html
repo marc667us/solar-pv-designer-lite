@@ -477,7 +477,7 @@
         (90,"Panels per String", pps|string + " in series"),
         (115,"Number of Strings", num_strings|string + " parallel"),
         (140,"Total Array Size", r.pv_kw|fmt(2) + " kWp"),
-        (165,"Panel Rating", "400 Wp (TOPCon/PERC)"),
+        (165,"Panel Rating", (r.panel_wp|string if r.panel_wp else "400") + " Wp (TOPCon/PERC)"),
         (190,"String Voc (est.)", (pps*24)|string + " V (24V/panel)"),
         (215,"MPPT Voltage Range", "60–145 V (inverter spec)"),
         (240,"String Isc (est.)", "10–12 A typical"),
