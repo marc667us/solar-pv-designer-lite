@@ -35,7 +35,9 @@ jobs:
           NEW_VARS='[]'
           add() {
             local k="$1" v="$2"
-            [ -n "$v" ] && NEW_VARS=$(echo "$NEW_VARS" | jq --arg k "$k" --arg v "$v" '. + [{"key":$k,"value":$v}]')
+            if [ -n "$v" ]; then
+              NEW_VARS=$(echo "$NEW_VARS" | jq --arg k "$k" --arg v "$v" '. + [{"key":$k,"value":$v}]')
+            fi
           }
           add SECRET_KEY          "$SECRET_KEY"
           add PAYSTACK_SECRET_KEY "$PAYSTACK_SECRET_KEY"
