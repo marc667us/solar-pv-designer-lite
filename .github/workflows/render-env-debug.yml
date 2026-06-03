@@ -1,0 +1,43 @@
+# One-shot debug workflow: read Render's current env-var keys.
+# - workflow_dispatch lets us trigger manually from gh CLI
+# - No secrets are printed; only the KEY NAMES from Render are listed
+# Inputs:
+#   RENDER_API_KEY, RENDER_SERVICE_ID (from GitHub Secrets)
+# Output:
+#   Logged list of env var keys + raw shape of GET response
+name: Render Env Debug
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List Render env var keys
+        env:
+          RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        # bash flags:
+        #   -e fail on first error (so jq parse failures surface)
+        #   -u undefined vars are errors (catches typos)
+        #   -o pipefail any failed pipe segment fails the whole pipe
+        run: |
+          set -euo pipefail
+          # curl: -s silent, -o write body to file, -w print stdout (we want the HTTP code)
+          BODY=$(curl -s \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars")
+          # jq -r prints raw strings (no quotes). length gets array size.
+          echo "RAW LENGTH:"
+          echo "$BODY" | jq 'length'
+          echo
+          echo "RAW SHAPE (first element):"
+          echo "$BODY" | jq '.[0]'
+          echo
+          echo "KEY NAMES (parsed for both response shapes):"
+          # The Render API can return either:
+          #   [ {envVar:{key:K,value:V}}, ... ]   (wrapper shape)
+          #   [ {key:K, value:V}, ... ]           (flat shape)
+          # This jq tries the wrapper first, falls back to flat.
+          echo "$BODY" | jq -r 'if (.[0]? // {}) | has("envVar") then [.[].envVar.key] else [.[].key] end | .[]'
