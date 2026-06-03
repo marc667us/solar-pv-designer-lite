@@ -1,4 +1,4 @@
-"""WSGI entry point for Render / gunicorn."""
+"""WSGI entry point for Railway / gunicorn."""
 from dotenv import load_dotenv
 load_dotenv()
 from web_app import app, init_db

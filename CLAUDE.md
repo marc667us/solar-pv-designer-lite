@@ -9,10 +9,10 @@ Flask web SaaS for residential, commercial, and industrial solar PV design, fina
 
 - **Live URL**: https://solarpro.aiappinvent.com
 - **GitHub**: marc667us/solar-pv-designer-lite (branch: `master`)
-- **Render service**: `srv-d86gh237uimc73dib0f0`
+- **Hosting**: Railway (migrated from Render 2026-06-03) — connect repo at railway.app → New Project → Deploy from GitHub → marc667us/solar-pv-designer-lite
 - **Admin login**: `admin` / `SolarAdmin2026!` (enterprise plan)
 
-Everything lives in a **single file**: `web_app.py` (~494KB, ~10 000 lines). SQLite database (`solar.db` locally, `/opt/render/project/src/solar.db` on Render).
+Everything lives in a **single file**: `web_app.py` (~494KB, ~10 000 lines). SQLite database (`solar.db` locally, `/app/solar.db` on Railway). Set `DB_PATH` env var in Railway Variables to override.
 
 ---
 
@@ -30,7 +30,7 @@ python start.py
 python web_app.py
 ```
 
-**Render (production):**
+**Railway (production):**
 ```bash
 gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
 ```
@@ -233,7 +233,7 @@ Deployment probes use `/api/health`. Non-root uid 1000. topologySpreadConstraint
 ## CI/CD
 
 `.github/workflows/`:
-- `deploy.yml` — **Step 1**: Sync GitHub Secrets → Render env vars (PUT), **Step 2**: Trigger Render deploy (POST). ORDER MATTERS — sync before trigger.
+- `deploy.yml` — Railway auto-deploys on push to master (GitHub integration in Railway dashboard). No API trigger needed. Set env vars once in Railway dashboard → Variables tab.
 - `ci.yml` — flake8/black lint, pip-audit, Semgrep SAST, Trivy image scan, smoke test
 - `deploy-dev.yml` — push-to-dev → kustomize apply (needs K8s cluster secrets)
 - `deploy-production.yml` — semver tag → manual approval → deploy → rollback on fail
@@ -277,7 +277,7 @@ Sequential `if raw is None` blocks (NOT `elif`).
 ## Email Stack
 
 - `_send_email()` — tries Resend first, falls back to SMTP
-- **Render free tier blocks ALL outbound SMTP** (ports 465 and 587 both blocked)
+- **Railway does NOT block outbound SMTP** — SMTP should work once deployed on Railway
 - Resend: `RESEND_API_KEY` set in GitHub Secrets; domain `aiappinvent.com` **NOT yet verified** (needed for custom sender)
 - Can send from `onboarding@resend.dev` without domain verification
 - Fix: Go to resend.com/domains → add aiappinvent.com → copy SPF/DKIM → Namecheap Advanced DNS → verify
@@ -303,26 +303,26 @@ Ground mount shows STEEL POST / CONCRETE FOOTING / PURLIN BEAM / EARTH ROD hardw
 
 ---
 
-## GitHub Secrets Status (2026-06-02)
+## Railway Variables (set in Railway dashboard → Variables tab)
 
-| Secret | Status |
-|--------|--------|
-| `RENDER_API_KEY` | ✅ |
-| `RENDER_SERVICE_ID` | ✅ |
-| `ANTHROPIC_API_KEY` | ✅ |
-| `OPENROUTER_API_KEY` | ✅ |
-| `RESEND_API_KEY` | ✅ |
-| `OLLAMA_URL` | ✅ |
-| `OLLAMA_MODEL` | ✅ |
-| `SMTP_HOST` | ✅ (mail.privateemail.com) |
-| `SMTP_PORT` | ✅ (587) |
-| `SMTP_USER` | ✅ (support@aiappinvent.com) |
-| `SMTP_PASS` | ✅ |
-| `SMTP_FROM` | ✅ (sales@aiappinvent.com) |
-| `SMTP_TLS` | ✅ (true) |
-| `EMAIL_SALES` | ✅ |
-| `EMAIL_SUPPORT` | ✅ |
-| `EMAIL_BILLING` | ✅ |
+| Variable | Status |
+|----------|--------|
+| `ANTHROPIC_API_KEY` | copy from GitHub Secrets |
+| `OPENROUTER_API_KEY` | copy from GitHub Secrets |
+| `RESEND_API_KEY` | copy from GitHub Secrets |
+| `PAYSTACK_SECRET_KEY` | copy from GitHub Secrets |
+| `SECRET_KEY` | copy from GitHub Secrets |
+| `OLLAMA_URL` | copy from GitHub Secrets |
+| `OLLAMA_MODEL` | copy from GitHub Secrets |
+| `SMTP_HOST` | mail.privateemail.com |
+| `SMTP_PORT` | 587 |
+| `SMTP_USER` | support@aiappinvent.com |
+| `SMTP_PASS` | copy from GitHub Secrets |
+| `SMTP_FROM` | sales@aiappinvent.com |
+| `SMTP_TLS` | true |
+| `EMAIL_SALES` | sales@aiappinvent.com |
+| `EMAIL_SUPPORT` | support@aiappinvent.com |
+| `EMAIL_BILLING` | billing@aiappinvent.com |
 | `EMAIL_HELLO` | ❌ not set |
 | `EMAIL_PROPOSALS` | ❌ not set |
 
@@ -379,11 +379,14 @@ python test_admin_ops2.py
 
 ---
 
-## Known Issues (2026-06-02)
+## Migration to Railway (2026-06-03)
 
-1. **Render deploy stuck** — Multiple commits after `dbafed0` show GitHub Actions success but Render serves old code. Fix: Render dashboard → Deploy settings → verify Auto-Deploy is ON for `master`; manually trigger deploy.
-2. **Email send fails** — Render blocks outbound SMTP. Fix: verify `aiappinvent.com` on Resend (resend.com/domains → SPF/DKIM → Namecheap DNS).
-3. **Redis/Celery warn** — Expected on Render free tier. No fix needed until paid tier or K8s.
+1. **Railway setup needed** — Create project at railway.app → New Project → Deploy from GitHub → marc667us/solar-pv-designer-lite → branch: master
+2. **Set env vars** — Railway dashboard → your service → Variables → add all vars from the table above
+3. **Custom domain** — Railway dashboard → Settings → Domains → add `solarpro.aiappinvent.com`; update Namecheap CNAME to point to Railway public domain instead of `solarpro-global.onrender.com`
+4. **SMTP should work** — Railway does not block outbound SMTP; test email after deploy
+5. **Resend domain verify** — resend.com/domains → aiappinvent.com → SPF/DKIM → Namecheap DNS (still needed for custom sender)
+6. **Redis/Celery** — WARN on Railway hobby tier (no Redis/Celery). No fix needed until K8s.
 
 ---
 

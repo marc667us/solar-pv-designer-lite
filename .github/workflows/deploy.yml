@@ -1,148 +1,24 @@
-name: Deploy to Render
+name: Deploy to Railway
 
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Sync secrets to Render (skips empty values)
-        # IMPORTANT: sync env vars BEFORE triggering deploy so new container gets fresh vars
-        env:
-          RENDER_API_KEY:          ${{ secrets.RENDER_API_KEY }}
-          RENDER_SERVICE_ID:       ${{ secrets.RENDER_SERVICE_ID }}
-          ANTHROPIC_API_KEY:       ${{ secrets.ANTHROPIC_API_KEY }}
-          MISTRAL_API_KEY:         ${{ secrets.MISTRAL_API_KEY }}
-          OPENROUTER_API_KEY:      ${{ secrets.OPENROUTER_API_KEY }}
-          OLLAMA_URL:              ${{ secrets.OLLAMA_URL }}
-          OLLAMA_MODEL:            ${{ secrets.OLLAMA_MODEL }}
-          SECRET_KEY:              ${{ secrets.SECRET_KEY }}
-          PAYSTACK_SECRET_KEY:     ${{ secrets.PAYSTACK_SECRET_KEY }}
-          RESEND_API_KEY:          ${{ secrets.RESEND_API_KEY }}
-          EMAIL_SALES:             ${{ secrets.EMAIL_SALES }}
-          EMAIL_SUPPORT:           ${{ secrets.EMAIL_SUPPORT }}
-          EMAIL_BILLING:           ${{ secrets.EMAIL_BILLING }}
-          EMAIL_HELLO:             ${{ secrets.EMAIL_HELLO }}
-          EMAIL_PROPOSALS:         ${{ secrets.EMAIL_PROPOSALS }}
-          SMTP_HOST:               ${{ secrets.SMTP_HOST }}
-          SMTP_PORT:               ${{ secrets.SMTP_PORT }}
-          SMTP_USER:               ${{ secrets.SMTP_USER }}
-          SMTP_PASS:               ${{ secrets.SMTP_PASS }}
-          SMTP_FROM:               ${{ secrets.SMTP_FROM }}
-          SMTP_TLS:                ${{ secrets.SMTP_TLS }}
+      - name: Railway auto-deploy confirmed
         run: |
-          NEW_VARS='[]'
-          add() {
-            local key="$1" val="$2"
-            if [ -n "$val" ]; then
-              NEW_VARS=$(printf '%s' "$NEW_VARS" | \
-                jq --arg k "$key" --arg v "$val" '. + [{"key":$k,"value":$v}]')
-            fi
-          }
-          add ANTHROPIC_API_KEY  "$ANTHROPIC_API_KEY"
-          add MISTRAL_API_KEY    "$MISTRAL_API_KEY"
-          add OPENROUTER_API_KEY "$OPENROUTER_API_KEY"
-          add OLLAMA_URL         "$OLLAMA_URL"
-          add OLLAMA_MODEL       "$OLLAMA_MODEL"
-          add SECRET_KEY         "$SECRET_KEY"
-          add PAYSTACK_SECRET_KEY "$PAYSTACK_SECRET_KEY"
-          add RESEND_API_KEY     "$RESEND_API_KEY"
-          add EMAIL_SALES        "$EMAIL_SALES"
-          add EMAIL_SUPPORT      "$EMAIL_SUPPORT"
-          add EMAIL_BILLING      "$EMAIL_BILLING"
-          add EMAIL_HELLO        "$EMAIL_HELLO"
-          add EMAIL_PROPOSALS    "$EMAIL_PROPOSALS"
-          add SMTP_HOST          "$SMTP_HOST"
-          add SMTP_PORT          "$SMTP_PORT"
-          add SMTP_USER          "$SMTP_USER"
-          add SMTP_PASS          "$SMTP_PASS"
-          add SMTP_FROM          "$SMTP_FROM"
-          add SMTP_TLS           "$SMTP_TLS"
-
-          if [ "$NEW_VARS" = '[]' ]; then
-            echo "No GitHub Secrets configured — skipping env-var sync"
-            exit 0
-          fi
-
-          echo "Syncing $(echo "$NEW_VARS" | jq 'length') secret(s) to Render..."
-
-          # GET current vars — Render v1 returns array of objects with nested envVar
-          # Format: [{"cursor":"...", "envVar":{"key":"K","value":"V"}},...] OR flat [{key,value},...]
-          CURRENT_RAW=$(curl -s \
-            -H "Authorization: Bearer $RENDER_API_KEY" \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars")
-          echo "GET response (first 200): ${CURRENT_RAW:0:200}"
-
-          # Normalise both flat [{key,value}] and nested [{envVar:{key,value}}] formats
-          CURRENT_CLEAN=$(echo "$CURRENT_RAW" | \
-            jq 'if (.[0] | has("envVar")) then [.[].envVar | {key:.key,value:.value}]
-                else [.[] | {key:.key,value:.value}] end' 2>/dev/null || echo '[]')
-          echo "Parsed $(echo "$CURRENT_CLEAN" | jq 'length') existing vars"
-
-          # Merge: keep existing vars not in NEW_VARS, then append NEW_VARS
-          UPDATED=$(echo "$CURRENT_CLEAN" | jq \
-            --argjson new "$NEW_VARS" \
-            'map(select(.key as $k | ($new | map(.key) | index($k)) == null)) + $new')
-          echo "PUT payload has $(echo "$UPDATED" | jq 'length') vars total"
-
-          HTTP_STATUS=$(curl -s -o /tmp/render_put.txt -w "%{http_code}" -X PUT \
-            -H "Authorization: Bearer $RENDER_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$UPDATED" \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars")
-          echo "PUT status: $HTTP_STATUS"
-          cat /tmp/render_put.txt | head -c 300
-          if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "201" ]; then
-            echo "Env vars synced successfully."
-          else
-            echo "Env-var sync failed (non-fatal) — set vars manually in Render dashboard if needed"
-          fi
-
-      - name: Trigger Render deploy (after env vars are synced)
-        env:
-          RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
-          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-        run: |
-          set -euo pipefail
-
-          # Trigger deploy — do NOT clear cache (clearCache causes runtime crash with unpinned packages)
-          HTTP_CODE=$(curl -s -o /tmp/deploy_resp.json -w "%{http_code}" \
-            -X POST \
-            -H "Authorization: Bearer $RENDER_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d '{"clearCache":"do_not_clear"}' \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys")
-
-          echo "Render API response (HTTP $HTTP_CODE):"
-          cat /tmp/deploy_resp.json | jq . 2>/dev/null || cat /tmp/deploy_resp.json
-
-          if [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "200" ]; then
-            echo "::error::Deploy trigger failed (HTTP $HTTP_CODE) — check Render dashboard"
-            exit 1
-          fi
-
-          DEPLOY_ID=$(cat /tmp/deploy_resp.json | jq -r '.id // empty')
-          echo "Deploy queued: $DEPLOY_ID — monitor at https://dashboard.render.com/web/$RENDER_SERVICE_ID/deploys"
-
-          # Poll for up to 8 minutes (16 × 30s) — fail the workflow if build fails
-          if [ -n "$DEPLOY_ID" ]; then
-            echo "Polling deploy status..."
-            for i in $(seq 1 16); do
-              sleep 30
-              STATUS=$(curl -s \
-                -H "Authorization: Bearer $RENDER_API_KEY" \
-                "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$DEPLOY_ID" \
-                | jq -r '.status // "unknown"')
-              echo "  [$i/16] $STATUS"
-              if [ "$STATUS" = "live" ]; then
-                echo "Deploy is LIVE ✓"
-                exit 0
-              elif [ "$STATUS" = "deactivated" ] || [ "$STATUS" = "build_failed" ] || [ "$STATUS" = "canceled" ]; then
-                echo "::error::Deploy $DEPLOY_ID ended with status: $STATUS"
-                exit 1
-              fi
-            done
-            echo "::warning::Timed out waiting for deploy to go live — check Render dashboard"
-          fi
+          echo "Push to master — Railway deploys automatically via GitHub integration."
+          echo ""
+          echo "Monitor: https://railway.app/dashboard"
+          echo "Logs:    railway logs --tail  (Railway CLI + RAILWAY_TOKEN)"
+          echo ""
+          echo "Required env vars (set once in Railway dashboard → Variables tab):"
+          echo "  ANTHROPIC_API_KEY  OPENROUTER_API_KEY  RESEND_API_KEY"
+          echo "  PAYSTACK_SECRET_KEY  SECRET_KEY"
+          echo "  SMTP_HOST  SMTP_PORT  SMTP_USER  SMTP_PASS  SMTP_FROM  SMTP_TLS"
+          echo "  EMAIL_SALES  EMAIL_SUPPORT  EMAIL_BILLING"
+          echo "  OLLAMA_URL  OLLAMA_MODEL"

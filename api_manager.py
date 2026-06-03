@@ -30,13 +30,8 @@ logger = logging.getLogger("api_manager")
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _db_path():
-    """Return the path to solar.db — works both locally and on Render."""
-    env = os.environ.get("DB_PATH", "solar.db")
-    if not os.path.isabs(env):
-        render = "/opt/render/project/src/solar.db"
-        if os.path.exists("/opt/render"):
-            return render
-    return env
+    """Return the path to solar.db. Set DB_PATH env var to override."""
+    return os.environ.get("DB_PATH", "solar.db")
 
 
 def _now_str():
