@@ -35,9 +35,22 @@ jobs:
           echo "RAW SHAPE (first element):"
           echo "$BODY" | jq '.[0]'
           echo
-          echo "KEY NAMES (parsed for both response shapes):"
+          echo "KEY NAMES + VALUE LENGTHS (no values printed):"
+          # For each env var, print the key + the length of its value to detect empty strings.
           # The Render API can return either:
           #   [ {envVar:{key:K,value:V}}, ... ]   (wrapper shape)
           #   [ {key:K, value:V}, ... ]           (flat shape)
-          # This jq tries the wrapper first, falls back to flat.
-          echo "$BODY" | jq -r 'if (.[0]? // {}) | has("envVar") then [.[].envVar.key] else [.[].key] end | .[]'
+          # | "\(.key) len=\(.value|length)"  — string-interpolates key and value length
+          echo "$BODY" | jq -r '
+            if (.[0]? // {}) | has("envVar")
+              then [.[].envVar | "\(.key) len=\(.value|length)"]
+              else [.[]       | "\(.key) len=\(.value|length)"]
+            end | .[]'
+
+          echo
+          echo "VALUE FINGERPRINT (first 3 chars + length, only for SMTP_HOST/SMTP_USER/RESEND_API_KEY/SECRET_KEY):"
+          # quick non-secret-leaking fingerprint to verify the stored value isn't garbage
+          echo "$BODY" | jq -r '
+            if (.[0]? // {}) | has("envVar") then [.[].envVar] else [.[]] end
+            | map(select(.key == "SMTP_HOST" or .key == "SMTP_USER" or .key == "RESEND_API_KEY" or .key == "SECRET_KEY"))
+            | .[] | "\(.key): first3=\(.value[0:3]) length=\(.value|length)"'
