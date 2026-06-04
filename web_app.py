@@ -9266,8 +9266,8 @@ def admin_feedback_update():
 import time as _time
 
 
-@limiter.exempt
 @app.route("/api/health")
+@limiter.exempt
 def api_health():
     """Primary health check used by K8s readiness/liveness probes."""
     t0 = _time.time()
@@ -9303,8 +9303,8 @@ def api_health():
     return jsonify(payload), (200 if db_ok else 503)
 
 
-@limiter.exempt
 @app.route("/api/health/database")
+@limiter.exempt
 def api_health_database():
     """Database health check with query latency."""
     t0 = _time.time()
@@ -9324,8 +9324,8 @@ def api_health_database():
                         "timestamp": datetime.utcnow().isoformat() + "Z"}), 503
 
 
-@limiter.exempt
 @app.route("/api/health/redis")
+@limiter.exempt
 def api_health_redis():
     """Redis health check."""
     redis_url = os.environ.get("REDIS_URL", "")
@@ -9349,8 +9349,8 @@ def api_health_redis():
                         "timestamp": datetime.utcnow().isoformat() + "Z"}), 503
 
 
-@limiter.exempt
 @app.route("/api/health/queue")
+@limiter.exempt
 def api_health_queue():
     """Celery queue health (checks Redis queue lengths)."""
     redis_url = os.environ.get("REDIS_URL", "")
@@ -9371,8 +9371,8 @@ def api_health_queue():
                         "timestamp": datetime.utcnow().isoformat() + "Z"}), 503
 
 
-@limiter.exempt
 @app.route("/api/health/storage")
+@limiter.exempt
 def api_health_storage():
     """File storage health check."""
     try:
@@ -9388,8 +9388,8 @@ def api_health_storage():
                         "timestamp": datetime.utcnow().isoformat() + "Z"}), 503
 
 
-@limiter.exempt
 @app.route("/api/health/ai")
+@limiter.exempt
 def api_health_ai():
     """AI service configuration health check."""
     services = {
@@ -9406,15 +9406,15 @@ def api_health_ai():
     }), 200
 
 
-@limiter.exempt
 @app.route("/api/ping")
+@limiter.exempt
 def api_ping():
     """Minimal ping endpoint for Uptime Kuma / load balancer."""
     return jsonify({"pong": True, "timestamp": datetime.utcnow().isoformat() + "Z"}), 200
 
 
-@limiter.exempt
 @app.route("/metrics")
+@limiter.exempt
 def prometheus_metrics():
     """Prometheus metrics endpoint."""
     try:
