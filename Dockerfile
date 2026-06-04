@@ -42,7 +42,7 @@ COPY calculation/ ./calculation/
 COPY config/ ./config/
 COPY templates/ ./templates/
 COPY static/ ./static/
-COPY logging_config/ ./logging_config/ 2>/dev/null || true
+COPY logging_config/ ./logging_config/
 
 # Create log directories (owned by app user)
 RUN mkdir -p /app/logs/backend /app/logs/audit /app/logs/security && \
