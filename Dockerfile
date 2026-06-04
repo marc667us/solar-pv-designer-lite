@@ -37,7 +37,9 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 
 # Copy application code
-COPY web_app.py wsgi.py ./
+# web_app.py imports from api_manager; missing it caused
+# "ModuleNotFoundError: No module named 'api_manager'" on Railway.
+COPY web_app.py wsgi.py api_manager.py ./
 COPY calculation/ ./calculation/
 COPY config/ ./config/
 COPY templates/ ./templates/
