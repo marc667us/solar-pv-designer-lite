@@ -9266,6 +9266,7 @@ def admin_feedback_update():
 import time as _time
 
 
+@limiter.exempt
 @app.route("/api/health")
 def api_health():
     """Primary health check used by K8s readiness/liveness probes."""
@@ -9302,6 +9303,7 @@ def api_health():
     return jsonify(payload), (200 if db_ok else 503)
 
 
+@limiter.exempt
 @app.route("/api/health/database")
 def api_health_database():
     """Database health check with query latency."""
@@ -9322,6 +9324,7 @@ def api_health_database():
                         "timestamp": datetime.utcnow().isoformat() + "Z"}), 503
 
 
+@limiter.exempt
 @app.route("/api/health/redis")
 def api_health_redis():
     """Redis health check."""
@@ -9346,6 +9349,7 @@ def api_health_redis():
                         "timestamp": datetime.utcnow().isoformat() + "Z"}), 503
 
 
+@limiter.exempt
 @app.route("/api/health/queue")
 def api_health_queue():
     """Celery queue health (checks Redis queue lengths)."""
@@ -9367,6 +9371,7 @@ def api_health_queue():
                         "timestamp": datetime.utcnow().isoformat() + "Z"}), 503
 
 
+@limiter.exempt
 @app.route("/api/health/storage")
 def api_health_storage():
     """File storage health check."""
@@ -9383,6 +9388,7 @@ def api_health_storage():
                         "timestamp": datetime.utcnow().isoformat() + "Z"}), 503
 
 
+@limiter.exempt
 @app.route("/api/health/ai")
 def api_health_ai():
     """AI service configuration health check."""
@@ -9400,12 +9406,14 @@ def api_health_ai():
     }), 200
 
 
+@limiter.exempt
 @app.route("/api/ping")
 def api_ping():
     """Minimal ping endpoint for Uptime Kuma / load balancer."""
     return jsonify({"pong": True, "timestamp": datetime.utcnow().isoformat() + "Z"}), 200
 
 
+@limiter.exempt
 @app.route("/metrics")
 def prometheus_metrics():
     """Prometheus metrics endpoint."""
