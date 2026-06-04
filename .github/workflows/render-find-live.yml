@@ -1,0 +1,29 @@
+# Find which deploy is currently the "live" one (serving traffic).
+# Render keeps the previous "live" deploy alive when newer deploys fail at runtime,
+# so just looking at the most-recent deploy doesn't tell us what users are seeing.
+name: Render Find Live Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Walk recent deploys and print status/commit pairs
+        env:
+          RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          set -euo pipefail
+          # Show last 20 deploys with their commit prefix + status, oldest last
+          echo "=== last 20 deploys (newest first) ==="
+          curl -s -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?limit=20" \
+            | jq -r '.[] | .deploy | "\(.createdAt[0:19])  \(.status|tostring)\t\(.commit.id[0:8])  \(.commit.message[0:60])"'
+          echo
+          # The currently-live deploy is the most recent with status="live"
+          echo "=== Most recent deploy with status=live ==="
+          curl -s -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?limit=20" \
+            | jq -r 'first(.[] | .deploy | select(.status == "live")) | "\(.createdAt) commit=\(.commit.id) msg=\(.commit.message[0:80])"'
