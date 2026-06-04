@@ -9571,19 +9571,73 @@ def admin_ops_backup_download():
 @app.route("/admin/ops/security/audit", methods=["POST"])
 @admin_required
 def admin_ops_security_audit():
-    """Run a quick security audit check."""
-    results = {}
-    with get_db() as c:
-        results["total_users"] = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        results["admin_users"] = c.execute("SELECT COUNT(*) FROM users WHERE is_admin=1").fetchone()[0]
-        results["disabled_accounts"] = c.execute("SELECT COUNT(*) FROM users WHERE plan='disabled'").fetchone()[0]
-        results["recent_payments"] = c.execute("SELECT COUNT(*) FROM payments WHERE status='success'").fetchone()[0]
-    results["secret_key_set"] = bool(os.environ.get("SECRET_KEY"))
-    results["anthropic_key_set"] = bool(os.environ.get("ANTHROPIC_API_KEY"))
-    results["paystack_key_set"] = bool(os.environ.get("PAYSTACK_SECRET_KEY"))
-    results["resend_key_set"] = bool(os.environ.get("RESEND_API_KEY"))
-    results["status"] = "pass"
-    log_audit(action="security_audit_run", user_id=session.get("user_id"), status="success")
+    """
+    Quick security audit endpoint for the Admin Ops Center.
+
+    Inputs:
+      _csrf form field (validated by csrf_protect)
+      Admin login cookie
+
+    Output:
+      JSON with user counts, admin counts, presence flags for SECRET_KEY,
+      Paystack/AI/Brevo/Axigen API keys, plus an overall status field.
+
+    Why the defensive wrapping:
+      Earlier intermittent "Response ended prematurely" failures during the
+      session audit were caused by worker churn on a free-tier host returning
+      a half-written response. Each section below is now individually try/except
+      wrapped so a partial failure still returns a complete JSON document and
+      never leaves the connection mid-response.
+
+    Syntax notes:
+      _table_exists is a project helper that PRAGMA-checks for a table name
+      so a missing 'payments' table on a fresh DB doesn't raise OperationalError
+    """
+    # CSRF was missing — POST endpoints in this project all call csrf_protect()
+    csrf_protect()
+    results = {"status": "pass"}
+
+    # User-table counts. Wrap each query so one failure doesn't abort the rest.
+    try:
+        with get_db() as c:
+            results["total_users"] = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            results["admin_users"] = c.execute("SELECT COUNT(*) FROM users WHERE is_admin=1").fetchone()[0]
+            results["disabled_accounts"] = c.execute("SELECT COUNT(*) FROM users WHERE plan='disabled'").fetchone()[0]
+            # payments may not exist on a fresh-DB deploy — degrade to 0 instead of crashing
+            if _table_exists(c, "payments"):
+                results["recent_payments"] = c.execute(
+                    "SELECT COUNT(*) FROM payments WHERE status='success'"
+                ).fetchone()[0]
+            else:
+                results["recent_payments"] = 0
+    except Exception as e:
+        # Surface the failure in the JSON instead of returning a 500 HTML page
+        results["status"] = "warning"
+        results["db_error"] = str(e)[:120]
+
+    # Env-var presence checks. bool(...) collapses a missing or empty string to False
+    # so no value (and therefore no secret) is ever leaked. Read via os.environ.get
+    # then strip BOM/whitespace via _env_clean so an injected BOM never marks a real
+    # key as 'unset' or vice-versa.
+    results["secret_key_set"]   = bool(_env_clean("SECRET_KEY"))
+    results["anthropic_key_set"]= bool(_env_clean("ANTHROPIC_API_KEY"))
+    results["paystack_key_set"] = bool(_env_clean("PAYSTACK_SECRET_KEY"))
+    # Resend keys must start with 're_' to be valid; treat anything else as unset
+    _rk = _env_clean("RESEND_API_KEY")
+    results["resend_key_set"]   = bool(_rk and _rk.startswith("re_"))
+    # New providers wired in this session
+    results["brevo_key_set"]    = bool(_env_clean("BREVO_API_KEY"))
+    results["axigen_configured"]= bool(_env_clean("AXIGEN_SERVER_URL")
+                                       and _env_clean("AXIGEN_USER")
+                                       and _env_clean("AXIGEN_PASSWORD"))
+
+    # Audit-log the run; do not let a logging failure prevent the response
+    try:
+        log_audit(action="security_audit_run",
+                  user_id=session.get("user_id"),
+                  status=results.get("status", "pass"))
+    except Exception:
+        pass
     return jsonify(results)
 
 
