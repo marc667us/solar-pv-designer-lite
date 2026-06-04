@@ -340,6 +340,13 @@ class _EmailClient:
         self.smtp_pass   = _env("SMTP_PASS")
         self.smtp_from   = _env("SMTP_FROM", "support@aiappinvent.com")
         self.smtp_tls    = _env("SMTP_TLS", "false").lower() in ("1", "true", "yes")
+        # Axigen mailbox REST API. Provides HTTPS-based send so it works
+        # through Render's outbound-SMTP block. AXIGEN_SERVER_URL must be the
+        # full https URL of an Axigen mail server (self-hosted or hosted).
+        # Example: https://mail.example.com/api/v1
+        self.axigen_url  = _env("AXIGEN_SERVER_URL")
+        self.axigen_user = _env("AXIGEN_USER")
+        self.axigen_pass = _env("AXIGEN_PASSWORD")
         self.addr_sales    = _env("EMAIL_SALES",    "sales@aiappinvent.com")
         self.addr_support  = _env("EMAIL_SUPPORT",  "support@aiappinvent.com")
         self.addr_billing  = _env("EMAIL_BILLING",  "billing@aiappinvent.com")
@@ -349,17 +356,84 @@ class _EmailClient:
     def reload(self):
         self._load()
 
+    def _send_axigen(self, _from, _to, subject, html_body, text_body):
+        """
+        Send an email through Axigen's Mailbox REST API.
+
+        Inputs:
+          _from      sender address string (must be a mailbox on the Axigen server)
+          _to        list of recipient address strings
+          subject    email subject text
+          html_body  HTML body string
+          text_body  plain-text body string or None
+        Output:
+          (True, "sent") on HTTP 200/201, else (False, "<error detail>")
+        Syntax notes:
+          - requests.post(..., auth=(u,p)) sends an HTTP Basic Authorization header
+          - timeout=15 prevents hanging if Axigen server is unreachable
+          - We POST to {AXIGEN_SERVER_URL}/mails/send per Axigen Mailbox REST API
+        """
+        import requests
+        if not (self.axigen_url and self.axigen_user and self.axigen_pass):
+            return False, "axigen not configured"
+        url = self.axigen_url.rstrip("/") + "/mails/send"
+        # Axigen accepts a JSON body with from/to/subject/bodyText/bodyHtml
+        # (mirrors the field schema documented on axigen.com)
+        payload = {
+            "from":     _from,
+            "to":       ", ".join(_to),
+            "subject":  subject,
+            "bodyHtml": html_body,
+        }
+        if text_body:
+            payload["bodyText"] = text_body
+        try:
+            r = requests.post(url, json=payload,
+                              auth=(self.axigen_user, self.axigen_pass),
+                              timeout=15)
+            if r.status_code in (200, 201, 202):
+                return True, "sent"
+            return False, f"HTTP {r.status_code}: {r.text[:200]}"
+        except Exception as e:
+            return False, str(e)
+
     def send(self, to_addr, subject, html_body, text_body=None, from_addr=None,
              resend_key_override=None):
         """
         Send an email. Returns (ok: bool, message: str).
-        Tries Resend first, falls back to SMTP automatically.
+
+        Order tried: Axigen (HTTPS, primary) -> Resend (HTTPS) -> SMTP (blocked on Render free tier).
+        The first provider that accepts the message wins; we never double-send.
+
+        Inputs:
+          to_addr               string or list of recipient addresses
+          subject               subject line
+          html_body             HTML content
+          text_body             optional plain-text fallback
+          from_addr             optional override for sender
+          resend_key_override   optional Resend key for one-off testing
+        Output:
+          (True, "sent") if any provider accepts, else (False, "<combined error>")
+        Syntax notes:
+          - time.time() captures ms latency we log into the api_call_log table
+          - isinstance(..., str) detects single-recipient form and wraps it as a list
         """
         _from = from_addr or self.addr_support or self.smtp_from
         _to   = [to_addr] if isinstance(to_addr, str) else list(to_addr)
         _key  = resend_key_override or self.resend_key
         t     = time.time()
 
+        # 1) Axigen primary — only attempts the call if AXIGEN_SERVER_URL is set,
+        #    so absence of config silently falls through to next provider.
+        if self.axigen_url:
+            ok, msg = self._send_axigen(_from, _to, subject, html_body, text_body)
+            if ok:
+                self._s.log("axigen", "send", "ok", (time.time()-t)*1000)
+                return True, "sent"
+            self._s.log("axigen", "send", "error", (time.time()-t)*1000, msg)
+            logger.warning("axigen failed: %s", msg)
+
+        # 2) Resend fallback — uses the Resend Python SDK over HTTPS
         if _key:
             try:
                 import resend as _r
@@ -374,8 +448,9 @@ class _EmailClient:
                 self._s.log("resend", "send", "error", (time.time()-t)*1000, str(e))
                 logger.warning("resend failed: %s", e)
 
+        # 3) SMTP last resort — blocked by Render's free tier, but works locally
         if not self.smtp_host or not self.smtp_user:
-            return False, "Email not configured — set RESEND_API_KEY or SMTP credentials."
+            return False, "Email not configured — set AXIGEN_SERVER_URL+USER+PASSWORD, RESEND_API_KEY, or SMTP credentials."
 
         try:
             import smtplib

@@ -10055,16 +10055,25 @@ def admin_ops_email_status():
         _apim.email._load()
     except Exception:
         pass
-    host  = os.environ.get("SMTP_HOST",  "")
-    port  = os.environ.get("SMTP_PORT",  "")
-    user  = os.environ.get("SMTP_USER",  "")
-    smtp_pass = os.environ.get("SMTP_PASS", "")
-    frm   = os.environ.get("SMTP_FROM",  "")
-    tls   = os.environ.get("SMTP_TLS",   "")
-    resend = os.environ.get("RESEND_API_KEY", "")
+    # All env reads go through _env_clean so a stray BOM doesn't poison comparisons
+    host      = _env_clean("SMTP_HOST")
+    port      = _env_clean("SMTP_PORT")
+    user      = _env_clean("SMTP_USER")
+    smtp_pass = _env_clean("SMTP_PASS")
+    frm       = _env_clean("SMTP_FROM")
+    tls       = _env_clean("SMTP_TLS")
+    resend    = _env_clean("RESEND_API_KEY")
+    ax_url    = _env_clean("AXIGEN_SERVER_URL")
+    ax_user   = _env_clean("AXIGEN_USER")
+    ax_pass   = _env_clean("AXIGEN_PASSWORD")
     return jsonify({
         "status": "ok",
-        "resend_configured": bool(resend and not resend.startswith("re_...")),
+        # Axigen is now the primary provider (Resend's key is invalid)
+        "axigen_configured": bool(ax_url and ax_user and ax_pass),
+        "axigen_url":  ax_url  or "(not set)",
+        "axigen_user": ax_user or "(not set)",
+        "axigen_pass": ("*" * 8) if ax_pass else "(not set)",
+        "resend_configured": bool(resend and resend.startswith("re_")),
         "resend_key_prefix": resend[:8] + "..." if resend else "(not set)",
         "smtp_configured": bool(host and user and smtp_pass),
         "smtp_host": host or "(not set)",
@@ -10107,6 +10116,35 @@ def admin_ops_email_test():
             "<small style='color:#6868a0'>solarpro.aiappinvent.com</small></div>")
     subject = "SolarPro Admin - Email Test"
     diagnostics = []
+
+    # --- Try Axigen first (HTTPS, primary, works through Render firewall) ---
+    # AXIGEN_SERVER_URL must include the API base, e.g. https://mail.example.com/api/v1
+    # AXIGEN_USER / AXIGEN_PASSWORD are the mailbox credentials on that server
+    ax_url  = _env_clean("AXIGEN_SERVER_URL")
+    ax_user = _env_clean("AXIGEN_USER")
+    ax_pass = _env_clean("AXIGEN_PASSWORD")
+    if ax_url and ax_user and ax_pass:
+        try:
+            import requests as _rq
+            # POST a single mail; auth tuple sends an HTTP Basic header
+            r_ax = _rq.post(
+                ax_url.rstrip("/") + "/mails/send",
+                json={"from": ax_user, "to": admin_email,
+                      "subject": subject, "bodyHtml": html},
+                auth=(ax_user, ax_pass), timeout=15)
+            if r_ax.status_code in (200, 201, 202):
+                diagnostics.append({"provider": "axigen", "status": "ok", "http": r_ax.status_code})
+                return jsonify({"status": "ok", "sent_to": admin_email,
+                               "provider": "axigen", "diagnostics": diagnostics,
+                               "message": "Test email sent via Axigen to " + admin_email})
+            diagnostics.append({"provider": "axigen", "status": "error",
+                                "http": r_ax.status_code,
+                                "detail": r_ax.text[:120]})
+        except Exception as e:
+            diagnostics.append({"provider": "axigen", "status": "error", "detail": str(e)[:120]})
+    else:
+        diagnostics.append({"provider": "axigen", "status": "skipped",
+                            "detail": "AXIGEN_SERVER_URL/USER/PASSWORD not configured"})
 
     # --- Try Resend first (HTTPS, works through Render firewall) ---
     resend_key = os.environ.get("RESEND_API_KEY", "")

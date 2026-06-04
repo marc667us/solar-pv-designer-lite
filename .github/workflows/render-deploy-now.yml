@@ -28,6 +28,9 @@ jobs:
           EMAIL_SALES:          ${{ secrets.EMAIL_SALES }}
           EMAIL_SUPPORT:        ${{ secrets.EMAIL_SUPPORT }}
           EMAIL_BILLING:        ${{ secrets.EMAIL_BILLING }}
+          AXIGEN_SERVER_URL:    ${{ secrets.AXIGEN_SERVER_URL }}
+          AXIGEN_USER:          ${{ secrets.AXIGEN_USER }}
+          AXIGEN_PASSWORD:      ${{ secrets.AXIGEN_PASSWORD }}
         run: |
           set -euo pipefail
 
@@ -56,6 +59,9 @@ jobs:
           add EMAIL_SALES         "$EMAIL_SALES"
           add EMAIL_SUPPORT       "$EMAIL_SUPPORT"
           add EMAIL_BILLING       "$EMAIL_BILLING"
+          add AXIGEN_SERVER_URL   "$AXIGEN_SERVER_URL"
+          add AXIGEN_USER         "$AXIGEN_USER"
+          add AXIGEN_PASSWORD     "$AXIGEN_PASSWORD"
 
           echo "Syncing $(echo "$NEW_VARS" | jq 'length') vars to Render service $RENDER_SERVICE_ID..."
 
