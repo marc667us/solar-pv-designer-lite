@@ -1,0 +1,133 @@
+# Sync env vars from GitHub Secrets to Railway, then trigger a Railway deploy.
+# - Uses Railway's GraphQL API directly with the project-scoped RAILWAY_TOKEN
+# - variableUpsert pushes one env var at a time; idempotent (overwrites existing)
+# - serviceInstanceRedeploy at the end pulls the latest source from the last upload
+#
+# Inputs (GitHub Secrets):
+#   RAILWAY_TOKEN  - project-scoped token (Project-Access-Token header)
+#   plus all the app secrets we want pushed to Railway
+#
+# Constants (not secret):
+#   PROJECT_ID = 310ad3cf-0b42-4959-995c-213ed4e81463   (amusing-art)
+#   ENV_ID     = 7ed9b8ad-6e37-4355-ac7d-ffa7fbb34798   (production)
+#   SERVICE_ID = b9889adc-2c77-46d3-9bb9-16738b9676e4   (web)
+name: Railway Sync and Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      RAILWAY_TOKEN:    ${{ secrets.RAILWAY_TOKEN }}
+      PROJECT_ID:       310ad3cf-0b42-4959-995c-213ed4e81463
+      ENVIRONMENT_ID:   7ed9b8ad-6e37-4355-ac7d-ffa7fbb34798
+      SERVICE_ID:       b9889adc-2c77-46d3-9bb9-16738b9676e4
+      # All the variables to push. Empty values are skipped.
+      SECRET_KEY:           ${{ secrets.SECRET_KEY }}
+      PAYSTACK_SECRET_KEY:  ${{ secrets.PAYSTACK_SECRET_KEY }}
+      PAYSTACK_PUBLIC_KEY:  ${{ secrets.PAYSTACK_PUBLIC_KEY }}
+      ANTHROPIC_API_KEY:    ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENROUTER_API_KEY:   ${{ secrets.OPENROUTER_API_KEY }}
+      RESEND_API_KEY:       ${{ secrets.RESEND_API_KEY }}
+      OLLAMA_URL:           ${{ secrets.OLLAMA_URL }}
+      OLLAMA_MODEL:         ${{ secrets.OLLAMA_MODEL }}
+      SMTP_HOST:            ${{ secrets.SMTP_HOST }}
+      SMTP_PORT:            ${{ secrets.SMTP_PORT }}
+      SMTP_USER:            ${{ secrets.SMTP_USER }}
+      SMTP_PASS:            ${{ secrets.SMTP_PASS }}
+      SMTP_FROM:            ${{ secrets.SMTP_FROM }}
+      SMTP_TLS:             ${{ secrets.SMTP_TLS }}
+      EMAIL_SALES:          ${{ secrets.EMAIL_SALES }}
+      EMAIL_SUPPORT:        ${{ secrets.EMAIL_SUPPORT }}
+      EMAIL_BILLING:        ${{ secrets.EMAIL_BILLING }}
+      AXIGEN_SERVER_URL:    ${{ secrets.AXIGEN_SERVER_URL }}
+      AXIGEN_USER:          ${{ secrets.AXIGEN_USER }}
+      AXIGEN_PASSWORD:      ${{ secrets.AXIGEN_PASSWORD }}
+    steps:
+      - name: Upsert variables to Railway
+        # Bash flags:  -e fail-fast, -u undefined vars are errors, -o pipefail catch broken pipes
+        run: |
+          set -euo pipefail
+
+          # Helper: variableUpsert one env var on the target service.
+          # Args: $1 = var name, $2 = value (empty -> skip)
+          # Uses jq -nc to safely JSON-encode the value (handles quotes, newlines, etc.)
+          upsert() {
+            local name="$1" value="$2"
+            if [ -z "$value" ]; then
+              echo "  skip $name (empty)"
+              return
+            fi
+            # Build the JSON body with jq so the value is safely escaped
+            local body
+            body=$(jq -nc \
+              --arg n "$name" --arg v "$value" \
+              --arg p "$PROJECT_ID" --arg e "$ENVIRONMENT_ID" --arg s "$SERVICE_ID" \
+              '{query:"mutation($i: VariableUpsertInput!){ variableUpsert(input: $i) }",
+                variables:{i:{name:$n,value:$v,projectId:$p,environmentId:$e,serviceId:$s}}}')
+            # POST to Railway GraphQL
+            local resp
+            resp=$(curl -sS -X POST https://backboard.railway.com/graphql/v2 \
+              -H "Project-Access-Token: $RAILWAY_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$body")
+            # If the response has "errors", echo and bail
+            if echo "$resp" | jq -e '.errors' >/dev/null; then
+              echo "  FAIL $name: $resp"
+              return 1
+            fi
+            echo "  ok   $name"
+          }
+
+          # Push every secret we care about
+          upsert SECRET_KEY          "$SECRET_KEY"
+          upsert PAYSTACK_SECRET_KEY "$PAYSTACK_SECRET_KEY"
+          upsert PAYSTACK_PUBLIC_KEY "$PAYSTACK_PUBLIC_KEY"
+          upsert ANTHROPIC_API_KEY   "$ANTHROPIC_API_KEY"
+          upsert OPENROUTER_API_KEY  "$OPENROUTER_API_KEY"
+          upsert RESEND_API_KEY      "$RESEND_API_KEY"
+          upsert OLLAMA_URL          "$OLLAMA_URL"
+          upsert OLLAMA_MODEL        "$OLLAMA_MODEL"
+          upsert SMTP_HOST           "$SMTP_HOST"
+          upsert SMTP_PORT           "$SMTP_PORT"
+          upsert SMTP_USER           "$SMTP_USER"
+          upsert SMTP_PASS           "$SMTP_PASS"
+          upsert SMTP_FROM           "$SMTP_FROM"
+          upsert SMTP_TLS            "$SMTP_TLS"
+          upsert EMAIL_SALES         "$EMAIL_SALES"
+          upsert EMAIL_SUPPORT       "$EMAIL_SUPPORT"
+          upsert EMAIL_BILLING       "$EMAIL_BILLING"
+          upsert AXIGEN_SERVER_URL   "$AXIGEN_SERVER_URL"
+          upsert AXIGEN_USER         "$AXIGEN_USER"
+          upsert AXIGEN_PASSWORD     "$AXIGEN_PASSWORD"
+          # DB_PATH is set so SQLite lives in the Railway-mounted volume root
+          upsert DB_PATH             "/app/solar.db"
+
+      - name: Trigger Railway redeploy
+        run: |
+          set -euo pipefail
+          # Pick the latest deployment for the service and redeploy it.
+          # serviceInstanceRedeploy needs the deploymentId (we look it up first).
+          DEP_BODY=$(jq -nc \
+            --arg p "$PROJECT_ID" --arg s "$SERVICE_ID" \
+            '{query:"query($p:String!,$s:String!){ deployments(first:1, input:{projectId:$p,serviceId:$s}){ edges{ node{ id status } } } }",
+              variables:{p:$p,s:$s}}')
+          DEP_RESP=$(curl -sS -X POST https://backboard.railway.com/graphql/v2 \
+            -H "Project-Access-Token: $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$DEP_BODY")
+          DEP_ID=$(echo "$DEP_RESP" | jq -r '.data.deployments.edges[0].node.id // empty')
+          if [ -z "$DEP_ID" ]; then
+            echo "No prior deployment found — run 'railway up' once first."
+            exit 0
+          fi
+          echo "Redeploying deployment $DEP_ID..."
+          REDEPLOY_BODY=$(jq -nc --arg d "$DEP_ID" \
+            '{query:"mutation($d:String!){ deploymentRedeploy(id:$d){ id status } }",
+              variables:{d:$d}}')
+          curl -sS -X POST https://backboard.railway.com/graphql/v2 \
+            -H "Project-Access-Token: $RAILWAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$REDEPLOY_BODY" | jq .
