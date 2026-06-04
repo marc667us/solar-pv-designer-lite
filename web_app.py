@@ -132,12 +132,19 @@ PAYSTACK_PUBLIC  = os.environ.get("PAYSTACK_PUBLIC_KEY", "")
 DEMO_MODE   = os.environ.get("DEMO_MODE", "true").lower() in ("1", "true", "yes")
 DEMO_DAYS   = int(os.environ.get("DEMO_DAYS", "14"))
 
+# Strip BOM/whitespace from env vars (GitHub Secrets occasionally store
+# values with a UTF-8 BOM prefix which crashes int() at module import).
+# Inputs:  name (env var), default (string)
+# Output:  cleaned string with BOM + surrounding whitespace removed
+def _env_clean(name, default=""):
+    return os.environ.get(name, default).lstrip("\ufeff").strip()
+
 SMTP_HOST   = os.environ.get("SMTP_HOST", "")
-SMTP_PORT   = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_PORT   = int(_env_clean("SMTP_PORT", "587") or "587")
 SMTP_USER   = os.environ.get("SMTP_USER", "")
 SMTP_PASS   = os.environ.get("SMTP_PASS", "")
 SMTP_FROM      = os.environ.get("SMTP_FROM",      "support@aiappinvent.com")
-SMTP_TLS       = os.environ.get("SMTP_TLS",       "false").lower() in ("1", "true", "yes")  # false=SSL/465, true=STARTTLS/587
+SMTP_TLS       = _env_clean("SMTP_TLS", "false").lower() in ("1", "true", "yes")  # false=SSL/465, true=STARTTLS/587
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 
 # Dedicated per-purpose sender addresses (3 Namecheap mailboxes)
@@ -10124,7 +10131,7 @@ def admin_ops_email_test():
 
     # --- Try SMTP (port from env - use 587 STARTTLS on Render) ---
     smtp_host = os.environ.get("SMTP_HOST", "")
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_port = int(_env_clean("SMTP_PORT", "587") or "587")
     smtp_user = os.environ.get("SMTP_USER", "")
     smtp_pass = os.environ.get("SMTP_PASS", "")
     smtp_tls  = os.environ.get("SMTP_TLS", "true").lower() in ("1", "true", "yes")

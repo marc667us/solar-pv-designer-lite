@@ -325,18 +325,26 @@ class _EmailClient:
         self._load()
 
     def _load(self):
-        self.resend_key  = os.environ.get("RESEND_API_KEY",  "")
-        self.smtp_host   = os.environ.get("SMTP_HOST",       "")
-        self.smtp_port   = int(os.environ.get("SMTP_PORT",   "465"))
-        self.smtp_user   = os.environ.get("SMTP_USER",       "")
-        self.smtp_pass   = os.environ.get("SMTP_PASS",       "")
-        self.smtp_from   = os.environ.get("SMTP_FROM",       "support@aiappinvent.com")
-        self.smtp_tls    = os.environ.get("SMTP_TLS", "false").lower() in ("1","true","yes")
-        self.addr_sales    = os.environ.get("EMAIL_SALES",    "sales@aiappinvent.com")
-        self.addr_support  = os.environ.get("EMAIL_SUPPORT",  "support@aiappinvent.com")
-        self.addr_billing  = os.environ.get("EMAIL_BILLING",  "billing@aiappinvent.com")
-        self.addr_hello    = os.environ.get("EMAIL_HELLO",    "sales@aiappinvent.com")
-        self.addr_proposals= os.environ.get("EMAIL_PROPOSALS","sales@aiappinvent.com")
+        # Helper: read env var and strip BOM + surrounding whitespace.
+        # Why: some GitHub Secrets were stored with a UTF-8 BOM ("﻿") prefix,
+        # causing int(SMTP_PORT) to crash at gunicorn startup and breaking deploys.
+        # Inputs:  env var name, default value
+        # Output:  cleaned string with BOM/whitespace removed
+        def _env(name, default=""):
+            return os.environ.get(name, default).lstrip("﻿").strip()
+        self.resend_key  = _env("RESEND_API_KEY")
+        self.smtp_host   = _env("SMTP_HOST")
+        # int() now sees a clean digit string; fallback "465" applies only if env is empty
+        self.smtp_port   = int(_env("SMTP_PORT", "465") or "465")
+        self.smtp_user   = _env("SMTP_USER")
+        self.smtp_pass   = _env("SMTP_PASS")
+        self.smtp_from   = _env("SMTP_FROM", "support@aiappinvent.com")
+        self.smtp_tls    = _env("SMTP_TLS", "false").lower() in ("1", "true", "yes")
+        self.addr_sales    = _env("EMAIL_SALES",    "sales@aiappinvent.com")
+        self.addr_support  = _env("EMAIL_SUPPORT",  "support@aiappinvent.com")
+        self.addr_billing  = _env("EMAIL_BILLING",  "billing@aiappinvent.com")
+        self.addr_hello    = _env("EMAIL_HELLO",    "sales@aiappinvent.com")
+        self.addr_proposals= _env("EMAIL_PROPOSALS","sales@aiappinvent.com")
 
     def reload(self):
         self._load()
