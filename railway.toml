@@ -5,8 +5,10 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-# 1 worker fits Railway free-tier 512MB RAM; gunicorn binds to $PORT (Railway env)
-startCommand = "gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120"
+# 1 worker fits Railway free-tier 512MB RAM. Wrap in `sh -c` so $PORT (Railway-injected)
+# is expanded by the shell — without the wrapper Railway passes the literal "$PORT" string
+# to gunicorn which then errors with "not a valid port number".
+startCommand = "sh -c 'gunicorn wsgi:app --bind 0.0.0.0:${PORT:-5000} --workers 1 --timeout 120'"
 # /api/ping is exempted from Flask-Limiter so Railway health checks don't 429
 healthcheckPath = "/api/ping"
 healthcheckTimeout = 60
