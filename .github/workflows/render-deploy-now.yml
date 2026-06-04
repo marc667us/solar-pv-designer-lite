@@ -31,6 +31,7 @@ jobs:
           AXIGEN_SERVER_URL:    ${{ secrets.AXIGEN_SERVER_URL }}
           AXIGEN_USER:          ${{ secrets.AXIGEN_USER }}
           AXIGEN_PASSWORD:      ${{ secrets.AXIGEN_PASSWORD }}
+          BREVO_API_KEY:        ${{ secrets.BREVO_API_KEY }}
         run: |
           set -euo pipefail
 
@@ -62,6 +63,7 @@ jobs:
           add AXIGEN_SERVER_URL   "$AXIGEN_SERVER_URL"
           add AXIGEN_USER         "$AXIGEN_USER"
           add AXIGEN_PASSWORD     "$AXIGEN_PASSWORD"
+          add BREVO_API_KEY       "$BREVO_API_KEY"
 
           echo "Syncing $(echo "$NEW_VARS" | jq 'length') vars to Render service $RENDER_SERVICE_ID..."
 

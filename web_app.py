@@ -10068,7 +10068,10 @@ def admin_ops_email_status():
     ax_pass   = _env_clean("AXIGEN_PASSWORD")
     return jsonify({
         "status": "ok",
-        # Axigen is now the primary provider (Resend's key is invalid)
+        # Brevo is now primary (free 300/day HTTPS API).
+        "brevo_configured": bool(_env_clean("BREVO_API_KEY")),
+        "brevo_key_prefix": (_env_clean("BREVO_API_KEY")[:10] + "...") if _env_clean("BREVO_API_KEY") else "(not set)",
+        # Axigen secondary HTTPS provider (was primary; superseded by Brevo)
         "axigen_configured": bool(ax_url and ax_user and ax_pass),
         "axigen_url":  ax_url  or "(not set)",
         "axigen_user": ax_user or "(not set)",
@@ -10116,6 +10119,40 @@ def admin_ops_email_test():
             "<small style='color:#6868a0'>solarpro.aiappinvent.com</small></div>")
     subject = "SolarPro Admin - Email Test"
     diagnostics = []
+
+    # --- Try Brevo first (HTTPS API, free 300/day, primary provider) ---
+    # Get a key at https://app.brevo.com -> SMTP & API -> API keys.
+    # Sender must be a Brevo-verified address (single-sender verify is free + instant).
+    brevo_key = _env_clean("BREVO_API_KEY")
+    if brevo_key:
+        try:
+            import requests as _rq
+            br_sender = _env_clean("SMTP_FROM") or _env_clean("EMAIL_SUPPORT") or "support@aiappinvent.com"
+            br_resp = _rq.post(
+                "https://api.brevo.com/v3/smtp/email",
+                json={"sender": {"email": br_sender},
+                      "to": [{"email": admin_email}],
+                      "subject": subject,
+                      "htmlContent": html},
+                headers={"api-key": brevo_key,
+                         "Content-Type": "application/json",
+                         "Accept": "application/json"},
+                timeout=15)
+            if br_resp.status_code in (200, 201, 202):
+                diagnostics.append({"provider": "brevo", "status": "ok",
+                                    "http": br_resp.status_code,
+                                    "messageId": br_resp.json().get("messageId", "")})
+                return jsonify({"status": "ok", "sent_to": admin_email,
+                               "provider": "brevo", "diagnostics": diagnostics,
+                               "message": "Test email sent via Brevo to " + admin_email})
+            diagnostics.append({"provider": "brevo", "status": "error",
+                                "http": br_resp.status_code,
+                                "detail": br_resp.text[:200]})
+        except Exception as e:
+            diagnostics.append({"provider": "brevo", "status": "error", "detail": str(e)[:200]})
+    else:
+        diagnostics.append({"provider": "brevo", "status": "skipped",
+                            "detail": "BREVO_API_KEY not configured"})
 
     # --- Try Axigen first (HTTPS, primary, works through Render firewall) ---
     # AXIGEN_SERVER_URL must include the API base, e.g. https://mail.example.com/api/v1

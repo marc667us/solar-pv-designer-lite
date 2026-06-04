@@ -340,6 +340,10 @@ class _EmailClient:
         self.smtp_pass   = _env("SMTP_PASS")
         self.smtp_from   = _env("SMTP_FROM", "support@aiappinvent.com")
         self.smtp_tls    = _env("SMTP_TLS", "false").lower() in ("1", "true", "yes")
+        # Brevo (Sendinblue) transactional email API — HTTPS, free 300/day.
+        # Used as the primary provider since free hosting (Render/Railway) blocks
+        # outbound SMTP. Key format: xkeysib-<long string>. Get one at brevo.com.
+        self.brevo_key   = _env("BREVO_API_KEY")
         # Axigen mailbox REST API. Provides HTTPS-based send so it works
         # through Render's outbound-SMTP block. AXIGEN_SERVER_URL must be the
         # full https URL of an Axigen mail server (self-hosted or hosted).
@@ -355,6 +359,57 @@ class _EmailClient:
 
     def reload(self):
         self._load()
+
+    def _send_brevo(self, _from, _to, subject, html_body, text_body):
+        """
+        Send an email through Brevo's transactional API (api.brevo.com/v3/smtp/email).
+
+        Why Brevo:
+          - Free tier: 300 emails/day forever (no card)
+          - HTTPS API, works through Render/Railway free-tier SMTP block
+          - Accepts custom sender once you verify the address in Brevo dashboard
+
+        Inputs:
+          _from      sender email string. MUST be verified in Brevo dashboard or
+                     covered by a verified-domain SPF/DKIM. Otherwise Brevo
+                     returns 400 with code "missing_credentials".
+          _to        list of recipient email strings
+          subject    email subject text
+          html_body  HTML body string
+          text_body  plain-text body string or None
+
+        Output:
+          (True, "sent") on HTTP 200/201, else (False, "<error detail>")
+
+        Syntax notes:
+          - Brevo uses the `api-key` header (NOT Bearer auth)
+          - sender + to are objects with {email, name} — name optional
+          - JSON-decoded response on success contains "messageId"
+        """
+        import requests
+        if not self.brevo_key:
+            return False, "brevo not configured"
+        url = "https://api.brevo.com/v3/smtp/email"
+        headers = {
+            "api-key":      self.brevo_key,
+            "Content-Type": "application/json",
+            "Accept":       "application/json",
+        }
+        payload = {
+            "sender":      {"email": _from},
+            "to":          [{"email": addr} for addr in _to],
+            "subject":     subject,
+            "htmlContent": html_body,
+        }
+        if text_body:
+            payload["textContent"] = text_body
+        try:
+            r = requests.post(url, json=payload, headers=headers, timeout=15)
+            if r.status_code in (200, 201, 202):
+                return True, "sent"
+            return False, f"HTTP {r.status_code}: {r.text[:200]}"
+        except Exception as e:
+            return False, str(e)
 
     def _send_axigen(self, _from, _to, subject, html_body, text_body):
         """
@@ -423,7 +478,16 @@ class _EmailClient:
         _key  = resend_key_override or self.resend_key
         t     = time.time()
 
-        # 1) Axigen primary — only attempts the call if AXIGEN_SERVER_URL is set,
+        # 1) Brevo primary — free 300/day HTTPS API, only runs if BREVO_API_KEY set.
+        if self.brevo_key:
+            ok, msg = self._send_brevo(_from, _to, subject, html_body, text_body)
+            if ok:
+                self._s.log("brevo", "send", "ok", (time.time()-t)*1000)
+                return True, "sent"
+            self._s.log("brevo", "send", "error", (time.time()-t)*1000, msg)
+            logger.warning("brevo failed: %s", msg)
+
+        # 2) Axigen — only attempts the call if AXIGEN_SERVER_URL is set,
         #    so absence of config silently falls through to next provider.
         if self.axigen_url:
             ok, msg = self._send_axigen(_from, _to, subject, html_body, text_body)
@@ -433,7 +497,7 @@ class _EmailClient:
             self._s.log("axigen", "send", "error", (time.time()-t)*1000, msg)
             logger.warning("axigen failed: %s", msg)
 
-        # 2) Resend fallback — uses the Resend Python SDK over HTTPS
+        # 3) Resend fallback — uses the Resend Python SDK over HTTPS
         if _key:
             try:
                 import resend as _r
@@ -448,9 +512,10 @@ class _EmailClient:
                 self._s.log("resend", "send", "error", (time.time()-t)*1000, str(e))
                 logger.warning("resend failed: %s", e)
 
-        # 3) SMTP last resort — blocked by Render's free tier, but works locally
+        # 4) SMTP last resort — blocked by both Render and Railway free tiers,
+        #    but works locally and on any paid-tier host or self-host VPS.
         if not self.smtp_host or not self.smtp_user:
-            return False, "Email not configured — set AXIGEN_SERVER_URL+USER+PASSWORD, RESEND_API_KEY, or SMTP credentials."
+            return False, "Email not configured — set BREVO_API_KEY, AXIGEN_SERVER_URL+USER+PASSWORD, RESEND_API_KEY, or SMTP credentials."
 
         try:
             import smtplib

@@ -45,6 +45,7 @@ jobs:
       AXIGEN_SERVER_URL:    ${{ secrets.AXIGEN_SERVER_URL }}
       AXIGEN_USER:          ${{ secrets.AXIGEN_USER }}
       AXIGEN_PASSWORD:      ${{ secrets.AXIGEN_PASSWORD }}
+      BREVO_API_KEY:        ${{ secrets.BREVO_API_KEY }}
     steps:
       - name: Upsert variables to Railway
         # Bash flags:  -e fail-fast, -u undefined vars are errors, -o pipefail catch broken pipes
@@ -102,6 +103,7 @@ jobs:
           upsert AXIGEN_SERVER_URL   "$AXIGEN_SERVER_URL"
           upsert AXIGEN_USER         "$AXIGEN_USER"
           upsert AXIGEN_PASSWORD     "$AXIGEN_PASSWORD"
+          upsert BREVO_API_KEY       "$BREVO_API_KEY"
           # DB_PATH is set so SQLite lives in the Railway-mounted volume root
           upsert DB_PATH             "/app/solar.db"
 
