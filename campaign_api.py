@@ -122,7 +122,13 @@ def _verify_password(password, stored):
 
 def _init_db_once():
     """Idempotent schema migration. Safe to call on every import."""
-    conn = sqlite3.connect(_db_path())
+    # Create the parent directory if DB_PATH points at a not-yet-mounted volume.
+    # Render disks may not exist on first deploy; the dir is created lazily.
+    db_path = _db_path()
+    parent = os.path.dirname(db_path) or "."
+    try: os.makedirs(parent, exist_ok=True)
+    except Exception as exc: print(f"[campaign_api] could not create {parent}: {exc}")
+    conn = sqlite3.connect(db_path)
     cur = conn.cursor()
     cur.executescript("""
         CREATE TABLE IF NOT EXISTS campaign_entities (
