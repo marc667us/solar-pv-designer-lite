@@ -155,25 +155,54 @@ def _init_db_once():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL UNIQUE,
             name TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'sales',   -- 'admin' or 'sales'
-            product_id TEXT NOT NULL DEFAULT 'solarpro-ghana',
+            role TEXT NOT NULL DEFAULT 'sales',
+            product_id TEXT NOT NULL DEFAULT '',
             password_hash TEXT NOT NULL,
             created_at TEXT NOT NULL,
-            last_login TEXT
+            last_login TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',     -- 'pending' | 'active' | 'suspended'
+            profession TEXT NOT NULL DEFAULT '',
+            invite_token TEXT                            -- the token they used (for audit)
         );
         CREATE INDEX IF NOT EXISTS idx_users_email ON campaign_users(email);
+        CREATE INDEX IF NOT EXISTS idx_users_status ON campaign_users(status);
+
+        CREATE TABLE IF NOT EXISTS campaign_invites (
+            token TEXT PRIMARY KEY,
+            created_by TEXT NOT NULL,         -- admin email
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            note TEXT NOT NULL DEFAULT '',    -- what the admin labelled the invite for
+            used_by_email TEXT,
+            used_at TEXT
+        );
     """)
 
-    # Bootstrap admin if no users exist yet
+    # Idempotent column additions for upgrades from earlier schema versions
+    for stmt in (
+        "ALTER TABLE campaign_users ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
+        "ALTER TABLE campaign_users ADD COLUMN profession TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE campaign_users ADD COLUMN invite_token TEXT",
+    ):
+        try: cur.execute(stmt)
+        except sqlite3.OperationalError: pass  # column already exists
+
+    # Bootstrap admin if no users exist yet — admin is auto-active.
     cur.execute("SELECT COUNT(*) FROM campaign_users")
     if cur.fetchone()[0] == 0:
         cur.execute(
-            "INSERT INTO campaign_users (email, name, role, product_id, password_hash, created_at) "
-            "VALUES (?,?,?,?,?,?)",
+            "INSERT INTO campaign_users (email, name, role, product_id, password_hash, created_at, status, profession) "
+            "VALUES (?,?,?,?,?,?,?,?)",
             (BOOTSTRAP_ADMIN_EMAIL.lower(), BOOTSTRAP_ADMIN_NAME, "admin",
-             "solarpro-ghana", _hash_password(BOOTSTRAP_ADMIN_PASSWORD), time.strftime("%Y-%m-%d")),
+             "solarpro-ghana", _hash_password(BOOTSTRAP_ADMIN_PASSWORD), time.strftime("%Y-%m-%d"),
+             "active", "Admin"),
         )
         print(f"[campaign_api] bootstrapped admin: {BOOTSTRAP_ADMIN_EMAIL}")
+    else:
+        # Pre-existing rows from an earlier schema have status='pending' default —
+        # nudge any admin role to active so they don't get locked out by the
+        # status check.
+        cur.execute("UPDATE campaign_users SET status='active' WHERE role='admin' AND status='pending'")
     # Seed entities if the table is empty
     cur.execute("SELECT COUNT(*) FROM campaign_entities")
     if cur.fetchone()[0] == 0 and os.path.exists(SEED_PATH):
@@ -320,6 +349,10 @@ def login():
     row = cur.fetchone()
     if not row or not _verify_password(password, row["password_hash"]):
         abort(401, description="invalid credentials")
+    if row["status"] == "pending":
+        abort(403, description="account pending admin approval")
+    if row["status"] == "suspended":
+        abort(403, description="account suspended")
     # Touch last_login (best effort)
     try:
         _conn().execute("UPDATE campaign_users SET last_login=? WHERE id=?",
@@ -334,41 +367,130 @@ def login():
     })
 
 
-@campaign_bp.route("/register", methods=["POST"])
-def register_user():
-    """Self-service signup.
-    Anyone with the portal URL can create their own account. New accounts get
-    the default 'sales' role and the default product. An admin can promote
-    them later from the Staff tab. Bootstrap admin is created on first DB init,
-    so the first signup never overrides the admin seed.
-    Body: { email, name, password }
+@campaign_bp.route("/invites", methods=["POST"])
+def create_invite():
+    """Admin creates an invitation. Body: { note?, expires_days? (default 14) }
+    Returns the token + URL to share via WhatsApp/email.
     """
+    s = _require_admin()
+    body = request.get_json(silent=True) or {}
+    note = (body.get("note") or "").strip()[:120]
+    expires_days = int(body.get("expires_days") or 14)
+    token = secrets.token_urlsafe(20)
+    now = time.strftime("%Y-%m-%dT%H:%M:%S")
+    expires = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() + expires_days * 86400))
+    _conn().execute(
+        "INSERT INTO campaign_invites (token, created_by, created_at, expires_at, note) "
+        "VALUES (?,?,?,?,?)",
+        (token, s["email"], now, expires, note),
+    )
+    _conn().commit()
+    return jsonify({"token": token, "expires_at": expires, "note": note})
+
+
+@campaign_bp.route("/invites", methods=["GET"])
+def list_invites():
+    _require_admin()
+    cur = _conn().execute(
+        "SELECT token, created_by, created_at, expires_at, note, used_by_email, used_at "
+        "FROM campaign_invites ORDER BY created_at DESC"
+    )
+    return jsonify([dict(r) for r in cur.fetchall()])
+
+
+@campaign_bp.route("/invites/<token>", methods=["DELETE"])
+def revoke_invite(token):
+    _require_admin()
+    _conn().execute("DELETE FROM campaign_invites WHERE token=?", (token,))
+    _conn().commit()
+    return jsonify(ok=True)
+
+
+@campaign_bp.route("/invite/<token>", methods=["GET"])
+def check_invite(token):
+    """Public — the signup page calls this to verify the invite is still valid."""
+    cur = _conn().execute("SELECT * FROM campaign_invites WHERE token=?", (token,))
+    inv = cur.fetchone()
+    if not inv:
+        abort(404, description="invitation not found")
+    if inv["used_by_email"]:
+        abort(410, description="invitation already used")
+    if inv["expires_at"] < time.strftime("%Y-%m-%dT%H:%M:%S"):
+        abort(410, description="invitation expired")
+    return jsonify({"ok": True, "expires_at": inv["expires_at"], "note": inv["note"]})
+
+
+@campaign_bp.route("/invite/<token>/accept", methods=["POST"])
+def accept_invite(token):
+    """Public — the invitee submits name + email + password + profession.
+    Creates a PENDING user; admin must approve before sign-in works.
+    """
+    cur = _conn().execute("SELECT * FROM campaign_invites WHERE token=?", (token,))
+    inv = cur.fetchone()
+    if not inv:
+        abort(404, description="invitation not found")
+    if inv["used_by_email"]:
+        abort(410, description="invitation already used")
+    if inv["expires_at"] < time.strftime("%Y-%m-%dT%H:%M:%S"):
+        abort(410, description="invitation expired")
+
     body = request.get_json(silent=True) or {}
     email = (body.get("email") or "").strip().lower()
     name = (body.get("name") or "").strip()
     password = body.get("password") or ""
-    if not email or not name or not password:
-        abort(400, description="email, name, password required")
+    profession = (body.get("profession") or "").strip()[:80]
+    if not email or not name or not password or not profession:
+        abort(400, description="email, name, password, profession required")
     if len(password) < 6:
         abort(400, description="password must be at least 6 characters")
+
     try:
         _conn().execute(
-            "INSERT INTO campaign_users (email, name, role, product_id, password_hash, created_at) "
-            "VALUES (?,?,?,?,?,?)",
-            (email, name, "sales", "solarpro-ghana",
-             _hash_password(password), time.strftime("%Y-%m-%d")),
+            "INSERT INTO campaign_users (email, name, role, product_id, password_hash, created_at, "
+            "status, profession, invite_token) VALUES (?,?,?,?,?,?,?,?,?)",
+            (email, name, "sales", "", _hash_password(password),
+             time.strftime("%Y-%m-%d"), "pending", profession, token),
+        )
+        _conn().execute(
+            "UPDATE campaign_invites SET used_by_email=?, used_at=? WHERE token=?",
+            (email, time.strftime("%Y-%m-%dT%H:%M:%S"), token),
         )
         _conn().commit()
     except sqlite3.IntegrityError:
-        abort(409, description="email already registered")
-    # Auto-login: return a session token so the portal can skip the login form
-    cur = _conn().execute("SELECT * FROM campaign_users WHERE email=?", (email,))
-    row = cur.fetchone()
-    return jsonify({
-        "token": _make_session_token(row),
-        "user": {"email": row["email"], "name": row["name"],
-                 "role": row["role"], "product_id": row["product_id"]},
-    })
+        abort(409, description="that email is already registered")
+    return jsonify({"ok": True, "message": "Account created. An admin will review and assign your product."})
+
+
+@campaign_bp.route("/pending", methods=["GET"])
+def list_pending():
+    """Admin — users awaiting approval."""
+    _require_admin()
+    cur = _conn().execute(
+        "SELECT id, email, name, profession, role, created_at, invite_token "
+        "FROM campaign_users WHERE status='pending' ORDER BY created_at ASC"
+    )
+    return jsonify([dict(r) for r in cur.fetchall()])
+
+
+@campaign_bp.route("/users/<int:uid>/approve", methods=["POST"])
+def approve_user(uid):
+    """Admin — activate a pending user and assign their product.
+    Body: { product_id, role? }
+    """
+    _require_admin()
+    body = request.get_json(silent=True) or {}
+    product_id = (body.get("product_id") or "").strip()
+    role = body.get("role", "sales")
+    if not product_id:
+        abort(400, description="product_id required")
+    if role not in ("admin", "sales", "manager"):
+        abort(400, description="role must be admin|sales|manager")
+    cur = _conn().execute("UPDATE campaign_users SET status='active', product_id=?, role=? "
+                          "WHERE id=? AND status='pending'", (product_id, role, uid))
+    _conn().commit()
+    if cur.rowcount == 0:
+        abort(404, description="no pending user with that id")
+    return jsonify(ok=True)
 
 
 @campaign_bp.route("/me", methods=["GET"])
