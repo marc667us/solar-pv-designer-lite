@@ -1,0 +1,35 @@
+# One-shot: reset DB_PATH on Render to /app/solar.db (the working directory),
+# since the persistent disk was never successfully attached.
+name: Render fix DB_PATH
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+    steps:
+      - name: Reset DB_PATH and redeploy
+        run: |
+          set -euo pipefail
+          EXISTING=$(curl -sS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars?limit=100")
+          # Replace DB_PATH (or remove the bad value) with /app/solar.db.
+          MERGED=$(echo "$EXISTING" | jq '
+            [.[] | .envVar | {key,value}] as $e
+            | [($e[] | select(.key != "DB_PATH")), {key:"DB_PATH",value:"/app/solar.db"}]
+          ')
+          curl -sS -X PUT \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$MERGED" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars" \
+            >/dev/null
+          echo "DB_PATH set to /app/solar.db"
+          curl -sS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"clear"}' \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            | jq '{id,status,createdAt}'
