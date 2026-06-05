@@ -1,0 +1,30 @@
+name: Render remove DB_PATH
+on: { workflow_dispatch: }
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+    steps:
+      - name: Remove DB_PATH env var, redeploy with cache clear
+        run: |
+          set -euo pipefail
+          # Fetch existing env vars, drop DB_PATH, PUT the rest back as the full set.
+          # Render's PUT replaces the env-var set entirely.
+          MERGED=$(curl -sS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars?limit=100" \
+            | jq '[.[] | .envVar | {key,value} | select(.key != "DB_PATH")]')
+          curl -sS -X PUT \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$MERGED" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars" \
+            >/dev/null
+          echo "DB_PATH removed."
+          curl -sS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"clear"}' \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            | jq '{id,status}'
