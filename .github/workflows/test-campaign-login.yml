@@ -1,0 +1,32 @@
+# Test campaign login against the live Render API from a fresh IP (the runner).
+# Runs from a GitHub-hosted runner so we don't share the same rate-limit bucket
+# as the developer machine.
+name: Test campaign login
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /health
+        run: |
+          curl -sS -o /dev/null -w "health %{http_code}\n" -m 12 \
+            https://solarpro-global.onrender.com/api/campaign/health
+      - name: Try login with new password ChangeMe2026/
+        run: |
+          STATUS=$(curl -sS -o /tmp/r1.json -w "%{http_code}" -m 15 \
+            -X POST https://solarpro-global.onrender.com/api/campaign/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"marc667us@yahoo.com","password":"ChangeMe2026/"}')
+          echo "HTTP: $STATUS"
+          head -c 400 /tmp/r1.json
+          echo
+      - name: Try login with old password ChangeMe2026!
+        run: |
+          STATUS=$(curl -sS -o /tmp/r2.json -w "%{http_code}" -m 15 \
+            -X POST https://solarpro-global.onrender.com/api/campaign/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"marc667us@yahoo.com","password":"ChangeMe2026!"}')
+          echo "HTTP: $STATUS"
+          head -c 400 /tmp/r2.json
+          echo
