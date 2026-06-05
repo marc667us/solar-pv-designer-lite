@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Refer & Earn — SolarPro Global{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Referral-program dashboard styles.
+     Inputs:  uses base CSS variables already set by base.html
+     Output:  hero stat tiles + sticky link bar + share-button row */
+  .ref-hero{background:radial-gradient(ellipse 80% 60% at 50% 0%,
+                rgba(245,158,11,.18) 0%,transparent 65%);padding:32px 0 8px;border-radius:18px}
+  .ref-link-bar{display:flex;align-items:stretch;background:#0a0a18;border:1px solid #2e2e50;
+    border-radius:12px;overflow:hidden;margin-top:18px}
+  .ref-link-bar input{flex:1;background:transparent;border:none;color:#e2e2f0;font-size:14px;
+    padding:14px 18px;font-family:'SFMono-Regular',Consolas,monospace;outline:none}
+  .ref-link-bar button{background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#0f0f22;
+    border:none;font-weight:800;padding:0 22px;cursor:pointer;font-size:13px;
+    text-transform:uppercase;letter-spacing:.5px}
+  .ref-link-bar button:hover{filter:brightness(1.08)}
+  .ref-stat{background:#0f0f22;border:1px solid #1e1e3a;border-radius:14px;padding:22px;text-align:center}
+  .ref-stat .v{font-size:38px;font-weight:900;line-height:1;background:linear-gradient(135deg,#f59e0b,#fbbf24);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .ref-stat .v.blue{background:linear-gradient(135deg,#0ea5e9,#38bdf8);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .ref-stat .v.green{background:linear-gradient(135deg,#22c55e,#4ade80);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+  .ref-stat .l{font-size:11px;color:#8888b8;font-weight:700;text-transform:uppercase;
+    letter-spacing:.6px;margin-top:8px}
+  .share-btn{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:10px;
+    font-size:13px;font-weight:700;text-decoration:none;transition:.15s;border:1px solid transparent}
+  .share-btn:hover{transform:translateY(-1px)}
+  .share-whatsapp{background:#25D366;color:#0f1d12}
+  .share-email{background:#0ea5e9;color:#fff}
+  .share-x{background:#0f0f22;color:#e2e2f0;border-color:#2e2e50}
+  .share-copy{background:transparent;color:#f59e0b;border-color:#f59e0b66;cursor:pointer;font-family:inherit}
+  .ref-table{width:100%;border-collapse:collapse;font-size:13px}
+  .ref-table th{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+    color:#8888b8;padding:10px 12px;border-bottom:1px solid #1e1e3a;text-align:left}
+  .ref-table td{padding:12px;border-bottom:1px solid #14142a;color:#c8c8e8}
+  .badge-plan{display:inline-block;padding:3px 9px;border-radius:6px;font-size:10px;
+    font-weight:700;text-transform:uppercase}
+  .badge-free{background:#1e1e3a;color:#9090b8}
+  .badge-paid{background:#22c55e22;color:#22c55e;border:1px solid #22c55e44}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:980px">
+
+  <!-- Header -->
+  <div class="ref-hero text-center mb-4">
+    <div style="font-size:42px;margin-bottom:6px">🎁</div>
+    <h1 style="font-size:1.9rem;font-weight:900;margin-bottom:8px">Refer & Earn</h1>
+    <p style="color:#9090b8;font-size:14px;max-width:560px;margin:0 auto">
+      Share SolarPro with installers, engineers, and homeowners. You earn rewards on
+      every friend who upgrades to a paid plan.
+    </p>
+  </div>
+
+  <!-- Shareable link -->
+  <div style="background:#0f0f22;border:1px solid #1e1e3a;border-radius:16px;padding:26px;margin-bottom:24px">
+    <div style="font-size:11px;color:#f59e0b;font-weight:800;text-transform:uppercase;
+                letter-spacing:.6px;margin-bottom:10px">
+      <i class="bi bi-link-45deg me-1"></i>Your unique invite link
+    </div>
+    <div class="ref-link-bar">
+      <input id="refLink" value="{{ share_url }}" readonly onclick="this.select()"/>
+      <button type="button" onclick="copyRef()" id="copyBtn">
+        <i class="bi bi-clipboard me-1"></i>Copy
+      </button>
+    </div>
+    <div style="font-size:12px;color:#6868a0;margin-top:12px">
+      Code: <span style="color:#f59e0b;font-weight:700;letter-spacing:1px;font-family:monospace">{{ referral_code }}</span>
+      &nbsp;·&nbsp; Anyone who signs up via this link is tagged to your account for life.
+    </div>
+
+    <!-- One-click share -->
+    <div class="d-flex flex-wrap gap-2 mt-3">
+      <!-- WhatsApp share link uses wa.me with a pre-filled message -->
+      <a class="share-btn share-whatsapp"
+         target="_blank" rel="noopener"
+         href="https://wa.me/?text={{ ('Try SolarPro Global — AI-powered solar PV design. Get 14 days free here: ' ~ share_url) | urlencode }}">
+        <i class="bi bi-whatsapp"></i> WhatsApp
+      </a>
+      <!-- mailto: pre-filled subject + body -->
+      <a class="share-btn share-email"
+         href="mailto:?subject=Try SolarPro Global - free 14 day trial&body=I've been using SolarPro Global for solar PV design. Thought you might like it - free 14 day trial via my link:%0D%0A%0D%0A{{ share_url }}">
+        <i class="bi bi-envelope"></i> Email
+      </a>
+      <!-- X / Twitter intent -->
+      <a class="share-btn share-x"
+         target="_blank" rel="noopener"
+         href="https://twitter.com/intent/tweet?text={{ ('Just designed a solar PV system in 60s with SolarPro Global — try free: ' ~ share_url) | urlencode }}">
+        <i class="bi bi-twitter-x"></i> Post on X
+      </a>
+      <button type="button" class="share-btn share-copy" onclick="copyRef()">
+        <i class="bi bi-clipboard"></i> Copy link
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="ref-stat">
+        <div class="v blue">{{ signups }}</div>
+        <div class="l">Friends signed up</div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="ref-stat">
+        <div class="v green">{{ upgraded }}</div>
+        <div class="l">Upgraded to paid</div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="ref-stat">
+        <div class="v">{{ upgraded * 20 }}%</div>
+        <div class="l">Earned credit (20% per paid signup)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent referrals -->
+  <div style="background:#0f0f22;border:1px solid #1e1e3a;border-radius:16px;padding:22px">
+    <div style="font-size:13px;font-weight:800;color:#e2e2f0;margin-bottom:14px">
+      <i class="bi bi-people me-1"></i>Recent referrals
+    </div>
+    {% if recent %}
+      <table class="ref-table">
+        <thead>
+          <tr><th>Username</th><th>Plan</th><th>Joined</th></tr>
+        </thead>
+        <tbody>
+          {% for r in recent %}
+            <tr>
+              <td>{{ r.username }}</td>
+              <td>
+                {% if r.plan and r.plan != 'free' and r.plan != 'disabled' %}
+                  <span class="badge-plan badge-paid">{{ r.plan|title }}</span>
+                {% else %}
+                  <span class="badge-plan badge-free">Free trial</span>
+                {% endif %}
+              </td>
+              <td style="color:#8888b8;font-size:12px">{{ r.created_at[:10] if r.created_at else '-' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div style="color:#8888b8;font-size:13px;text-align:center;padding:24px 0">
+        Nobody signed up via your link yet. Share it on WhatsApp or Email above to start earning.
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- How it works -->
+  <div style="background:#0a0a14;border:1px solid #14142a;border-radius:14px;padding:18px 22px;margin-top:24px;font-size:13px;color:#9090b8">
+    <strong style="color:#f59e0b">How it works:</strong>
+    1) Share your link.&nbsp;
+    2) Your friend signs up & uses the free 14-day trial.&nbsp;
+    3) When they upgrade to a paid plan, you both get rewarded — they save 20% on their first paid month, you earn 20% credit toward your own subscription.
+  </div>
+</div>
+
+<script>
+// Copy referral URL to clipboard. Falls back to text-selection if Clipboard API
+// is unavailable (older browsers, insecure contexts).
+function copyRef() {
+  var inp = document.getElementById('refLink');
+  var btn = document.getElementById('copyBtn');
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(inp.value);
+    } else {
+      inp.select();
+      document.execCommand('copy');
+    }
+    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Copied!';
+    setTimeout(function(){ btn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copy'; }, 1800);
+  } catch(e) {
+    inp.select();  // last-resort: highlight so user can copy manually
+  }
+}
+</script>
+{% endblock %}

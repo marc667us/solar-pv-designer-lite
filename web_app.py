@@ -226,6 +226,18 @@ def init_db():
             is_admin INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+        -- Referral program columns (REFERRAL_BACKFILL_DONE marker for idempotency)
+        CREATE TABLE IF NOT EXISTS referrals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            referrer_id INTEGER NOT NULL,
+            referee_id  INTEGER NOT NULL UNIQUE,
+            signup_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+            upgraded_at TEXT,
+            plan_at_upgrade TEXT,
+            reward_status   TEXT DEFAULT 'pending',
+            FOREIGN KEY (referrer_id) REFERENCES users(id),
+            FOREIGN KEY (referee_id)  REFERENCES users(id)
+        );
         CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -555,6 +567,24 @@ def init_db():
                     "INSERT INTO users (username,email,name,password_hash,plan,is_admin) "
                     "VALUES (?,?,?,?,?,?)",
                     (uname, email, name, generate_password_hash(pwd), plan, is_admin))
+    # Referral-program migration: add columns + backfill codes for any
+    # users that pre-date the feature. Wrap in try/except per column so
+    # reruns are idempotent (SQLite throws OperationalError on duplicate column).
+    import secrets as _sec
+    with get_db() as _c:
+        try: _c.execute("ALTER TABLE users ADD COLUMN referral_code TEXT")
+        except Exception: pass
+        try: _c.execute("ALTER TABLE users ADD COLUMN referred_by INTEGER")
+        except Exception: pass
+        # Backfill codes for any user that lacks one
+        _missing = _c.execute("SELECT id FROM users WHERE referral_code IS NULL OR referral_code = ''").fetchall()
+        for _row in _missing:
+            while True:
+                _code = _sec.token_urlsafe(6).replace('_','').replace('-','')[:8].upper()
+                if not _c.execute("SELECT 1 FROM users WHERE referral_code = ?", (_code,)).fetchone():
+                    _c.execute("UPDATE users SET referral_code = ? WHERE id = ?", (_code, _row[0]))
+                    break
+
     # Grant admin to the first registered user if no admins exist yet
     with get_db() as c:
         admins = c.execute("SELECT COUNT(*) FROM users WHERE is_admin=1").fetchone()[0]
@@ -1552,13 +1582,33 @@ def register():
         try:
             with get_db() as c:
                 # All new signups begin on 'free' plan — upgrade later
+                # -- Referral capture -------------------------------------
+                # If the visitor arrived via /r/<code> or ?ref=<code>, the
+                # base.html JS dropped a `ref_code` cookie. We look up the
+                # referring user here and store both fields on the new row.
+                _ref_cookie = (request.cookies.get("ref_code") or "").upper().strip()[:16]
+                _referrer_id = None
+                if _ref_cookie:
+                    _hit = c.execute("SELECT id FROM users WHERE referral_code = ?",
+                                     (_ref_cookie,)).fetchone()
+                    if _hit:
+                        _referrer_id = _hit[0]
+                # Generate this new user's own referral code (unique per user)
+                _new_code = _gen_referral_code()
                 c.execute(
-                    "INSERT INTO users (username,email,password_hash,name,company,country,plan) "
-                    "VALUES (?,?,?,?,?,?,?)",
+                    "INSERT INTO users (username,email,password_hash,name,company,country,plan,referral_code,referred_by) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
                     (f["username"], f["email"], ph,
                      f.get("name",""), f.get("company",""),
-                     f.get("country",""), "free"))
+                     f.get("country",""), "free", _new_code, _referrer_id))
                 uid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+                # Log the referral event so we can track conversions over time
+                if _referrer_id:
+                    try:
+                        c.execute("INSERT INTO referrals (referrer_id, referee_id) VALUES (?, ?)",
+                                  (_referrer_id, uid))
+                    except Exception:
+                        pass  # UNIQUE violation = already logged, fine
             session["user_id"] = uid
             session["username"] = f["username"]
             # Send welcome email — non-blocking
@@ -10322,6 +10372,80 @@ def admin_ops_env_keys():
         "all_keys": keys,
         "interesting_keys_and_lengths": smtp_keys,
     })
+
+
+# ============================================================
+# REFERRAL PROGRAM
+# - /r/<code>   captures the ref cookie + sends visitor to landing
+# - /referrals  authenticated user dashboard with link + stats
+# - register()  hook (already inlined above) reads the ref cookie
+# ============================================================
+
+def _gen_referral_code():
+    """Return an 8-char uppercase alphanumeric code not yet in users.referral_code.
+    Inputs:  none
+    Output:  unique code string
+    Syntax:  secrets.token_urlsafe gives URL-safe base64; we strip dashes/underscores
+             and uppercase so the code is easy to type/share verbally.
+    """
+    import secrets as _sec
+    for _ in range(20):  # 20 attempts before giving up (extremely unlikely collision)
+        code = _sec.token_urlsafe(6).replace("_","").replace("-","")[:8].upper()
+        with get_db() as c:
+            hit = c.execute("SELECT 1 FROM users WHERE referral_code = ?", (code,)).fetchone()
+            if not hit:
+                return code
+    raise RuntimeError("could not generate unique referral code after 20 attempts")
+
+
+@app.route("/r/<code>")
+def referral_capture(code):
+    """Capture a referral click.
+    Inputs:  url path /r/<CODE>
+    Output:  302 to landing, with a ref_code cookie set for 30 days.
+    """
+    code = (code or "").upper().strip()[:16]
+    resp = redirect(url_for("landing"))
+    # 30 days, Lax so it survives top-level navigation but not third-party iframes.
+    resp.set_cookie("ref_code", code, max_age=30*24*3600,
+                    httponly=False, samesite="Lax")
+    return resp
+
+
+@app.route("/referrals")
+@login_required
+def referrals_page():
+    """
+    User-facing referral dashboard.
+    Inputs:  login cookie
+    Output:  rendered referrals.html with the user link + stats
+    """
+    u = current_user()
+    # Lazy backfill: if this user pre-dates the feature, give them a code now.
+    code = u.get("referral_code") if isinstance(u, dict) else getattr(u, "referral_code", None)
+    if not code:
+        code = _gen_referral_code()
+        with get_db() as c:
+            c.execute("UPDATE users SET referral_code = ? WHERE id = ?", (code, u["id"]))
+    # Stats: anyone who set referred_by to this user
+    with get_db() as c:
+        signups = c.execute("SELECT COUNT(*) FROM users WHERE referred_by = ?",
+                            (u["id"],)).fetchone()[0]
+        upgraded = c.execute(
+            "SELECT COUNT(*) FROM users WHERE referred_by = ? "
+            "AND plan IS NOT NULL AND plan NOT IN ('free','disabled')",
+            (u["id"],)).fetchone()[0]
+        recent_rows = c.execute(
+            "SELECT username, plan, created_at FROM users "
+            "WHERE referred_by = ? ORDER BY id DESC LIMIT 10",
+            (u["id"],)).fetchall()
+    recent = [dict(r) for r in recent_rows] if recent_rows else []
+    # Build the share URL using request.host_url so it works on any deployment
+    share_url = request.host_url.rstrip("/") + "/r/" + code
+    return render_template("referrals.html", user=u, referral_code=code,
+                           share_url=share_url, signups=signups,
+                           upgraded=upgraded, recent=recent)
+
 
 if __name__ == "__main__":
     init_db()

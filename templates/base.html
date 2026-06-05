@@ -127,6 +127,21 @@
 </style>
 {% block extra_head %}{% endblock %}
 <meta name="csrf-token" content="{{ csrf_token() }}">
+<script>
+// REF_COOKIE_CAPTURE_v1
+// If the visitor lands with ?ref=CODE in the URL we drop a 30-day cookie
+// so /register can credit the referrer even after the visitor wanders
+// through other pages first.
+(function(){
+  try {
+    var p = new URLSearchParams(window.location.search);
+    var ref = (p.get("ref") || "").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,16);
+    if (ref) {
+      document.cookie = "ref_code=" + ref + "; max-age=" + (30*24*3600) + "; path=/; SameSite=Lax";
+    }
+  } catch(e) { /* private mode / unusual browsers - silent */ }
+})();
+</script>
 </head>
 <body>
 
