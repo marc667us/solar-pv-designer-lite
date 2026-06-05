@@ -34,8 +34,11 @@ Railway Volume mounted at /app and set DB_PATH=/app/solar.db (the existing
 deploy workflow already pushes DB_PATH). Once a Volume is attached, this
 module needs no changes.
 """
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import sqlite3
 import time
 from pathlib import Path
@@ -50,6 +53,21 @@ from flask import Blueprint, jsonify, request, abort, make_response, g
 # Railway and redeploying. This is "obscurity auth" — adequate for an
 # internal-only beta portal whose data is contact info already on the web.
 CAMPAIGN_API_KEY = os.environ.get("CAMPAIGN_API_KEY", "campaign-ghana-2026-beta")
+
+# Bootstrap admin — created on first DB init if no users exist. Marc gets
+# admin rights and a default password he should change immediately.
+BOOTSTRAP_ADMIN_EMAIL    = os.environ.get("CAMPAIGN_ADMIN_EMAIL", "marc667us@yahoo.com")
+BOOTSTRAP_ADMIN_NAME     = os.environ.get("CAMPAIGN_ADMIN_NAME", "Marc")
+BOOTSTRAP_ADMIN_PASSWORD = os.environ.get("CAMPAIGN_ADMIN_PASSWORD", "ChangeMe2026!")
+
+# Sessions are bound to a server-side random token. We don't store tokens in
+# the DB to keep it simple — we sign them with this secret using HMAC, so a
+# valid token decodes back to a user email + role. Rotating SESSION_SECRET
+# logs everyone out.
+SESSION_SECRET = os.environ.get(
+    "CAMPAIGN_SESSION_SECRET",
+    "campaign-session-secret-rotate-this-on-prod"
+).encode()
 
 # Allowed CORS origins. Add another origin here if a new portal host appears.
 ALLOWED_ORIGINS = {
@@ -82,6 +100,26 @@ def _conn():
     return g._campaign_db
 
 
+def _hash_password(password, salt=None):
+    """PBKDF2-HMAC-SHA256, 200k iterations. Returns 'salt$hash' both hex.
+    Stdlib only — no bcrypt dependency to add."""
+    if salt is None:
+        salt = secrets.token_bytes(16)
+    elif isinstance(salt, str):
+        salt = bytes.fromhex(salt)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 200_000)
+    return salt.hex() + "$" + digest.hex()
+
+
+def _verify_password(password, stored):
+    """Compare a password against the stored 'salt$hash'."""
+    try:
+        salt_hex, _ = stored.split("$", 1)
+        return hmac.compare_digest(stored, _hash_password(password, salt_hex))
+    except Exception:
+        return False
+
+
 def _init_db_once():
     """Idempotent schema migration. Safe to call on every import."""
     conn = sqlite3.connect(_db_path())
@@ -89,15 +127,15 @@ def _init_db_once():
     cur.executescript("""
         CREATE TABLE IF NOT EXISTS campaign_entities (
             name TEXT PRIMARY KEY,
-            payload TEXT NOT NULL,           -- whole entity dict as JSON
+            payload TEXT NOT NULL,
             seeded_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS campaign_pipeline (
-            entity_name TEXT PRIMARY KEY,    -- FK to campaign_entities.name
+            entity_name TEXT PRIMARY KEY,
             status TEXT NOT NULL DEFAULT 'INVITED',
             notes TEXT NOT NULL DEFAULT '',
             next_action_date TEXT NOT NULL DEFAULT '',
-            literature_sent TEXT NOT NULL DEFAULT '[]',  -- JSON list
+            literature_sent TEXT NOT NULL DEFAULT '[]',
             last_updated TEXT NOT NULL,
             last_updated_by TEXT NOT NULL DEFAULT ''
         );
@@ -113,7 +151,29 @@ def _init_db_once():
         );
         CREATE INDEX IF NOT EXISTS idx_feedback_entity ON campaign_feedback(entity_name);
         CREATE INDEX IF NOT EXISTS idx_feedback_status ON campaign_feedback(status);
+        CREATE TABLE IF NOT EXISTS campaign_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'sales',   -- 'admin' or 'sales'
+            product_id TEXT NOT NULL DEFAULT 'solarpro-ghana',
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            last_login TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_users_email ON campaign_users(email);
     """)
+
+    # Bootstrap admin if no users exist yet
+    cur.execute("SELECT COUNT(*) FROM campaign_users")
+    if cur.fetchone()[0] == 0:
+        cur.execute(
+            "INSERT INTO campaign_users (email, name, role, product_id, password_hash, created_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (BOOTSTRAP_ADMIN_EMAIL.lower(), BOOTSTRAP_ADMIN_NAME, "admin",
+             "solarpro-ghana", _hash_password(BOOTSTRAP_ADMIN_PASSWORD), time.strftime("%Y-%m-%d")),
+        )
+        print(f"[campaign_api] bootstrapped admin: {BOOTSTRAP_ADMIN_EMAIL}")
     # Seed entities if the table is empty
     cur.execute("SELECT COUNT(*) FROM campaign_entities")
     if cur.fetchone()[0] == 0 and os.path.exists(SEED_PATH):
@@ -160,15 +220,81 @@ def _preflight():
     return None
 
 
+# Update Access-Control-Allow-Headers to include the new session header
+def _cors_headers_with_session(resp):
+    origin = request.headers.get("Origin")
+    if origin in ALLOWED_ORIGINS:
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Campaign-Key, X-Campaign-Rep, X-Campaign-Session"
+        resp.headers["Access-Control-Max-Age"] = "600"
+    return resp
+
+
+# Replace the registered after_request to use the session-aware version
+_cors_headers = _cors_headers_with_session
+
+
 def _check_key():
-    """Enforce X-Campaign-Key on every write."""
+    """Enforce X-Campaign-Key on every write (legacy soft-auth)."""
     if request.headers.get("X-Campaign-Key") != CAMPAIGN_API_KEY:
         abort(401, description="bad campaign key")
 
 
 def _rep():
-    """The rep's display name for audit columns. Header X-Campaign-Rep."""
+    """The rep's display name from session cookie or X-Campaign-Rep fallback."""
+    sess = _session_from_request()
+    if sess:
+        return sess["name"]
     return (request.headers.get("X-Campaign-Rep") or "anon").strip()[:80]
+
+
+# ---------------------------------------------------------------------------
+# Session tokens (signed, stateless — no session table needed)
+
+def _make_session_token(user_row):
+    """Make a signed session token: 'email|role|name|issued_at|sig'."""
+    payload = f"{user_row['email']}|{user_row['role']}|{user_row['name']}|{int(time.time())}"
+    sig = hmac.new(SESSION_SECRET, payload.encode(), hashlib.sha256).hexdigest()
+    return payload + "|" + sig
+
+
+def _decode_session_token(token):
+    """Return {email, role, name, issued_at} or None if invalid/tampered."""
+    if not token or token.count("|") < 4:
+        return None
+    *parts, sig = token.split("|")
+    payload = "|".join(parts)
+    expected = hmac.new(SESSION_SECRET, payload.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        return None
+    email, role, name, issued = parts[0], parts[1], parts[2], parts[3]
+    # 30-day session window
+    if (time.time() - int(issued)) > 30 * 86400:
+        return None
+    return {"email": email, "role": role, "name": name, "issued_at": int(issued)}
+
+
+def _session_from_request():
+    """Look up the current session from X-Campaign-Session header."""
+    tok = request.headers.get("X-Campaign-Session", "")
+    return _decode_session_token(tok)
+
+
+def _require_user():
+    """Require any logged-in user — returns the decoded session or 401."""
+    s = _session_from_request()
+    if not s:
+        abort(401, description="login required")
+    return s
+
+
+def _require_admin():
+    """Require admin role — returns the decoded session or 403."""
+    s = _require_user()
+    if s.get("role") != "admin":
+        abort(403, description="admin only")
+    return s
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +303,110 @@ def _rep():
 @campaign_bp.route("/health", methods=["GET"])
 def health():
     return jsonify(ok=True, ts=int(time.time()))
+
+
+# ---------------------------------------------------------------------------
+# Auth + user management
+
+@campaign_bp.route("/login", methods=["POST"])
+def login():
+    """email + password → session token. No X-Campaign-Key required to log in."""
+    body = request.get_json(silent=True) or {}
+    email = (body.get("email") or "").strip().lower()
+    password = body.get("password") or ""
+    if not email or not password:
+        abort(400, description="email and password required")
+    cur = _conn().execute("SELECT * FROM campaign_users WHERE email=?", (email,))
+    row = cur.fetchone()
+    if not row or not _verify_password(password, row["password_hash"]):
+        abort(401, description="invalid credentials")
+    # Touch last_login (best effort)
+    try:
+        _conn().execute("UPDATE campaign_users SET last_login=? WHERE id=?",
+                        (time.strftime("%Y-%m-%dT%H:%M:%S"), row["id"]))
+        _conn().commit()
+    except Exception:
+        pass
+    return jsonify({
+        "token": _make_session_token(row),
+        "user": {"email": row["email"], "name": row["name"],
+                 "role": row["role"], "product_id": row["product_id"]},
+    })
+
+
+@campaign_bp.route("/me", methods=["GET"])
+def me():
+    """Return the logged-in user (validates the session token)."""
+    s = _require_user()
+    return jsonify({"email": s["email"], "name": s["name"], "role": s["role"]})
+
+
+@campaign_bp.route("/users", methods=["GET"])
+def list_users():
+    """Admin-only — list all staff."""
+    _require_admin()
+    cur = _conn().execute(
+        "SELECT id, email, name, role, product_id, created_at, last_login FROM campaign_users ORDER BY created_at DESC"
+    )
+    return jsonify([dict(r) for r in cur.fetchall()])
+
+
+@campaign_bp.route("/users", methods=["POST"])
+def create_user():
+    """Admin-only — add a new staff member.
+    Body: { email, name, password, role?, product_id? }
+    """
+    _require_admin()
+    body = request.get_json(silent=True) or {}
+    email = (body.get("email") or "").strip().lower()
+    name = (body.get("name") or "").strip()
+    password = body.get("password") or ""
+    role = body.get("role", "sales")
+    product_id = body.get("product_id", "solarpro-ghana")
+    if not email or not name or not password:
+        abort(400, description="email, name, password required")
+    if role not in ("admin", "sales", "manager"):
+        abort(400, description="role must be admin|sales|manager")
+    try:
+        _conn().execute(
+            "INSERT INTO campaign_users (email, name, role, product_id, password_hash, created_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (email, name, role, product_id, _hash_password(password), time.strftime("%Y-%m-%d")),
+        )
+        _conn().commit()
+    except sqlite3.IntegrityError:
+        abort(409, description="email already exists")
+    return jsonify(ok=True)
+
+
+@campaign_bp.route("/users/<int:uid>", methods=["DELETE"])
+def delete_user(uid):
+    """Admin-only — remove a staff member."""
+    s = _require_admin()
+    # Sanity: don't let admin delete themselves
+    cur = _conn().execute("SELECT email FROM campaign_users WHERE id=?", (uid,))
+    row = cur.fetchone()
+    if not row:
+        abort(404)
+    if row["email"] == s["email"]:
+        abort(400, description="cannot delete yourself")
+    _conn().execute("DELETE FROM campaign_users WHERE id=?", (uid,))
+    _conn().commit()
+    return jsonify(ok=True)
+
+
+@campaign_bp.route("/users/<int:uid>/reset-password", methods=["POST"])
+def reset_password(uid):
+    """Admin-only — set a new password for a user.
+    Body: { password }"""
+    _require_admin()
+    body = request.get_json(silent=True) or {}
+    pw = body.get("password") or ""
+    if not pw:
+        abort(400, description="password required")
+    _conn().execute("UPDATE campaign_users SET password_hash=? WHERE id=?", (_hash_password(pw), uid))
+    _conn().commit()
+    return jsonify(ok=True)
 
 
 @campaign_bp.route("/entities", methods=["GET"])
