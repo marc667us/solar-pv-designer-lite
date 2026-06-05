@@ -576,6 +576,26 @@ def init_db():
         except Exception: pass
         try: _c.execute("ALTER TABLE users ADD COLUMN referred_by INTEGER")
         except Exception: pass
+        # TRIAL_MODEL_v1 - 14-day free trial column. Each user gets one
+        # absolute date (ISO 8601) recorded at signup; expiry is just a
+        # 'now > trial_end_date' check that runs on each request.
+        try: _c.execute("ALTER TABLE users ADD COLUMN trial_end_date TEXT")
+        except Exception: pass
+        # Backfill: any user without trial_end_date gets 14 days from their
+        # original created_at. Users with no created_at (legacy) get 0 days
+        # meaning 'trial already expired'.
+        try:
+            from datetime import datetime as _dtm, timedelta as _td
+            _missing = _c.execute("SELECT id, created_at FROM users WHERE trial_end_date IS NULL OR trial_end_date = ''").fetchall()
+            for _row in _missing:
+                try:
+                    _start = _dtm.fromisoformat((_row[1] or _dtm.now().isoformat()).replace('Z',''))
+                except Exception:
+                    _start = _dtm.now()
+                _end = (_start + _td(days=14)).isoformat()
+                _c.execute("UPDATE users SET trial_end_date = ? WHERE id = ?", (_end, _row[0]))
+        except Exception:
+            pass
         # Backfill codes for any user that lacks one
         _missing = _c.execute("SELECT id FROM users WHERE referral_code IS NULL OR referral_code = ''").fetchall()
         for _row in _missing:
@@ -1595,12 +1615,15 @@ def register():
                         _referrer_id = _hit[0]
                 # Generate this new user's own referral code (unique per user)
                 _new_code = _gen_referral_code()
+                # TRIAL_MODEL_v1 - compute trial expiry: 14 days from now (UTC, ISO).
+                from datetime import datetime as _dtm, timedelta as _td
+                _trial_end = (_dtm.now() + _td(days=14)).isoformat()
                 c.execute(
-                    "INSERT INTO users (username,email,password_hash,name,company,country,plan,referral_code,referred_by) "
-                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO users (username,email,password_hash,name,company,country,plan,referral_code,referred_by,trial_end_date) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
                     (f["username"], f["email"], ph,
                      f.get("name",""), f.get("company",""),
-                     f.get("country",""), "free", _new_code, _referrer_id))
+                     f.get("country",""), "free", _new_code, _referrer_id, _trial_end))
                 uid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
                 # Log the referral event so we can track conversions over time
                 if _referrer_id:
@@ -2856,14 +2879,67 @@ _______________________________________________
                        f"site_assessment_{project['name'].replace(' ','_')}.pdf")
 
 
+
+def _trial_days_left(user=None):
+    """
+    Days remaining in the user's 14-day free trial.
+
+    Inputs:  user (dict-like with trial_end_date) - defaults to current_user()
+    Output:  integer >= 0 if still in trial; 0 once expired or unknown
+             None if user is on a paid plan (no trial to count)
+    """
+    u = user or current_user()
+    if not u:
+        return 0
+    plan = (u.get("plan") or "free").lower() if isinstance(u, dict) else (u["plan"] or "free").lower()
+    if plan != "free":
+        return None  # paid users don't see a trial countdown
+    try:
+        from datetime import datetime as _dtm
+        _te_raw = u.get("trial_end_date") if isinstance(u, dict) else u["trial_end_date"]
+        if not _te_raw:
+            return 0
+        _te = _dtm.fromisoformat(str(_te_raw).replace("Z",""))
+        delta = (_te - _dtm.now()).total_seconds()
+        return max(0, int(delta // 86400) + (1 if delta % 86400 > 0 else 0))
+    except Exception:
+        return 0
+
+@app.context_processor
+def _inject_trial_days_left():
+    """Expose trial_days_left() to every Jinja template."""
+    return {"trial_days_left": _trial_days_left}
+
 def _paid_only(pid):
-    """Gate: redirect free-plan users to upgrade page."""
-    u    = current_user()
-    plan = (u["plan"] or "free").lower() if u else "free"
-    if plan == "free":
-        flash("This report is available on Basic plan and above. Upgrade to access all reports.", "warning")
-        return redirect(url_for("upgrade"))
-    return None
+    """
+    Gate: free-plan users get full access during the 14-day trial window,
+    then are redirected to /upgrade once trial_end_date passes.
+
+    Inputs:  pid (project id) - not used directly; current_user() supplies the row
+    Output:  None if access permitted; a redirect(Response) otherwise
+    Logic:
+      - any paid plan (starter/professional/business/enterprise) -> allowed
+      - free plan AND now <= trial_end_date                       -> allowed (trial)
+      - free plan AND trial expired                              -> redirected
+    """
+    u = current_user()
+    if not u:
+        return redirect(url_for("login"))
+    plan = (u.get("plan") or "free").lower() if isinstance(u, dict) else (u["plan"] or "free").lower()
+    if plan != "free":
+        return None  # paid subscriber, no gate
+    # In-trial check: parse trial_end_date and compare to now
+    try:
+        from datetime import datetime as _dtm
+        _te_raw = u.get("trial_end_date") if isinstance(u, dict) else u["trial_end_date"]
+        if _te_raw:
+            _te = _dtm.fromisoformat(str(_te_raw).replace("Z",""))
+            if _dtm.now() <= _te:
+                return None  # still inside the 14-day trial
+    except Exception:
+        pass  # malformed date -> treat as expired
+    flash("Your 14-day free trial has ended. Upgrade to keep using premium features.", "warning")
+    return redirect(url_for("upgrade"))
 
 
 @app.route("/project/<int:pid>/report/pv")
