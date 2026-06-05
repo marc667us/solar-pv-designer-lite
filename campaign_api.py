@@ -183,9 +183,24 @@ def _init_db_once():
         "ALTER TABLE campaign_users ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
         "ALTER TABLE campaign_users ADD COLUMN profession TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE campaign_users ADD COLUMN invite_token TEXT",
+        # Tracking — when product was assigned, by whom
+        "ALTER TABLE campaign_users ADD COLUMN product_assigned_at TEXT",
+        "ALTER TABLE campaign_users ADD COLUMN product_assigned_by TEXT",
     ):
         try: cur.execute(stmt)
-        except sqlite3.OperationalError: pass  # column already exists
+        except sqlite3.OperationalError: pass
+
+    # Per-entity assignments table (which staff gets which entities)
+    cur.executescript("""
+        CREATE TABLE IF NOT EXISTS campaign_assignments (
+            user_id INTEGER NOT NULL,
+            entity_name TEXT NOT NULL,
+            assigned_at TEXT NOT NULL,
+            assigned_by TEXT NOT NULL,
+            PRIMARY KEY (user_id, entity_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_assign_user ON campaign_assignments(user_id);
+    """)
 
     # Bootstrap admin if no users exist yet — admin is auto-active.
     cur.execute("SELECT COUNT(*) FROM campaign_users")
@@ -265,9 +280,13 @@ _cors_headers = _cors_headers_with_session
 
 
 def _check_key():
-    """Enforce X-Campaign-Key on every write (legacy soft-auth)."""
-    if request.headers.get("X-Campaign-Key") != CAMPAIGN_API_KEY:
-        abort(401, description="bad campaign key")
+    """Accept EITHER a valid session token OR the legacy X-Campaign-Key.
+    Sessions are the new way; the API key remains as a fallback."""
+    if _session_from_request():
+        return
+    if request.headers.get("X-Campaign-Key") == CAMPAIGN_API_KEY:
+        return
+    abort(401, description="login required")
 
 
 def _rep():
@@ -474,30 +493,103 @@ def list_pending():
 
 @campaign_bp.route("/users/<int:uid>/approve", methods=["POST"])
 def approve_user(uid):
-    """Admin — activate a pending user and assign their product.
-    Body: { product_id, role? }
+    """Admin — activate a pending user, assign product + role, and assign entities.
+
+    Body: {
+      product_id (required),
+      role? (sales|manager|admin),
+      entities? (list of entity names; default = ALL entities of that product)
+    }
+    Every assignment is timestamped with assigned_at + assigned_by (admin email).
     """
-    _require_admin()
+    s = _require_admin()
     body = request.get_json(silent=True) or {}
     product_id = (body.get("product_id") or "").strip()
     role = body.get("role", "sales")
+    requested_entities = body.get("entities")  # None => all
     if not product_id:
         abort(400, description="product_id required")
     if role not in ("admin", "sales", "manager"):
         abort(400, description="role must be admin|sales|manager")
-    cur = _conn().execute("UPDATE campaign_users SET status='active', product_id=?, role=? "
-                          "WHERE id=? AND status='pending'", (product_id, role, uid))
-    _conn().commit()
+
+    now = time.strftime("%Y-%m-%dT%H:%M:%S")
+    conn = _conn()
+    cur = conn.execute(
+        "UPDATE campaign_users SET status='active', product_id=?, role=?, "
+        "product_assigned_at=?, product_assigned_by=? WHERE id=? AND status='pending'",
+        (product_id, role, now, s["email"], uid),
+    )
     if cur.rowcount == 0:
         abort(404, description="no pending user with that id")
-    return jsonify(ok=True)
+
+    # Default to assigning every entity if the admin didn't pick a subset
+    if requested_entities is None:
+        cur = conn.execute("SELECT name FROM campaign_entities")
+        requested_entities = [r["name"] for r in cur.fetchall()]
+
+    # Clear any previous assignments (shouldn't exist for a pending user, but be safe)
+    conn.execute("DELETE FROM campaign_assignments WHERE user_id=?", (uid,))
+    for name in requested_entities:
+        conn.execute(
+            "INSERT OR IGNORE INTO campaign_assignments (user_id, entity_name, assigned_at, assigned_by) "
+            "VALUES (?,?,?,?)",
+            (uid, name, now, s["email"]),
+        )
+    conn.commit()
+    return jsonify(ok=True, assigned_entities=len(requested_entities), at=now)
+
+
+@campaign_bp.route("/users/<int:uid>/assignments", methods=["GET"])
+def list_assignments(uid):
+    """Admin OR the user themselves — see what entities a user is assigned."""
+    s = _require_user()
+    if s.get("role") != "admin":
+        # Sales can only see their own
+        me = _conn().execute("SELECT id FROM campaign_users WHERE email=?", (s["email"],)).fetchone()
+        if not me or me["id"] != uid:
+            abort(403)
+    cur = _conn().execute(
+        "SELECT entity_name, assigned_at, assigned_by FROM campaign_assignments "
+        "WHERE user_id=? ORDER BY entity_name", (uid,))
+    return jsonify([dict(r) for r in cur.fetchall()])
+
+
+@campaign_bp.route("/users/<int:uid>/assignments", methods=["POST"])
+def set_assignments(uid):
+    """Admin — replace a user's entity assignments.
+    Body: { entities: [name, name, ...] }
+    Old assignments are removed; new ones get fresh assigned_at/by.
+    """
+    s = _require_admin()
+    body = request.get_json(silent=True) or {}
+    names = body.get("entities") or []
+    now = time.strftime("%Y-%m-%dT%H:%M:%S")
+    conn = _conn()
+    conn.execute("DELETE FROM campaign_assignments WHERE user_id=?", (uid,))
+    for n in names:
+        conn.execute(
+            "INSERT OR IGNORE INTO campaign_assignments (user_id, entity_name, assigned_at, assigned_by) "
+            "VALUES (?,?,?,?)", (uid, n, now, s["email"]),
+        )
+    conn.commit()
+    return jsonify(ok=True, count=len(names), at=now)
 
 
 @campaign_bp.route("/me", methods=["GET"])
 def me():
-    """Return the logged-in user (validates the session token)."""
+    """Return the logged-in user including product + assignment tracking."""
     s = _require_user()
-    return jsonify({"email": s["email"], "name": s["name"], "role": s["role"]})
+    cur = _conn().execute(
+        "SELECT id, email, name, role, product_id, profession, product_assigned_at, product_assigned_by, created_at, last_login "
+        "FROM campaign_users WHERE email=?", (s["email"],))
+    row = cur.fetchone()
+    if not row:
+        abort(401)
+    # Pull assignment count too
+    a = _conn().execute("SELECT COUNT(*) AS n FROM campaign_assignments WHERE user_id=?", (row["id"],)).fetchone()
+    out = dict(row)
+    out["assigned_entities_count"] = a["n"] if a else 0
+    return jsonify(out)
 
 
 @campaign_bp.route("/users", methods=["GET"])
@@ -568,30 +660,68 @@ def reset_password(uid):
     return jsonify(ok=True)
 
 
+def _allowed_entities_for_session(s):
+    """Return the set of entity names this session is allowed to see.
+    Admin → all. Sales/manager → only entities in campaign_assignments.
+    Returns None to mean 'no filter' (admin)."""
+    if not s or s.get("role") == "admin":
+        return None
+    u = _conn().execute("SELECT id FROM campaign_users WHERE email=?", (s["email"],)).fetchone()
+    if not u:
+        return set()
+    rows = _conn().execute("SELECT entity_name FROM campaign_assignments WHERE user_id=?", (u["id"],)).fetchall()
+    return {r["entity_name"] for r in rows}
+
+
 @campaign_bp.route("/entities", methods=["GET"])
 def list_entities():
-    """Return the entity master list."""
-    cur = _conn().cursor()
-    cur.execute("SELECT payload FROM campaign_entities ORDER BY name")
-    items = [json.loads(r["payload"]) for r in cur.fetchall()]
+    """Entity master list, filtered to the caller's assignments unless they're admin."""
+    s = _session_from_request()
+    allowed = _allowed_entities_for_session(s)
+    cur = _conn().execute("SELECT payload FROM campaign_entities ORDER BY name")
+    items = []
+    # Pull assignment metadata for the caller so the UI can render 'assigned by/at'
+    uid = None
+    if s:
+        u = _conn().execute("SELECT id FROM campaign_users WHERE email=?", (s["email"],)).fetchone()
+        uid = u["id"] if u else None
+    meta = {}
+    if uid:
+        for r in _conn().execute("SELECT entity_name, assigned_at, assigned_by FROM campaign_assignments WHERE user_id=?", (uid,)):
+            meta[r["entity_name"]] = {"assigned_at": r["assigned_at"], "assigned_by": r["assigned_by"]}
+    for r in cur.fetchall():
+        e = json.loads(r["payload"])
+        if allowed is not None and e["name"] not in allowed:
+            continue
+        if e["name"] in meta:
+            e["_assigned_at"] = meta[e["name"]]["assigned_at"]
+            e["_assigned_by"] = meta[e["name"]]["assigned_by"]
+        items.append(e)
     return jsonify({"generated": time.strftime("%Y-%m-%d"), "entities": items})
 
 
 @campaign_bp.route("/state", methods=["GET"])
 def get_state():
-    """One snapshot containing pipeline + feedback so the portal can hydrate in 1 round-trip."""
-    cur = _conn().cursor()
-    cur.execute("SELECT * FROM campaign_pipeline")
-    pipeline = {r["entity_name"]: {
-        "status": r["status"], "notes": r["notes"],
-        "next_action_date": r["next_action_date"],
-        "literature_sent": json.loads(r["literature_sent"] or "[]"),
-        "last_updated": r["last_updated"],
-        "last_updated_by": r["last_updated_by"],
-    } for r in cur.fetchall()}
-    cur.execute("SELECT * FROM campaign_feedback ORDER BY id DESC")
+    """One snapshot — pipeline + feedback, filtered to caller's assignments."""
+    s = _session_from_request()
+    allowed = _allowed_entities_for_session(s)
+    cur = _conn().execute("SELECT * FROM campaign_pipeline")
+    pipeline = {}
+    for r in cur.fetchall():
+        if allowed is not None and r["entity_name"] not in allowed:
+            continue
+        pipeline[r["entity_name"]] = {
+            "status": r["status"], "notes": r["notes"],
+            "next_action_date": r["next_action_date"],
+            "literature_sent": json.loads(r["literature_sent"] or "[]"),
+            "last_updated": r["last_updated"],
+            "last_updated_by": r["last_updated_by"],
+        }
+    cur = _conn().execute("SELECT * FROM campaign_feedback ORDER BY id DESC")
     feedback = {}
     for r in cur.fetchall():
+        if allowed is not None and r["entity_name"] not in allowed:
+            continue
         feedback.setdefault(r["entity_name"], []).append({
             "id": r["id"], "date": r["date"], "type": r["type"],
             "severity": r["severity"], "text": r["text"],
