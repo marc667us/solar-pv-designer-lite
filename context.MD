@@ -1,92 +1,87 @@
 # SolarPro Global — Session Context
 
-**Last updated:** 2026-06-05
+**Last updated:** 2026-06-05 (end of session, switched to sales-campaign focus)
 **Purpose:** capture in-flight state so any session can resume mid-task without re-discovery.
 
 ---
 
 ## 1. Where the app is running RIGHT NOW
 
-| Tier | URL | State | Branch | Railway env |
-|------|-----|-------|--------|-------------|
-| **Production** | https://web-production-744af.up.railway.app | ✅ Live, valid Railway SSL, sales-ready | `master` @ `16b7ba3` | production (`7ed9b8ad-…`) |
-| Production custom domain | https://solarpro.aiappinvent.com | ❌ Cert not yet issued by Railway; browser refuses HTTPS | — | (same) |
-| **Staging** | — | Created on Railway but **no token, no service deploy** | `staging` (planned) | staging (`f50c2e0e-…`) |
-| **Development** | — | Created on Railway but **no token, no service deploy** | `develop` @ `163a936` | development (`2b52bbc8-…`) |
+| Tier | URL | State | Branch |
+|------|-----|-------|--------|
+| **Primary host (Render)** | https://solarpro-global.onrender.com | ✅ Live — deploys auto-trigger on push to `master`. Fresh DB on each redeploy (no persistent disk yet). | `master` @ `2ff1481` |
+| Legacy host (Railway) | https://web-production-744af.up.railway.app | ⚠️ Stale — Railway auto-deploy stopped picking up new commits. Last successfully deployed: `5aa9761`. | (frozen) |
+| Custom domain | https://solarpro.aiappinvent.com | ❌ Railway cert never issued. Not pointed at Render yet. | — |
+
+**Why the host change:** at midday 2026-06-05 Railway's GitHub integration stopped picking up new pushes from `master` for unknown reasons (no logs visible without dashboard access). The campaign-portal backend (`campaign_api.py`) was already shipped to master and needed live execution; we redeployed the same code on the existing Render service via `gh workflow run "Force Render Deploy"`. Render is now the primary host. Railway service is left running but stale.
 
 ---
 
-## 2. Active blockers (waiting on user)
+## 2. Today's net change (campaign portal backend added in this repo)
 
-1. **Cloudflare API token** — to put Cloudflare in front of Railway and bypass the stuck custom-domain cert.
-   - Token created via https://dash.cloudflare.com/profile/api-tokens, "Edit zone DNS" template plus extra `Zone:Edit` and `Zone:SSL and Certificates:Edit` scopes.
-   - Once received, I add `aiappinvent.com` as a CF zone, import DNS, set SSL/TLS mode = **Full** (not Strict), trigger Universal SSL.
-   - User then pastes the 2 nameservers from Cloudflare into Namecheap (the only manual step that can't be automated).
+A separate **aiappinvent Sales Campaign Portal** got built today. Its FRONTEND lives in a different repo (`marc667us/campaign-portal`, GitHub Pages). Its BACKEND lives here as a Flask blueprint:
 
-2. **Railway env-scoped tokens** for staging + development environments — generated from Railway dashboard → project → Settings → Tokens. Without these the 3-tier deploy pipeline can't be wired.
+- `campaign_api.py` — REST API mounted at `/api/campaign/*` (admin auth, invite-only signup, per-entity assignments, audit tracking, CORS for the portal origin)
+- `patch_campaign_api_registration.py` — binary patch that wires the blueprint into `web_app.py` (preserves CRLF + mojibake per the editing rule)
+- `.github/workflows/render-attach-campaign-disk.yml` — disk-attach attempt (failed, Render disk API returned 404)
+- `.github/workflows/render-fix-db-path.yml` — set DB_PATH=/app/solar.db (also wrong — `/app` doesn't exist on Render)
+- `.github/workflows/render-remove-db-path.yml` — removed DB_PATH so the code default kicks in
+- `.github/workflows/test-campaign-login.yml` — login smoke test from a clean runner IP
 
-3. **Paystack live keys** — user owns this; replacing `pk_test_…` / `sk_test_…` GitHub secrets with live values when ready.
+The campaign portal is documented separately in `memory/project_campaign_portal.md` and `campaign-portal/context.MD`. Treat it as an independent project that just happens to share this Render service.
 
 ---
 
-## 3. Latest production commits (master)
+## 3. Active blockers
+
+1. **Namecheap CNAME for `solarpro.aiappinvent.com`** — still pointing at Railway, where the cert never issued. Move it to Render (CNAME → service URL or alias) when next picking up SolarPro work. Same CNAME problem also blocks `campaign.aiappinvent.com` for the campaign portal.
+2. **Railway service is dead but billed** — should be paused or deleted to stop any free-tier resource ticking.
+3. **Persistent disk on Render** — currently the DB resets on every redeploy. Render disk REST API returned 404 on both PUT and POST to `/v1/services/{id}/disk`. Either find the correct endpoint, switch to a render.yaml IaC definition, or move to Turso/SQLite Cloud (free).
+4. **Workflow secret leak** — `render-attach-campaign-disk.yml` accidentally dumps all env values (including `OPENROUTER_API_KEY`, `PAYSTACK_SECRET_KEY`, `SECRET_KEY`) into GitHub Actions logs when it builds the env-vars merge. Rewrite the merge to not echo values.
+
+---
+
+## 4. Things that ARE working
+
+- All existing SolarPro routes (landing, register, login, project wizard, BOQ, reports, admin) — untouched today
+- New campaign portal endpoints (`/api/campaign/*`) — verified end-to-end via test workflow
+- Auto-deploy on `git push origin master` to Render
+- `Force Render Deploy` workflow as a manual re-trigger
+- 26/29 admin ops tests (per earlier session state — not re-verified today)
+- All 7 panel wattages, 22/22 reports — per memory, not retested today
+
+---
+
+## 5. Latest commits on master (most recent first)
 
 | Commit | What |
-|--------|------|
-| `16b7ba3` | feat(referrals): add referral program with shareable per-user link |
-| `9720710` | fix(security-audit): defensive wrapping + csrf_protect + brevo/axigen checks |
-| `93c5423` | feat(email): wire Brevo as primary HTTPS provider |
-| `cca3768` | fix(env): strip BOM from env vars (this was THE Render-deploy root-cause fix) |
-| `27b2492` | feat(panel-select): 110/250/330/400/450/500/550 Wp options + dynamic install report |
+|---|---|
+| `2ff1481` | (campaign-portal repo) PDF restyle + bigger Open buttons on tabs |
+| `dd30c14` | `chore(campaign-api): add /_debug endpoint` |
+| `bc5a689` + `ec4726f` + `b95bd1e` | iteration on fix attempts for the Render DB-path issue |
+| `b029bf5` | feat(campaign-api): invite-based onboarding + admin approval |
+| `33a8ec8` | feat(campaign-api): SaaS auth — email+password login, user mgmt, sessions |
+| `7c980f3` | feat(campaign-api): cloud-backed REST API for the GitHub Pages campaign portal |
+| `37c432a` | revert(campaign): unbundle campaign portal from SolarPro (initial mistake) |
 
-## 4. Develop branch (not in production)
-
-| Commit | What |
-|--------|------|
-| `163a936` | feat(trial): 14-day free trial model from `Documents\pvsolar1\kubernates\basicprice.txt` |
+Pre-today commits (the actual SolarPro work) are unchanged from the prior session — see `memory/project_solar_pv.md` for the prior baseline.
 
 ---
 
-## 5. Email pipeline — current verified state
+## 6. Resume here (next time you work on the SolarPro app)
 
-- **Provider:** Brevo (HTTPS API, free 300/day)
-- **Authenticated domain:** `aiappinvent.com` (DKIM CNAMEs + brevo-code TXT + DMARC TXT all green)
-- **Verified senders that the app actually uses:** `sales@aiappinvent.com`, `support@aiappinvent.com`, `billing@aiappinvent.com`, plus auto-verified `marc667us@yahoo.com`
-- **Verified delivery test (2026-06-04 / 23:24 UTC):** request → delivered in 2 seconds. Sender shown to recipient = `sales@aiappinvent.com`. Stop using yahoo as visible sender.
-
----
-
-## 6. Sales-readiness audit (latest run)
-
-| Component | State |
-|-----------|-------|
-| Public landing | ✅ |
-| Public assessment magnet (`/api/assess/design`) | ✅ — calc + lead-save + Brevo email all working |
-| Register form + welcome email | ✅ |
-| Free trial → upgrade via Paystack (test keys) | ✅ on test mode; live keys pending |
-| Reports + exports (gated for paid plans) | ✅ 22/22 |
-| Admin Ops Center | ✅ 26/29 (Redis/Queue WARN expected on free tier) |
-| Referral link + dashboard | ✅ 10/10 |
+1. **Re-point `solarpro.aiappinvent.com`** at Render. Add Render's recommended target as CNAME at Namecheap, add the custom domain via Render API workflow.
+2. **Decide what to do with the Railway service.** Either re-enable auto-deploy by reconnecting GitHub integration via Railway dashboard, or delete it.
+3. **Attach a persistent disk on Render.** Without this, every Render redeploy wipes solar.db — the campaign portal admin must be re-bootstrapped each time. (For the actual SolarPro app, the same disk would persist user accounts, projects, and BOQs.)
+4. **Resume the original SolarPro 14-day trial work** on `develop` branch (`163a936`) — deploy to a Render preview environment when you're ready.
 
 ---
 
-## 7. Memory of session-level decisions (most important)
+## 7. What we did NOT touch in SolarPro today
 
-- **Zero-cost APIs only** until the app is generating revenue. No paid Claude / no paid Render Starter / no paid Brevo plan. Free-tier alternatives only (OpenRouter, GitHub Models, Ollama; Brevo / Mailgun / Resend free tiers).
-- **Production untouched** unless explicitly directed. Trial-model + future basicprice features stay on `develop` until they're tested in dev/staging.
-- **Code comments required** — every new code block must include: what it does, inputs, expected outputs, and any non-obvious syntax.
-- **Verify before acting** — when something fails, read the actual log first. Don't delete/recreate state to "retrigger" provisioning unless the current state is definitively dead (this rule was learned the hard way during Railway cert debugging this session).
+- `web_app.py` — only the 2-line registration injection for the campaign blueprint was added at the top, via binary patch. No SolarPro routes, no shared config changed.
+- `solar.db` schema (for SolarPro tables) — only added campaign-prefixed tables alongside
+- Any template, static, or `calculation/` file
+- Any payment / email config
 
----
-
-## 8. Out-of-scope work from `basicprice.txt` (queued for future sessions)
-
-The spec also describes (but we have NOT built):
-- Public 50,000+ electrical product catalog (RMUs, transformers, switchboards, MCCs, generators, cables, etc.) with search + technical specs + supplier directory
-- Public 20,000+ IT product catalog (firewalls, switches, routers, PBX, CCTV, access control, etc.)
-- AI Product Intelligence Agent (recommends products, brands, suppliers; benchmarks prices)
-- CRM tracking tables: `public_visitors`, `lead_magnets`, `product_views`, `supplier_views`, `trial_users`, `upgrade_opportunities`, `subscription_events`, `marketing_campaigns`, `crm_leads`, `crm_opportunities`
-- Automated trial-reminder emails on day 7, 10, 13, 15 (requires a scheduler — cron / Railway cron service / GitHub Actions cron)
-- BOQ Generator, Invoice Generator, Procurement Module enhancements per the spec
-
-When the user is ready for these, the trial-model commit (`163a936`) is the natural starting point because it already adds `trial_end_date` and the gating logic.
+This means SolarPro behavior is exactly the same as it was at the start of session 2026-06-05.
