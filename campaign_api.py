@@ -58,7 +58,7 @@ CAMPAIGN_API_KEY = os.environ.get("CAMPAIGN_API_KEY", "campaign-ghana-2026-beta"
 # admin rights and a default password he should change immediately.
 BOOTSTRAP_ADMIN_EMAIL    = os.environ.get("CAMPAIGN_ADMIN_EMAIL", "marc667us@yahoo.com")
 BOOTSTRAP_ADMIN_NAME     = os.environ.get("CAMPAIGN_ADMIN_NAME", "Marc")
-BOOTSTRAP_ADMIN_PASSWORD = os.environ.get("CAMPAIGN_ADMIN_PASSWORD", "ChangeMe2026!")
+BOOTSTRAP_ADMIN_PASSWORD = os.environ.get("CAMPAIGN_ADMIN_PASSWORD", "ChangeMe2026/")
 
 # Sessions are bound to a server-side random token. We don't store tokens in
 # the DB to keep it simple — we sign them with this secret using HMAC, so a
