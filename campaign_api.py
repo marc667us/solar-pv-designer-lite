@@ -373,6 +373,35 @@ def health():
     return jsonify(ok=True, ts=int(time.time()))
 
 
+@campaign_bp.route("/_debug", methods=["GET"])
+def debug():
+    """Surface DB state so we can diagnose 500s without dashboard access."""
+    path = _db_path()
+    parent = os.path.dirname(path) or "."
+    info = {
+        "db_path_env": os.environ.get("DB_PATH"),
+        "db_path_used": path,
+        "parent_exists": os.path.isdir(parent),
+        "parent_writable": os.access(parent, os.W_OK),
+        "db_file_exists": os.path.isfile(path),
+        "cwd": os.getcwd(),
+        "module_dir": os.path.dirname(os.path.abspath(__file__)),
+        "ts": int(time.time()),
+    }
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'campaign_%'")
+        info["campaign_tables"] = [r[0] for r in cur.fetchall()]
+        cur = conn.execute("SELECT COUNT(*) FROM campaign_users")
+        info["users_count"] = cur.fetchone()[0]
+        conn.close()
+        info["db_open"] = True
+    except Exception as exc:
+        info["db_open"] = False
+        info["db_error"] = f"{type(exc).__name__}: {exc}"
+    return jsonify(info)
+
+
 # ---------------------------------------------------------------------------
 # Auth + user management
 
