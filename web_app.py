@@ -1543,12 +1543,6 @@ def calc_boq(num_panels, num_bat, inv_kw, pv_kw, bat_kwh,
 
 # ─── Routes — Auth ────────────────────────────────────────────────────────────
 
-
-# === Campaign portal (intranet sales app) ===
-from campaign_blueprint import register_campaign
-register_campaign(app)
-# === end campaign portal ===
-
 @app.route("/")
 def landing():
     with get_db() as c:
