@@ -7,9 +7,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **SolarPro Global** — Intelligent Global PV Solar System Design Platform.
 Flask web SaaS for residential, commercial, and industrial solar PV design, financial engineering, and project management.
 
-- **Live URL**: https://solarpro.aiappinvent.com
-- **GitHub**: marc667us/solar-pv-designer-lite (branch: `master`)
-- **Hosting**: Railway (migrated from Render 2026-06-03) — connect repo at railway.app → New Project → Deploy from GitHub → marc667us/solar-pv-designer-lite
+- **Production URL (Railway default, valid SSL)**: https://web-production-744af.up.railway.app
+- **Custom domain**: https://solarpro.aiappinvent.com — Railway cert is stuck; Cloudflare being added in front as fix
+- **GitHub**: marc667us/solar-pv-designer-lite
+- **Branch model**: `master` = production / `develop` = active feature work / `staging` = pre-prod (planned)
+- **Hosting**: Railway, free tier. Project ID `310ad3cf-0b42-4959-995c-213ed4e81463`, service ID `b9889adc-2c77-46d3-9bb9-16738b9676e4`. Three Railway environments exist:
+  - production (`7ed9b8ad-...`) — auto-deploys master
+  - staging (`f50c2e0e-...`) — created, no token yet
+  - development (`2b52bbc8-...`) — created, no token yet
 - **Admin login**: `admin` / `SolarAdmin2026!` (enterprise plan)
 
 Everything lives in a **single file**: `web_app.py` (~494KB, ~10 000 lines). SQLite database (`solar.db` locally, `/app/solar.db` on Railway). Set `DB_PATH` env var in Railway Variables to override.
@@ -276,19 +281,41 @@ Sequential `if raw is None` blocks (NOT `elif`).
 
 ## Email Stack
 
-- `_send_email()` — tries Resend first, falls back to SMTP
-- **Railway does NOT block outbound SMTP** — SMTP should work once deployed on Railway
-- Resend: `RESEND_API_KEY` set in GitHub Secrets; domain `aiappinvent.com` **NOT yet verified** (needed for custom sender)
-- Can send from `onboarding@resend.dev` without domain verification
-- Fix: Go to resend.com/domains → add aiappinvent.com → copy SPF/DKIM → Namecheap Advanced DNS → verify
+- `_send_email()` send chain (api_manager.py): **Brevo → Axigen → Resend → SMTP**
+- **Brevo (primary, HTTPS, free 300/day):** `BREVO_API_KEY` (`xkeysib-...`). Domain `aiappinvent.com` is **authenticated** (4 DNS records on Namecheap: 2 DKIM CNAMEs, 1 brevo-code TXT, 1 DMARC TXT) so we can send from any `@aiappinvent.com` address. Verified senders in production: `sales@`, `support@`, `billing@`, plus auto-verified `marc667us@yahoo.com`.
+- **Axigen (secondary, scaffolded only):** `AXIGEN_SERVER_URL`/`AXIGEN_USER`/`AXIGEN_PASSWORD` — vars exist + integration code lives in api_manager._send_axigen(); no actual server provisioned yet
+- **Resend (fallback, currently broken):** `RESEND_API_KEY` value is a Render-generated placeholder `rnd_pGzm…`, not a real Resend key. To re-enable: generate at https://resend.com/api-keys, `gh secret set RESEND_API_KEY -b "re_xxx"`, redeploy.
+- **SMTP (last resort):** Namecheap Private Email — `mail.privateemail.com:587` STARTTLS. **Render blocks outbound SMTP; Railway free tier also blocks it.** SMTP only works on paid hosting or self-host.
 
 ---
 
 ## Payments
 
-- **Paystack** — `POST /api.paystack.co/transaction/initialize`; callback `/paystack/callback`
+- **Paystack — client-side via PaystackPop.js** on `templates/upgrade.html`. Server-side routes: `/paystack/verify` (POST, called by JS callback) + `/paystack/webhook` (POST, async confirmation). There is NO server-side `/paystack/initialize` route — the popup talks directly to Paystack.
 - **Stripe** — `stripe.checkout.Session.create`; webhook `/stripe/webhook`
-- Plans: `free` (1 project, 14 days), `professional` ($49/mo), `business` ($99/mo), `enterprise` (custom)
+- Plans: `free` (14-day trial), `professional` ($49/mo), `business` ($99/mo), `enterprise` (custom)
+
+---
+
+## Referral Program (commit `16b7ba3`)
+
+- Schema: `users.referral_code` (unique 8-char per user, auto-generated on signup), `users.referred_by` (FK), `referrals` table logs conversions
+- Routes: `GET /r/<code>` → sets `ref_code` cookie + 302s to landing; `GET /referrals` → user dashboard
+- `base.html` injects `REF_COOKIE_CAPTURE_v1` JS that reads `?ref=CODE` from URL and stores the same cookie
+- `register()` reads cookie, looks up referrer, sets `referred_by`, logs to `referrals` table
+- Reward language (template only, manually applied): 20% credit per paid referral + 20% off first paid month for referee
+- Live tests: 10/10 PASS (`test_referrals_live.py`)
+
+---
+
+## 14-Day Free-Trial Model (on `develop` branch only, NOT in production)
+
+- Source spec: `C:\Users\USER\Documents\pvsolar1\kubernates\basicprice.txt`
+- Commit: `163a936` on `develop`
+- Schema: `users.trial_end_date` (TEXT ISO 8601, set to now+14d on signup)
+- `_paid_only()` admits free-plan users while `now <= trial_end_date`; otherwise redirect to `/upgrade`
+- `_trial_days_left()` helper exposed via Jinja `context_processor` for countdown widgets
+- Out of scope (future sessions): 50k+ public product catalog (electrical, IT), AI Product Intelligence Agent, automated day 7/10/13/15 reminders, CRM tables (public_visitors, product_views, supplier_views)
 
 ---
 
@@ -307,9 +334,11 @@ Ground mount shows STEEL POST / CONCRETE FOOTING / PURLIN BEAM / EARTH ROD hardw
 
 | Variable | Status |
 |----------|--------|
-| `ANTHROPIC_API_KEY` | copy from GitHub Secrets |
-| `OPENROUTER_API_KEY` | copy from GitHub Secrets |
-| `RESEND_API_KEY` | copy from GitHub Secrets |
+| `ANTHROPIC_API_KEY` | **leave empty** — zero-cost policy; chain falls through to OpenRouter |
+| `OPENROUTER_API_KEY` | copy from GitHub Secrets (free Llama/Gemma models) |
+| `BREVO_API_KEY` | copy from GitHub Secrets — current primary email provider |
+| `AXIGEN_SERVER_URL` / `AXIGEN_USER` / `AXIGEN_PASSWORD` | empty until VPS provisioned |
+| `RESEND_API_KEY` | held but invalid placeholder `rnd_pGzm…`; not used |
 | `PAYSTACK_SECRET_KEY` | copy from GitHub Secrets |
 | `SECRET_KEY` | copy from GitHub Secrets |
 | `OLLAMA_URL` | copy from GitHub Secrets |
