@@ -93,9 +93,23 @@ campaign_bp = Blueprint("campaign", __name__, url_prefix="/api/campaign")
 # Database init
 
 def _conn():
-    """Open a SQLite connection. Per-request (Flask `g`) so we close cleanly."""
+    """Open a SQLite connection. Per-request (Flask `g`) so we close cleanly.
+
+    Falls back to /app/solar.db (no subdirectory) if DB_PATH points at a
+    not-yet-mounted volume — happens on Render's free tier when a Disk
+    is referenced in env vars before being attached.
+    """
     if not hasattr(g, "_campaign_db"):
-        g._campaign_db = sqlite3.connect(_db_path())
+        path = _db_path()
+        try:
+            parent = os.path.dirname(path) or "."
+            os.makedirs(parent, exist_ok=True)
+            g._campaign_db = sqlite3.connect(path)
+        except (sqlite3.OperationalError, OSError) as exc:
+            # Disk not mounted? Fall back to working dir so the API still serves.
+            fallback = os.path.join(os.path.dirname(os.path.abspath(__file__)), "solar.db")
+            print(f"[campaign_api] _conn falling back to {fallback}: {exc}")
+            g._campaign_db = sqlite3.connect(fallback)
         g._campaign_db.row_factory = sqlite3.Row
     return g._campaign_db
 
