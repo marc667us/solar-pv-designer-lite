@@ -334,6 +334,43 @@ def login():
     })
 
 
+@campaign_bp.route("/register", methods=["POST"])
+def register_user():
+    """Self-service signup.
+    Anyone with the portal URL can create their own account. New accounts get
+    the default 'sales' role and the default product. An admin can promote
+    them later from the Staff tab. Bootstrap admin is created on first DB init,
+    so the first signup never overrides the admin seed.
+    Body: { email, name, password }
+    """
+    body = request.get_json(silent=True) or {}
+    email = (body.get("email") or "").strip().lower()
+    name = (body.get("name") or "").strip()
+    password = body.get("password") or ""
+    if not email or not name or not password:
+        abort(400, description="email, name, password required")
+    if len(password) < 6:
+        abort(400, description="password must be at least 6 characters")
+    try:
+        _conn().execute(
+            "INSERT INTO campaign_users (email, name, role, product_id, password_hash, created_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (email, name, "sales", "solarpro-ghana",
+             _hash_password(password), time.strftime("%Y-%m-%d")),
+        )
+        _conn().commit()
+    except sqlite3.IntegrityError:
+        abort(409, description="email already registered")
+    # Auto-login: return a session token so the portal can skip the login form
+    cur = _conn().execute("SELECT * FROM campaign_users WHERE email=?", (email,))
+    row = cur.fetchone()
+    return jsonify({
+        "token": _make_session_token(row),
+        "user": {"email": row["email"], "name": row["name"],
+                 "role": row["role"], "product_id": row["product_id"]},
+    })
+
+
 @campaign_bp.route("/me", methods=["GET"])
 def me():
     """Return the logged-in user (validates the session token)."""
