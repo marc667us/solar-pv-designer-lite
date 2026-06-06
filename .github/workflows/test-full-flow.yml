@@ -1,0 +1,64 @@
+name: Test full flow
+on: { workflow_dispatch: }
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Full end-to-end flow against live API
+        run: |
+          API=https://solarpro-global.onrender.com/api/campaign
+          PASS_FAIL() { if [ "$2" = "$3" ]; then echo "  ✓ $1"; else echo "  ✗ $1 (got $2, want $3)"; fi; }
+
+          # 1. health
+          S=$(curl -sS -o /dev/null -w "%{http_code}" -m 12 "$API/health")
+          PASS_FAIL "health 200" "$S" "200"
+
+          # 2. admin login
+          R=$(curl -sS -o /tmp/lr.json -w "%{http_code}" -m 15 -X POST "$API/login" \
+              -H "Content-Type: application/json" \
+              -d '{"email":"marc667us@yahoo.com","password":"ChangeMe2026/"}')
+          PASS_FAIL "admin login 200" "$R" "200"
+          TOK=$(jq -r .token /tmp/lr.json)
+          UR=$(jq -r .user.role /tmp/lr.json)
+          PASS_FAIL "role is admin" "$UR" "admin"
+
+          # 3. /me works
+          ME=$(curl -sS -o /tmp/me.json -w "%{http_code}" -m 12 "$API/me" -H "X-Campaign-Session: $TOK")
+          PASS_FAIL "GET /me 200" "$ME" "200"
+
+          # 4. admin sees 15 entities
+          curl -sS "$API/entities" -H "X-Campaign-Session: $TOK" -m 15 > /tmp/e.json
+          N=$(jq '.entities | length' /tmp/e.json)
+          PASS_FAIL "admin sees 15 entities" "$N" "15"
+
+          # 5. /state returns pipeline + feedback keys
+          curl -sS "$API/state" -H "X-Campaign-Session: $TOK" -m 12 > /tmp/s.json
+          K=$(jq -r 'keys | join(",")' /tmp/s.json)
+          PASS_FAIL "/state has pipeline+feedback keys" "$K" "feedback,pipeline"
+
+          # 6. create + revoke an invite
+          INV=$(curl -sS -X POST "$API/invites" -H "X-Campaign-Session: $TOK" \
+              -H "Content-Type: application/json" -d '{"note":"smoke test","expires_days":1}' -m 12 | jq -r .token)
+          PASS_FAIL "invite token present" "$(test -n "$INV" && echo yes)" "yes"
+          R=$(curl -sS -o /dev/null -w "%{http_code}" -X DELETE "$API/invites/$INV" -H "X-Campaign-Session: $TOK" -m 12)
+          PASS_FAIL "invite revoke 200" "$R" "200"
+
+          # 7. update one entity's state
+          R=$(curl -sS -o /dev/null -w "%{http_code}" -m 12 \
+              -X POST "$API/state/Ozo%20Solar%20Limited" \
+              -H "Content-Type: application/json" -H "X-Campaign-Session: $TOK" \
+              -d '{"status":"CONTACTED","notes":"smoke test","next_action_date":"","literature_sent":[]}')
+          PASS_FAIL "state update 200" "$R" "200"
+
+          # 8. submit feedback
+          R=$(curl -sS -o /tmp/fb.json -w "%{http_code}" -m 12 \
+              -X POST "$API/feedback" \
+              -H "Content-Type: application/json" -H "X-Campaign-Session: $TOK" \
+              -d '{"entity_name":"Ozo Solar Limited","type":"bug","severity":"medium","text":"smoke","status":"open"}')
+          PASS_FAIL "feedback create 200" "$R" "200"
+
+          # 9. static front-end checks
+          curl -sS -o /tmp/portal.html -w "  portal HTTP %{http_code}\n" -m 15 https://marc667us.github.io/campaign-portal/
+          for needle in 'data-tab="admin"' 'data-tab="logout"' 'bulk-assign-bar' 'ent-cb' 'audio_user_walkthrough.wav' 'chart-cities' 'no-store, no-cache'; do
+            grep -q "$needle" /tmp/portal.html && echo "  ✓ html contains: $needle" || echo "  ✗ MISSING: $needle"
+          done
