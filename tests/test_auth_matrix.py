@@ -91,6 +91,10 @@ def register_and_login(client, username, password="TestPass123!", email=None,
     """
     Register a fresh user and log them in (the test client retains the
     session cookie). Returns the (username, password) tuple.
+
+    `terms_agreed` is required by web_app.py:1585 — omitting it caused every
+    test that relies on this helper to silently fail registration before this
+    fix (Phase 2.2 of SolarPro_Schedule_2026-06-08.md).
     """
     csrf = _csrf(client, "/register")
     client.post("/register", data={
@@ -101,6 +105,7 @@ def register_and_login(client, username, password="TestPass123!", email=None,
         "name": f"{username} (test)",
         "company": company,
         "country": country,
+        "terms_agreed": "on",
     }, follow_redirects=True)
     return username, password
 
