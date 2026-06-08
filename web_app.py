@@ -582,6 +582,13 @@ def init_db():
         except Exception: pass
         try: _c.execute("ALTER TABLE users ADD COLUMN referred_by INTEGER")
         except Exception: pass
+        try: _c.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0")
+        except Exception: pass
+        try: _c.execute("ALTER TABLE users ADD COLUMN email_verify_token TEXT")
+        except Exception: pass
+        # Backfill: any pre-existing user becomes verified (do not lock them out).
+        try: _c.execute("UPDATE users SET email_verified=1 WHERE (email_verified IS NULL OR email_verified=0) AND (email_verify_token IS NULL OR email_verify_token="")")
+        except Exception: pass
         # Backfill codes for any user that lacks one
         _missing = _c.execute("SELECT id FROM users WHERE referral_code IS NULL OR referral_code = ''").fetchall()
         for _row in _missing:
@@ -1616,57 +1623,73 @@ def register():
                                   (_referrer_id, uid))
                     except Exception:
                         pass  # UNIQUE violation = already logged, fine
-            session["user_id"] = uid
-            session["username"] = f["username"]
-            # Send welcome email — non-blocking
+            # Email verification: generate single-use token, persist unverified row.
+            # User MUST click the link in the email before they can log in.
+            import secrets as _secrets_v
+            _verify_token = _secrets_v.token_urlsafe(32)
             try:
+                c.execute("UPDATE users SET email_verified=0, email_verify_token=? WHERE id=?",
+                          (_verify_token, uid))
+            except Exception:
+                pass
+            # Build verification URL using the current request host (works for both
+            # solarpro-global.onrender.com and the custom domain once cert is live).
+            try:
+                _verify_url = request.host_url.rstrip("/") + url_for("verify_email", token=_verify_token)
+                _login_url  = request.host_url.rstrip("/") + url_for("login")
                 _send_system_email(
                     f["email"],
-                    "Welcome to SolarPro Global â˜€ï¸ — Your account is ready",
-                    f"""Hello {f.get('name', f['username'])},
-
-Welcome to SolarPro Global! Your free account has been created successfully.
-
-─────────────────────────────────────
-GETTING STARTED — 4 quick steps
-─────────────────────────────────────
-1. Complete your Organisation Profile
-   â†' Settings â†' Organization tab
-   (Your org name appears on all PDF reports)
-
-2. Create your first solar project
-   â†' Click "New Project" on your dashboard
-   â†' Enter location, load schedule â†' get full design
-
-3. Configure email to send reports to clients
-   â†' Settings â†' Email / SMTP tab
-   â†' Supports Gmail, Outlook, Brevo, Mailgun
-
-4. Explore tutorials and user guides
-   â†' Support â†' Resources (audio narration + PDF download)
-
-─────────────────────────────────────
-YOUR ACCOUNT
-─────────────────────────────────────
-Username:  {f['username']}
-Plan:      Free (upgrade anytime)
-Dashboard: {url_for('dashboard', _external=True)}
-
-Need help? Open a support ticket or email support@aiappinvent.com
-We respond within 24 hours.
-
-Welcome aboard!
-— The SolarPro Global Team
-solarpro.aiappinvent.com
-""")
+                    "Verify your email to activate SolarPro Global",
+                    "Hello " + f.get("name", f["username"]) + ",\n\n"
+                    "Welcome to SolarPro Global. Your account has been created on the Free plan.\n\n"
+                    "Before you can log in, please confirm your email by clicking the link below:\n\n"
+                    "    " + _verify_url + "\n\n"
+                    "After verifying, return to the login page to sign in:\n\n"
+                    "    " + _login_url + "\n\n"
+                    "If you did not create this account you can safely ignore this email.\n\n"
+                    "Need help? Reply to this email or write to support@aiappinvent.com.\n\n"
+                    "The SolarPro Global Team\n"
+                    "solarpro.aiappinvent.com\n")
             except Exception:
-                pass  # Email failure must never block registration
-            flash("Welcome! Your account is ready.", "success")
-            return redirect(url_for("dashboard"))
+                pass  # Email failure must never block registration; user can request a resend.
+            flash("Account created. Check your email to verify, then come back here to log in.", "success")
+            return redirect(url_for("login"))
         except sqlite3.IntegrityError:
             flash("Username or email already registered.", "danger")
     return render_template("auth.html", mode="register",
                            countries=get_countries())
+
+
+@app.route("/verify-email/<token>", methods=["GET"])
+@limiter.limit("60 per hour")
+def verify_email(token):
+    """Activate a user account via the single-use token mailed at signup.
+
+    Flow:
+      1. Look up a user whose email_verify_token matches.
+      2. If found: set email_verified=1, clear the token (prevents reuse).
+      3. Flash success and redirect to /login.
+      4. If not found OR already verified: friendly error, redirect to /login.
+    """
+    if not token:
+        flash("Verification link is missing the token. Please use the link from your email.", "danger")
+        return redirect(url_for("login"))
+    with get_db() as c:
+        row = c.execute(
+            "SELECT id, username, email_verified FROM users WHERE email_verify_token=?",
+            (token,)).fetchone()
+        if not row:
+            flash("This verification link is invalid or has already been used. "
+                  "If you already verified, just log in.", "warning")
+            return redirect(url_for("login"))
+        if row["email_verified"]:
+            flash("Your email is already verified. Please log in.", "info")
+            return redirect(url_for("login"))
+        c.execute(
+            "UPDATE users SET email_verified=1, email_verify_token=NULL WHERE id=?",
+            (row["id"],))
+    flash("Email verified! You can now log in.", "success")
+    return redirect(url_for("login"))
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -1693,6 +1716,17 @@ def login():
             user = c.execute("SELECT * FROM users WHERE username=?",
                              (username,)).fetchone()
         if user and check_password_hash(user["password_hash"], password):
+            # Email-verification gate: refuse login until the user clicks the
+            # verification link mailed at signup. Existing users (pre-feature)
+            # are backfilled email_verified=1 in init_db so they are not locked out.
+            try:
+                _ev = user["email_verified"]
+            except Exception:
+                _ev = 1  # row missing the column = legacy DB; treat as verified.
+            if not _ev:
+                flash("Please verify your email first. Check your inbox for the link we "
+                      "sent when you signed up.", "warning")
+                return render_template("auth.html", mode="login")
             session["user_id"] = user["id"]
             session["username"] = user["username"]
             # ── Log success & clear failure counter ──
