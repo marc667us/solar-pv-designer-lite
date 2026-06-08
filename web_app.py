@@ -1544,11 +1544,6 @@ def calc_boq(num_panels, num_bat, inv_kw, pv_kw, bat_kwh,
 # ─── Routes — Auth ────────────────────────────────────────────────────────────
 
 
-# === Campaign portal REST API (backs the GitHub Pages portal) ===
-from campaign_api import register_campaign_api
-register_campaign_api(app)
-# === end campaign portal REST API ===
-
 @app.route("/")
 def landing():
     with get_db() as c:

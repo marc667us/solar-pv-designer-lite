@@ -12,9 +12,11 @@
 1. Open https://campaign.aiappinvent.com (or https://marc667us.github.io/campaign-portal/ if DNS hasn't propagated yet)
 2. You land on the **Sign in** card
 3. Enter:
-   - Email: `marc667us@yahoo.com`
-   - Password: `ChangeMe2026!`
+   - Email: the address your administrator gave you (typically your work email).
+   - Password: the one-time password your administrator shared with you out-of-band (e.g. password manager invite). It is **not** committed to this repo; ask the administrator if you don't have it.
 4. Click **Sign in**
+
+> **Security:** The portal admin password is held only in your password manager and the deploy's GitHub Secret (`CAMPAIGN_ADMIN_PASSWORD`). It must never be written into this tutorial, source code, or chat. Section 2 below walks through changing it immediately on first login.
 
 If you see "Network error", the backend (Railway) is still building — wait 2 minutes and retry.
 
