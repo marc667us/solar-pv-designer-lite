@@ -1,0 +1,132 @@
+name: Cleanup Test Users
+
+# One-shot maintenance: log in as admin and DELETE users created by the email-
+# verification smoke tests. Matches on username prefix or email domain — see
+# the patterns below. Outputs the list of deletions to the workflow log.
+#
+# Triggered manually only. Idempotent — re-running is a no-op once the matched
+# users are gone.
+
+on:
+  workflow_dispatch:
+    inputs:
+      patterns:
+        description: 'Comma-separated username prefixes to delete (case-sensitive)'
+        required: false
+        default: 'smoke,test,wait,attempt,throw,tester,marc2'
+      email_domains:
+        description: 'Comma-separated email domains to delete (matches @<domain>)'
+        required: false
+        default: 'web-library.net,example.com,mail.tm'
+      dry_run:
+        description: 'If true, list matches but do NOT delete'
+        required: false
+        default: 'false'
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: pip install requests beautifulsoup4
+
+      - name: Login + delete matching test users
+        env:
+          BASE_URL: https://solarpro-global.onrender.com
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: ${{ secrets.SOLARPRO_ADMIN_PASSWORD }}
+          PATTERNS:      ${{ inputs.patterns }}
+          EMAIL_DOMAINS: ${{ inputs.email_domains }}
+          DRY_RUN:       ${{ inputs.dry_run }}
+        run: |
+          python <<'PY'
+          import os, re, sys, requests
+          from bs4 import BeautifulSoup
+
+          BASE  = os.environ['BASE_URL']
+          AUSER = os.environ['ADMIN_USERNAME']
+          APASS = os.environ['ADMIN_PASSWORD']
+          PATS  = [p.strip() for p in os.environ['PATTERNS'].split(',') if p.strip()]
+          DOMS  = [d.strip() for d in os.environ['EMAIL_DOMAINS'].split(',') if d.strip()]
+          DRY   = os.environ['DRY_RUN'].lower() == 'true'
+
+          if not APASS:
+              sys.exit("SOLARPRO_ADMIN_PASSWORD secret not set")
+
+          s = requests.Session()
+
+          def csrf(url):
+              r = s.get(url, timeout=30); r.raise_for_status()
+              m = re.search(r'name=["\']_csrf["\']\s+value=["\']([^"\']+)["\']', r.text)
+              if not m: sys.exit(f"CSRF not found at {url}")
+              return m.group(1), r.text
+
+          # 1. login as admin
+          tok, _ = csrf(f"{BASE}/login")
+          r = s.post(f"{BASE}/login",
+                     data={"_csrf": tok, "username": AUSER, "password": APASS},
+                     allow_redirects=False, timeout=30)
+          if r.status_code not in (302, 303):
+              sys.exit(f"admin login failed: HTTP {r.status_code}")
+          print(f"admin logged in (redirected to {r.headers.get('Location')})")
+
+          # 2. fetch /admin/users
+          tok2, html = csrf(f"{BASE}/admin/users")
+          soup = BeautifulSoup(html, 'html.parser')
+
+          # Extract (id, username, email) — admin_users.html embeds each user
+          # in a form whose hidden uid field tells us the id. We scan all rows.
+          # The page format may differ; the regex pulls form blocks per user.
+          targets = []
+          for form in soup.find_all('form'):
+              uid_input = form.find('input', attrs={'name': 'uid'})
+              if not uid_input: continue
+              uid = uid_input.get('value')
+              # Find adjacent user-ish text (username + email) on the same row.
+              row = form.find_parent(['tr', 'div'])
+              row_text = row.get_text(' ', strip=True) if row else ''
+              # crude extraction
+              m_un = re.search(r'\b([a-z][a-z0-9_]{2,40})\b', row_text)
+              m_em = re.search(r'[\w.+-]+@[\w.-]+\.[a-z]{2,}', row_text, re.I)
+              un = m_un.group(1) if m_un else ''
+              em = m_em.group(0) if m_em else ''
+              # match
+              hit = False
+              for p in PATS:
+                  if un.startswith(p): hit = True; break
+              if not hit:
+                  for d in DOMS:
+                      if em.endswith('@'+d): hit = True; break
+              if hit:
+                  targets.append({'uid': uid, 'username': un, 'email': em})
+
+          # de-dup by uid
+          seen = set(); uniq = []
+          for t in targets:
+              if t['uid'] not in seen:
+                  seen.add(t['uid']); uniq.append(t)
+
+          print(f"matched {len(uniq)} test user(s):")
+          for t in uniq:
+              print(f"  uid={t['uid']:>5}  username={t['username']!r:30}  email={t['email']!r}")
+
+          if not uniq:
+              print("nothing to clean — exit 0")
+              sys.exit(0)
+          if DRY:
+              print("DRY RUN — no deletions performed")
+              sys.exit(0)
+
+          # 3. delete each
+          for t in uniq:
+              tok3, _ = csrf(f"{BASE}/admin/users")
+              r = s.post(f"{BASE}/admin/users",
+                         data={"_csrf": tok3, "action": "delete", "uid": t['uid']},
+                         allow_redirects=False, timeout=30)
+              ok = r.status_code in (302, 303)
+              print(f"  DELETE uid={t['uid']} ({t['username']}): HTTP {r.status_code} {'OK' if ok else 'FAIL'}")
+
+          print("cleanup complete")
+          PY

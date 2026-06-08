@@ -5323,6 +5323,46 @@ def admin_users():
                 new_role = request.form.get("role", "customer")
                 c.execute("UPDATE users SET role=? WHERE id=?", (new_role, uid))
                 flash(f"Role updated to '{new_role}'.", "success")
+            elif action == "delete":
+                # Locate the target by uid or username. Admin UI can post either.
+                _target_id = uid
+                if not _target_id:
+                    _un = (request.form.get("username") or "").strip()
+                    if _un:
+                        _row = c.execute("SELECT id FROM users WHERE username=?",
+                                          (_un,)).fetchone()
+                        _target_id = _row["id"] if _row else None
+                if not _target_id:
+                    flash("User not found.", "danger")
+                else:
+                    _meta = c.execute("SELECT id, is_admin, username FROM users WHERE id=?",
+                                       (_target_id,)).fetchone()
+                    if not _meta:
+                        flash("User not found.", "danger")
+                    elif _meta["is_admin"]:
+                        flash("Refused: cannot delete an admin via this action.", "danger")
+                    elif _meta["id"] == session.get("user_id"):
+                        flash("Refused: cannot delete yourself.", "danger")
+                    else:
+                        # Cascade. Tables that hold user-owned rows that the
+                        # app expects to be present-or-absent per FK semantics.
+                        # We intentionally skip audit_log so forensic trail
+                        # survives the cleanup.
+                        for _stmt in (
+                            ("DELETE FROM projects WHERE user_id=?", (_target_id,)),
+                            ("DELETE FROM payments WHERE user_id=?", (_target_id,)),
+                            ("DELETE FROM referrals WHERE referrer_id=? OR referee_id=?",
+                             (_target_id, _target_id)),
+                            ("DELETE FROM login_failures WHERE username=?",
+                             (_meta["username"],)),
+                            ("DELETE FROM users WHERE id=?", (_target_id,)),
+                        ):
+                            try:
+                                c.execute(_stmt[0], _stmt[1])
+                            except Exception:
+                                pass  # table may not exist in this schema version.
+                        flash(f"User {_meta['username']} (id {_target_id}) permanently deleted.",
+                              "warning")
             elif action == "disable":
                 c.execute("UPDATE users SET plan='disabled' WHERE id=?", (uid,))
                 flash("Account disabled.", "warning")
