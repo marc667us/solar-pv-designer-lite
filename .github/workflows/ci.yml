@@ -116,18 +116,49 @@ jobs:
           print('Routes registered:', len([r.rule for r in web_app.app.url_map.iter_rules()]))
           "
 
-      - name: Run test suite (if exists)
+      # ── 3.2 + 3.1 (partial) — unit/integration tests in tests/ must hard-fail ──
+      # Quality-gate work-schedule 2026-06-06: the legacy step below collected
+      # only root test_*.py (which are mostly live smokes hitting prod URLs)
+      # AND swallowed every failure with `|| true`. The tests/ directory
+      # (currently tests/test_app.py and anything we add) is the real
+      # unit/integration suite and must hard-fail the build.
+      - name: Run unit + integration tests (tests/) — hard-fail
         env:
           SECRET_KEY: test-secret-key-for-ci
           APP_ENV: test
+          TESTING: "1"
         run: |
-          if [ -f test_render.py ]; then
-            echo "Skipping live Render tests in CI"
-          fi
-          if ls test_*.py &>/dev/null 2>&1; then
-            pytest test_*.py -v --ignore=test_render.py || true
+          if [ -d tests ] && ls tests/*.py >/dev/null 2>&1; then
+            pytest tests/ -v
           else
-            echo "No unit test files found"
+            echo "::warning::No tests/ directory found — unit suite missing."
+          fi
+
+      # Legacy root test_*.py are mostly live-site smokes (test_render.py,
+      # test_admin_ops2.py, test_referrals_live.py, test_session_audit.py,
+      # test_sales_readiness.py). They require admin creds + live URL env
+      # that CI doesn't have, so they're advisory only. To promote one of
+      # these to hard-fail: move it into tests/ and parametrize its base URL.
+      - name: Run legacy root smoke tests (non-blocking, advisory)
+        env:
+          SECRET_KEY: test-secret-key-for-ci
+          APP_ENV: test
+          TESTING: "1"
+        continue-on-error: true
+        run: |
+          shopt -s nullglob
+          live_smokes=(test_render.py test_admin_ops2.py test_admin_ops.py \
+                       test_referrals_live.py test_sales_readiness.py \
+                       test_session_audit.py test_agent.py test_email_debug.py)
+          ignore_args=()
+          for f in "${live_smokes[@]}"; do
+            [ -f "$f" ] && ignore_args+=(--ignore="$f")
+          done
+          root_tests=(test_*.py)
+          if [ ${#root_tests[@]} -gt 0 ]; then
+            pytest "${root_tests[@]}" "${ignore_args[@]}" -v
+          else
+            echo "No root test_*.py files found"
           fi
 
   # ── 4. Build Docker Image ────────────────────────────────────────────────────

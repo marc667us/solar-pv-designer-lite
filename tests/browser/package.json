@@ -1,0 +1,12 @@
+{
+  "name": "solarpro-portal-browser-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright Test suite that drives the live campaign portal end-to-end.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1"
+  }
+}
