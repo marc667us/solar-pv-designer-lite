@@ -31,7 +31,7 @@ spec:
           command:
             - celery
             - -A
-            - web_app.celery_app
+            - tasks.celery_app
             - worker
             - --loglevel=info
             - --concurrency=4
@@ -84,7 +84,7 @@ spec:
               command:
                 - celery
                 - -A
-                - web_app.celery_app
+                - tasks.celery_app
                 - inspect
                 - ping
                 - -d

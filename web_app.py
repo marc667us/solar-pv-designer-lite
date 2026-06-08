@@ -555,9 +555,15 @@ def init_db():
         except Exception:
             pass
     # Seed default users — ensure admin and owner accounts always exist
+    def _seed_pwd(env_var):
+        # Source seed passwords from env so the repo never carries a live credential.
+        v = os.environ.get(env_var)
+        if not v:
+            raise RuntimeError(env_var + " env var required for initial user seed (see SolarPro_Schedule_2026-06-08.md Phase 0.1)")
+        return v
     _SEED_USERS = [
-        ("admin",    "admin@solarpro.global", "Administrator", "SolarAdmin2026!", "enterprise", 1),
-        ("marc667us","marc667us@yahoo.com",   "Marc",          "marc667us",       "enterprise", 1),
+        ("admin",    "admin@solarpro.global", "Administrator", _seed_pwd("SOLARPRO_ADMIN_PASSWORD"), "enterprise", 1),
+        ("marc667us","marc667us@yahoo.com",   "Marc",          _seed_pwd("SOLARPRO_OWNER_PASSWORD"),       "enterprise", 1),
     ]
     with get_db() as c:
         for uname, email, name, pwd, plan, is_admin in _SEED_USERS:

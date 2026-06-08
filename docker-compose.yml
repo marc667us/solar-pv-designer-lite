@@ -83,7 +83,7 @@ services:
     container_name: solarpro-celery
     restart: unless-stopped
     command: >
-      celery -A web_app.celery_app worker
+      celery -A tasks.celery_app worker
       --loglevel=info
       --concurrency=2
       --queues=default,heavy,ai_tasks,email,reports
@@ -118,7 +118,7 @@ services:
     container_name: solarpro-beat
     restart: unless-stopped
     command: >
-      celery -A web_app.celery_app beat
+      celery -A tasks.celery_app beat
       --loglevel=info
       --schedule=/tmp/celerybeat-schedule
     environment:

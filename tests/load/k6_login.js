@@ -16,9 +16,33 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
 
-const BASE_URL = __ENV.BASE_URL || 'https://solarpro-global.onrender.com';
-const TEST_EMAIL = __ENV.TEST_EMAIL || 'load-test-user@example.com';
-const TEST_PASSWORD = __ENV.TEST_PASSWORD || '<override-via-env>';
+// Phase 2.4 guardrails (2026-06-08): refuse to run unless BASE_URL/TEST_EMAIL/
+// TEST_PASSWORD are explicitly supplied, and refuse known prod URLs. Without
+// these the script could (a) DoS production at 1000 VUs and (b) silently
+// fail every login on the rate-limited /login endpoint (20/hr/IP).
+const BASE_URL = __ENV.BASE_URL;
+const TEST_EMAIL = __ENV.TEST_EMAIL;
+const TEST_PASSWORD = __ENV.TEST_PASSWORD;
+
+const PROD_HOSTS = [
+    'solarpro-global.onrender.com',
+    'solarpro.aiappinvent.com',
+    'web-production-744af.up.railway.app',
+];
+
+if (!BASE_URL || !TEST_EMAIL || !TEST_PASSWORD) {
+    throw new Error(
+        'k6_login.js refuses to start: BASE_URL, TEST_EMAIL, TEST_PASSWORD must all be set via --env. ' +
+        'Example: k6 run --env BASE_URL=https://staging.example.com --env TEST_EMAIL=loadtest@example.com --env TEST_PASSWORD=... tests/load/k6_login.js'
+    );
+}
+if (PROD_HOSTS.some(h => BASE_URL.includes(h))) {
+    throw new Error(
+        `k6_login.js refuses to run against known production host (${BASE_URL}). ` +
+        'Either point at a staging host, or set k6 to use the same loadtest user the rate limiter exempts. ' +
+        'See Phase 2.4 of SolarPro_Schedule_2026-06-08.md for context.'
+    );
+}
 
 const errorRate = new Rate('errors');
 const loginTime = new Trend('login_duration', true);

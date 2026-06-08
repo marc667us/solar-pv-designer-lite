@@ -1,7 +1,13 @@
 # SolarPro Global — Session Context
 
-**Last updated:** 2026-06-05 (end of session, switched to sales-campaign focus)
+**Last updated:** 2026-06-08 (Phase 0 emergency-security: credential rotation + staleness sweep)
 **Purpose:** capture in-flight state so any session can resume mid-task without re-discovery.
+
+## 2026-06-08 (this session)
+
+- **Phase 0.1 credential rotation:** byte-patched `web_app.py:559-560` to source `admin` + `marc667us` seed passwords from `SOLARPRO_ADMIN_PASSWORD` and `SOLARPRO_OWNER_PASSWORD` env vars. Old plaintext `SolarAdmin2026!` and `"marc667us"` literals removed; helper `_seed_pwd()` raises `RuntimeError` if env var unset. New passwords generated; pushing to Render via API workflow. Old hash will be replaced on next redeploy (Render has no persistent disk so a fresh seed runs).
+- **Phase 0.2 doc creds:** removed `ChangeMe2026!` and `SolarAdmin2026!` references from `CLAUDE.md`. Removed orphaned campaign-portal section. Deleted `.github/workflows/test-admin-entities.yml` (targeted torn-down blueprint).
+- **Schedule:** `Desktop\SolarPro_Schedule_2026-06-08.md` is the live work plan. Prior 46-item plan from 2026-06-06 superseded; closure delta tracked at top of new schedule.
 
 ---
 
@@ -85,3 +91,42 @@ Pre-today commits (the actual SolarPro work) are unchanged from the prior sessio
 - Any payment / email config
 
 This means SolarPro behavior is exactly the same as it was at the start of session 2026-06-05.
+
+---
+
+<!-- BEGIN: PROJECT OS CONTEXT (canonical — do not edit in place; re-sync from C:\Users\USER\_project_context_append.md) -->
+
+# Project OS — Context Addendum
+
+This project operates under the **Project Execution Directive** appended to this app's `CLAUDE.md`. See that file for:
+
+- **Session-start rule** (read CLAUDE.md, README.md, this context.MD, all `docs/*.md`, code, tests, infra files BEFORE coding; produce an orientation summary).
+- **24 numbered discipline rules** covering scope control · reuse-before-create · architecture pipeline (Router → Service → Repository → DB) · multi-tenant `tenant_id` discipline · PostgreSQL RLS · hidden-page protection · logout-must-really-work · scalability · indexing · caching · queues · AI agent discipline · error handling · audit logging · admin operations · dependency audits · testing · documentation · ADR + implementation-log templates · pre/post-coding checklists.
+- **Free / Open-Source Stack Rule** with the full FOSS technology table, cost-control checklist, and low-cost deployment ladder. Paid SaaS only when explicitly approved by the project owner.
+- **Codex CLI Pair-Coding Workflow** — Claude implements, Codex reviews; a feature is NOT complete until Codex review passes the 10-item quality gate.
+
+## Canonical Sources
+
+- `C:\Users\USER\Documents\pvsolar1\improvements\dontforget1.txt` — original Project Execution Directive + FOSS Stack Rule
+- `C:\Users\USER\Documents\pvsolar1\improvements\thereviewer1.txt` — original Codex pair-coding workflow
+
+If this app's `CLAUDE.md` directive drifts from those source files, re-read them and reconcile.
+
+## Per-Session Orientation Summary (update every session)
+
+Append the latest snapshot here so the next session inherits accurate state. The template:
+
+```
+Date:
+Current project status:
+- Completed modules:
+- Partially completed modules:
+- Missing modules:
+- Current technical risks:
+- Next logical task:
+- Files likely to be affected:
+```
+
+Granular per-task changes go to `docs/IMPLEMENTATION_LOG.md` per the directive's §21.
+
+<!-- END: PROJECT OS CONTEXT -->

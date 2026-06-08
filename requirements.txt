@@ -10,3 +10,5 @@ markdown-pdf
 ddgs
 pytest>=9.0
 resend
+celery==5.4.0
+redis==5.0.7
