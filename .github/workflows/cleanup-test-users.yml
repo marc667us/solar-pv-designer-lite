@@ -76,31 +76,33 @@ jobs:
           tok2, html = csrf(f"{BASE}/admin/users")
           soup = BeautifulSoup(html, 'html.parser')
 
-          # Extract (id, username, email) — admin_users.html embeds each user
-          # in a form whose hidden uid field tells us the id. We scan all rows.
-          # The page format may differ; the regex pulls form blocks per user.
+          # admin_users.html puts each user inside an element carrying a
+          # `data-search="<username> <email> <name> <company>"` attribute, and
+          # the per-user forms inside that element carry the uid in a hidden
+          # field. Find all such containers and pair them with their uid.
           targets = []
-          for form in soup.find_all('form'):
-              uid_input = form.find('input', attrs={'name': 'uid'})
+          all_rows = []  # for visibility in the log
+          for node in soup.find_all(attrs={"data-search": True}):
+              ds = node.get("data-search", "").strip()
+              parts = ds.split()
+              un = parts[0] if parts else ""
+              em = next((p for p in parts if "@" in p), "")
+              uid_input = node.find("input", attrs={"name": "uid"})
               if not uid_input: continue
-              uid = uid_input.get('value')
-              # Find adjacent user-ish text (username + email) on the same row.
-              row = form.find_parent(['tr', 'div'])
-              row_text = row.get_text(' ', strip=True) if row else ''
-              # crude extraction
-              m_un = re.search(r'\b([a-z][a-z0-9_]{2,40})\b', row_text)
-              m_em = re.search(r'[\w.+-]+@[\w.-]+\.[a-z]{2,}', row_text, re.I)
-              un = m_un.group(1) if m_un else ''
-              em = m_em.group(0) if m_em else ''
-              # match
+              uid = uid_input.get("value", "")
+              all_rows.append({"uid": uid, "username": un, "email": em})
               hit = False
               for p in PATS:
                   if un.startswith(p): hit = True; break
               if not hit:
                   for d in DOMS:
-                      if em.endswith('@'+d): hit = True; break
+                      if em.endswith("@"+d): hit = True; break
               if hit:
-                  targets.append({'uid': uid, 'username': un, 'email': em})
+                  targets.append({"uid": uid, "username": un, "email": em})
+
+          print(f"=== {len(all_rows)} total user(s) on /admin/users ===")
+          for r in all_rows:
+              print(f"  uid={r['uid']:>5}  {r['username']!r:30}  {r['email']!r}")
 
           # de-dup by uid
           seen = set(); uniq = []
