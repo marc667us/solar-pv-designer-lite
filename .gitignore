@@ -33,6 +33,7 @@ Thumbs.db
 # Backup files (created by binary patches + mojibake fixers)
 *.bak
 *.bak_*
+*.bak.*
 
 # Local curl / smoke-test artifacts
 _check.html
