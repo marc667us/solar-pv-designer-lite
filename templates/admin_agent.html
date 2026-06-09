@@ -153,7 +153,7 @@
   <strong>Searches RFP &amp; tender portals only</strong> — UNGM, World Bank, AfDB, Devex, DG Market, TendersOnTime, GlobalTenders, ReliefWeb, Africa Tenders.
   Results are filtered to <strong>solicitations only</strong> (RFPs, ITBs, EOIs, contract notices) — no news articles.
   Every result includes a direct link to the original procurement notice.
-  {% if has_ai %}<br><i class="bi bi-robot me-1 text-warning"></i>Claude AI will extract tender reference, deadline, issuing organisation, and scope from each notice.{% endif %}
+  {% if has_ai %}<br><i class="bi bi-robot me-1 text-warning"></i>Our AI engine will extract tender reference, deadline, issuing organisation, and scope from each notice.{% endif %}
 </div>
 
 <!-- KPI strip -->
@@ -161,8 +161,8 @@
   <div class="col-6 col-md-2">
     <div class="kpi-card h-100">
       <div class="kpi-label"><i class="bi bi-robot me-1"></i>Agent Mode</div>
-      <div class="kpi-value" style="font-size:13px">{{ 'Claude AI' if has_ai else 'Web Search' }}</div>
-      <div class="kpi-unit">{{ 'claude-opus-4-7' if has_ai else 'smart rules' }}</div>
+      <div class="kpi-value" style="font-size:13px">{{ 'AI Engine' if has_ai else 'Web Search' }}</div>
+      <div class="kpi-unit">{{ 'frontier model' if has_ai else 'smart rules' }}</div>
     </div>
   </div>
   <div class="col-6 col-md-2">
@@ -458,7 +458,7 @@ async function runAgent(){
     notifyAgentRun(json.prospects.length, country, json.source);
 
     // Show in-page toast
-    const srcLabel = json.source === 'web+claude' ? 'Claude AI' :
+    const srcLabel = json.source === 'web+claude' ? 'AI Engine' :
                      json.source && json.source.includes('github') ? 'GitHub Models' : 'Web Search';
     showToast(
       `<i class="bi bi-robot me-2" style="color:#a78bfa"></i>` +
@@ -507,7 +507,7 @@ async function saveMonitorSettings(){
 function renderProspects(prospects, source, resultCount){
   const grid = document.getElementById('prospectGrid');
   grid.innerHTML = '';
-  const srcLabel = source === 'web+claude' ? '🌐 Web Search + Claude AI' :
+  const srcLabel = source === 'web+claude' ? '🌐 Web Search + AI Engine' :
                    source === 'web_search' ? '🌐 Live Web Search' : source;
   document.getElementById('resultsCount').textContent = prospects.length + ' prospects found';
   document.getElementById('resultsSource').textContent = '(' + srcLabel + (resultCount ? ', ' + resultCount + ' pages scanned)' : ')');

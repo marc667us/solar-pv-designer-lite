@@ -8214,7 +8214,7 @@ def admin_agent():
     _has_gh     = bool(os.environ.get("GITHUB_TOKEN"))
     _ai_label   = ("OpenRouter" if _has_or
                    else "GitHub Models" if _has_gh
-                   else "Claude" if _has_claude
+                   else "Primary AI" if _has_claude
                    else "none")
     return render_template("admin_agent.html", user=current_user(),
                            saved_leads=saved, total_saved=total_saved,
@@ -8779,7 +8779,7 @@ def admin_agent_notify():
         ).fetchone()
     if state and state[0] and count > 0:
         if source == "web+claude":
-            src_label = "Web Search + Claude AI"
+            src_label = "Web Search + AI"
         elif source == "web+mistral":
             src_label = "Web Search + Mistral AI"
         elif source == "web+ollama":
