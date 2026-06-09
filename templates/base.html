@@ -54,12 +54,16 @@
     border:none;color:#000;font-weight:700}
   .btn-solar:hover{filter:brightness(1.1);color:#000}
 
-  /* KPI cards */
-  .kpi-card{background:var(--sp-card-bg);border:1px solid var(--sp-border);border-radius:12px;padding:16px}
-  .kpi-label{font-size:11px;color:#7878b0;font-weight:800;text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px}
-  .kpi-value{font-size:24px;font-weight:900;background:linear-gradient(90deg,var(--solar-gold),#fbbf24);
-    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-  .kpi-unit{font-size:12px;color:#6a6aa0;margin-top:2px}
+  /* KPI cards — padding bumped to absorb the bigger fonts without clipping */
+  .kpi-card{background:var(--sp-card-bg);border:1px solid var(--sp-border);border-radius:12px;padding:18px 16px;
+    min-width:0}
+  .kpi-label{font-size:11px;color:#7878b0;font-weight:800;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kpi-value{font-size:22px;font-weight:900;line-height:1.15;background:linear-gradient(90deg,var(--solar-gold),#fbbf24);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kpi-unit{font-size:12px;color:#6a6aa0;margin-top:3px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
   /* Misc shared */
   .badge-verdict{padding:6px 15px;border-radius:20px;font-size:13px;font-weight:800;letter-spacing:.4px}
@@ -68,10 +72,10 @@
   .table{--bs-table-bg:transparent;--bs-table-border-color:#1e1e3a;--bs-table-color:#d0d0e8}
   .table th{color:#8585b8;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px}
   .report-header{background:linear-gradient(135deg,#0f0f22,#13133a);border:1px solid #1e1e3a;
-    border-radius:16px;padding:28px 32px;margin-bottom:24px;position:relative;overflow:hidden}
+    border-radius:16px;padding:24px 28px;margin-bottom:24px;position:relative;overflow:hidden}
   .report-header::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
     background:linear-gradient(90deg,var(--solar-gold),var(--solar-blue),#a78bfa)}
-  .report-title{font-size:22px;font-weight:900;letter-spacing:-.5px;
+  .report-title{font-size:20px;font-weight:900;letter-spacing:-.5px;line-height:1.2;
     background:linear-gradient(90deg,#f2f2fd 40%,var(--solar-gold));
     -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
   .data-row{display:flex;justify-content:space-between;align-items:center;
@@ -117,14 +121,14 @@
     main.container-xl{padding-left:12px;padding-right:12px}
     .toast-stack{right:8px;left:8px;min-width:unset;max-width:calc(100vw - 16px)}
     .report-header,.results-header,.dash-header{padding:18px 18px !important;border-radius:12px !important}
-    .kpi-value{font-size:21px!important}
+    .kpi-value{font-size:20px!important;line-height:1.15}
     .kpi-label{font-size:11px}
     .data-row{flex-wrap:wrap;gap:4px;font-size:15px;padding:12px 14px}
     .data-row .val{word-break:break-word}
     .section-head{font-size:14px}
     .footer-bar{margin-top:24px;padding:18px 0}
     .solar-card{border-radius:10px}
-    .kpi-card{padding:14px}
+    .kpi-card{padding:16px 14px}
     /* iOS Safari needs ≥16px on inputs to avoid auto-zoom on focus */
     .sp-input,input,select,textarea{font-size:16px!important}
     /* Ensure tap targets meet 44×44 minimum on mobile */
@@ -135,9 +139,10 @@
     .navbar-brand{font-size:1.05rem}
     .navbar .container-xl{padding-left:12px;padding-right:12px}
     /* Stack KPI cards full-width on small phones */
-    .kpi-card{padding:12px;margin-bottom:8px}
-    .report-header,.results-header,.dash-header{padding:14px !important}
-    .report-title{font-size:18px!important}
+    .kpi-card{padding:14px 12px;margin-bottom:8px}
+    .kpi-value{font-size:18px!important}
+    .report-header,.results-header,.dash-header{padding:16px !important}
+    .report-title{font-size:17px!important;line-height:1.25}
     /* Drop heavy table borders for cleaner readability */
     .table{font-size:14px}
     .table th,.table td{padding:.5rem .4rem}
