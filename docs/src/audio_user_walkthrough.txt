@@ -1,0 +1,33 @@
+Welcome to SolarPro Global, the AI-powered solar design platform built for Ghana.
+
+This is a five-minute walkthrough of what the platform does for a solar designer.
+
+When you log in, you land on your dashboard. It shows every project you've started, with quick access to the engineering reports for each one.
+
+To start a new project, click the new project button at the top right. You give it a name, pick your client, choose the site type, and set the country to Ghana. The platform locks in the local utility tariff and the Cedi as your currency.
+
+The next step is location. You pick the prospect's region on a rotating globe, or you type the address. The platform pulls peak sun hours, ambient temperature, and the regional utility tariff from its database. Ghana regions covered include Greater Accra, Ashanti, Northern, Volta, and Western.
+
+After location, you enter the loads. There are two ways to do this. The first is the appliance picker, ideal for residential projects. You click each appliance the customer wants to power, set the quantity, and the daily hours of use. The platform fills in standard wattages from its catalogue.
+
+The second method is direct entry, better for commercial and industrial projects. You can paste rows from an Excel sheet listing load name, wattage, quantity, hours per day, and days per week. The platform supports up to two hundred loads per project.
+
+You also pick the mounting type before continuing. Options include rooftop pitched, rooftop flat, rooftop metal, rooftop membrane, ground fixed, and ground tracking. Ground mounts automatically add steel post, concrete footing, purlin beam, and earth rod to the bill of materials.
+
+Click calculate sizing. In less than thirty seconds, you get the required photovoltaic array size in kilowatt peak, the panel count and string layout, the battery autonomy in kilowatt hours, the inverter rating, the MPPT match status, the AC cable size, and the DC cable size.
+
+Every output complies with British Standard 7671 for AC wiring and International Electrotechnical Commission 62548 for the DC side. You can override any value by clicking and typing. The system flags any string design that exceeds the inverter's MPPT voltage window.
+
+Next is the bill of quantities. It lists panels, inverters, batteries, mounting rails, end clamps, mid clamps, MC4 connectors, fuses, surge arrestors, isolators, the combiner box, earthing rods, and the right length of AC and DC cable. You can override unit prices or add custom line items.
+
+The economic analysis comes after. It uses the regional Ghana utility tariff with a default six percent annual escalation. You get simple payback in years, internal rate of return, net present value over twenty-five years, lifetime savings in Cedis, first year energy yield in kilowatt hours, and tonnes of carbon dioxide avoided per year. A cash flow graph shows the payback point clearly.
+
+Finally you generate the proposal. One click produces seven reports as a single branded PDF. The reports cover photovoltaic sizing, bill of quantities, cable schedule, economic analysis, installation method, energy yield, and the bankable client proposal.
+
+Total time from start to finished proposal is about twenty minutes for a typical residential project. That replaces four to six hours of Excel and Word work.
+
+For technical questions during the process, the AI helpline in the bottom right corner answers in two seconds.
+
+Sign up free at SolarPro Global. No credit card required. The beta closes on July fifteenth twenty twenty six, and the first fifteen Ghana companies get a fifty percent lifetime discount.
+
+That's the walkthrough. Thank you for listening.

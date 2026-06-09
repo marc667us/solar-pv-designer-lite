@@ -39,24 +39,28 @@ SRC_DIR = PROJECT / "docs" / "src"
 DOCS = PROJECT / "docs"
 
 CSS = """
-body { font-family: 'Segoe UI', Calibri, sans-serif; font-size: 10.5pt; line-height: 1.5; color: #1a1a1a; }
-h1 { font-size: 22pt; color: #1f5fb8; border-bottom: 3px solid #1f5fb8; padding-bottom: 6px; margin-top: 0; }
-h2 { font-size: 15pt; color: #2a6fcc; margin-top: 22px; border-bottom: 1px solid #d8e3f0; padding-bottom: 3px; }
-h3 { font-size: 12.5pt; color: #333; margin-top: 14px; }
-h4 { font-size: 11pt; color: #555; margin-bottom: 4px; }
-table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 9pt; }
-th { background: #1f5fb8; color: #fff; text-align: left; padding: 5px 8px; }
-td { border: 1px solid #d8e3f0; padding: 5px 8px; vertical-align: top; }
-tr:nth-child(even) td { background: #f4f8fd; }
-code { background: #f4f2ef; padding: 1px 4px; border-radius: 3px; font-family: Consolas, monospace; font-size: 9.5pt; }
-pre { background: #f7f5f2; border: 1px solid #e0dcd5; border-left: 3px solid #1f5fb8; padding: 10px 12px; border-radius: 4px; font-size: 9pt; line-height: 1.4; overflow-x: auto; }
-pre code { background: none; padding: 0; }
-blockquote { border-left: 3px solid #ffcb6b; background: #fffbf2; margin: 10px 0; padding: 6px 14px; color: #444; font-style: italic; }
-strong { color: #1a1a1a; }
-a { color: #1f5fb8; }
-hr { border: none; border-top: 1px solid #ddd; margin: 18px 0; }
-ul, ol { margin: 8px 0; }
-li { margin: 3px 0; }
+@page { margin: 18mm 16mm; }
+body { font-family: 'Segoe UI', Calibri, sans-serif; font-size: 11.5pt; line-height: 1.65; color: #1f2937; }
+h1 { font-size: 28pt; color: #0d1f3c; margin: 0 0 4px; letter-spacing: -0.5px; font-weight: 800; }
+h1::after { content: ""; display: block; width: 60px; height: 4px; background: linear-gradient(90deg,#ce1126,#fcd116,#006b3f); margin-top: 10px; border-radius: 2px; }
+h2 { font-size: 16pt; color: #0d1f3c; margin: 32px 0 10px; padding: 6px 0 6px 14px; border-left: 5px solid #ce1126; background: linear-gradient(90deg, #fdf2f4 0%, transparent 60%); font-weight: 700; }
+h3 { font-size: 13.5pt; color: #1f2937; margin: 24px 0 6px; font-weight: 700; }
+h4 { font-size: 11.5pt; color: #475569; margin: 14px 0 4px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+p { margin: 8px 0 12px; }
+table { border-collapse: collapse; width: 100%; margin: 14px 0 18px; font-size: 10.5pt; box-shadow: 0 1px 0 #e2e8f0; }
+th { background: #0d1f3c; color: #fff; text-align: left; padding: 8px 12px; font-size: 10pt; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+td { border-bottom: 1px solid #e5e7eb; padding: 9px 12px; vertical-align: top; }
+tr:nth-child(even) td { background: #f8fafc; }
+code { background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; font-family: 'JetBrains Mono', Consolas, monospace; font-size: 10.5pt; font-weight: 600; }
+pre { background: #0d1f3c; color: #e2e8f0; border-radius: 8px; padding: 14px 18px; font-size: 10pt; line-height: 1.55; margin: 14px 0; overflow-x: auto; }
+pre code { background: none; padding: 0; color: inherit; }
+blockquote { border-left: 5px solid #fcd116; background: linear-gradient(90deg,#fffbeb,#fffefa); margin: 16px 0; padding: 14px 22px; color: #78350f; font-style: normal; border-radius: 0 6px 6px 0; }
+blockquote p { margin: 0; }
+strong { color: #0d1f3c; font-weight: 700; }
+a { color: #ce1126; text-decoration: none; border-bottom: 1px dotted #ce1126; }
+hr { border: none; border-top: 2px solid #e2e8f0; margin: 28px 0; }
+ul, ol { margin: 10px 0 14px; padding-left: 28px; }
+li { margin: 4px 0; }
 """
 
 # Three docs to render: (src_filename, out_filename, title, subject)

@@ -1,7 +1,7 @@
 """Re-run admin ops test — all buttons including email. Revoke Sessions goes last."""
 import requests, re, sys, time
 
-BASE = "https://solarpro.aiappinvent.com"
+BASE = "https://web-production-744af.up.railway.app"
 s = requests.Session()
 
 def do_login():

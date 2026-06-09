@@ -1,0 +1,41 @@
+This is the technical walkthrough for SolarPro Global. About six minutes covering the engineering basis, the standards we follow, and how each calculation is derived.
+
+Three principles drive every output. First, every result is derivable from the inputs you provide. Second, every output is overridable; defaults are conservative but the engineer can replace any value. Third, every output is traceable; the proposal PDF shows the calculation path so a reviewing engineer can validate without re-running the tool.
+
+We follow seven standards. British Standard 7671, the eighteenth edition, governs AC cable sizing, derating, and protective device coordination. International Electrotechnical Commission 62548 covers DC string design, MPPT voltage windows, and isolation. IEC 60364 part 7-712 handles photovoltaic-specific installation requirements. IEC 61730 determines module safety classification and class two isolation. National Electrical Code article 690 is a fallback for United States installations. The Ghana Energy Commission Solar PV Code of Practice 2019 drives the permitting checklist. IEC 61724 governs performance ratio and yield calculation in the economic analysis.
+
+Site assessment uses region-level peak sun hours from the global solar data file. For Ghana, Greater Accra has 5.2 kilowatt hours per square metre per day, Ashanti has 5.0, Northern has 5.6, Volta has 5.1, and Western has 4.8. Ambient temperatures range from 26 to 30 degrees Celsius. The source data is NASA POWER plus Ghana Meteorological Agency monthly means averaged over 2018 to 2023.
+
+Load analysis sums the daily energy demand. The formula is: daily energy equals the sum across all loads of nameplate power times quantity times daily hours times weekly days divided by seven. A diversity factor is applied to peak load, not to daily energy. The default diversity factor is 0.65 for residential, 0.85 for commercial, and 1.0 for industrial. Surge load defaults to peak times three for motor start margin.
+
+Photovoltaic array sizing computes required peak power as daily energy divided by peak sun hours, system efficiency, and temperature derating. System efficiency defaults to 0.80, combining inverter, wiring, and soiling losses. Cell temperature estimates use ambient plus 25 degrees Celsius from the nominal operating cell temperature approximation. The temperature coefficient defaults to negative 0.0034 per kelvin for a tier-one mono panel.
+
+Module count rounds up the required peak power divided by chosen module wattage. Supported modules are 110, 250, 330, 400, 450, 500, and 550 watt peak.
+
+String design checks the inverter MPPT voltage window. Minimum series count is the lower MPPT voltage divided by Vmp at hot panel temperature. Maximum series count is the upper MPPT voltage divided by Voc at cold panel temperature. If minimum exceeds maximum, the engine flags a warning and suggests a smaller Vmp module or a different inverter.
+
+Battery sizing uses capacity in watt hours equals daily energy times autonomy days divided by the product of depth of discharge, inverter efficiency, and battery efficiency. Defaults are one day autonomy for residential, 0.5 days for grid tied, and two days for off-grid critical loads. Depth of discharge is 0.80 for lithium, 0.50 for gel and AGM. Battery efficiency is 0.95 for lithium and 0.85 for lead acid.
+
+Inverter sizing uses two-sided constraints. Inverter rating must handle peak load with twenty-five percent margin and must absorb at least eighty-five percent of array output, avoiding over-clipping under low peak sun hours.
+
+DC cable sizing uses the voltage drop method from IEC 62548. Cross sectional area equals two times length times current times resistivity divided by maximum voltage drop. Resistivity is 0.0175 ohm millimetres squared per metre for copper at 20 degrees Celsius. Maximum voltage drop defaults to 1.5 percent of array voltage. The result rounds up to the next standard size and is verified against ampacity at 70 degrees Celsius ambient.
+
+AC cable sizing follows BS 7671 section 523, table 4D5 for PVC SWA cable. Ambient temperature factor for Ghana is 0.94. Grouping factor applies when multiple cables share a conduit. Final cable is the smallest size whose derated capacity equals or exceeds the design current times 1.25. Voltage drop must not exceed three percent for final circuits or five percent combined per BS 7671 appendix 12.
+
+Earthing follows BS 7671 section 544. The earth conductor is sized at half the phase conductor cross section, minimum four millimetres squared copper. Earth rod is 1.2 metres by 16 millimetres copper, with measured resistance not exceeding ten ohms per IEC 60364 part 7-712.
+
+The bill of quantities engine traverses the sized system and emits one line per material category. Mounting rails use the panel length times 1.05 divided by a standard rail length of 4.2 metres. End clamps are four per string. Mid clamps are two per panel minus the strings. DC cable adds ten percent wastage. AC cable adds ten percent wastage. Ground mount adds steel posts one per four modules, concrete footings one per post, purlin beam at 4.2 metres per row, and earth rod one per twenty modules.
+
+Economic analysis computes annual yield per IEC 61724 as peak power times peak sun hours times 365 days times performance ratio. Performance ratio defaults are 0.75 for rooftop residential, 0.80 for rooftop commercial, 0.82 for ground fixed, and 0.86 for ground tracking.
+
+Cash flow for each year uses savings equals annual energy times one minus degradation times tariff times one plus escalation to the power of year minus one. OPEX defaults to one percent of CAPEX with three percent annual increase. Degradation defaults to 0.5 percent per year for lithium systems.
+
+Headline metrics are payback in years interpolated to where cumulative cash flow turns positive, internal rate of return via Newton-Raphson on the cash flow vector with tolerance one in ten to the sixth, net present value summed over lifetime, and levelised cost of energy as total costs divided by total energy.
+
+Seven reports come out the back. Photovoltaic sizing report. Bill of quantities. Cable schedule with every run, gauge, length, derating, and voltage drop. Economic analysis with charts and the IRR plus NPV table. Installation method statement with step-by-step procedure and safety. Energy yield report with month-by-month projection. The bankable proposal combining cover page, executive summary, and sized excerpts from the first six.
+
+Every report embeds the assumptions used: peak sun hours, system efficiency, derating factors. A third party engineer can validate without re-running the tool.
+
+For integration, suppliers can wire stock into the procurement screen via a REST or GraphQL endpoint returning SKU, name, category, unit price in Cedis, in-stock flag, and lead time in days. SolarPro pulls on a six-hour cadence. Live unit costs replace blank cells in the bill of quantities.
+
+That covers the engineering basis. The full technical reference is in the technical guide PDF available in the portal. Thank you for listening.
