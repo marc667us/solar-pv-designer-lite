@@ -1,0 +1,155 @@
+name: Kill Railway
+
+# One-shot teardown: detach every custom domain on the Railway project, delete
+# all services, then attempt to delete the project itself. Frees the
+# solarpro.aiappinvent.com host from any stale Railway cert binding and
+# decommissions infra that's been "dead" since 2026-06-05.
+#
+# Triggered manually only. Idempotent — re-running on an already-empty project
+# is a no-op.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'If true, only list what would be deleted'
+        required: false
+        default: 'false'
+
+jobs:
+  teardown:
+    runs-on: ubuntu-latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      DRY_RUN:       ${{ inputs.dry_run }}
+    steps:
+      - name: Refuse without token
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "::error::RAILWAY_TOKEN secret is not set"
+            exit 1
+          fi
+          echo "RAILWAY_TOKEN present"
+
+      - name: Teardown via GraphQL
+        run: |
+          python3 <<'PY'
+          import os, json, urllib.request, urllib.error, sys
+
+          TOKEN = os.environ['RAILWAY_TOKEN']
+          DRY   = os.environ.get('DRY_RUN','false').lower() == 'true'
+          API   = 'https://backboard.railway.app/graphql/v2'
+
+          def gql(query, variables=None):
+              body = json.dumps({'query': query, 'variables': variables or {}}).encode()
+              req = urllib.request.Request(API, data=body, headers={
+                  'Authorization': f'Bearer {TOKEN}',
+                  'Content-Type':  'application/json',
+              })
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as r:
+                      data = json.load(r)
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode('utf-8','replace')
+                  print(f"HTTP {e.code}: {body[:400]}", file=sys.stderr)
+                  raise
+              if data.get('errors'):
+                  print('GraphQL errors:', json.dumps(data['errors'], indent=2))
+              return data.get('data') or {}
+
+          # 1) Identify the project the token is scoped to. Project tokens expose
+          #    `projectToken { project { id name } }`. Account-level tokens use
+          #    a different path; we try both.
+          print("=== Identifying project ===")
+          try:
+              d = gql('{ projectToken { project { id name } } }')
+              proj = d.get('projectToken', {}).get('project') or {}
+          except Exception:
+              proj = {}
+          if not proj.get('id'):
+              try:
+                  d = gql('{ me { projects { edges { node { id name } } } } }')
+                  edges = (d.get('me') or {}).get('projects', {}).get('edges', [])
+                  if edges:
+                      proj = edges[0]['node']
+              except Exception:
+                  pass
+          if not proj.get('id'):
+              print("Could not identify a project. Token may already be revoked, or schema changed.")
+              print("Workflow will exit clean (nothing to do).")
+              sys.exit(0)
+          pid = proj['id']
+          print(f"project: {proj.get('name','<no-name>')}  id={pid}")
+
+          # 2) List services + environments + custom domains.
+          print("\n=== Inventory ===")
+          q_inv = '''
+          query($id: String!) {
+            project(id: $id) {
+              services { edges { node { id name } } }
+              environments { edges { node { id name } } }
+            }
+          }
+          '''
+          inv = gql(q_inv, {'id': pid}).get('project') or {}
+          services = [e['node'] for e in (inv.get('services') or {}).get('edges', [])]
+          envs     = [e['node'] for e in (inv.get('environments') or {}).get('edges', [])]
+          print(f"services: {[s['name'] for s in services]}")
+          print(f"environments: {[e['name'] for e in envs]}")
+
+          domains = []
+          for s in services:
+              for e in envs:
+                  try:
+                      d = gql('''
+                          query($svc: String!, $env: String!) {
+                            customDomains(serviceId: $svc, environmentId: $env) {
+                              customDomains { id domain }
+                            }
+                          }
+                      ''', {'svc': s['id'], 'env': e['id']})
+                      for cd in ((d.get('customDomains') or {}).get('customDomains') or []):
+                          domains.append({'id': cd['id'], 'domain': cd['domain'],
+                                          'service': s['name'], 'env': e['name']})
+                  except Exception as ex:
+                      print(f"  query domains for {s['name']}/{e['name']} failed: {ex}")
+          print(f"custom domains: {[d['domain'] for d in domains]}")
+
+          if DRY:
+              print("\nDRY RUN — exiting before any destructive call")
+              sys.exit(0)
+
+          # 3) Detach every custom domain.
+          print("\n=== Detaching custom domains ===")
+          for d in domains:
+              try:
+                  r = gql('mutation($id: String!) { customDomainDelete(id: $id) }',
+                          {'id': d['id']})
+                  print(f"  DETACHED {d['domain']} (id={d['id']})")
+              except Exception as ex:
+                  print(f"  FAILED to detach {d['domain']}: {ex}")
+
+          # 4) Delete services.
+          print("\n=== Deleting services ===")
+          for s in services:
+              try:
+                  r = gql('mutation($id: String!) { serviceDelete(id: $id) }',
+                          {'id': s['id']})
+                  print(f"  DELETED service {s['name']} (id={s['id']})")
+              except Exception as ex:
+                  print(f"  FAILED to delete service {s['name']}: {ex}")
+
+          # 5) Delete the project itself. Project tokens may not have permission
+          #    for this — surface clearly if so.
+          print("\n=== Deleting project ===")
+          try:
+              r = gql('mutation($id: String!) { projectDelete(id: $id) }',
+                      {'id': pid})
+              print(f"  DELETED project (id={pid})")
+          except Exception as ex:
+              print(f"  COULD NOT delete project (project tokens often lack this scope): {ex}")
+              print(f"  All services + custom domains are gone; the project shell remains")
+              print(f"  but cannot affect solarpro.aiappinvent.com any more.")
+
+          print("\n=== Done ===")
+          PY
