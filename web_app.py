@@ -212,6 +212,12 @@ _DEFAULT_APPLIANCES = [
 # ─── Database ─────────────────────────────────────────────────────────────────
 
 def get_db():
+    # Phase B1: dual-backend dispatch on DATABASE_URL. When unset (today),
+    # behavior is byte-identical to the original SQLite path.
+    _db_url = os.environ.get("DATABASE_URL", "")
+    if _db_url.startswith(("postgres://", "postgresql://")):
+        import db_adapter
+        return db_adapter.open_postgres(_db_url)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -5079,7 +5085,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â�
 
 # PART A — TECHNICAL PROPOSAL
 
-# A1. Site Assessment & Solar Resource
+## A1. Site Assessment & Solar Resource
 
 | Parameter | Value |
 |---|---|
@@ -5093,7 +5099,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â�
 | Autonomy | {d.get("autonomy",1)} day(s) |
 | Battery Chemistry | {d.get("chemistry","LiFePO4")} |
 
-# A2. Electrical Load Analysis
+## A2. Electrical Load Analysis
 
 | Parameter | Value |
 |---|---|
@@ -5115,7 +5121,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â�
     md += f"| | **TOTAL** | | | | **{_fmt(r['daily_kwh'],3)}** |\n"
 
     md += f"""
-# A3. Engineering Sizing Calculations
+## A3. Engineering Sizing Calculations
 
 | Component | Calculation | Result |
 |---|---|---|
@@ -5124,7 +5130,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â�
 | Inverter | Peak load {_fmt(r.get("peak_kw",0),2)} kW Ã— 1.25 SF | **{_fmt(r["inv_kw"],1)} kW** |
 | MPPT | Array {_fmt(r["pv_kw"],2)} kWp Ã· {d.get("voltage",48)} V bus | **{r.get("mppt_a","—")} A** |
 
-# A4. AC Cable Schedule (BS 7671)
+## A4. AC Cable Schedule (BS 7671)
 
 | Circuit | Size (mmÂ²) | Capacity (A) | Breaker (A) | Volt Drop | Compliant |
 |---|---|---|---|---|---|
@@ -5139,7 +5145,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â�
 
 # PART B — FINANCIAL PROPOSAL
 
-# B1. Bill of Quantities (BOQ)
+## B1. Bill of Quantities (BOQ)
 
 | No. | Description | Qty | Unit | Basic Rate ({sym}) | Total Rate ({sym}) | Amount ({sym}) |
 |---|---|---|---|---|---|---|
@@ -5152,7 +5158,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â�
     md += f"| | **GRAND TOTAL** | | | | | **{sym} {_fmt(r['boq_grand'],2)}** |\n"
 
     md += f"""
-# B2. Financial Summary
+## B2. Financial Summary
 
 | Item | Value |
 |---|---|
@@ -5162,7 +5168,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â�
 | Contingency (10%) | {sym} {_fmt(eco.get("total_local",0)*0.1,0)} |
 | Budget with contingency | {sym} {_fmt(eco.get("total_local",0)*1.1,0)} |
 
-# B3. Return on Investment
+## B3. Return on Investment
 
 | Metric | Value |
 |---|---|
@@ -5177,7 +5183,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â�
 | Cumulative Savings (25yr) | {sym} {_fmt(eco.get("cumul_25",0),0)} |
 | Annual COâ‚‚ Avoided | {_fmt(eco.get("co2_yr",0),2)} tonnes/year |
 
-# B4. Loan Structure & Bankability
+## B4. Loan Structure & Bankability
 
 | Parameter | Value |
 |---|---|
@@ -5190,7 +5196,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â�
 | Annual Debt Service | {sym} {_fmt(eco.get("annual_pmt",0),0)}/year |
 | **DSCR** | **{_fmt(eco.get("dscr",0),2)} — {eco.get("bankability","—")}** |
 
-# B5. Monthly Generation & Savings Profile
+## B5. Monthly Generation & Savings Profile
 
 | Month | Generation (kWh) | Savings ({sym}) |
 |---|---|---|
@@ -5206,7 +5212,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â�
 
 # PART C — PROJECT DELIVERY
 
-# C1. Installation Methodology
+## C1. Installation Methodology
 
 **Phase 1 — Site Preparation & Civil Works:** Prepare mounting surfaces, install aluminium racking on roof at correct tilt angle. Install conduit runs.
 
@@ -5224,7 +5230,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â�
 
 **Phase 8 — Handover & Monitoring:** Provide O&M manual, test certificates, warranties. Configure remote monitoring for 7-day performance verification.
 
-# C2. Testing & Verification Schedule
+## C2. Testing & Verification Schedule
 
 | Test | Standard | Acceptance Criteria |
 |---|---|---|
@@ -5238,7 +5244,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â�
 | Voltage Drop | BS 7671 | â‰¤ 3% final circuits |
 | 7-Day Performance Check | IEC 62446 | â‰¥ 90% design output |
 
-# C3. Warranties & O&M
+## C3. Warranties & O&M
 
 | Item | Warranty |
 |---|---|

@@ -13,3 +13,4 @@ resend
 celery==5.4.0
 redis==5.0.7
 hvac>=2.0.0
+psycopg2-binary>=2.9.9
