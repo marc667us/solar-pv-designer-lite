@@ -1,5 +1,5 @@
 ﻿{% extends "base.html" %}
-{% block title %}My Account â€” SolarPro Global{% endblock %}
+{% block title %}My Account — SolarPro Global{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -150,7 +150,7 @@
 
       <div class="info-row">
         <span class="info-lbl">Member since</span>
-        <span class="info-val">{{ user.created_at[:10] if user.created_at else 'â€”' }}</span>
+        <span class="info-val">{{ user.created_at[:10] if user.created_at else '—' }}</span>
       </div>
       <div class="info-row">
         <span class="info-lbl">Username</span>
@@ -183,7 +183,7 @@
       </div>
       {% if usage_pct >= 90 and limit < 9999 %}
       <div class="text-danger" style="font-size:10px;margin-top:4px">
-        <i class="bi bi-exclamation-triangle me-1"></i>Near project limit â€” upgrade to add more.
+        <i class="bi bi-exclamation-triangle me-1"></i>Near project limit — upgrade to add more.
       </div>
       {% endif %}
 
@@ -296,7 +296,7 @@
              style="background:#f59e0b08;border:1px solid #f59e0b22">
           <i class="bi bi-info-circle-fill" style="color:#f59e0b;font-size:16px;margin-top:2px;flex-shrink:0"></i>
           <div style="font-size:12px;color:#b0a080">
-            You're on the <strong style="color:#f0d080">Free plan</strong> â€” only the Pre-Installation Site Assessment
+            You're on the <strong style="color:#f0d080">Free plan</strong> — only the Pre-Installation Site Assessment
             is available. Upgrade to unlock all 9 reports, Excel export, procurement planning, and more.
             <a href="{{ url_for('upgrade') }}" class="ms-1 fw-bold" style="color:#f59e0b">Upgrade now â†’</a>
           </div>
@@ -383,19 +383,19 @@
           {% for pay in payments %}
           {% set pc2 = plan_colors2.get(pay.plan or 'free', '#6868a0') %}
           <tr>
-            <td class="text-secondary">{{ pay.created_at[:10] if pay.created_at else 'â€”' }}</td>
+            <td class="text-secondary">{{ pay.created_at[:10] if pay.created_at else '—' }}</td>
             <td>
               <span style="font-size:10px;font-weight:800;color:{{ pc2 }};
                     background:{{ pc2 }}15;border:1px solid {{ pc2 }}30;
                     padding:2px 7px;border-radius:8px;text-transform:uppercase">
-                {{ pay.plan or 'â€”' }}
+                {{ pay.plan or '—' }}
               </span>
             </td>
             <td>
               {% if pay.amount_usd and pay.amount_usd > 0 %}
               <span style="color:var(--solar-gold);font-weight:700">${{ "%.0f"|format(pay.amount_usd) }}</span>
               {% else %}
-              <span class="text-secondary">â€”</span>
+              <span class="text-secondary">—</span>
               {% endif %}
             </td>
             <td>
@@ -409,7 +409,7 @@
             </td>
             <td class="text-secondary" style="font-size:10px;max-width:110px;
                 overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-              {{ pay.reference[:18] if pay.reference else 'â€”' }}
+              {{ pay.reference[:18] if pay.reference else '—' }}
             </td>
             <td>
               {% if pay.status == 'success' %}

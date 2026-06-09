@@ -12,7 +12,7 @@
     --sp-bg:#0a0a14; --sp-card-bg:#0f0f22; --sp-border:#1e1e3a;
     --sp-text:#e2e2f0; --sp-muted:#6868a0; --sp-sub:#9090c0;
     --sp-accent:#f59e0b; --sp-accent2:#ea580c;
-    --sp-font:'Segoe UI',system-ui,sans-serif; --sp-fs:14px; --sp-radius:14px;
+    --sp-font:'Segoe UI',system-ui,sans-serif; --sp-fs:16px; --sp-radius:14px;
     --solar-gold:var(--sp-accent);--solar-orange:var(--sp-accent2);
     --solar-blue:#0ea5e9;--solar-green:#22c55e
   }
@@ -31,18 +31,18 @@
     background:linear-gradient(90deg,var(--solar-gold),var(--solar-blue));
     -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
   .navbar-brand:hover{opacity:.85}
-  .nav-link{color:#a0a0c8!important;font-size:13px;font-weight:600;
+  .nav-link{color:#a0a0c8!important;font-size:14px;font-weight:600;
     padding:.35rem .6rem!important;border-radius:6px;transition:all .15s}
   .nav-link:hover,.nav-link.active{color:#e2e2f0!important;background:rgba(255,255,255,.07)}
   .nav-link.active{background:rgba(245,158,11,.12)!important;color:var(--solar-gold)!important}
   .dropdown-menu{background:#0f0f22;border:1px solid #1e1e3a;border-radius:10px;
     padding:.4rem;box-shadow:0 8px 32px rgba(0,0,0,.6)}
-  .dropdown-item{color:#a0a0c8;border-radius:6px;font-size:13px;padding:.45rem .75rem}
+  .dropdown-item{color:#a0a0c8;border-radius:6px;font-size:14px;padding:.5rem .8rem}
   .dropdown-item:hover{background:rgba(255,255,255,.06);color:#e2e2f0}
   .dropdown-divider{border-color:#1e1e3a;margin:.3rem 0}
 
   /* Plan badge in nav */
-  .plan-chip{font-size:9px;font-weight:800;letter-spacing:.4px;padding:1px 6px;
+  .plan-chip{font-size:10px;font-weight:800;letter-spacing:.4px;padding:2px 7px;
     border-radius:4px;vertical-align:middle;margin-left:4px}
 
   /* Cards */
@@ -56,17 +56,17 @@
 
   /* KPI cards */
   .kpi-card{background:var(--sp-card-bg);border:1px solid var(--sp-border);border-radius:12px;padding:16px}
-  .kpi-label{font-size:10px;color:#6868a0;font-weight:800;text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px}
-  .kpi-value{font-size:22px;font-weight:900;background:linear-gradient(90deg,var(--solar-gold),#fbbf24);
+  .kpi-label{font-size:11px;color:#7878b0;font-weight:800;text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px}
+  .kpi-value{font-size:24px;font-weight:900;background:linear-gradient(90deg,var(--solar-gold),#fbbf24);
     -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-  .kpi-unit{font-size:11px;color:#5a5a90;margin-top:2px}
+  .kpi-unit{font-size:12px;color:#6a6aa0;margin-top:2px}
 
   /* Misc shared */
-  .badge-verdict{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800;letter-spacing:.4px}
-  .section-head{font-size:13px;font-weight:800;color:#9090c0;text-transform:uppercase;
+  .badge-verdict{padding:6px 15px;border-radius:20px;font-size:13px;font-weight:800;letter-spacing:.4px}
+  .section-head{font-size:14px;font-weight:800;color:#a0a0d0;text-transform:uppercase;
     letter-spacing:.6px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #1e1e3a}
-  .table{--bs-table-bg:transparent;--bs-table-border-color:#1e1e3a;--bs-table-color:#c8c8e8}
-  .table th{color:#7070a8;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px}
+  .table{--bs-table-bg:transparent;--bs-table-border-color:#1e1e3a;--bs-table-color:#d0d0e8}
+  .table th{color:#8585b8;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px}
   .report-header{background:linear-gradient(135deg,#0f0f22,#13133a);border:1px solid #1e1e3a;
     border-radius:16px;padding:28px 32px;margin-bottom:24px;position:relative;overflow:hidden}
   .report-header::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
@@ -75,15 +75,15 @@
     background:linear-gradient(90deg,#f2f2fd 40%,var(--solar-gold));
     -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
   .data-row{display:flex;justify-content:space-between;align-items:center;
-    padding:8px 12px;background:rgba(255,255,255,.025);border-radius:8px;font-size:13px;margin-bottom:6px}
-  .data-row .lbl{color:#8888b8} .data-row .val{font-weight:700;color:#f0f0f8}
+    padding:10px 14px;background:rgba(255,255,255,.025);border-radius:8px;font-size:14px;margin-bottom:6px}
+  .data-row .lbl{color:#9898c8} .data-row .val{font-weight:700;color:#f0f0f8}
   .data-row.total{background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2)}
-  .data-row.total .val{color:var(--solar-gold);font-size:15px}
+  .data-row.total .val{color:var(--solar-gold);font-size:16px}
 
   /* Form inputs themed */
   .sp-input{background:rgba(255,255,255,.04)!important;border:1px solid var(--sp-border)!important;
-    color:var(--sp-text)!important;border-radius:8px!important;font-size:13px!important;
-    transition:border-color .15s,box-shadow .15s}
+    color:var(--sp-text)!important;border-radius:8px!important;font-size:15px!important;
+    padding:.55rem .8rem!important;transition:border-color .15s,box-shadow .15s}
   .sp-input:focus{border-color:var(--sp-accent)!important;box-shadow:0 0 0 2px rgba(245,158,11,.15)!important;outline:none!important}
   .sp-input::placeholder{color:var(--sp-muted)!important}
   .sp-input option,.sp-input optgroup{background:#0f0f22;color:var(--sp-text)}
@@ -100,29 +100,47 @@
   .solar-toast.info   {border-left:3px solid var(--solar-blue)}
 
   /* Footer */
-  .footer-bar{border-top:1px solid #1e1e3a;color:#4a4a7a;font-size:12px;padding:28px 0;margin-top:48px}
-  .footer-link{color:#5a5a90;text-decoration:none;transition:color .15s}
-  .footer-link:hover{color:#a0a0c8}
+  .footer-bar{border-top:1px solid #1e1e3a;color:#5a5a8a;font-size:13px;padding:28px 0;margin-top:48px}
+  .footer-link{color:#6a6aa0;text-decoration:none;transition:color .15s}
+  .footer-link:hover{color:#b0b0d8}
+
+  /* Accessibility / readability — make link underlines visible on hover for body text */
+  main a:not(.btn):not(.nav-link):not(.dropdown-item):not(.footer-link):hover{text-decoration:underline}
 
   @media print{.no-print{display:none!important}.report-header::before{display:none}}
   @media(max-width:991px){.navbar-nav{padding:.5rem 0;gap:.25rem!important}}
 
-  /* ── Mobile layout ── */
+  /* ── Mobile layout (≤767px — tablets and below) ── */
   @media(max-width:767px){
+    /* Bump body font slightly on mobile for thumb-readability */
+    :root{--sp-fs:17px}
     main.container-xl{padding-left:12px;padding-right:12px}
     .toast-stack{right:8px;left:8px;min-width:unset;max-width:calc(100vw - 16px)}
     .report-header,.results-header,.dash-header{padding:18px 18px !important;border-radius:12px !important}
-    .kpi-value{font-size:18px!important}
-    .data-row{flex-wrap:wrap;gap:4px}
+    .kpi-value{font-size:21px!important}
+    .kpi-label{font-size:11px}
+    .data-row{flex-wrap:wrap;gap:4px;font-size:15px;padding:12px 14px}
     .data-row .val{word-break:break-word}
-    .section-head{font-size:12px}
+    .section-head{font-size:14px}
     .footer-bar{margin-top:24px;padding:18px 0}
     .solar-card{border-radius:10px}
-    .kpi-card{padding:12px}
+    .kpi-card{padding:14px}
+    /* iOS Safari needs ≥16px on inputs to avoid auto-zoom on focus */
+    .sp-input,input,select,textarea{font-size:16px!important}
+    /* Ensure tap targets meet 44×44 minimum on mobile */
+    .btn,.nav-link,.dropdown-item{min-height:44px;display:inline-flex;align-items:center}
   }
+  /* ── Phone layout (≤575px — phones in portrait) ── */
   @media(max-width:575px){
-    .navbar-brand{font-size:.95rem}
+    .navbar-brand{font-size:1.05rem}
     .navbar .container-xl{padding-left:12px;padding-right:12px}
+    /* Stack KPI cards full-width on small phones */
+    .kpi-card{padding:12px;margin-bottom:8px}
+    .report-header,.results-header,.dash-header{padding:14px !important}
+    .report-title{font-size:18px!important}
+    /* Drop heavy table borders for cleaner readability */
+    .table{font-size:14px}
+    .table th,.table td{padding:.5rem .4rem}
   }
 </style>
 {% block extra_head %}{% endblock %}
@@ -244,14 +262,14 @@
             <i class="bi bi-headset me-1"></i>Support
           </a>
           <ul class="dropdown-menu dropdown-menu-dark" style="min-width:200px">
-            <li><span class="dropdown-header text-secondary" style="font-size:10px;letter-spacing:.5px">HELP</span></li>
+            <li><span class="dropdown-header text-secondary" style="font-size:11px;letter-spacing:.5px;color:#9090c0!important">HELP</span></li>
             <li>
               <a class="dropdown-item" href="{{ url_for('tickets') }}">
                 <i class="bi bi-chat-dots me-2 text-secondary"></i>Support Tickets
               </a>
             </li>
             <li><hr class="dropdown-divider" style="border-color:#1e1e3a"></li>
-            <li><span class="dropdown-header text-secondary" style="font-size:10px;letter-spacing:.5px">RESOURCES</span></li>
+            <li><span class="dropdown-header text-secondary" style="font-size:11px;letter-spacing:.5px;color:#9090c0!important">RESOURCES</span></li>
             <li>
               <a class="dropdown-item" href="{{ url_for('support') }}">
                 <i class="bi bi-collection-play me-2" style="color:#a78bfa"></i>All Tutorials
@@ -288,7 +306,7 @@
           </a>
           <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" style="min-width:220px">
             <!-- Overview -->
-            <li><span class="dropdown-header text-secondary" style="font-size:10px;letter-spacing:.5px">OVERVIEW</span></li>
+            <li><span class="dropdown-header text-secondary" style="font-size:11px;letter-spacing:.5px;color:#9090c0!important">OVERVIEW</span></li>
             <li>
               <a class="dropdown-item" href="{{ url_for('admin_dashboard') }}">
                 <i class="bi bi-speedometer2 me-2 text-secondary"></i>Admin Dashboard
@@ -301,7 +319,7 @@
             </li>
             <li><hr class="dropdown-divider"></li>
             <!-- Sales & Growth -->
-            <li><span class="dropdown-header text-secondary" style="font-size:10px;letter-spacing:.5px">SALES & GROWTH</span></li>
+            <li><span class="dropdown-header text-secondary" style="font-size:11px;letter-spacing:.5px;color:#9090c0!important">SALES & GROWTH</span></li>
             <li>
               <a class="dropdown-item" href="{{ url_for('admin_agent') }}">
                 <i class="bi bi-robot me-2" style="color:#a78bfa"></i>Prospect Agent <span class="badge ms-1" style="background:#a78bfa22;color:#a78bfa;font-size:9px">AI</span>
@@ -349,7 +367,7 @@
             </li>
             <li><hr class="dropdown-divider"></li>
             <!-- Operations -->
-            <li><span class="dropdown-header text-secondary" style="font-size:10px;letter-spacing:.5px">OPERATIONS</span></li>
+            <li><span class="dropdown-header text-secondary" style="font-size:11px;letter-spacing:.5px;color:#9090c0!important">OPERATIONS</span></li>
             <li>
               <a class="dropdown-item" href="{{ url_for('admin_users') }}">
                 <i class="bi bi-people me-2 text-secondary"></i>Users
@@ -372,7 +390,7 @@
             </li>
             <li><hr class="dropdown-divider"></li>
             <!-- Procurement -->
-            <li><span class="dropdown-header text-secondary" style="font-size:10px;letter-spacing:.5px">PROCUREMENT</span></li>
+            <li><span class="dropdown-header text-secondary" style="font-size:11px;letter-spacing:.5px;color:#9090c0!important">PROCUREMENT</span></li>
             <li>
               <a class="dropdown-item" href="{{ url_for('procurement_suppliers') }}">
                 <i class="bi bi-building-gear me-2 text-info"></i>Supplier Directory

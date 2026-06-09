@@ -1,5 +1,5 @@
 ﻿{% extends "base.html" %}
-{% block title %}Upgrade Plan â€” SolarPro Global{% endblock %}
+{% block title %}Upgrade Plan — SolarPro Global{% endblock %}
 
 {% block extra_head %}
 {% if paystack_public_key %}
@@ -109,7 +109,7 @@
         Try Professional Free for 14 Days
       </div>
       <p class="text-secondary mb-2" style="font-size:14px">
-        Instantly unlock <strong class="text-light">all Professional features</strong> â€” no credit card,
+        Instantly unlock <strong class="text-light">all Professional features</strong> — no credit card,
         no payment, no strings. Expires automatically after 14 days.
       </p>
       <div class="d-flex flex-wrap gap-2">
@@ -173,7 +173,7 @@
     <div class="plan-card {% if is_popular %}featured{% endif %} {% if is_current %}current{% endif %} h-100"
          style="{% if is_popular %}border-color:var(--solar-gold){% else %}border-color:{{ color }}44{% endif %}">
       {% if is_popular %}
-      <span class="popular-badge">â­ MOST POPULAR</span>
+      <span class="popular-badge">⭐ MOST POPULAR</span>
       {% endif %}
 
       <div class="small fw-bold mb-1" style="color:{{ color }};text-transform:uppercase;letter-spacing:.5px">
@@ -216,7 +216,7 @@
                 style="background:{% if is_popular %}linear-gradient(135deg,var(--solar-gold),var(--solar-orange)){% else %}{{ color }}{% endif %};color:#000;border-radius:10px"
                 onclick="payWithPaystack('{{ plan_key }}', {{ pp.usd }})">
           <i class="bi bi-{% if is_popular %}stars{% else %}phone{% endif %} me-2"></i>
-          Pay ${{ pp.usd }}/mo â€” Card / MoMo
+          Pay ${{ pp.usd }}/mo — Card / MoMo
         </button>
 
         {% elif stripe_key %}
@@ -270,7 +270,7 @@
 <div class="grad-sep"></div>
 <div class="text-center mb-4">
   <h4 class="fw-black mb-1">Full Feature Comparison</h4>
-  <p class="text-secondary small">Every feature â€” across all plans</p>
+  <p class="text-secondary small">Every feature — across all plans</p>
 </div>
 
 <div class="solar-card p-0 overflow-hidden mb-5">
@@ -385,9 +385,9 @@
         {% for icon,color,title,subs in [
           ('bi-credit-card-2-front-fill','#0ea5e9','Card Payments',
            ['Visa Â· Mastercard Â· Verve','All countries Â· Billed USD','Powered by Paystack (PCI-DSS L1)']),
-          ('bi-phone-fill','#f59e0b','Mobile Money â€” West Africa',
+          ('bi-phone-fill','#f59e0b','Mobile Money — West Africa',
            ['Ghana: MTN Â· AirtelTigo Â· Vodafone','Nigeria: MTN Â· OPay Â· Airtel','Billed in local currency']),
-          ('bi-phone-fill','#a78bfa','Mobile Money â€” More Africa',
+          ('bi-phone-fill','#a78bfa','Mobile Money — More Africa',
            ['Senegal: Orange Â· Wave Â· Free','Cameroon: MTN Â· Orange','Gambia Â· Liberia via Paystack']),
         ] %}
         <div class="col-md-4">
@@ -405,7 +405,7 @@
       <div class="mt-3 p-3 rounded text-center" style="background:rgba(14,165,233,.07);border:1px solid #0ea5e922">
         <div class="small text-secondary">
           <i class="bi bi-info-circle me-2 text-info"></i>
-          No payment gateway configured â€” contact
+          No payment gateway configured — contact
           <a href="mailto:sales@aiappinvent.com" class="text-warning fw-bold">sales@aiappinvent.com</a>
           to upgrade manually.
         </div>
@@ -442,21 +442,21 @@
         ("Can I really cancel anytime?",
          "Yes. Subscriptions are month-to-month with no minimum term. Cancel before your renewal date and you won't be charged again. Your projects remain accessible on the Free plan after cancellation."),
         ("Is there a free trial?",
-         "Yes â€” you get a 14-day free trial with 1 project, full engineering calculations, and a Pre-Installation Assessment PDF. No credit card required. After 14 days, upgrade to a paid plan to continue using the platform."),
+         "Yes — you get a 14-day free trial with 1 project, full engineering calculations, and a Pre-Installation Assessment PDF. No credit card required. After 14 days, upgrade to a paid plan to continue using the platform."),
         ("What happens to my data if I downgrade?",
          "Your project data is always preserved. You simply cannot create new projects above your plan limit. All completed reports and calculations remain fully accessible."),
         ("Can I upgrade mid-month?",
-         "Yes. Upgrade any time and your new plan is activated immediately. You won't be double-charged â€” billing starts on your next cycle."),
+         "Yes. Upgrade any time and your new plan is activated immediately. You won't be double-charged — billing starts on your next cycle."),
         ("Do MoMo payments auto-renew?",
          "Mobile Money billing is currently manual. Contact support before your renewal date to extend your plan. We'll send a reminder 5 days before expiry."),
         ("Is there a discount for annual billing?",
-         "Yes â€” contact sales@aiappinvent.com for annual pricing and save up to 20% compared to monthly billing."),
+         "Yes — contact sales@aiappinvent.com for annual pricing and save up to 20% compared to monthly billing."),
         ("Is my payment secure?",
          "Absolutely. Payments are processed by Paystack, a PCI-DSS Level 1 certified payment processor. We never store card details on our servers."),
         ("What is the Enterprise API?",
          "Enterprise plan users get API key access to programmatically create projects, retrieve calculation results, and generate reports. Contact support for API documentation and onboarding."),
         ("Can I get a custom or white-label version?",
-         "Yes â€” Enterprise plan includes white-label report branding with your company name and logo. For a fully customised platform deployment, contact sales@aiappinvent.com for pricing."),
+         "Yes — Enterprise plan includes white-label report branding with your company name and logo. For a fully customised platform deployment, contact sales@aiappinvent.com for pricing."),
         ("Which engineering standards are used?",
          "BS 7671:2018 (UK IET Wiring Regulations), IEC 60364, NEC 2023, IEEE 1547, and MCS. Cable sizing uses the tabulated method with correction factors for temperature, grouping, and installation method."),
       ] %}
@@ -478,7 +478,7 @@
 <div class="text-center py-4 mb-4" style="background:radial-gradient(ellipse 50% 80% at 50% 50%,rgba(245,158,11,.05),transparent);border-radius:16px">
   <div class="fw-black mb-2" style="font-size:20px">Ready to unlock the full platform?</div>
   <p class="text-secondary small mb-3">
-    Professional at $49/mo gives you everything â€” 10 projects, 9 reports, Excel, Word, procurement, and email delivery.
+    Professional at $49/mo gives you everything — 10 projects, 9 reports, Excel, Word, procurement, and email delivery.
   </p>
   {% if demo_mode %}
   <form method="POST" action="{{ url_for('upgrade_demo_activate') }}" class="d-inline me-2">

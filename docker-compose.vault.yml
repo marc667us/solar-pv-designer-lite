@@ -1,0 +1,47 @@
+version: "3.9"
+
+# SolarPro Phase 1b: HashiCorp Vault OSS, sealed production mode.
+#
+# Why sealed (not dev mode):
+#   - Dev mode auto-unseals with a known root token, doesn't persist storage,
+#     and has audit disabled by default. Useless for the contract we wrote in
+#     SECRETS_ENGINE_PROPOSAL_v3.md.
+#   - Sealed mode forces the 3-of-5 Shamir unseal ceremony (owner-present),
+#     persists encrypted KV data on disk, and lets us enable two audit devices.
+#
+# How to bring this up (do NOT capture unseal keys in any shell history file):
+#   1. docker compose -f docker-compose.vault.yml up -d
+#   2. docker exec -it solarpro-vault vault operator init -key-shares=5 -key-threshold=3
+#      ^ this prints 5 unseal keys + 1 initial root token. Owner copies them
+#        OFFLINE (password manager + safe + USB). DO NOT save to a file in
+#        this repo. DO NOT echo to a shell that has history enabled.
+#   3. docker exec -it solarpro-vault vault operator unseal <key1>
+#      docker exec -it solarpro-vault vault operator unseal <key2>
+#      docker exec -it solarpro-vault vault operator unseal <key3>
+#   4. Configure: docs/SECRETS_BOOTSTRAP.md §3 has the full bootstrap script.
+
+services:
+  vault:
+    image: hashicorp/vault:1.17
+    container_name: solarpro-vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK   # required for vault mlock — prevents key material being swapped to disk
+    ports:
+      - "127.0.0.1:8200:8200"   # bind localhost only — never expose to LAN/internet
+    volumes:
+      - ./vault-data:/vault/data
+      - ./vault-audit:/vault/audit
+      - ./vault-config:/vault/config:ro
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+      VAULT_API_ADDR: http://127.0.0.1:8200
+    command: server -config=/vault/config/vault.hcl
+    healthcheck:
+      # /v1/sys/health returns 501 when sealed (per Vault docs) — that's
+      # actually the healthy state pre-unseal. We accept any 5xx-or-200.
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider",
+             "http://127.0.0.1:8200/v1/sys/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

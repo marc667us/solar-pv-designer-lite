@@ -8,10 +8,26 @@ Run:  pytest tests/ -v
 import io
 import json
 import os
+import sqlite3
 import sys
 import tempfile
 
 import pytest
+
+
+def _verify_user_in_db(db_path, username):
+    """Flip the email-verification flag for a test user, bypassing the email-token roundtrip.
+
+    Why: web_app.py:1637 (commit 17e40ee) registers new users with email_verified=0 and
+    bounces them from /dashboard, /api/*, /upgrade etc. until they hit /verify-email/<token>.
+    These pytest tests don't have a mail inbox — flip the flag directly in the temp DB.
+    """
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("UPDATE users SET email_verified=1 WHERE username=?", (username,))
+        conn.commit()
+    finally:
+        conn.close()
 
 # ── make sure the project root is importable ──────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -37,6 +53,12 @@ def app_client(tmp_db, monkeypatch_session):
     wa.init_db()                          # create schema in temp DB
     wa.app.config["TESTING"] = True
     wa.app.config["WTF_CSRF_ENABLED"] = False
+    # Flask-Limiter default 120/min trips on later tests in the same session.
+    # Disable for tests only — production config unaffected.
+    wa.app.config["RATELIMIT_ENABLED"] = False
+    if hasattr(wa, "limiter"):
+        try: wa.limiter.enabled = False
+        except Exception: pass
     with wa.app.test_client() as client:
         yield client
 
@@ -78,28 +100,38 @@ class TestAuth:
         resp = app_client.get("/login")
         assert resp.status_code == 200
 
-    def test_register_and_login(self, app_client):
+    def test_register_and_login(self, app_client, tmp_db):
         csrf = _csrf(app_client, "/register")
         resp = app_client.post("/register", data={
+            "_csrf":        csrf,
+            "username":     "testuser",
+            "email":        "test@example.com",
+            "password":     "TestPass123!",
+            "name":         "Test User",
+            "company":      "Test Co",
+            "country":      "Ghana",
+            "terms_agreed": "on",
+        }, follow_redirects=False)
+        # Bypass the email-verification gate (commit 17e40ee) by flipping the flag in the temp DB.
+        _verify_user_in_db(tmp_db, "testuser")
+        # Now log in and confirm we land on the dashboard.
+        csrf = _csrf(app_client, "/login")
+        resp = app_client.post("/login", data={
             "_csrf":    csrf,
             "username": "testuser",
-            "email":    "test@example.com",
             "password": "TestPass123!",
-            "name":     "Test User",
-            "company":  "Test Co",
-            "country":  "Ghana",
         }, follow_redirects=True)
         assert resp.status_code == 200
-        # Should land on dashboard after registration
         assert b"dashboard" in resp.data.lower() or b"Dashboard" in resp.data
 
     def test_duplicate_register_fails(self, app_client):
         csrf = _csrf(app_client, "/register")
         resp = app_client.post("/register", data={
-            "_csrf":    csrf,
-            "username": "testuser",        # already exists from above
-            "email":    "other@example.com",
-            "password": "AnotherPass123!",
+            "_csrf":        csrf,
+            "username":     "testuser",        # already exists from above
+            "email":        "other@example.com",
+            "password":     "AnotherPass123!",
+            "terms_agreed": "on",
         }, follow_redirects=True)
         assert resp.status_code == 200
         assert b"already" in resp.data.lower() or b"registered" in resp.data.lower()

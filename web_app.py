@@ -19,6 +19,7 @@ from config.global_solar_data import (GLOBAL_DATA, get_countries, get_regions,
                                       get_solar_data, temp_derating)
 from calculation.ac_cable_sizing import size_all_cables
 from api_manager import api as _api
+import secrets_broker as _sb  # Phase 1: audit + tier + Vault-ready secret reads
 
 # Structured logging (tenant-aware JSON logs)
 try:
@@ -123,7 +124,12 @@ STRIPE_PRICES    = {
     "professional": os.environ.get("STRIPE_PRICE_PROFESSIONAL", ""),
     "enterprise":   os.environ.get("STRIPE_PRICE_ENTERPRISE", ""),
 }
-PAYSTACK_SECRET  = os.environ.get("PAYSTACK_SECRET_KEY", "")
+# Phase 1: route PAYSTACK_SECRET through secrets_broker for audit + future Vault.
+# DEGRADED tier means: try Vault, fall through to env warm-up automatically.
+try:
+    PAYSTACK_SECRET = _sb.get("payment/paystack", tier="DEGRADED")["secret"]
+except Exception:
+    PAYSTACK_SECRET = os.environ.get("PAYSTACK_SECRET_KEY", "")
 PAYSTACK_PUBLIC  = os.environ.get("PAYSTACK_PUBLIC_KEY", "")
 
 # ─── Free / demo mode & SMTP ──────────────────────────────────────────────────
@@ -556,8 +562,24 @@ def init_db():
             pass
     # Seed default users — ensure admin and owner accounts always exist
     def _seed_pwd(env_var):
-        # Source seed passwords from env so the repo never carries a live credential.
-        v = os.environ.get(env_var)
+        # Phase 1: route via secrets_broker (audit + tier + Vault-ready).
+        # DEGRADED tier with built-in env warm-up preserves the existing
+        # "env var required" guarantee while landing audit trail and the
+        # Vault cutover path.
+        _PATH_MAP = {
+            "SOLARPRO_ADMIN_PASSWORD": ("seed/admin",     "password"),
+            "SOLARPRO_OWNER_PASSWORD": ("seed/marc667us", "password"),
+        }
+        v = None
+        mapping = _PATH_MAP.get(env_var)
+        if mapping:
+            path, field = mapping
+            try:
+                v = _sb.get(path, tier="DEGRADED")[field]
+            except Exception:
+                v = None
+        if not v:
+            v = os.environ.get(env_var)
         if not v:
             raise RuntimeError(env_var + " env var required for initial user seed (see SolarPro_Schedule_2026-06-08.md Phase 0.1)")
         return v
@@ -681,11 +703,11 @@ def init_db():
 
 # ─── System email helper ─────────────────────────────────────────────────────
 
-def _send_email(to_addr, subject, html_body, text_body=None, from_addr=None, resend_key=None):
-    """Delegate to api_manager (single source). Resend -> SMTP fallback."""
+def _send_email(to_addr, subject, html_body, text_body=None, from_addr=None, resend_key=None, attachments=None):
+    """Delegate to api_manager (single source). Resend -> SMTP fallback. attachments: optional [(filename, bytes, mime), ...]."""
     return _api.email.send(to_addr, subject, html_body,
                            text_body=text_body, from_addr=from_addr,
-                           resend_key_override=resend_key)
+                           resend_key_override=resend_key, attachments=attachments)
 
 
 def _send_system_email(to_addr, subject, body_text):
@@ -7556,9 +7578,41 @@ def project_email(pid):
             "<p>" + _ptxt + "</p>"
             "<hr><p style='color:#888;font-size:12px'>SolarPro Global</p></div>"
         )
+        # Render the selected report to PDF bytes and attach it.
+        # Why: prior code only sent the message body and the placeholder said
+        # "...attached" but nothing was. We dispatch to the existing PDF view
+        # function (registered as a Flask endpoint) and capture its bytes.
+        _attachments = None
+        _report_label = (request.form.get("report") or "").strip()
+        _endpoint_map = {
+            "Full Proposal (All Reports)": "export_pdf_proposal",
+            "PV System Design Report":     "export_pdf_pv",
+            "BOQ Report":                  "export_pdf_boq",
+            "Economic Analysis":           "export_pdf_economic",
+            "Energy Impact":               "export_pdf_energy",
+            "AC Cable Schedule":           "export_pdf_cable",
+            "Installation Plan":           "export_pdf_installation",
+            "Installation Work Plan":      "export_pdf_workplan",
+            "Staffing Plan":               "export_pdf_staffing",
+            "Procurement Plan":            "export_pdf_procurement",
+            "Site Assessment":             "export_pdf_inspection",
+        }
+        _ep_name = _endpoint_map.get(_report_label)
+        if _ep_name:
+            _vf = app.view_functions.get(_ep_name)
+            if _vf:
+                try:
+                    _resp = _vf(pid)
+                    _pdf_bytes = _resp.get_data() if hasattr(_resp, "get_data") else None
+                    if _pdf_bytes and _pdf_bytes[:4] == b"%PDF":
+                        _fname = getattr(_resp, "download_name", None) or (_report_label.replace(" ", "_") + ".pdf")
+                        _attachments = [(_fname, _pdf_bytes, "application/pdf")]
+                except Exception as _pdf_exc:
+                    logger.warning("PDF attachment render failed for %s: %s", _report_label, _pdf_exc)
         _ok, _err = _send_email(
             recipients, subject, _phtml, text_body=_ptxt,
             from_addr=eff_from, resend_key=eff_resend or None,
+            attachments=_attachments,
         )
         if _ok:
             with get_db() as c:

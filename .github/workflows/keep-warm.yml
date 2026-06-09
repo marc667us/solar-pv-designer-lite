@@ -1,0 +1,42 @@
+# Pings solarpro.aiappinvent.com every 10 minutes to keep Render free tier warm.
+#
+# Why: Render free spins the container down after 15 min of inactivity. First user
+# request triggers a cold start that takes 30-60 seconds — beta-killer for public
+# visitors who'll abandon at the 10-second mark. A 10-min ping keeps the service
+# warm 24/7.
+#
+# Cost on GitHub free tier: ~720 minutes/month (2000 free for private, unlimited
+# public). Each run ~10 seconds — well under the cap.
+#
+# To pause without removing: comment out the `cron` line below, or disable in
+# Actions tab. To stop entirely: delete this file.
+
+name: keep-warm
+
+on:
+  schedule:
+    # Every 10 minutes. GitHub may skew by a few minutes; doesn't matter for
+    # warming purposes (we just need a ping inside Render's 15-min idle window).
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}  # manual trigger for testing
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Warm /api/ping
+        run: |
+          # -f fails on HTTP 4xx/5xx; --max-time bounds the call so a cold-start
+          # hang doesn't burn workflow minutes.
+          set -e
+          for URL in \
+            "https://solarpro.aiappinvent.com/api/ping" \
+            "https://solarpro-global.onrender.com/api/ping"; do
+            echo "Pinging $URL"
+            curl -fsS --max-time 60 -o /dev/null -w "  HTTP %{http_code} in %{time_total}s\n" "$URL" || \
+              echo "  WARN: ping failed for $URL"
+          done

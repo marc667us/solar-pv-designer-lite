@@ -34,7 +34,7 @@ GLOBAL_DATA = {
         "utility": "Electricity Company of Ghana (ECG) / NEDCo",
         "tariff_ref": "PURC Tariff Order, July 2024 — Blended Residential Rate",
         "cost_usd_kwp": 980,     # USD/kWp all-in — West Africa import + install
-        "fx_usd": 16.0,          # GHS/USD (May 2026)
+        "fx_usd": 12.0,          # GHS/USD (2026-06-09 — owner-corrected from 16.0)
         "momo": "MTN MoMo · AirtelTigo Money · Vodafone Cash",
         "regions": {
             "Greater Accra":  {"psh": 4.8, "temp": 27.8, "lat":  5.6, "lon":  -0.2},

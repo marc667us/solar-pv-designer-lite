@@ -24,7 +24,24 @@ WHY THIS MODULE EXISTS
 import os, json, time, sqlite3, hashlib, logging
 from datetime import datetime
 
+import secrets_broker  # Phase 1: routes secret reads through the broker (audit + tier + future Vault)
+
 logger = logging.getLogger("api_manager")
+
+
+# Internal helper used by the lazy properties below. Centralizes the broker call
+# + the tolerant "return empty string on miss" fallback that matches the prior
+# eager-load behaviour (so the existing if-key-present provider guards still work).
+def _secret_field(path: str, field: str, default: str = "") -> str:
+    """Fetch one field from a secret path via the broker. Returns default
+    when Vault is unreachable AND no env warm-up is available, so callers
+    can fall through to the next provider exactly as they did pre-broker.
+    Audited per the broker's sampling policy."""
+    try:
+        sec = secrets_broker.get(path, tier="DEGRADED")
+        return sec[field]
+    except (secrets_broker.VaultUnreachable, KeyError):
+        return default
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -325,32 +342,12 @@ class _EmailClient:
         self._load()
 
     def _load(self):
-        # Helper: read env var and strip BOM + surrounding whitespace.
-        # Why: some GitHub Secrets were stored with a UTF-8 BOM ("﻿") prefix,
-        # causing int(SMTP_PORT) to crash at gunicorn startup and breaking deploys.
-        # Inputs:  env var name, default value
-        # Output:  cleaned string with BOM/whitespace removed
+        # Phase 1 refactor: secret fields (RESEND/SMTP/BREVO/AXIGEN keys) are
+        # served by @property methods that call the broker on each access.
+        # _load() now only seeds the non-secret display-address fields, which
+        # remain eager because they aren't sensitive and don't rotate.
         def _env(name, default=""):
             return os.environ.get(name, default).lstrip("﻿").strip()
-        self.resend_key  = _env("RESEND_API_KEY")
-        self.smtp_host   = _env("SMTP_HOST")
-        # int() now sees a clean digit string; fallback "465" applies only if env is empty
-        self.smtp_port   = int(_env("SMTP_PORT", "465") or "465")
-        self.smtp_user   = _env("SMTP_USER")
-        self.smtp_pass   = _env("SMTP_PASS")
-        self.smtp_from   = _env("SMTP_FROM", "support@aiappinvent.com")
-        self.smtp_tls    = _env("SMTP_TLS", "false").lower() in ("1", "true", "yes")
-        # Brevo (Sendinblue) transactional email API — HTTPS, free 300/day.
-        # Used as the primary provider since free hosting (Render/Railway) blocks
-        # outbound SMTP. Key format: xkeysib-<long string>. Get one at brevo.com.
-        self.brevo_key   = _env("BREVO_API_KEY")
-        # Axigen mailbox REST API. Provides HTTPS-based send so it works
-        # through Render's outbound-SMTP block. AXIGEN_SERVER_URL must be the
-        # full https URL of an Axigen mail server (self-hosted or hosted).
-        # Example: https://mail.example.com/api/v1
-        self.axigen_url  = _env("AXIGEN_SERVER_URL")
-        self.axigen_user = _env("AXIGEN_USER")
-        self.axigen_pass = _env("AXIGEN_PASSWORD")
         self.addr_sales    = _env("EMAIL_SALES",    "sales@aiappinvent.com")
         self.addr_support  = _env("EMAIL_SUPPORT",  "support@aiappinvent.com")
         self.addr_billing  = _env("EMAIL_BILLING",  "billing@aiappinvent.com")
@@ -360,7 +357,65 @@ class _EmailClient:
     def reload(self):
         self._load()
 
-    def _send_brevo(self, _from, _to, subject, html_body, text_body):
+    # ── Phase 1 lazy properties — every read goes through secrets_broker ────
+    # Returns "" (or sensible default) when Vault is unreachable AND no env
+    # warm-up is available. Matches prior eager-load "" semantics, so the
+    # if-key-present provider guards keep working.
+
+    @property
+    def resend_key(self) -> str:
+        return _secret_field("email/resend", "api_key", "")
+
+    @property
+    def brevo_key(self) -> str:
+        return _secret_field("email/brevo", "api_key", "")
+
+    @property
+    def smtp_host(self) -> str:
+        return _secret_field("email/smtp", "host", "")
+
+    @property
+    def smtp_port(self) -> int:
+        raw = _secret_field("email/smtp", "port", "465")
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return 465
+
+    @property
+    def smtp_user(self) -> str:
+        return _secret_field("email/smtp", "user", "")
+
+    @property
+    def smtp_pass(self) -> str:
+        return _secret_field("email/smtp", "pass", "")
+
+    @property
+    def smtp_from(self) -> str:
+        return _secret_field("email/smtp", "from", "support@aiappinvent.com")
+
+    @property
+    def smtp_tls(self) -> bool:
+        raw = _secret_field("email/smtp", "tls", "false")
+        return raw.lower() in ("1", "true", "yes")
+
+    # Axigen is not in _ENV_MAP / _TIER yet — Phase 2 deliverable. For now,
+    # fall through to direct env reads so the configured (unconfigured) state
+    # matches pre-broker behaviour exactly. When Phase 2 adds it to _TIER,
+    # flip these to _secret_field("email/axigen", ...).
+    @property
+    def axigen_url(self) -> str:
+        return os.environ.get("AXIGEN_SERVER_URL", "").lstrip("﻿").strip()
+
+    @property
+    def axigen_user(self) -> str:
+        return os.environ.get("AXIGEN_USER", "").lstrip("﻿").strip()
+
+    @property
+    def axigen_pass(self) -> str:
+        return os.environ.get("AXIGEN_PASSWORD", "").lstrip("﻿").strip()
+
+    def _send_brevo(self, _from, _to, subject, html_body, text_body, attachments=None):
         """
         Send an email through Brevo's transactional API (api.brevo.com/v3/smtp/email).
 
@@ -370,13 +425,15 @@ class _EmailClient:
           - Accepts custom sender once you verify the address in Brevo dashboard
 
         Inputs:
-          _from      sender email string. MUST be verified in Brevo dashboard or
-                     covered by a verified-domain SPF/DKIM. Otherwise Brevo
-                     returns 400 with code "missing_credentials".
-          _to        list of recipient email strings
-          subject    email subject text
-          html_body  HTML body string
-          text_body  plain-text body string or None
+          _from         sender email string. MUST be verified in Brevo dashboard or
+                        covered by a verified-domain SPF/DKIM. Otherwise Brevo
+                        returns 400 with code "missing_credentials".
+          _to           list of recipient email strings
+          subject       email subject text
+          html_body     HTML body string
+          text_body     plain-text body string or None
+          attachments   optional list of (filename, bytes, mime) tuples; encoded
+                        per Brevo's spec (base64 in JSON "attachment" array).
 
         Output:
           (True, "sent") on HTTP 200/201, else (False, "<error detail>")
@@ -386,7 +443,7 @@ class _EmailClient:
           - sender + to are objects with {email, name} — name optional
           - JSON-decoded response on success contains "messageId"
         """
-        import requests
+        import requests, base64
         if not self.brevo_key:
             return False, "brevo not configured"
         url = "https://api.brevo.com/v3/smtp/email"
@@ -403,6 +460,12 @@ class _EmailClient:
         }
         if text_body:
             payload["textContent"] = text_body
+        if attachments:
+            payload["attachment"] = [
+                {"name": fname,
+                 "content": base64.b64encode(data).decode("ascii")}
+                for (fname, data, _mime) in attachments
+            ]
         try:
             r = requests.post(url, json=payload, headers=headers, timeout=15)
             if r.status_code in (200, 201, 202):
@@ -411,16 +474,18 @@ class _EmailClient:
         except Exception as e:
             return False, str(e)
 
-    def _send_axigen(self, _from, _to, subject, html_body, text_body):
+    def _send_axigen(self, _from, _to, subject, html_body, text_body, attachments=None):
         """
         Send an email through Axigen's Mailbox REST API.
 
         Inputs:
-          _from      sender address string (must be a mailbox on the Axigen server)
-          _to        list of recipient address strings
-          subject    email subject text
-          html_body  HTML body string
-          text_body  plain-text body string or None
+          _from         sender address string (must be a mailbox on the Axigen server)
+          _to           list of recipient address strings
+          subject       email subject text
+          html_body     HTML body string
+          text_body     plain-text body string or None
+          attachments   optional list of (filename, bytes, mime) tuples; encoded
+                        per Axigen's spec (base64 in JSON "attachments" array).
         Output:
           (True, "sent") on HTTP 200/201, else (False, "<error detail>")
         Syntax notes:
@@ -428,7 +493,7 @@ class _EmailClient:
           - timeout=15 prevents hanging if Axigen server is unreachable
           - We POST to {AXIGEN_SERVER_URL}/mails/send per Axigen Mailbox REST API
         """
-        import requests
+        import requests, base64
         if not (self.axigen_url and self.axigen_user and self.axigen_pass):
             return False, "axigen not configured"
         url = self.axigen_url.rstrip("/") + "/mails/send"
@@ -442,6 +507,13 @@ class _EmailClient:
         }
         if text_body:
             payload["bodyText"] = text_body
+        if attachments:
+            payload["attachments"] = [
+                {"fileName": fname,
+                 "contentType": (mime or "application/octet-stream"),
+                 "content": base64.b64encode(data).decode("ascii")}
+                for (fname, data, mime) in attachments
+            ]
         try:
             r = requests.post(url, json=payload,
                               auth=(self.axigen_user, self.axigen_pass),
@@ -453,7 +525,7 @@ class _EmailClient:
             return False, str(e)
 
     def send(self, to_addr, subject, html_body, text_body=None, from_addr=None,
-             resend_key_override=None):
+             resend_key_override=None, attachments=None):
         """
         Send an email. Returns (ok: bool, message: str).
 
@@ -467,6 +539,9 @@ class _EmailClient:
           text_body             optional plain-text fallback
           from_addr             optional override for sender
           resend_key_override   optional Resend key for one-off testing
+          attachments           optional list of (filename, bytes, mime) tuples
+                                attached on every provider; mime defaults to
+                                application/octet-stream if blank
         Output:
           (True, "sent") if any provider accepts, else (False, "<combined error>")
         Syntax notes:
@@ -480,7 +555,7 @@ class _EmailClient:
 
         # 1) Brevo primary — free 300/day HTTPS API, only runs if BREVO_API_KEY set.
         if self.brevo_key:
-            ok, msg = self._send_brevo(_from, _to, subject, html_body, text_body)
+            ok, msg = self._send_brevo(_from, _to, subject, html_body, text_body, attachments)
             if ok:
                 self._s.log("brevo", "send", "ok", (time.time()-t)*1000)
                 return True, "sent"
@@ -490,7 +565,7 @@ class _EmailClient:
         # 2) Axigen — only attempts the call if AXIGEN_SERVER_URL is set,
         #    so absence of config silently falls through to next provider.
         if self.axigen_url:
-            ok, msg = self._send_axigen(_from, _to, subject, html_body, text_body)
+            ok, msg = self._send_axigen(_from, _to, subject, html_body, text_body, attachments)
             if ok:
                 self._s.log("axigen", "send", "ok", (time.time()-t)*1000)
                 return True, "sent"
@@ -500,11 +575,17 @@ class _EmailClient:
         # 3) Resend fallback — uses the Resend Python SDK over HTTPS
         if _key:
             try:
-                import resend as _r
+                import resend as _r, base64
                 _r.api_key = _key
                 params = {"from": _from, "to": _to, "subject": subject, "html": html_body}
                 if text_body:
                     params["text"] = text_body
+                if attachments:
+                    params["attachments"] = [
+                        {"filename": fname,
+                         "content": base64.b64encode(data).decode("ascii")}
+                        for (fname, data, _mime) in attachments
+                    ]
                 _r.Emails.send(params)
                 self._s.log("resend", "send", "ok", (time.time()-t)*1000)
                 return True, "sent"
@@ -521,13 +602,23 @@ class _EmailClient:
             import smtplib
             from email.mime.multipart import MIMEMultipart
             from email.mime.text import MIMEText as _MT
-            msg = MIMEMultipart("alternative")
-            msg["From"]    = _from
-            msg["To"]      = ", ".join(_to)
-            msg["Subject"] = subject
+            from email.mime.application import MIMEApplication
+            # mixed wraps the alternative body + binary parts (PDF attachments).
+            # alternative-only was the old shape and silently dropped files.
+            outer = MIMEMultipart("mixed")
+            outer["From"]    = _from
+            outer["To"]      = ", ".join(_to)
+            outer["Subject"] = subject
+            alt = MIMEMultipart("alternative")
             if text_body:
-                msg.attach(_MT(text_body, "plain"))
-            msg.attach(_MT(html_body, "html"))
+                alt.attach(_MT(text_body, "plain"))
+            alt.attach(_MT(html_body, "html"))
+            outer.attach(alt)
+            for (fname, data, mime) in (attachments or []):
+                _sub = (mime.split("/", 1)[1] if (mime and "/" in mime) else "octet-stream")
+                part = MIMEApplication(data, _subtype=_sub)
+                part.add_header("Content-Disposition", "attachment", filename=fname)
+                outer.attach(part)
             if self.smtp_tls:
                 srv = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=15)
                 srv.ehlo()
@@ -535,7 +626,7 @@ class _EmailClient:
             else:
                 srv = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=15)
             srv.login(self.smtp_user, self.smtp_pass)
-            srv.sendmail(_from, _to, msg.as_string())
+            srv.sendmail(_from, _to, outer.as_string())
             srv.quit()
             self._s.log("smtp", "send", "ok", (time.time()-t)*1000)
             return True, "sent"
