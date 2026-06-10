@@ -356,3 +356,42 @@ Close every quality-gate finding that can be made via additive files (new migrat
 **Next Recommended Step:** Commit + push, smoke production once redeployed, then P2 Postgres cutover (so the AI ledger and any future per-user state survives redeploys).
 
 ---
+
+# Implementation Log Entry
+**Date:** 2026-06-10 · **Task:** P2 (partial) — Postgres migrations applied; cutover gated · **Status:** Migrations live, env-flip blocked on SQL-portability work
+
+**Objective:** Land the Postgres schema so the cutover is one env-var flip away. Per the prior session's plan: re-fetch URL → set secret → migrate → flip DATABASE_URL → smoke. Discovered a critical blocker during wiring: `init_db()` at `web_app.py:226` runs SQLite-only DDL (`INTEGER PRIMARY KEY AUTOINCREMENT`, `TEXT DEFAULT CURRENT_TIMESTAMP`) unconditionally, and dozens of `datetime('now')` / `INSERT OR REPLACE` / `last_insert_rowid()` patterns live in the route handlers. The `db_adapter.py` docstring claims `get_db()` guards this; **it doesn't**. Flipping the env var today would 500 production on the first request.
+
+**Files Changed:**
+- NEW `.github/workflows/migrate-and-cutover-postgres.yml` — one workflow does the whole pipeline with two gates:
+  - Default run (no inputs): finds `solarpro-postgres` by name, waits for available, fetches masked internal URL, applies `migrations/001..004` against the external URL with `psql --single-transaction`. **No env-var change. No redeploy. App keeps running on SQLite.**
+  - `set_database_url=true`: appends the cutover (PUT-merge `DATABASE_URL` onto the Render web service, preserving every other env var) and triggers a redeploy.
+  - `remove_database_url=true`: ROLLBACK — strips `DATABASE_URL`, redeploys on SQLite.
+  - Both URLs `::add-mask::`ed so they don't surface in logs.
+
+**Database Changes:** Postgres schema 001..004 applied (run `27296591166`, 46 s). Includes UUID PKs, 18 tenant-RLS-aware tables, `current_tenant_id()` / `is_super_admin()` helpers, hardening rules. **Empty data** — no row migration from SQLite yet.
+
+**API Changes:** none.
+
+**Tests Added:** workflow YAML parses; default-run gating confirmed by `gh workflow run` followed by status=success in 46s.
+
+**Security:** internal + external Postgres URLs both `::add-mask::`ed; the cutover step uses internal URL only (in-cluster traffic).
+
+**Documentation Updated:** this entry. CLAUDE.md's earlier note about "B1 dual-backend get_db scaffold" stands but should be amended — the scaffold is ready, the surrounding code is not.
+
+**What Was Completed:** Migrations live on Postgres. Workflow ready to flip DATABASE_URL the moment SQL portability lands.
+
+**What Remains (cutover prerequisites):**
+1. **Gate `init_db()` on DATABASE_URL** — early-return when set; migrations 001..004 own the schema in Postgres. Estimated: 15 min.
+2. **Audit SQLite-only SQL across `web_app.py`**: `datetime('now')`, `date('now')`, `strftime('%...', ...)`, `INSERT OR REPLACE`, `INSERT OR IGNORE`, `last_insert_rowid()`, `PRAGMA table_info()`. Replace each with portable equivalents or extend `db_adapter.py` to translate at execute-time. Estimated: 2-4 hours.
+3. **Data migration**: dump SQLite (`/app/solar.db`), translate types where needed, COPY into Postgres. Estimated: 1 hour.
+4. **Cutover smoke**: login, create project, generate report, generate proposal PDF, hit `/api/ai/quota`, check `/api/health/database` returns `backend=postgresql`. Estimated: 30 min.
+5. Only then run the workflow with `set_database_url=true`.
+
+**Known Risks:**
+- Postgres free tier has a 90-day idle rollover. If we provision and never cut over within 90 days, Render deletes the instance. **Re-running provision-postgres.yml is idempotent** — it'll recreate with a fresh URL, but migrations need re-applying. Bookmark.
+- Free tier 25-conn ceiling; `db_adapter.py` opens a fresh conn per `get_db()` call. Fine pre-launch; needs `psycopg2.pool` before any real traffic.
+
+**Next Recommended Step:** Commit the workflow + this log entry. Decide between (A) continuing to P3 (proposal superset, ~2-3 hr code refactor across 10 report markdowns) and (B) wrapping the session — substantial work has shipped: caps + ledger + quota route + 15/15 calc audit + 2 critical bash fixes + 3 PDF diagrams on 4 routes + Postgres schema. The cutover gate is a separate workstream that can wait for a dedicated session.
+
+---
