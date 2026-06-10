@@ -1,0 +1,80 @@
+{
+  "country": "United Kingdom",
+  "generated": "2026-06-10",
+  "purpose": "SolarPro Global — beta-testing invitee list (UK MCS-certified solar installers + suppliers)",
+  "schema_notes": "Same shape as the other per-country files. Each entry has a verified email collected from the company's own contact page on 2026-06-10. MCS certification noted in `notes` field where confirmed.",
+  "entities": [
+    {
+      "name": "Spirit Energy",
+      "roles": ["installer"],
+      "services": "Solar PV, battery storage, EV charging; residential + commercial",
+      "address": "Spirit House, 25 Albury Close, Reading, RG30 1BD",
+      "city": "Reading",
+      "email": "info@spiritenergy.co.uk",
+      "phones": ["+44 118 951 4490"],
+      "contact_person": null,
+      "website": "https://www.spiritenergy.co.uk/",
+      "notes": "~50-mile radius for residential, 200+ miles for commercial."
+    },
+    {
+      "name": "Cambridge Solar",
+      "roles": ["installer"],
+      "services": "Solar panel installation + maintenance, battery storage, EV chargers, electrical work",
+      "address": "Unit 6 Beech Court, Willow Road, Fenstanton, Cambridge, PE28 9RF",
+      "city": "Cambridge",
+      "email": "info@cambridge-solar.co.uk",
+      "phones": ["+44 1223 912 224", "+44 1223 633 703"],
+      "contact_person": null,
+      "website": "https://cambridge-solar.co.uk/",
+      "notes": "Covers Cambridge + Ely + Huntingdon + Newmarket + Peterborough."
+    },
+    {
+      "name": "Joju Solar",
+      "roles": ["installer"],
+      "services": "Solar PV, battery storage, EV charge points; residential + commercial; 18+ year track record",
+      "address": "Head: Suite 5, 128 Aldersgate Street, London EC1A 4AE | Oxford: Old Music Hall, 106-108 Cowley Road, OX4 1JE | Sheffield: Scotia Works, Leadmill Rd, S1 4SE",
+      "city": "London + Oxford + Sheffield",
+      "email": "info@joju.co.uk",
+      "phones": ["+44 207 697 1000"],
+      "contact_person": null,
+      "website": "https://www.jojusolar.co.uk/",
+      "notes": "Multi-region with London HQ. Long track record."
+    },
+    {
+      "name": "Acen Solar",
+      "roles": ["installer"],
+      "services": "Solar PV, battery storage, Tesla Powerwall, EV chargers, AC, electrical contracting",
+      "address": "44 Broadway, Stratford, London, E15 1XH",
+      "city": "London (Essex + Kent coverage)",
+      "email": "info@acen-solar.co.uk",
+      "phones": ["+44 203 005 3282", "+44 7939 322 692"],
+      "contact_person": null,
+      "website": "https://acen-solar.co.uk/",
+      "notes": "WhatsApp +44 7939 322 692 also active."
+    },
+    {
+      "name": "CRG Direct",
+      "roles": ["installer"],
+      "services": "Solar PV, battery storage, heat pumps, AC, EV chargers, loft insulation; residential + commercial",
+      "address": "Port Solent, Portsmouth, Hampshire",
+      "city": "Portsmouth, Hampshire",
+      "email": "info@crgdirect.co.uk",
+      "phones": ["+44 330 133 2497"],
+      "contact_person": null,
+      "website": "https://www.crgdirect.co.uk/",
+      "notes": "MCS Certified + NICEIC + Gas Safe + Which? Trusted Trader."
+    },
+    {
+      "name": "Solent Renewables",
+      "roles": ["installer"],
+      "services": "Solar panel installation, battery storage, inverter upgrades, maintenance",
+      "address": "63 Shanklin Road, Shirley, Southampton, SO15 7RG",
+      "city": "Southampton",
+      "email": "info@solentrenewables.co.uk",
+      "phones": ["+44 23 8001 9744"],
+      "contact_person": null,
+      "website": "https://solentrenewables.co.uk/",
+      "notes": "MCS Certified. Covers Hampshire and surrounding areas."
+    }
+  ]
+}

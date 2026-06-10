@@ -1,0 +1,68 @@
+{
+  "country": "United States",
+  "generated": "2026-06-10",
+  "purpose": "SolarPro Global — beta-testing invitee list (US solar installers + suppliers)",
+  "schema_notes": "Same shape as the other per-country files. Each entry has a verified email collected from the company's own public contact page on 2026-06-10.",
+  "entities": [
+    {
+      "name": "American Array Solar",
+      "roles": ["installer"],
+      "services": "Residential + commercial solar PV, roofing, battery storage, heat pumps, EV charging across California; also Arizona and Texas",
+      "address": "2021 Las Positas Court #129, Livermore, CA 94551 (HQ); offices in Manteca, Madera, Chatsworth, Bakersfield",
+      "city": "Livermore, CA (multi-city)",
+      "email": "info@americanarray.com",
+      "phones": ["+1 844 347 6527"],
+      "contact_person": null,
+      "website": "https://www.americanarraysolar.com/",
+      "notes": "Multi-state operator; PV + battery + EV bundled."
+    },
+    {
+      "name": "Infinity Solar USA",
+      "roles": ["installer"],
+      "services": "Custom solar system design + install, maintenance, battery storage, EV charger installation; nationwide US coverage",
+      "address": "12545 NE Whitaker Way, Portland, OR 97230",
+      "city": "Portland, OR (nationwide)",
+      "email": "sales@infinitysolarusa.com",
+      "phones": ["+1 800 818 0598"],
+      "contact_person": null,
+      "website": "https://www.infinitysolarusa.com/",
+      "notes": "Licensed professionals; multi-state."
+    },
+    {
+      "name": "Renova Energy",
+      "roles": ["installer"],
+      "services": "Residential + commercial solar, SunPower Elite dealer, battery storage, micro-grid solutions",
+      "address": "41555 Cook St, Palm Desert, CA 92211",
+      "city": "Palm Desert, CA",
+      "email": "info@renovaenergy.com",
+      "phones": ["+1 760 568 3413", "+1 855 736 6821"],
+      "contact_person": null,
+      "website": "https://renovaenergy.com/",
+      "notes": "SunPower Elite dealer since 2006; award-winning."
+    },
+    {
+      "name": "Longhorn Solar",
+      "roles": ["installer"],
+      "services": "Residential + commercial PV, energy efficiency, multi-city Texas coverage",
+      "address": "Austin HQ: 1500 Chisolm Trail Rd Ste 100, Round Rock, TX 78681 | San Antonio: 12500 Network Blvd #101 | DFW: 701 E Plano Pkwy #305, Plano | Houston by phone",
+      "city": "Austin / San Antonio / Dallas-Plano / Houston, TX",
+      "email": "contact@longhornsolar.com",
+      "phones": ["+1 512 837 4800", "+1 210 566 8000", "+1 972 850 7764"],
+      "contact_person": null,
+      "website": "https://longhornsolar.com/",
+      "notes": "Long-running Texas installer; service department separate."
+    },
+    {
+      "name": "IES Texas Solar",
+      "roles": ["installer"],
+      "services": "Residential + commercial solar, battery storage, backup generators, repair services across Texas",
+      "address": "Dallas/Fort Worth: 250 Chandler Dr Ste 200, Rowlett, TX 75088 | Austin: 15720 Vision Dr Ste 200, Pflugerville | San Antonio: 1731 S San Marcos | Houston: 5100 Franz Road, Katy | Rio Grande Valley: 2803 Zachary St, La Feria",
+      "city": "Dallas / Austin / San Antonio / Houston / Rio Grande Valley, TX",
+      "email": "iestxsolar@ies-co.com",
+      "phones": ["+1 855 447 6527"],
+      "contact_person": null,
+      "website": "https://iestxsolar.com/",
+      "notes": "TECL 17438 licensed. 5 regional offices."
+    }
+  ]
+}

@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       country:
-        description: "ghana | nigeria | kenya | all | owner_preview (preview = send only to the owner address kafedzie@gmail.com)"
+        description: "ghana | nigeria | kenya | us | uk | all (= ghana+nigeria+kenya+us+uk) | owner_preview"
         required: false
         default: "ghana"
         type: choice
@@ -25,6 +25,8 @@ on:
           - ghana
           - nigeria
           - kenya
+          - us
+          - uk
           - all
           - owner_preview
       confirm_send:
@@ -67,6 +69,8 @@ jobs:
                   "data/beta_outreach/ghana_beta_invitees.json",
                   "data/beta_outreach/nigeria_beta_invitees.json",
                   "data/beta_outreach/kenya_beta_invitees.json",
+                  "data/beta_outreach/us_beta_invitees.json",
+                  "data/beta_outreach/uk_beta_invitees.json",
               ]
           else:
               files = [f"data/beta_outreach/{COUNTRY}_beta_invitees.json"]
