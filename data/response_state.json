@@ -1,4 +1,36 @@
 {
-  "initialized": "2026-06-10",
-  "note": "Beta-monitor poll state. Re-written every 30 minutes by .github/workflows/beta-monitor.yml. Initial values are 0 so the first real poll establishes the baseline without sending a spurious alert."
+  "active_sessions": {
+    "active_sessions": [
+      {
+        "created_at": "2026-06-10 23:07:08",
+        "id": 2,
+        "is_admin": 1,
+        "plan": "enterprise",
+        "username": "marc667us"
+      },
+      {
+        "created_at": "2026-06-10 23:07:07",
+        "id": 1,
+        "is_admin": 1,
+        "plan": "enterprise",
+        "username": "admin"
+      }
+    ],
+    "count": 2,
+    "status": "ok"
+  },
+  "alerts_this_poll": [],
+  "beta_signups": {
+    "count": 0
+  },
+  "feedback": {
+    "count": 0
+  },
+  "last_poll_utc": "2026-06-10T23:48:20.208974+00:00",
+  "security_audit": {
+    "error": "HTTP 405"
+  },
+  "tickets": {
+    "count": 0
+  }
 }
