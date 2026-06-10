@@ -1,0 +1,169 @@
+# Send the v0.9.0-beta.1 invitation email to the curated Ghana solar
+# installer/supplier list at data/beta_outreach/ghana_beta_invitees.json,
+# attaching data/beta_outreach/SolarPro_Sales_Pitch.pdf. Uses Brevo's
+# HTTPS API via the BREVO_API_KEY repo secret (300/day free tier; we
+# send ~7 emails per run).
+#
+# Default mode is DRY-RUN — it prints the recipient list + the rendered
+# email body and exits without hitting Brevo. Set the workflow_dispatch
+# input `confirm_send` to "YES_SEND" to actually fire.
+#
+# Manual rollback: there is none for sent email. Read the dry-run output
+# carefully before confirming.
+
+name: Send beta invites
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_send:
+        description: "Type 'YES_SEND' (uppercase) to actually send. Anything else = dry-run."
+        required: false
+        default: "DRY_RUN"
+
+permissions:
+  contents: read
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+      EMAIL_SALES:   ${{ secrets.EMAIL_SALES }}
+      CONFIRM_SEND:  ${{ github.event.inputs.confirm_send }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Send
+        run: |
+          set -e
+          python - <<'PY'
+          import base64, json, os, sys, time, urllib.request
+
+          IS_LIVE  = os.environ.get("CONFIRM_SEND") == "YES_SEND"
+          BREVO    = os.environ["BREVO_API_KEY"]
+          SENDER   = os.environ.get("EMAIL_SALES", "sales@aiappinvent.com")
+
+          DATA = json.load(open("data/beta_outreach/ghana_beta_invitees.json"))
+          ATTACH = open("data/beta_outreach/SolarPro_Sales_Pitch.pdf", "rb").read()
+          ATTACH_B64 = base64.b64encode(ATTACH).decode("ascii")
+
+          SUBJECT = "Try SolarPro Global - free beta access for your design team"
+
+          BODY_HTML = """<!DOCTYPE html>
+          <html><body style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#1a1a1a;line-height:1.55">
+          <h2 style="color:#0a2d47">SolarPro Global - Public Beta Invitation</h2>
+          <p>Dear <strong>{company}</strong> team,</p>
+          <p>I'm Marc - founder of <strong>AI App Invent</strong> and the engineer behind
+          <a href="https://solarpro.aiappinvent.com">SolarPro Global</a>, a new web app
+          that turns a customer's daily load schedule into a full solar PV design
+          package in under five minutes:</p>
+          <ul>
+            <li>BS 7671 / IEC 60364 compliant sizing for PV, battery, inverter and MPPT</li>
+            <li>AC cable sizing with per-circuit voltage drop working</li>
+            <li>Bill of Quantities with CAPEX, financing and 25-year cashflow</li>
+            <li>Single-line diagram, system topology and mounting plan</li>
+            <li>One-click PDF export of the complete technical and financial proposal</li>
+          </ul>
+          <p>You and your team are exactly the kind of operator we want feedback from.
+          <strong>The public beta is live now and free</strong> to use through the rest
+          of the year while we polish the platform.</p>
+          <h3 style="color:#0a2d47">How to join</h3>
+          <ol>
+            <li>Visit <a href="https://solarpro.aiappinvent.com">https://solarpro.aiappinvent.com</a></li>
+            <li>Sign up with your work email (no credit card required)</li>
+            <li>Create a project, run a design, download the proposal PDF</li>
+            <li>Email back with anything that surprised you - bugs, missing features,
+                copy that did not make sense, anything</li>
+          </ol>
+          <p style="background:#fef3c7;border-left:4px solid #f59e0b;padding:10px 14px;font-size:14px">
+          The current beta runs on free-tier infrastructure that may be reset between
+          deployments while we cut over to the production database. We post the cut-over
+          date in the in-app banner; for now, please keep a local copy of any project
+          you cannot afford to recreate.</p>
+          <p>Attached you will find our short sales-pitch PDF for context. Release notes:</p>
+          <p><a href="https://github.com/marc667us/solar-pv-designer-lite/releases/tag/v0.9.0-beta.1">
+          github.com/marc667us/solar-pv-designer-lite/releases/tag/v0.9.0-beta.1</a></p>
+          <h3 style="color:#0a2d47">How to send feedback</h3>
+          <p>Two channels - pick whichever is easier:</p>
+          <ul>
+            <li><strong>In-app feedback</strong> - every page has a feedback link in the
+                footer. Submissions land in our admin queue.</li>
+            <li><strong>Open a ticket</strong> - visit <a href="https://solarpro.aiappinvent.com/tickets">solarpro.aiappinvent.com/tickets</a>
+                after logging in to file a bug or request.</li>
+          </ul>
+          <p>You can also just reply to this email.</p>
+          <h3 style="color:#0a2d47">What I want back</h3>
+          <p>If the design output for one of your real projects is wrong, off by a margin
+          you would not accept, or simply confusing - please tell me. That is what I want
+          to fix before we open the gates wider.</p>
+          <p>Best regards,<br>
+          <strong>Marc</strong><br>
+          Founder, AI App Invent<br>
+          <a href="mailto:sales@aiappinvent.com">sales@aiappinvent.com</a><br>
+          <a href="https://aiappinvent.com">aiappinvent.com</a></p>
+          </body></html>
+          """
+
+          # Build recipient list with one canonical email per organization
+          rcpts = []
+          for e in DATA["entities"]:
+              em = (e.get("email") or "").strip()
+              if not em:
+                  continue
+              em = em.split("/")[0].strip().split(",")[0].strip()
+              if "@" not in em:
+                  continue
+              rcpts.append({"name": e["name"], "email": em})
+
+          print(f"Recipients ({len(rcpts)}):")
+          for r in rcpts:
+              print(f"  - {r['name']:<45}  {r['email']}")
+          print(f"\nSubject: {SUBJECT}")
+          print(f"Attachment: SolarPro_Sales_Pitch.pdf ({len(ATTACH):,} bytes)")
+          print(f"Mode: {'LIVE SEND' if IS_LIVE else 'DRY RUN'}")
+          print()
+
+          if not IS_LIVE:
+              print("Dry run complete. Re-run workflow with confirm_send=YES_SEND to fire.")
+              sys.exit(0)
+
+          sent, failed = 0, []
+          for r in rcpts:
+              body = BODY_HTML.replace("{company}", r["name"])
+              payload = json.dumps({
+                  "sender":      {"email": SENDER, "name": "Marc - AI App Invent"},
+                  "to":          [{"email": r["email"], "name": r["name"]}],
+                  "subject":     SUBJECT,
+                  "htmlContent": body,
+                  "attachment":  [{"name": "SolarPro_Sales_Pitch.pdf",
+                                   "content": ATTACH_B64}],
+              }).encode("utf-8")
+              req = urllib.request.Request(
+                  "https://api.brevo.com/v3/smtp/email",
+                  data=payload,
+                  headers={"api-key": BREVO,
+                           "Content-Type": "application/json",
+                           "Accept": "application/json"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      code = resp.status
+                      body_resp = resp.read().decode("utf-8", "replace")
+                  if 200 <= code < 300:
+                      print(f"  SENT  {r['email']:<40}  HTTP {code}")
+                      sent += 1
+                  else:
+                      print(f"  FAIL  {r['email']:<40}  HTTP {code}  {body_resp[:120]}")
+                      failed.append((r, code, body_resp[:200]))
+              except Exception as ex:
+                  print(f"  FAIL  {r['email']:<40}  {ex!r}")
+                  failed.append((r, "exc", str(ex)[:200]))
+              time.sleep(1)
+
+          print(f"\n=== RESULT: sent={sent}  failed={len(failed)} ===")
+          if failed:
+              sys.exit(1)
+          PY
