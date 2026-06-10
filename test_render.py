@@ -1,10 +1,13 @@
 ﻿"""End-to-end test against https://solarpro.aiappinvent.com
    Uses the enterprise-plan admin account so report gates don't block.
 """
-import sys, re, time
+import os, sys, re, time
 import requests
 
-BASE = "https://solarpro.aiappinvent.com"
+BASE     = os.environ.get("SOLARPRO_BASE", "https://solarpro.aiappinvent.com")
+ADMIN_PW = os.environ.get("SOLARPRO_ADMIN_PASSWORD", "")
+if not ADMIN_PW:
+    sys.exit("Set SOLARPRO_ADMIN_PASSWORD env var (admin login passphrase).")
 s = requests.Session()
 s.headers.update({"User-Agent": "solar-test/1.0"})
 
@@ -53,7 +56,7 @@ print("\n=== 0. Wake & Login (admin / enterprise) ===")
 r = s.get(BASE + "/", timeout=60)
 h("Home page reachable", r)
 
-r = post(BASE + "/login", {"username": "admin", "password": "SolarAdmin2026!"})
+r = post(BASE + "/login", {"username": "admin", "password": ADMIN_PW})
 h("Admin login", r)
 chk("Landed on dashboard", "dashboard" in r.url or "project" in r.url, r.url)
 

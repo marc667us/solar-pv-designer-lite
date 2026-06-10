@@ -2,11 +2,13 @@
 Live smoke-test: every admin operations button on https://solarpro.aiappinvent.com
 Logs in as admin, then hits each endpoint and reports pass/fail + response summary.
 """
-import requests, json, sys, time
+import os, requests, json, sys, time
 
-BASE    = "https://solarpro.aiappinvent.com"
+BASE    = os.environ.get("SOLARPRO_BASE", "https://solarpro.aiappinvent.com")
 USER    = "admin"
-PASS    = "SolarAdmin2026!"
+PASS    = os.environ.get("SOLARPRO_ADMIN_PASSWORD", "")
+if not PASS:
+    sys.exit("Set SOLARPRO_ADMIN_PASSWORD env var (admin login passphrase).")
 
 s = requests.Session()
 s.headers.update({"User-Agent": "SolarPro-AdminTest/1.0"})

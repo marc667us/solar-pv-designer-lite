@@ -1,6 +1,9 @@
-﻿import requests, re
+﻿import os, requests, re, sys
 
-BASE = "https://solarpro.aiappinvent.com"
+BASE     = os.environ.get("SOLARPRO_BASE", "https://solarpro.aiappinvent.com")
+ADMIN_PW = os.environ.get("SOLARPRO_ADMIN_PASSWORD", "")
+if not ADMIN_PW:
+    sys.exit("Set SOLARPRO_ADMIN_PASSWORD env var (admin login passphrase).")
 s = requests.Session()
 
 def get_csrf(url):
@@ -14,7 +17,7 @@ def post(url, data):
     return s.post(url, data=data, allow_redirects=True, timeout=40)
 
 s.get(BASE + "/", timeout=60)
-post(BASE + "/login", {"username": "admin", "password": "SolarAdmin2026!"})
+post(BASE + "/login", {"username": "admin", "password": ADMIN_PW})
 
 # Use project 1 (should have results)
 r = s.get(BASE + "/project/1/email", timeout=30)

@@ -1,6 +1,9 @@
-﻿import requests, re, sys, time
+﻿import os, requests, re, sys, time
 
-BASE = "https://solarpro.aiappinvent.com"
+BASE     = os.environ.get("SOLARPRO_BASE", "https://solarpro.aiappinvent.com")
+ADMIN_PW = os.environ.get("SOLARPRO_ADMIN_PASSWORD", "")
+if not ADMIN_PW:
+    sys.exit("Set SOLARPRO_ADMIN_PASSWORD env var (admin login passphrase).")
 s = requests.Session()
 
 def get_csrf(url):
@@ -29,7 +32,7 @@ def safe(text, n=800):
 # Login
 print("Waking site...")
 s.get(BASE + "/", timeout=60)
-r = post(BASE + "/login", {"username": "admin", "password": "SolarAdmin2026!"})
+r = post(BASE + "/login", {"username": "admin", "password": ADMIN_PW})
 print("Login:", r.status_code, r.url)
 if "dashboard" not in r.url and "project" not in r.url:
     print("Login FAILED:", safe(r.text))
