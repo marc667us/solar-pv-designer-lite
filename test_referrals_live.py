@@ -1,5 +1,5 @@
 """
-Live end-to-end test of the referral program on the Railway-hosted SolarPro.
+Live end-to-end test of the referral program.
 
 Tests, in order:
   1.  /referrals (admin login)            -> renders, code shown
@@ -13,16 +13,28 @@ Tests, in order:
   9.  ?ref=<code> query param (no /r/)    -> base.html JS cookie capture
   10. Signup with invalid ref cookie      -> succeeds, no referred_by
 
-Inputs:  BASE Railway URL, admin credentials
+After tests: cleans up the two synthetic users via the admin /admin/users
+delete action so prod admin metrics stay clean (Render free-tier SQLite is
+wiped on every deploy anyway, but we still leave it tidy).
+
+Inputs:  SOLARPRO_BASE        (default https://solarpro.aiappinvent.com)
+         SOLARPRO_ADMIN_PASSWORD (required)
 Output:  PASS/FAIL per check + summary
 """
+import os
 import requests
 import re
 import sys
 import time
 import random
+from urllib.parse import urlparse
 
-BASE = "https://web-production-744af.up.railway.app"
+BASE     = os.environ.get("SOLARPRO_BASE", "https://solarpro.aiappinvent.com")
+ADMIN_PW = os.environ.get("SOLARPRO_ADMIN_PASSWORD", "")
+if not ADMIN_PW:
+    sys.exit("Set SOLARPRO_ADMIN_PASSWORD env var (admin login passphrase).")
+COOKIE_DOMAIN = urlparse(BASE).hostname or ""
+
 GREEN = "\x1b[92m"
 RED = "\x1b[91m"
 END = "\x1b[0m"
@@ -45,9 +57,19 @@ def admin_session():
     s = requests.Session()
     r = s.get(f"{BASE}/login", timeout=30)
     s.post(f"{BASE}/login",
-           data={"username": "admin", "password": "SolarAdmin2026!",
+           data={"username": "admin", "password": ADMIN_PW,
                  "_csrf": csrf_of(r.text)}, timeout=30)
     return s
+
+
+def admin_delete_user(admin, username):
+    """POST /admin/users action=delete for the named user. Returns True if 2xx/3xx."""
+    r = admin.get(f"{BASE}/admin/users", timeout=30)
+    token = csrf_of(r.text)
+    r = admin.post(f"{BASE}/admin/users",
+                   data={"action": "delete", "username": username, "_csrf": token},
+                   timeout=30, allow_redirects=True)
+    return r.status_code < 400
 
 
 def main():
@@ -132,8 +154,11 @@ def main():
 
     # 10. Signup with a never-existed cookie value succeeds with no referred_by
     visitor2 = requests.Session()
+    # Cookie domain is derived from the configured BASE host so this works for
+    # solarpro.aiappinvent.com, solarpro-global.onrender.com, or any future host
+    # without further code edits.
     visitor2.cookies.set("ref_code", "BADGARBA",
-                         domain="web-production-744af.up.railway.app", path="/")
+                         domain=COOKIE_DOMAIN, path="/")
     r = visitor2.get(f"{BASE}/register", timeout=30)
     csrf = csrf_of(r.text)
     uname2 = f"reflive2_{int(time.time())}_{random.randint(100,999)}"
@@ -147,6 +172,12 @@ def main():
     results.append(report("10. Signup with invalid ref cookie succeeds (graceful)",
                           r.status_code in (301, 302),
                           f"HTTP {r.status_code}"))
+
+    # ── Cleanup: delete synthetic users so admin metrics stay clean ──
+    print("\n--- Cleanup ---")
+    for uname in (uname1, uname2):
+        ok = admin_delete_user(admin, uname)
+        report(f"Deleted synthetic user {uname[:32]}", ok)
 
     passed = sum(1 for r in results if r)
     print(f"\n=== Referral live tests: {passed}/{len(results)} PASS ===")

@@ -21,11 +21,15 @@ Syntax notes:
 - request.form fields in this app use [] suffix (load_name[], load_watt[], ...)
 - /project/<pid>/results is the page that shows the KPI strip with num_panels
 """
+import os
 import requests
 import re
 import sys
 
-BASE = "https://web-production-744af.up.railway.app"
+BASE     = os.environ.get("SOLARPRO_BASE", "https://solarpro.aiappinvent.com")
+ADMIN_PW = os.environ.get("SOLARPRO_ADMIN_PASSWORD", "")
+if not ADMIN_PW:
+    sys.exit("Set SOLARPRO_ADMIN_PASSWORD env var (admin login passphrase).")
 
 
 def csrf_of(html):
@@ -40,14 +44,16 @@ def csrf_of(html):
 
 
 def login(s):
-    """POST login as admin; raises if logout button not visible after."""
-    r = s.get(f"{BASE}/login", timeout=20)
+    """POST login as admin; raises if logout button not visible after.
+    First GET uses a 60s timeout to absorb Render free-tier cold-starts."""
+    s.get(f"{BASE}/", timeout=60)  # warm-up
+    r = s.get(f"{BASE}/login", timeout=30)
     s.post(
         f"{BASE}/login",
-        data={"username": "admin", "password": "SolarAdmin2026!", "_csrf": csrf_of(r.text)},
-        timeout=20,
+        data={"username": "admin", "password": ADMIN_PW, "_csrf": csrf_of(r.text)},
+        timeout=30,
     )
-    dash = s.get(f"{BASE}/admin", timeout=20)
+    dash = s.get(f"{BASE}/admin", timeout=30)
     assert "logout" in dash.text.lower(), "login failed (no logout link)"
 
 
