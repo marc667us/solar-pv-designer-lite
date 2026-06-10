@@ -136,6 +136,25 @@ class _PgConnAdapter:
         cur.execute(translated, params if params else None)
         return cur
 
+    def executemany(self, sql, seq_of_params):
+        """Run the same statement for each row of params. Mirrors
+        sqlite3.Connection.executemany. Used by init_db's seed phase
+        (appliances, suppliers, equipment_catalog, news_posts).
+
+        We translate SQL once up front (cheap) and reuse the cursor
+        across the iteration — same semantics as psycopg2's native
+        cursor.executemany, just bridged through our connection-level
+        compat shim."""
+        import psycopg2.extras
+        translated = _translate_sqlite_to_postgres(sql)
+        if "?" in translated:
+            translated = translated.replace("?", "%s")
+        cur = self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        # psycopg2 expects a list of tuples / mappings; coerce generic
+        # iterables to a list so cursor.executemany can iterate it.
+        cur.executemany(translated, list(seq_of_params))
+        return cur
+
     def executescript(self, sql_text):
         """Run a multi-statement SQL string. Postgres doesn't have
         executescript; we split on `;` boundaries. Comments must be
