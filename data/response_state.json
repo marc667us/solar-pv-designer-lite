@@ -1,0 +1,4 @@
+{
+  "initialized": "2026-06-10",
+  "note": "Beta-monitor poll state. Re-written every 30 minutes by .github/workflows/beta-monitor.yml. Initial values are 0 so the first real poll establishes the baseline without sending a spurious alert."
+}

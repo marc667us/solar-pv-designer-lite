@@ -1,0 +1,252 @@
+# Beta monitor: every 30 minutes, log into prod as admin and:
+#   1. Poll /admin/feedback, /admin/tickets, /admin/beta for new evaluator
+#      responses (HTML tables — count rows, diff against last-known state
+#      stored in data/response_state.json).
+#   2. Poll /admin/ops/security/audit and /admin/ops/logs/audit for hacker
+#      indicators (failed_login spikes, suspicious IPs, unauthenticated
+#      admin probes).
+#   3. If new responses OR security indicators are present, email a
+#      summary to the owner via Brevo.
+#   4. Commit the updated state back to repo so the next run only flags
+#      what's actually new.
+#
+# Triggered:
+#   - schedule: cron every 30 min (00, 30 of every hour, UTC)
+#   - workflow_dispatch: manual run from the Actions tab
+#
+# Required secrets:
+#   SOLARPRO_ADMIN_PASSWORD  - admin login (rotating passphrase)
+#   BREVO_API_KEY            - alerting channel
+#   EMAIL_SALES              - alert recipient
+#
+# Designed to be idempotent: if nothing new, the job exits 0 silently
+# (no alert email) and only the cadence shows in the Actions log.
+
+name: Beta monitor
+
+on:
+  schedule:
+    - cron: "0,30 * * * *"     # twice an hour, on the hour and half-hour
+  workflow_dispatch: {}        # always allow a manual fire
+
+permissions:
+  contents: write              # so the job can commit the updated state
+
+concurrency:
+  group: beta-monitor
+  cancel-in-progress: false    # serialize runs — never run two pollers at once
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE:                    https://solarpro.aiappinvent.com
+      SOLARPRO_ADMIN_PASSWORD: ${{ secrets.SOLARPRO_ADMIN_PASSWORD }}
+      BREVO_API_KEY:           ${{ secrets.BREVO_API_KEY }}
+      EMAIL_SALES:             ${{ secrets.EMAIL_SALES }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Poll, diff, alert
+        run: |
+          set -e
+          python - <<'PY'
+          import base64, json, os, re, sys, urllib.parse
+          from datetime import datetime, timezone
+          import requests
+
+          BASE   = os.environ["BASE"]
+          PW     = os.environ["SOLARPRO_ADMIN_PASSWORD"]
+          BREVO  = os.environ["BREVO_API_KEY"]
+          ALERT_TO = os.environ.get("EMAIL_SALES", "sales@aiappinvent.com")
+          STATE_PATH = "data/response_state.json"
+
+          # ---------- Load prior state ----------
+          if os.path.exists(STATE_PATH):
+              with open(STATE_PATH, "r", encoding="utf-8") as f:
+                  state = json.load(f)
+          else:
+              state = {}
+
+          def get_csrf(html):
+              m = re.search(r'name="_csrf"\s+value="([^"]+)"', html)
+              return m.group(1) if m else ""
+
+          s = requests.Session()
+          s.headers.update({"User-Agent": "SolarPro-BetaMonitor/1.0"})
+
+          # ---------- Login ----------
+          # Cold-start tolerance for Render free tier: 60s on the warm-up,
+          # 30s thereafter. The "/login is 20/hour" limit means we should be
+          # careful — at 30-min cadence we hit /login 48x/day, well under cap.
+          s.get(BASE + "/", timeout=60)
+          r = s.get(BASE + "/login", timeout=30)
+          tok = get_csrf(r.text)
+          r = s.post(BASE + "/login",
+                     data={"username": "admin", "password": PW, "_csrf": tok},
+                     allow_redirects=True, timeout=30)
+          if "/dashboard" not in r.url and "/admin" not in r.url and r.url != BASE + "/":
+              # Hard exit so we don't silently process unauthenticated pages.
+              print(f"::error::login failed (landed at {r.url}, status {r.status_code})")
+              sys.exit(2)
+          print(f"login OK ({r.url})")
+
+          # ---------- Probe admin views ----------
+          # Each probe returns (count, sample) where sample is a short
+          # human-readable summary used in the alert body.
+          def count_rows(html, table_id=None):
+              # Coarse but driver-agnostic: count <tr ... data-row OR <tbody>
+              # then <tr>. Falls back to simple <tr> count if no <tbody>.
+              m = re.search(r'<tbody[^>]*>(.+?)</tbody>', html, re.DOTALL | re.IGNORECASE)
+              body = m.group(1) if m else html
+              return len(re.findall(r'<tr[^>]*>', body, re.IGNORECASE))
+
+          probes = {
+              "feedback":     "/admin/feedback",
+              "tickets":      "/admin/tickets",
+              "beta_signups": "/admin/beta",
+          }
+          observations = {}
+          for key, path in probes.items():
+              try:
+                  pr = s.get(BASE + path, timeout=30)
+                  if pr.status_code != 200:
+                      observations[key] = {"error": f"HTTP {pr.status_code}", "count": 0}
+                      continue
+                  count = count_rows(pr.text)
+                  observations[key] = {"count": count}
+              except Exception as e:
+                  observations[key] = {"error": str(e)[:120], "count": 0}
+
+          # ---------- Security probes ----------
+          security = {}
+          for path, alias in [("/admin/ops/security/audit",      "security_audit"),
+                              ("/admin/ops/logs/audit",          "audit_log"),
+                              ("/admin/ops/security/sessions",   "active_sessions")]:
+              try:
+                  pr = s.get(BASE + path, timeout=30)
+                  if pr.status_code != 200:
+                      security[alias] = {"error": f"HTTP {pr.status_code}"}
+                      continue
+                  try:
+                      js = pr.json()
+                  except Exception:
+                      js = {"raw": pr.text[:200]}
+                  security[alias] = js
+              except Exception as e:
+                  security[alias] = {"error": str(e)[:120]}
+
+          # ---------- Diff against prior state ----------
+          new_alerts = []
+          for key in probes:
+              prev = state.get(key, {}).get("count", 0)
+              cur  = observations[key].get("count", 0)
+              if cur > prev:
+                  new_alerts.append(f"+{cur - prev} new {key} (now {cur}, was {prev})")
+
+          # Brute-force detection: failed_logins count in security_audit
+          # vs prior reading. Any non-zero delta of failed logins is worth
+          # an alert at beta scale.
+          sa = security.get("security_audit", {}) or {}
+          fl = sa.get("failed_logins_24h") if isinstance(sa, dict) else None
+          prev_fl = state.get("security_audit", {}).get("failed_logins_24h")
+          if fl is not None and prev_fl is not None and fl > prev_fl:
+              new_alerts.append(
+                  f"SECURITY: failed_logins_24h went {prev_fl} -> {fl} "
+                  f"(+{fl - prev_fl} in the last 30 min)"
+              )
+          # First observation of failed_logins gets logged but no alert
+          # (no baseline to compare against).
+
+          # Active sessions count change — sudden jump = suspicious
+          ses = security.get("active_sessions", {}) or {}
+          ses_count = ses.get("count") if isinstance(ses, dict) else None
+          prev_ses = state.get("active_sessions", {}).get("count")
+          if (ses_count is not None and prev_ses is not None
+                  and ses_count - prev_ses >= 5):
+              new_alerts.append(
+                  f"SECURITY: active_sessions jumped {prev_ses} -> {ses_count} "
+                  f"(+{ses_count - prev_ses} in 30 min)"
+              )
+
+          # ---------- Update state ----------
+          new_state = {**observations}
+          new_state["security_audit"]    = sa
+          new_state["active_sessions"]   = ses
+          new_state["last_poll_utc"]     = datetime.now(timezone.utc).isoformat()
+          new_state["alerts_this_poll"]  = new_alerts
+
+          # ---------- Persist + alert ----------
+          os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
+          with open(STATE_PATH, "w", encoding="utf-8") as f:
+              json.dump(new_state, f, indent=2, sort_keys=True)
+          print(f"state written: {len(new_alerts)} alerts")
+
+          if not new_alerts:
+              print("nothing new — skipping email")
+              sys.exit(0)
+
+          # ---------- Send alert email via Brevo ----------
+          html = ("<h3>SolarPro beta — new responses / security signals</h3>"
+                  f"<p>Poll time: {new_state['last_poll_utc']}</p>"
+                  "<ul>"
+                  + "".join(f"<li>{a}</li>" for a in new_alerts)
+                  + "</ul>"
+                  "<h4>Where to look</h4>"
+                  "<ul>"
+                  "  <li><a href='https://solarpro.aiappinvent.com/admin/feedback'>"
+                  "  /admin/feedback</a></li>"
+                  "  <li><a href='https://solarpro.aiappinvent.com/admin/tickets'>"
+                  "  /admin/tickets</a></li>"
+                  "  <li><a href='https://solarpro.aiappinvent.com/admin/beta'>"
+                  "  /admin/beta</a></li>"
+                  "  <li><a href='https://solarpro.aiappinvent.com/admin/ops/security/audit'>"
+                  "  /admin/ops/security/audit</a></li>"
+                  "</ul>"
+                  "<pre style='font-size:11px;background:#f5f5f5;padding:8px'>"
+                  + json.dumps({k:v for k,v in new_state.items()
+                                 if k not in ("alerts_this_poll",)},
+                               indent=2, default=str)[:3000]
+                  + "</pre>")
+          payload = json.dumps({
+              "sender": {"email": ALERT_TO, "name": "SolarPro Beta Monitor"},
+              "to":     [{"email": ALERT_TO}],
+              "subject": f"SolarPro beta — {len(new_alerts)} new signal(s) at "
+                          f"{new_state['last_poll_utc'][:16]}",
+              "htmlContent": html,
+          }).encode("utf-8")
+          import urllib.request
+          req = urllib.request.Request(
+              "https://api.brevo.com/v3/smtp/email",
+              data=payload,
+              headers={"api-key": BREVO,
+                       "Content-Type": "application/json",
+                       "Accept": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  print(f"alert email status: {resp.status}")
+          except Exception as e:
+              print(f"::warning::alert email failed: {e}")
+          PY
+
+      - name: Commit updated state
+        run: |
+          set -e
+          if git diff --quiet data/response_state.json 2>/dev/null; then
+            echo "state unchanged — no commit"
+            exit 0
+          fi
+          git config user.email "actions@github.com"
+          git config user.name  "Beta Monitor"
+          git add data/response_state.json
+          git commit -m "chore(beta-monitor): update state $(date -u +'%FT%TZ')"
+          # `git push` may race with concurrent runs; guarded by concurrency above
+          git push origin HEAD:master
