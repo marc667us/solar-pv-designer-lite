@@ -116,30 +116,41 @@ jobs:
           echo "external=$EXTERNAL" >> $GITHUB_OUTPUT
           echo "Connection URLs captured (masked in logs)."
 
-      - name: Apply migrations 001..004
+      - name: Apply mirror-SQLite schema migration
         if: env.ROLLBACK != 'true'
         env:
           DATABASE_URL: ${{ steps.conn.outputs.external }}
         run: |
           set -e
-          for f in migrations/001_postgresql_schema.sql \
-                   migrations/002_rls_policies.sql \
-                   migrations/003_rls_hardening.sql \
-                   migrations/004_schema_hardening.sql; do
+          # Session A swap: the previous greenfield migrations (001..004)
+          # described a different application (UUID keys, multi-tenant RLS,
+          # CRM/proposals schema). The codex+supervisor review at
+          # reviews/codex-beta-cutover.md identified that flipping
+          # DATABASE_URL against that schema would 500 immediately. Those
+          # files now live in migrations/archive/ for reference.
+          #
+          # 001_mirror_sqlite.sql mirrors the 24-table schema that
+          # web_app.py:init_db() creates on SQLite — drops the orphaned
+          # greenfield tables in a CASCADE prelude, then creates the mirror.
+          for f in migrations/001_mirror_sqlite.sql; do
             if [ ! -f "$f" ]; then
-              echo "::warning::$f missing, skipping"
-              continue
+              echo "::error::$f missing"
+              exit 1
             fi
             echo "--- Applying $f ---"
-            # ON_ERROR_STOP so a single bad statement stops the chain; the
-            # 003+004 migrations reference a solarpro_app role guarded with
-            # IF EXISTS so they no-op if the role isn't created yet.
             psql "$DATABASE_URL" \
               -v ON_ERROR_STOP=1 \
               --single-transaction \
               -f "$f"
             echo "OK: $f"
           done
+          # Sanity: confirm we land with 24 tables in public.
+          COUNT=$(psql "$DATABASE_URL" -At -c \
+            "SELECT count(*) FROM pg_tables WHERE schemaname='public'")
+          echo "public schema table count: $COUNT (expect 24)"
+          if [ "$COUNT" != "24" ]; then
+            echo "::warning::expected 24 tables, got $COUNT — review output above"
+          fi
 
       - name: Set DATABASE_URL on Render web service (cutover)
         if: env.ROLLBACK != 'true' && env.DO_CUTOVER == 'true'
