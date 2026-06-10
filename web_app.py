@@ -10192,6 +10192,30 @@ def api_ping():
     return jsonify({"pong": True, "timestamp": datetime.utcnow().isoformat() + "Z"}), 200
 
 
+@app.route("/api/version")
+@limiter.exempt
+def api_version():
+    """Build identity for beta evaluators + ops. Returns the VERSION file
+    contents + git commit SHA + a UTC build timestamp.
+
+    The VERSION file is a single-line plain-text semver string updated by
+    hand at each tag (e.g. 0.9.0-beta.1). The commit SHA is read at import
+    time from the RENDER_GIT_COMMIT env var which Render sets on every
+    build; falls back to "unknown" on local runs without that env."""
+    _root = os.path.dirname(os.path.abspath(__file__))
+    try:
+        _ver = open(os.path.join(_root, "VERSION"), "r", encoding="utf-8").read().strip()
+    except Exception:
+        _ver = "unknown"
+    return jsonify({
+        "version":     _ver,
+        "commit":      os.environ.get("RENDER_GIT_COMMIT", "unknown")[:12],
+        "build_time":  os.environ.get("RENDER_BUILD_TIME", ""),
+        "channel":     "beta",
+    }), 200
+
+
+
 @app.route("/metrics")
 @limiter.exempt
 def prometheus_metrics():
