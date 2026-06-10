@@ -1,0 +1,92 @@
+{
+  "country": "Kenya",
+  "generated": "2026-06-10",
+  "purpose": "SolarPro Global — beta-testing invitee list (Kenya solar suppliers & installers)",
+  "schema_notes": "Same shape as ghana_beta_invitees.json. Each entry has a verified email collected from the company's own website or EEE Kenya / ENF directory listing on 2026-06-10. Only entries with confirmed public email addresses are included.",
+  "entities": [
+    {
+      "name": "Solar Kenya Limited",
+      "roles": ["supplier", "installer"],
+      "services": "Solar PV systems, water heaters, battery backup, 24/7 customer support",
+      "address": "DRS House ground floor, Lusaka Road, Nairobi",
+      "city": "Nairobi",
+      "email": "info@solarkenyaltd.co.ke",
+      "phones": ["+254 722 574 891", "+254 020 221 3300"],
+      "contact_person": null,
+      "website": "https://solarkenyaltd.co.ke/",
+      "notes": "20+ years experience. One-stop power-backup shop."
+    },
+    {
+      "name": "Misambi Electricals and Electronics Ltd",
+      "roles": ["supplier", "installer"],
+      "services": "Solar PV + electrical engineering, Nairobi CBD retail + installation",
+      "address": "Moringa House, Sheikh Karume Road, 1st floor room B6, P.O. Box 520-00520, Nairobi",
+      "city": "Nairobi",
+      "email": "info@miseelimited.com",
+      "phones": ["+254 204 402 294", "+254 772 751 655"],
+      "contact_person": null,
+      "website": "https://www.eeekenya.com/",
+      "notes": "Listed via EEE Kenya solar contractor directory."
+    },
+    {
+      "name": "Lean Energy Solutions",
+      "roles": ["installer"],
+      "services": "Commercial and industrial solar PV, energy efficiency consulting",
+      "address": "Tower B, Valley View Office Park, City Park Drive, Off Limuru Road, Nairobi",
+      "city": "Nairobi",
+      "email": "info@leansolutions.co.ke",
+      "phones": ["+254 727 597 853"],
+      "contact_person": null,
+      "website": "https://www.leansolutions.co.ke/",
+      "notes": "Energy-management focus."
+    },
+    {
+      "name": "OFGEN Limited",
+      "roles": ["installer"],
+      "services": "Commercial solar PV, EPC, solar-as-a-service, system monitoring",
+      "address": "No 7 Diani Close, Off Ole Dume Road, Kilimani, Nairobi",
+      "city": "Nairobi",
+      "email": "talk2us@ofgen.co.ke",
+      "phones": ["+254 732 970 474", "+254 020 522 4725"],
+      "contact_person": null,
+      "website": "https://www.ofgen.co.ke/",
+      "notes": "Solar-as-a-service business model."
+    },
+    {
+      "name": "Wazo Smart Systems Limited",
+      "roles": ["installer"],
+      "services": "Residential + commercial PV, smart home + automation, system design",
+      "address": "Southfield Mall, Room 33, Nairobi",
+      "city": "Nairobi",
+      "email": "info@smartsystems.co.ke",
+      "phones": ["+254 772 779 281"],
+      "contact_person": null,
+      "website": "https://smartsystems.co.ke/",
+      "notes": "Smart-home integration angle."
+    },
+    {
+      "name": "Strauss Energy",
+      "roles": ["installer"],
+      "services": "Solar PV, BIPV, climate innovation projects, education sector deployments",
+      "address": "Climate Innovation Centre, 3rd Floor, Strathmore Business School, Nairobi",
+      "city": "Nairobi",
+      "email": "info@straussenergy.com",
+      "phones": ["+254 020 440 9938", "+254 733 448 438"],
+      "contact_person": null,
+      "website": "https://straussenergy.com/",
+      "notes": "Strathmore CIC alumni — design-tool friendly cohort."
+    },
+    {
+      "name": "Delta Energy Systems (K) Ltd",
+      "roles": ["supplier", "installer"],
+      "services": "Solar PV, hybrid + grid-tie inverters, batteries, EPC",
+      "address": "Nairobi",
+      "city": "Nairobi",
+      "email": "info@deltaenergysystems.co.ke",
+      "phones": ["+254 719 500 739", "+254 775 132 555"],
+      "contact_person": null,
+      "website": "https://deltaenergysystems.co.ke/",
+      "notes": "Listed via EEE Kenya contractor directory."
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "country": "Nigeria",
+  "generated": "2026-06-10",
+  "purpose": "SolarPro Global — beta-testing invitee list (Nigeria solar suppliers & installers)",
+  "schema_notes": "Same shape as ghana_beta_invitees.json. Each entry has a verified email collected from the company's own website or ENF directory listing on 2026-06-10. Only entries with confirmed public email addresses are included.",
+  "entities": [
+    {
+      "name": "Rubitec Solar",
+      "roles": ["supplier", "installer"],
+      "services": "Solar PV, hybrid inverters, backup systems, mini-grid systems, COREN-certified installation training, commercial and industrial projects, agro-solar pumping",
+      "address": "5 Talabi Street, off Adeniyi Jones Avenue, Ikeja, Lagos",
+      "city": "Lagos",
+      "email": "info@rubitecsolar.com",
+      "phones": ["+234 708 705 4296", "+234 813 723 9782"],
+      "contact_person": null,
+      "website": "https://www.rubitecsolar.com/",
+      "notes": "Self-described as integrated renewable energy company and IPP."
+    },
+    {
+      "name": "Solarity Plus Limited",
+      "roles": ["installer"],
+      "services": "Solar design + installation for residential and commercial, nationwide service",
+      "address": "Lagos Mainland (nationwide service)",
+      "city": "Lagos",
+      "email": "info@solarity4u.com.ng",
+      "phones": ["+234 905 390 2950", "+234 805 273 5910"],
+      "contact_person": null,
+      "website": "https://solarity4u.com.ng/",
+      "notes": "Listed in 2026 best-installers article."
+    },
+    {
+      "name": "SolarKobo",
+      "roles": ["supplier", "installer"],
+      "services": "Nationwide solar installations, instant online cost estimate, panels + inverters + batteries",
+      "address": "Lagos (nationwide)",
+      "city": "Lagos",
+      "email": "sales@solarkobo.com",
+      "phones": [],
+      "contact_person": null,
+      "website": "https://www.solarkobo.com/",
+      "notes": "Online-first quote tool, fast install turnaround (2-5 business days)."
+    },
+    {
+      "name": "Powertech Solar Energy Co Limited",
+      "roles": ["supplier", "installer"],
+      "services": "Off-grid / on-grid / mini-grid PV, smart grid + storage, central + string + outdoor inverters, technical consultancy and training",
+      "address": "16 Bariga Road, Adeshina Bus-Stop, Bariga, Lagos",
+      "city": "Lagos",
+      "email": "powertech@solarworksng.com",
+      "phones": ["+234 803 610 6824"],
+      "contact_person": null,
+      "website": "https://solarworksng.com/",
+      "notes": "Also lists wind + biomass + waste-to-energy."
+    },
+    {
+      "name": "SMK Solar Nigeria",
+      "roles": ["supplier", "installer"],
+      "services": "Hybrid inverters, LiFePO4 batteries, panels, solar refrigeration, solar lighting; turnkey installation with same-day completion",
+      "address": "Service centres in Lagos, Kano, Benin, Uyo",
+      "city": "Lagos (multi-city)",
+      "email": "contact@smksolar.com.ng",
+      "phones": ["+234 810 243 9745"],
+      "contact_person": null,
+      "website": "https://smksolar.com.ng/",
+      "notes": "Since 2016. Specialised storage + freezer combos."
+    },
+    {
+      "name": "Solynta Energy",
+      "roles": ["supplier", "installer"],
+      "services": "1-4 kW residential solar packages, energy assessments, 7-day install window, 26-state coverage",
+      "address": "1B Etim Iyang Close, Off Etim Iyang Crescent, Victoria Island, Lagos",
+      "city": "Lagos",
+      "email": "solar@solyntaenergy.com",
+      "phones": ["+234 705 300 8625", "+234 813 745 8756"],
+      "contact_person": null,
+      "website": "https://solyntaenergy.com/",
+      "notes": "Tagline 'displace your generator'. Claims 2000+ MW deployed."
+    },
+    {
+      "name": "Infinite Eco Tech",
+      "roles": ["installer"],
+      "services": "Solar panel + inverter installation + repair + maintenance, panel cleaning, swimming-pool design as side service",
+      "address": "Lagos",
+      "city": "Lagos",
+      "email": "info@infiniteecotech.com",
+      "phones": ["+234 906 764 6134"],
+      "contact_person": null,
+      "website": "https://infiniteecotech.com/",
+      "notes": "4.9-star Google rating across 19 reviews."
+    },
+    {
+      "name": "Solar Shop Nigeria",
+      "roles": ["supplier"],
+      "services": "Online solar store — panels, inverters, batteries, accessories",
+      "address": "Abuja",
+      "city": "Abuja",
+      "email": "info@shopsolar.ng",
+      "phones": [],
+      "contact_person": null,
+      "website": "http://shopsolar.ng/",
+      "notes": "Pure online supplier."
+    },
+    {
+      "name": "Solar Depot Nigeria Limited",
+      "roles": ["supplier", "installer"],
+      "services": "Multi-city retail + nationwide shipping, hybrid solar inverters, deep-cycle batteries, panels",
+      "address": "Lagos: Adegbola Adigun Street, Greenfield Estate, Opic, Isheri | Abuja: Flat 3 Block 17 Borno Street, Area 10 Garki | Ibadan: 46 Hope Road, Old Ife Road, Alakia",
+      "city": "Lagos / Abuja / Ibadan",
+      "email": "sales@solardepotng.com",
+      "phones": ["+234 808 607 1014", "+234 704 694 6795", "+234 906 912 5453"],
+      "contact_person": null,
+      "website": "https://www.solardepotng.com/",
+      "notes": "10+ year track record. 24/7 online support."
+    }
+  ]
+}

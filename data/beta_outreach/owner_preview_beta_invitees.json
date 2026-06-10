@@ -1,0 +1,20 @@
+{
+  "country": "Owner Preview",
+  "generated": "2026-06-10",
+  "purpose": "Owner-facing preview send — the same invitation email body that evaluators receive, dispatched to a single owner address so they can eyeball the formatting + attachment before the public list goes out.",
+  "schema_notes": "Same shape as the per-country invitee files. Add additional preview-recipient rows here when more owners want a preview copy.",
+  "entities": [
+    {
+      "name": "Marc (Owner Preview)",
+      "roles": ["preview"],
+      "services": "Owner copy — see exactly what beta evaluators receive.",
+      "address": "",
+      "city": "",
+      "email": "kafedzie@gmail.com",
+      "phones": [],
+      "contact_person": null,
+      "website": "",
+      "notes": "Preview channel only. Not part of the public outreach tally."
+    }
+  ]
+}

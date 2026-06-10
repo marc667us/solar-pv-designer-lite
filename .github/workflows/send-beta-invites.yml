@@ -16,6 +16,17 @@ name: Send beta invites
 on:
   workflow_dispatch:
     inputs:
+      country:
+        description: "ghana | nigeria | kenya | all | owner_preview (preview = send only to the owner address kafedzie@gmail.com)"
+        required: false
+        default: "ghana"
+        type: choice
+        options:
+          - ghana
+          - nigeria
+          - kenya
+          - all
+          - owner_preview
       confirm_send:
         description: "Type 'YES_SEND' (uppercase) to actually send. Anything else = dry-run."
         required: false
@@ -32,6 +43,7 @@ jobs:
       BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
       EMAIL_SALES:   ${{ secrets.EMAIL_SALES }}
       CONFIRM_SEND:  ${{ github.event.inputs.confirm_send }}
+      COUNTRY:       ${{ github.event.inputs.country }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,8 +56,21 @@ jobs:
           IS_LIVE  = os.environ.get("CONFIRM_SEND") == "YES_SEND"
           BREVO    = os.environ["BREVO_API_KEY"]
           SENDER   = os.environ.get("EMAIL_SALES", "sales@aiappinvent.com")
+          COUNTRY  = (os.environ.get("COUNTRY") or "ghana").lower().strip()
 
-          DATA = json.load(open("data/beta_outreach/ghana_beta_invitees.json"))
+          # Resolve which country file(s) to load. `all` chains ghana ->
+          # nigeria -> kenya in one workflow run; each country's emails go
+          # out before the next country's file is opened so a Brevo error
+          # mid-run still leaves the next country safely on-disk.
+          if COUNTRY == "all":
+              files = [
+                  "data/beta_outreach/ghana_beta_invitees.json",
+                  "data/beta_outreach/nigeria_beta_invitees.json",
+                  "data/beta_outreach/kenya_beta_invitees.json",
+              ]
+          else:
+              files = [f"data/beta_outreach/{COUNTRY}_beta_invitees.json"]
+
           ATTACH = open("data/beta_outreach/SolarPro_Sales_Pitch.pdf", "rb").read()
           ATTACH_B64 = base64.b64encode(ATTACH).decode("ascii")
 
@@ -106,20 +131,25 @@ jobs:
           </body></html>
           """
 
-          # Build recipient list with one canonical email per organization
+          # Build recipient list with one canonical email per organization,
+          # tagged by country so the per-country tally is honest.
           rcpts = []
-          for e in DATA["entities"]:
-              em = (e.get("email") or "").strip()
-              if not em:
-                  continue
-              em = em.split("/")[0].strip().split(",")[0].strip()
-              if "@" not in em:
-                  continue
-              rcpts.append({"name": e["name"], "email": em})
+          for path in files:
+              data = json.load(open(path))
+              c = data.get("country", os.path.basename(path).split("_")[0]).title()
+              for e in data["entities"]:
+                  em = (e.get("email") or "").strip()
+                  if not em:
+                      continue
+                  em = em.split("/")[0].strip().split(",")[0].strip()
+                  if "@" not in em:
+                      continue
+                  rcpts.append({"name": e["name"], "email": em, "country": c})
 
+          print(f"Country selector: {COUNTRY}")
           print(f"Recipients ({len(rcpts)}):")
           for r in rcpts:
-              print(f"  - {r['name']:<45}  {r['email']}")
+              print(f"  - [{r['country']:<8}] {r['name']:<45}  {r['email']}")
           print(f"\nSubject: {SUBJECT}")
           print(f"Attachment: SolarPro_Sales_Pitch.pdf ({len(ATTACH):,} bytes)")
           print(f"Mode: {'LIVE SEND' if IS_LIVE else 'DRY RUN'}")
@@ -153,13 +183,13 @@ jobs:
                       code = resp.status
                       body_resp = resp.read().decode("utf-8", "replace")
                   if 200 <= code < 300:
-                      print(f"  SENT  {r['email']:<40}  HTTP {code}")
+                      print(f"  SENT  [{r['country']:<8}] {r['email']:<40}  HTTP {code}")
                       sent += 1
                   else:
-                      print(f"  FAIL  {r['email']:<40}  HTTP {code}  {body_resp[:120]}")
+                      print(f"  FAIL  [{r['country']:<8}] {r['email']:<40}  HTTP {code}  {body_resp[:120]}")
                       failed.append((r, code, body_resp[:200]))
               except Exception as ex:
-                  print(f"  FAIL  {r['email']:<40}  {ex!r}")
+                  print(f"  FAIL  [{r['country']:<8}] {r['email']:<40}  {ex!r}")
                   failed.append((r, "exc", str(ex)[:200]))
               time.sleep(1)
 
