@@ -23,14 +23,17 @@ KNOWN LIMITATIONS (documented for next session):
     literal contains the character '?', it gets wrongly substituted. None
     of SolarPro's queries do today (audited 2026-06-09); revisit if SQL
     grows.
-  - SQLite-specific syntax in the codebase WILL fail on Postgres:
-      * AUTOINCREMENT (~15 occurrences in init_db CREATE TABLE blocks)
-      * datetime('now'), date('now'), strftime() — Postgres equivalents differ
-      * PRAGMA table_info() — Postgres uses information_schema
-    These are NOT handled here; they're handled by skipping init_db's
-    CREATE TABLE pass when on Postgres (migrations 001-004 build the
-    schema instead) AND by a future migration of date/time queries.
-    The dual-backend get_db() in web_app.py guards this.
+  - Session B (this revision) added SQL translations for the SQLite-specific
+    idioms web_app.py uses at runtime:
+      * SELECT last_insert_rowid()   -> SELECT lastval()
+      * datetime('now', '-24 hours') -> NOW() - INTERVAL '24 hours'
+      * datetime('now')              -> NOW()
+      * PRAGMA table_info(<name>)    -> information_schema.columns query
+      * sqlite_master                -> information_schema.tables query
+    The SQLite path is unaffected — these only run when DATABASE_URL is set.
+    AUTOINCREMENT in init_db CREATE TABLE blocks is still handled by the
+    init_db DATABASE_URL gate in Session C; migration 001_mirror_sqlite.sql
+    owns the Postgres schema.
   - Connection pooling: this adapter opens a fresh connection per get_db()
     call. Free-tier Postgres caps at ~25 simultaneous connections; under
     real load we'd need psycopg2.pool. For dev/beta-without-load, fine.
@@ -39,6 +42,67 @@ KNOWN LIMITATIONS (documented for next session):
 from __future__ import annotations
 
 import os
+import re
+
+
+# ── SQL translation: SQLite idioms -> Postgres equivalents ─────────────────
+# Applied in order: more specific patterns must come BEFORE more general ones
+# (e.g. datetime('now', '-24 hours') must match before bare datetime('now')).
+_PRAGMA_RE = re.compile(r"PRAGMA\s+table_info\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)",
+                        flags=re.IGNORECASE)
+_SQLITE_MASTER_RE = re.compile(
+    r"FROM\s+sqlite_master\s+WHERE\s+type\s*=\s*'table'\s+AND\s+name\s*=\s*\?",
+    flags=re.IGNORECASE,
+)
+
+
+def _translate_sqlite_to_postgres(sql: str) -> str:
+    """Rewrite the SQLite-specific idioms web_app.py uses at runtime to their
+    Postgres equivalents. Idempotent: running on already-translated SQL is a
+    no-op because the SQLite-specific patterns no longer match."""
+    # PRAGMA table_info(<name>) -> portable column-list query.
+    # We return (ordinal_position-1) AS cid, column_name AS name, ... so the
+    # existing `row[1]` callers in web_app.py keep working.
+    def _pragma_sub(m):
+        tbl = m.group(1)
+        return (
+            "SELECT ordinal_position - 1 AS cid, "
+            "column_name AS name, "
+            "data_type AS type, "
+            "CASE WHEN is_nullable='NO' THEN 1 ELSE 0 END AS notnull, "
+            "column_default AS dflt_value, "
+            "0 AS pk "
+            "FROM information_schema.columns "
+            f"WHERE table_schema='public' AND table_name='{tbl}' "
+            "ORDER BY ordinal_position"
+        )
+    sql = _PRAGMA_RE.sub(_pragma_sub, sql)
+
+    # sqlite_master existence check used by _table_exists() helpers.
+    sql = _SQLITE_MASTER_RE.sub(
+        "FROM information_schema.tables WHERE table_schema='public' AND table_name=?",
+        sql,
+    )
+
+    # datetime('now', '-N hours/days') -> NOW() - INTERVAL 'N hours/days'.
+    # Hand-rolled because Python's str.replace can't cover the parameterized
+    # offset cleanly. The ?-style placeholder already handled below by the
+    # bare ? -> %s substitution further down execute().
+    sql = re.sub(
+        r"datetime\(\s*'now'\s*,\s*'-(\d+)\s+(hours?|days?|minutes?)'\s*\)",
+        lambda m: f"(NOW() - INTERVAL '{m.group(1)} {m.group(2)}')",
+        sql,
+        flags=re.IGNORECASE,
+    )
+    # Bare datetime('now') -> NOW(). Must come after the offset variant.
+    sql = sql.replace("datetime('now')", "NOW()")
+    sql = sql.replace('datetime("now")', "NOW()")
+
+    # SELECT last_insert_rowid() -> SELECT lastval(). Both return the most
+    # recent autoincremented PK for the current session.
+    sql = sql.replace("last_insert_rowid()", "lastval()")
+
+    return sql
 
 
 class _PgConnAdapter:
@@ -61,7 +125,13 @@ class _PgConnAdapter:
         would break any caller that does row[0].
         """
         import psycopg2.extras
-        translated = sql.replace("?", "%s") if "?" in sql else sql
+        # Two-step translation: SQLite idiom rewrites first, then ?->%s.
+        # Idiom translation runs unconditionally so the ?-translation in
+        # rewritten fragments (e.g. PRAGMA's WHERE table_name=?) catches
+        # placeholders the rewrite introduced.
+        translated = _translate_sqlite_to_postgres(sql)
+        if "?" in translated:
+            translated = translated.replace("?", "%s")
         cur = self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         cur.execute(translated, params if params else None)
         return cur

@@ -10199,9 +10199,9 @@ def admin_operations():
         users = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         projects = c.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
         failed_logins = c.execute(
-            "SELECT COUNT(*) FROM audit_log WHERE action='failed_login' "
+            "SELECT COUNT(*) FROM audit_logs WHERE action='failed_login' "
             "AND created_at >= datetime('now', '-24 hours')"
-        ).fetchone()[0] if _table_exists(c, "audit_log") else 0
+        ).fetchone()[0] if _table_exists(c, "audit_logs") else 0
         db_path = DB_PATH
         db_size = os.path.getsize(db_path) if os.path.exists(db_path) else 0
     security = {
@@ -10774,7 +10774,7 @@ def admin_ops_view_audit_logs():
         conn = get_db()
         try:
             rows = conn.execute(
-                "SELECT id, action, user_id, resource, status, created_at FROM audit_log ORDER BY id DESC LIMIT 100"
+                "SELECT id, action, user_id, resource, status, created_at FROM audit_logs ORDER BY id DESC LIMIT 100"
             ).fetchall()
             entries = [{"id": r[0], "action": r[1], "user_id": r[2],
                         "resource": r[3], "status": r[4], "created_at": r[5]} for r in rows]
@@ -10783,7 +10783,7 @@ def admin_ops_view_audit_logs():
         except Exception:
             conn.close()
             return jsonify({"status": "ok", "entries": [],
-                            "message": "No audit_log table yet. Activates after PostgreSQL migration."})
+                            "message": "No audit_logs table yet. Activates after PostgreSQL migration."})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 

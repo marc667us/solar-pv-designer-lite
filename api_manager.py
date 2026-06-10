@@ -124,9 +124,17 @@ class _Store:
     def set(self, key, value, ttl, provider=""):
         try:
             with sqlite3.connect(self.db) as c:
+                # Portable upsert: works on both SQLite (>=3.24, which is what
+                # any Python 3.8+ ships) and Postgres. The old INSERT OR REPLACE
+                # form was SQLite-only and would fail if this _Store ever moved
+                # to the main DB backend.
                 c.execute(
-                    "INSERT OR REPLACE INTO api_cache (cache_key, provider, value, expires_at) "
-                    "VALUES (?,?,?,?)",
+                    "INSERT INTO api_cache (cache_key, provider, value, expires_at) "
+                    "VALUES (?,?,?,?) "
+                    "ON CONFLICT(cache_key) DO UPDATE SET "
+                    "    provider=excluded.provider, "
+                    "    value=excluded.value, "
+                    "    expires_at=excluded.expires_at",
                     (key, provider, json.dumps(value, default=str), time.time() + ttl))
         except Exception as e:
             logger.warning("_Store.set: %s", e)
