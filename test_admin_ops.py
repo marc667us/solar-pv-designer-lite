@@ -109,12 +109,25 @@ elif "Invalid" in r.text or "incorrect" in r.text.lower():
     print("    Login FAILED — wrong credentials. Aborting.")
     sys.exit(1)
 else:
-    # Try fetching /admin to confirm auth
+    # Try fetching /admin to confirm auth.
     test = s.get(BASE + "/admin", timeout=10, allow_redirects=False)
     if test.status_code == 200:
         print(f"    Login OK (admin page accessible)")
+    elif r.status_code == 429 or test.status_code == 429:
+        # /login is rate-limited at 20/hour. If we hit it, every protected
+        # endpoint below will redirect to /login and the suite is meaningless.
+        # Hard-exit so the failure is unambiguous instead of an 18-FAIL cascade.
+        print(f"    Login RATE-LIMITED (HTTP 429). /login is capped at 20/hr.")
+        print(f"    Wait ~30 min for the limiter window to roll over, then re-run.")
+        sys.exit(2)
+    elif r.url.endswith("/login") or test.headers.get("Location", "").endswith("/login"):
+        print(f"    Login FAILED — landed back on /login (post code={r.status_code}, "
+              f"admin probe code={test.status_code}). Session not established.")
+        sys.exit(2)
     else:
-        print(f"    Login status unclear (url={r.url}, code={r.status_code}) — continuing anyway")
+        print(f"    Login status unclear (url={r.url}, code={r.status_code}, "
+              f"admin probe={test.status_code}). Aborting to avoid a misleading FAIL cascade.")
+        sys.exit(2)
 
 # Refresh CSRF token from dashboard
 dash = s.get(BASE + "/admin", timeout=10)
@@ -198,10 +211,13 @@ if failed:
     print("\nFailed endpoints:")
     for lbl, st, msg in results:
         if st == "FAIL":
-            print(f"  ✗ {lbl.strip():<50} {msg}")
+            # Use the ANSI FAIL_MARK already defined above instead of a Unicode
+            # cross — the latter crashes on Windows cp1252 console (UnicodeEncodeError).
+            print(f"  [{FAIL_MARK}] {lbl.strip():<50} {msg}")
 if warned:
     print("\nWarnings (unavailable services — expected on Render free tier):")
     for lbl, st, msg in results:
         if st == "WARN":
-            print(f"  ⚠ {lbl.strip():<50} {msg[:70]}")
+            # Same rationale: WARN_MARK is ASCII-safe; the U+26A0 glyph was not.
+            print(f"  [{WARN_MARK}] {lbl.strip():<50} {msg[:70]}")
 print()
