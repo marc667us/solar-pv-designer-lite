@@ -24,7 +24,22 @@ codex_run "codex-final-approval" "$PROMPT"
 
 echo ""
 echo "=== Final verdict ==="
-grep -E "^SUPERVISOR VERDICT:" reviews/codex-final-approval.md || echo "(verdict line not found — read reviews/codex-final-approval.md)"
+# Parse verdict and EXIT NON-ZERO on FAIL / missing — CI must not pass a failed gate.
+VERDICT_LINE=$(grep -E "^SUPERVISOR VERDICT:" reviews/codex-final-approval.md || true)
+if [ -z "$VERDICT_LINE" ]; then
+  echo "(verdict line not found - read reviews/codex-final-approval.md)"
+  echo ""
+  echo "Reminder: a PASS verdict from this script is advisory. The human/Claude (acting as Supervisor)"
+  echo "must still confirm runtime behaviour via /verify before treating the gate as closed."
+  exit 2
+fi
+echo "$VERDICT_LINE"
 echo ""
 echo "Reminder: a PASS verdict from this script is advisory. The human/Claude (acting as Supervisor)"
 echo "must still confirm runtime behaviour via /verify before treating the gate as closed."
+# Non-zero exit on FAIL so the calling CI step (or the human) cannot miss it.
+case "$VERDICT_LINE" in
+  *FAIL*) exit 1 ;;
+  *PASS*) exit 0 ;;
+  *)      exit 2 ;;
+esac

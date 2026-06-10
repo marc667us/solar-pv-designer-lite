@@ -292,3 +292,26 @@ Close every quality-gate finding that can be made via additive files (new migrat
 **Next Recommended Step:** Commit the four changed/new files + byte-patcher + bak, push to master, force Render deploy, smoke `GET /api/ai/quota` against `solarpro.aiappinvent.com`, then continue resume queue P0 numeric audit.
 
 ---
+
+# Implementation Log Entry
+**Date:** 2026-06-10 · **Task:** P0 numeric outputs audit + P5 critical Codex fixes · **Status:** Done
+
+**Objective:** Discharge two resume-queue items. P0: owner mandate "all calc outputs checked, no errors". P5: two critical Codex findings (silent CI pass on FAIL verdict; reviewer call swallowing errors).
+
+**Files Changed:**
+- NEW `scripts/audit_calc_outputs.py` — hand-calc audit harness for the 5kWp Greater Accra residential case. Covers `temp_derating`, `calc_loads`, `calc_pv`, `calc_battery`, `calc_inverter`, `calc_mppt`, `calc_boq`, `size_all_cables`, `calc_economics`. 15/15 PASS.
+- EDIT `scripts/quality-gate.sh` — parses `SUPERVISOR VERDICT` line; exits 1 on FAIL, 0 on PASS, 2 on missing. Was: always exited 0 because the grep-pipe-echo idiom masked failures.
+- EDIT `scripts/_codex-runner.sh` — `codex_run()` now tracks a per-call rc and returns it; previously `_run_ollama / _run_codex` failures were silently caught by `|| echo`, so the reviewer pipeline kept going with empty review stubs.
+
+**Test Coverage:**
+- Audit run on 5kWp Greater Accra residential at 18 kWh/day, 5.0 PSH, 28 °C, GHS 1.9688/kWh tariff, LiFePO4: payback 5.76 yr, IRR 25.2%, NPV GHS 109,269. All 15 hand-calc comparisons pass.
+- Quality-gate verdict parsing tested in three modes (FAIL→1, PASS→0, missing→2) — all correct.
+
+**Audit Observation (not a bug, worth recording):**
+- `calc_economics` falls back to `pv_kw × cost_usd_kwp × (1 + install_rate)` for CAPEX when `boq_total_local` is not passed. This ignores battery + cables + protection costs. In production every call path passes the BOQ total in, so the fallback path is dormant — but if a future caller forgets, it will understate CAPEX (in this test case: GHS 71k fallback vs GHS 124k from full BOQ).
+
+**Known Risks:** P0 audit covers one canonical test case. Edge cases (Northern Ghana 35 °C, commercial three-phase, NMC chemistry, off-grid) not exercised yet — recommend a follow-up sweep when time allows.
+
+**Next Recommended Step:** Commit. Then P1 PDF design diagrams (`_render_pdf` at `web_app.py:3816` is markdown-only — needs server-side image rendering or Playwright screenshots for SLD/topology/mounting plan).
+
+---

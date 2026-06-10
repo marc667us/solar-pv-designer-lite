@@ -92,22 +92,30 @@ codex_run() {
     echo ""
   } > "$out_file"
 
+  # Track per-call failure so we propagate it to the caller instead of
+  # silently writing a "call failed" stub and pretending the review succeeded.
+  local _rc=0
   case "$REVIEWER_BACKEND" in
     ollama)
-      _run_ollama "$prompt" >> "$out_file" 2>>"$out_file" \
-        || echo -e "\n\n_Ollama call failed — check that the daemon is running (\`ollama serve\` / Ollama tray app) and the model is pulled (\`ollama pull ${REVIEWER_MODEL}\`)._" >> "$out_file"
+      if ! _run_ollama "$prompt" >> "$out_file" 2>>"$out_file"; then
+        echo -e "\n\n_Ollama call failed - check that the daemon is running (\`ollama serve\` / Ollama tray app) and the model is pulled (\`ollama pull ${REVIEWER_MODEL}\`)._" >> "$out_file"
+        _rc=1
+      fi
       ;;
     codex)
-      _run_codex "$prompt" >> "$out_file" 2>>"$out_file" \
-        || echo -e "\n\n_Codex call failed — check auth (OPENAI_API_KEY or \`codex login\`)._" >> "$out_file"
+      if ! _run_codex "$prompt" >> "$out_file" 2>>"$out_file"; then
+        echo -e "\n\n_Codex call failed - check auth (OPENAI_API_KEY or \`codex login\`)._" >> "$out_file"
+        _rc=1
+      fi
       ;;
     *)
       echo "ERROR: unknown REVIEWER_BACKEND='$REVIEWER_BACKEND' (expected: ollama | codex)" >&2
-      exit 1
+      return 1
       ;;
   esac
 
   echo "Wrote: $out_file"
+  return $_rc
 }
 
 _run_ollama() {
