@@ -25,6 +25,7 @@ import os, json, time, sqlite3, hashlib, logging
 from datetime import datetime
 
 import secrets_broker  # Phase 1: routes secret reads through the broker (audit + tier + future Vault)
+import ai_budget        # spend cap + per-user token cap (supervisor-approved 2026-06-10)
 
 logger = logging.getLogger("api_manager")
 
@@ -212,12 +213,30 @@ class _AIClient:
     def reload(self):
         self._load()
 
-    def chat(self, messages, system="", model=None, max_tokens=800, cache_ttl=0):
+    def chat(self, messages, system="", model=None, max_tokens=800, cache_ttl=0,
+             user_id=None, is_admin=False, endpoint=""):
         """
         Send AI chat. Returns (reply: str, provider: str).
-        provider is 'claude', 'openrouter', 'ollama', 'github_models', or 'rule_based'.
-        cache_ttl > 0 enables response caching (seconds).
+        provider is 'claude', 'openrouter', 'ollama', 'github_models', 'rule_based',
+        'cache', or 'capped'.
+
+        Cap gates (supervisor-approved 2026-06-10):
+          - Pre-flight check_caps. Blocked => return ('capped', reason) tuple; no upstream call.
+          - Post-call record_usage with estimated tokens + USD cost.
+          - Admin bypass: is_admin=True skips gate (call still ledger-recorded).
+          - Anonymous user_id=None: per-user cap skipped, org spend cap still enforced.
         """
+        allowed, cap_reason = ai_budget.check_caps(user_id=user_id, is_admin=is_admin)
+        if not allowed:
+            _prompt_text = (system or "") + "\n".join(
+                m.get("content", "") for m in (messages or []))
+            ai_budget.record_usage(
+                user_id=user_id, provider="capped", model="",
+                prompt_tokens=ai_budget.estimate_tokens(_prompt_text),
+                completion_tokens=0, endpoint=endpoint, blocked=True,
+                error=cap_reason)
+            return ai_budget.capped_response(cap_reason)
+
         ckey = None
         if cache_ttl > 0:
             ckey = _Store._key("ai", messages, system, model or "", max_tokens)
@@ -235,6 +254,21 @@ class _AIClient:
 
         if ckey and provider not in ("rule_based",):
             self._s.set(ckey, {"reply": reply, "provider": provider}, cache_ttl, "ai")
+
+        # Ledger every upstream call. Skip rule_based (no upstream, no tokens).
+        if provider != "rule_based":
+            _model_used = (model or "claude-haiku-4-5-20251001") if provider == "claude" else {
+                "openrouter":    self.openrouter_model,
+                "ollama":        self.ollama_model,
+                "github_models": self.github_model,
+            }.get(provider, "")
+            _prompt_text = (system or "") + "\n".join(
+                m.get("content", "") for m in (messages or []))
+            ai_budget.record_usage(
+                user_id=user_id, provider=provider, model=_model_used,
+                prompt_tokens=ai_budget.estimate_tokens(_prompt_text),
+                completion_tokens=ai_budget.estimate_tokens(reply),
+                endpoint=endpoint)
 
         return reply, provider
 

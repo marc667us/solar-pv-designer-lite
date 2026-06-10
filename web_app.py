@@ -6153,7 +6153,9 @@ def assistant_chat():
     try:
         # -- api_manager handles full fallback chain --
         # Claude -> OpenRouter -> Ollama -> GitHub Models -> rule-based
-        reply, _ai_provider = _api.ai.chat(msgs, system=system, max_tokens=500)
+        reply, _ai_provider = _api.ai.chat(msgs, system=system, max_tokens=500,
+                                            user_id=session.get("user_id"),
+                                            endpoint="/api/assistant/chat")
         if _ai_provider == "rule_based":
             _rule = _rule_reply(message.lower())
             if _rule:
@@ -8601,6 +8603,29 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                 if raw.endswith("```"):
                     raw = raw[:-3]
             data = json.loads(raw)
+            # AI_BUDGET_LEDGER_MARKER_AGENT - record one ledger row per
+            # successful prospecting-agent run so admin spend is visible.
+            try:
+                import ai_budget as _ab_agent
+                _src = ai_source or ""
+                if "openrouter" in _src:
+                    _prov, _mdl = "openrouter", _src.split("(")[-1].rstrip(")")
+                elif "ollama" in _src:
+                    _prov, _mdl = "ollama", os.environ.get("OLLAMA_MODEL", "")
+                elif "github" in _src:
+                    _prov, _mdl = "github_models", "gpt-4.1-mini"
+                elif "claude" in _src:
+                    _prov, _mdl = "claude", "claude-opus-4-7"
+                else:
+                    _prov, _mdl = "unknown", ""
+                _ab_agent.record_usage(
+                    user_id=session.get("user_id"),
+                    provider=_prov, model=_mdl,
+                    prompt_tokens=_ab_agent.estimate_tokens(prompt),
+                    completion_tokens=_ab_agent.estimate_tokens(raw or ""),
+                    endpoint="/admin/agent/run")
+            except Exception:
+                pass
             return jsonify({"ok": True, "prospects": data["prospects"],
                             "source": ai_source, "result_count": len(search_results)})
         except Exception as e:
@@ -10858,6 +10883,31 @@ def _table_exists(conn, table_name):
         return row is not None
     except Exception:
         return False
+
+
+# ── AI Budget — quota status endpoint ────────────────────────────────────────
+# Lets the chat widget show remaining-tokens / reset-time, and lets admin UIs
+# read org-wide spend without scraping the ledger. Login required.
+@app.route("/api/ai/quota")
+@login_required
+def api_ai_quota():
+    import ai_budget as _ab
+    uid = session.get("user_id")
+    remaining, reset_s, used = _ab.get_user_remaining(uid)
+    spend = _ab.get_org_spend_this_month()
+    return jsonify({
+        "user": {
+            "used":           used,
+            "limit":          _ab.USER_TOKEN_CAP_24H,
+            "remaining":      remaining,
+            "reset_seconds":  reset_s,
+        },
+        "org": {
+            "spent_usd":  round(spend, 4),
+            "limit_usd":  _ab.SPEND_CAP_USD_MONTHLY,
+        },
+    })
+
 
 
 if __name__ == "__main__":

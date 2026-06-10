@@ -245,3 +245,50 @@ Close every quality-gate finding that can be made via additive files (new migrat
 4. Begin Railway cert revival per `Documents\pvsolar1\improvements\railwaycertissue.txt` with `solarpro.aiappinvent.com` as the custom domain.
 
 ---
+
+# Implementation Log Entry
+**Date:** 2026-06-10 · **Task:** AI gateway caps (spend + per-user token) · **Status:** Implemented, tests green, awaiting commit + deploy
+
+**Objective:** Add a budget gate to every AI call so (a) accidental Anthropic spend is bounded at $10/mo org-wide, (b) one beta user can't burn shared OpenRouter / GitHub-Models free quotas for everyone, (c) admin work isn't blocked. Approved spec: $10/mo org cap, 50k tokens/user/24h rolling, hard block + admin bypass, ledger every call.
+
+**Files Changed:**
+- NEW `ai_budget.py` — `SPEND_CAP_USD_MONTHLY`, `USER_TOKEN_CAP_24H`, `check_caps`, `record_usage`, `get_user_remaining`, `get_org_spend_this_month`, `_PROVIDER_COSTS` table (only Anthropic priced; everything else $0).
+- NEW `tests/test_ai_budget.py` — 18 contract tests. All green.
+- EDIT `api_manager.py` — `_AIClient.chat()` gains `user_id`/`is_admin`/`endpoint` kwargs; pre-flight `check_caps`; post-call `record_usage` (skipped for `rule_based` and `cache`). Approximate model attribution: provider→model lookup using `_AIClient`'s configured model strings; Anthropic uses requested `model` or haiku-4-5 default.
+- EDIT `web_app.py` (byte-safe Pattern A+B via `scripts/patch_ai_budget_wiring.py`):
+  - `/api/assistant/chat` — passes `user_id` + `endpoint`.
+  - `/admin/agent/run` — records ledger row after success (admin bypass intentional; visibility only).
+  - NEW `/api/ai/quota` — `@login_required`; returns `{user:{used,limit,remaining,reset_seconds}, org:{spent_usd,limit_usd}}`.
+- NEW `new_ai_budget_routes.py` — source of the inserted route (kept on disk so re-running the patcher is idempotent).
+
+**Database Changes:**
+- NEW table `ai_usage_ledger` (idempotent, auto-created on first call): columns id / occurred_at / user_id / provider / model / prompt_tokens / completion_tokens / total_tokens / cost_usd / endpoint / request_id / blocked / error. Indexes on `(user_id, occurred_at DESC)` and `(occurred_at DESC)`. Volume ~60 B/row × ~15k rows/mo = ~0.9 MB/mo on Render Postgres free tier. `tenant_id` deferred (single-tenant users table today).
+
+**API Changes:**
+- `_AIClient.chat()` signature extended with `user_id=None, is_admin=False, endpoint=""` (backward compatible — existing callers ignored).
+- NEW response provider label `"capped"` returned when caps block. Reply text is the human-readable cap reason.
+- NEW route `GET /api/ai/quota`.
+
+**Frontend Changes:** None this pass. Capped responses appear in the chat as the AI message ("Daily AI quota used (50,000 / 50,000 tokens). Resets in 23h 45m.").
+
+**Security Changes:** All upstream AI calls now require a pre-flight cap gate. Admin-bypass intentional; ledger still records admin usage for visibility.
+
+**Tests Added:** 18 contract tests in `tests/test_ai_budget.py`. Full suite: 60 pass / 141 skip (unchanged from baseline).
+
+**Documentation Updated:** This entry. Owner-facing docs (API_SPECIFICATION / DATABASE_DESIGN) deferred to a follow-up cleanup pass.
+
+**What Was Completed:** Module + tests + gateway wiring + ledger writes from both AI endpoints + quota status route. Bypass discipline preserved (`@admin_required` routes auto-pass; user routes don't).
+
+**What Remains:**
+- Smoke against production after redeploy (`/api/ai/quota` JSON shape; cap-block UI string in `/api/assistant/chat`).
+- Optional: chat widget can poll `/api/ai/quota` to show remaining tokens.
+- Codex review retry via `scripts/codex-review.sh` after commit.
+- Multi-tenant `tenant_id` on `ai_usage_ledger` when users table grows `org_id`.
+
+**Known Risks:**
+- SQLite ledger wiped on every Render redeploy (per `feedback_render_ephemeral_db`); spend cap effectively resets on deploy, not just on the 1st. Closes when P2 Postgres cutover lands.
+- Token estimation is `len(text)/4` everywhere — Anthropic responses include exact usage we don't yet read; ~5-15% under/over on cost. Acceptable at $10/mo cap.
+
+**Next Recommended Step:** Commit the four changed/new files + byte-patcher + bak, push to master, force Render deploy, smoke `GET /api/ai/quota` against `solarpro.aiappinvent.com`, then continue resume queue P0 numeric audit.
+
+---
