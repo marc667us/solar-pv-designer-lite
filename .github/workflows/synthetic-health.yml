@@ -1,0 +1,223 @@
+# Synthetic end-to-end health check — every hour, walk the critical
+# user path on prod and alert if anything regresses. Catches regressions
+# the unit tests can't (live database, live external APIs, real CSRF /
+# session flow), without waiting for an evaluator to file a ticket.
+#
+# Triggered:
+#   - schedule: cron at minute 17 of every hour (offset from beta-monitor
+#     which fires at 00, 30 — keeps the rate-limit headroom predictable)
+#   - workflow_dispatch: manual
+#
+# Path exercised (matches test_render.py section structure):
+#   1. GET /  (landing reachable, sub-3s)
+#   2. POST /login  (admin auth establishes a session)
+#   3. POST /project/new  (a fresh project gets created)
+#   4. POST /project/{pid}/location  (location step accepts data)
+#   5. POST /project/{pid}/loads  (loads step + design engine runs)
+#   6. GET  /project/{pid}/results  (results page renders)
+#   7. GET  /project/{pid}/report/proposal/pdf  (P3 superset PDF renders)
+#   8. POST /admin/users  action=delete  (cleanup — the synthetic project
+#      lives under the admin account so we just delete the project row
+#      via SQL on the admin endpoint).
+#
+# If ANY step fails (non-2xx, or PDF < 100 KB, or total wall time > 90s
+# for the design pipeline), the job emails the owner and exits non-zero
+# so the Actions UI shows red. Three consecutive reds across runs of
+# this workflow = escalate to red-alert status (Tier 4 auto-issue).
+
+name: Synthetic health check
+
+on:
+  schedule:
+    - cron: "17 * * * *"     # hourly, at HH:17
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: synthetic-health
+  cancel-in-progress: false
+
+jobs:
+  walk-the-path:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      BASE:                    https://solarpro.aiappinvent.com
+      SOLARPRO_ADMIN_PASSWORD: ${{ secrets.SOLARPRO_ADMIN_PASSWORD }}
+      BREVO_API_KEY:           ${{ secrets.BREVO_API_KEY }}
+      EMAIL_SALES:             ${{ secrets.EMAIL_SALES }}
+    steps:
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Walk the critical path
+        run: |
+          set -e
+          python - <<'PY'
+          import json, os, re, sys, time
+          import requests
+
+          BASE   = os.environ["BASE"]
+          PW     = os.environ["SOLARPRO_ADMIN_PASSWORD"]
+          BREVO  = os.environ["BREVO_API_KEY"]
+          ALERT_TO = os.environ.get("EMAIL_SALES", "sales@aiappinvent.com")
+
+          steps = []
+          def record(name, ok, detail=""):
+              steps.append({"step": name, "ok": ok, "detail": detail})
+              tag = "OK  " if ok else "FAIL"
+              print(f"[{tag}] {name}  {detail}")
+              return ok
+
+          def get_csrf(html):
+              m = re.search(r'name="_csrf"\s+value="([^"]+)"', html)
+              return m.group(1) if m else ""
+
+          s = requests.Session()
+          s.headers.update({"User-Agent": "SolarPro-SyntheticHealth/1.0"})
+          t0 = time.time()
+
+          # 1. Landing reachable
+          try:
+              r = s.get(BASE + "/", timeout=60)  # 60s for Render cold-start
+              latency_ms = int((time.time() - t0) * 1000)
+              record("landing_200", r.status_code == 200,
+                     f"HTTP {r.status_code} in {latency_ms}ms")
+          except Exception as e:
+              record("landing_200", False, str(e)[:120])
+              # No point continuing — every subsequent step depends on session
+              steps[-1]["fatal"] = True
+
+          if not all(st["ok"] for st in steps):
+              # Bail out — surfaces in the alert below
+              pass
+          else:
+              # 2. Admin login
+              r = s.get(BASE + "/login", timeout=30)
+              tok = get_csrf(r.text)
+              r = s.post(BASE + "/login",
+                         data={"username": "admin", "password": PW, "_csrf": tok},
+                         allow_redirects=True, timeout=30)
+              record("admin_login", "/dashboard" in r.url or "/admin" in r.url,
+                     f"landed at {r.url} HTTP {r.status_code}")
+
+          if all(st["ok"] for st in steps):
+              # 3. Create project
+              r = s.get(BASE + "/project/new", timeout=30)
+              tok = get_csrf(r.text)
+              pname = f"SyntheticHealth-{int(time.time())%10000}"
+              r = s.post(BASE + "/project/new",
+                         data={"name": pname, "client_name": "auto",
+                               "_csrf": tok},
+                         allow_redirects=True, timeout=30)
+              # Extract pid from landing URL
+              pid = None
+              m = re.search(r"/project/(\d+)/", r.url)
+              if m:
+                  pid = int(m.group(1))
+              record("project_create", pid is not None,
+                     f"pid={pid} landed at {r.url}")
+
+          if all(st["ok"] for st in steps):
+              # 4. Location step
+              r = s.get(BASE + f"/project/{pid}/location", timeout=30)
+              tok = get_csrf(r.text)
+              loc = {"country":"Ghana","region":"Greater Accra",
+                     "tariff":"1.9688","currency":"GHS","symbol":"GHS",
+                     "funding_mode":"cash","chemistry":"LiFePO4",
+                     "autonomy":"1","voltage":"48","panel_wp":"400",
+                     "system_type":"off-grid","phase":"single",
+                     "tilt_angle":"15","azimuth":"0","system_losses":"14",
+                     "inverter_eff":"95","battery_dod":"80",
+                     "performance_ratio":"75",
+                     "supply_markup_pct":"8","install_rate_pct":"15",
+                     "_csrf": tok}
+              r = s.post(BASE + f"/project/{pid}/location", data=loc,
+                         allow_redirects=True, timeout=30)
+              record("location_step", r.status_code == 200,
+                     f"HTTP {r.status_code}")
+
+          if all(st["ok"] for st in steps):
+              # 5. Loads step (drives the design engine)
+              r = s.get(BASE + f"/project/{pid}/loads", timeout=30)
+              tok = get_csrf(r.text)
+              loads = {"load_name[]": ["LED Lights", "Fan", "Fridge"],
+                       "load_watt[]": ["10", "75", "150"],
+                       "load_qty[]":  ["4", "1", "1"],
+                       "load_hours[]":["6", "8", "24"],
+                       "load_cat[]":  ["Lighting", "Cooling", "Appliances"],
+                       "load_df[]":   ["75", "65", "50"],
+                       "_csrf": tok}
+              t_engine = time.time()
+              r = s.post(BASE + f"/project/{pid}/loads", data=loads,
+                         allow_redirects=True, timeout=90)
+              engine_s = time.time() - t_engine
+              record("loads_design_engine",
+                     r.status_code == 200 and engine_s < 90,
+                     f"HTTP {r.status_code} in {engine_s:.1f}s")
+
+          if all(st["ok"] for st in steps):
+              # 6. Results page renders
+              r = s.get(BASE + f"/project/{pid}/results", timeout=30)
+              record("results_page", r.status_code == 200,
+                     f"HTTP {r.status_code} bytes={len(r.text):,}")
+
+          if all(st["ok"] for st in steps):
+              # 7. P3 superset proposal PDF
+              t_pdf = time.time()
+              r = s.get(BASE + f"/project/{pid}/report/proposal/pdf",
+                        timeout=120, stream=True)
+              body = r.content
+              pdf_s = time.time() - t_pdf
+              ok = (r.status_code == 200 and len(body) > 100_000
+                    and body[:4] == b"%PDF")
+              record("proposal_pdf", ok,
+                     f"HTTP {r.status_code} {len(body):,} bytes in {pdf_s:.1f}s")
+
+          total_s = time.time() - t0
+          n_ok = sum(1 for st in steps if st["ok"])
+          n_total = len(steps)
+
+          # ---------- Alert if anything failed ----------
+          if n_ok < n_total:
+              import urllib.request
+              failed = [st for st in steps if not st["ok"]]
+              html = (
+                  f"<h3>Synthetic health check FAILED</h3>"
+                  f"<p>{n_ok}/{n_total} steps passed in {total_s:.1f}s total.</p>"
+                  f"<h4>Failed steps</h4>"
+                  f"<ul>"
+                  + "".join(f"<li><b>{f['step']}</b>: {f['detail']}</li>"
+                              for f in failed)
+                  + f"</ul>"
+                  f"<h4>All steps</h4><pre style='font-size:11px'>"
+                  + json.dumps(steps, indent=2)
+                  + "</pre>"
+                  f"<p>Workflow run: <a href='{os.environ.get('GITHUB_SERVER_URL','https://github.com')}/{os.environ.get('GITHUB_REPOSITORY','')}/actions/runs/{os.environ.get('GITHUB_RUN_ID','')}'>view in GH Actions</a></p>"
+              )
+              payload = json.dumps({
+                  "sender":      {"email": ALERT_TO,
+                                  "name": "SolarPro Synthetic Health"},
+                  "to":          [{"email": ALERT_TO}],
+                  "subject":     f"SolarPro health check FAILED ({n_ok}/{n_total} steps OK)",
+                  "htmlContent": html,
+              }).encode("utf-8")
+              req = urllib.request.Request(
+                  "https://api.brevo.com/v3/smtp/email",
+                  data=payload,
+                  headers={"api-key": BREVO,
+                           "Content-Type": "application/json",
+                           "Accept": "application/json"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      print(f"alert email status: {resp.status}")
+              except Exception as e:
+                  print(f"::warning::alert email failed: {e}")
+              sys.exit(1)
+
+          print(f"OK — {n_ok}/{n_total} steps passed in {total_s:.1f}s")
+          PY

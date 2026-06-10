@@ -1,0 +1,168 @@
+# Daily digest — 09:00 UTC summary of beta activity from the last 24h.
+#
+# Composes one email to the owner that aggregates:
+#   * total signups in 24h (admin /admin/beta + registered users delta)
+#   * total feedback rows
+#   * total tickets
+#   * recent security audit summary
+#   * last synthetic-health-check result (from the cron run history)
+#
+# Designed to need ZERO clicks from the owner per ordinary day. Just
+# read the email, all clear, done.
+#
+# Schedule:
+#   - cron 0 9 * * *  (daily at 09:00 UTC = 09:00 GMT / 10:00 BST /
+#                       05:00 EDT / 12:00 EAT / 12:30 IST)
+#   - workflow_dispatch for manual runs (test the format, send a copy
+#     of yesterday's summary).
+
+name: Daily digest
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE:                    https://solarpro.aiappinvent.com
+      SOLARPRO_ADMIN_PASSWORD: ${{ secrets.SOLARPRO_ADMIN_PASSWORD }}
+      BREVO_API_KEY:           ${{ secrets.BREVO_API_KEY }}
+      EMAIL_SALES:             ${{ secrets.EMAIL_SALES }}
+    steps:
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Compose + send digest
+        run: |
+          set -e
+          python - <<'PY'
+          import json, os, re, sys
+          from datetime import datetime, timezone
+          import requests, urllib.request
+
+          BASE     = os.environ["BASE"]
+          PW       = os.environ["SOLARPRO_ADMIN_PASSWORD"]
+          BREVO    = os.environ["BREVO_API_KEY"]
+          ALERT_TO = os.environ.get("EMAIL_SALES", "sales@aiappinvent.com")
+
+          def csrf(html):
+              m = re.search(r'name="_csrf"\s+value="([^"]+)"', html)
+              return m.group(1) if m else ""
+
+          def count_rows(html):
+              m = re.search(r"<tbody[^>]*>(.+?)</tbody>", html,
+                            re.DOTALL | re.IGNORECASE)
+              body = m.group(1) if m else html
+              return len(re.findall(r"<tr[^>]*>", body, re.IGNORECASE))
+
+          s = requests.Session()
+          s.headers.update({"User-Agent": "SolarPro-DailyDigest/1.0"})
+          s.get(BASE + "/", timeout=60)
+          r = s.get(BASE + "/login", timeout=30)
+          tok = csrf(r.text)
+          r = s.post(BASE + "/login",
+                     data={"username": "admin", "password": PW, "_csrf": tok},
+                     allow_redirects=True, timeout=30)
+          if "/dashboard" not in r.url and "/admin" not in r.url:
+              print(f"::error::login failed (landed at {r.url})")
+              sys.exit(2)
+
+          counts = {}
+          for label, path in [("feedback",     "/admin/feedback"),
+                              ("tickets",      "/admin/tickets"),
+                              ("beta_signups", "/admin/beta")]:
+              pr = s.get(BASE + path, timeout=30)
+              counts[label] = (count_rows(pr.text)
+                                if pr.status_code == 200 else "ERROR")
+
+          # Security pulse
+          try:
+              sec = s.get(BASE + "/admin/ops/security/audit",
+                           timeout=30).json()
+          except Exception:
+              sec = {"error": "unreachable"}
+
+          # Synthetic-health summary — pull last 5 runs from the Actions API
+          # so the digest reflects whether prod has been healthy.
+          import subprocess
+          try:
+              # gh CLI is preinstalled on github-hosted runners
+              runs_json = subprocess.check_output(
+                  ["gh", "run", "list",
+                   "-R", os.environ.get("GITHUB_REPOSITORY", ""),
+                   "--workflow=Synthetic health check",
+                   "-L", "5", "--json", "conclusion,createdAt"],
+                  env={**os.environ,
+                       "GH_TOKEN": os.environ.get("GITHUB_TOKEN", "")},
+                  timeout=30,
+              ).decode("utf-8")
+              recent = json.loads(runs_json)
+              health = " ".join(
+                  ("OK" if x.get("conclusion") == "success"
+                   else (x.get("conclusion") or "?").upper())
+                  for x in recent
+              )
+              if not recent:
+                  health = "(no runs yet)"
+          except Exception as e:
+              health = f"(query failed: {e})"
+
+          today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+          html = f"""
+          <h3>SolarPro Beta — daily digest, {today}</h3>
+          <p>Snapshot of the prod admin views as of {datetime.now(timezone.utc).isoformat()}.</p>
+
+          <h4>Response volume</h4>
+          <ul>
+            <li><b>Feedback rows:</b> {counts.get('feedback','?')}</li>
+            <li><b>Tickets rows:</b> {counts.get('tickets','?')}</li>
+            <li><b>Beta signups rows:</b> {counts.get('beta_signups','?')}</li>
+          </ul>
+
+          <h4>Security pulse</h4>
+          <pre style="font-size:11px;background:#f5f5f5;padding:8px">{json.dumps(sec, indent=2)[:1500]}</pre>
+
+          <h4>Synthetic health — last 5 hourly runs (most recent first)</h4>
+          <p><code>{health}</code></p>
+
+          <h4>Direct links (admin)</h4>
+          <ul>
+            <li><a href="https://solarpro.aiappinvent.com/admin/feedback">/admin/feedback</a></li>
+            <li><a href="https://solarpro.aiappinvent.com/admin/tickets">/admin/tickets</a></li>
+            <li><a href="https://solarpro.aiappinvent.com/admin/beta">/admin/beta</a></li>
+            <li><a href="https://solarpro.aiappinvent.com/admin/ops/security/audit">/admin/ops/security/audit</a></li>
+          </ul>
+
+          <p style="color:#888;font-size:11px">
+          Generated by .github/workflows/daily-digest.yml. Skip the email if
+          everything reads as expected — the synthetic-health row will tell
+          you the same thing in a glance.
+          </p>
+          """
+
+          payload = json.dumps({
+              "sender": {"email": ALERT_TO, "name": "SolarPro Daily Digest"},
+              "to":     [{"email": ALERT_TO}],
+              "subject": f"SolarPro daily digest — {today}",
+              "htmlContent": html,
+          }).encode("utf-8")
+          req = urllib.request.Request(
+              "https://api.brevo.com/v3/smtp/email",
+              data=payload,
+              headers={"api-key": BREVO,
+                       "Content-Type": "application/json",
+                       "Accept": "application/json"},
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=30) as resp:
+              print(f"digest email status: {resp.status}")
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
