@@ -1,0 +1,209 @@
+# One-shot: migrate Render Postgres + cut the web service over to it.
+#
+# What it does (atomic, end-to-end):
+#   1. Look up solarpro-postgres by name via Render API (idempotent — uses the
+#      Postgres already provisioned by provision-postgres.yml).
+#   2. Wait for status=available.
+#   3. Fetch the internal connection URL (service-to-service traffic stays in cluster).
+#   4. Apply migrations/001..004 against the internal URL via psql.
+#   5. PUT-merge DATABASE_URL onto the Render web service's env-vars (preserves
+#      every other env var Render currently holds).
+#   6. Trigger a redeploy so get_db() flips to the Postgres path.
+#
+# Rollback (manual): re-run this workflow with REMOVE_DATABASE_URL=true to strip
+# the env var; the next deploy falls back to SQLite via the dual-backend scaffold.
+#
+# Triggered manually via `gh workflow run`. Idempotent.
+
+name: Migrate Postgres and cut over
+
+on:
+  workflow_dispatch:
+    inputs:
+      set_database_url:
+        description: "Set 'true' to flip DATABASE_URL on the web service AFTER migrations succeed. Leave 'false' to apply migrations only — the app keeps running on SQLite. PRODUCTION-SAFE DEFAULT."
+        required: false
+        default: "false"
+      remove_database_url:
+        description: "Set to 'true' to ROLLBACK — strips DATABASE_URL and redeploys on SQLite. Overrides set_database_url."
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+
+jobs:
+  cutover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      ROLLBACK:          ${{ github.event.inputs.remove_database_url }}
+      DO_CUTOVER:        ${{ github.event.inputs.set_database_url }}
+    steps:
+      - name: Checkout (for migrations/*.sql)
+        if: env.ROLLBACK != 'true'
+        uses: actions/checkout@v4
+
+      - name: Install psql client
+        if: env.ROLLBACK != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Find solarpro-postgres
+        if: env.ROLLBACK != 'true'
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg_list.json
+          PG_ID=$(python3 -c "
+          import json
+          d = json.load(open('/tmp/pg_list.json'))
+          for item in (d if isinstance(d, list) else []):
+              pg = item.get('postgres', item)
+              if pg.get('name') == 'solarpro-postgres':
+                  print(pg.get('id', ''))
+                  break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found — run provision-postgres.yml first"
+            exit 1
+          fi
+          echo "Found Postgres ID: $PG_ID"
+          echo "id=$PG_ID" >> $GITHUB_OUTPUT
+
+      - name: Wait for Postgres available
+        if: env.ROLLBACK != 'true'
+        env:
+          PG_ID: ${{ steps.pg.outputs.id }}
+        run: |
+          set -e
+          for i in $(seq 1 30); do
+            STATUS=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/postgres/$PG_ID" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+            echo "[poll $i] status=$STATUS"
+            [ "$STATUS" = "available" ] && break
+            sleep 10
+          done
+          [ "$STATUS" = "available" ] || { echo "::error::Postgres not available"; exit 1; }
+
+      - name: Fetch internal connection URL
+        if: env.ROLLBACK != 'true'
+        id: conn
+        env:
+          PG_ID: ${{ steps.pg.outputs.id }}
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          INTERNAL=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('internalConnectionString',''))")
+          EXTERNAL=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          if [ -z "$INTERNAL" ] || [ -z "$EXTERNAL" ]; then
+            echo "::error::Connection URLs missing from API response"
+            cat /tmp/conn.json | head -c 400
+            exit 1
+          fi
+          # Mask so neither URL surfaces in logs.
+          echo "::add-mask::$INTERNAL"
+          echo "::add-mask::$EXTERNAL"
+          # External URL is used by this runner to apply migrations (the runner
+          # is outside Render's network). Internal URL is what the web service uses.
+          echo "internal=$INTERNAL" >> $GITHUB_OUTPUT
+          echo "external=$EXTERNAL" >> $GITHUB_OUTPUT
+          echo "Connection URLs captured (masked in logs)."
+
+      - name: Apply migrations 001..004
+        if: env.ROLLBACK != 'true'
+        env:
+          DATABASE_URL: ${{ steps.conn.outputs.external }}
+        run: |
+          set -e
+          for f in migrations/001_postgresql_schema.sql \
+                   migrations/002_rls_policies.sql \
+                   migrations/003_rls_hardening.sql \
+                   migrations/004_schema_hardening.sql; do
+            if [ ! -f "$f" ]; then
+              echo "::warning::$f missing, skipping"
+              continue
+            fi
+            echo "--- Applying $f ---"
+            # ON_ERROR_STOP so a single bad statement stops the chain; the
+            # 003+004 migrations reference a solarpro_app role guarded with
+            # IF EXISTS so they no-op if the role isn't created yet.
+            psql "$DATABASE_URL" \
+              -v ON_ERROR_STOP=1 \
+              --single-transaction \
+              -f "$f"
+            echo "OK: $f"
+          done
+
+      - name: Set DATABASE_URL on Render web service (cutover)
+        if: env.ROLLBACK != 'true' && env.DO_CUTOVER == 'true'
+        env:
+          INTERNAL_URL: ${{ steps.conn.outputs.internal }}
+        run: |
+          set -e
+          # PUT replaces the env-var set, so fetch existing first, merge DATABASE_URL.
+          EXISTING=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars?limit=100")
+          # The list comes back as [{envVar:{key,value}}, ...]. Normalize then merge.
+          MERGED=$(echo "$EXISTING" | jq --arg url "$INTERNAL_URL" '
+            [.[] | .envVar | {key,value}] as $e
+            | [($e[] | select(.key != "DATABASE_URL")), {key:"DATABASE_URL", value:$url}]
+          ')
+          # Mask the URL string in any log line that might surface it.
+          echo "::add-mask::$INTERNAL_URL"
+          NCOUNT=$(echo "$MERGED" | jq 'length')
+          echo "Submitting merged env-var set ($NCOUNT vars) to Render..."
+          curl -fsS -X PUT \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$MERGED" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars" \
+            | jq 'length as $n | "Render confirmed \($n) env vars set"'
+
+      - name: Rollback - strip DATABASE_URL
+        if: env.ROLLBACK == 'true'
+        run: |
+          set -e
+          EXISTING=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars?limit=100")
+          MERGED=$(echo "$EXISTING" | jq '
+            [.[] | .envVar | {key,value}] | map(select(.key != "DATABASE_URL"))
+          ')
+          NCOUNT=$(echo "$MERGED" | jq 'length')
+          echo "Rolling back - submitting env-var set without DATABASE_URL ($NCOUNT vars)..."
+          curl -fsS -X PUT \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$MERGED" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars" \
+            | jq 'length as $n | "Render confirmed \($n) env vars set"'
+
+      - name: Trigger redeploy
+        if: env.ROLLBACK == 'true' || env.DO_CUTOVER == 'true'
+        run: |
+          set -e
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}' \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            | jq '{id,status,createdAt,commit:.commit.id[:7]}'
+
+      - name: Summary
+        run: |
+          if [ "$ROLLBACK" = "true" ]; then
+            echo "ROLLBACK complete - DATABASE_URL stripped, get_db() will fall back to SQLite on next deploy."
+          elif [ "$DO_CUTOVER" = "true" ]; then
+            echo "CUTOVER complete - migrations applied, DATABASE_URL set, redeploy triggered."
+            echo "Verify with: curl https://solarpro.aiappinvent.com/api/health/database"
+          else
+            echo "MIGRATIONS-ONLY complete - schema applied to Postgres. App still running on SQLite."
+            echo "To finish the cutover later, re-run this workflow with set_database_url=true"
+            echo "AFTER fixing init_db / SQLite-specific SQL (see docs/IMPLEMENTATION_LOG.md)."
+          fi
