@@ -1,4 +1,28 @@
 {
-  "note": "Brevo delivery monitor state. Re-written every 2 hours by .github/workflows/email-delivery-check.yml. alerted_event_keys tracks event signatures we've already emailed about so we don't re-alert.",
-  "alerted_event_keys": []
+  "alerted_event_keys": [
+    "blocked|kafedie@gmail.com|2026-06-11T00:30:27.067Z",
+    "hardBounces|kafedie@gmail.com|2026-06-11T00:14:51.000Z",
+    "hardBounces|sales@infinitysolarusa.com|2026-06-10T23:42:53.000Z",
+    "softBounces|info@shopsolar.ng|2026-06-10T23:33:24.000Z",
+    "softBounces|info@smartsystems.co.ke|2026-06-10T23:37:42.000Z",
+    "softBounces|info@solarmatesystemsgh.com|2026-06-10T23:22:37.000Z",
+    "softBounces|test_autotest_gh@solarpro-test.invalid|2026-06-10T19:50:27.000Z",
+    "softBounces|test_autotest_gh@solarpro-test.invalid|2026-06-10T20:58:37.000Z",
+    "softBounces|test_autotest_gh@solarpro-test.invalid|2026-06-10T23:09:10.000Z",
+    "softBounces|test_autotest_ng@solarpro-test.invalid|2026-06-10T19:50:26.000Z",
+    "softBounces|test_autotest_ng@solarpro-test.invalid|2026-06-10T20:58:56.000Z",
+    "softBounces|test_autotest_ng@solarpro-test.invalid|2026-06-10T23:09:11.000Z"
+  ],
+  "last_run_utc": "2026-06-11T00:44:38.955772+00:00",
+  "totals": {
+    "blocked": 1,
+    "deferred": 1,
+    "delivered": 33,
+    "hardBounces": 2,
+    "opened": 6,
+    "other": 62,
+    "softBounces": 9,
+    "spam": 0
+  },
+  "window_days": 1
 }
