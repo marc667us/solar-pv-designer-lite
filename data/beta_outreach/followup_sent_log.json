@@ -1,0 +1,39 @@
+{
+  "sent": {
+    "info@acen-solar.co.uk": {
+      "sent_at": "2026-06-11T21:28:39.791244+00:00",
+      "messageId": "<202606112128.11756260085@smtp-relay.mailin.fr>",
+      "company": "Acen Solar"
+    },
+    "info@dysonenergysolar.com": {
+      "sent_at": "2026-06-11T21:28:41.282934+00:00",
+      "messageId": "<202606112128.81284771825@smtp-relay.mailin.fr>",
+      "company": "Dyson Energy Solar"
+    },
+    "iestxsolar@ies-co.com": {
+      "sent_at": "2026-06-11T21:28:42.762885+00:00",
+      "messageId": "<202606112128.93812321312@smtp-relay.mailin.fr>",
+      "company": "IES Texas Solar"
+    },
+    "info@cambridge-solar.co.uk": {
+      "sent_at": "2026-06-11T21:28:44.244290+00:00",
+      "messageId": "<202606112128.40276136253@smtp-relay.mailin.fr>",
+      "company": "Cambridge Solar"
+    },
+    "info@crgdirect.co.uk": {
+      "sent_at": "2026-06-11T21:28:45.743273+00:00",
+      "messageId": "<202606112128.20375481520@smtp-relay.mailin.fr>",
+      "company": "CRG Direct"
+    },
+    "info@renovaenergy.com": {
+      "sent_at": "2026-06-11T21:28:47.230395+00:00",
+      "messageId": "<202606112128.66981292791@smtp-relay.mailin.fr>",
+      "company": "Renova Energy"
+    },
+    "info@spiritenergy.co.uk": {
+      "sent_at": "2026-06-11T21:28:48.708851+00:00",
+      "messageId": "<202606112128.84188356801@smtp-relay.mailin.fr>",
+      "company": "Spirit Energy"
+    }
+  }
+}
