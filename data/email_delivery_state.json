@@ -1,0 +1,4 @@
+{
+  "note": "Brevo delivery monitor state. Re-written every 2 hours by .github/workflows/email-delivery-check.yml. alerted_event_keys tracks event signatures we've already emailed about so we don't re-alert.",
+  "alerted_event_keys": []
+}

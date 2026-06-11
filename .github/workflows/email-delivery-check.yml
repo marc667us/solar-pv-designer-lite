@@ -1,0 +1,257 @@
+# Email delivery check — every 2 hours, query Brevo's events API for
+# anything sent from the SolarPro sender domain and alert the owner on
+# bounces / blocks / spam complaints / deferred deliveries.
+#
+# Why this is needed: Brevo's POST /v3/smtp/email returns HTTP 201
+# meaning "accepted into our queue", NOT "delivered to recipient inbox".
+# Owner reported the first 2 owner-preview emails didn't land — likely
+# Gmail spam filter on first-touch from aiappinvent.com.
+#
+# This workflow surfaces the real delivery story by polling Brevo's
+# events feed and categorising:
+#
+#   delivered  — landed in recipient inbox
+#   soft_bounce — temporary failure (mailbox full, deferred)
+#   hard_bounce — permanent failure (bad address)
+#   blocked    — recipient mailserver rejected outright
+#   spam       — recipient marked it as spam (rare — needs feedback loop)
+#   deferred   — Brevo retrying
+#   unique_opened — opened (good signal)
+#
+# Schedule:
+#   - cron at HH:37 (offset from the other 4 crons)
+#   - workflow_dispatch with optional `email` input to query a specific
+#     recipient's status on demand (used to diagnose the kafedzie/kafedie
+#     mystery)
+
+name: Email delivery check
+
+on:
+  schedule:
+    - cron: "37 */2 * * *"   # every 2 hours at HH:37
+  workflow_dispatch:
+    inputs:
+      email:
+        description: "Optional: query a specific recipient's events only. Leave blank for a full sweep."
+        required: false
+        default: ""
+      days:
+        description: "How many days back to query (default 1). Increase to debug older sends."
+        required: false
+        default: "1"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: email-delivery-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+      EMAIL_SALES:   ${{ secrets.EMAIL_SALES }}
+      QUERY_EMAIL:   ${{ github.event.inputs.email }}
+      QUERY_DAYS:    ${{ github.event.inputs.days }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Query Brevo events
+        run: |
+          set -e
+          python - <<'PY'
+          import json, os, sys
+          from datetime import datetime, timezone
+          import urllib.request, urllib.parse, urllib.error
+
+          BREVO    = os.environ["BREVO_API_KEY"]
+          ALERT_TO = os.environ.get("EMAIL_SALES", "sales@aiappinvent.com")
+          QEMAIL   = (os.environ.get("QUERY_EMAIL") or "").strip()
+          QDAYS    = max(1, min(90,
+                          int(os.environ.get("QUERY_DAYS") or "1")))
+          STATE_PATH = "data/email_delivery_state.json"
+
+          if os.path.exists(STATE_PATH):
+              state = json.load(open(STATE_PATH, "r", encoding="utf-8"))
+          else:
+              state = {"alerted_event_keys": []}
+
+          # ---------- Query Brevo events ----------
+          # API: GET /v3/smtp/statistics/events
+          # `limit` max 5000 per call; we paginate until either we hit
+          # everything or 200 events have been seen — 200 is plenty for
+          # 2h windows at our send volume.
+          events = []
+          offset = 0
+          batch  = 100
+          while True:
+              params = {"limit": batch, "offset": offset, "days": QDAYS,
+                         "sort": "desc"}
+              if QEMAIL:
+                  params["email"] = QEMAIL
+              url = ("https://api.brevo.com/v3/smtp/statistics/events?"
+                     + urllib.parse.urlencode(params))
+              req = urllib.request.Request(
+                  url, headers={"api-key": BREVO,
+                                "Accept": "application/json"},
+                  method="GET",
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      data = json.loads(resp.read().decode("utf-8"))
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode("utf-8", "replace")
+                  print(f"::error::Brevo events HTTP {e.code}: {body[:200]}")
+                  sys.exit(2)
+              except Exception as e:
+                  print(f"::error::Brevo events fetch failed: {e}")
+                  sys.exit(2)
+              batch_events = data.get("events", [])
+              events.extend(batch_events)
+              if len(batch_events) < batch or len(events) >= 200:
+                  break
+              offset += batch
+
+          print(f"Pulled {len(events)} events from Brevo "
+                  f"(window={QDAYS}d, recipient_filter={QEMAIL or 'ALL'})")
+
+          # ---------- Categorise ----------
+          # Brevo event vocabulary:
+          #   requests      — accepted into queue
+          #   delivered     — landed in recipient mailbox
+          #   hardBounces   — permanent failure
+          #   softBounces   — temporary failure
+          #   blocked       — rejected by recipient mailserver
+          #   spam          — recipient marked as spam
+          #   deferred      — Brevo will retry
+          #   opened / unique_opened — recipient actually read it
+          buckets = {"delivered": [], "hardBounces": [], "softBounces": [],
+                      "blocked": [], "spam": [], "deferred": [],
+                      "opened": [], "other": []}
+          for ev in events:
+              t = ev.get("event") or "other"
+              key = t if t in buckets else "other"
+              buckets[key].append({
+                  "email":   ev.get("email"),
+                  "subject": ev.get("subject"),
+                  "date":    ev.get("date"),
+                  "reason":  ev.get("reason"),
+                  "ip":      ev.get("ip"),
+              })
+
+          # ---------- Decide alert ----------
+          bad_buckets = ("hardBounces", "softBounces", "blocked", "spam")
+          alerted_keys = set(state.get("alerted_event_keys", []))
+          new_alerts = []
+          for b in bad_buckets:
+              for ev in buckets[b]:
+                  key = f"{b}|{ev['email']}|{ev['date']}"
+                  if key not in alerted_keys:
+                      ev["bucket"] = b
+                      new_alerts.append(ev)
+                      alerted_keys.add(key)
+
+          # ---------- Persist state ----------
+          new_state = {
+              "last_run_utc": datetime.now(timezone.utc).isoformat(),
+              "window_days":  QDAYS,
+              "totals":       {k: len(v) for k, v in buckets.items()},
+              "alerted_event_keys": sorted(alerted_keys)[-5000:],
+          }
+          os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
+          with open(STATE_PATH, "w", encoding="utf-8") as f:
+              json.dump(new_state, f, indent=2, sort_keys=True)
+
+          # Always print the rollup so the workflow run is informative
+          # whether or not an alert email fires.
+          rollup = " ".join(f"{k}={len(v)}" for k, v in buckets.items())
+          print(f"Rollup: {rollup}")
+
+          # For manual on-demand queries we also dump the buckets so the
+          # operator can see what each recipient's status is.
+          if QEMAIL:
+              print("\nPer-recipient detail (recipient filter active):")
+              for b, evs in buckets.items():
+                  if evs:
+                      print(f"  {b}:")
+                      for ev in evs:
+                          print(f"    {ev['email']:<30} "
+                                  f"{ev['date']!s:<25} "
+                                  f"{(ev.get('reason') or '')[:60]}")
+
+          if not new_alerts:
+              print("no new bounces / blocks / spam — done")
+              sys.exit(0)
+
+          # ---------- Send alert email ----------
+          html = (
+              f"<h3>SolarPro Brevo delivery alert</h3>"
+              f"<p>{len(new_alerts)} new non-delivery event(s) detected in "
+              f"the last {QDAYS} day(s). Rollup: {rollup}</p>"
+              f"<table style='border-collapse:collapse'>"
+              f"<tr style='background:#f5f5f5'>"
+              f"<th style='padding:6px 10px;text-align:left'>Bucket</th>"
+              f"<th style='padding:6px 10px;text-align:left'>Recipient</th>"
+              f"<th style='padding:6px 10px;text-align:left'>Subject</th>"
+              f"<th style='padding:6px 10px;text-align:left'>Date</th>"
+              f"<th style='padding:6px 10px;text-align:left'>Reason</th>"
+              f"</tr>"
+              + "".join(
+                  f"<tr><td style='padding:4px 10px'>{a['bucket']}</td>"
+                  f"<td style='padding:4px 10px'>{a['email']}</td>"
+                  f"<td style='padding:4px 10px'>{(a.get('subject') or '')[:60]}</td>"
+                  f"<td style='padding:4px 10px;font-size:11px'>{a['date']}</td>"
+                  f"<td style='padding:4px 10px;font-size:11px'>"
+                  f"{(a.get('reason') or '')[:80]}</td></tr>"
+                  for a in new_alerts)
+              + "</table>"
+              "<p>What to do:</p><ul>"
+              "<li><b>hardBounces</b> — drop the address from any future list.</li>"
+              "<li><b>blocked</b> — the recipient mailserver rejected. May be "
+              "an internal block; not always actionable.</li>"
+              "<li><b>spam</b> — they actively reported it as spam. Consider "
+              "Brevo sender-domain reputation; reduce send frequency.</li>"
+              "<li><b>softBounces</b> — temporary. Brevo retries. Watch if it "
+              "repeats — may flip to hardBounce.</li>"
+              "</ul>"
+          )
+          payload = json.dumps({
+              "sender":      {"email": ALERT_TO,
+                                "name": "SolarPro Delivery Monitor"},
+              "to":          [{"email": ALERT_TO}],
+              "subject":     f"SolarPro Brevo: {len(new_alerts)} new "
+                                f"non-delivery event(s)",
+              "htmlContent": html,
+          }).encode("utf-8")
+          req = urllib.request.Request(
+              "https://api.brevo.com/v3/smtp/email",
+              data=payload,
+              headers={"api-key": BREVO,
+                       "Content-Type": "application/json",
+                       "Accept": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  print(f"alert email status: HTTP {resp.status}")
+          except Exception as e:
+              print(f"::warning::alert email failed: {e}")
+          PY
+
+      - name: Commit updated state
+        run: |
+          set -e
+          if git diff --quiet data/email_delivery_state.json 2>/dev/null; then
+            echo "state unchanged — no commit"
+            exit 0
+          fi
+          git config user.email "actions@github.com"
+          git config user.name  "Email Delivery Check"
+          git add data/email_delivery_state.json
+          git commit -m "chore(email-delivery): update state $(date -u +'%FT%TZ')"
+          git push origin HEAD:master
