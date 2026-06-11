@@ -130,3 +130,66 @@ Current project status:
 Granular per-task changes go to `docs/IMPLEMENTATION_LOG.md` per the directive's §21.
 
 <!-- END: PROJECT OS CONTEXT -->
+
+---
+
+
+---
+
+<!-- BEGIN: AGENTIC ADK CONTEXT (canonical — do not edit in place; re-sync from C:\Users\USER\_agentic_adk_context_append.md) -->
+
+# Agentic Development Context Addendum
+
+This project operates under the **Agentic Development Extension** appended to this app's `CLAUDE.md` and elaborated in this app's `MCP.md`. Together they define the three-layer agentic platform every app under this account belongs to.
+
+## What This Extension Adds
+
+- **Google ADK** is the Agent Operating System — it orchestrates business agents (executive, engineering, construction, procurement, finance, healthcare, legal, research, sales, support, technology) across workflows, tools, and memory.
+- **HARD RULE — Google ADK is the only agent framework** for every agent in every app. All agent classes, tools, memory, handoffs, and orchestration use ADK primitives. No LangChain / LangGraph / AutoGen / CrewAI / Semantic Kernel / hand-rolled while-loops without an approved ADR. See CLAUDE.md §0.1 for the full rule.
+- **HARD RULE — Always start from orchestration; branch into conductors when needed.** Every request enters via a single Root Orchestrator agent (`app/agents/orchestrators/root_orchestrator.py`). The Root Orchestrator routes to department Conductors (`app/agents/conductors/<dept>_conductor.py`) when a branch needs to coordinate ≥2 specialists or non-trivial flow; otherwise it calls a specialist directly. Specialists never call other agents. See CLAUDE.md §0.2 for full branching rules + topology diagram.
+- **HARD RULE — Agents and code must be reusable across apps.** Every app is a pip-installable package (`pyproject.toml` at root, `app/` package, `__init__.py` everywhere, `__all__` declaring the public API). Other apps consume agents/tools/schemas either by `pip install -e ../this-app` and importing, or via the MCP mesh (this-app's MCP server registered in the consumer's MCP.md). No copy-paste between apps; no hardcoded paths inside business logic; no cross-department imports between specialists; no business logic in route handlers. Each app maintains `docs/REUSABILITY.md` listing its public exports + consumers. See CLAUDE.md §0.3 for full rules.
+- **Claude Code** is the **Software Engineering Agent** living inside the Technology Department. It writes code; it does NOT orchestrate business workflows.
+- **Codex CLI + Supervisor** is the pair-coding review lane (existing — see `ai-coworkers/`, `reviews/`, `scripts/`).
+- **Governance Agents** — Work Reviewer, Development Supervisor, Work Scheduler — are mandatory in every app and themselves implemented in ADK. They are the project's quality and planning gates.
+- **MCP.md** in the app root enumerates the Model Context Protocol servers and how Claude Code connects to ADK for this app specifically.
+
+## The Four Mandatory Quality Gates
+
+Nothing ships until all four pass, in order:
+
+1. **Codex CLI** review via `./scripts/quality-gate.sh`.
+2. **Supervisor** sign-off via `/code-review`, `/security-review`, `/verify`.
+3. **Work Reviewer Agent** approval (`POST /api/review/work` → status `approved`).
+4. **Work Scheduler Agent** marks the task `approved`.
+
+## Canonical Sources
+
+- `C:\Users\USER\Documents\agentic proper2\agenticadk1.txt` — Enterprise AI Agent Factory master prompt
+- `C:\Users\USER\_agentic_adk_append.md` — CLAUDE.md template (this extension's full text)
+- `C:\Users\USER\_agentic_adk_mcp.md` — MCP.md template
+- `C:\Users\USER\_agentic_adk_context_append.md` — this file
+- `C:\Users\USER\Documents\pvsolar1\improvements\dontforget1.txt` — original Project Execution Directive + FOSS Stack Rule
+- `C:\Users\USER\Documents\pvsolar1\improvements\thereviewer1.txt` — Codex pair-coding workflow
+
+If this app's `CLAUDE.md` extension drifts from those source files, re-read them and reconcile.
+
+## Per-Session Orientation Summary (update every session)
+
+Append the latest snapshot below so the next session inherits accurate state. The template:
+
+```
+Date:
+Agentic layer status:
+- ADK installed:                  yes | no | partial
+- Executive Department agents:    list of implemented agents
+- Technology Department agents:   list of implemented agents
+- Governance agents (Reviewer/Supervisor/Scheduler):  status of each
+- Other departments stubbed:      list
+- Active MCP servers (see MCP.md): list
+- Last governance pipeline run:   pass | fail | not run | path to report
+- Next agentic task:
+```
+
+Granular per-task changes go to `docs/IMPLEMENTATION_LOG.md` per the Project Execution Directive §21.
+
+<!-- END: AGENTIC ADK CONTEXT -->
