@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Rate SolarPro - Beta{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Three-axis rating form for beta evaluators.
+     Inputs: 3 sliders (1..5) + optional comment textarea.
+     Server-side `_clamp` enforces the 1..5 contract regardless of UI. */
+  .rate-wrap { max-width:680px; margin:32px auto; padding:0 16px; }
+  .rate-card {
+    background:var(--sp-card-bg, #0f0f22);
+    border:1px solid var(--sp-border, #1e1e3a);
+    border-radius:16px; padding:28px;
+  }
+  .rate-axis { margin-bottom:24px; }
+  .rate-axis label.lbl {
+    display:flex; justify-content:space-between; align-items:baseline;
+    color:var(--sp-text, #e2e2f0); font-weight:700; font-size:14px;
+    margin-bottom:6px;
+  }
+  .rate-axis .score-out {
+    color:#fbbf24; font-weight:900; font-size:18px; min-width:48px; text-align:right;
+  }
+  .rate-axis .helper {
+    color:var(--sp-muted, #6868a0); font-size:12px; margin-bottom:10px;
+  }
+  .rate-slider {
+    width:100%; appearance:none; height:8px; border-radius:6px;
+    background:linear-gradient(90deg, #ef4444 0%, #f59e0b 50%, #22c55e 100%);
+    outline:none;
+  }
+  .rate-slider::-webkit-slider-thumb {
+    appearance:none; width:22px; height:22px; border-radius:50%;
+    background:#fde68a; border:2px solid #f59e0b; cursor:pointer;
+  }
+  .rate-slider::-moz-range-thumb {
+    width:22px; height:22px; border-radius:50%;
+    background:#fde68a; border:2px solid #f59e0b; cursor:pointer;
+  }
+  .rate-ticks {
+    display:flex; justify-content:space-between; color:var(--sp-muted, #6868a0);
+    font-size:11px; margin-top:6px; padding:0 4px;
+  }
+  .rate-card textarea {
+    width:100%; min-height:90px; padding:10px 12px; border-radius:10px;
+    border:1px solid var(--sp-border, #1e1e3a); background:#0a0a14;
+    color:var(--sp-text, #e2e2f0); font-family:inherit; font-size:14px;
+    resize:vertical;
+  }
+  .rate-submit {
+    background:linear-gradient(135deg, #f59e0b, #fbbf24);
+    color:#0f0f22; border:none; padding:12px 28px; border-radius:10px;
+    font-weight:900; font-size:14px; cursor:pointer; letter-spacing:.3px;
+    text-transform:uppercase;
+  }
+  .rate-submit:hover { filter:brightness(1.08); }
+  .rate-success {
+    background:rgba(34,197,94,.12); border:1px solid #22c55e;
+    color:#22c55e; padding:12px 14px; border-radius:10px;
+    margin-bottom:18px; display:none;
+  }
+  .rate-error {
+    background:rgba(239,68,68,.12); border:1px solid #ef4444;
+    color:#ef4444; padding:12px 14px; border-radius:10px;
+    margin-bottom:18px; display:none;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="rate-wrap">
+  <div class="rate-card">
+    <h2 style="margin:0 0 6px;font-size:1.6rem;font-weight:900">
+      <i class="bi bi-stars me-2" style="color:#fbbf24"></i>Rate SolarPro Global
+    </h2>
+    <p style="color:#9090b8;margin:0 0 22px;font-size:13.5px">
+      Three quick scores from 1 (poor) to 5 (excellent). Takes 30 seconds. Your
+      input goes straight to the dev team and shapes the next release.
+    </p>
+
+    <div id="rateOk"  class="rate-success"></div>
+    <div id="rateErr" class="rate-error"></div>
+
+    <form id="rateForm" autocomplete="off">
+      <input type="hidden" name="_csrf" value="{{ session.get('_csrf','') }}"/>
+      <input type="hidden" name="page" value="rate"/>
+
+      <div class="rate-axis">
+        <label class="lbl">
+          <span><i class="bi bi-speedometer2 me-1"></i>Performance</span>
+          <span class="score-out" id="perfOut">3 / 5</span>
+        </label>
+        <div class="helper">How fast and responsive does the app feel when you use it?</div>
+        <input type="range" min="1" max="5" value="3" name="perf_score"
+               id="perfSlider" class="rate-slider"
+               oninput="document.getElementById('perfOut').textContent = this.value + ' / 5'"/>
+        <div class="rate-ticks"><span>1 - Poor</span><span>2</span><span>3 - OK</span><span>4</span><span>5 - Excellent</span></div>
+      </div>
+
+      <div class="rate-axis">
+        <label class="lbl">
+          <span><i class="bi bi-lightbulb me-1"></i>Creativity</span>
+          <span class="score-out" id="creOut">3 / 5</span>
+        </label>
+        <div class="helper">How original and well-thought are the workflow and outputs?</div>
+        <input type="range" min="1" max="5" value="3" name="creativity_score"
+               id="creSlider" class="rate-slider"
+               oninput="document.getElementById('creOut').textContent = this.value + ' / 5'"/>
+        <div class="rate-ticks"><span>1 - Poor</span><span>2</span><span>3 - OK</span><span>4</span><span>5 - Excellent</span></div>
+      </div>
+
+      <div class="rate-axis">
+        <label class="lbl">
+          <span><i class="bi bi-cash-coin me-1"></i>Value</span>
+          <span class="score-out" id="valOut">3 / 5</span>
+        </label>
+        <div class="helper">How useful is this to your real solar-design workflow?</div>
+        <input type="range" min="1" max="5" value="3" name="value_score"
+               id="valSlider" class="rate-slider"
+               oninput="document.getElementById('valOut').textContent = this.value + ' / 5'"/>
+        <div class="rate-ticks"><span>1 - Poor</span><span>2</span><span>3 - OK</span><span>4</span><span>5 - Excellent</span></div>
+      </div>
+
+      <div style="margin:0 0 18px">
+        <label class="lbl" style="margin-bottom:6px">
+          <span><i class="bi bi-chat-text me-1"></i>Comment <span style="color:#6868a0;font-weight:400">(optional)</span></span>
+        </label>
+        <textarea name="message" placeholder="What worked? What didn't? Anything we should add?"></textarea>
+      </div>
+
+      <button type="submit" class="rate-submit">
+        <i class="bi bi-send me-1"></i>Submit rating
+      </button>
+    </form>
+  </div>
+</div>
+
+<script>
+// AJAX submit: keep the user on the page, show a clear success / error
+// banner, and reset the form so a second rating is one click away.
+document.getElementById('rateForm').addEventListener('submit', async function(ev) {
+  ev.preventDefault();
+  const ok  = document.getElementById('rateOk');
+  const err = document.getElementById('rateErr');
+  ok.style.display  = 'none';
+  err.style.display = 'none';
+  try {
+    const r = await fetch('/rate', { method:'POST', body:new FormData(this) });
+    const j = await r.json();
+    if (r.ok && j.ok) {
+      ok.textContent = j.msg || 'Rating submitted - thank you!';
+      ok.style.display = 'block';
+      // Soft reset: clear comment but keep slider state so the next
+      // submission of an iterative score is one click away.
+      this.querySelector('textarea[name=message]').value = '';
+      window.scrollTo({top:0, behavior:'smooth'});
+    } else {
+      err.textContent = (j && j.msg) || ('Submit failed: HTTP ' + r.status);
+      err.style.display = 'block';
+    }
+  } catch (e) {
+    err.textContent = 'Network error: ' + e.message;
+    err.style.display = 'block';
+  }
+});
+</script>
+{% endblock %}

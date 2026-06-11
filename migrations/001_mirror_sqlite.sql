@@ -445,18 +445,24 @@ CREATE TABLE IF NOT EXISTS beta_signups (
 );
 
 -- ---------------------------------------------------------------------
--- Table 22 — beta_feedback
+-- Table 22 — beta_feedback (with 3-axis rating columns added 2026-06-10)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS beta_feedback (
-    id         SERIAL PRIMARY KEY,
-    user_id    INTEGER DEFAULT NULL,
-    username   TEXT DEFAULT '',
-    email      TEXT DEFAULT '',
-    type       TEXT DEFAULT 'general',
-    message    TEXT NOT NULL,
-    page       TEXT DEFAULT '',
-    status     TEXT DEFAULT 'new',
-    created_at TEXT DEFAULT sqlite_ts()
+    id               SERIAL PRIMARY KEY,
+    user_id          INTEGER DEFAULT NULL,
+    username         TEXT DEFAULT '',
+    email            TEXT DEFAULT '',
+    type             TEXT DEFAULT 'general',
+    message          TEXT NOT NULL,
+    page             TEXT DEFAULT '',
+    status           TEXT DEFAULT 'new',
+    created_at       TEXT DEFAULT sqlite_ts(),
+    -- Rating columns (1..5, NULL when the row is general feedback rather
+    -- than a numeric rating). Server-side clamp at the /rate endpoint
+    -- ensures values land in range.
+    perf_score       INTEGER,
+    creativity_score INTEGER,
+    value_score      INTEGER
 );
 
 -- ---------------------------------------------------------------------

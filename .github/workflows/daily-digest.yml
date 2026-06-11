@@ -82,6 +82,29 @@ jobs:
               counts[label] = (count_rows(pr.text)
                                 if pr.status_code == 200 else "ERROR")
 
+          # Rating averages — scrape /admin/feedback for the perf/creativity/
+          # value scores embedded in the body. The admin template hasn't
+          # been updated to surface these yet (work in progress); for now
+          # we extract from the "Performance=N/5  Creativity=N/5  Value=N/5"
+          # summary line that the /rate POST writes into the message field.
+          ratings = {"perf": [], "creativity": [], "value": []}
+          try:
+              pr = s.get(BASE + "/admin/feedback", timeout=30)
+              if pr.status_code == 200:
+                  for m in re.finditer(
+                      r"Performance\s*=\s*(\d+)\s*/\s*5\s+"
+                      r"Creativity\s*=\s*(\d+)\s*/\s*5\s+"
+                      r"Value\s*=\s*(\d+)\s*/\s*5",
+                      pr.text):
+                      ratings["perf"].append(int(m.group(1)))
+                      ratings["creativity"].append(int(m.group(2)))
+                      ratings["value"].append(int(m.group(3)))
+          except Exception:
+              pass
+          avg = {}
+          for k, vs in ratings.items():
+              avg[k] = (round(sum(vs) / len(vs), 2), len(vs)) if vs else (None, 0)
+
           # Security pulse
           try:
               sec = s.get(BASE + "/admin/ops/security/audit",
@@ -124,6 +147,13 @@ jobs:
             <li><b>Feedback rows:</b> {counts.get('feedback','?')}</li>
             <li><b>Tickets rows:</b> {counts.get('tickets','?')}</li>
             <li><b>Beta signups rows:</b> {counts.get('beta_signups','?')}</li>
+          </ul>
+
+          <h4>Beta rating averages (so far)</h4>
+          <ul>
+            <li><b>Performance:</b> {avg['perf'][0] if avg['perf'][0] is not None else 'no ratings yet'} {f"(n={{avg['perf'][1]}})" if avg['perf'][1] else ''}</li>
+            <li><b>Creativity:</b>  {avg['creativity'][0] if avg['creativity'][0] is not None else 'no ratings yet'} {f"(n={{avg['creativity'][1]}})" if avg['creativity'][1] else ''}</li>
+            <li><b>Value:</b>       {avg['value'][0] if avg['value'][0] is not None else 'no ratings yet'} {f"(n={{avg['value'][1]}})" if avg['value'][1] else ''}</li>
           </ul>
 
           <h4>Security pulse</h4>

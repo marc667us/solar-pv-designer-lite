@@ -580,6 +580,15 @@ def init_db():
             except Exception:
                 pass
 
+        # Migrate: beta_feedback rating columns (3 axes for evaluators).
+        # Wrapped in try/except per column so reruns are idempotent on SQLite.
+        for col in ["perf_score", "creativity_score", "value_score"]:
+            try:
+                with get_db() as c:
+                    c.execute(f"ALTER TABLE beta_feedback ADD COLUMN {col} INTEGER")
+            except Exception:
+                pass
+
     # ── Seed phase — runs on BOTH backends ─────────────────────────────
     # All operations below are row-level INSERT/UPDATE/SELECT, not DDL,
     # and work identically on SQLite + Postgres through the adapter.
@@ -9896,6 +9905,66 @@ def submit_feedback():
         "<p><a href='https://solarpro.aiappinvent.com/admin/feedback'>View feedback</a></p>",
         from_addr=EMAIL_SUPPORT)
     return jsonify({"ok": True, "msg": "Feedback submitted. Thank you!"})
+
+
+@app.route("/rate", methods=["GET"])
+@login_required
+def rate_form():
+    """GET the beta rating form. The submit POSTs to /rate which
+    writes to beta_feedback with type='rating' and the three score
+    columns populated."""
+    return render_template("rate.html", user=current_user())
+
+
+@app.route("/rate", methods=["POST"])
+@login_required
+def submit_rating():
+    """Persist a 3-axis beta rating into beta_feedback. The three
+    scores are clamped to 1..5 server-side so the slider UI cannot
+    bypass the contract. Optional comment lives in the message column."""
+    csrf_protect()
+    def _clamp(name):
+        try:
+            v = int(request.form.get(name, "0"))
+        except (TypeError, ValueError):
+            v = 0
+        return max(1, min(5, v))
+    perf       = _clamp("perf_score")
+    creativity = _clamp("creativity_score")
+    value      = _clamp("value_score")
+    comment    = (request.form.get("message") or "").strip()
+    page       = (request.form.get("page") or "").strip()
+    if not any([perf, creativity, value]):
+        return jsonify({"ok": False, "msg": "Pick at least one score"}), 400
+    with get_db() as c:
+        u = c.execute("SELECT username, email FROM users WHERE id=?",
+                      (session["user_id"],)).fetchone()
+    username = u["username"] if u else ""
+    uemail   = u["email"]    if u else ""
+    # Compose a short summary line into the message column too, so the
+    # admin /admin/feedback view shows the rating context at a glance.
+    summary = f"Performance={perf}/5  Creativity={creativity}/5  Value={value}/5"
+    full_msg = summary + ("\n\n" + comment if comment else "")
+    with get_db() as c:
+        c.execute(
+            "INSERT INTO beta_feedback (user_id, username, email, type, message, "
+            "page, perf_score, creativity_score, value_score) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (session["user_id"], username, uemail, "rating", full_msg, page,
+             perf, creativity, value))
+    _send_email(
+        EMAIL_SUPPORT,
+        "[RATING] " + summary + " from " + username,
+        "<h3>Beta Rating</h3><p><b>From:</b> " + username + " (" + uemail + ")<br>"
+        "<b>Page:</b> " + (page or "N/A") + "</p>"
+        "<table style=\"border-collapse:collapse\"><tr><td style=\"padding:4px 12px\"><b>Performance</b></td><td style=\"padding:4px 12px\">"
+        + str(perf) + "/5</td></tr><tr><td style=\"padding:4px 12px\"><b>Creativity</b></td><td style=\"padding:4px 12px\">"
+        + str(creativity) + "/5</td></tr><tr><td style=\"padding:4px 12px\"><b>Value</b></td><td style=\"padding:4px 12px\">"
+        + str(value) + "/5</td></tr></table>"
+        + ("<p><b>Comment:</b><br>" + comment + "</p>" if comment else "")
+        + "<p><a href=\"https://solarpro.aiappinvent.com/admin/feedback\">View ratings</a></p>",
+        from_addr=EMAIL_SUPPORT)
+    return jsonify({"ok": True, "msg": "Rating submitted. Thank you!"})
 
 
 @app.route("/admin/beta")
