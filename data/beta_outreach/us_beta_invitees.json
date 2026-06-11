@@ -17,18 +17,6 @@
       "notes": "Multi-state operator; PV + battery + EV bundled."
     },
     {
-      "name": "Infinity Solar USA",
-      "roles": ["installer"],
-      "services": "Custom solar system design + install, maintenance, battery storage, EV charger installation; nationwide US coverage",
-      "address": "12545 NE Whitaker Way, Portland, OR 97230",
-      "city": "Portland, OR (nationwide)",
-      "email": "sales@infinitysolarusa.com",
-      "phones": ["+1 800 818 0598"],
-      "contact_person": null,
-      "website": "https://www.infinitysolarusa.com/",
-      "notes": "Licensed professionals; multi-state."
-    },
-    {
       "name": "Renova Energy",
       "roles": ["installer"],
       "services": "Residential + commercial solar, SunPower Elite dealer, battery storage, micro-grid solutions",
