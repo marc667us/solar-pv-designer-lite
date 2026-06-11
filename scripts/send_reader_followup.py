@@ -85,7 +85,7 @@ tender radar + one design end-to-end. Reply with a time that works.</p>
 """
 
 
-def load_readers(invitees_only: bool) -> list[dict]:
+def load_readers(invitees_only: bool, include_owner_preview: bool) -> list[dict]:
     if not READERS_PATH.exists():
         sys.exit(f"missing {READERS_PATH} — run list_beta_readers.py first "
                  f"(or trigger the List beta readers workflow)")
@@ -93,6 +93,11 @@ def load_readers(invitees_only: bool) -> list[dict]:
     openers = doc.get("openers", [])
     if invitees_only:
         openers = [r for r in openers if r.get("in_invitee_list")]
+    if not include_owner_preview:
+        # Default: skip owner's own preview accounts — they don't get a
+        # "what stopped you?" email from themselves.
+        openers = [r for r in openers
+                   if (r.get("invitee_country") or "").lower() != "owner preview"]
     return openers
 
 
@@ -150,9 +155,14 @@ def main() -> int:
                     help="actually send (default is dry-run)")
     ap.add_argument("--all-openers", action="store_true",
                     help="include non-invitee openers too (default: invitees only)")
+    ap.add_argument("--include-owner-preview", action="store_true",
+                    help="include owner's preview accounts (default: exclude)")
     args = ap.parse_args()
 
-    readers = load_readers(invitees_only=not args.all_openers)
+    readers = load_readers(
+        invitees_only=not args.all_openers,
+        include_owner_preview=args.include_owner_preview,
+    )
     log = load_sent_log()
     today = dt.date.today().isoformat()
 
