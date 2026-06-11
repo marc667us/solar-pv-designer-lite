@@ -10073,6 +10073,129 @@ def admin_beta_status():
     return redirect(url_for("admin_beta"))
 
 
+# ─── Autonomous Agents dashboard ───────────────────────────────
+# In-app read-out for the 5 cron workflows (beta-monitor, agent-triage,
+# synthetic-health, email-delivery-check, daily-digest). All execution
+# happens in GH Actions; this page is just the admin-facing surface so
+# the operator does not need to leave the app to know what they did.
+
+_GH_REPO = "marc667us/solar-pv-designer-lite"
+
+_AGENT_SPECS = [
+    {
+        "key":         "beta-monitor",
+        "name":        "Beta Monitor",
+        "cadence":     "every 30 min",
+        "icon":        "bi-broadcast-pin",
+        "color":       "#22c55e",
+        "purpose":     "Polls /admin/feedback + /admin/tickets + /admin/beta plus three security probes; alerts on any new aggregate-count change.",
+        "state_file":  "data/response_state.json",
+        "workflow":    "beta-monitor.yml",
+    },
+    {
+        "key":         "agent-triage",
+        "name":        "Agent Triage",
+        "cadence":     "hourly HH:23",
+        "icon":        "bi-robot",
+        "color":       "#fbbf24",
+        "purpose":     "Per-item: LLM classify -> Brevo ACK -> GH issue create if severity high+. Tier 2-4 of the autonomous stack.",
+        "state_file":  "data/agent_state.json",
+        "workflow":    "agent-triage.yml",
+    },
+    {
+        "key":         "synthetic-health",
+        "name":        "Synthetic Health",
+        "cadence":     "hourly HH:17",
+        "icon":        "bi-heart-pulse",
+        "color":       "#0ea5e9",
+        "purpose":     "End-to-end critical-user-path walk: landing -> admin login -> create project -> design engine -> proposal PDF. Red on any step failure.",
+        "state_file":  None,
+        "workflow":    "synthetic-health.yml",
+    },
+    {
+        "key":         "email-delivery-check",
+        "name":        "Email Delivery Check",
+        "cadence":     "every 2h HH:37",
+        "icon":        "bi-envelope-check",
+        "color":       "#a855f7",
+        "purpose":     "Polls Brevo events API for bounces / blocks / spam complaints / deferrals against the SolarPro sender domain.",
+        "state_file":  "data/email_delivery_state.json",
+        "workflow":    "email-delivery-check.yml",
+    },
+    {
+        "key":         "daily-digest",
+        "name":        "Daily Digest",
+        "cadence":     "09:00 UTC daily",
+        "icon":        "bi-calendar-week",
+        "color":       "#f43f5e",
+        "purpose":     "One-shot owner summary of last-24h response volumes, rating averages, security pulse, and synthetic-health conclusions.",
+        "state_file":  None,
+        "workflow":    "daily-digest.yml",
+    },
+]
+
+
+def _agent_state_rows(state_dict):
+    """Flatten the state dict into [(label, value)] for table render.
+    Skips the long human-prose `note` and the bulky alerted_event_keys
+    list (which is just dedup history, not operator-visible signal)."""
+    if not isinstance(state_dict, dict):
+        return []
+    skip = {"note", "alerted_event_keys", "actions_this_run",
+            "alerts_this_poll"}
+    rows = []
+    for k, v in state_dict.items():
+        if k in skip: continue
+        if isinstance(v, dict):
+            # Flatten one level so security_audit + totals etc. show inline
+            small = ", ".join(f"{k2}={v2}" for k2, v2 in v.items()
+                                  if not isinstance(v2, (dict, list)))[:200]
+            rows.append((k, small or "(nested)"))
+        elif isinstance(v, list):
+            rows.append((k, f"list ({len(v)} entries)"))
+        else:
+            rows.append((k, str(v)[:200]))
+    return rows
+
+
+@app.route("/admin/agents")
+@admin_required
+def admin_agents():
+    """Read each cron's state file from disk and render the dashboard."""
+    import json as _json
+    root = os.path.dirname(os.path.abspath(__file__))
+    agents = []
+    for spec in _AGENT_SPECS:
+        state = None
+        if spec["state_file"]:
+            sp = os.path.join(root, spec["state_file"])
+            if os.path.exists(sp):
+                try:
+                    state = _json.load(open(sp, "r", encoding="utf-8"))
+                except Exception:
+                    state = None
+        agents.append({
+            "key":          spec["key"],
+            "name":         spec["name"],
+            "cadence":      spec["cadence"],
+            "icon":         spec["icon"],
+            "color":        spec["color"],
+            "purpose":      spec["purpose"],
+            "state":        state,
+            "state_rows":   _agent_state_rows(state) if state else [],
+            "runs_url":
+                f"https://github.com/{_GH_REPO}/actions/workflows/"
+                f"{spec['workflow']}",
+            "dispatch_url":
+                f"https://github.com/{_GH_REPO}/actions/workflows/"
+                f"{spec['workflow']}",
+            "file_url":
+                f"https://github.com/{_GH_REPO}/blob/master/.github/"
+                f"workflows/{spec['workflow']}",
+        })
+    return render_template("admin_agents.html", agents=agents)
+
+
 # ─── Tier 2-4 agent-triage JSON API ─────────────────────────────
 # JSON-returning siblings to /admin/{feedback,tickets,beta} so the
 # hourly agent-triage workflow (.github/workflows/agent-triage.yml)

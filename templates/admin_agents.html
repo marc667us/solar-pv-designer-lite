@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Autonomous Agents — SolarPro Admin{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:1100px">
+
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="fw-bold mb-0">
+        <i class="bi bi-robot text-warning me-2"></i>Autonomous Agents
+      </h2>
+      <p class="text-muted mb-0 small">
+        State of the five cron workflows that monitor + triage the beta surface.
+        All execution happens in GitHub Actions; this page is the in-app
+        read-out so you don't need to leave the admin to know what they did.
+      </p>
+    </div>
+    <a class="btn btn-outline-warning btn-sm"
+       href="https://github.com/marc667us/solar-pv-designer-lite/actions"
+       target="_blank" rel="noopener">
+      <i class="bi bi-box-arrow-up-right me-1"></i>GitHub Actions
+    </a>
+  </div>
+
+  <!-- One card per agent — server-rendered from the committed state files
+       under data/. Cards link to the matching workflow run history; the
+       "Trigger" buttons open the GitHub Actions UI with the workflow_dispatch
+       form pre-selected so you can run on demand. -->
+  <div class="row g-3">
+
+  {% for a in agents %}
+    <div class="col-md-6">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-header d-flex align-items-center">
+          <i class="bi {{ a.icon }} me-2" style="color:{{ a.color }}"></i>
+          <strong>{{ a.name }}</strong>
+          <span class="badge ms-2"
+                style="background:{{ a.color }}22;color:{{ a.color }};border:1px solid {{ a.color }}55">
+            {{ a.cadence }}
+          </span>
+          <a class="ms-auto small" href="{{ a.runs_url }}"
+             target="_blank" rel="noopener" style="font-size:11px">
+            recent runs &rarr;
+          </a>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">{{ a.purpose }}</p>
+
+          {% if a.state %}
+            <table class="table table-sm table-dark table-borderless mb-3" style="font-size:12.5px">
+              {% for k, v in a.state_rows %}
+                <tr>
+                  <td class="text-muted" style="width:42%">{{ k }}</td>
+                  <td><code style="color:#fbbf24">{{ v }}</code></td>
+                </tr>
+              {% endfor %}
+            </table>
+          {% else %}
+            <div class="alert alert-secondary py-2 small mb-3">
+              No state file on disk yet — the agent has not run, or runs without
+              persistent state (see runs link above).
+            </div>
+          {% endif %}
+
+          <div class="d-flex gap-2">
+            <a class="btn btn-sm btn-outline-warning"
+               href="{{ a.dispatch_url }}"
+               target="_blank" rel="noopener">
+              <i class="bi bi-play-circle me-1"></i>Trigger
+            </a>
+            <a class="btn btn-sm btn-outline-secondary"
+               href="{{ a.file_url }}"
+               target="_blank" rel="noopener">
+              <i class="bi bi-file-code me-1"></i>Workflow file
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+
+  </div>
+
+  <div class="mt-4 small text-muted">
+    <strong>Where the state lives:</strong>
+    state JSON files committed to <code>data/</code> after each cron run.
+    Render auto-redeploys on each commit so this page always reads the
+    freshest snapshot.
+  </div>
+
+</div>
+{% endblock %}
