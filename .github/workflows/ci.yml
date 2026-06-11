@@ -100,7 +100,8 @@ jobs:
         run: pip install -r requirements.txt pytest
 
       - name: Syntax check web_app.py
-        run: python -c "import ast; ast.parse(open('web_app.py','rb').read()); print('web_app.py: syntax OK')"
+        run: |
+          python -c "import ast; ast.parse(open('web_app.py','rb').read()); print('web_app.py: syntax OK')"
 
       - name: Run smoke tests
         env:
