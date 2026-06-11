@@ -27,6 +27,18 @@
       "contact_person": null,
       "website": "",
       "notes": "Preview channel only. Not part of the public outreach tally."
+    },
+    {
+      "name": "Marc (Yahoo)",
+      "roles": ["preview"],
+      "services": "Owner Yahoo inbox — fallback after the Gmail copies didn't land.",
+      "address": "",
+      "city": "",
+      "email": "marc667us@yahoo.com",
+      "phones": [],
+      "contact_person": null,
+      "website": "",
+      "notes": "Preview channel only. Not part of the public outreach tally."
     }
   ]
 }

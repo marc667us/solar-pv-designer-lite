@@ -10073,6 +10073,81 @@ def admin_beta_status():
     return redirect(url_for("admin_beta"))
 
 
+# ─── Tier 2-4 agent-triage JSON API ─────────────────────────────
+# JSON-returning siblings to /admin/{feedback,tickets,beta} so the
+# hourly agent-triage workflow (.github/workflows/agent-triage.yml)
+# can fetch per-item records (id + body + submitter) without scraping
+# the Jinja-rendered admin pages.
+
+def _rows_to_json(rows):
+    """Convert sqlite3.Row / DictCursor rows to plain dicts. Strips
+    nothing — callers can drop fields per their need (e.g. the
+    agent only needs id + message + email)."""
+    out = []
+    for r in rows:
+        try:
+            out.append({k: r[k] for k in r.keys()})
+        except Exception:
+            # Fall back to positional access if .keys() unavailable.
+            out.append(dict(r) if hasattr(r, "keys") else list(r))
+    return out
+
+def _limit_since(default=50, max_=200):
+    """Parse `?limit=N&since=ID` query params. Server-side clamps
+    keep an over-eager agent from pulling 10k rows in one call."""
+    try:
+        limit = int(request.args.get("limit", default))
+    except (TypeError, ValueError):
+        limit = default
+    limit = max(1, min(max_, limit))
+    try:
+        since = int(request.args.get("since", "0"))
+    except (TypeError, ValueError):
+        since = 0
+    return limit, since
+
+
+@app.route("/admin/api/feedback")
+@admin_required
+def admin_api_feedback():
+    limit, since = _limit_since()
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT * FROM beta_feedback WHERE id > ? ORDER BY id DESC LIMIT ?",
+            (since, limit),
+        ).fetchall()
+    return jsonify({"ok": True, "items": _rows_to_json(rows),
+                    "count": len(rows), "since": since, "limit": limit})
+
+
+@app.route("/admin/api/tickets")
+@admin_required
+def admin_api_tickets():
+    limit, since = _limit_since()
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT t.*, u.email AS submitter_email, u.username AS submitter_username "
+            "FROM tickets t LEFT JOIN users u ON t.user_id = u.id "
+            "WHERE t.id > ? ORDER BY t.id DESC LIMIT ?",
+            (since, limit),
+        ).fetchall()
+    return jsonify({"ok": True, "items": _rows_to_json(rows),
+                    "count": len(rows), "since": since, "limit": limit})
+
+
+@app.route("/admin/api/beta_signups")
+@admin_required
+def admin_api_beta_signups():
+    limit, since = _limit_since()
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT * FROM beta_signups WHERE id > ? ORDER BY id DESC LIMIT ?",
+            (since, limit),
+        ).fetchall()
+    return jsonify({"ok": True, "items": _rows_to_json(rows),
+                    "count": len(rows), "since": since, "limit": limit})
+
+
 @app.route("/admin/feedback")
 @admin_required
 def admin_feedback():
