@@ -1,0 +1,46 @@
+# List beta invitees who opened the launch email.
+# Manual trigger. Queries Brevo events, cross-references the invitee
+# JSON files, commits the result to data/beta_outreach/readers_to_follow_up.json.
+name: List beta readers
+
+on:
+  workflow_dispatch:
+    inputs:
+      window_days:
+        description: "Look-back window in days"
+        required: false
+        default: "14"
+
+permissions:
+  contents: write
+
+jobs:
+  list-readers:
+    name: Query Brevo + commit reader list
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run reader query
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          READER_WINDOW_DAYS: ${{ github.event.inputs.window_days }}
+        run: |
+          python scripts/list_beta_readers.py
+
+      - name: Commit reader list
+        run: |
+          git config user.name  "List Beta Readers"
+          git config user.email "actions@github.com"
+          git add data/beta_outreach/readers_to_follow_up.json
+          if git diff --cached --quiet; then
+            echo "no changes to commit"
+          else
+            git commit -m "chore(beta-readers): refresh list at $(date -u +%FT%TZ)"
+            git push
+          fi

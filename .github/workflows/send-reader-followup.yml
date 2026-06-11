@@ -1,0 +1,70 @@
+# Send the "what stopped you?" follow-up to invitees who opened the
+# launch email. Two-stage safety: dry-run by default; set actually_send
+# to "true" to fire. Reads data/beta_outreach/readers_to_follow_up.json
+# which must be refreshed by the List beta readers workflow first.
+name: Send reader follow-up
+
+on:
+  workflow_dispatch:
+    inputs:
+      actually_send:
+        description: 'Set to "true" to actually send. Anything else = dry-run.'
+        required: true
+        default: "false"
+      include_non_invitees:
+        description: 'Include opens from emails not on the invitee list?'
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+jobs:
+  send-followup:
+    name: Send follow-up via Brevo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Plan (dry-run preview) — always runs
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+        run: |
+          set -e
+          ARGS=""
+          if [ "${{ github.event.inputs.include_non_invitees }}" = "true" ]; then
+            ARGS="$ARGS --all-openers"
+          fi
+          python scripts/send_reader_followup.py $ARGS
+
+      - name: Actually send
+        if: ${{ github.event.inputs.actually_send == 'true' }}
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          SMTP_FROM:     sales@aiappinvent.com
+          FOLLOWUP_REPLY_TO: marc@aiappinvent.com
+        run: |
+          set -e
+          ARGS="--send"
+          if [ "${{ github.event.inputs.include_non_invitees }}" = "true" ]; then
+            ARGS="$ARGS --all-openers"
+          fi
+          python scripts/send_reader_followup.py $ARGS
+
+      - name: Commit sent-log
+        if: ${{ github.event.inputs.actually_send == 'true' }}
+        run: |
+          git config user.name  "Send Reader Followup"
+          git config user.email "actions@github.com"
+          git add data/beta_outreach/followup_sent_log.json
+          if git diff --cached --quiet; then
+            echo "no changes to commit"
+          else
+            git commit -m "chore(reader-followup): sent log $(date -u +%FT%TZ)"
+            git push
+          fi
