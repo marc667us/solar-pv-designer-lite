@@ -1,0 +1,81 @@
+{
+  "generated_at": "2026-06-11T21:14:05.175243+00:00",
+  "window_days": 14,
+  "total_opened_events": 28,
+  "unique_openers_total": 9,
+  "unique_openers_among_invitees": 9,
+  "openers": [
+    {
+      "email": "kafedzie@gmail.com",
+      "first_open": "2026-06-08T00:16:22.252Z",
+      "open_count": 15,
+      "in_invitee_list": true,
+      "invitee_name": "Marc (Owner Preview)",
+      "invitee_country": "Owner Preview"
+    },
+    {
+      "email": "marc667us@yahoo.com",
+      "first_open": "2026-06-09T12:50:42.955Z",
+      "open_count": 4,
+      "in_invitee_list": true,
+      "invitee_name": "Marc (Yahoo)",
+      "invitee_country": "Owner Preview"
+    },
+    {
+      "email": "info@acen-solar.co.uk",
+      "first_open": "2026-06-10T23:44:28.430Z",
+      "open_count": 2,
+      "in_invitee_list": true,
+      "invitee_name": "Acen Solar",
+      "invitee_country": "United Kingdom"
+    },
+    {
+      "email": "info@dysonenergysolar.com",
+      "first_open": "2026-06-11T06:40:06.019Z",
+      "open_count": 2,
+      "in_invitee_list": true,
+      "invitee_name": "Dyson Energy Solar",
+      "invitee_country": "ghana_beta_invitees"
+    },
+    {
+      "email": "iestxsolar@ies-co.com",
+      "first_open": "2026-06-10T23:43:14.229Z",
+      "open_count": 1,
+      "in_invitee_list": true,
+      "invitee_name": "IES Texas Solar",
+      "invitee_country": "United States"
+    },
+    {
+      "email": "info@cambridge-solar.co.uk",
+      "first_open": "2026-06-10T23:44:23.451Z",
+      "open_count": 1,
+      "in_invitee_list": true,
+      "invitee_name": "Cambridge Solar",
+      "invitee_country": "United Kingdom"
+    },
+    {
+      "email": "info@crgdirect.co.uk",
+      "first_open": "2026-06-11T07:22:14.001Z",
+      "open_count": 1,
+      "in_invitee_list": true,
+      "invitee_name": "CRG Direct",
+      "invitee_country": "United Kingdom"
+    },
+    {
+      "email": "info@renovaenergy.com",
+      "first_open": "2026-06-10T23:43:01.346Z",
+      "open_count": 1,
+      "in_invitee_list": true,
+      "invitee_name": "Renova Energy",
+      "invitee_country": "United States"
+    },
+    {
+      "email": "info@spiritenergy.co.uk",
+      "first_open": "2026-06-10T23:44:18.292Z",
+      "open_count": 1,
+      "in_invitee_list": true,
+      "invitee_name": "Spirit Energy",
+      "invitee_country": "United Kingdom"
+    }
+  ]
+}
