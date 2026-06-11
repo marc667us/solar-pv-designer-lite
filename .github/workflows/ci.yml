@@ -107,6 +107,8 @@ jobs:
         env:
           SECRET_KEY: test-secret-key-for-ci
           APP_ENV: test
+          SOLARPRO_ADMIN_PASSWORD: test-admin-password-for-ci
+          SOLARPRO_OWNER_PASSWORD: test-owner-password-for-ci
         run: |
           python -c "
           import os, sys
@@ -128,6 +130,8 @@ jobs:
           SECRET_KEY: test-secret-key-for-ci
           APP_ENV: test
           TESTING: "1"
+          SOLARPRO_ADMIN_PASSWORD: test-admin-password-for-ci
+          SOLARPRO_OWNER_PASSWORD: test-owner-password-for-ci
         run: |
           if [ -d tests ] && ls tests/*.py >/dev/null 2>&1; then
             pytest tests/ -v
@@ -145,6 +149,8 @@ jobs:
           SECRET_KEY: test-secret-key-for-ci
           APP_ENV: test
           TESTING: "1"
+          SOLARPRO_ADMIN_PASSWORD: test-admin-password-for-ci
+          SOLARPRO_OWNER_PASSWORD: test-owner-password-for-ci
         continue-on-error: true
         run: |
           shopt -s nullglob
