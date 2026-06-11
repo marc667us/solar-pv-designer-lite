@@ -147,25 +147,32 @@ def build_square():
         for li, bl in enumerate(body.split("\n")):
             d.text((x + 22, tile_y + 86 + li * 26), bl, font=body_f, fill=TEXT)
 
-    # CTA — gold filled rounded button
-    cta_text = "Start Free — 14 Day Trial — No Card"
-    cta_f = font(F_ARIAL_BOLD, 32)
-    cw, ch = measure(d, cta_text, cta_f)
-    cx0 = (W - (cw + 80)) // 2
-    cy0 = tile_y + tile_h + 38
-    rounded_rect(d, (cx0, cy0, cx0 + cw + 80, cy0 + ch + 30), 32, fill=GOLD)
-    d.text((cx0 + 40, cy0 + 15), cta_text, font=cta_f, fill=BG_DEEP)
+    # "VISIT THE PLATFORM" — explicit call-to-action label
+    label = "VISIT THE PLATFORM"
+    label_f = font(F_ARIAL_BOLD, 22)
+    lw, lh = measure(d, label, label_f)
+    label_y = tile_y + tile_h + 44
+    d.text(((W - lw) // 2, label_y), label, font=label_f, fill=GOLD_LIGHT)
 
-    # URL
-    url = "solarpro.aiappinvent.com"
-    url_f = font(F_ARIAL_BOLD, 30)
-    uw, uh = measure(d, url, url_f)
-    d.text(((W - uw) // 2, cy0 + ch + 90), url, font=url_f, fill=TEXT)
+    # URL itself IS the gold-pill CTA — biggest, most prominent
+    url_text = "solarpro.aiappinvent.com"
+    url_f = font(F_ARIAL_BLACK, 44)
+    uw, uh = measure(d, url_text, url_f)
+    cx0 = (W - (uw + 80)) // 2
+    cy0 = label_y + lh + 22
+    rounded_rect(d, (cx0, cy0, cx0 + uw + 80, cy0 + uh + 34), 38, fill=GOLD)
+    d.text((cx0 + 40, cy0 + 12), url_text, font=url_f, fill=BG_DEEP)
+
+    # Trust line under URL — what you get when you visit
+    sub_cta = "Start Free  ·  14 Day Trial  ·  No Card Required"
+    sc_f = font(F_ARIAL_BOLD, 22)
+    sw, _ = measure(d, sub_cta, sc_f)
+    d.text(((W - sw) // 2, cy0 + uh + 62), sub_cta, font=sc_f, fill=TEXT)
 
     # Brand mark — bottom
     brand = "SolarPro Global"
     bf = font(F_ARIAL_BOLD, 22)
-    bw2, bh2 = measure(d, brand, bf)
+    bw2, _ = measure(d, brand, bf)
     d.text(((W - bw2) // 2, H - 70), brand, font=bf, fill=MUTED)
 
     out = OUT_DIR / "SolarPro_Beta_Flyer_1080.png"
@@ -226,7 +233,7 @@ def build_wide():
     d.text((R_X + 28, card_y + 78), "Start Free.", font=title_f, fill=TEXT)
     d.text((R_X + 28, card_y + 120), "14 Day Trial.", font=title_f, fill=TEXT)
 
-    # Card body — value bullets
+    # Card body — value bullets (tighter to make room for VISIT block)
     body_f = font(F_ARIAL, 18)
     bullets = [
         "Live tender + RFP feed",
@@ -234,20 +241,26 @@ def build_wide():
         "BOQ + financial proposal",
         "BS 7671 / IEC 60364 compliant",
     ]
-    by = card_y + 200
+    by = card_y + 188
     for b in bullets:
         d.text((R_X + 28, by), "•", font=body_f, fill=GOLD)
         d.text((R_X + 50, by), b, font=body_f, fill=TEXT)
-        by += 32
+        by += 28
 
-    # CTA pill at bottom of card
+    # "VISIT" prompt above URL pill — explicit direction
+    visit_f = font(F_ARIAL_BOLD, 14)
+    visit = "VISIT THE PLATFORM"
+    vw, _ = measure(d, visit, visit_f)
+    d.text((R_X + (card_w - vw) // 2, card_y + card_h - 96), visit, font=visit_f, fill=GOLD_LIGHT)
+
+    # URL pill at bottom of card — the action target
     cta = "solarpro.aiappinvent.com"
-    cta_f = font(F_ARIAL_BOLD, 22)
+    cta_f = font(F_ARIAL_BLACK, 24)
     cw, ch = measure(d, cta, cta_f)
     cx0 = R_X + (card_w - (cw + 40)) // 2
     cy0 = card_y + card_h - 70
     rounded_rect(d, (cx0, cy0, cx0 + cw + 40, cy0 + ch + 22), 26, fill=GOLD)
-    d.text((cx0 + 20, cy0 + 10), cta, font=cta_f, fill=BG_DEEP)
+    d.text((cx0 + 20, cy0 + 9), cta, font=cta_f, fill=BG_DEEP)
 
     # Brand mark — bottom left
     brand = "SolarPro Global"
