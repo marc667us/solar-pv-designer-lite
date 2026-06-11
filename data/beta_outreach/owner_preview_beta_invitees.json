@@ -15,6 +15,18 @@
       "contact_person": null,
       "website": "",
       "notes": "Preview channel only. Not part of the public outreach tally."
+    },
+    {
+      "name": "Marc (Owner Preview 2)",
+      "roles": ["preview"],
+      "services": "Second owner preview address — added 2026-06-10 on owner request.",
+      "address": "",
+      "city": "",
+      "email": "kafedie@gmail.com",
+      "phones": [],
+      "contact_person": null,
+      "website": "",
+      "notes": "Preview channel only. Not part of the public outreach tally."
     }
   ]
 }
