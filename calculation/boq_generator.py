@@ -72,7 +72,7 @@ def generate_boq(pv_kw, num_panels, battery_kwh, num_batteries, inverter_kw):
     #   Trunking : 900 GHS per lot (PVC trunking + conduit, BS EN 61386)
     #   Misc     : 600 GHS allowance (connectors, MC4, labels, cable ties)
     items = [
-        (1,  f"Solar PV Modules (400 Wp each)",                  num_panels,    "No.", 1_600.00),
+        (1,  f"PV Solar Modules (400 Wp each)",                  num_panels,    "No.", 1_600.00),
         (2,  f"Hybrid Inverter ({inverter_kw:.1f}kW, 415/230V)", 1,             "No.", inv_basic),
         (3,  "Battery Units (2.4 kWh LiFePO4 each)",             num_batteries, "No.", 3_800.00),
         (4,  "PV Mounting Structure (rail + clamps)",             num_panels,    "No.",   280.00),
@@ -102,7 +102,7 @@ def generate_boq(pv_kw, num_panels, battery_kwh, num_batteries, inverter_kw):
     lines = [
         "BILL OF QUANTITIES (BoQ)",
         "=" * len(header),
-        "Project  : Solar PV Off-Grid System",
+        "Project  : PV Solar Off-Grid System",
         "Location : Ghana",
         "Standard : BS 7671:2018 (18th Edition)",
         "Voltage  : 415/230V AC, 50 Hz",

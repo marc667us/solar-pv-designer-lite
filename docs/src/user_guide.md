@@ -1,5 +1,5 @@
 # SolarPro Global — User Guide
-## End-to-end workflow for solar PV designers in Ghana
+## End-to-end workflow for pv solar designers in Ghana
 
 **Version:** 2026-06-05 (beta)
 **Audience:** Solar engineers, designers, project leads — at installer and supplier companies.

@@ -86,7 +86,7 @@ jobs:
           <p>Dear <strong>{company}</strong> team,</p>
           <p>I'm Marc - founder of <strong>AI App Invent</strong> and the engineer behind
           <a href="https://solarpro.aiappinvent.com">SolarPro Global</a>, a new web app
-          that turns a customer's daily load schedule into a full solar PV design
+          that turns a customer's daily load schedule into a full pv solar design
           package in under five minutes:</p>
           <ul>
             <li>BS 7671 / IEC 60364 compliant sizing for PV, battery, inverter and MPPT</li>

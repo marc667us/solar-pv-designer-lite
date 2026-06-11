@@ -10,7 +10,7 @@ Patches:
   1. export_pdf_boq          (BOQ — Bill of Quantities)
   2. export_pdf_installation (Installation Report)
   3. export_pdf_pv           (PV System Design Report)
-  4. export_pdf_proposal     (Solar PV Proposal)
+  4. export_pdf_proposal     (PV Solar Proposal)
 
 Re-running is safe: each patch checks for a marker first.
 """
@@ -72,7 +72,7 @@ ROUTES = [
     (b"return _render_pdf(f\"Bill of Quantities", "BOQ"),
     (b"return _render_pdf(f\"Installation Report", "Installation"),
     (b"return _render_pdf(f\"PV System Design Report", "PV"),
-    (b"return _render_pdf(f\"Solar PV Proposal", "Proposal"),
+    (b"return _render_pdf(f\"PV Solar Proposal", "Proposal"),
 ]
 # Each route: insert `md = _diagrams_markdown(d, r) + md\r\n    ` directly
 # before the `return _render_pdf(...)` line. The indent is 4 spaces (route body).

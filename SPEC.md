@@ -19,7 +19,7 @@ The platform shall support:
 
 The system will automate:
 - Load analysis
-- Solar PV sizing
+- PV Solar sizing
 - Battery sizing
 - Inverter sizing
 - Electrical distribution design
@@ -38,7 +38,7 @@ deployable and not restricted to any specific geographical region.
 ## 2. Project Objectives
 The software shall:
 - Perform accurate electrical load analysis.
-- Design complete solar PV systems.
+- Design complete pv solar systems.
 - Calculate energy consumption and demand.
 - Size solar panels, batteries, inverters, and charge controllers.
 - Perform electrical cable sizing and protection calculations.

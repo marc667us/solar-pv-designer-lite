@@ -339,10 +339,10 @@ def generate_economic_impact(pv_kw, num_panels, battery_kwh, num_batteries,
         div,
         "  PV SOLAR ECONOMIC IMPACT REPORT",
         div,
-        f"  Project  : Solar PV Off-Grid System",
+        f"  Project  : PV Solar Off-Grid System",
         f"  Region   : {SELECTED_REGION}",
         f"  System   : {pv_kw:.2f} kWp  |  {battery_kwh:.2f} kWh Battery  |  {inverter_kw:.2f} kW Inverter",
-        f"  Tool     : Solar PV Designer Lite",
+        f"  Tool     : SolarPro Global — PV Solar Designer Lite",
         div,
         "",
         "  ┌─────────────────────────────────────────────────────────────────┐",
@@ -604,7 +604,7 @@ def generate_economic_impact(pv_kw, num_panels, battery_kwh, num_batteries,
     <div class="rpt-meta">
       Region: <strong style="color:#fbbf24">{SELECTED_REGION}</strong> &nbsp;|&nbsp;
       System: <strong style="color:#38bdf8">{pv_kw:.2f} kWp · {battery_kwh:.2f} kWh · {inverter_kw:.2f} kW</strong> &nbsp;|&nbsp;
-      Tool: Solar PV Designer Lite
+      Tool: SolarPro Global — PV Solar Designer Lite
     </div>
   </div>
 
@@ -747,7 +747,7 @@ def generate_economic_impact(pv_kw, num_panels, battery_kwh, num_batteries,
   </div>
 
   <div class="foot">
-    Solar PV Designer Lite &nbsp;|&nbsp; Ghana &nbsp;|&nbsp; BS 7671:2018 &nbsp;|&nbsp;
+    SolarPro Global — PV Solar Designer Lite &nbsp;|&nbsp; Ghana &nbsp;|&nbsp; BS 7671:2018 &nbsp;|&nbsp;
     Rates: Ghana market data (April 2026). Subject to detailed design and site survey.
   </div>
 </div>

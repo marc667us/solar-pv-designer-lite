@@ -787,7 +787,7 @@
       <table class="table table-sm">
         <thead><tr><th>#</th><th>Description</th><th>Specification</th><th class="text-center">Qty</th><th>Unit</th><th>Remarks</th></tr></thead>
         <tbody>
-          <tr><td>1.1</td><td class="fw-bold">Solar PV Panels</td><td>{{ r.panel_wp if r.panel_wp else 400 }} Wp Monocrystalline PERC, Tier 1, Voc ≈ 24 V</td><td class="text-center text-warning fw-bold">{{ r.num_panels }}</td><td>Modules</td><td>{{ r.inv_brand.split(',')[0] if r.inv_brand else "Tier 1 brand" }} or equivalent</td></tr>
+          <tr><td>1.1</td><td class="fw-bold">PV Solar Panels</td><td>{{ r.panel_wp if r.panel_wp else 400 }} Wp Monocrystalline PERC, Tier 1, Voc ≈ 24 V</td><td class="text-center text-warning fw-bold">{{ r.num_panels }}</td><td>Modules</td><td>{{ r.inv_brand.split(',')[0] if r.inv_brand else "Tier 1 brand" }} or equivalent</td></tr>
           <tr><td>1.2</td><td class="fw-bold">Aluminium Mounting Rails</td><td>40×40 mm anodised aluminium, roof-compatible</td><td class="text-center text-warning fw-bold">{{ (r.num_panels * 1.2)|int }}</td><td>m (linear)</td><td>Includes 20% overlap allowance</td></tr>
           <tr><td>1.3</td><td class="fw-bold">Mid &amp; End Clamps</td><td>Stainless steel SS304, compatible with panel frame</td><td class="text-center text-warning fw-bold">{{ r.num_panels * 4 }}</td><td>Sets</td><td>2 mid + 2 end per panel</td></tr>
           <tr><td>1.4</td><td class="fw-bold">Roof Mounting Brackets / L-Feet</td><td>Galvanised steel or aluminium, tilt-adjustable</td><td class="text-center text-warning fw-bold">{{ (r.num_panels * 1.5)|int }}</td><td>No.</td><td>Spacing ≤ 1.2 m along rail</td></tr>
@@ -1047,10 +1047,10 @@
     <div class="row g-3 mb-4">
       {% for role,count,color,icon,quals,duties in [
         ("Project Engineer / Site Manager",1,"#0ea5e9","bi-person-badge-fill",
-          ["BEng Electrical Engineering (or equivalent)","17th/18th Edition BS 7671 Wiring Regulations","Solar PV System Design certification (MCS or equivalent)","IOSH Managing Safely / CSCS Gold Card"],
+          ["BEng Electrical Engineering (or equivalent)","17th/18th Edition BS 7671 Wiring Regulations","PV Solar System Design certification (MCS or equivalent)","IOSH Managing Safely / CSCS Gold Card"],
           ["Overall technical and programme responsibility","Prepare and maintain risk assessments and method statements","Approve all test results and sign off each phase","Client liaison and progress reporting","Escalate any design queries or site issues to design team","Sign and issue Installation Completion Certificate"]),
         ("Senior Electrical Technician",1,"#f59e0b","bi-tools",
-          ["City &amp; Guilds 2365 / NVQ Level 3 Electrical Installation","18th Edition BS 7671 (2391 Inspection &amp; Testing)","ECS Gold Card / Solar PV installation card","Working at Height certification"],
+          ["City &amp; Guilds 2365 / NVQ Level 3 Electrical Installation","18th Edition BS 7671 (2391 Inspection &amp; Testing)","ECS Gold Card / PV Solar installation card","Working at Height certification"],
           ["Lead all electrical installation activities","Perform and record all pre-commissioning and commissioning tests","Wire and terminate AC distribution board and all circuits","Configure inverter and battery management system settings","Verify all cable sizes and protection device ratings against design","Mentor and supervise electrical apprentice on site"]),
         ("Electrical Apprentice / Assistant",1,"#a78bfa","bi-person-fill",
           ["NVQ Level 2 Electrical Installation (or working toward)","Basic Working at Height awareness","Manual Handling certificate","CSCS Green Card"],

@@ -19,10 +19,10 @@ def generate_specification(pv_kw, num_panels, battery_kwh, num_batteries, invert
     lines = [
         "PV MASTER TECHNICAL SPECIFICATION",
         "=" * 60,
-        "Project  : Solar PV Off-Grid System",
+        "Project  : PV Solar Off-Grid System",
         "Location : Ghana",
         "Date     : 2026-04-10",
-        "Prepared : Solar PV Designer Lite",
+        "Prepared : SolarPro Global — PV Solar Designer Lite",
         "=" * 60,
         "",
         "1. PV MODULES",

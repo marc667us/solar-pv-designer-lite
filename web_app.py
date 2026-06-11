@@ -2147,7 +2147,7 @@ to configure SMTP_HOST, SMTP_USER, and SMTP_PASS in the Render dashboard.
 
 
 _TUTORIAL_USER_GUIDE_MD = """# SolarPro Global — Complete User Guide
-## Intelligent Solar PV Design & Financial Engineering Platform
+## Intelligent PV Solar Design & Financial Engineering Platform
 
 **Version 1.0 Â· solarpro.aiappinvent.com**
 
@@ -2155,7 +2155,7 @@ _TUTORIAL_USER_GUIDE_MD = """# SolarPro Global — Complete User Guide
 
 ## Welcome to SolarPro Global
 
-SolarPro Global is a professional solar PV design platform that takes you from
+SolarPro Global is a professional pv solar design platform that takes you from
 initial site assessment all the way through to a bankable financial proposal —
 in a single workflow. This guide walks you through every step.
 
@@ -4640,7 +4640,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62446
 
 | # | Description | Specification | Qty | Unit |
 |---|---|---|---|---|
-| 1.1 | Solar PV Panels | {r.get("panel_wp",400)} Wp Monocrystalline PERC, Tier 1, Voc â‰ˆ 24 V | {r["num_panels"]} | Modules |
+| 1.1 | PV Solar Panels | {r.get("panel_wp",400)} Wp Monocrystalline PERC, Tier 1, Voc â‰ˆ 24 V | {r["num_panels"]} | Modules |
 | 1.2 | Aluminium Mounting Rails | 40Ã—40 mm anodised aluminium | {int(r["num_panels"]*1.2)} | m |
 | 1.3 | Mid & End Clamps | Stainless steel SS304 | {r["num_panels"]*4} | Sets |
 | 1.4 | Roof Mounting Brackets | Galvanised steel, tilt-adjustable | {int(r["num_panels"]*1.5)} | No. |
@@ -4833,7 +4833,7 @@ Total programme: **12 working days** (weather permitting).
 
 | Role | No. | Key Qualifications | Days on Site |
 |---|---|---|---|
-| Project Engineer / Site Manager | 1 | BEng Electrical, 18th Ed BS 7671, Solar PV cert, IOSH | All 12 days |
+| Project Engineer / Site Manager | 1 | BEng Electrical, 18th Ed BS 7671, PV Solar cert, IOSH | All 12 days |
 | Senior Electrical Technician | 1 | C&G 2365 NVQ L3, 18th Ed + 2391, ECS Gold, Work at Height | All 12 days |
 | Electrical Apprentice / Assistant | 1 | NVQ L2 Electrical, Manual Handling, CSCS Green | All 12 days |
 | Structural / Civil Technician | 1 | Roof mounting experience, PASMA/IPAF, CSCS | Days 1—6 |
@@ -4933,7 +4933,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62446
 
 | Role | No. | Key Qualifications | Days on Site |
 |---|---|---|---|
-| Project Engineer / Site Manager | 1 | BEng Electrical, 18th Ed BS 7671, Solar PV cert, IOSH | All 12 days |
+| Project Engineer / Site Manager | 1 | BEng Electrical, 18th Ed BS 7671, PV Solar cert, IOSH | All 12 days |
 | Senior Electrical Technician | 1 | C&G 2365 NVQ L3, 18th Ed + 2391, ECS Gold, Work at Height | All 12 days |
 | Electrical Apprentice / Assistant | 1 | NVQ L2 Electrical, Manual Handling, CSCS Green | All 12 days |
 | Structural / Civil Technician | 1 | Roof mounting, PASMA/IPAF, CSCS | Days 1—6 |
@@ -4962,7 +4962,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62446
 ## Project Engineer / Site Manager
 Responsible for overall technical quality, programme, safety, and client communication.
 Signs off each phase, approves all test results, and issues the Installation Completion Certificate.
-Holds valid BS 7671 certification and Solar PV design qualification (MCS or equivalent).
+Holds valid BS 7671 certification and PV Solar design qualification (MCS or equivalent).
 
 ## Senior Electrical Technician
 Leads all electrical installation activities. Performs and records all pre-commissioning and
@@ -5169,7 +5169,7 @@ def export_pdf_proposal(pid):
         recs = []
 
     # ── Header ──────────────────────────────────────────────────────────────
-    md = f"""# Solar PV System Proposal — {project["name"]}
+    md = f"""# PV Solar System Proposal — {project["name"]}
 
 **Location:** {d.get("region","")}, {d.get("country","")}
 **System Type:** {d.get("system_type","off-grid").title()} | **PV Capacity:** {_fmt(r["pv_kw"],2)} kWp
@@ -5558,7 +5558,7 @@ with remarks. Sign-off by the consultant and the client is required before mobil
 
 | # | Description | Specification | Qty | Unit |
 |---|---|---|---|---|
-| 1.1 | Solar PV Panels | {r.get("panel_wp",400)} Wp Monocrystalline PERC, Tier 1, Voc â‰ˆ 24 V | {r["num_panels"]} | Modules |
+| 1.1 | PV Solar Panels | {r.get("panel_wp",400)} Wp Monocrystalline PERC, Tier 1, Voc â‰ˆ 24 V | {r["num_panels"]} | Modules |
 | 1.2 | Aluminium Mounting Rails | 40Ã—40 mm anodised aluminium | {int(r["num_panels"]*1.2)} | m |
 | 1.3 | Mid & End Clamps | Stainless steel SS304 | {r["num_panels"]*4} | Sets |
 | 1.4 | Roof Mounting Brackets | Galvanised steel, tilt-adjustable | {int(r["num_panels"]*1.5)} | No. |
@@ -5726,7 +5726,7 @@ Completion Certificate, O&M manual issued.
 
 | Role | No. | Key Qualifications | Days on Site |
 |---|---|---|---|
-| Project Engineer / Site Manager | 1 | BEng Electrical, 18th Ed BS 7671, Solar PV cert, IOSH | All 12 days |
+| Project Engineer / Site Manager | 1 | BEng Electrical, 18th Ed BS 7671, PV Solar cert, IOSH | All 12 days |
 | Senior Electrical Technician | 1 | C&G 2365 NVQ L3, 18th Ed + 2391, ECS Gold, Work at Height | All 12 days |
 | Electrical Apprentice / Assistant | 1 | NVQ L2 Electrical, Manual Handling, CSCS Green | All 12 days |
 | Structural / Civil Technician | 1 | Roof mounting experience, PASMA/IPAF, CSCS | Days 1—6 |
@@ -5750,7 +5750,7 @@ Completion Certificate, O&M manual issued.
 
 **Project Engineer / Site Manager** — Overall technical quality, programme, safety, and client
 communication. Signs off each phase, approves all test results, issues the Installation Completion
-Certificate. Holds valid BS 7671 certification and Solar PV design qualification.
+Certificate. Holds valid BS 7671 certification and PV Solar design qualification.
 
 **Senior Electrical Technician** — Leads all electrical installation activities. Performs and records
 all pre-commissioning and commissioning tests. Configures inverter and BMS settings. Mentors the
@@ -5832,7 +5832,7 @@ accident log. Emergency response coordinator.
 """
     fname = f"Proposal_{project['name'].replace(' ','_')}.pdf"
     md = _diagrams_markdown(d, r) + md
-    return _render_pdf(f"Solar PV Proposal — {project['name']}", md, fname)
+    return _render_pdf(f"PV Solar Proposal — {project['name']}", md, fname)
 
 
 # ─── Phase 4: Admin panel ─────────────────────────────────────────────────────
@@ -8352,7 +8352,7 @@ def export_docx(pid):
 
     t3 = doc.add_paragraph()
     t3.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    t3.add_run(f"Solar PV System Design Report\n"
+    t3.add_run(f"PV Solar System Design Report\n"
                f"{d.get('region','')}, {d.get('country','')}\n"
                f"Generated: {datetime.now().strftime('%d %B %Y')}")
 

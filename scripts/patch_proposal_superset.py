@@ -9,7 +9,7 @@ Why a byte-level patch (per CLAUDE.md):
 Procedure:
 1. Read web_app.py as raw bytes.
 2. Locate the OLD function: from `def export_pdf_proposal(pid):` through the
-   final `return _render_pdf(f"Solar PV Proposal ...` line (inclusive).
+   final `return _render_pdf(f"PV Solar Proposal ...` line (inclusive).
 3. Read the NEW function bytes from new_proposal_route.py and convert LF->CRLF
    so it matches the surrounding file's line endings.
 4. Verify single occurrence of both start and end anchors and that start < end.
@@ -24,7 +24,7 @@ NEW_FILE = os.path.join(ROOT, "new_proposal_route.py")
 
 START_ANCHOR = b"def export_pdf_proposal(pid):"
 # Last line of the OLD function. Distinctive enough to be unique in web_app.py.
-END_ANCHOR   = b'return _render_pdf(f"Solar PV Proposal'
+END_ANCHOR   = b'return _render_pdf(f"PV Solar Proposal'
 
 
 def main() -> int:

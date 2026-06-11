@@ -60,7 +60,7 @@
         <i class="bi bi-sun-fill me-1"></i> SolarPro Global · Intelligent PV Design Platform
       </div>
       <div class="report-title" style="font-size:28px;margin-bottom:6px">
-        Solar PV System Proposal
+        PV Solar System Proposal
       </div>
       <div style="font-size:17px;font-weight:700;color:#c8c8e8;margin-bottom:12px">{{ project.name }}</div>
       <div class="text-secondary small">
@@ -88,7 +88,7 @@
   </div>
   <p style="color:#c8c8e8;line-height:1.75;font-size:14px;margin-bottom:16px">
     This document presents a complete technical and financial proposal for a
-    <strong class="text-warning">{{ r.pv_kw|fmt(2) }} kWp {{ d.system_type|title }} Solar PV System</strong>
+    <strong class="text-warning">{{ r.pv_kw|fmt(2) }} kWp {{ d.system_type|title }} PV Solar System</strong>
     to be installed at <strong class="text-warning">{{ d.region }}, {{ d.country }}</strong>.
     The system has been engineered to meet a daily energy demand of
     <strong class="text-warning">{{ r.daily_kwh|fmt(2) }} kWh/day</strong> using the latest
@@ -229,7 +229,7 @@
     <div class="col-md-6 col-lg-4">
       <div class="component-card">
         <div class="component-icon">☀️</div>
-        <div class="component-title">Solar PV Panels</div>
+        <div class="component-title">PV Solar Panels</div>
         <div class="component-sub">{{ r.num_panels }} × {{ r.panel_wp if r.panel_wp else 400 }} Wp Monocrystalline PERC</div>
         <div class="component-desc mb-3">
           Solar panels (photovoltaic modules) convert sunlight directly into DC electricity using
@@ -555,7 +555,7 @@
     <div class="col-md-6">
       <div class="highlight-box" style="margin-bottom:0;height:100%;box-sizing:border-box">
         <div class="head"><i class="bi bi-pie-chart-fill"></i>Cost breakdown</div>
-        Equipment represents ~87% of cost — this is normal for solar PV projects. The largest
+        Equipment represents ~87% of cost — this is normal for pv solar projects. The largest
         single cost item is typically the battery bank (30–40%), followed by the solar panels (25–30%),
         and the inverter (12–18%). Installation labour at {{ eco.get('install_rate_pct',15) }}% covers all civil works, cable containment,
         electrical connections, testing, and commissioning.
@@ -804,7 +804,7 @@
   <div class="prop-section-head"><i class="bi bi-hammer"></i>C1. Installation &amp; Commissioning Plan</div>
   <div class="explain-box mb-3">
     <div class="head"><i class="bi bi-info-circle"></i>Our installation approach</div>
-    All work is carried out by qualified electrical engineers and installers with experience in solar PV
+    All work is carried out by qualified electrical engineers and installers with experience in PV solar
     systems. The installation follows a structured sequence to ensure safety, quality, and compliance
     with BS 7671, IEC 60364, and all local regulations. No system is energised until all testing
     and inspections are complete and signed off.
