@@ -147,6 +147,20 @@
     .table{font-size:14px}
     .table th,.table td{padding:.5rem .4rem}
   }
+
+  /* Prose left-alignment: headings + paragraphs read left even inside
+     .text-center containers, while flex/grid layouts (buttons rows, stat
+     grids, badge chips) keep their justify-content centering intact. */
+  .text-center h1,
+  .text-center h2,
+  .text-center h3,
+  .text-center h4,
+  .text-center h5,
+  .text-center h6,
+  .text-center p,
+  .text-center .lead,
+  .text-center > .text-secondary,
+  .text-center blockquote{text-align:left !important}
 </style>
 {% block extra_head %}{% endblock %}
 <meta name="csrf-token" content="{{ csrf_token() }}">
