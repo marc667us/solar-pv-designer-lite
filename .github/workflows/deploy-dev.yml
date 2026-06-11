@@ -52,11 +52,21 @@ jobs:
           echo "Dev deploy health check PASSED"
 
       # Also trigger Render deploy (for Render-hosted dev environment)
+      # Secret-presence check moved into the shell block — GitHub Actions
+      # rejects workflows that reference `secrets.*` inside `if:` conditions,
+      # which caused this file to fail-load with "workflow file issue" on every
+      # push since it was added.
       - name: Trigger Render deploy (if configured)
-        if: ${{ secrets.RENDER_API_KEY != '' && secrets.RENDER_SERVICE_ID != '' }}
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
         run: |
-          curl -s -X POST \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
-            -d '{"clearCache":"do_not_clear"}' | jq .
+          if [ -n "$RENDER_API_KEY" ] && [ -n "$RENDER_SERVICE_ID" ]; then
+            curl -s -X POST \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              -H "Content-Type: application/json" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+              -d '{"clearCache":"do_not_clear"}' | jq .
+          else
+            echo "Render API key / service id not configured — skipping Render deploy."
+          fi
