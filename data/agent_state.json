@@ -1,0 +1,7 @@
+{
+  "note": "Agent-triage state. Re-written every hour by .github/workflows/agent-triage.yml. last_*_id values track the highest id seen per channel so the next run only processes truly-new items. initialized=false on the very first run; the workflow seeds the baseline to the current max id without processing the backlog to avoid spam-ACKing existing rows.",
+  "initialized": false,
+  "last_feedback_id": 0,
+  "last_ticket_id": 0,
+  "last_signup_id": 0
+}

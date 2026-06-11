@@ -1,0 +1,417 @@
+# Agent-triage — Tiers 2, 3, 4 of the autonomous monitoring stack.
+#
+# Every hour (HH:23, offset from beta-monitor at :00/:30 and
+# synthetic-health at :17 so the four crons never overlap on the
+# /login rate-limit window), this workflow:
+#
+#   1. Logs into prod as admin
+#   2. GETs /admin/api/{feedback,tickets,beta_signups}?since=<last_id>
+#      to pull only items created after the previous successful run
+#   3. For each new item:
+#        a. Tier 2 — classifies via OpenRouter free tier (Llama 3.2-3b)
+#           into one of: critical_bug, high_bug, feature_request,
+#           info, spam
+#        b. Tier 3 — sends a personalised acknowledgement email to the
+#           submitter via Brevo (skipped if classification = spam OR
+#           the submitter email is empty / matches admin)
+#        c. Tier 4 — if classification >= high, creates a GH issue
+#           with the full body + classification + suggested next step,
+#           labelled `beta`, `auto-triage`, `severity:{critical,high}`
+#   4. Commits the updated last-seen IDs to data/agent_state.json
+#      so the next run only processes truly new items
+#
+# Failure modes handled:
+#   - OpenRouter unreachable / quota hit: classification defaults to
+#     'info' so we still ACK but never open a noisy GH issue
+#   - Brevo rejects the ACK email: logged as warning, processing
+#     continues for the rest of the batch
+#   - Admin login fails: hard-exit with the error so the Actions UI
+#     flags red — manual operator follow-up
+#   - GH issue creation fails (permissions / API): warning logged,
+#     state file is still updated so we don't retry the same items
+
+name: Agent triage
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  issues:   write
+
+concurrency:
+  group: agent-triage
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE:                    https://solarpro.aiappinvent.com
+      SOLARPRO_ADMIN_PASSWORD: ${{ secrets.SOLARPRO_ADMIN_PASSWORD }}
+      BREVO_API_KEY:           ${{ secrets.BREVO_API_KEY }}
+      EMAIL_SALES:             ${{ secrets.EMAIL_SALES }}
+      OPENROUTER_API_KEY:      ${{ secrets.OPENROUTER_API_KEY }}
+      GH_TOKEN:                ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run triage
+        run: |
+          set -e
+          python - <<'PY'
+          import base64, json, os, re, subprocess, sys, time
+          from datetime import datetime, timezone
+          import urllib.request, urllib.error
+          import requests
+
+          BASE     = os.environ["BASE"]
+          PW       = os.environ["SOLARPRO_ADMIN_PASSWORD"]
+          BREVO    = os.environ["BREVO_API_KEY"]
+          ALERT_TO = os.environ.get("EMAIL_SALES", "sales@aiappinvent.com")
+          OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+          REPO     = os.environ.get("GITHUB_REPOSITORY", "")
+          STATE_PATH = "data/agent_state.json"
+
+          if os.path.exists(STATE_PATH):
+              with open(STATE_PATH, "r", encoding="utf-8") as f:
+                  state = json.load(f)
+          else:
+              state = {}
+
+          # ---------- Login ----------
+          def csrf(h):
+              m = re.search(r'name="_csrf"\s+value="([^"]+)"', h)
+              return m.group(1) if m else ""
+
+          s = requests.Session()
+          s.headers.update({"User-Agent": "SolarPro-AgentTriage/1.0"})
+          s.get(BASE + "/", timeout=60)
+          r = s.get(BASE + "/login", timeout=30)
+          r = s.post(BASE + "/login",
+                     data={"username": "admin", "password": PW,
+                           "_csrf": csrf(r.text)},
+                     allow_redirects=True, timeout=30)
+          if "/dashboard" not in r.url and "/admin" not in r.url:
+              print(f"::error::login failed (landed at {r.url})")
+              sys.exit(2)
+
+          # ---------- Pull new items per channel ----------
+          channels = {
+              "feedback":     ("/admin/api/feedback",      "last_feedback_id"),
+              "tickets":      ("/admin/api/tickets",       "last_ticket_id"),
+              "beta_signups": ("/admin/api/beta_signups",  "last_signup_id"),
+          }
+          new_items = {}
+          for chan, (path, state_key) in channels.items():
+              since = int(state.get(state_key, 0))
+              try:
+                  pr = s.get(BASE + path, params={"since": since,
+                                                  "limit": 50}, timeout=30)
+                  js = pr.json()
+              except Exception as e:
+                  print(f"::warning::failed to fetch {chan}: {e}")
+                  new_items[chan] = []
+                  continue
+              items = js.get("items", []) if js.get("ok") else []
+              # Items come newest-first; reverse so we process chronologically.
+              new_items[chan] = list(reversed(items))
+              print(f"  {chan}: {len(items)} new since id>{since}")
+
+          # First-run guard: if state is fresh and there are many existing
+          # rows, baseline to the highest id and skip processing this batch.
+          # Subsequent runs handle truly-new items.
+          if not state.get("initialized"):
+              max_ids = {}
+              for chan, (_, sk) in channels.items():
+                  if new_items[chan]:
+                      max_ids[sk] = max(int(it.get("id", 0))
+                                         for it in new_items[chan])
+              new_state = {**state, **max_ids,
+                           "initialized": True,
+                           "first_baseline_utc":
+                               datetime.now(timezone.utc).isoformat()}
+              os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
+              with open(STATE_PATH, "w", encoding="utf-8") as f:
+                  json.dump(new_state, f, indent=2, sort_keys=True)
+              print("first-run baseline established; no items processed")
+              sys.exit(0)
+
+          # ---------- Tier 2 — classify ----------
+          def classify(text, item_type):
+              """Ask OpenRouter (free tier) to bucket the text. Returns a
+              dict {severity, summary, suggested_fix}. On any failure
+              falls back to severity='info' so we still ACK but never
+              open a noisy GH issue."""
+              if not OPENROUTER_KEY or not text:
+                  return {"severity": "info",
+                          "summary": text[:140] if text else "(empty)",
+                          "suggested_fix": ""}
+              prompt = (
+                  "You are a triage assistant for SolarPro Global beta. "
+                  "Classify the following beta-evaluator message into one of: "
+                  "critical_bug, high_bug, feature_request, info, spam. "
+                  "Return ONLY valid JSON like: "
+                  '{"severity":"high_bug","summary":"<one-line>",'
+                  '"suggested_fix":"<one-line action for engineering>"}. '
+                  f"Item type: {item_type}\nMessage:\n{text[:2000]}"
+              )
+              payload = json.dumps({
+                  "model": "meta-llama/llama-3.2-3b-instruct:free",
+                  "messages": [
+                      {"role": "system",
+                       "content": "You return only valid JSON. No prose."},
+                      {"role": "user", "content": prompt},
+                  ],
+                  "temperature": 0.1,
+                  "max_tokens": 200,
+              }).encode("utf-8")
+              req = urllib.request.Request(
+                  "https://openrouter.ai/api/v1/chat/completions",
+                  data=payload,
+                  headers={"Authorization": "Bearer " + OPENROUTER_KEY,
+                           "Content-Type": "application/json",
+                           "HTTP-Referer":
+                               "https://solarpro.aiappinvent.com",
+                           "X-Title": "SolarPro Agent Triage"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      data = json.loads(resp.read().decode("utf-8"))
+                  raw = data["choices"][0]["message"]["content"].strip()
+                  # Trim ```json fences if the model wraps them
+                  raw = re.sub(r"^```(?:json)?\s*", "", raw)
+                  raw = re.sub(r"\s*```$", "", raw)
+                  out = json.loads(raw)
+                  sev = (out.get("severity") or "info").lower().strip()
+                  if sev not in ("critical_bug", "high_bug",
+                                  "feature_request", "info", "spam"):
+                      sev = "info"
+                  return {"severity": sev,
+                          "summary": (out.get("summary") or "")[:200],
+                          "suggested_fix":
+                              (out.get("suggested_fix") or "")[:300]}
+              except Exception as e:
+                  print(f"::warning::classify failed: {e!r}")
+                  return {"severity": "info",
+                          "summary": text[:140],
+                          "suggested_fix": ""}
+
+          # ---------- Tier 3 — ACK email ----------
+          def send_ack(to_email, submitter_name, classification, item_summary,
+                        channel):
+              if not to_email or "@" not in to_email:
+                  return None
+              if to_email.lower().startswith("admin@") or \
+                 to_email.lower().endswith("@aiappinvent.com"):
+                  return "skipped_internal"
+              if classification["severity"] == "spam":
+                  return "skipped_spam"
+              # Human-readable severity blurb
+              sev = classification["severity"]
+              blurb = {
+                  "critical_bug":    "We have logged this as a critical bug "
+                                      "and the engineering team has been "
+                                      "alerted immediately.",
+                  "high_bug":        "We have logged this as a high-priority "
+                                      "bug and will get back to you within "
+                                      "24 hours.",
+                  "feature_request": "We have logged this as a feature "
+                                      "request and added it to the backlog.",
+                  "info":            "Thanks for letting us know.",
+              }.get(sev, "Thanks for letting us know.")
+              html = (
+                  f"<p>Hi{(' ' + submitter_name) if submitter_name else ''},</p>"
+                  f"<p>Thanks for your beta {channel} on SolarPro Global. "
+                  f"{blurb}</p>"
+                  f"<p style='color:#888;font-size:12px'>"
+                  f"Internal triage reference: <code>{sev}</code></p>"
+                  f"<p>Best regards,<br>SolarPro Team<br>"
+                  f"<a href='mailto:sales@aiappinvent.com'>"
+                  f"sales@aiappinvent.com</a></p>"
+              )
+              payload = json.dumps({
+                  "sender": {"email": ALERT_TO,
+                              "name": "SolarPro Global"},
+                  "to":     [{"email": to_email, "name": submitter_name or ""}],
+                  "subject":
+                      f"Thanks for your {channel} on SolarPro beta",
+                  "htmlContent": html,
+              }).encode("utf-8")
+              req = urllib.request.Request(
+                  "https://api.brevo.com/v3/smtp/email",
+                  data=payload,
+                  headers={"api-key": BREVO,
+                           "Content-Type": "application/json",
+                           "Accept": "application/json"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      return f"ack_sent ({resp.status})"
+              except Exception as e:
+                  return f"ack_failed: {e!r}"
+
+          # ---------- Tier 4 — GH Issue for critical/high ----------
+          def open_issue(item, classification, channel):
+              sev = classification["severity"]
+              if sev not in ("critical_bug", "high_bug"):
+                  return "skipped_low_severity"
+              title = (
+                  f"[BETA-{sev.upper()}] "
+                  f"{(classification['summary'] or item.get('message',''))[:80]}"
+              )
+              body_lines = [
+                  f"**Auto-triaged by `.github/workflows/agent-triage.yml`** "
+                  f"on {datetime.now(timezone.utc).isoformat()}",
+                  "",
+                  f"- **Channel**: `{channel}`",
+                  f"- **Submitter**: "
+                  f"`{item.get('username') or item.get('submitter_username') or 'unknown'}` "
+                  f"(`{item.get('email') or item.get('submitter_email') or ''}`)",
+                  f"- **Item id**: `{item.get('id')}`",
+                  f"- **Created at (UTC)**: `{item.get('created_at')}`",
+                  f"- **Classification**: `{sev}`",
+                  "",
+                  "## LLM summary",
+                  classification.get("summary") or "(none)",
+                  "",
+                  "## Suggested fix",
+                  classification.get("suggested_fix") or "(none)",
+                  "",
+                  "## Raw evaluator message",
+                  "```",
+                  (item.get("message") or item.get("subject")
+                                       or "(empty)")[:3000],
+                  "```",
+              ]
+              body = "\n".join(body_lines)
+              labels = ["beta", "auto-triage",
+                         f"severity:{sev.split('_')[0]}"]
+              cmd = ["gh", "issue", "create", "-R", REPO,
+                     "--title", title, "--body", body,
+                     "--label", ",".join(labels)]
+              try:
+                  out = subprocess.check_output(cmd, timeout=30,
+                                                  stderr=subprocess.STDOUT)
+                  url = out.decode("utf-8", "replace").strip().splitlines()[-1]
+                  return f"issue_created: {url}"
+              except subprocess.CalledProcessError as e:
+                  return f"issue_create_failed: {e.output.decode('utf-8','replace')[:200]}"
+              except Exception as e:
+                  return f"issue_create_exc: {e!r}"
+
+          # ---------- Main processing loop ----------
+          actions = []
+          for chan, items in new_items.items():
+              for item in items:
+                  text = (item.get("message")
+                            or item.get("subject")
+                            or item.get("name") or "")
+                  classification = classify(text, chan)
+                  ack_result = send_ack(
+                      item.get("email") or item.get("submitter_email"),
+                      item.get("username")
+                          or item.get("submitter_username")
+                          or item.get("name", ""),
+                      classification,
+                      (item.get("message", "") or text)[:200],
+                      chan,
+                  )
+                  issue_result = open_issue(item, classification, chan)
+                  actions.append({
+                      "channel":      chan,
+                      "id":           item.get("id"),
+                      "severity":     classification["severity"],
+                      "summary":      classification["summary"][:120],
+                      "ack":          ack_result,
+                      "issue":        issue_result,
+                  })
+                  # Polite pacing — Brevo 300/day, OpenRouter has its own free
+                  # quota, GH issue create is rate-limited too.
+                  time.sleep(1)
+
+          # ---------- Persist new state ----------
+          new_state = dict(state)
+          for chan, (_, sk) in channels.items():
+              if new_items[chan]:
+                  new_state[sk] = max(int(it.get("id", 0))
+                                       for it in new_items[chan])
+          new_state["last_run_utc"] = datetime.now(timezone.utc).isoformat()
+          new_state["actions_this_run"] = actions
+          os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
+          with open(STATE_PATH, "w", encoding="utf-8") as f:
+              json.dump(new_state, f, indent=2, sort_keys=True)
+
+          # ---------- Owner summary ----------
+          if not actions:
+              print("no new items — done")
+              sys.exit(0)
+          # Send one consolidated summary email so the owner sees what
+          # the agent just decided.
+          html = (f"<h3>Agent triage — {len(actions)} item(s) processed</h3>"
+                  f"<p>Run time: {new_state['last_run_utc']}</p>"
+                  f"<table style='border-collapse:collapse'>"
+                  f"<tr style='background:#f5f5f5'>"
+                  f"<th style='padding:6px 10px;text-align:left'>Channel</th>"
+                  f"<th style='padding:6px 10px;text-align:left'>ID</th>"
+                  f"<th style='padding:6px 10px;text-align:left'>Severity</th>"
+                  f"<th style='padding:6px 10px;text-align:left'>Summary</th>"
+                  f"<th style='padding:6px 10px;text-align:left'>ACK</th>"
+                  f"<th style='padding:6px 10px;text-align:left'>Issue</th>"
+                  f"</tr>"
+                  + "".join(
+                      f"<tr><td style='padding:4px 10px'>{a['channel']}</td>"
+                      f"<td style='padding:4px 10px'>{a['id']}</td>"
+                      f"<td style='padding:4px 10px'>{a['severity']}</td>"
+                      f"<td style='padding:4px 10px'>{a['summary']}</td>"
+                      f"<td style='padding:4px 10px;font-size:11px'>"
+                      f"{a['ack']}</td>"
+                      f"<td style='padding:4px 10px;font-size:11px'>"
+                      f"{a['issue']}</td></tr>"
+                      for a in actions)
+                  + "</table>")
+          payload = json.dumps({
+              "sender":      {"email": ALERT_TO,
+                                "name": "SolarPro Agent Triage"},
+              "to":          [{"email": ALERT_TO}],
+              "subject":
+                  f"Agent triage processed {len(actions)} item(s)",
+              "htmlContent": html,
+          }).encode("utf-8")
+          req = urllib.request.Request(
+              "https://api.brevo.com/v3/smtp/email",
+              data=payload,
+              headers={"api-key": BREVO,
+                       "Content-Type": "application/json",
+                       "Accept": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  print(f"summary email: HTTP {resp.status}")
+          except Exception as e:
+              print(f"::warning::summary email failed: {e}")
+          PY
+
+      - name: Commit updated state
+        run: |
+          set -e
+          if git diff --quiet data/agent_state.json 2>/dev/null; then
+            echo "state unchanged — no commit"
+            exit 0
+          fi
+          git config user.email "actions@github.com"
+          git config user.name  "Agent Triage"
+          git add data/agent_state.json
+          git commit -m "chore(agent-triage): update state $(date -u +'%FT%TZ')"
+          git push origin HEAD:master
