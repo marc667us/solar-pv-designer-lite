@@ -2,14 +2,14 @@
   "active_sessions": {
     "active_sessions": [
       {
-        "created_at": "2026-06-11 22:56:27",
+        "created_at": "2026-06-12 01:39:58",
         "id": 2,
         "is_admin": 1,
         "plan": "enterprise",
         "username": "marc667us"
       },
       {
-        "created_at": "2026-06-11 22:56:27",
+        "created_at": "2026-06-12 01:39:57",
         "id": 1,
         "is_admin": 1,
         "plan": "enterprise",
@@ -26,7 +26,7 @@
   "feedback": {
     "count": 0
   },
-  "last_poll_utc": "2026-06-11T23:01:03.344633+00:00",
+  "last_poll_utc": "2026-06-12T01:41:18.164216+00:00",
   "security_audit": {
     "error": "HTTP 405"
   },
