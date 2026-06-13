@@ -775,6 +775,16 @@ def current_user():
                          (session["user_id"],)).fetchone()
 
 
+@app.context_processor
+def inject_user_into_templates():
+    # Inject the current user into every template context so base.html
+    # navbar (which gates on {% if user %}) correctly shows the user
+    # dropdown + Logout on pages whose route handlers do not pass
+    # user=current_user() explicitly (terms, privacy, forgot_password,
+    # reset_password, auth.html re-renders, etc.).
+    return {"user": current_user()}
+
+
 def get_project(pid):
     with get_db() as c:
         row = c.execute("SELECT * FROM projects WHERE id=? AND user_id=?",
