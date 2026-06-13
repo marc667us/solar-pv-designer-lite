@@ -8624,6 +8624,14 @@ def err_429(e):
 
 @app.errorhandler(500)
 def err_500(e):
+    # Surface the real traceback in Render runtime logs so 500s are
+    # diagnosable from outside the container without re-deploys.
+    try:
+        import traceback as _tb
+        app.logger.error("500 at %s %s
+%s", request.method, request.path, _tb.format_exc())
+    except Exception:
+        pass
     return render_template("error.html", code=500,
         title="Internal Server Error",
         message="Something went wrong on our end. "
