@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Folders — SolarPro Global{% endblock %}
+{% block content %}
+
+<div class="mb-3">
+  <a href="{{ url_for('dashboard') }}" class="text-secondary small text-decoration-none">
+    <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+  </a>
+</div>
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <div class="fw-black fs-4 mb-1"><i class="bi bi-folder2-open me-2" style="color:var(--solar-gold)"></i>Project Folders</div>
+    <div class="text-secondary small">Group projects under a folder. Reports for every project in a folder can be downloaded as one ZIP.</div>
+  </div>
+  <a href="{{ url_for('project_new') }}" class="btn btn-solar btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>New Project
+  </a>
+</div>
+
+{% if folders %}
+<div class="row g-3">
+  {% for f in folders %}
+  <div class="col-md-4">
+    <a href="{{ url_for('folder_detail', name=f.name) }}"
+       class="solar-card p-3 d-block text-decoration-none"
+       style="border:1px solid #1e1e3a; color:inherit; transition:.15s"
+       onmouseover="this.style.borderColor='var(--solar-gold)'"
+       onmouseout="this.style.borderColor='#1e1e3a'">
+      <div class="d-flex align-items-center gap-3">
+        <div style="width:42px;height:42px;border-radius:8px;
+                    background:rgba(245,158,11,.12);
+                    display:flex;align-items:center;justify-content:center;
+                    font-size:20px;color:var(--solar-gold);flex-shrink:0">
+          <i class="bi bi-folder-fill"></i>
+        </div>
+        <div class="flex-grow-1" style="min-width:0">
+          <div class="fw-bold text-truncate">{{ f.name }}</div>
+          <div class="text-secondary small">{{ f.count }} project{{ 's' if f.count != 1 }}</div>
+        </div>
+        <i class="bi bi-chevron-right text-secondary"></i>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="solar-card p-5 text-center">
+  <div style="font-size:48px;color:#6868a0" class="mb-3"><i class="bi bi-folder2"></i></div>
+  <div class="fw-bold mb-2">No folders yet</div>
+  <div class="text-secondary small mb-4">When you create a project, pick a folder name to group it.<br>All projects in the same folder can be downloaded together.</div>
+  <a href="{{ url_for('project_new') }}" class="btn btn-solar"><i class="bi bi-plus-lg me-1"></i>Create First Project</a>
+</div>
+{% endif %}
+
+{% endblock %}

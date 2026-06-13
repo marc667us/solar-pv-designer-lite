@@ -34,6 +34,23 @@
             Use a descriptive name — include the site or client for easy reference.
           </div>
         </div>
+        <div class="mb-4">
+          <label class="form-label small fw-bold text-secondary text-uppercase" style="letter-spacing:.5px">
+            Folder <span class="text-secondary text-lowercase fw-normal">(optional)</span>
+          </label>
+          <input name="folder" list="folder-suggestions" maxlength="80"
+                 class="form-control form-control-lg bg-dark text-light border-secondary"
+                 placeholder="e.g. Lagos Clients, 2026 Pipeline, Demo"
+                 autocomplete="off"/>
+          <datalist id="folder-suggestions">
+            {% for f in (folders or []) %}<option value="{{ f }}"></option>{% endfor %}
+          </datalist>
+          <div class="form-text text-secondary small mt-2">
+            <i class="bi bi-folder2 me-1" style="color:var(--solar-gold)"></i>
+            Group projects under a folder. All reports for this project will be downloadable
+            together from the folder view. Leave blank for an un-grouped project.
+          </div>
+        </div>
         <button type="submit" class="btn btn-solar w-100 btn-lg">
           <i class="bi bi-arrow-right me-2"></i>Create & Set Location
         </button>

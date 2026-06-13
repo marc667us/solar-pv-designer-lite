@@ -72,7 +72,7 @@ def _get_real_ip():
 limiter = Limiter(
     _get_real_ip,
     app=app,
-    default_limits=["600 per hour", "120 per minute"],
+    default_limits=["3000 per hour", "300 per minute"],
     storage_uri="memory://",
 )
 
@@ -526,6 +526,8 @@ def init_db():
             "ALTER TABLE leads ADD COLUMN follow_up_date TEXT DEFAULT ''",
             # projects lifecycle stage column
             "ALTER TABLE projects ADD COLUMN stage TEXT DEFAULT 'new'",
+            # User-defined folder/label for grouping projects (Gmail-style).
+            "ALTER TABLE projects ADD COLUMN folder TEXT DEFAULT ''",
             # monitor_state: configurable interval + email notifications
             "ALTER TABLE monitor_state ADD COLUMN scan_interval INTEGER DEFAULT 120",
             "ALTER TABLE monitor_state ADD COLUMN notify_email INTEGER DEFAULT 0",
@@ -2450,6 +2452,8 @@ def dashboard():
             "payback":   eco.get("payback", 0),
             "total_local":eco.get("total_local", 0),
             "symbol":    d.get("symbol", "$"),
+            # Folder (Gmail-style label). Older rows may lack the column; guard.
+            "folder":    (p["folder"] if "folder" in p.keys() else "") or "",
             "stage":     stage,
         })
 
@@ -2484,9 +2488,12 @@ def project_new():
     if request.method == "POST":
         csrf_protect()
         name = request.form.get("name", "New Project")
+        # Folder = optional Gmail-style label for organising projects. Empty
+        # string when the user did not pick one (kept simple, no separate table).
+        folder = (request.form.get("folder", "") or "").strip()[:80]
         with get_db() as c:
-            c.execute("INSERT INTO projects (user_id, name) VALUES (?,?)",
-                      (session["user_id"], name))
+            c.execute("INSERT INTO projects (user_id, name, folder) VALUES (?,?,?)",
+                      (session["user_id"], name, folder))
             pid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
         return redirect(url_for("project_location", pid=pid))
     u = current_user()
@@ -2501,8 +2508,15 @@ def project_new():
                 "paid_users": c.execute("SELECT COUNT(*) FROM users WHERE plan NOT IN ('free','demo') AND plan IS NOT NULL").fetchone()[0],
                 "recent_leads": c.execute("SELECT name,email,company,interest,status,created_at FROM leads ORDER BY created_at DESC LIMIT 5").fetchall(),
             }
+    # Distinct existing folders for this user, for the New Project autocomplete.
+    with get_db() as c:
+        folders = [r[0] for r in c.execute(
+            "SELECT DISTINCT folder FROM projects WHERE user_id=? AND folder<>'' "
+            "ORDER BY folder COLLATE NOCASE",
+            (session["user_id"],)).fetchall()]
     return render_template("project_new.html", user=u,
                            plan=plan, limit=limit, count=count,
+                           folders=folders,
                            sales_data=sales_data)
 
 
@@ -11758,6 +11772,180 @@ def api_ai_quota():
             "limit_usd":  _ab.SPEND_CAP_USD_MONTHLY,
         },
     })
+
+
+
+# ─── Routes — Folders (Gmail-style project grouping) ──────────────────────────
+#
+# Lets the user organise projects under named folders. The folder is just a
+# text label on `projects.folder` (added via ALTER TABLE in init_db). There is
+# NO separate `folders` table — keep it simple. Empty string = un-grouped.
+#
+# Two views:
+#   /folders          → list of distinct folders for the current user
+#   /folder/<name>    → projects in that folder + per-report download links
+#   /folder/<name>/zip.zip → bundles every available PDF report for every
+#                            project in the folder into a single ZIP.
+#
+# The ZIP route uses Flask's in-process test_client so we can replay each
+# existing /project/<pid>/report/<kind>/pdf route without duplicating the PDF
+# generation logic. We forward the current session into the test client so
+# @login_required + tenant filters pass.
+
+import io
+import re
+import zipfile
+from urllib.parse import unquote
+
+
+def _safe_filename(name):
+    # Strip filesystem-unsafe characters; keep reasonably short for ZIP entries.
+    cleaned = re.sub(r"[^A-Za-z0-9._\- ]+", "_", (name or "untitled")).strip() or "untitled"
+    return cleaned[:80]
+
+
+# Reports the wizard produces. The two-tuple is (URL suffix, filename stub).
+# We attempt every one; 4xx (plan-gated / no-results) is skipped silently.
+_FOLDER_REPORT_KINDS = [
+    ("inspection",   "01-inspection"),
+    ("pv",           "02-pv-master"),
+    ("boq",          "03-boq-capex"),
+    ("cable",        "04-cable-sizing"),
+    ("energy",       "05-energy-yield"),
+    ("economic",     "06-economic"),
+    ("installation", "07-installation"),
+    ("workplan",     "08-workplan"),
+    ("staffing",     "09-staffing"),
+    ("proposal",     "10-proposal"),
+]
+
+
+@app.route("/folders")
+@login_required
+def folders_index():
+    # List every distinct folder this user has used, with the project count.
+    uid = session["user_id"]
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT COALESCE(NULLIF(folder,''),'(Unfiled)') AS f, COUNT(*) AS n "
+            "FROM projects WHERE user_id=? GROUP BY f ORDER BY f COLLATE NOCASE",
+            (uid,)).fetchall()
+    folders = [{"name": r["f"], "count": r["n"]} for r in rows]
+    return render_template("folders_index.html", user=current_user(), folders=folders)
+
+
+@app.route("/folder/<path:name>")
+@login_required
+def folder_detail(name):
+    # Render the contents of one folder. "(Unfiled)" is the synthetic bucket
+    # for projects with an empty folder column.
+    uid = session["user_id"]
+    name = unquote(name).strip()
+    is_unfiled = name in ("", "(Unfiled)")
+    with get_db() as c:
+        if is_unfiled:
+            rows = c.execute(
+                "SELECT * FROM projects WHERE user_id=? AND COALESCE(folder,'')='' "
+                "ORDER BY updated_at DESC",
+                (uid,)).fetchall()
+        else:
+            rows = c.execute(
+                "SELECT * FROM projects WHERE user_id=? AND folder=? "
+                "ORDER BY updated_at DESC",
+                (uid, name)).fetchall()
+    projects = []
+    for p in rows:
+        d = json.loads(p["data_json"] or "{}")
+        has_results = bool(d.get("results"))
+        projects.append({
+            "id":          p["id"],
+            "name":        p["name"],
+            "updated":     (p["updated_at"] or "")[:16].replace("T", " "),
+            "country":     d.get("country", ""),
+            "location":    d.get("location", ""),
+            "has_results": has_results,
+            "report_kinds": _FOLDER_REPORT_KINDS if has_results else [],
+        })
+    display_name = "(Unfiled)" if is_unfiled else name
+    return render_template("folder_detail.html",
+                           user=current_user(),
+                           folder_name=display_name,
+                           folder_slug=("" if is_unfiled else name),
+                           projects=projects,
+                           report_kinds=_FOLDER_REPORT_KINDS)
+
+
+@app.route("/folder/<path:name>/zip.zip")
+@login_required
+@limiter.limit("3 per minute")
+def folder_zip(name):
+    # Bundle every available PDF report for every project in the folder into
+    # one ZIP. Uses the in-process Flask test_client to call existing PDF
+    # routes — no duplication of PDF generation logic. Plan-gated reports
+    # silently skip (4xx response from the inner call).
+    uid = session["user_id"]
+    name = unquote(name).strip()
+    is_unfiled = name in ("", "(Unfiled)")
+    with get_db() as c:
+        if is_unfiled:
+            rows = c.execute(
+                "SELECT id, name FROM projects WHERE user_id=? AND COALESCE(folder,'')=''",
+                (uid,)).fetchall()
+        else:
+            rows = c.execute(
+                "SELECT id, name FROM projects WHERE user_id=? AND folder=?",
+                (uid, name)).fetchall()
+    if not rows:
+        flash("That folder has no projects yet.", "warning")
+        return redirect(url_for("folders_index"))
+
+    buf = io.BytesIO()
+    bundled = 0
+    skipped = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        with app.test_client() as client:
+            # Forward our session so @login_required + tenant filters pass.
+            with client.session_transaction() as sess:
+                sess["user_id"] = session["user_id"]
+                sess["username"] = session.get("username", "")
+            for proj in rows:
+                proj_folder = _safe_filename(f"{proj['id']:04d} - {proj['name']}")
+                for kind, stub in _FOLDER_REPORT_KINDS:
+                    url = url_for(f"export_pdf_{kind}", pid=proj["id"]) \
+                        if f"export_pdf_{kind}" in app.view_functions \
+                        else f"/project/{proj['id']}/report/{kind}/pdf"
+                    try:
+                        resp = client.get(url)
+                    except Exception:
+                        skipped += 1
+                        continue
+                    # Only accept real PDFs — many routes 302 to /results when the
+                    # project has no calculation results yet.
+                    ctype = (resp.headers.get("Content-Type") or "").lower()
+                    if resp.status_code == 200 and "pdf" in ctype:
+                        zf.writestr(f"{proj_folder}/{stub}.pdf", resp.data)
+                        bundled += 1
+                    else:
+                        skipped += 1
+        # Manifest so the user knows what was bundled vs skipped.
+        manifest = (f"SolarPro Folder Export\n"
+                    f"Folder: {('(Unfiled)' if is_unfiled else name)}\n"
+                    f"User:   {session.get('username','')}\n"
+                    f"At:     {datetime.utcnow().isoformat()}Z\n"
+                    f"PDFs bundled: {bundled}\n"
+                    f"PDFs skipped (plan-gated / no-results): {skipped}\n"
+                    f"Projects: {len(rows)}\n")
+        zf.writestr("MANIFEST.txt", manifest)
+
+    if bundled == 0:
+        flash("No completed reports yet in this folder. Run a project's calculations first.", "warning")
+        return redirect(url_for("folder_detail", name=("(Unfiled)" if is_unfiled else name)))
+
+    buf.seek(0)
+    safe = _safe_filename(("Unfiled" if is_unfiled else name)).replace(" ", "_")
+    return send_file(buf, mimetype="application/zip",
+                     as_attachment=True,
+                     download_name=f"SolarPro_{safe}_{datetime.utcnow():%Y%m%d}.zip")
 
 
 
