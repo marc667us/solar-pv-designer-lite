@@ -14,15 +14,15 @@
     "softBounces|test_autotest_ng@solarpro-test.invalid|2026-06-10T20:58:56.000Z",
     "softBounces|test_autotest_ng@solarpro-test.invalid|2026-06-10T23:09:11.000Z"
   ],
-  "last_run_utc": "2026-06-12T22:11:13.203268+00:00",
+  "last_run_utc": "2026-06-13T00:01:20.778755+00:00",
   "totals": {
-    "blocked": 1,
+    "blocked": 0,
     "deferred": 0,
-    "delivered": 16,
-    "hardBounces": 1,
-    "opened": 11,
-    "other": 26,
-    "softBounces": 1,
+    "delivered": 1,
+    "hardBounces": 0,
+    "opened": 2,
+    "other": 5,
+    "softBounces": 0,
     "spam": 0
   },
   "window_days": 1
