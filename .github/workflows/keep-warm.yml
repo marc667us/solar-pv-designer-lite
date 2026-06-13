@@ -15,9 +15,17 @@ name: keep-warm
 
 on:
   schedule:
-    # Every 10 minutes. GitHub may skew by a few minutes; doesn't matter for
-    # warming purposes (we just need a ping inside Render's 15-min idle window).
-    - cron: "*/10 * * * *"
+    # GitHub free-tier cron is best-effort: under load it silently DROPS
+    # scheduled fires, and the official docs warn that the top of the hour
+    # (:00) is the worst slot. Real-world observed gaps on this repo have
+    # exceeded 2-4 hours despite "*/10 * * * *" — long enough for Render's
+    # 15-min idle timeout to put the container to sleep and produce
+    # "server cannot be reached" on the next user visit.
+    #
+    # Mitigation: schedule far more aggressively and at offset minutes that
+    # avoid the :00/:30 high-load windows. Even if GitHub drops half the
+    # fires, the effective rate still stays under Render's 15-min limit.
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
   workflow_dispatch: {}  # manual trigger for testing
 
 permissions:
