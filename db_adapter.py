@@ -102,6 +102,40 @@ def _translate_sqlite_to_postgres(sql: str) -> str:
     # recent autoincremented PK for the current session.
     sql = sql.replace("last_insert_rowid()", "lastval()")
 
+    # INSERT OR IGNORE -> INSERT ... ON CONFLICT DO NOTHING.
+    # Postgres has no OR-IGNORE syntax; ON CONFLICT DO NOTHING is the
+    # idiomatic equivalent. Targets any constraint so behavior matches
+    # SQLite's "ignore any uniqueness violation" semantics.
+    # The ON CONFLICT clause must appear after the VALUES tuple, but the
+    # callers in web_app.py keep VALUES on a single line, so a regex
+    # appending before a terminating ; or end-of-statement is safe.
+    if re.search(r"\bINSERT\s+OR\s+IGNORE\b", sql, re.IGNORECASE):
+        sql = re.sub(r"\bINSERT\s+OR\s+IGNORE\b", "INSERT", sql, flags=re.IGNORECASE)
+        # Append ON CONFLICT DO NOTHING right before a trailing semicolon
+        # if any; otherwise at the end of the statement.
+        if sql.rstrip().endswith(";"):
+            sql = sql.rstrip()[:-1] + " ON CONFLICT DO NOTHING;"
+        else:
+            sql = sql.rstrip() + " ON CONFLICT DO NOTHING"
+
+    # strftime('<fmt>', col) -> to_char(col::timestamp, '<fmt>').
+    # SolarPro only uses '%Y-%m' and '%Y-%m-%d' formats in date-grouping
+    # queries (admin dashboards). Translate the SQLite escape codes to
+    # Postgres to_char tokens.
+    _STRFTIME_MAP = {"%Y-%m-%d": "YYYY-MM-DD", "%Y-%m": "YYYY-MM",
+                     "%Y": "YYYY", "%m": "MM", "%d": "DD"}
+    def _strftime_sub(m):
+        fmt_sqlite = m.group(1)
+        col = m.group(2).strip()
+        fmt_pg = _STRFTIME_MAP.get(fmt_sqlite, fmt_sqlite)
+        return f"to_char({col}::timestamp, '{fmt_pg}')"
+    sql = re.sub(
+        r"strftime\(\s*'([^']+)'\s*,\s*([^)]+)\)",
+        _strftime_sub,
+        sql,
+        flags=re.IGNORECASE,
+    )
+
     return sql
 
 
