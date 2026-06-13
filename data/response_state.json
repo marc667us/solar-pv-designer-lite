@@ -1,29 +1,7 @@
 {
   "active_sessions": {
-    "active_sessions": [
-      {
-        "created_at": "2026-06-13 12:31:57",
-        "id": 3,
-        "is_admin": 0,
-        "plan": "professional",
-        "username": "kafedzie"
-      },
-      {
-        "created_at": "2026-06-13 11:15:33",
-        "id": 2,
-        "is_admin": 1,
-        "plan": "enterprise",
-        "username": "marc667us"
-      },
-      {
-        "created_at": "2026-06-13 11:15:32",
-        "id": 1,
-        "is_admin": 1,
-        "plan": "enterprise",
-        "username": "admin"
-      }
-    ],
-    "count": 3,
+    "active_sessions": [],
+    "message": "users table not found",
     "status": "ok"
   },
   "alerts_this_poll": [],
@@ -33,7 +11,7 @@
   "feedback": {
     "count": 0
   },
-  "last_poll_utc": "2026-06-13T18:01:37.682324+00:00",
+  "last_poll_utc": "2026-06-13T19:58:22.295184+00:00",
   "security_audit": {
     "error": "HTTP 405"
   },
