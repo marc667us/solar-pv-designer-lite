@@ -2519,7 +2519,7 @@ def project_new():
     with get_db() as c:
         folders = [r[0] for r in c.execute(
             "SELECT DISTINCT folder FROM projects WHERE user_id=? AND folder<>'' "
-            "ORDER BY folder COLLATE NOCASE",
+            "ORDER BY LOWER(folder)",
             (session["user_id"],)).fetchall()]
     return render_template("project_new.html", user=u,
                            plan=plan, limit=limit, count=count,
