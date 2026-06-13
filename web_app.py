@@ -8624,12 +8624,10 @@ def err_429(e):
 
 @app.errorhandler(500)
 def err_500(e):
-    # Surface the real traceback in Render runtime logs so 500s are
-    # diagnosable from outside the container without re-deploys.
+    # Log full traceback to runtime logs so 500s are diagnosable.
     try:
         import traceback as _tb
-        app.logger.error("500 at %s %s
-%s", request.method, request.path, _tb.format_exc())
+        app.logger.error("500 " + request.method + " " + request.path + chr(10) + _tb.format_exc())
     except Exception:
         pass
     return render_template("error.html", code=500,
