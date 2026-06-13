@@ -134,11 +134,16 @@ CREATE TABLE IF NOT EXISTS projects (
     user_id    INTEGER NOT NULL,
     name       TEXT NOT NULL,
     stage      TEXT DEFAULT 'new',
+    folder     TEXT DEFAULT '',
     data_json  TEXT DEFAULT '{}',
     created_at TEXT DEFAULT sqlite_ts(),
     updated_at TEXT DEFAULT sqlite_ts(),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+-- ALTER for already-deployed Postgres instances where projects existed
+-- before the folder column was introduced. ADD COLUMN IF NOT EXISTS is
+-- Postgres 9.6+ and idempotent — re-applying this migration is safe.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS folder TEXT DEFAULT '';
 
 -- ---------------------------------------------------------------------
 -- Table 4 — tickets
