@@ -630,6 +630,13 @@ def init_db():
                     "INSERT INTO users (username,email,name,password_hash,plan,is_admin) "
                     "VALUES (?,?,?,?,?,?)",
                     (uname, email, name, generate_password_hash(pwd), plan, is_admin))
+            else:
+                # Re-sync the password hash on every boot so rotating
+                # SOLARPRO_*_PASSWORD env vars (rotate-admin-password.yml)
+                # actually takes effect on Postgres, where rows persist.
+                c.execute(
+                    "UPDATE users SET password_hash=? WHERE username=?",
+                    (generate_password_hash(pwd), uname))
 
     # Referral-program columns: SQLite still uses ALTER TABLE for schema
     # evolution; Postgres has them baked in via the mirror migration.
