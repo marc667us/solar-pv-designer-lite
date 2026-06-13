@@ -2519,7 +2519,7 @@ def project_new():
     with get_db() as c:
         folders = [r[0] for r in c.execute(
             "SELECT DISTINCT folder FROM projects WHERE user_id=? AND folder<>'' "
-            "ORDER BY LOWER(folder)",
+            "ORDER BY folder",
             (session["user_id"],)).fetchall()]
     return render_template("project_new.html", user=u,
                            plan=plan, limit=limit, count=count,
@@ -11835,7 +11835,7 @@ def folders_index():
     with get_db() as c:
         rows = c.execute(
             "SELECT COALESCE(NULLIF(folder,''),'(Unfiled)') AS f, COUNT(*) AS n "
-            "FROM projects WHERE user_id=? GROUP BY f ORDER BY f COLLATE NOCASE",
+            "FROM projects WHERE user_id=? GROUP BY f ORDER BY f",
             (uid,)).fetchall()
     folders = [{"name": r["f"], "count": r["n"]} for r in rows]
     return render_template("folders_index.html", user=current_user(), folders=folders)
