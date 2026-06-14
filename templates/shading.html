@@ -1235,19 +1235,21 @@
     _ck('init starting (engine total_panels=' + (engineData.total_panels || 0) +
         ', obstructions=' + obstructions.length + ')');
 
-    // Scene
+    // Scene — bright daytime sky to match the reference images. Sky
+    // colour is a warm blue; fog matches so distant objects blend into
+    // the horizon naturally.
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a1a);
-    scene.fog = new THREE.Fog(0x0a0a1a, 50, 200);
-    _ck('scene created');
+    scene.background = new THREE.Color(0x87CEEB);    // sky blue
+    scene.fog = new THREE.Fog(0xb3e0f2, 80, 280);    // hazy horizon
+    _ck('scene created (daytime sky)');
 
-    // Camera — guard against a 0-width host (can happen if Bootstrap grid
-    // layout hasn't settled when the module runs). Force a sane aspect.
+    // Camera — eye-level 3/4 perspective like the reference images
+    // (person standing back from the array + slightly elevated).
     var hw = host.clientWidth || 800;
     var hh = host.clientHeight || 560;
-    const camera = new THREE.PerspectiveCamera(45, hw / hh, 0.1, 500);
-    camera.position.set(28, 22, 32);
-    camera.lookAt(0, 2, 0);
+    const camera = new THREE.PerspectiveCamera(50, hw / hh, 0.1, 500);
+    camera.position.set(24, 14, 26);
+    camera.lookAt(0, 3, 0);
     _ck('camera created (' + hw + 'x' + hh + ')');
 
     // Renderer
@@ -1259,11 +1261,12 @@
     host.appendChild(renderer.domElement);
     _ck('renderer attached');
 
-    // Lights — increased intensity so geometry stays visible even when
-    // the sun is below horizon or shadow-mapping is off.
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x303060, 0.85);
+    // Lights — daytime intensity matching the reference images.
+    // Hemisphere blends sky (warm blue) into ground (warm green) so
+    // unlit faces are not pure black. Ambient adds overall fill.
+    const hemi = new THREE.HemisphereLight(0xb3d8f0, 0x4a7c3f, 1.2);
     scene.add(hemi);
-    const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambient);
 
     // Sun (directional). Initial position will be set from engine series.
@@ -1279,12 +1282,18 @@
     scene.add(sun);
     scene.add(sun.target);
 
-    // Visible sun disc + glow.
+    // Visible sun disc + glow ring (bigger + brighter to match images).
     const sunMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(1.4, 24, 24),
-      new THREE.MeshBasicMaterial({ color: 0xffe066 })
+      new THREE.SphereGeometry(2.6, 24, 24),
+      new THREE.MeshBasicMaterial({ color: 0xffff66 })
     );
     scene.add(sunMesh);
+    const sunGlow = new THREE.Mesh(
+      new THREE.SphereGeometry(3.8, 24, 24),
+      new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true,
+                                    opacity: 0.30, side: THREE.BackSide })
+    );
+    scene.add(sunGlow);
 
     // Place sun from engine: use peak-shading step's altitude/azimuth.
     function placeSun(altDeg, azDeg) {
@@ -1300,6 +1309,7 @@
       const z =  Math.cos(az) * Math.cos(alt) * dist;
       sun.position.set(x, y, z);
       sunMesh.position.copy(sun.position);
+      sunGlow.position.copy(sun.position);
       sun.target.position.set(0, 0, 0);
     }
     let _placedSun = false;
@@ -1317,14 +1327,25 @@
     }
     if (!_placedSun) placeSun(60, 180);   // sane default — noon, south
 
-    // Ground (large grass-coloured disc).
+    // Ground — bright green grass like the reference images. Two
+    // discs: a wider tan "earth" base in the distance plus the green
+    // lawn on top so the horizon looks natural through the fog.
+    const earth = new THREE.Mesh(
+      new THREE.CircleGeometry(140, 48),
+      new THREE.MeshStandardMaterial({ color: 0xa68b6e, roughness: 1.0 })
+    );
+    earth.rotation.x = -Math.PI / 2;
+    earth.position.y = -0.02;
+    earth.receiveShadow = true;
+    scene.add(earth);
     const ground = new THREE.Mesh(
-      new THREE.CircleGeometry(80, 64),
-      new THREE.MeshStandardMaterial({ color: 0x202c1a, roughness: 1.0 })
+      new THREE.CircleGeometry(70, 64),
+      new THREE.MeshStandardMaterial({ color: 0x6ca54a, roughness: 0.9 })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
+    _ck('ground + earth added (green grass)');
 
     // North arrow (small cone at +Z away from camera).
     const arrowGroup = new THREE.Group();
