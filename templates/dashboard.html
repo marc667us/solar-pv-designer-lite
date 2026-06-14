@@ -212,10 +212,28 @@
 <div class="filter-bar mb-4">
   <i class="bi bi-search text-secondary" style="font-size:14px"></i>
   <input type="text" id="projSearch" class="search-input"
-         placeholder="Search all projects…" oninput="filterProjects()">
-  <span id="projCount" class="text-secondary ms-auto" style="font-size:11px">
-    {{ projects|length }} project{{ 's' if projects|length != 1 }}
+         placeholder="Search all projects (name, country, location)…"
+         oninput="filterProjects()">
+  <button type="button" id="projShowAllBtn" class="btn btn-sm btn-outline-warning"
+          onclick="toggleShowAllProjects()" style="font-size:11px;white-space:nowrap">
+    <i class="bi bi-eye me-1"></i>Show all ({{ projects|length }})
+  </button>
+  <span id="projCount" class="text-secondary ms-2" style="font-size:11px">
+    {{ projects|length }} project{{ 's' if projects|length != 1 }} · hidden
   </span>
+</div>
+
+{# Default-hidden hint shown when the lists are collapsed (no search query). #}
+<div id="projHiddenHint" class="solar-card p-3 mb-4 text-center"
+     style="border:1px dashed #2a2a5a;background:rgba(255,255,255,.02)">
+  <i class="bi bi-folder2 d-block mb-2" style="font-size:24px;color:#6060a0"></i>
+  <div class="fw-bold mb-1" style="color:#a0a0c8">
+    {{ projects|length }} project{{ 's' if projects|length != 1 }} on file
+  </div>
+  <div class="text-secondary small">
+    Type a project name, country, or location above to find one.
+    Or click <strong style="color:var(--solar-gold)">Show all</strong> to list every project.
+  </div>
 </div>
 
 <!-- ── Saved / Completed Projects ─────────────────────────────────────── -->
@@ -228,7 +246,7 @@
     </span>
   </div>
 </div>
-<div class="row g-3 mb-5" id="savedGrid">
+<div class="row g-3 mb-5" id="savedGrid" style="display:none">
 {% for p in saved %}
 {% set vc = '#22c55e' if p.verdict=='APPROVED' else '#f59e0b' if p.verdict=='CONDITIONAL' else '#ef4444' if p.verdict=='REJECTED' else '' %}
 {% set bc = '#22c55e' if p.bankability=='BANKABLE' else '#f59e0b' if p.bankability=='MARGINAL' else '#ef4444' if p.bankability=='NOT BANKABLE' else '' %}
@@ -398,7 +416,7 @@
     <i class="bi bi-exclamation-triangle me-1" style="color:#f59e0b"></i>Incomplete designs are cleared on logout
   </span>
 </div>
-<div class="row g-3 mb-4" id="draftsGrid">
+<div class="row g-3 mb-4" id="draftsGrid" style="display:none">
 {% for p in drafts %}
 {% set stage_steps = [('location','#f59e0b'),('loads','#0ea5e9'),('results','#22c55e')] %}
 {% set stage_idx   = 0 if p.stage=='location' else 1 if p.stage=='loads' else -1 %}
@@ -583,20 +601,66 @@
 {% endif %}
 
 <script>
+// Project list is HIDDEN by default to keep the dashboard tidy when the
+// operator has many saved projects. Two ways to reveal:
+//   1. Type in the search box — only matching cards appear
+//   2. Click the "Show all" button — every card appears
+let _projShowAll = false;
+
 function filterProjects() {
-  const q = document.getElementById('projSearch').value.toLowerCase();
-  const cols = document.querySelectorAll('.proj-col');
+  const q = (document.getElementById('projSearch').value || '').toLowerCase().trim();
+  const cols    = document.querySelectorAll('.proj-col');
+  const saved   = document.getElementById('savedGrid');
+  const drafts  = document.getElementById('draftsGrid');
+  const hint    = document.getElementById('projHiddenHint');
+  const cnt     = document.getElementById('projCount');
+  const total   = cols.length;
+
+  // Reveal mode: search has a query, OR user hit "Show all".
+  const revealing = _projShowAll || q.length > 0;
+
+  if (saved)  saved.style.display  = revealing ? '' : 'none';
+  if (drafts) drafts.style.display = revealing ? '' : 'none';
+  if (hint)   hint.style.display   = revealing ? 'none' : '';
+
   let visible = 0;
-  cols.forEach(c => {
-    const match = !q || c.dataset.search.includes(q);
-    c.style.display = match ? '' : 'none';
-    if (match) visible++;
-  });
-  const cnt = document.getElementById('projCount');
-  if (cnt) cnt.textContent = visible + ' project' + (visible !== 1 ? 's' : '');
+  if (revealing) {
+    cols.forEach(c => {
+      const match = !q || c.dataset.search.includes(q);
+      c.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+  }
+
+  if (cnt) {
+    if (!revealing) {
+      cnt.textContent = total + ' project' + (total !== 1 ? 's' : '') + ' · hidden';
+    } else if (q) {
+      cnt.textContent = visible + ' of ' + total + ' match' + (visible !== 1 ? 'es' : '');
+    } else {
+      cnt.textContent = 'showing all ' + total + ' project' + (total !== 1 ? 's' : '');
+    }
+  }
   const noP = document.getElementById('noProjects');
-  if (noP) noP.style.display = visible === 0 ? '' : 'none';
+  if (noP) noP.style.display = (revealing && visible === 0) ? '' : 'none';
 }
+
+function toggleShowAllProjects() {
+  _projShowAll = !_projShowAll;
+  const btn = document.getElementById('projShowAllBtn');
+  if (btn) {
+    btn.innerHTML = _projShowAll
+      ? '<i class="bi bi-eye-slash me-1"></i>Hide all'
+      : '<i class="bi bi-eye me-1"></i>Show all (' +
+        document.querySelectorAll('.proj-col').length + ')';
+    btn.classList.toggle('btn-outline-warning', !_projShowAll);
+    btn.classList.toggle('btn-warning',          _projShowAll);
+  }
+  filterProjects();
+}
+
+// Initialise hidden state on first paint so the counts read correctly.
+document.addEventListener('DOMContentLoaded', filterProjects);
 </script>
 
 {% endblock %}
