@@ -535,3 +535,136 @@ Next Recommended Step:
    PDF integration (small lift) vs. real photo upload (medium lift).
 
 ---
+
+# Implementation Log Entry
+Date: 2026-06-14 (evening continuation of the shading-agent session)
+Task: AI 3D Shading Simulation Agent — UX hardening + standalone report + visual fidelity
+Status: shipped (deployed live), one open item (partial 3D render on user's browser)
+
+Objective:
+Iterate on the morning's AI 3D Shading Simulation Agent shipment with
+operator feedback: fix blank-canvas reports, build a standalone shading
+report deliverable, add demo/manual-override controls so the human can
+drive the agent, recalibrate demo presets, run a live end-to-end test
+suite against the production site, and self-host Three.js so browser
+extensions can't block the 3D scene.
+
+Files Changed (today's commits 5a4f424 → 69594b8):
+* engine/shading_engine.py — Day-1 commit reused (no changes)
+* engine/agents/shading_agent.py — Day-3 commit reused (no changes)
+* templates/shading.html — extensive UX hardening (chart-split, manual
+  factor override, demo button, 12-s timeout + visible error message,
+  daytime aesthetic rebuild matching reference images, debug overlay,
+  per-section checkpoints, per-obstruction try/catch)
+* templates/report_shading.html (new) — full standalone HTML report
+* templates/three_test.html (new) — Three.js sanity test page
+* templates/dashboard.html — project-list collapse + Show-all button
+* web_app.py — multiple byte-patches:
+    patch_day5_get_engine_run.py        — engine runs on GET, default
+                                           num_panels=12 for fresh projs
+    patch_day5_fix_get_gate.py          — drop the ?v2=1 gate
+    patch_demo_mode.py                  — ?demo=10/20/25/30 server-side
+    patch_recalibrate_demos.py          — demos land on right buckets
+    patch_speed_and_manual.py           — cut LLM on GET (27s→1.3s);
+                                           manual_factor URL param
+    patch_save_manual_factor.py         — Save Manual Factor button +
+                                           data["shading"]["factor_source"]="manual"
+    patch_shading_report_routes.py      — /report/shading + /pdf
+                                           (also REPORT_OPTIONS for email)
+    patch_three_test.py                 — /three-test sanity page
+* static/vendor/three-0.160.0/three.module.js   (1.27 MB, new)
+* static/vendor/three-0.160.0/OrbitControls.js  (30 KB, new)
+* test_shading_live.py (new) — 47-assertion live test suite
+* docs/IMPLEMENTATION_LOG.md (this entry)
+
+User-visible changes:
+* /project/<pid>/shading defaults to the v2 dashboard (no flag).
+  ?v1=1 falls back to the legacy 2.5D SVG view as a back-out.
+* Engine runs on every GET, not just POST — dashboard renders the
+  moment you open the page, even on legacy projects.
+* Manual factor override row at the top: 8 gold pill buttons
+  (1.00/0.95/0.90/0.85/0.80/0.75/0.70/0.60) + Save this factor + Clear.
+* "Test with 10% shading" button at top-left of the canvas → ?demo=10.
+* Top stat strip: AGENT FACTOR / SYSTEM LOSS / AFFECTED PANELS /
+  SHADING WINDOW.
+* SHADING FACTOR RECOMMENDATION TABLE with AGENT PICK row in gold.
+* PV SYSTEM SIZE CALCULATION card: Base / Factor / Corrected /
+  Recommended.
+* 5-thumbnail SHADOW SIMULATION THROUGH THE DAY strip (07/09/12/15/18).
+* 3 daily curves: SHADING LOSS THROUGH THE DAY, SOLAR IRRADIANCE
+  PROFILE (ideal vs shaded), PER-PANEL SHADING DISTRIBUTION histogram.
+* CONCLUDING ACTION paragraph: "Due to X% shading loss the original
+  N panels would only deliver Y kWp ... therefore the array must be
+  increased to M panels (R kWp installed)".
+* Standalone Shading Report at /project/<pid>/report/shading (HTML)
+  and /project/<pid>/report/shading/pdf (PDF) + email pipeline via
+  the existing /project/<pid>/email flow (REPORT_OPTIONS now includes
+  "Shading Analysis Report").
+* Dashboard action bar links to View Report / Download PDF /
+  Email Report.
+* Dashboard project-list collapse: cards hidden by default with
+  a "N projects on file" hint + Show all (N) toggle + search box.
+* Three.js + OrbitControls SELF-HOSTED at /static/vendor/three-0.160.0/
+  so browser extensions can't block via the CDN.
+* 12-s timeout fallback on canvas — if Three.js doesn't finish loading
+  within 12 s, a visible error overlay explains likely causes.
+* Per-section console checkpoints with optional ?debug=1 overlay.
+* Brighter daytime scene aesthetic (sky blue background + green grass +
+  bigger yellow sun + warmer hemisphere lighting + closer camera FOV
+  50). Goal: match the reference images in pvsolar1/real shading/.
+
+Live test results (test_shading_live.py against live 1198ce0):
+  47/47 PASS — server health, login, engine runs on GET in 1.35 s,
+  all chart containers present, demo presets land on correct buckets
+  (0.90/0.80/0.75/0.70), manual factor override applies, legacy view
+  back-out works.
+
+Locator-selections audit:
+  138 regions across 20 countries in config/global_solar_data.py
+  verified — 0 issues. Engine reads the lat/lon the operator picked
+  on the locator step correctly.
+
+What Was Completed:
+✓ Standalone Shading Report (HTML + PDF + email + print)
+✓ Concluding action paragraph (dashboard + HTML report + PDF)
+✓ Manual factor override (URL param + Save button + persistence)
+✓ Demo presets ?demo=10/20/25/30 calibrated to land on right buckets
+✓ Page load 27 s → 1.3 s (cut LLM call on GET)
+✓ Three.js self-hosted (no CDN, no blocking)
+✓ 12-s timeout fallback with visible error message
+✓ Debug overlay (?debug=1) + per-section console checkpoints
+✓ Chart-split (2D charts render independently of Three.js)
+✓ Daytime aesthetic matching reference images
+✓ /three-test sanity page to isolate Three.js init issues
+✓ Live test suite (47/47 PASS)
+✓ Dashboard project-list collapse with search-first pattern
+
+What Remains (one open item):
+* Partial 3D render on the operator's browser. Operator reports
+  "1 panel, no sun, no obstructions" even after the daytime-aesthetic
+  rebuild. Cannot diagnose without their F12 console log or the
+  ?debug=1 overlay's last checkpoint line. Three possible causes:
+    1. WebGL acceleration disabled (chrome://gpu)
+    2. Browser extension blocking ES module scripts
+    3. Specific scene-init code path my checkpoints haven't caught
+  Next-session move: ask operator to load /three-test (the new sanity
+  page) and report whether the spinning cube renders. If yes -> my
+  shading scene has a remaining bug; if no -> environmental issue
+  on their machine.
+
+Known Risks:
+* google-adk not pinned in requirements.txt (ADR-003 covers this).
+  Soft-fallback OpenRouter HTTPS path is what production currently
+  uses for the agent narrative. Run cost: zero (Nemotron free tier).
+* The shading PDF's "5b. Concluding Action" markdown patch worked at
+  the file level but isn't tested end-to-end against markdown-pdf.
+
+Next Recommended Step:
+1. Operator hits /three-test and reports whether the spinning cube
+   renders. Confirms or rules out environmental issues.
+2. If environmental: write a Three.js-free fallback that renders the
+   3D scene as a server-generated SVG snapshot (same data, no WebGL).
+3. If scene bug: add granular checkpoints to the panel-grid loop body
+   so we can see which iteration breaks.
+
+---
