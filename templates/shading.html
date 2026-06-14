@@ -411,10 +411,10 @@
         {% set _rows = 2 if _np <= 16 else 3 if _np <= 36 else 4 if _np <= 64 else 5 if _np <= 100 else 6 %}
         {% set _cols = ((_np + _rows - 1) // _rows) %}
         {% set ARR_X0 = 500 %}
-        {% set ARR_Y0 = 430 %}
+        {% set ARR_Y0 = 450 %}
         {% set _pw   = 380 / _cols %}        {# panel width on screen (horizontal) #}
-        {% set _shx  = 90 / _rows %}         {# total horizontal back-shift (LEFT toward sun)  #}
-        {% set _shy  = 170 / _rows %}        {# total vertical back-shift (UP, tilt)            #}
+        {% set _shx  = 50 / _rows %}         {# total horizontal back-shift (LEFT toward sun)  #}
+        {% set _shy  = 270 / _rows %}        {# total vertical back-shift (UP, tilt) — bigger so the array clearly faces UP toward the sun #}
 
         {# ── Defs: gradients, patterns, filters, markers ────────────── #}
         <defs>
@@ -521,30 +521,36 @@
         <text x="478" y="78"  fill="#f59e0b" font-size="11" font-weight="600">12:00</text>
         <text x="930" y="377" fill="#f59e0b" font-size="11" font-weight="600">18:00</text>
 
-        {# ── Sun (upper-left) with glow + body + ray spokes ─────────── #}
-        <circle cx="170" cy="120" r="55" fill="url(#sunGlow)" filter="url(#softGlow)"/>
-        <circle cx="170" cy="120" r="28" fill="url(#sunGrad)"/>
+        {# ── Sun (upper area, slightly left) with glow + body + ray spokes ─── #}
+        <circle cx="240" cy="90" r="55" fill="url(#sunGlow)" filter="url(#softGlow)"/>
+        <circle cx="240" cy="90" r="30" fill="url(#sunGrad)"/>
         <g stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round">
-          <line x1="170" y1="78"  x2="170" y2="62"/>
-          <line x1="170" y1="162" x2="170" y2="178"/>
-          <line x1="128" y1="120" x2="112" y2="120"/>
-          <line x1="212" y1="120" x2="228" y2="120"/>
-          <line x1="140" y1="90"  x2="128" y2="78"/>
-          <line x1="200" y1="90"  x2="212" y2="78"/>
-          <line x1="140" y1="150" x2="128" y2="162"/>
-          <line x1="200" y1="150" x2="212" y2="162"/>
+          <line x1="240" y1="46"  x2="240" y2="30"/>
+          <line x1="240" y1="134" x2="240" y2="150"/>
+          <line x1="196" y1="90"  x2="180" y2="90"/>
+          <line x1="284" y1="90"  x2="300" y2="90"/>
+          <line x1="208" y1="58"  x2="196" y2="46"/>
+          <line x1="272" y1="58"  x2="284" y2="46"/>
+          <line x1="208" y1="122" x2="196" y2="134"/>
+          <line x1="272" y1="122" x2="284" y2="134"/>
         </g>
-        <text x="240" y="100" fill="#fbbf24" font-size="11" font-weight="700">Sun</text>
-        <text x="240" y="114" fill="#9090c0" font-size="10">light direction →</text>
+        <text x="310" y="78" fill="#fbbf24" font-size="12" font-weight="700">Sun</text>
+        <text x="310" y="92" fill="#9090c0" font-size="10">light direction →</text>
 
-        {# ── Sun rays: parallel beams from sun toward array (down-right) #}
-        <g stroke="#fbbf24" stroke-width="1.4" stroke-opacity="0.5" stroke-dasharray="3 4">
-          <line x1="200" y1="140" x2="500" y2="270"/>
-          <line x1="240" y1="140" x2="560" y2="270"/>
-          <line x1="280" y1="140" x2="620" y2="270"/>
-          <line x1="320" y1="140" x2="680" y2="270"/>
-          <line x1="360" y1="140" x2="740" y2="270"/>
-          <line x1="400" y1="140" x2="800" y2="270"/>
+        {# ── Sun rays: parallel beams from sun, aimed at the tilted PV     #}
+        {# face. Beams arrive at the TOP edge of the array (back-top row)  #}
+        {# at a near-perpendicular angle, demonstrating the panel faces    #}
+        {# the sun.                                                        #}
+        {% set _arr_top_x = ARR_X0 - _shx * _rows %}
+        {% set _arr_top_y = ARR_Y0 - _shy * _rows %}
+        {% set _arr_right_x = _arr_top_x + _cols * _pw %}
+        <g stroke="#fbbf24" stroke-width="1.4" stroke-opacity="0.55" stroke-dasharray="3 4">
+          {% for k in range(7) %}
+            {% set _t = k / 6.0 %}
+            <line x1="{{ 200 + k*36 }}" y1="{{ 110 + k*8 }}"
+                  x2="{{ _arr_top_x + _t * (_arr_right_x - _arr_top_x) }}"
+                  y2="{{ _arr_top_y + 4 }}"/>
+          {% endfor %}
         </g>
 
         {# ── 3D Building (obstruction). Bottom-front-right corner at
