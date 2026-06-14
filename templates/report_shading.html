@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+{% block title %}Shading Analysis Report — {{ project.name }}{% endblock %}
+{% block content %}
+
+{% set _eng = shading.get('engine', {}) or {} %}
+{% set _ag  = shading.get('agent_v2', {}) or {} %}
+{% set _factor = shading.factor or _eng.bucket_factor or 1.0 %}
+{% set _label  = shading.label or _eng.bucket_label or 'No shading' %}
+{% set _loss   = shading.loss_pct or _eng.bucket_loss_pct or 0 %}
+{% set _source = shading.factor_source or ('agent' if _ag else 'engine') %}
+{% set _pv_base = r.get('pv_kw_base') or r.get('pv_kw') or 0 %}
+{% set _pv_corrected = (_pv_base / _factor) if _factor and _factor > 0 else _pv_base %}
+{% set _pv_recommended = _pv_corrected | round(0, 'ceil') %}
+{% set _obs = shading.get('obstructions', []) or [] %}
+
+<style>
+  @media print {
+    .no-print, .navbar, footer { display: none !important; }
+    .solar-card { box-shadow: none !important; border: 1px solid #888 !important; }
+    body { background: #fff !important; color: #000 !important; }
+    .text-secondary { color: #444 !important; }
+  }
+  .shading-report h1, .shading-report h2 { letter-spacing: .5px; }
+  .shading-report table { font-size: 13px; }
+  .shading-report .metric-big { font-size: 32px; font-weight: 900; }
+</style>
+
+<div class="no-print mb-3 d-flex gap-2 flex-wrap">
+  <a href="{{ url_for('project_shading', pid=project.id) }}"
+     class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back to Shading Dashboard
+  </a>
+  <a href="{{ url_for('export_pdf_shading', pid=project.id) }}"
+     class="btn btn-sm btn-warning fw-bold">
+    <i class="bi bi-filetype-pdf me-1"></i>Download PDF
+  </a>
+  <a href="{{ url_for('project_email', pid=project.id) }}"
+     class="btn btn-sm btn-success">
+    <i class="bi bi-envelope me-1"></i>Email this report
+  </a>
+  <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-info">
+    <i class="bi bi-printer me-1"></i>Print
+  </button>
+</div>
+
+<div class="shading-report">
+
+  {# ── Title block ──────────────────────────────────────────────── #}
+  <div class="solar-card p-4 mb-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+      <div>
+        <div class="fw-black" style="font-size:24px;color:var(--solar-gold)">
+          <i class="bi bi-sun me-2"></i>Shading Analysis Report
+        </div>
+        <div class="fw-bold mt-1" style="font-size:18px;color:#fff">
+          {{ project.name }}
+        </div>
+        <div class="text-secondary mt-1" style="font-size:13px">
+          {{ d.get('region', '') }}, {{ d.get('country', '') }} ·
+          {{ d.get('system_type', 'off-grid').title() }} System
+        </div>
+        <div class="text-secondary" style="font-size:11px">
+          Prepared by SolarPro Global · BS 7671:2018 · IEC 61853 · IEC 62446
+        </div>
+      </div>
+      <div class="text-end">
+        <div class="text-secondary" style="font-size:11px">AGENT FACTOR</div>
+        <div class="metric-big" style="color:var(--solar-gold);line-height:1">
+          {{ "%.2f"|format(_factor) }}
+        </div>
+        <div class="text-secondary" style="font-size:12px">{{ _label }}</div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Executive Summary ─────────────────────────────────────────── #}
+  <div class="solar-card p-3 mb-4">
+    <div class="section-head mb-3">
+      <i class="bi bi-1-circle me-2"></i>Executive Summary
+    </div>
+    <p style="font-size:14px;color:#d4d4f0;line-height:1.6">
+      This report documents the AI 3D Shading Simulation performed on the
+      <strong>{{ project.name }}</strong> site. The shading factor was
+      determined from on-site obstruction geometry (height, distance,
+      direction), the site's solar geometry (latitude
+      {{ _eng.get('lat', '--') }}°, longitude {{ _eng.get('lon', '--') }}°),
+      and the electrical-string behaviour of the PV modules under partial
+      shade.
+    </p>
+    <div class="row g-2 mt-2">
+      {% set _kpis = [
+        ('AI shading factor', '%.2f'|format(_factor), 'var(--solar-gold)'),
+        ('Severity bucket', _label, '#9bd1ff'),
+        ('Energy loss', '%.1f%%'|format(_loss), '#ef4444'),
+        ('Affected panels', (_eng.get('affected_panels', '--')|string) + ' / ' + (_eng.get('total_panels', '--')|string), '#f59e0b'),
+        ('Shading window', _eng.get('shading_start', '--') ~ '–' ~ _eng.get('shading_end', '--'), '#9bd1ff'),
+        ('Mitigation', _eng.get('mitigation', shading.get('mitigation', 'Bypass diodes')), '#22c55e'),
+      ] %}
+      {% for label, value, color in _kpis %}
+      <div class="col-6 col-md-4">
+        <div class="p-2 rounded" style="background:rgba(255,255,255,.03);border:1px solid #1e1e3a">
+          <div class="text-secondary" style="font-size:10px;text-transform:uppercase">{{ label }}</div>
+          <div class="fw-bold" style="font-size:16px;color:{{ color }}">{{ value }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ── Site Geometry ─────────────────────────────────────────────── #}
+  <div class="solar-card p-3 mb-4">
+    <div class="section-head mb-2">
+      <i class="bi bi-2-circle me-2"></i>Site Geometry
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <tbody style="color:#e6e6f5">
+          <tr><th style="color:#a0a0c8;width:50%">Latitude</th><td>{{ _eng.get('lat','--') }}° N</td></tr>
+          <tr><th style="color:#a0a0c8">Longitude</th><td>{{ _eng.get('lon','--') }}° E</td></tr>
+          <tr><th style="color:#a0a0c8">Analysis date</th><td>{{ _eng.get('on_date','21 June (summer solstice)') }}</td></tr>
+          <tr><th style="color:#a0a0c8">Array tilt</th><td>{{ _eng.get('tilt_deg','--') }}°</td></tr>
+          <tr><th style="color:#a0a0c8">Array azimuth</th><td>{{ _eng.get('array_azimuth_deg','--') }}°</td></tr>
+          <tr><th style="color:#a0a0c8">Total panels</th><td>{{ _eng.get('total_panels','--') }}</td></tr>
+          <tr><th style="color:#a0a0c8">Number of strings</th><td>{{ _eng.get('n_strings','--') }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── Obstruction Register ──────────────────────────────────────── #}
+  <div class="solar-card p-3 mb-4">
+    <div class="section-head mb-2">
+      <i class="bi bi-3-circle me-2"></i>Obstruction Register
+    </div>
+    {% if _obs %}
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead style="color:#a0a0c8">
+          <tr><th>#</th><th>Type</th><th>H (m)</th><th>W (m)</th><th>Dist (m)</th><th>Direction</th><th>Mitigation</th></tr>
+        </thead>
+        <tbody style="color:#e6e6f5">
+          {% for o in _obs %}
+          <tr>
+            <td><span class="badge" style="background:var(--solar-gold);color:#000">{{ loop.index }}</span></td>
+            <td>{{ o.type or '—' }}</td>
+            <td>{{ "%.1f"|format(o.height|float) }}</td>
+            <td>{{ "%.1f"|format(o.width|float) }}</td>
+            <td>{{ "%.1f"|format(o.distance|float) }}</td>
+            <td>{{ o.direction or '—' }}</td>
+            <td>{{ o.mitigation or 'None' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-secondary">No obstructions recorded on this project.</p>
+    {% endif %}
+  </div>
+
+  {# ── AI Narrative ──────────────────────────────────────────────── #}
+  <div class="solar-card p-3 mb-4">
+    <div class="section-head mb-2">
+      <i class="bi bi-4-circle me-2"></i>AI Shading Agent — Narrative Analysis
+    </div>
+    {% if _ag and _ag.narrative %}
+    <div class="p-3 rounded mb-3"
+         style="background:rgba(245,158,11,.06);border-left:3px solid var(--solar-gold);
+                font-size:14px;color:#e6e6f5;line-height:1.6">
+      {{ _ag.narrative }}
+    </div>
+    {% else %}
+    <p style="color:#d4d4f0;line-height:1.6">
+      The deterministic shading engine computed a factor of
+      <strong style="color:var(--solar-gold)">{{ "%.2f"|format(_factor) }}</strong>
+      ({{ _label }}, {{ "%.1f"|format(_loss) }}% loss) for this site.
+      See the per-obstruction table above and the system recommendation
+      in section 6.
+    </p>
+    {% endif %}
+
+    {% if _ag and _ag.per_obstruction %}
+    <div class="fw-bold mb-2" style="color:#a0a0c8">PER-OBSTRUCTION IMPACT</div>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead style="color:#a0a0c8">
+          <tr><th>Obstruction</th><th>Impact</th><th>Mitigation recommendation</th></tr>
+        </thead>
+        <tbody style="color:#e6e6f5">
+          {% for r2 in _ag.per_obstruction %}
+          <tr>
+            <td>{{ r2.ref or '—' }}</td>
+            <td>{{ r2.impact or '—' }}</td>
+            <td style="color:#9bd1ff">{{ r2.mitigation or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if _ag and _ag.factor_reasoning %}
+    <p class="mt-3" style="color:#d4d4f0">
+      <strong style="color:var(--solar-gold)">Factor reasoning:</strong>
+      {{ _ag.factor_reasoning }}
+    </p>
+    {% endif %}
+
+    {% if _ag and _ag.what_ifs %}
+    <div class="fw-bold mt-3 mb-2" style="color:#a0a0c8">MITIGATION WHAT-IFS</div>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead style="color:#a0a0c8">
+          <tr><th>Scenario</th><th>Expected factor</th><th>Expected loss</th><th>Reasoning</th></tr>
+        </thead>
+        <tbody style="color:#e6e6f5">
+          {% for w in _ag.what_ifs %}
+          <tr>
+            <td>{{ w.scenario or '—' }}</td>
+            <td style="color:#4ade80;font-weight:700">{{ w.expected_factor }}</td>
+            <td>{{ w.expected_loss_pct }}%</td>
+            <td style="font-size:12px">{{ w.reasoning or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── PV Size Calculation ──────────────────────────────────────── #}
+  <div class="solar-card p-3 mb-4">
+    <div class="section-head mb-2">
+      <i class="bi bi-5-circle me-2"></i>PV System Sizing — With Shading Correction
+    </div>
+    <p style="color:#d4d4f0">
+      Corrected PV size is the base size divided by the shading factor —
+      this ensures the array still meets the daily energy demand even
+      with the modelled losses.
+    </p>
+    <div class="row g-2">
+      <div class="col-6 col-md-3">
+        <div class="p-2 rounded text-center"
+             style="background:rgba(255,255,255,.03);border:1px solid #1e1e3a">
+          <div class="text-secondary" style="font-size:10px">BASE PV</div>
+          <div class="fw-bold" style="font-size:20px;color:#fff">{{ "%.2f"|format(_pv_base) }} kWp</div>
+          <div class="text-secondary" style="font-size:10px">(no shading)</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="p-2 rounded text-center"
+             style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4)">
+          <div class="text-secondary" style="font-size:10px">SHADING FACTOR</div>
+          <div class="fw-bold" style="font-size:20px;color:var(--solar-gold)">{{ "%.2f"|format(_factor) }}</div>
+          <div class="text-secondary" style="font-size:10px">{{ _label }}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="p-2 rounded text-center"
+             style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.4)">
+          <div class="text-secondary" style="font-size:10px">CORRECTED PV</div>
+          <div class="fw-bold" style="font-size:20px;color:#4ade80">{{ "%.2f"|format(_pv_corrected) }} kWp</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="p-2 rounded text-center"
+             style="background:linear-gradient(90deg,rgba(74,222,128,.18) 0%, rgba(74,222,128,.08) 100%);
+                    border:2px solid #4ade80">
+          <div class="fw-bold" style="color:#4ade80;font-size:11px">RECOMMENDED</div>
+          <div class="fw-bold" style="font-size:24px;color:#4ade80">{{ "%.0f"|format(_pv_recommended) }} kWp</div>
+        </div>
+      </div>
+    </div>
+    <div class="mt-2 p-2 rounded text-center"
+         style="background:#0a0a14;border:1px dashed #1e1e3a;color:#d4d4f0;
+                font-family:monospace;font-size:13px">
+      Corrected PV Size = {{ "%.2f"|format(_pv_base) }} ÷ {{ "%.2f"|format(_factor) }}
+      = <strong style="color:#4ade80">{{ "%.2f"|format(_pv_corrected) }} kWp</strong>
+      → rounded to <strong style="color:#4ade80">{{ "%.0f"|format(_pv_recommended) }} kWp</strong>
+    </div>
+  </div>
+
+  {# ── Concluding Action — sizing decision in plain language ──── #}
+  {% set _orig_panels = r.get('num_panels', 0) | int %}
+  {% set _panel_wp = r.get('panel_wp', 400) | int %}
+  {% set _extra_kwp = _pv_corrected - _pv_base %}
+  {% set _extra_panels = ((_extra_kwp * 1000 / _panel_wp) | round(0, 'ceil')) | int if _panel_wp > 0 else 0 %}
+  {% set _new_panels = _orig_panels + _extra_panels %}
+  {% set _daily = r.get('daily_kwh', 0) %}
+  <div class="solar-card p-3 mb-4"
+       style="background:linear-gradient(180deg,rgba(74,222,128,.08) 0%,rgba(74,222,128,.02) 100%);
+              border-left:4px solid #4ade80">
+    <div class="section-head mb-2" style="color:#4ade80">
+      <i class="bi bi-flag-fill me-2"></i>Concluding Action — Sizing Decision
+    </div>
+    <p style="color:#e6e6f5;font-size:14px;line-height:1.7">
+      {% if _factor >= 0.999 %}
+        No shading was detected on this site. The original PV array of
+        <strong>{{ _orig_panels }} panels ({{ "%.2f"|format(_pv_base) }} kWp)</strong>
+        will deliver the design daily energy demand of
+        <strong>{{ "%.2f"|format(_daily) }} kWh/day</strong> without
+        adjustment.
+        <strong style="color:#4ade80">No re-sizing required.</strong>
+      {% else %}
+        Due to <strong style="color:var(--solar-gold)">{{ "%.1f"|format(_loss) }}% shading loss</strong>
+        ({{ _label }}) at this site, the original PV array of
+        <strong>{{ _orig_panels }} panels ({{ "%.2f"|format(_pv_base) }} kWp)</strong>
+        would only deliver about
+        <strong style="color:#ef4444">{{ "%.2f"|format(_pv_base * _factor) }} kWp</strong>
+        of usable capacity against the design daily energy demand of
+        <strong>{{ "%.2f"|format(_daily) }} kWh/day</strong>.
+        <br><br>
+        <strong style="color:var(--solar-gold)">Therefore</strong>,
+        the array must be increased to
+        <strong style="color:#4ade80">{{ _new_panels }} panels
+        ({{ "%.0f"|format(_pv_recommended) }} kWp installed)</strong>
+        so the shaded array still produces the required energy. That is
+        <strong>{{ _extra_panels }} additional panels</strong>
+        ({{ "%.2f"|format(_extra_kwp) }} kWp extra) beyond the un-shaded
+        design.
+        {% if _factor < 0.85 %}
+        <br><br>
+        <strong>Alternative path:</strong> install
+        {% if _factor >= 0.75 %}DC optimisers{% else %}micro-inverters
+        (Enphase IQ8){% endif %} to recover most of the loss without
+        adding panels — capex vs roof-area trade-off.
+        {% endif %}
+      {% endif %}
+    </p>
+  </div>
+
+  {# ── Recommendations ──────────────────────────────────────────── #}
+  <div class="solar-card p-3 mb-4">
+    <div class="section-head mb-2">
+      <i class="bi bi-6-circle me-2"></i>Recommendations
+    </div>
+    <ul style="color:#d4d4f0;line-height:1.7">
+      {% if _factor >= 0.999 %}
+      <li>No additional PV capacity is required for shading.</li>
+      <li>Re-confirm during commissioning that the site stays free of new
+          obstructions (trees, mast retrofits, neighbour builds).</li>
+      {% elif _factor >= 0.90 %}
+      <li>Light shading detected. Standard module-level bypass diodes are
+          sufficient — no per-panel electronics required.</li>
+      <li>Re-confirm panel layout avoids the morning/evening shadow
+          windows where possible.</li>
+      <li>Use the recommended <strong>{{ "%.0f"|format(_pv_recommended) }} kWp</strong> array size.</li>
+      {% elif _factor >= 0.80 %}
+      <li>Moderate to significant shading. Consider DC optimisers (Tigo,
+          SolarEdge HD-Wave) on the affected string(s) to eliminate
+          string-mismatch losses.</li>
+      <li>If practical, increase row spacing or relocate the array away
+          from the dominant obstruction.</li>
+      <li>Use the recommended <strong>{{ "%.0f"|format(_pv_recommended) }} kWp</strong> array size.</li>
+      {% else %}
+      <li>Heavy or severe shading. Strongly recommend DC optimisers OR
+          micro-inverters (Enphase IQ8) on the entire array to decouple
+          per-panel MPPT.</li>
+      <li>If the dominant obstruction is removable (tree pruning, antenna
+          relocation), the financial case for removal is typically
+          18-36 months payback.</li>
+      <li>Use the recommended <strong>{{ "%.0f"|format(_pv_recommended) }} kWp</strong> array size.</li>
+      <li>Add a performance-monitoring system (Solar-Log, Tigo TS4) so the
+          array's daily yield is tracked against the shading model
+          post-installation.</li>
+      {% endif %}
+    </ul>
+  </div>
+
+  {# ── Methodology footer ──────────────────────────────────────── #}
+  <div class="solar-card p-3 mb-4">
+    <div class="section-head mb-2">
+      <i class="bi bi-7-circle me-2"></i>Methodology
+    </div>
+    <ol style="color:#d4d4f0;line-height:1.6;font-size:13px">
+      <li><strong>Sun position</strong> via the NOAA Solar Position
+        Algorithm (≈0.1° accuracy) at the site GPS coordinates.</li>
+      <li><strong>3D ray-cast shadow projection</strong> from each
+        obstruction's bounding geometry onto the panel array plane.</li>
+      <li><strong>Per-panel intersection</strong> via Sutherland-Hodgman
+        convex polygon clipping at 30-minute intervals across the day.</li>
+      <li><strong>Electrical-string model</strong> that applies the
+        correct loss formula per mitigation strategy: None / Bypass
+        diodes (3 substrings per panel + Kirchhoff string penalty) /
+        DC optimisers / Micro-inverters (per-panel MPPT).</li>
+      <li><strong>8-bucket conservative pick</strong> matching the
+        project's <code>SHADING_FACTORS</code> table; if computed loss
+        falls between bands, the conservative bucket is selected.</li>
+      <li><strong>Narrative explanation</strong> from a Google-ADK
+        <code>LlmAgent</code> whose system prompt carries NREL solar
+        geometry, IEC 61853 string-electrical behaviour, and common
+        site patterns.</li>
+    </ol>
+  </div>
+
+  <div class="text-center text-secondary mt-4" style="font-size:11px">
+    <em>Shading Analysis Report — {{ project.name }}</em><br>
+    Generated by SolarPro Global · AI 3D Shading Simulation Agent v1
+  </div>
+</div>
+
+{% endblock %}
