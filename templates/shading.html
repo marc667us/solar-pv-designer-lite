@@ -54,9 +54,15 @@
 {% if request.args.get('v2') %}
 {% set _eng = shading.get('engine') if shading else None %}
 {% set _obs = shading.get('obstructions') or [] %}
+{% set _results = project.data.get('results', {}) if project else {} %}
+{% set _pv_base = _results.get('pv_kw_base') or _results.get('pv_kw') or 0 %}
+{% set _factor  = _eng.bucket_factor if _eng else (shading.factor or 1.0) %}
+{% set _pv_corrected = (_pv_base / _factor) if _factor and _factor > 0 else _pv_base %}
+{% set _pv_recommended = (_pv_corrected | round(0, 'ceil')) %}
 <div class="solar-card p-0 mb-4 overflow-hidden"
      style="border:1px solid rgba(245,158,11,.35);
             background:linear-gradient(180deg,#0a0a1a 0%,#0d1023 60%,#101632 100%);">
+  {# ── Top header — title left, location/date/time strip right.       #}
   <div class="d-flex justify-content-between align-items-center p-3 flex-wrap gap-2"
        style="border-bottom:1px solid #1e1e3a">
     <div>
@@ -68,30 +74,65 @@
       </div>
     </div>
     {% if _eng %}
-    <div class="d-flex gap-2 align-items-center flex-wrap" style="font-size:11px">
-      <span class="badge"
-            style="background:rgba(245,158,11,.18);color:var(--solar-gold);
-                   border:1px solid rgba(245,158,11,.45);font-size:11px">
-        AI factor {{ "%.2f"|format(_eng.bucket_factor) }} · {{ _eng.bucket_label }}
-      </span>
-      <span class="text-secondary">
-        Loss: <span class="text-danger fw-bold">{{ _eng.system_loss_pct }}%</span>
-      </span>
-      <span class="text-secondary">
-        Affected: <span class="text-warning fw-bold">{{ _eng.affected_panels }}/{{ _eng.total_panels }}</span>
-      </span>
-      <span class="text-secondary">
-        Window: {{ _eng.shading_start }}–{{ _eng.shading_end }}
-        ({{ _eng.shading_duration_h }}h)
-      </span>
+    <div class="p-2 rounded text-end" style="background:rgba(255,255,255,.04);
+                                              border:1px solid #1e1e3a;font-size:11px">
+      <div class="text-secondary" style="font-size:10px">LOCATION</div>
+      <div class="fw-bold" style="color:var(--solar-gold);font-size:12px">
+        {{ project.data.region or '—' }}, {{ project.data.country or '—' }}
+      </div>
+      <div class="text-secondary mt-1" style="font-size:10px">
+        GPS {{ "%.4f"|format(_eng.lat) }}° / {{ "%.4f"|format(_eng.lon) }}°
+        · Date {{ _eng.on_date }}
+      </div>
     </div>
-    {% else %}
-    <div class="small text-secondary">
+    {% endif %}
+    {% if not _eng %}
+    <div class="small text-secondary mt-2">
       Engine has not produced output yet. Save the form below at least once with
       obstructions + a Location step so the engine can run with site GPS + panel count.
     </div>
     {% endif %}
   </div>
+
+  {% if _eng %}
+  {# ── Top stat strip: matches the dark cards in the reference images. #}
+  <div class="row g-0" style="border-bottom:1px solid #1e1e3a;background:rgba(0,0,0,.20)">
+    <div class="col-6 col-md-3 p-3 text-center" style="border-right:1px solid #1e1e3a">
+      <div class="text-secondary" style="font-size:10px">AGENT FACTOR</div>
+      <div class="fw-black" style="color:var(--solar-gold);font-size:22px">
+        {{ "%.2f"|format(_eng.bucket_factor) }}
+      </div>
+      <div class="text-secondary" style="font-size:10px">{{ _eng.bucket_label }}</div>
+    </div>
+    <div class="col-6 col-md-3 p-3 text-center" style="border-right:1px solid #1e1e3a">
+      <div class="text-secondary" style="font-size:10px">SYSTEM LOSS</div>
+      <div class="fw-black text-danger" style="font-size:22px">
+        {{ _eng.system_loss_pct }}%
+      </div>
+      <div class="text-secondary" style="font-size:10px">
+        Peak step: {{ _eng.peak_step_loss_pct }}%
+      </div>
+    </div>
+    <div class="col-6 col-md-3 p-3 text-center" style="border-right:1px solid #1e1e3a">
+      <div class="text-secondary" style="font-size:10px">AFFECTED PANELS</div>
+      <div class="fw-black text-warning" style="font-size:22px">
+        {{ _eng.affected_panels }}/{{ _eng.total_panels }}
+      </div>
+      <div class="text-secondary" style="font-size:10px">
+        {{ _eng.heavily_affected }} heavily affected
+      </div>
+    </div>
+    <div class="col-6 col-md-3 p-3 text-center">
+      <div class="text-secondary" style="font-size:10px">SHADING WINDOW</div>
+      <div class="fw-black" style="color:#9bd1ff;font-size:18px">
+        {{ _eng.shading_start }}–{{ _eng.shading_end }}
+      </div>
+      <div class="text-secondary" style="font-size:10px">
+        {{ _eng.shading_duration_h }} hours / day
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   {# ── Main 3D canvas + right-side control rail ──────────────────────── #}
   <div class="row g-0">
@@ -374,6 +415,172 @@
           Full</span>
       </div>
     </div>
+  </div>
+
+  {# ───────────────────────────────────────────────────────────────── #}
+  {# Shadow simulation through the day — 5 SVG thumbnails (mini grids #}
+  {# coloured by per-panel fraction at fixed times). Matches the      #}
+  {# centre band in the reference images.                              #}
+  {# ───────────────────────────────────────────────────────────────── #}
+  {% if _eng and _eng.series %}
+  <div class="p-3" style="border-top:1px solid #1e1e3a">
+    <div class="fw-bold small mb-2" style="color:var(--solar-gold);font-size:12px">
+      <i class="bi bi-clock-history me-1"></i>SHADOW SIMULATION THROUGH THE DAY ({{ _eng.on_date }})
+    </div>
+    <div id="shadingThumbStrip" class="row g-2"></div>
+    <div class="text-secondary mt-2" style="font-size:10px">
+      Click any thumbnail to jump the time slider to that step.
+    </div>
+  </div>
+  {% endif %}
+
+  {# ───────────────────────────────────────────────────────────────── #}
+  {# Bottom section: Shading Factor Recommendation Table (with AGENT  #}
+  {# PICK row highlighted in gold) + PV System Size Calculation card. #}
+  {# ───────────────────────────────────────────────────────────────── #}
+  {% if _eng %}
+  <div class="row g-0" style="border-top:1px solid #1e1e3a;background:rgba(0,0,0,.15)">
+    <div class="col-12 col-md-7 p-3">
+      <div class="fw-bold small mb-2" style="color:var(--solar-gold);font-size:12px">
+        <i class="bi bi-table me-1"></i>SHADING FACTOR RECOMMENDATION TABLE
+        (AGENT PICK HIGHLIGHTED)
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-borderless m-0"
+               style="font-size:12px;color:#d4d4f0">
+          <thead style="color:#a0a0c8;border-bottom:1px solid #1e1e3a">
+            <tr>
+              <th style="width:36px"><i class="bi bi-cpu" style="color:var(--solar-gold)"></i></th>
+              <th>Shading Condition</th>
+              <th class="text-end">Shading Loss</th>
+              <th class="text-end">Shading Factor</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for label, loss_pct, factor in shading_factors %}
+          {% set _is_pick = (factor == _eng.bucket_factor) %}
+          <tr {% if _is_pick %}
+              style="background:linear-gradient(90deg,
+                       rgba(245,158,11,.20) 0%,
+                       rgba(245,158,11,.08) 100%);
+                     border-left:4px solid #f59e0b;
+                     box-shadow:0 0 12px rgba(245,158,11,.18) inset"
+              {% else %}
+              style="opacity:0.55"
+              {% endif %}>
+            <td>
+              {% if _is_pick %}
+              <span class="badge"
+                    style="background:#f59e0b;color:#000;font-size:9px;padding:4px 6px">
+                <i class="bi bi-cpu"></i> PICK
+              </span>
+              {% endif %}
+            </td>
+            <td {% if _is_pick %}style="font-weight:900;color:#fff;font-size:13px"{% endif %}>
+              {{ label }}
+            </td>
+            <td class="text-end">
+              {% if _is_pick %}
+              <span class="badge bg-danger" style="font-size:11px">{{ loss_pct }}</span>
+              {% else %}
+              {{ loss_pct }}
+              {% endif %}
+            </td>
+            <td class="text-end"
+                {% if _is_pick %}style="color:var(--solar-gold);font-weight:900;font-size:16px"{% endif %}>
+              {{ "%.2f"|format(factor) }}
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-5 p-3" style="border-left:1px solid #1e1e3a">
+      <div class="fw-bold small mb-2" style="color:var(--solar-gold);font-size:12px">
+        <i class="bi bi-calculator me-1"></i>PV SYSTEM SIZE CALCULATION (WITH SHADING)
+      </div>
+      <div class="d-flex flex-column gap-2">
+        <div class="d-flex justify-content-between align-items-center p-2 rounded"
+             style="background:rgba(255,255,255,.03);border:1px solid #1e1e3a">
+          <div>
+            <div class="text-secondary" style="font-size:10px">BASE PV SIZE</div>
+            <div class="small text-secondary" style="font-size:10px">(without shading)</div>
+          </div>
+          <div class="fw-black" style="font-size:18px;color:#fff">
+            {{ "%.2f"|format(_pv_base) }} kWp
+          </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center p-2 rounded"
+             style="background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.35)">
+          <div>
+            <div class="text-secondary" style="font-size:10px">AI SELECTED FACTOR</div>
+            <div class="small" style="color:var(--solar-gold);font-size:11px">
+              {{ _eng.bucket_label }}
+            </div>
+          </div>
+          <div class="fw-black" style="color:var(--solar-gold);font-size:22px">
+            {{ "%.2f"|format(_eng.bucket_factor) }}
+          </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center p-2 rounded"
+             style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.35)">
+          <div>
+            <div class="text-secondary" style="font-size:10px">CORRECTED PV SIZE</div>
+            <div class="small text-secondary" style="font-size:10px">(after shading)</div>
+          </div>
+          <div class="fw-black" style="color:#4ade80;font-size:18px">
+            {{ "%.2f"|format(_pv_corrected) }} kWp
+          </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center p-2 rounded"
+             style="background:linear-gradient(90deg, rgba(74,222,128,.18) 0%,
+                                                       rgba(74,222,128,.08) 100%);
+                    border:2px solid #4ade80">
+          <div>
+            <div class="fw-bold" style="color:#4ade80;font-size:11px">RECOMMENDED PV SIZE</div>
+            <div class="small text-secondary" style="font-size:10px">
+              (rounded up to nearest whole kWp)
+            </div>
+          </div>
+          <div class="fw-black" style="color:#4ade80;font-size:26px">
+            {{ "%.0f"|format(_pv_recommended) }} kWp
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ───────────────────────────────────────────────────────────────── #}
+  {# Action bar at the bottom of the v2 dashboard — matches the       #}
+  {# button row in the reference images.                               #}
+  {# ───────────────────────────────────────────────────────────────── #}
+  <div class="d-flex flex-wrap gap-2 p-3"
+       style="border-top:1px solid #1e1e3a;background:rgba(0,0,0,.25)">
+    <a href="{{ url_for('project_loads', pid=project.id) }}"
+       class="btn btn-sm btn-outline-secondary" style="font-size:11px">
+      <i class="bi bi-arrow-left me-1"></i>Back to Load Calculation
+    </a>
+    <button type="button" class="btn btn-sm btn-outline-info"
+            id="shadingRegen3d" style="font-size:11px">
+      <i class="bi bi-arrow-clockwise me-1"></i>Re-generate 3D Simulation
+    </button>
+    <button type="submit" form="shadingForm" name="run_analysis" value="1"
+            class="btn btn-sm btn-warning fw-bold" style="font-size:11px">
+      <i class="bi bi-cpu me-1"></i>Run AI Shading Analysis
+    </button>
+    <a href="{{ url_for('project_loads', pid=project.id) }}"
+       class="btn btn-sm btn-success" style="font-size:11px">
+      <i class="bi bi-calculator me-1"></i>Apply Factor &amp; Recalculate
+    </a>
+    {% if _eng %}
+    <a href="{{ url_for('export_pdf_proposal', pid=project.id) }}"
+       class="btn btn-sm btn-outline-warning ms-auto" style="font-size:11px">
+      <i class="bi bi-filetype-pdf me-1"></i>Save Shading Report (PDF)
+    </a>
+    {% endif %}
   </div>
 </div>
 
@@ -971,6 +1178,117 @@
         });
       }
     }
+
+    // ── 5-thumbnail shadow strip (matches the centre band in the
+    //    reference dashboard images). Picks the series steps closest
+    //    to 07:00 / 09:00 / 12:00 / 15:00 / 18:00, renders each as a
+    //    small SVG grid coloured by that step's panel_fracs. Clicking
+    //    a thumbnail jumps the main slider to that step.
+    const thumbHost = document.getElementById('shadingThumbStrip');
+    if (thumbHost && series.length) {
+      const targetTimes = ['07:00', '09:00', '12:00', '15:00', '18:00'];
+      const picks = targetTimes.map(t => {
+        // Closest step (by absolute minute distance).
+        const tm = (s) => {
+          const [h, m] = (s.time || '00:00').split(':').map(Number);
+          return h * 60 + m;
+        };
+        const target = parseInt(t.split(':')[0], 10) * 60;
+        let best = 0;
+        for (let i = 1; i < series.length; i++) {
+          if (Math.abs(tm(series[i]) - target) < Math.abs(tm(series[best]) - target)) {
+            best = i;
+          }
+        }
+        return best;
+      });
+
+      function colorFor(frac) {
+        if (frac >= 0.95) return '#000';
+        if (frac >= 0.50) return '#c62828';
+        if (frac >= 0.20) return '#f57c00';
+        if (frac >= 0.05) return '#ffb74d';
+        return '#3949ab';
+      }
+
+      const cells = [];
+      picks.forEach(idx => {
+        const s = series[idx];
+        const fracs = s.panel_fracs || [];
+        // Build a small SVG mini-grid: cols × rows panels, fixed 80×52 px.
+        const padX = 4, padY = 4;
+        const cellW = (80 - 2 * padX) / cols;
+        const cellH = (52 - 2 * padY) / rows;
+        let rects = '';
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const pid = r * cols + c;
+            if (pid >= totalPanels) break;
+            const f = fracs[pid] || 0;
+            rects += `<rect x="${padX + c * cellW}" y="${padY + r * cellH}"
+              width="${cellW - 0.5}" height="${cellH - 0.5}"
+              fill="${colorFor(f)}" />`;
+          }
+        }
+        // Sun glyph in the upper-left corner.
+        const dotX = 6 + (s.az / 360) * 68;
+        const dotY = 50 - Math.max(0, s.alt) * 0.35;
+        const sun = s.alt > 0 ?
+          `<circle cx="${dotX.toFixed(1)}" cy="${dotY.toFixed(1)}" r="2.5"
+             fill="#ffd24a" stroke="#f59e0b" stroke-width="0.5"/>` : '';
+
+        cells.push(`
+          <div class="col-6 col-md text-center">
+            <div class="thumb-card" data-idx="${idx}"
+                 style="background:linear-gradient(180deg, #1a253d 0%, #0d1023 100%);
+                        border:1px solid #1e1e3a;border-radius:6px;padding:6px;
+                        cursor:pointer;transition:all 0.15s">
+              <div class="fw-bold" style="color:#fff;font-size:11px">${s.time}</div>
+              <div class="text-secondary" style="font-size:9px">
+                alt ${s.alt.toFixed(1)}° / az ${s.az.toFixed(0)}°
+              </div>
+              <svg viewBox="0 0 80 56" width="100%"
+                   style="background:#0a0a1a;border-radius:3px;margin-top:4px">
+                <rect x="0" y="0" width="80" height="56" fill="#0a0a1a"/>
+                ${sun}
+                ${rects}
+              </svg>
+              <div class="text-secondary mt-1" style="font-size:9px">
+                ${(s.avg_frac * 100).toFixed(0)}% avg shaded
+              </div>
+            </div>
+          </div>
+        `);
+      });
+      thumbHost.innerHTML = cells.join('');
+      thumbHost.querySelectorAll('.thumb-card').forEach(el => {
+        el.addEventListener('mouseenter', () => {
+          el.style.borderColor = '#f59e0b';
+          el.style.transform = 'translateY(-2px)';
+        });
+        el.addEventListener('mouseleave', () => {
+          el.style.borderColor = '#1e1e3a';
+          el.style.transform = 'translateY(0)';
+        });
+        el.addEventListener('click', () => {
+          const i = parseInt(el.dataset.idx, 10);
+          if (slider) {
+            slider.value = i;
+            slider.dispatchEvent(new Event('input'));
+          }
+        });
+      });
+    }
+
+    // Re-generate 3D simulation button — soft reset of camera + force
+    // re-render of the heatmap from the latest engine output.
+    document.getElementById('shadingRegen3d')?.addEventListener('click', () => {
+      camera.position.copy(homePos);
+      controls.target.set(0, 2, 0);
+      controls.update();
+      // Re-tint panels with current slider step.
+      if (slider) slider.dispatchEvent(new Event('input'));
+    });
 
     // Resize
     function onResize() {
