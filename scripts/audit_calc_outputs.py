@@ -102,10 +102,12 @@ td_h  = expected_td
 eff_h = SYS_EFF * td_h
 pv_kw_h = round(DAILY_KWH / (PSH * eff_h), 3)
 num_p_h = math.ceil(pv_kw_h * 1000 / PANEL_WP)
-pv_kw, num_p, td_r = calc_pv(DAILY_KWH, PSH, TEMP_C, PANEL_WP, SYS_EFF)
+pv_kw, num_p, td_r, pv_kw_base = calc_pv(DAILY_KWH, PSH, TEMP_C, PANEL_WP, SYS_EFF)
 check("calc_pv pv_kw",      pv_kw_h, pv_kw)
 check("calc_pv num_panels", num_p_h, num_p)
 check("calc_pv td",         round(td_h, 4), td_r)
+# With default shading_factor=1.0, pv_kw_corrected == pv_kw_base.
+check("calc_pv pv_kw_base", pv_kw_h, pv_kw_base)
 
 
 # ── calc_battery ───────────────────────────────────────────────────────────

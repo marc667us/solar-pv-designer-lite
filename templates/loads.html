@@ -170,6 +170,39 @@
           Please add at least one load before running calculations. Use the <strong>Add Row</strong> button or click a preset above.
         </div>
 
+        {# ── Include Shading button (per shading requirement1.txt) ─────── #}
+        {# Opens the PV Shading Factor Modelling page. Use only when the    #}
+        {# final site inspection report confirms shading from any           #}
+        {# obstruction (tree, building, parapet wall, mast, tank, etc.).    #}
+        {% set _sh = project.data.get("shading", {}) if project.data else {} %}
+        {% set _sf = _sh.get("factor", 1.0) %}
+        <div class="mt-3 pt-3" style="border-top:1px solid #1e1e3a">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+              <i class="bi bi-sun" style="color:var(--solar-gold);font-size:18px"></i>
+              <div>
+                <div class="small fw-bold">Shading Allowance</div>
+                <div class="text-secondary" style="font-size:11px">
+                  {% if _sf and _sf < 0.999 %}
+                    <span style="color:#f59e0b">Active</span> &mdash;
+                    factor <strong>{{ "%.2f"|format(_sf) }}</strong>
+                    ({{ ((1.0 - _sf) * 100)|round|int }}% loss
+                    {% if _sh.get("obstruction_type") %} · {{ _sh.get("obstruction_type") }}{% endif %})
+                  {% else %}
+                    No shading applied. Click only if site inspection confirms an obstruction.
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            <a href="{{ url_for('project_shading', pid=project.id) }}"
+               class="btn btn-sm"
+               style="background:rgba(245,158,11,.12);color:var(--solar-gold);border:1px solid rgba(245,158,11,.4)">
+              <i class="bi bi-{% if _sf and _sf < 0.999 %}gear-fill{% else %}plus-circle{% endif %} me-1"></i>
+              {% if _sf and _sf < 0.999 %}Edit Shading{% else %}Include Shading{% endif %}
+            </a>
+          </div>
+        </div>
+
         <div class="d-flex justify-content-between align-items-center mt-3 pt-3" style="border-top:1px solid #1e1e3a">
           <div class="text-secondary" style="font-size:11px">
             <i class="bi bi-info-circle me-1"></i>

@@ -1,0 +1,510 @@
+{% extends "base.html" %}
+{% block title %}PV Shading Factor Modelling — {{ project.name }}{% endblock %}
+{% block content %}
+
+{# ── Implements `pvsolar1/shading requirement1.txt` Phase 1. ─────────────── #}
+{# The 3D AI simulation agent is Phase 2 and not yet wired here.            #}
+
+<div class="mb-3">
+  <a href="{{ url_for('project_loads', pid=project.id) }}" class="text-secondary small text-decoration-none">
+    <i class="bi bi-arrow-left me-1"></i>Back to Loads
+  </a>
+</div>
+
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+  <div>
+    <div class="fw-black fs-4 mb-1">
+      <i class="bi bi-sun me-2" style="color:var(--solar-gold)"></i>PV Shading Factor Modelling
+    </div>
+    <div class="text-secondary small">
+      Project: <span class="fw-bold text-light">{{ project.name }}</span>
+      {% if shading.factor %} ·
+        Current factor: <span class="fw-bold" style="color:#f59e0b">{{ "%.2f"|format(shading.factor) }}</span>
+        {% if shading.factor < 0.999 %}
+          (<span class="text-danger">{{ ((1.0 - shading.factor) * 100)|round|int }}% loss</span>)
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ── Spec note ────────────────────────────────────────────────────────── #}
+<div class="solar-card p-3 mb-4" style="border-left:3px solid #0ea5e9">
+  <div class="d-flex gap-2 align-items-start">
+    <i class="bi bi-info-circle text-info mt-1"></i>
+    <div class="small text-secondary">
+      Use this page <strong>only when the final site inspection report confirms shading</strong>
+      from trees, nearby buildings, towers, parapet walls, antennas, water tanks, masts, hills
+      or other obstructions. The selected factor is divided into the base PV size:
+      <code>Corrected PV Size = Base PV Size &divide; Shading Factor</code>.
+    </div>
+  </div>
+</div>
+
+<form method="POST" id="shadingForm">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <input type="hidden" name="shading_factor" id="shadingFactorInput" value="{{ shading.factor or 1.00 }}">
+  <input type="hidden" name="shading_label" id="shadingLabelInput" value="{{ shading.label or 'No shading' }}">
+
+  <div class="row g-3 mb-4">
+
+    {# ── Left column: obstruction + site geometry ──────────────────── #}
+    <div class="col-md-6">
+      <div class="solar-card p-3 h-100">
+        <div class="section-head mb-3"><i class="bi bi-building me-1"></i>Obstruction &amp; Site Geometry</div>
+
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label small text-secondary fw-bold">Obstruction Type</label>
+            <select name="obstruction_type" class="form-select form-control sp-input">
+              {% for opt in ['Tree','Nearby building','Mast / antenna','Water tank','Parapet wall','Hill','Tower','Other'] %}
+                <option value="{{ opt }}" {% if shading.obstruction_type == opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label small text-secondary fw-bold">Height (m)</label>
+            <input name="obstruction_height_m" type="number" step="0.1" min="0"
+                   class="form-control sp-input" value="{{ shading.obstruction_height_m or '' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small text-secondary fw-bold">Width (m)</label>
+            <input name="obstruction_width_m" type="number" step="0.1" min="0"
+                   class="form-control sp-input" value="{{ shading.obstruction_width_m or '' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small text-secondary fw-bold">Distance to PV (m)</label>
+            <input name="distance_m" type="number" step="0.1" min="0"
+                   class="form-control sp-input" value="{{ shading.distance_m or '' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small text-secondary fw-bold">Direction from Array</label>
+            <select name="direction_from_array" class="form-select form-control sp-input">
+              {% for opt in ['N','NE','E','SE','S','SW','W','NW'] %}
+                <option value="{{ opt }}" {% if shading.direction_from_array == opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label small text-secondary fw-bold">Roof Type</label>
+            <select name="roof_type" class="form-select form-control sp-input">
+              {% for opt in ['Flat roof','Pitched roof','Metal roof','Membrane roof','Ground mounted'] %}
+                <option value="{{ opt }}" {% if shading.roof_type == opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label small text-secondary fw-bold">Roof Height (m)</label>
+            <input name="roof_height_m" type="number" step="0.1" min="0"
+                   class="form-control sp-input" value="{{ shading.roof_height_m or '' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small text-secondary fw-bold">PV Tilt (&deg;)</label>
+            <input name="tilt_deg" type="number" step="1" min="0" max="60"
+                   class="form-control sp-input" value="{{ shading.tilt_deg or '' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small text-secondary fw-bold">Azimuth</label>
+            <select name="azimuth" class="form-select form-control sp-input">
+              {% for opt in ['North','South','East','West','South-East','South-West','East-West (bifacial)'] %}
+                <option value="{{ opt }}" {% if shading.azimuth == opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Right column: time / season / mitigation ──────────────────── #}
+    <div class="col-md-6">
+      <div class="solar-card p-3 h-100">
+        <div class="section-head mb-3"><i class="bi bi-cloud-sun me-1"></i>Shading Time, Season &amp; Mitigation</div>
+
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="form-label small text-secondary fw-bold">Time of Shading</label>
+            <select name="shading_time" class="form-select form-control sp-input">
+              {% for opt in ['Morning','Midday','Afternoon','Evening','All day'] %}
+                <option value="{{ opt }}" {% if shading.shading_time == opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label small text-secondary fw-bold">Duration (hrs/day)</label>
+            <input name="shading_hours" type="number" step="0.5" min="0" max="12"
+                   class="form-control sp-input" value="{{ shading.shading_hours or '' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small text-secondary fw-bold">Shaded Panel Area (%)</label>
+            <input name="shaded_area_pct" type="number" step="1" min="0" max="100"
+                   class="form-control sp-input" value="{{ shading.shaded_area_pct or '' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small text-secondary fw-bold">Season Impact</label>
+            <select name="season_impact" class="form-select form-control sp-input">
+              {% for opt in ['Low','Medium','High'] %}
+                <option value="{{ opt }}" {% if shading.season_impact == opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label small text-secondary fw-bold">Mitigation Available</label>
+            <select name="mitigation" class="form-select form-control sp-input">
+              {% for opt in ['None','Bypass diodes','DC optimisers','Micro-inverters','Combination'] %}
+                <option value="{{ opt }}" {% if shading.mitigation == opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label small text-secondary fw-bold">Inspector Notes</label>
+            <textarea name="notes" rows="3" maxlength="500"
+                      class="form-control sp-input"
+                      placeholder="Describe the obstruction and the time-of-day it casts shadow over the PV area.">{{ shading.notes or '' }}</textarea>
+          </div>
+          <div class="col-12">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="inspection_confirmed" id="inspChk"
+                     value="1" {% if shading.inspection_confirmed %}checked{% endif %}>
+              <label class="form-check-label small" for="inspChk">
+                The final site inspection report confirms this shading source.
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── SVG illustration: sun path, obstruction, shadow, PV array ───── #}
+  {# Reactive: the number of shaded panels + shadow opacity reflect the     #}
+  {# selected shading factor. Updated by the radio handler in <script>.     #}
+  <div class="solar-card p-3 mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+      <div class="section-head mb-0"><i class="bi bi-diagram-3 me-1"></i>PV Shading Model View</div>
+      <div class="small">
+        <span class="text-secondary">Live preview — </span>
+        <span id="svgFactorLabel" class="fw-bold" style="color:var(--solar-gold)">Factor 1.00 · No shading</span>
+      </div>
+    </div>
+    <div class="text-center">
+      <svg id="shadingSvg" viewBox="0 0 900 380"
+           style="max-width:100%;height:auto;background:linear-gradient(180deg,#0a0a18 0%,#0a1024 50%,#0a1f12 100%);border-radius:12px;border:1px solid #1e1e3a">
+
+        {# ── SVG defs (gradients, filters, patterns) ─────────────────── #}
+        <defs>
+          <radialGradient id="sunGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stop-color="#fff7c0" stop-opacity="1"/>
+            <stop offset="60%"  stop-color="#fbbf24" stop-opacity="1"/>
+            <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.9"/>
+          </radialGradient>
+          <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stop-color="#fbbf24" stop-opacity="0.5"/>
+            <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="bldgFace" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#3a3a5a"/>
+            <stop offset="100%" stop-color="#1e1e3a"/>
+          </linearGradient>
+          <linearGradient id="bldgSide" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#272745"/>
+            <stop offset="100%" stop-color="#14142a"/>
+          </linearGradient>
+          <linearGradient id="pvFace" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#0ea5e9"/>
+            <stop offset="100%" stop-color="#0369a1"/>
+          </linearGradient>
+          <linearGradient id="pvShaded" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#1a1a2f"/>
+            <stop offset="100%" stop-color="#0a0a14"/>
+          </linearGradient>
+          <linearGradient id="shadowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#000" stop-opacity="0.85"/>
+            <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+          </linearGradient>
+          <linearGradient id="groundGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#143018"/>
+            <stop offset="100%" stop-color="#08180c"/>
+          </linearGradient>
+          <pattern id="pvCells" patternUnits="userSpaceOnUse" width="9" height="9">
+            <rect width="9" height="9" fill="url(#pvFace)"/>
+            <path d="M0 0 H9 M0 0 V9" stroke="#082f49" stroke-width="0.6"/>
+          </pattern>
+          <pattern id="pvCellsShaded" patternUnits="userSpaceOnUse" width="9" height="9">
+            <rect width="9" height="9" fill="url(#pvShaded)"/>
+            <path d="M0 0 H9 M0 0 V9" stroke="#1e1e3a" stroke-width="0.6"/>
+          </pattern>
+          <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="6"/>
+          </filter>
+        </defs>
+
+        {# ── Ground / horizon ─────────────────────────────────────────── #}
+        <path d="M 0 280 L 900 280 L 900 380 L 0 380 Z" fill="url(#groundGrad)"/>
+        <line x1="0" y1="280" x2="900" y2="280" stroke="#22c55e" stroke-width="0.5" stroke-opacity="0.4"/>
+
+        {# ── Sun path arc (daytime trajectory) ───────────────────────── #}
+        <path d="M 80 270 Q 450 30 820 270" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="3 5"
+              fill="none" opacity="0.55"/>
+        <text x="60"  y="290" fill="#f59e0b" font-size="11" font-weight="600">06:00</text>
+        <text x="430" y="55"  fill="#f59e0b" font-size="11" font-weight="600">12:00</text>
+        <text x="790" y="290" fill="#f59e0b" font-size="11" font-weight="600">18:00</text>
+
+        {# ── Sun (glow + body + rays) ────────────────────────────────── #}
+        <circle id="sunGlowEl" cx="450" cy="55"  r="50" fill="url(#sunGlow)" filter="url(#softGlow)"/>
+        <circle id="sunEl"     cx="450" cy="55"  r="22" fill="url(#sunGrad)"/>
+        <g id="sunRays" stroke="#fbbf24" stroke-width="2" stroke-linecap="round">
+          <line x1="450" y1="20" x2="450" y2="8"/>
+          <line x1="450" y1="102" x2="450" y2="90"/>
+          <line x1="415" y1="55" x2="403" y2="55"/>
+          <line x1="497" y1="55" x2="485" y2="55"/>
+          <line x1="425" y1="30" x2="416" y2="21"/>
+          <line x1="484" y1="30" x2="475" y2="21"/>
+          <line x1="425" y1="80" x2="416" y2="89"/>
+          <line x1="484" y1="80" x2="475" y2="89"/>
+        </g>
+
+        {# ── Sun rays projected onto the array ───────────────────────── #}
+        <g stroke="#fbbf24" stroke-width="1" opacity="0.35">
+          <line x1="450" y1="75" x2="170" y2="265"/>
+          <line x1="450" y1="75" x2="270" y2="265"/>
+          <line x1="450" y1="75" x2="370" y2="265"/>
+          <line x1="450" y1="75" x2="470" y2="265"/>
+          <line x1="450" y1="75" x2="570" y2="265"/>
+          <line x1="450" y1="75" x2="670" y2="265"/>
+        </g>
+
+        {# ── Obstruction: 3D-look building ───────────────────────────── #}
+        <g>
+          {# side face #}
+          <polygon points="100,180 100,275 140,260 140,165" fill="url(#bldgSide)" stroke="#0a0a14" stroke-width="1"/>
+          {# front face #}
+          <polygon points="140,165 140,260 220,275 220,180" fill="url(#bldgFace)" stroke="#0a0a14" stroke-width="1"/>
+          {# roof #}
+          <polygon points="100,180 140,165 220,180 180,195" fill="#2a2a4a" stroke="#0a0a14" stroke-width="1"/>
+          {# windows #}
+          <rect x="150" y="195" width="14" height="14" fill="#fbbf24" opacity="0.55"/>
+          <rect x="175" y="195" width="14" height="14" fill="#fbbf24" opacity="0.55"/>
+          <rect x="200" y="200" width="14" height="14" fill="#fbbf24" opacity="0.45"/>
+          <rect x="150" y="225" width="14" height="14" fill="#fbbf24" opacity="0.30"/>
+          <rect x="175" y="225" width="14" height="14" fill="#fbbf24" opacity="0.30"/>
+          <text x="100" y="155" fill="#a0a0c8" font-size="11" font-weight="600">Obstruction</text>
+          <line x1="160" y1="160" x2="160" y2="170" stroke="#a0a0c8" stroke-width="1"/>
+        </g>
+
+        {# ── Cast shadow on the PV apron ─────────────────────────────── #}
+        {# We compute the shadow polygon dynamically via JS later; this is  #}
+        {# the default geometry for a moderate factor. JS reshapes it.     #}
+        <polygon id="shadowPoly"
+                 points="220,275 460,275 380,300 200,300"
+                 fill="url(#shadowGrad)" opacity="0.78"/>
+
+        {# ── PV array: perspective view (12 modules in 2 rows of 6) ──── #}
+        {# Drawn in inclined-look: front edge lower than back, slight tilt. #}
+        <g id="pvArray">
+          {% for i in range(6) %}
+            {# back row (further) #}
+            <polygon id="pvBack{{ i }}"
+                     points="{{ 240 + i*90 }},255 {{ 320 + i*90 }},250 {{ 318 + i*90 }},290 {{ 238 + i*90 }},295"
+                     fill="url(#pvCells)" stroke="#1e1e3a" stroke-width="1"/>
+            {# front row (closer) #}
+            <polygon id="pvFront{{ i }}"
+                     points="{{ 238 + i*90 }},295 {{ 318 + i*90 }},290 {{ 316 + i*90 }},335 {{ 236 + i*90 }},340"
+                     fill="url(#pvCells)" stroke="#1e1e3a" stroke-width="1"/>
+            {# tilt label (back row only, first panel) #}
+            {% if i == 0 %}
+              <text x="245" y="270" fill="#fff" font-size="9" opacity="0.7">PV{{ i+1 }}</text>
+              <text x="245" y="310" fill="#fff" font-size="9" opacity="0.7">PV{{ i+7 }}</text>
+            {% else %}
+              <text x="{{ 245 + i*90 }}" y="270" fill="#fff" font-size="9" opacity="0.7">PV{{ i+1 }}</text>
+              <text x="{{ 245 + i*90 }}" y="310" fill="#fff" font-size="9" opacity="0.7">PV{{ i+7 }}</text>
+            {% endif %}
+          {% endfor %}
+        </g>
+
+        {# ── Compass + tilt indicator (lower-right) ──────────────────── #}
+        <g transform="translate(820, 320)">
+          <circle r="22" fill="#0a0a14" stroke="#1e1e3a" stroke-width="1.5"/>
+          <text x="0" y="-12" fill="#ef4444" font-size="10" text-anchor="middle" font-weight="700">N</text>
+          <text x="0" y="18"  fill="#a0a0c8" font-size="10" text-anchor="middle">S</text>
+          <text x="-14" y="4" fill="#a0a0c8" font-size="10" text-anchor="middle">W</text>
+          <text x="14"  y="4" fill="#a0a0c8" font-size="10" text-anchor="middle">E</text>
+          <line x1="0" y1="-8" x2="0" y2="-2" stroke="#ef4444" stroke-width="2"/>
+        </g>
+
+        {# ── Tilt indicator + legend ─────────────────────────────────── #}
+        <g transform="translate(700, 320)">
+          <text x="0" y="0"  fill="#a0a0c8" font-size="10">PV tilt &amp; azimuth</text>
+          <text x="0" y="13" fill="#fbbf24" font-size="11" font-weight="700" id="svgTiltAz">15° / South</text>
+        </g>
+
+        {# ── Legend (lower-left) ─────────────────────────────────────── #}
+        <g transform="translate(20, 320)">
+          <rect width="14" height="10" fill="url(#pvFace)"/>
+          <text x="20" y="9" fill="#a0a0c8" font-size="10">Active module</text>
+          <rect y="16" width="14" height="10" fill="url(#pvShaded)"/>
+          <text x="20" y="25" fill="#a0a0c8" font-size="10">Shaded module</text>
+          <rect y="32" width="14" height="10" fill="url(#shadowGrad)" opacity="0.85"/>
+          <text x="20" y="41" fill="#a0a0c8" font-size="10">Cast shadow</text>
+        </g>
+
+        {# ── Header overlay ──────────────────────────────────────────── #}
+        <text x="20" y="22" fill="#f5f5fa" font-size="13" font-weight="700">PV Shading Simulation</text>
+        <text x="20" y="38" fill="#9090c0" font-size="10">Sun path · obstruction · cast shadow · affected modules</text>
+      </svg>
+    </div>
+    <div class="text-secondary small mt-2">
+      <i class="bi bi-info-circle me-1"></i>
+      The illustration reacts to the factor you pick below — the shaded modules and shadow extent grow with the loss.
+      Phase 2 will replace this with a 3D AI-driven simulation that auto-selects the factor from obstruction geometry,
+      sun path, and PV layout.
+    </div>
+  </div>
+
+  {# ── Shading factor selection table ─────────────────────────────── #}
+  <div class="solar-card p-3 mb-4">
+    <div class="section-head mb-3"><i class="bi bi-table me-1"></i>Select Shading Factor</div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Select</th>
+            <th>Condition</th>
+            <th>Loss</th>
+            <th>Factor</th>
+            <th>Corrected / Base</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for label, loss, factor in shading_factors %}
+          {% set is_current = (shading.factor and (factor - 0.0001) <= shading.factor <= (factor + 0.0001))
+                              or (not shading.factor and factor == 1.0) %}
+          <tr class="shading-row" data-factor="{{ factor }}" data-label="{{ label }}"
+              style="cursor:pointer; {% if is_current %}background:rgba(245,158,11,.08){% endif %}">
+            <td>
+              <input type="radio" name="shading_choice"
+                     value="{{ factor }}"
+                     {% if is_current %}checked{% endif %}
+                     class="form-check-input">
+            </td>
+            <td>{{ label }}</td>
+            <td><span class="badge bg-dark border" style="color:#ef4444;border-color:#ef444444!important">{{ loss }}</span></td>
+            <td><span class="fw-bold" style="color:var(--solar-gold)">{{ "%.2f"|format(factor) }}</span></td>
+            <td class="text-secondary small">
+              {% if factor < 1.0 %}
+                &times; {{ "%.3f"|format(1.0/factor) }}
+              {% else %}
+                &mdash;
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 justify-content-end flex-wrap">
+    <a href="{{ url_for('project_loads', pid=project.id) }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Cancel
+    </a>
+    <button type="submit" class="btn btn-solar">
+      <i class="bi bi-check2-square me-1"></i>Apply Shading Factor
+    </button>
+  </div>
+</form>
+
+<script>
+  // ── Shading factor table + SVG reactor ─────────────────────────────
+  // Clicking a table row (or its radio) updates the hidden form inputs
+  // AND redraws the SVG: number of shaded PV modules grows with the
+  // loss, and the cast shadow widens. Defaults to current saved factor.
+  (function(){
+    const factorInput = document.getElementById('shadingFactorInput');
+    const labelInput  = document.getElementById('shadingLabelInput');
+    const svgLabel    = document.getElementById('svgFactorLabel');
+    const svgTiltAz   = document.getElementById('svgTiltAz');
+    const shadowPoly  = document.getElementById('shadowPoly');
+    const tiltInput   = document.querySelector('input[name="tilt_deg"]');
+    const azInput     = document.querySelector('select[name="azimuth"]');
+
+    function pvEl(prefix, i){ return document.getElementById(prefix + i); }
+
+    // factor (1.00 -> 0.60) maps to a number of shaded modules out of 12.
+    // Smooth-ish ramp: each 5% loss tier shades ~1.5 panels on average.
+    function shadedCount(factor){
+      const loss = 1.0 - factor;
+      const n = Math.round(loss * 12 * 2.4);
+      return Math.max(0, Math.min(12, n));
+    }
+
+    function redrawSvg(factor, label){
+      const n = shadedCount(factor);
+      // Order: shade front-row left-to-right first (closer to obstruction),
+      // then back-row left-to-right. Matches the spatial intuition that
+      // a side obstruction shadows the near modules first.
+      const order = [
+        ['pvFront', 0],['pvFront', 1],['pvFront', 2],
+        ['pvBack',  0],['pvBack',  1],['pvBack',  2],
+        ['pvFront', 3],['pvBack',  3],
+        ['pvFront', 4],['pvBack',  4],
+        ['pvFront', 5],['pvBack',  5],
+      ];
+      for (let i = 0; i < order.length; i++){
+        const el = pvEl(order[i][0], order[i][1]);
+        if (!el) continue;
+        el.setAttribute('fill', i < n ? 'url(#pvCellsShaded)' : 'url(#pvCells)');
+      }
+      // Shadow polygon: widens + darkens with loss. Caps so 60% factor
+      // still leaves room to see the array under it.
+      const loss = 1.0 - factor;
+      const rightEdge = 220 + 240 * (0.4 + loss * 1.4);  // 220..580
+      const bottomLeft  = 200 - 50 * loss;
+      const bottomRight = rightEdge - 80 * loss;
+      shadowPoly.setAttribute('points',
+        `220,275 ${rightEdge},275 ${bottomRight},310 ${bottomLeft},310`);
+      shadowPoly.setAttribute('opacity', String(0.45 + loss * 1.2));
+
+      // Label
+      const lossPct = Math.round(loss * 100);
+      svgLabel.textContent = lossPct === 0
+        ? `Factor ${factor.toFixed(2)} · No shading`
+        : `Factor ${factor.toFixed(2)} · ${lossPct}% loss · ${label}`;
+    }
+
+    function refreshTiltAz(){
+      const t = tiltInput && tiltInput.value ? tiltInput.value : '15';
+      const a = azInput && azInput.value ? azInput.value : 'South';
+      svgTiltAz.textContent = `${t}° / ${a}`;
+    }
+
+    function apply(row){
+      const f = parseFloat(row.getAttribute('data-factor'));
+      const l = row.getAttribute('data-label');
+      factorInput.value = f.toFixed(2);
+      labelInput.value  = l;
+      document.querySelectorAll('.shading-row').forEach(r => {
+        r.style.background = (r === row) ? 'rgba(245,158,11,.08)' : '';
+        const rb = r.querySelector('input[type=radio]');
+        if (rb) rb.checked = (r === row);
+      });
+      redrawSvg(f, l);
+    }
+
+    document.querySelectorAll('.shading-row').forEach(row => {
+      row.addEventListener('click', function(){ apply(row); });
+      const rb = row.querySelector('input[type=radio]');
+      if (rb) rb.addEventListener('change', function(){ apply(row); });
+    });
+    if (tiltInput) tiltInput.addEventListener('input', refreshTiltAz);
+    if (azInput)   azInput.addEventListener('change', refreshTiltAz);
+
+    // Initial paint from currently-checked row (or first row otherwise).
+    const initialRow = document.querySelector('.shading-row input[type=radio]:checked')
+                        ? document.querySelector('.shading-row input[type=radio]:checked').closest('.shading-row')
+                        : document.querySelector('.shading-row');
+    if (initialRow) apply(initialRow);
+    refreshTiltAz();
+  })();
+</script>
+
+{% endblock %}

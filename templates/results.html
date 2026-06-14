@@ -174,6 +174,45 @@
   </div>
 </div>
 
+{# ── Shading correction banner (per shading requirement1.txt) ────────── #}
+{# Shown only when an operator applied a shading factor < 1.0. Displays   #}
+{# the un-shaded base size next to the corrected size so the design       #}
+{# justification is visible at-a-glance.                                  #}
+{% set _sf = r.shading_factor if r.shading_factor is defined else 1.0 %}
+{% if _sf and _sf < 0.999 and r.pv_kw_base is defined %}
+<div class="solar-card p-3 mb-3"
+     style="border-left:4px solid #f59e0b;background:linear-gradient(90deg,rgba(245,158,11,.06),transparent)">
+  <div class="row g-3 align-items-center">
+    <div class="col-md-7">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <i class="bi bi-sun" style="color:var(--solar-gold);font-size:18px"></i>
+        <span class="fw-bold">Shading-Corrected PV Sizing Applied</span>
+      </div>
+      <div class="text-secondary small">
+        Site inspection confirmed shading
+        {% if r.shading and r.shading.obstruction_type %} from <strong>{{ r.shading.obstruction_type|lower }}</strong>{% endif %}.
+        Loss class: <strong style="color:#f59e0b">{{ ((1.0 - _sf) * 100)|round|int }}%</strong>
+        · Factor: <strong style="color:#f59e0b">{{ "%.2f"|format(_sf) }}</strong>
+        · Formula: <code>Corrected = Base &divide; Factor</code>
+      </div>
+    </div>
+    <div class="col-md-5">
+      <div class="d-flex align-items-center gap-3 justify-content-end flex-wrap">
+        <div class="text-end">
+          <div class="text-secondary" style="font-size:10px;text-transform:uppercase;letter-spacing:.5px">Without shading</div>
+          <div class="fw-bold" style="font-size:18px;color:#9090c0">{{ r.pv_kw_base|fmt }} kWp</div>
+        </div>
+        <i class="bi bi-arrow-right text-secondary"></i>
+        <div class="text-end">
+          <div class="text-secondary" style="font-size:10px;text-transform:uppercase;letter-spacing:.5px">With {{ ((1.0 - _sf) * 100)|round|int }}% allowance</div>
+          <div class="fw-bold" style="font-size:18px;color:var(--solar-gold)">{{ r.pv_kw|fmt }} kWp</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- ── 8-KPI strip ─────────────────────────────────────────────────── -->
 <div class="row g-2 mb-4">
   {% for lbl,val,unit,color in [

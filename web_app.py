@@ -982,13 +982,22 @@ def calc_loads(loads):
     return round(total, 3)
 
 
-def calc_pv(daily_kwh, psh, temp_c, panel_wp=400, sys_eff=0.75):
-    """Monocrystalline PERC sizing with temperature derating."""
+def calc_pv(daily_kwh, psh, temp_c, panel_wp=400, sys_eff=0.75, shading_factor=1.0):
+    """Monocrystalline PERC sizing with temperature derating + shading correction.
+
+    shading_factor: 1.0 = no shading; <1.0 raises array size proportionally.
+    Returns (pv_kw_corrected, num_panels, td, pv_kw_base) so reports can
+    show both the un-shaded and shading-corrected sizes per spec.
+    """
     td  = temp_derating(temp_c)
     eff = sys_eff * td
-    pv_kw      = daily_kwh / (psh * eff)
-    num_panels = math.ceil(pv_kw * 1000 / panel_wp)
-    return round(pv_kw, 3), num_panels, round(td, 4)
+    pv_kw_base      = daily_kwh / (psh * eff)
+    # Shading correction: Corrected = Base / Factor (per spec).
+    # Clamp factor to a safe range so a 0 from the form never divides.
+    sf = max(0.10, min(1.00, float(shading_factor or 1.0)))
+    pv_kw_corrected = pv_kw_base / sf
+    num_panels      = math.ceil(pv_kw_corrected * 1000 / panel_wp)
+    return round(pv_kw_corrected, 3), num_panels, round(td, 4), round(pv_kw_base, 3)
 
 
 def calc_battery(daily_kwh, autonomy=1, chemistry="LiFePO4"):
@@ -2750,7 +2759,14 @@ def project_loads(pid):
         supply_markup_pct = float(data.get("supply_markup_pct", 8))
         install_rate_pct  = float(data.get("install_rate_pct", 15))
 
-        pv_kw, num_panels, td      = calc_pv(daily_kwh, psh, temp, panel_wp)
+        # Shading correction (per spec shading requirement1.txt). Default 1.0
+        # = no shading. Operator sets factor via /project/<pid>/shading after
+        # site inspection confirms obstructions. Saved factor lives under
+        # data["shading"]["factor"].
+        _sh = data.get("shading", {}) or {}
+        _sh_factor = float(_sh.get("factor", 1.0) or 1.0)
+        pv_kw, num_panels, td, pv_kw_base = calc_pv(
+            daily_kwh, psh, temp, panel_wp, shading_factor=_sh_factor)
         bat_kwh, num_bat, unit_bat = calc_battery(daily_kwh, autonomy, chemistry)
         inv_kw                     = calc_inverter(daily_kwh, peak_kw=div_peak_kw)
         mppt_a                     = calc_mppt(pv_kw, dc_voltage)
@@ -2776,6 +2792,11 @@ def project_loads(pid):
         data["results"] = {
             "daily_kwh":    daily_kwh,
             "pv_kw":        pv_kw,
+            # pv_kw_base = pre-shading size; pv_kw = shading-corrected size.
+            # When shading_factor == 1.0, the two are equal.
+            "pv_kw_base":   pv_kw_base,
+            "shading_factor": _sh_factor,
+            "shading":      _sh,
             "num_panels":   num_panels,
             "panel_wp":     panel_wp,
             "temp_derating":td,
@@ -7357,7 +7378,7 @@ def assess_design():
         return jsonify({"ok": False, "error": "Total daily load is zero. Please check appliance wattage and hours."}), 400
 
     # ── Sizing ────────────────────────────────────────────────────────────────
-    pv_kw, num_panels, _td = calc_pv(daily_kwh, psh, temp)
+    pv_kw, num_panels, _td, _pv_kw_base = calc_pv(daily_kwh, psh, temp)
     bat_kwh, num_bat, unit_kwh = calc_battery(daily_kwh, autonomy=1.5)
     inv_kw = calc_inverter(daily_kwh, peak_kw)
 
@@ -11959,6 +11980,127 @@ def folder_zip(name):
     return send_file(buf, mimetype="application/zip",
                      as_attachment=True,
                      download_name=f"SolarPro_{safe}_{datetime.utcnow():%Y%m%d}.zip")
+
+
+
+# ─── Routes — PV Shading Factor Modelling ─────────────────────────────────────
+#
+# Implements `shading requirement1.txt` (Phase 1 — manual / inspection-driven
+# factor selection; Phase 2 with the 3D AI agent is a follow-up).
+#
+# Flow: operator runs the wizard normally, then if the site inspection report
+# confirms shading from any obstruction (tree, parapet, tower, mast, water
+# tank, etc.), they click "Include Shading" on the loads page. That brings
+# them to this page where they enter the obstruction geometry, pick a
+# shading-loss class from the table, and save. The factor is stored under
+# data["shading"]["factor"] on the project row; next loads-submit reads it
+# and divides the base PV size by the factor (calc_pv shading_factor=).
+#
+# Table from the spec:
+#   No shading              0%   1.00
+#   Very light shading      5%   0.95
+#   Light shading          10%   0.90
+#   Moderate shading       15%   0.85
+#   Significant shading    20%   0.80
+#   Heavy shading          25%   0.75
+#   Severe shading         30%   0.70
+#   Very severe shading    40%   0.60
+
+
+SHADING_FACTORS = [
+    ("No shading",          "0%",  1.00),
+    ("Very light shading",  "5%",  0.95),
+    ("Light shading",       "10%", 0.90),
+    ("Moderate shading",    "15%", 0.85),
+    ("Significant shading", "20%", 0.80),
+    ("Heavy shading",       "25%", 0.75),
+    ("Severe shading",      "30%", 0.70),
+    ("Very severe shading", "40%", 0.60),
+]
+
+
+def _shading_num(raw, default=0.0):
+    # Parse a numeric field tolerantly. Empty/None/'' -> default; anything
+    # unparseable -> default. Keeps the form forgiving so a partial save
+    # doesn't 500.
+    try:
+        if raw is None or raw == "":
+            return float(default)
+        return float(str(raw).strip())
+    except Exception:
+        return float(default)
+
+
+@app.route("/project/<int:pid>/shading", methods=["GET", "POST"])
+@login_required
+@limiter.limit("30 per hour")
+def project_shading(pid):
+    project = get_project(pid)
+    if not project:
+        flash("Project not found.", "warning")
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        csrf_protect()
+        factor = _shading_num(request.form.get("shading_factor"), default=1.0)
+        # Clamp [0.10, 1.00] so the divide in calc_pv stays safe even if the
+        # form is hand-edited. 0.10 = catastrophic shading; 1.00 = none.
+        factor = max(0.10, min(1.00, factor))
+
+        data = project["data"]
+        data["shading"] = {
+            "factor":               factor,
+            "label":                (request.form.get("shading_label", "") or "").strip()[:60],
+            "obstruction_type":     (request.form.get("obstruction_type", "") or "").strip()[:60],
+            "obstruction_height_m": _shading_num(request.form.get("obstruction_height_m")),
+            "obstruction_width_m":  _shading_num(request.form.get("obstruction_width_m")),
+            "distance_m":           _shading_num(request.form.get("distance_m")),
+            "direction_from_array": (request.form.get("direction_from_array", "") or "").strip()[:30],
+            "tilt_deg":             _shading_num(request.form.get("tilt_deg")),
+            "azimuth":              (request.form.get("azimuth", "") or "").strip()[:30],
+            "roof_type":            (request.form.get("roof_type", "") or "").strip()[:40],
+            "roof_height_m":        _shading_num(request.form.get("roof_height_m")),
+            "shading_time":         (request.form.get("shading_time", "") or "").strip()[:40],
+            "shading_hours":        _shading_num(request.form.get("shading_hours")),
+            "shaded_area_pct":      _shading_num(request.form.get("shaded_area_pct")),
+            "season_impact":        (request.form.get("season_impact", "") or "").strip()[:20],
+            "mitigation":           (request.form.get("mitigation", "") or "").strip()[:60],
+            "inspection_confirmed": bool(request.form.get("inspection_confirmed")),
+            "notes":                (request.form.get("notes", "") or "").strip()[:500],
+            "saved_at":             datetime.utcnow().isoformat() + "Z",
+            "saved_by":             session.get("username", ""),
+        }
+        save_project_data(pid, data)
+
+        # Audit log — operator overrode the un-shaded design. Important record
+        # because the corrected PV size is materially larger.
+        try:
+            with get_db() as c:
+                c.execute(
+                    "INSERT INTO audit_logs (user_id, username, action, ip_address, details) "
+                    "VALUES (?,?,?,?,?)",
+                    (session.get("user_id"), session.get("username", ""),
+                     "shading_factor_set", _get_real_ip(),
+                     f"pid={pid} factor={factor:.2f} label={data['shading'].get('label','')}"))
+        except Exception:
+            # Audit failures must not break the user flow.
+            pass
+
+        if factor >= 0.999:
+            flash("Shading cleared (factor 1.00). The base PV size will be used.", "info")
+        else:
+            loss_pct = round((1.0 - factor) * 100)
+            flash(f"Shading factor {factor:.2f} saved ({loss_pct}% loss). "
+                  f"Re-run the loads step to apply the correction to PV sizing.",
+                  "success")
+        return redirect(url_for("project_loads", pid=pid))
+
+    shading = project["data"].get("shading", {}) or {}
+    return render_template("shading.html",
+                           user=current_user(),
+                           project=project,
+                           shading=shading,
+                           shading_factors=SHADING_FACTORS)
 
 
 
