@@ -1021,21 +1021,40 @@
     if (err) {
       err.style.display = 'flex';
       err.innerHTML =
-        '<i class="bi bi-exclamation-triangle" style="font-size:24px"></i>' +
-        '<div><strong>3D scene failed to load.</strong></div>' +
+        '<i class="bi bi-exclamation-triangle" style="font-size:24px;color:#f59e0b"></i>' +
+        '<div><strong>3D scene unavailable.</strong> The dashboard charts below ' +
+        'still work — only the interactive 3D view is missing.</div>' +
         '<div style="font-family:monospace;font-size:11px;color:#c0a070;' +
         'max-width:520px;word-wrap:break-word">' + msg + '</div>' +
         '<div style="color:#a0a0c8;font-size:11px;max-width:520px">' +
-        'Hard-refresh (Ctrl+Shift+R). If it persists, the Three.js CDN ' +
-        'or your browser may be blocking the module. Open the browser ' +
-        'console (F12) for the full error.</div>';
+        'Cause is usually: (a) Three.js CDN blocked by your network or ' +
+        'browser extension; or (b) the page was served before Three.js ' +
+        'finished loading. Hard-refresh (Ctrl+Shift+R) to retry. ' +
+        'Open the browser console (F12) for the full JS error.</div>';
     }
   }
+  // Catch ALL errors (sync + async module-load) so init failures never
+  // leave the canvas stuck on "Initializing…" forever.
   window.addEventListener('error', (ev) => {
-    if (ev.message && /three|module|TypeError/i.test(ev.message)) {
-      _shadingShowError(ev.message + ' (' + (ev.filename || '?') + ')');
-    }
+    _shadingShowError((ev.message || 'unknown error') +
+                      ' (' + (ev.filename || '?') + ')');
   });
+  window.addEventListener('unhandledrejection', (ev) => {
+    _shadingShowError('Promise rejected: ' +
+                      ((ev.reason && ev.reason.message) || ev.reason || 'unknown'));
+  });
+  // 12-second timeout fallback: if Three.js hasn't taken over the canvas
+  // by then, swap the spinner for the error overlay. Prevents the
+  // "Initializing 3D scene…" spinner from sitting there forever when
+  // the module fetch silently hangs.
+  setTimeout(function() {
+    const load = document.getElementById('shading3d-loading');
+    if (load && load.style.display !== 'none') {
+      _shadingShowError('Three.js module did not finish loading within ' +
+        '12 seconds. The CDN (cdn.jsdelivr.net) is most likely blocked ' +
+        'on this network or by a browser extension.');
+    }
+  }, 12000);
 
   const host = document.getElementById('shading3d-canvas');
   try {

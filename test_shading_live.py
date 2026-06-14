@@ -50,16 +50,16 @@ _results: list[tuple[str, bool, str]] = []
 
 def test(name: str, ok: bool, detail: str = "") -> None:
     _results.append((name, ok, detail))
-    icon = "✔" if ok else "✘"
-    print(f"  {icon} {name}" + (f" — {detail}" if detail else ""))
+    icon = "PASS" if ok else "FAIL"
+    print(f"  [{icon}] {name}" + (f" -- {detail}" if detail else ""))
 
 
 def section(title: str) -> None:
-    print(f"\n── {title} ──")
+    print(f"\n-- {title} --")
 
 
 def summary() -> int:
-    print("\n" + "═" * 60)
+    print("\n" + "=" * 60)
     passed = sum(1 for _, ok, _ in _results if ok)
     total  = len(_results)
     print(f"  PASS: {passed}/{total}")
@@ -67,7 +67,7 @@ def summary() -> int:
         print("\n  FAILURES:")
         for name, ok, detail in _results:
             if not ok:
-                print(f"    ✘ {name}" + (f" — {detail}" if detail else ""))
+                print(f"    [FAIL] {name}" + (f" -- {detail}" if detail else ""))
     return 0 if passed == total else 1
 
 
