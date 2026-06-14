@@ -55,8 +55,55 @@
 {% set _factor  = _eng.bucket_factor if _eng else (shading.factor or 1.0) %}
 {% set _pv_corrected = (_pv_base / _factor) if _factor and _factor > 0 else _pv_base %}
 {% set _pv_recommended = (_pv_corrected | round(0, 'ceil')) %}
-<div class="solar-card p-0 mb-4 overflow-hidden"
-     style="border:1px solid rgba(245,158,11,.35);
+<style>
+  /* ── Typography + contrast bump scoped to the v2 shading dashboard. */
+  .v2-shading-card,
+  .v2-shading-card .small,
+  .v2-shading-card .text-secondary {
+    font-size: 13px !important;
+    line-height: 1.45 !important;
+  }
+  .v2-shading-card .text-secondary { color: #c8c8e0 !important; }
+  .v2-shading-card .fw-bold,
+  .v2-shading-card .fw-black { color: #fff !important; }
+  /* Bump every inline 10/11/12px label up one notch + lighten. */
+  .v2-shading-card *[style*="font-size:10px"] { font-size: 12px !important; color:#b8b8d6 !important; }
+  .v2-shading-card *[style*="font-size:11px"] { font-size: 13px !important; }
+  .v2-shading-card *[style*="font-size:12px"] { font-size: 14px !important; }
+  .v2-shading-card *[style*="font-size:13px"] { font-size: 15px !important; }
+  /* Stronger numeric figures in the top stat strip + PV calc. */
+  .v2-shading-card *[style*="font-size:18px"] { font-size: 22px !important; }
+  .v2-shading-card *[style*="font-size:22px"] { font-size: 28px !important; font-weight: 900 !important; }
+  .v2-shading-card *[style*="font-size:26px"] { font-size: 34px !important; font-weight: 900 !important; }
+  /* Lighten the muted slate-greys throughout. */
+  .v2-shading-card *[style*="color:#a0a0c8"] { color: #d0d0e8 !important; }
+  .v2-shading-card *[style*="color:#7878b0"],
+  .v2-shading-card *[style*="color:#6060a0"] { color: #a8a8d0 !important; }
+  .v2-shading-card *[style*="color:#9090c0"] { color: #c0c0e0 !important; }
+  /* Section heads brighter + larger. */
+  .v2-shading-card *[style*="color:var(--solar-gold)"][style*="font-size:12px"],
+  .v2-shading-card *[style*="color:var(--solar-gold)"][style*="font-size:13px"] {
+    font-size: 14px !important;
+    letter-spacing: .35px;
+    color: #ffc847 !important;
+  }
+  /* Header title bump. */
+  .v2-shading-card .fw-black[style*="font-size:18px"] {
+    font-size: 22px !important;
+  }
+  /* Stat strip cells — bigger headlines for the four KPIs. */
+  .v2-shading-card .col-md-3 .fw-black { font-size: 30px !important; }
+  /* Brighten manual-override pills' grey background. */
+  .v2-shading-card a.btn[style*="background:rgba(255,255,255,.04)"] {
+    background: rgba(255,255,255,.10) !important;
+    color: #fff !important;
+  }
+  /* Tables — slightly larger + brighter row text. */
+  .v2-shading-card table { font-size: 13px !important; color: #e6e6f5 !important; }
+  .v2-shading-card table thead th { font-size: 12px !important; color: #a8a8d0 !important; }
+</style>
+<div class="solar-card v2-shading-card p-0 mb-4 overflow-hidden"
+     style="border:1px solid rgba(245,158,11,.45);
             background:linear-gradient(180deg,#0a0a1a 0%,#0d1023 60%,#101632 100%);">
   {# ── Top header — title left, location/date/time strip right.       #}
   <div class="d-flex justify-content-between align-items-center p-3 flex-wrap gap-2"
