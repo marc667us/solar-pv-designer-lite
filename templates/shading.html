@@ -90,6 +90,48 @@
     {% endif %}
   </div>
 
+  {# ── Manual factor override row (the human can introduce a factor;  #}
+  {# the agent + PV calc respond by modelling THAT scenario).          #}
+  {% set _manual = request.args.get('manual_factor') %}
+  <div class="p-3" style="border-bottom:1px solid #1e1e3a;background:rgba(245,158,11,.04)">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <i class="bi bi-hand-index-thumb" style="color:var(--solar-gold);font-size:14px"></i>
+      <div class="fw-bold small me-2" style="color:var(--solar-gold);font-size:11px">
+        MANUAL OVERRIDE — pick a factor; agent will model it
+      </div>
+      {% for label, loss_pct, factor in shading_factors %}
+      {% set _is_picked = (_manual == ("%.2f"|format(factor))) %}
+      <a href="?manual_factor={{ "%.2f"|format(factor) }}"
+         class="btn btn-sm"
+         style="font-size:11px;font-weight:700;padding:4px 10px;
+                background:{% if _is_picked %}var(--solar-gold){% else %}rgba(255,255,255,.04){% endif %};
+                color:{% if _is_picked %}#000{% else %}#d4d4f0{% endif %};
+                border:1px solid {% if _is_picked %}var(--solar-gold){% else %}#1e1e3a{% endif %};
+                text-decoration:none">
+        {{ "%.2f"|format(factor) }}
+        <span style="opacity:.65;font-weight:400;font-size:10px">
+          {{ label.split(' shading')[0] }}
+        </span>
+      </a>
+      {% endfor %}
+      {% if _manual %}
+      <a href="{{ url_for('project_shading', pid=project.id) }}"
+         class="btn btn-sm btn-outline-secondary" style="font-size:11px">
+        <i class="bi bi-x-lg"></i> Clear
+      </a>
+      {% endif %}
+    </div>
+    {% if _manual and shading.get('manual_override') %}
+    <div class="text-secondary mt-2" style="font-size:11px">
+      <i class="bi bi-info-circle me-1" style="color:#f59e0b"></i>
+      Operator set factor <strong style="color:var(--solar-gold)">{{ "%.2f"|format(shading.manual_override.factor) }}</strong>
+      ({{ shading.manual_override.label }}, {{ shading.manual_override.loss_pct }}% loss).
+      The PV calculation card + Recommended PV Size below reflect THIS scenario.
+      <strong>Save the form</strong> to keep this factor + get a fresh agent narrative.
+    </div>
+    {% endif %}
+  </div>
+
   {% if _eng %}
   {# ── Top stat strip: matches the dark cards in the reference images. #}
   <div class="row g-0" style="border-bottom:1px solid #1e1e3a;background:rgba(0,0,0,.20)">

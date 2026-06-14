@@ -12432,20 +12432,30 @@ def project_shading(pid):
             if _eng:
                 shading = dict(shading)
                 shading["engine"] = _eng
-                # Also fire the agent so the analysis card appears
-                # the first time the user sees the v2 dashboard.
-                try:
-                    from engine.agents.shading_agent import run_shading_agent
-                    _ag = run_shading_agent(_eng, {"obstructions": shading.get("obstructions") or []})
-                    if _ag:
-                        shading["agent_v2"] = _ag
-                except Exception:
-                    pass
+                # Skip the LLM agent on GET (free-tier latency 5-30s).
+                # Agent runs only when the operator saves the form.
         except Exception as _e:
             try:
                 app.logger.warning("v2 GET engine failure: %s", _e)
             except Exception:
                 pass
+    # Manual factor override (operator picks a factor; PV calc +
+    # agent narrative reflect that scenario).
+    try:
+        _mf = float(request.args.get("manual_factor") or 0)
+    except Exception:
+        _mf = 0.0
+    if 0.55 <= _mf <= 1.05 and shading.get("engine"):
+        shading = dict(shading)
+        _eng2 = dict(shading["engine"])
+        _eng2["bucket_factor"] = _mf
+        from engine.shading_engine import pick_shading_bucket as _psb
+        _label, _loss, _f = _psb((1.0 - _mf) * 100)
+        _eng2["bucket_label"] = _label
+        _eng2["bucket_loss_pct"] = _loss
+        shading["engine"] = _eng2
+        shading["manual_override"] = {"factor": _mf, "label": _label,
+                                       "loss_pct": _loss}
     return render_template("shading.html",
                            user=current_user(),
                            project=project,
