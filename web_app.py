@@ -12396,7 +12396,9 @@ def project_shading(pid):
     # obstructions are already saved. Result is local-only
     # (we do NOT save_project_data on GET); it persists only
     # when the operator hits Save on the form.
-    if request.args.get("v2") and not shading.get("engine"):
+    # Engine runs on GET whenever no engine output exists yet, regardless
+    # of the v1/v2 flag — the template decides which view to render.
+    if not shading.get("engine"):
         try:
             _eng = _engine_full_analysis(project, shading.get("obstructions") or [])
             if _eng:
