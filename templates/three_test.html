@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Three.js sanity test{% endblock %}
+{% block content %}
+
+<div class="solar-card p-3 mb-3">
+  <h3>Three.js sanity test</h3>
+  <p class="text-secondary small">
+    Minimal Three.js scene — just one spinning blue cube, one yellow sphere
+    (sun), bright sky background, no engine data, no obstructions.
+    If this works, Three.js + your browser can render. If this fails,
+    the problem is environmental (WebGL disabled, browser too old,
+    extension blocking).
+  </p>
+  <div class="d-flex gap-2 small">
+    <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-outline-secondary">Back</a>
+    <a href="chrome://gpu" class="btn btn-sm btn-outline-info" target="_blank">Check chrome://gpu</a>
+  </div>
+</div>
+
+<div id="test-out" style="font-family:monospace;font-size:12px;color:#9bd1ff;
+                          background:#0a0a14;border:1px solid #1e1e3a;
+                          border-radius:6px;padding:10px;margin-bottom:10px;
+                          min-height:60px;line-height:1.5"></div>
+
+<div id="test-host" style="width:100%;height:480px;background:#87CEEB;
+                            border:2px solid #f59e0b;border-radius:12px"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "{{ url_for('static', filename='vendor/three-0.160.0/three.module.js') }}"
+  }
+}
+</script>
+<script type="module">
+  const out = document.getElementById('test-out');
+  function log(msg, ok) {
+    const icon = ok === false ? '<span style="color:#ef4444">[FAIL]</span>'
+                              : '<span style="color:#4ade80">[OK]</span>';
+    out.innerHTML += icon + ' ' + msg + '<br>';
+  }
+  window.addEventListener('error', (e) => {
+    log('window error: ' + e.message + ' (' + (e.filename||'?') + ':' +
+        (e.lineno||'?') + ')', false);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    log('promise rejected: ' + (e.reason?.message || e.reason), false);
+  });
+  log('script started');
+  try {
+    log('loading three.module.js from /static/vendor/...');
+    const THREE = await import('three');
+    log('three.module.js loaded — version ' + (THREE.REVISION || '?'));
+
+    const host = document.getElementById('test-host');
+    if (!host) { log('test-host div missing', false); throw new Error('no host'); }
+
+    // Scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB);
+    log('scene created');
+
+    // Camera
+    const cam = new THREE.PerspectiveCamera(50, host.clientWidth/host.clientHeight, 0.1, 200);
+    cam.position.set(5, 5, 8);
+    cam.lookAt(0, 0, 0);
+    log('camera created');
+
+    // Renderer
+    const r = new THREE.WebGLRenderer({ antialias: true });
+    r.setPixelRatio(window.devicePixelRatio);
+    r.setSize(host.clientWidth, host.clientHeight);
+    host.appendChild(r.domElement);
+    log('renderer attached (canvas should be visible inside the gold box)');
+
+    // Lights
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x4a7c3f, 1.0));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const sun = new THREE.DirectionalLight(0xffe066, 1.2);
+    sun.position.set(8, 12, 6);
+    scene.add(sun);
+    log('lights added');
+
+    // Sun mesh
+    const sunM = new THREE.Mesh(
+      new THREE.SphereGeometry(0.8, 24, 24),
+      new THREE.MeshBasicMaterial({ color: 0xffff66 })
+    );
+    sunM.position.set(8, 12, 6);
+    scene.add(sunM);
+    log('sun mesh added (yellow sphere, upper right)');
+
+    // Ground
+    const g = new THREE.Mesh(
+      new THREE.CircleGeometry(15, 32),
+      new THREE.MeshStandardMaterial({ color: 0x6ca54a, roughness: 0.9 })
+    );
+    g.rotation.x = -Math.PI/2;
+    scene.add(g);
+    log('green ground disc added');
+
+    // Spinning blue cube
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(2, 2, 2),
+      new THREE.MeshStandardMaterial({ color: 0x1a2a4d, roughness: 0.5 })
+    );
+    cube.position.y = 1.5;
+    scene.add(cube);
+    log('blue cube added (centre)');
+
+    // Render loop
+    function tick() {
+      cube.rotation.x += 0.01;
+      cube.rotation.y += 0.012;
+      r.render(scene, cam);
+      requestAnimationFrame(tick);
+    }
+    tick();
+    log('render loop running — you should see a spinning blue cube');
+  } catch (err) {
+    log('FATAL: ' + (err.message || err), false);
+    console.error(err);
+  }
+</script>
+
+{% endblock %}
