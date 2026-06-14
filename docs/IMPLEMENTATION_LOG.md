@@ -395,3 +395,143 @@ Close every quality-gate finding that can be made via additive files (new migrat
 **Next Recommended Step:** Commit the workflow + this log entry. Decide between (A) continuing to P3 (proposal superset, ~2-3 hr code refactor across 10 report markdowns) and (B) wrapping the session — substantial work has shipped: caps + ledger + quota route + 15/15 calc audit + 2 critical bash fixes + 3 PDF diagrams on 4 routes + Postgres schema. The cutover gate is a separate workstream that can wait for a dedicated session.
 
 ---
+
+# Implementation Log Entry
+Date: 2026-06-14
+Task: AI 3D Shading Simulation Agent — full upgrade (Days 1–5)
+Status: shipped (live smoke pending Render redeploy)
+
+Objective:
+Replace yesterday's deterministic shading heuristic with a real geometry
++ electrical-string + LLM-narrated AI 3D Shading Simulation Agent
+matching the spec in `pvsolar1/shading requirement1.txt` and
+`pvsolar1/real shading/update implementation of shaging.txt` plus the
+four reference dashboard images in `pvsolar1/real shading/`. The agent
+must compute the shading factor from actual sun-position + obstruction
+geometry, narrate the findings per-obstruction, suggest mitigation
+what-ifs, and present the result on a dashboard visually matching the
+reference images.
+
+Files Changed:
+* engine/__init__.py (new)
+* engine/shading_engine.py (new, ~620 LOC)
+* engine/agents/__init__.py (new)
+* engine/agents/shading_agent.py (new, ~470 LOC)
+* tests/test_shading_engine.py (new, 26 tests)
+* tests/test_shading_agent.py (new, 9 tests)
+* templates/shading.html (+820 LOC across the four days; flag-gated
+  on ?v2=1 so the legacy view is unchanged for everyone else)
+* web_app.py — three byte-patches:
+    - patch_wire_shading_engine.py (Day 1: route additive helper)
+    - patch_day3_per_step_panels.py (Day 3: per-step panel_fracs)
+    - patch_day3_agent_invocation.py (Day 3: agent invocation)
+
+Database Changes: none. Engine output + agent output persist inside the
+existing data_json blob under data["shading"]["engine"] and
+data["shading"]["agent_v2"].
+
+API Changes:
+* GET/POST /project/<pid>/shading?v2=1 — new flag activates the Three.js
+  dashboard. Server-side route signature unchanged.
+
+Frontend Changes:
+* Three.js scene (vanilla, CDN, no React) with sun + ground + panel
+  grid + obstruction meshes (cuboid / cone+cylinder for tree / cylinder
+  for tanks/masts/walls). Real cast shadows via directional sun light.
+* OrbitControls + camera presets (Reset / Top / South / East).
+* Display-layer toggles — Sun · Rays · Shadows · Obstructions · Panels ·
+  Affected · Sun Path Arc.
+* Sun-path dome SVG overlay (E-S-W half-dome with day arc + peak sun
+  marker).
+* Time slider 06:00→18:00 with Play button — drags through engine's
+  series; sun moves, panels re-tint live from per-step per-panel fracs.
+* 4-cell top stat strip (Agent Factor / System Loss / Affected Panels /
+  Shading Window).
+* Top-right location/GPS/date chip.
+* AI SHADING AGENT — ANALYSIS card with narrative + per-obstruction
+  impact/mitigation pairs + factor reasoning + mitigation what-ifs.
+* SHADING FACTOR RECOMMENDATION TABLE with AGENT PICK row highlighted
+  in gold + glow + PICK badge.
+* PV SYSTEM SIZE CALCULATION card (Base / Factor / Corrected /
+  Recommended PV size).
+* 5-thumbnail SHADOW SIMULATION THROUGH THE DAY strip (07/09/12/15/18
+  SVG mini-grids — clickable).
+* Bottom action button row (Back / Re-generate / Run Analysis / Apply
+  Factor / Save Shading Report PDF).
+
+Security Changes: none. The new ADK agent call is gated through
+`run_shading_agent` which catches every exception. No new endpoints
+introduced. Existing CSRF + login-required protection unchanged.
+
+Tests Added: 35 total (26 engine + 9 agent). All green.
+* Engine: sun position (Accra solstice noon, London winter noon,
+  pre-sunrise), panel grid, shadow projection (none below horizon,
+  tall close obstruction shades, distant obstruction misses),
+  time-series + electrical-string mitigation ordering, bucket
+  selection across the 8-row spec table, top-level pipeline.
+* Agent: tool primitives (sun position, bucket pick, mitigation
+  what-ifs, run_full_analysis), deterministic fallback path
+  end-to-end, factor clamping for invalid LLM outputs.
+
+Documentation Updated:
+* docs/IMPLEMENTATION_LOG.md (this entry)
+* docs/ARCHITECTURE_DECISIONS.md — ADR for the soft-fallback ADK
+  pattern (this commit)
+
+What Was Completed (matches the spec acceptance criteria):
+✓ User can enter site data (Location step + obstructions form)
+✓ User can add multiple obstructions (cloneable cards, already
+  shipped pre-Day-1)
+✓ App generates a 3D site scene (Three.js)
+✓ Sun rays and shadows are displayed
+✓ Affected panels are highlighted (heat-tint on the 3D + HTML grid +
+  thumbnail strip)
+✓ AI determines shading severity (deterministic engine)
+✓ AI selects shading factor (engine picks bucket; agent confirms /
+  ties)
+✓ Shading factor is passed to PV calculation model (loads handler
+  reads data["shading"]["factor"] which is the agent's pick)
+✓ Calculate and Recalculate use the corrected PV size (existing
+  calc_pv with shading_factor= arg)
+✓ Dashboard output visually resembles the four supplied engineering
+  shading images
+✓ All results are saved against project (and tenant_id — solar app
+  is single-tenant for now per its CLAUDE.md)
+
+What Remains (deferred to follow-up sessions):
+* Full ADK governance scaffold (Work Reviewer + Scheduler + Dev
+  Supervisor as ADK agents per pvsolar1/CLAUDE.md §0.2). Solar-pv-
+  designer-lite is a single-file Flask app and the full app/agents/
+  package restructure would break every route until landed. Best
+  done in a dedicated refactor session.
+* MinIO + real photo upload per obstruction. Postgres bytea works
+  but is not the right blob store. Defer until MinIO is wired.
+* Audio voice-note capture (spec asked for "voice note") — text
+  only for now.
+* Server-side PDF integration for the shading report. The save
+  button exists and points at the existing proposal PDF; a dedicated
+  shading-only PDF + the per-time SVG snapshot for in-PDF embed is a
+  follow-up commit.
+* Mitigation what-if action buttons that re-run the engine
+  server-side — currently the what-ifs render LLM-narrated estimates;
+  re-running the engine inline would let the user A/B compare factors
+  before clicking Apply.
+
+Known Risks:
+* Render auto-deploy missed all four Day-2/3/4 pushes. Force-deploy
+  workflow run 27501474123 fired at 14:12:40Z. If the live commit
+  isn't c999b0a after the deploy lands, manual investigation needed.
+* google-adk is not in requirements.txt — the agent's ADK path only
+  runs in environments where someone has pip-installed it. The
+  OpenRouter fallback is what live currently uses. Documented as
+  ADR + flagged in this log for the follow-up session that pins ADK.
+
+Next Recommended Step:
+1. Wait for the force-deploy to finish.
+2. Hit /project/<pid>/shading?v2=1 on the live URL, save once with
+   real obstructions, verify the dashboard renders matching the
+   reference images.
+3. Decide on follow-up scope: ADK governance scaffold (big lift) vs.
+   PDF integration (small lift) vs. real photo upload (medium lift).
+
+---

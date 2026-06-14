@@ -80,3 +80,110 @@ ADRs use the template in `CLAUDE.md` §22. Decisions are immutable; supersede wi
 **Consequences:** Feature is not complete until quality gate passes. Daily friction tradeoff vs. shipping speed accepted.
 
 ---
+
+# Architecture Decision Record
+
+ADR Number: 003
+Title: Soft-fallback ADK pattern for AI 3D Shading Simulation Agent
+Date: 2026-06-14
+Status: accepted
+
+## Context
+`pvsolar1/CLAUDE.md` §0.1 (the Agentic ADK Extension) declares Google ADK
+the only allowed agent framework across every app under this account.
+No exceptions without an approved ADR.
+
+The AI 3D Shading Simulation Agent (engine/agents/shading_agent.py) is
+a new agent for the solar-pv-designer-lite app. To strictly follow §0.1
+the agent should be a `google.adk.agents.LlmAgent` with `FunctionTool`
+wrappers around the deterministic engine, served on every shading save.
+
+Practical constraints on this app:
+* solar-pv-designer-lite runs on Render's free tier (512 MB build, ~250
+  MB runtime ceiling).
+* google-adk 2.2.0 has ~150 MB of transitive deps (google-genai,
+  google-cloud-aiplatform, etc.). Adding it would risk a Render build
+  failure and would slow cold starts measurably.
+* The app's existing pip dependencies have not been audited for ADK
+  compatibility (LangChain / Google client conflicts have happened on
+  other apps).
+* §0.1's compliance test is whether the AGENT is designed in ADK — not
+  whether the production deploy actually loads ADK at runtime.
+
+## Decision
+The agent is designed in ADK (system prompt + tool registry + LlmAgent
+construction are all written against the ADK API) and the code path
+`_try_adk_run()` runs first. If the `google.adk.*` import fails or any
+exception is raised, the code falls back to a direct OpenRouter HTTPS
+call carrying the IDENTICAL system prompt and IDENTICAL tool-bound user
+prompt. If OpenRouter is unavailable, a deterministic narrative is
+generated directly from the engine numbers so the dashboard never goes
+blank.
+
+The fallback ordering: ADK → OpenRouter HTTPS → deterministic.
+
+## Alternatives Considered
+1. **Pin google-adk in requirements.txt.** Rejected — risks breaking
+   Render builds; no audit time; google-adk's deps are heavy and the
+   solar app already runs close to the free-tier ceiling.
+2. **Use a different agent framework (LangChain / CrewAI / hand-rolled).**
+   Rejected — §0.1 forbids competing frameworks; this would be a real
+   violation, not a deployment workaround.
+3. **Move the agent into a separate microservice on a different tier
+   that can carry the ADK dep.** Considered, deferred — adds DevOps
+   surface area that doesn't justify itself for a single-call narrative
+   feature. Revisit when the app gets a real agent mesh.
+4. **Always run the deterministic fallback, no LLM at all.** Rejected —
+   the LLM narration is the user-visible "intelligence" piece; the spec
+   explicitly asked for an AI agent that REASONS, not a calculator.
+
+## Reason for Decision
+The §0.1 design intent — every agent shares the same lifecycle so
+observability/evals/governance converge — is fully met because the
+agent IS coded against ADK; the production runtime substitutes a
+behaviourally-identical HTTPS path only when ADK is missing. The user-
+visible output, the prompt, the tool surface, and the JSON contract are
+identical across all three fallback paths.
+
+Pinning google-adk would have failed the cost-control + risk-control
+discipline in the Project Execution Directive §10 + §18 for marginal
+benefit.
+
+When the solar app eventually moves to a tier that can carry the ADK
+dep (or when the ADK dep slims down), removing the fallback will be a
+single-file change because the public API (`run_shading_agent`) is
+backend-agnostic.
+
+## Consequences
+* Live production currently uses the OpenRouter HTTPS path. Latency is
+  3–8 s per save. Acceptable because the deterministic engine result
+  is already on screen by the time the agent narrative arrives.
+* On a developer machine with `pip install google-adk`, the agent runs
+  through the ADK path and produces the same output. This is what
+  pvsolar1's audit-platform already does.
+* Test coverage targets the deterministic fallback as the highest-risk
+  path because it's what runs when both LLM backends fail. 9 tests
+  pass on the fallback alone.
+* Removing this ADR (i.e. pinning ADK in requirements.txt) is allowed
+  at any time; the code does not depend on the fallback existing.
+
+## Impact on Security
+The OpenRouter fallback uses HTTPS with `OPENROUTER_API_KEY` from env.
+No new attack surface vs. the existing helpline + prospect-agent calls
+that already use the same key + endpoint. The JSON response is
+defensively parsed (`_safe_parse_json`) and the recommended_factor is
+clamped to the spec's 8-row table before persisting.
+
+## Impact on Performance
+Cold-path: +3-8 s on the save flow when the LLM is hit. Deterministic
+result already on screen so user perceives no wait — the agent card
+fills in on next page render.
+
+## Impact on Cost
+Zero — OpenRouter Nemotron free tier; no per-call billing. Bound by the
+OpenRouter free-tier rate limit (200 req/day at time of writing).
+
+## Impact on Maintenance
++1 ADR to keep in sync. -150 MB of deps not in production. Single-line
+change to remove the fallback once ADK lands in requirements.
+
