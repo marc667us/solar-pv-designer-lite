@@ -12334,6 +12334,44 @@ def project_shading(pid):
 
     if request.method == "POST":
         csrf_protect()
+        # Save-manual-factor: human-driven override of the agent pick.
+        # Bypasses the obstruction parser + agent run; just persists
+        # the chosen factor + a "source=manual" tag.
+        _smf_raw = request.form.get("save_manual_factor") or ""
+        if _smf_raw:
+            try:
+                _smf = float(_smf_raw)
+            except Exception:
+                _smf = 0.0
+            if 0.55 <= _smf <= 1.05:
+                data = project["data"]
+                _existing = data.get("shading", {}) or {}
+                from engine.shading_engine import pick_shading_bucket as _psb
+                _label, _loss, _f = _psb((1.0 - _smf) * 100)
+                _existing["factor"] = _smf
+                _existing["label"] = _label
+                _existing["loss_pct"] = _loss
+                _existing["factor_source"] = "manual"
+                _existing["saved_at"] = datetime.utcnow().isoformat() + "Z"
+                _existing["saved_by"] = session.get("username", "")
+                data["shading"] = _existing
+                save_project_data(pid, data)
+                try:
+                    with get_db() as c:
+                        c.execute(
+                            "INSERT INTO audit_logs (user_id, username, action, ip_address, details) "
+                            "VALUES (?,?,?,?,?)",
+                            (session.get("user_id"), session.get("username", ""),
+                             "shading_factor_manual_set", _get_real_ip(),
+                             f"pid={pid} factor={_smf:.2f} label={_label}"))
+                except Exception:
+                    pass
+                flash(f"Manual shading factor saved: {_smf:.2f} ({_label}, {_loss:.0f}% loss). "
+                      f"Re-run the loads step to apply.", "success")
+                return redirect(url_for("project_shading", pid=pid))
+            else:
+                flash("Manual factor must be between 0.55 and 1.05.", "warning")
+                return redirect(url_for("project_shading", pid=pid))
         # Parse the obstruction cards first, then let the agent decide the
         # shading factor from those inputs. Per owner spec, the operator
         # models the obstructions; the agent picks the factor.
@@ -12400,23 +12438,28 @@ def project_shading(pid):
     # something even on a project with no real obstructions saved. The
     # operator can test the engine + agent + 3D scene with one click.
     _demo = (request.args.get("demo") or "").strip().lower()
+    # Calibrated 2026-06-14 against engine output at Accra/12 panels:
+    #   demo=10  -> 5m tree  6m East  -> 12.3% loss -> 0.90 Light
+    #   demo=20  -> 5m tree  5m East  -> 23.8% loss -> 0.80 Significant
+    #   demo=25  -> 6m wall  6m East  -> 25.0% loss -> 0.75 Heavy
+    #   demo=30  -> 5m wall  5m East  -> 36.3% loss -> 0.70 Severe
     _demo_obs = {
-        "10":  [{"type": "parapet wall", "height": 1.8, "width": 8.0,
-                 "distance": 4.0, "direction": "South",
+        "10":  [{"type": "tree", "height": 5.0, "width": 3.0,
+                 "distance": 6.0, "direction": "East",
                  "mitigation": "Bypass diodes",
-                 "notes": "demo: light shading sample"}],
-        "20":  [{"type": "neighbour building", "height": 8.0, "width": 10.0,
-                 "distance": 8.0, "direction": "West",
+                 "notes": "demo: light shading (single tree to the east)"}],
+        "20":  [{"type": "tree", "height": 5.0, "width": 4.0,
+                 "distance": 5.0, "direction": "East",
                  "mitigation": "Bypass diodes",
-                 "notes": "demo: significant shading sample"}],
-        "25":  [{"type": "large tree", "height": 9.0, "width": 6.0,
-                 "distance": 5.0, "direction": "South-West",
+                 "notes": "demo: significant shading (closer tree)"}],
+        "25":  [{"type": "boundary wall", "height": 6.0, "width": 5.0,
+                 "distance": 6.0, "direction": "East",
                  "mitigation": "Bypass diodes",
-                 "notes": "demo: heavy shading sample"}],
-        "30":  [{"type": "10-storey building", "height": 32.0, "width": 18.0,
-                 "distance": 18.0, "direction": "West",
+                 "notes": "demo: heavy shading (wall to the east)"}],
+        "30":  [{"type": "boundary wall", "height": 5.0, "width": 5.0,
+                 "distance": 5.0, "direction": "East",
                  "mitigation": "Bypass diodes",
-                 "notes": "demo: severe shading sample"}],
+                 "notes": "demo: severe shading (wall close in)"}],
     }
     if _demo in _demo_obs:
         shading = dict(shading)

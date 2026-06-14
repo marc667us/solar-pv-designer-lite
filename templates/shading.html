@@ -162,19 +162,39 @@
       </a>
       {% endfor %}
       {% if _manual %}
+      <form method="POST" action="{{ url_for('project_shading', pid=project.id) }}"
+            class="d-inline m-0">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="save_manual_factor" value="{{ _manual }}">
+        <button type="submit" class="btn btn-sm btn-success fw-bold"
+                style="font-size:11px;padding:4px 14px">
+          <i class="bi bi-check-lg me-1"></i>Save this factor
+        </button>
+      </form>
       <a href="{{ url_for('project_shading', pid=project.id) }}"
          class="btn btn-sm btn-outline-secondary" style="font-size:11px">
         <i class="bi bi-x-lg"></i> Clear
       </a>
       {% endif %}
     </div>
-    {% if _manual and shading.get('manual_override') %}
+    {% if _manual %}
     <div class="text-secondary mt-2" style="font-size:11px">
       <i class="bi bi-info-circle me-1" style="color:#f59e0b"></i>
-      Operator set factor <strong style="color:var(--solar-gold)">{{ "%.2f"|format(shading.manual_override.factor) }}</strong>
-      ({{ shading.manual_override.label }}, {{ shading.manual_override.loss_pct }}% loss).
-      The PV calculation card + Recommended PV Size below reflect THIS scenario.
-      <strong>Save the form</strong> to keep this factor + get a fresh agent narrative.
+      Operator picked factor <strong style="color:var(--solar-gold)">{{ _manual }}</strong>.
+      The dashboard now models this scenario. Click <strong style="color:#4ade80">Save this factor</strong>
+      to persist it on the project — the loads calculation will then use this factor as the
+      authoritative shading factor instead of the agent's pick.
+    </div>
+    {% endif %}
+    {% if shading.get('factor_source') == 'manual' %}
+    <div class="text-secondary mt-2" style="font-size:11px;
+         background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.35);
+         padding:6px 10px;border-radius:6px">
+      <i class="bi bi-check-circle me-1" style="color:#4ade80"></i>
+      <strong style="color:#4ade80">Saved manual factor in effect:</strong>
+      {{ "%.2f"|format(shading.factor) }} ({{ shading.label }}). Saved
+      {{ shading.saved_at[:16].replace('T', ' ') if shading.saved_at else '' }}.
+      To restore the agent's pick, save the form below again.
     </div>
     {% endif %}
   </div>
@@ -742,12 +762,253 @@
 {{ (shading.get('obstructions') or [])|tojson }}
 </script>
 
+<!-- ── REGULAR SCRIPT — runs first, no module deps. Draws every 2D    -->
+<!-- thing on the page (SVG sun-path, affected-panel grid, 5-thumbnails, -->
+<!-- 3 daily curves). If Three.js below fails to load (CDN block, etc.)  -->
+<!-- this script still runs so the operator sees the dashboard data even -->
+<!-- without the 3D scene.                                                -->
+<script>
+(function() {
+  // Heat-tint colour for a panel's max shaded fraction across the day.
+  function shadeColor(frac) {
+    if (frac >= 0.95) return '#000000';
+    if (frac >= 0.50) return '#c62828';
+    if (frac >= 0.20) return '#f57c00';
+    if (frac >= 0.05) return '#ffb74d';
+    return '#3949ab';
+  }
+
+  var engineData = {};
+  try {
+    var raw = (document.getElementById('shading-engine-data') || {}).textContent || '{}';
+    engineData = JSON.parse(raw.trim() || '{}');
+  } catch (e) { console.warn('[shading] engine-data parse failed', e); }
+
+  var series       = engineData.series || [];
+  var totalPanels  = engineData.total_panels || 0;
+  var cols         = Math.max(1, Math.round(Math.sqrt(totalPanels * 1.6))) || 1;
+  var rows         = Math.ceil(totalPanels / cols) || 1;
+  var perPanelFracs = engineData.per_panel_max_frac || [];
+
+  // ── Sun-path dome SVG (E-W half-dome + day arc + peak sun marker).
+  try {
+    var sp = document.getElementById('shadingSunPath');
+    if (sp && series.length) {
+      var cx = 120, cy = 130, rx = 110, ry = 95;
+      var parts = [];
+      parts.push('<path d="M ' + (cx-rx) + ' ' + cy + ' A ' + rx + ' ' + ry +
+                 ' 0 0 1 ' + (cx+rx) + ' ' + cy + '" fill="none" stroke="#3a3a5e" stroke-width="1"/>');
+      parts.push('<text x="' + (cx-rx+4) + '" y="' + (cy+12) + '" fill="#a0a0c8" font-size="10">W</text>');
+      parts.push('<text x="' + (cx+rx-12) + '" y="' + (cy+12) + '" fill="#a0a0c8" font-size="10">E</text>');
+      parts.push('<text x="' + (cx-4) + '" y="' + (cy-ry+8) + '" fill="#a0a0c8" font-size="10">N</text>');
+      parts.push('<text x="' + (cx-4) + '" y="' + (cy+12) + '" fill="#a0a0c8" font-size="10">S</text>');
+      var arc = [];
+      series.forEach(function(s) {
+        if (s.alt <= 0) return;
+        var altR = s.alt * Math.PI / 180;
+        var azR  = (s.az - 180) * Math.PI / 180;
+        arc.push((cx + Math.sin(azR) * rx * Math.cos(altR)).toFixed(1) + ',' +
+                 (cy - Math.sin(altR) * ry).toFixed(1));
+      });
+      if (arc.length > 1) {
+        parts.push('<polyline points="' + arc.join(' ') + '" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="3,2" opacity="0.8"/>');
+      }
+      var peak = series[0];
+      series.forEach(function(s) { if (s.alt > peak.alt) peak = s; });
+      if (peak.alt > 0) {
+        var altR = peak.alt * Math.PI / 180;
+        var azR  = (peak.az - 180) * Math.PI / 180;
+        var px = cx + Math.sin(azR) * rx * Math.cos(altR);
+        var py = cy - Math.sin(altR) * ry;
+        parts.push('<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="6" fill="#ffe066" stroke="#f59e0b" stroke-width="1.5"/>');
+        var lbl = document.getElementById('shadingSunPathLabel');
+        if (lbl) lbl.textContent = 'Peak sun: ' + peak.alt.toFixed(1) + '° altitude at ' + peak.az.toFixed(0) + '° azimuth (' + peak.time + ')';
+      }
+      sp.innerHTML = parts.join('');
+    }
+  } catch (e) { console.warn('[shading] sun-path draw failed', e); }
+
+  // ── Affected-panel HTML grid (max shaded fraction across the day).
+  try {
+    var grid = document.getElementById('shadingPanelGrid');
+    if (grid && totalPanels) {
+      grid.style.gridTemplateColumns = 'repeat(' + cols + ', minmax(0, 1fr))';
+      var cells = [];
+      for (var i = 0; i < totalPanels; i++) {
+        var frac = perPanelFracs[i] || 0;
+        var color = '#3949ab', border = 'none';
+        if (frac >= 0.95)      { color = '#000000'; border = '1px solid #c62828'; }
+        else if (frac >= 0.50) color = '#c62828';
+        else if (frac >= 0.20) color = '#f57c00';
+        else if (frac >= 0.05) color = '#ffb74d';
+        cells.push('<div title="Panel ' + (i+1) + ': ' + (frac*100).toFixed(0) + '% max shaded" style="aspect-ratio:1.13/1.72;background:' + color + ';border:' + border + ';border-radius:2px"></div>');
+      }
+      grid.innerHTML = cells.join('');
+    }
+  } catch (e) { console.warn('[shading] panel-grid draw failed', e); }
+
+  // ── 5-thumbnail strip (07/09/12/15/18 closest series step).
+  try {
+    var thumb = document.getElementById('shadingThumbStrip');
+    if (thumb && series.length) {
+      var targets = ['07:00','09:00','12:00','15:00','18:00'];
+      var picks = targets.map(function(t) {
+        var tm = function(s) { var p = (s.time||'00:00').split(':').map(Number); return p[0]*60+p[1]; };
+        var tgt = parseInt(t.split(':')[0],10) * 60;
+        var best = 0;
+        for (var i = 1; i < series.length; i++)
+          if (Math.abs(tm(series[i])-tgt) < Math.abs(tm(series[best])-tgt)) best = i;
+        return best;
+      });
+      var tcells = [];
+      picks.forEach(function(idx) {
+        var s = series[idx];
+        var fracs = s.panel_fracs || [];
+        var padX = 4, padY = 4, cellW = (80-2*padX)/cols, cellH = (52-2*padY)/rows;
+        var rects = '';
+        for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) {
+          var pid = r*cols+c;
+          if (pid >= totalPanels) break;
+          rects += '<rect x="' + (padX+c*cellW) + '" y="' + (padY+r*cellH) + '" width="' + (cellW-0.5) + '" height="' + (cellH-0.5) + '" fill="' + shadeColor(fracs[pid]||0) + '"/>';
+        }
+        var dotX = 6 + (s.az/360)*68, dotY = 50 - Math.max(0, s.alt)*0.35;
+        var sun = s.alt > 0 ? '<circle cx="' + dotX.toFixed(1) + '" cy="' + dotY.toFixed(1) + '" r="2.5" fill="#ffd24a" stroke="#f59e0b" stroke-width="0.5"/>' : '';
+        tcells.push(
+          '<div class="col-6 col-md text-center">' +
+            '<div class="thumb-card" data-idx="' + idx + '" style="background:linear-gradient(180deg,#1a253d 0%,#0d1023 100%);border:1px solid #1e1e3a;border-radius:6px;padding:6px;cursor:pointer">' +
+              '<div class="fw-bold" style="color:#fff;font-size:11px">' + s.time + '</div>' +
+              '<div class="text-secondary" style="font-size:9px">alt ' + s.alt.toFixed(1) + '° / az ' + s.az.toFixed(0) + '°</div>' +
+              '<svg viewBox="0 0 80 56" width="100%" style="background:#0a0a1a;border-radius:3px;margin-top:4px"><rect width="80" height="56" fill="#0a0a1a"/>' + sun + rects + '</svg>' +
+              '<div class="text-secondary mt-1" style="font-size:9px">' + (s.avg_frac*100).toFixed(0) + '% avg shaded</div>' +
+            '</div>' +
+          '</div>'
+        );
+      });
+      thumb.innerHTML = tcells.join('');
+    }
+  } catch (e) { console.warn('[shading] thumbnail strip failed', e); }
+
+  // ── Daily curves: shading-loss, irradiance, distribution histogram.
+  try {
+    var W = 320, H = 180, padL = 36, padR = 12, padT = 18, padB = 24;
+    var plotW = W - padL - padR, plotH = H - padT - padB;
+    function minOf(s) { var p = (s.time||'00:00').split(':').map(Number); return p[0]*60+p[1]; }
+    if (series.length) {
+      var tMin = minOf(series[0]), tMax = minOf(series[series.length-1]);
+      function xOf(s) { return padL + ((minOf(s)-tMin)/Math.max(1,tMax-tMin))*plotW; }
+      function axes(yLabel, yMaxPct) {
+        var g = '';
+        [0,0.25,0.50,0.75,1.00].forEach(function(f) {
+          var y = padT + plotH*(1-f);
+          g += '<line x1="' + padL + '" y1="' + y + '" x2="' + (W-padR) + '" y2="' + y + '" stroke="#1e1e3a" stroke-width="0.5"/>';
+          g += '<text x="' + (padL-4) + '" y="' + (y+3) + '" fill="#6060a0" font-size="8" text-anchor="end">' + Math.round(yMaxPct*f) + '</text>';
+        });
+        [6,9,12,15,18].forEach(function(h) {
+          var t = h*60;
+          if (t < tMin || t > tMax) return;
+          var x = padL + ((t-tMin)/(tMax-tMin))*plotW;
+          g += '<line x1="' + x + '" y1="' + padT + '" x2="' + x + '" y2="' + (H-padB) + '" stroke="#1e1e3a" stroke-width="0.5"/>';
+          g += '<text x="' + x + '" y="' + (H-padB+12) + '" fill="#6060a0" font-size="8" text-anchor="middle">' + h + 'h</text>';
+        });
+        g += '<text x="6" y="' + (padT+plotH/2) + '" fill="#a0a0c8" font-size="9" transform="rotate(-90,6,' + (padT+plotH/2) + ')" text-anchor="middle">' + yLabel + '</text>';
+        return g;
+      }
+      // 1. Loss curve
+      var lossSvg = document.getElementById('shadingLossCurve');
+      if (lossSvg) {
+        var yMax = Math.max.apply(null, [0.05].concat(series.map(function(s){return s.avg_frac;})));
+        var yOf = function(f) { return padT + plotH*(1-f/yMax); };
+        var path = 'M ' + xOf(series[0]) + ' ' + yOf(series[0].avg_frac);
+        for (var i = 1; i < series.length; i++) path += ' L ' + xOf(series[i]) + ' ' + yOf(series[i].avg_frac);
+        var area = path + ' L ' + xOf(series[series.length-1]) + ' ' + (padT+plotH) + ' L ' + xOf(series[0]) + ' ' + (padT+plotH) + ' Z';
+        var peak = series[0];
+        series.forEach(function(s){ if (s.avg_frac > peak.avg_frac) peak = s; });
+        var peakX = xOf(peak), peakY = yOf(peak.avg_frac);
+        lossSvg.innerHTML = axes('% shaded', Math.round(yMax*100)) +
+          '<path d="' + area + '" fill="rgba(198,40,40,.25)"/>' +
+          '<path d="' + path + '" fill="none" stroke="#ef4444" stroke-width="2"/>' +
+          '<circle cx="' + peakX + '" cy="' + peakY + '" r="4" fill="#ef4444" stroke="#fff" stroke-width="1"/>' +
+          '<text x="' + peakX + '" y="' + (peakY-8) + '" fill="#ef4444" font-size="9" text-anchor="middle" font-weight="700">peak ' + (peak.avg_frac*100).toFixed(0) + '% @ ' + peak.time + '</text>';
+      }
+      // 2. Irradiance
+      var irradSvg = document.getElementById('shadingIrradianceCurve');
+      if (irradSvg) {
+        var ideals = series.map(function(s){ return Math.max(0, Math.sin(s.alt*Math.PI/180))*1000; });
+        var iMax = Math.max.apply(null, [50].concat(ideals));
+        var yOf2 = function(v) { return padT + plotH*(1-v/iMax); };
+        var corrected = series.map(function(s,i){ return ideals[i]*(1-s.avg_frac); });
+        function buildPath(arr) { var p = 'M ' + xOf(series[0]) + ' ' + yOf2(arr[0]); for (var i = 1; i < arr.length; i++) p += ' L ' + xOf(series[i]) + ' ' + yOf2(arr[i]); return p; }
+        var iLoss = 0, iSum = 0;
+        for (var i = 0; i < ideals.length; i++) { iLoss += ideals[i]-corrected[i]; iSum += ideals[i]; }
+        var lossPct = iSum > 0 ? (iLoss/iSum)*100 : 0;
+        irradSvg.innerHTML = axes('W/m² clear sky', Math.round(iMax)) +
+          '<path d="' + buildPath(ideals) + ' L ' + xOf(series[series.length-1]) + ' ' + (padT+plotH) + ' L ' + xOf(series[0]) + ' ' + (padT+plotH) + ' Z" fill="rgba(245,158,11,.18)"/>' +
+          '<path d="' + buildPath(corrected) + ' L ' + xOf(series[series.length-1]) + ' ' + (padT+plotH) + ' L ' + xOf(series[0]) + ' ' + (padT+plotH) + ' Z" fill="rgba(239,68,68,.30)"/>' +
+          '<path d="' + buildPath(ideals) + '" fill="none" stroke="#f59e0b" stroke-width="2"/>' +
+          '<path d="' + buildPath(corrected) + '" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="3,2"/>' +
+          '<text x="' + (W-padR-4) + '" y="' + (padT+10) + '" fill="#f59e0b" font-size="9" text-anchor="end" font-weight="700">unshaded</text>' +
+          '<text x="' + (W-padR-4) + '" y="' + (padT+22) + '" fill="#ef4444" font-size="9" text-anchor="end" font-weight="700">shaded (−' + lossPct.toFixed(1) + '%)</text>';
+      }
+      // 3. Distribution
+      var distSvg = document.getElementById('shadingDistrib');
+      if (distSvg) {
+        var peak2 = series[0];
+        series.forEach(function(s){ if (s.avg_frac > peak2.avg_frac) peak2 = s; });
+        var fracs = peak2.panel_fracs || [];
+        var buckets = [
+          {label:'Unshaded',lo:0,hi:0.05,color:'#3949ab',n:0},
+          {label:'Light',lo:0.05,hi:0.20,color:'#ffb74d',n:0},
+          {label:'Moderate',lo:0.20,hi:0.50,color:'#f57c00',n:0},
+          {label:'Heavy',lo:0.50,hi:0.95,color:'#c62828',n:0},
+          {label:'Full',lo:0.95,hi:1.01,color:'#000',n:0}
+        ];
+        fracs.forEach(function(f) {
+          for (var i = 0; i < buckets.length; i++) {
+            if (f >= buckets[i].lo && f < buckets[i].hi) { buckets[i].n++; break; }
+          }
+        });
+        var yMax3 = Math.max.apply(null, [1].concat(buckets.map(function(b){return b.n;})));
+        var yOf3 = function(v) { return padT + plotH*(1-v/yMax3); };
+        var barW = plotW/buckets.length*0.7;
+        var g = '';
+        for (var ii = 0; ii <= 4; ii++) {
+          var f = ii/4, y = padT + plotH*(1-f);
+          g += '<line x1="' + padL + '" y1="' + y + '" x2="' + (W-padR) + '" y2="' + y + '" stroke="#1e1e3a" stroke-width="0.5"/>';
+          g += '<text x="' + (padL-4) + '" y="' + (y+3) + '" fill="#6060a0" font-size="8" text-anchor="end">' + Math.round(yMax3*f) + '</text>';
+        }
+        buckets.forEach(function(b,i) {
+          var cx2 = padL + (i+0.5)*(plotW/buckets.length);
+          var x = cx2 - barW/2, y = yOf3(b.n), h = padT + plotH - y;
+          var stroke = b.color === '#000' ? 'stroke="#c62828" stroke-width="1.5"' : '';
+          g += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + h + '" fill="' + b.color + '" ' + stroke + '/>';
+          g += '<text x="' + cx2 + '" y="' + (y-4) + '" fill="#fff" font-size="10" text-anchor="middle" font-weight="700">' + b.n + '</text>';
+          g += '<text x="' + cx2 + '" y="' + (H-padB+12) + '" fill="#a0a0c8" font-size="8" text-anchor="middle">' + b.label + '</text>';
+        });
+        g += '<text x="6" y="' + (padT+plotH/2) + '" fill="#a0a0c8" font-size="9" transform="rotate(-90,6,' + (padT+plotH/2) + ')" text-anchor="middle">panels</text>';
+        g += '<text x="' + (W/2) + '" y="' + (padT-4) + '" fill="var(--solar-gold)" font-size="9" text-anchor="middle" font-weight="700">at peak ' + peak2.time + '</text>';
+        distSvg.innerHTML = g;
+      }
+    }
+  } catch (e) { console.warn('[shading] daily curves failed', e); }
+
+  // ── Wire the demo + manual factor buttons (no Three.js dep).
+  try {
+    var demoBtn = document.getElementById('shadingDemo10');
+    if (demoBtn) {
+      demoBtn.addEventListener('click', function() {
+        var url = new URL(window.location.href);
+        url.searchParams.set('demo', '10');
+        window.location.href = url.toString();
+      });
+    }
+  } catch (e) { console.warn('[shading] demo button wire failed', e); }
+})();
+</script>
+
+<!-- ── MODULE SCRIPT — Three.js 3D scene only. Falls back to error box -->
+<!-- if the CDN module fails; charts above already drew so the operator -->
+<!-- still has the SVG sun-path + affected grid + thumbnails + curves.  -->
 <script type="module">
-  // Day-2 scene: ground + sun + panel array + obstruction meshes +
-  // real cast shadows + display-layer toggles + camera presets +
-  // sun-path dome SVG overlay + affected-panel HTML grid. Day 3 will
-  // add a time slider that re-positions the sun across the day, plus
-  // ADK LlmAgent narrative + mitigation what-ifs.
   import * as THREE       from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
   import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
