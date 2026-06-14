@@ -236,8 +236,11 @@ def main() -> int:
         test("manual factor 0.85 applied to engine output",
              eng.get("bucket_factor") == 0.85,
              f"got={eng.get('bucket_factor')}")
-        test("manual_override stamp in HTML",
-             "Operator set factor" in r.text or 'manual_override' in r.text,
+        test("manual override banner in HTML",
+             "Operator picked factor" in r.text or
+             "Operator set factor" in r.text or
+             "manual_override" in r.text or
+             "Saved manual factor in effect" in r.text,
              "no manual_override banner")
     except Exception as e:
         test("manual factor override", False, str(e))

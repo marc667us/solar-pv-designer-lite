@@ -12448,7 +12448,7 @@ def project_shading(pid):
                  "distance": 6.0, "direction": "East",
                  "mitigation": "Bypass diodes",
                  "notes": "demo: light shading (single tree to the east)"}],
-        "20":  [{"type": "tree", "height": 5.0, "width": 4.0,
+        "20":  [{"type": "tree", "height": 4.0, "width": 4.0,
                  "distance": 5.0, "direction": "East",
                  "mitigation": "Bypass diodes",
                  "notes": "demo: significant shading (closer tree)"}],
