@@ -42,15 +42,18 @@
 </div>
 
 {# ───────────────────────────────────────────────────────────────────── #}
-{# AI 3D Shading Simulation — v2 scaffold (Day 1 of the upgrade).        #}
+{# AI 3D Shading Simulation — v2 scaffold (Day 2 of the upgrade).        #}
 {# Visible only with ?v2=1 so the live page is unchanged for everyone     #}
-{# else. Reads engine output (data.shading.engine) — produced by the     #}
-{# deterministic core engine.shading_engine.run_full_analysis when the   #}
-{# operator last saved obstructions. Day 2 adds cast shadows + display   #}
-{# toggles; Day 3 adds time slider + ADK LlmAgent narration.             #}
+{# else. Reads engine output (data.shading.engine) + obstructions from   #}
+{# the saved form. Day 2 ships: real obstruction meshes (cuboids/cones/  #}
+{# cylinders) at correct distance + direction, real cast shadows, sun-   #}
+{# path dome SVG overlay, display-layer toggle checkboxes, and an HTML   #}
+{# affected-panel grid keyed off per_panel_max_frac. Day 3 adds time     #}
+{# slider + ADK LlmAgent narration.                                     #}
 {# ───────────────────────────────────────────────────────────────────── #}
 {% if request.args.get('v2') %}
 {% set _eng = shading.get('engine') if shading else None %}
+{% set _obs = shading.get('obstructions') or [] %}
 <div class="solar-card p-0 mb-4 overflow-hidden"
      style="border:1px solid rgba(245,158,11,.35);
             background:linear-gradient(180deg,#0a0a1a 0%,#0d1023 60%,#101632 100%);">
@@ -61,8 +64,7 @@
         <i class="bi bi-box me-2"></i>AI 3D Shading Simulation
       </div>
       <div class="text-secondary" style="font-size:11px">
-        v2 scaffold — Day 1 of the upgraded shading agent. Drag to rotate, scroll to zoom.
-        Sun position driven by GPS + date.
+        Drag to rotate · scroll to zoom · right-drag to pan. Sun position from GPS + date.
       </div>
     </div>
     {% if _eng %}
@@ -90,32 +92,212 @@
     </div>
     {% endif %}
   </div>
-  <div id="shading3d-canvas" style="width:100%;height:540px;background:transparent;
-                                    cursor:grab"></div>
+
+  {# ── Main 3D canvas + right-side control rail ──────────────────────── #}
+  <div class="row g-0">
+    <div class="col-12 col-lg-9">
+      <div id="shading3d-canvas" style="width:100%;height:560px;background:transparent;
+                                        cursor:grab"></div>
+    </div>
+    <div class="col-12 col-lg-3 p-3" style="border-left:1px solid #1e1e3a;background:rgba(255,255,255,.02)">
+      {# Display-layer toggle checkboxes. Each toggle drives a Three.js  #}
+      {# group visibility AND the cast-shadow flag for "Shadows".        #}
+      <div class="fw-bold small mb-2" style="color:var(--solar-gold);font-size:12px">
+        <i class="bi bi-layers me-1"></i>DISPLAY LAYERS
+      </div>
+      <div class="d-flex flex-column gap-1 mb-3" style="font-size:12px">
+        <label class="form-check d-flex align-items-center gap-2 m-0">
+          <input class="form-check-input shading-toggle" type="checkbox" data-layer="sun" checked>
+          <span>Show Sun</span>
+        </label>
+        <label class="form-check d-flex align-items-center gap-2 m-0">
+          <input class="form-check-input shading-toggle" type="checkbox" data-layer="rays" checked>
+          <span>Show Sun Rays</span>
+        </label>
+        <label class="form-check d-flex align-items-center gap-2 m-0">
+          <input class="form-check-input shading-toggle" type="checkbox" data-layer="shadows" checked>
+          <span>Show Shadows</span>
+        </label>
+        <label class="form-check d-flex align-items-center gap-2 m-0">
+          <input class="form-check-input shading-toggle" type="checkbox" data-layer="obstructions" checked>
+          <span>Show Obstructions</span>
+        </label>
+        <label class="form-check d-flex align-items-center gap-2 m-0">
+          <input class="form-check-input shading-toggle" type="checkbox" data-layer="panels" checked>
+          <span>Show PV Panels</span>
+        </label>
+        <label class="form-check d-flex align-items-center gap-2 m-0">
+          <input class="form-check-input shading-toggle" type="checkbox" data-layer="affected" checked>
+          <span>Highlight Affected Panels</span>
+        </label>
+        <label class="form-check d-flex align-items-center gap-2 m-0">
+          <input class="form-check-input shading-toggle" type="checkbox" data-layer="sunpath" checked>
+          <span>Show Sun Path Arc</span>
+        </label>
+      </div>
+
+      {# ── 3D view controls — reset + camera presets ─────────────────── #}
+      <div class="fw-bold small mb-2 mt-3" style="color:var(--solar-gold);font-size:12px">
+        <i class="bi bi-camera me-1"></i>3D VIEW CONTROLS
+      </div>
+      <div class="d-flex flex-wrap gap-1 mb-3">
+        <button type="button" id="shadingReset"
+                class="btn btn-sm btn-outline-secondary" style="font-size:11px">
+          <i class="bi bi-house"></i> Reset
+        </button>
+        <button type="button" data-view="top"
+                class="btn btn-sm btn-outline-secondary shading-view" style="font-size:11px">
+          Top
+        </button>
+        <button type="button" data-view="south"
+                class="btn btn-sm btn-outline-secondary shading-view" style="font-size:11px">
+          South
+        </button>
+        <button type="button" data-view="east"
+                class="btn btn-sm btn-outline-secondary shading-view" style="font-size:11px">
+          East
+        </button>
+      </div>
+
+      {# ── Sun-path dome SVG (E-S-W compass dome + arc + current sun) ── #}
+      <div class="fw-bold small mb-2 mt-3" style="color:var(--solar-gold);font-size:12px">
+        <i class="bi bi-sun me-1"></i>SUN PATH DIAGRAM
+      </div>
+      <svg id="shadingSunPath" viewBox="0 0 240 140"
+           style="width:100%;height:auto;background:rgba(255,255,255,.02);
+                  border:1px solid #1e1e3a;border-radius:6px"></svg>
+      <div class="text-secondary mt-1" id="shadingSunPathLabel"
+           style="font-size:10px;text-align:center"></div>
+    </div>
+  </div>
+
+  {# ── Bottom: obstruction summary + affected-panel grid ───────────── #}
+  <div class="row g-0" style="border-top:1px solid #1e1e3a;background:rgba(0,0,0,.18)">
+    <div class="col-12 col-md-7 p-3">
+      <div class="fw-bold small mb-2" style="color:var(--solar-gold);font-size:12px">
+        <i class="bi bi-buildings me-1"></i>OBSTRUCTION SUMMARY
+      </div>
+      {% if _obs %}
+      <div class="table-responsive">
+        <table class="table table-sm table-borderless m-0"
+               style="font-size:11px;color:#d4d4f0">
+          <thead style="color:#a0a0c8;border-bottom:1px solid #1e1e3a">
+            <tr><th>#</th><th>Type</th><th>H (m)</th><th>W (m)</th>
+                <th>Dist (m)</th><th>Direction</th></tr>
+          </thead>
+          <tbody>
+          {% for o in _obs %}
+            <tr style="border-bottom:1px dashed rgba(255,255,255,.04)">
+              <td><span class="badge"
+                        style="background:var(--solar-gold);color:#000;font-size:10px">
+                {{ loop.index }}</span></td>
+              <td>{{ o.type or '—' }}</td>
+              <td>{{ "%.1f"|format(o.height|float) }}</td>
+              <td>{{ "%.1f"|format(o.width|float) }}</td>
+              <td>{{ "%.1f"|format(o.distance|float) }}</td>
+              <td>{{ o.direction or '—' }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-secondary small">
+        No obstructions saved yet — add some below and save the form.
+      </div>
+      {% endif %}
+    </div>
+    <div class="col-12 col-md-5 p-3" style="border-left:1px solid #1e1e3a">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="fw-bold small" style="color:var(--solar-gold);font-size:12px">
+          <i class="bi bi-grid-3x3 me-1"></i>AFFECTED PANEL MAP
+        </div>
+        {% if _eng %}
+        <div class="text-secondary" style="font-size:10px">
+          {{ _eng.affected_panels }}/{{ _eng.total_panels }} affected · peak day
+        </div>
+        {% endif %}
+      </div>
+      <div id="shadingPanelGrid"
+           style="display:grid;gap:2px;background:#0a0a1a;padding:6px;
+                  border-radius:6px;border:1px solid #1e1e3a;
+                  grid-template-columns:repeat(auto-fit, minmax(14px, 1fr))">
+      </div>
+      <div class="d-flex gap-2 mt-2 flex-wrap" style="font-size:10px;color:#a0a0c8">
+        <span><span style="display:inline-block;width:10px;height:10px;
+                           background:#3949ab;border-radius:2px;vertical-align:middle"></span>
+          Unshaded</span>
+        <span><span style="display:inline-block;width:10px;height:10px;
+                           background:#ffb74d;border-radius:2px;vertical-align:middle"></span>
+          Light</span>
+        <span><span style="display:inline-block;width:10px;height:10px;
+                           background:#f57c00;border-radius:2px;vertical-align:middle"></span>
+          Moderate</span>
+        <span><span style="display:inline-block;width:10px;height:10px;
+                           background:#c62828;border-radius:2px;vertical-align:middle"></span>
+          Heavy</span>
+        <span><span style="display:inline-block;width:10px;height:10px;
+                           background:#000;border:1px solid #c62828;border-radius:2px;vertical-align:middle"></span>
+          Full</span>
+      </div>
+    </div>
+  </div>
 </div>
 
-{# Engine output serialised for the Three.js scene to consume. Empty {} #}
-{# placeholder keeps the JSON parse path stable on first load.          #}
+{# Engine output + saved obstruction list, serialised for the Three.js #}
+{# scene + the affected-panel HTML grid + the sun-path dome SVG to     #}
+{# consume. Empty {} keeps JSON parse stable on first load.            #}
 <script id="shading-engine-data" type="application/json">
 {{ (shading.get('engine') or {})|tojson }}
 </script>
+<script id="shading-obstructions-data" type="application/json">
+{{ (shading.get('obstructions') or [])|tojson }}
+</script>
 
 <script type="module">
-  // Day-1 scaffold: scene + ground + panel array as flat boxes + sun
-  // directional light + ambient + hemisphere + OrbitControls. Day 2
-  // extends this with obstruction cuboids/cylinders/cones, shadow
-  // mapping, and per-panel shading material based on per_panel_max_frac.
+  // Day-2 scene: ground + sun + panel array + obstruction meshes +
+  // real cast shadows + display-layer toggles + camera presets +
+  // sun-path dome SVG overlay + affected-panel HTML grid. Day 3 will
+  // add a time slider that re-positions the sun across the day, plus
+  // ADK LlmAgent narrative + mitigation what-ifs.
   import * as THREE       from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
   import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
   const host = document.getElementById('shading3d-canvas');
   if (host) {
     let engineData = {};
+    let obstructions = [];
     try {
       engineData = JSON.parse(
         document.getElementById('shading-engine-data').textContent.trim() || '{}'
       );
     } catch (e) { console.warn('shading-engine-data parse', e); }
+    try {
+      obstructions = JSON.parse(
+        document.getElementById('shading-obstructions-data').textContent.trim() || '[]'
+      );
+    } catch (e) { console.warn('shading-obstructions-data parse', e); }
+
+    // Cardinal direction → azimuth degrees, matching engine.DIRECTION_AZ.
+    const DIR_AZ = {
+      'N': 0, 'North': 0,
+      'NE': 45, 'North-East': 45, 'NorthEast': 45,
+      'E': 90, 'East': 90,
+      'SE': 135, 'South-East': 135, 'SouthEast': 135,
+      'S': 180, 'South': 180,
+      'SW': 225, 'South-West': 225, 'SouthWest': 225,
+      'W': 270, 'West': 270,
+      'NW': 315, 'North-West': 315, 'NorthWest': 315,
+    };
+
+    // Heat-tint colour for a panel's max shaded fraction across the day.
+    function shadeColor(frac) {
+      if (frac >= 0.95) return 0x000000;        // full
+      if (frac >= 0.50) return 0xc62828;        // heavy
+      if (frac >= 0.20) return 0xf57c00;        // moderate
+      if (frac >= 0.05) return 0xffb74d;        // light
+      return 0x3949ab;                          // unshaded panel base
+    }
 
     // Scene
     const scene = new THREE.Scene();
@@ -221,10 +403,7 @@
     arrowGroup.position.set(-22, 0.05, 0);
     scene.add(arrowGroup);
 
-    // PV panel grid. Day 1 = flat boxes at hardcoded positions matching
-    // engine.total_panels with auto rows/cols. Day 2 will pull real
-    // 3D corners from the engine so layout matches the deterministic
-    // shadow calculation 1:1.
+    // ── PV panel grid (layered group so the display toggle can hide it).
     const totalPanels = engineData.total_panels || 12;
     const cols = Math.max(1, Math.round(Math.sqrt(totalPanels * 1.6)));
     const rows = Math.ceil(totalPanels / cols);
@@ -236,23 +415,19 @@
     const arrayY  = 1.0;
     const panelGroup = new THREE.Group();
     panelGroup.rotation.x = -tiltRad;
-    // Centre the array on origin in its OWN tilted plane.
-    const panelMat = new THREE.MeshStandardMaterial({
-      color: 0x1a2a4d, roughness: 0.45, metalness: 0.15,
-      emissive: 0x0a1428, emissiveIntensity: 0.2
-    });
     const perPanelFracs = engineData.per_panel_max_frac || [];
+    const panelMeshes = [];
     let pid = 0;
     for (let r = 0; r < rows && pid < totalPanels; r++) {
       for (let c = 0; c < cols && pid < totalPanels; c++) {
-        const mat = panelMat.clone();
-        // Heat-tint shaded panels for instant visual feedback.
         const frac = perPanelFracs[pid] || 0;
-        if (frac > 0.5)      mat.color.setHex(0xc62828);
-        else if (frac > 0.2) mat.color.setHex(0xf57c00);
-        else if (frac > 0.05) mat.color.setHex(0xffb74d);
+        const mat = new THREE.MeshStandardMaterial({
+          color: shadeColor(frac),
+          roughness: 0.45, metalness: 0.15,
+          emissive: 0x0a1428, emissiveIntensity: 0.15
+        });
         const mesh = new THREE.Mesh(
-          new THREE.BoxGeometry(panelW, panelH, 0.04),
+          new THREE.BoxGeometry(panelW, panelH, 0.05),
           mat
         );
         mesh.castShadow = true;
@@ -260,12 +435,189 @@
         const x = -totalW / 2 + panelW / 2 + c * (panelW + gapU);
         const y = -totalH / 2 + panelH / 2 + r * (panelH + gapV);
         mesh.position.set(x, y, 0);
+        mesh.userData = { panelId: pid, shadedFrac: frac };
         panelGroup.add(mesh);
+        panelMeshes.push(mesh);
         pid++;
       }
     }
     panelGroup.position.y = arrayY;
     scene.add(panelGroup);
+
+    // ── Obstructions (cuboid for buildings/walls, cylinder for tanks/
+    //    masts/antennas, cylinder+cone for trees). Positioned at
+    //    (distance, direction) from the array centre, matching the
+    //    engine's geometry. Cast shadows onto ground + panels.
+    const obstructionGroup = new THREE.Group();
+    function makeObstructionMesh(obs) {
+      const t = (obs.type || '').toLowerCase();
+      const h = Math.max(0.2, parseFloat(obs.height) || 1);
+      const w = Math.max(0.2, parseFloat(obs.width)  || 1);
+      const d = Math.max(0.2, parseFloat(obs.width)  || 1);   // depth ≈ width v1
+      const grp = new THREE.Group();
+      if (t.includes('tree')) {
+        const trunk = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18, 0.22, h * 0.45, 12),
+          new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 1 })
+        );
+        trunk.castShadow = true; trunk.receiveShadow = true;
+        trunk.position.y = h * 0.225;
+        grp.add(trunk);
+        const crown = new THREE.Mesh(
+          new THREE.ConeGeometry(Math.max(0.7, w * 0.7), h * 0.65, 14),
+          new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.95 })
+        );
+        crown.castShadow = true; crown.receiveShadow = true;
+        crown.position.y = h * 0.45 + h * 0.325;
+        grp.add(crown);
+      } else if (t.includes('water tank') || t.includes('tank')) {
+        const stand = new THREE.Mesh(
+          new THREE.BoxGeometry(w * 0.7, h * 0.5, w * 0.7),
+          new THREE.MeshStandardMaterial({ color: 0x6e6e6e, roughness: 0.7 })
+        );
+        stand.castShadow = true; stand.receiveShadow = true;
+        stand.position.y = h * 0.25;
+        grp.add(stand);
+        const tank = new THREE.Mesh(
+          new THREE.CylinderGeometry(w / 2, w / 2, h * 0.5, 24),
+          new THREE.MeshStandardMaterial({ color: 0x1565c0, roughness: 0.4, metalness: 0.4 })
+        );
+        tank.castShadow = true; tank.receiveShadow = true;
+        tank.position.y = h * 0.75;
+        grp.add(tank);
+      } else if (t.includes('mast') || t.includes('antenna') || t.includes('pole')) {
+        const mast = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18, 0.22, h, 10),
+          new THREE.MeshStandardMaterial({ color: 0x9e9e9e, roughness: 0.6, metalness: 0.5 })
+        );
+        mast.castShadow = true; mast.receiveShadow = true;
+        mast.position.y = h / 2;
+        grp.add(mast);
+      } else if (t.includes('wall') || t.includes('parapet')) {
+        // Wall is long thin cuboid. Treat user "width" as length.
+        const wall = new THREE.Mesh(
+          new THREE.BoxGeometry(w, h, 0.3),
+          new THREE.MeshStandardMaterial({ color: 0xa1887f, roughness: 0.9 })
+        );
+        wall.castShadow = true; wall.receiveShadow = true;
+        wall.position.y = h / 2;
+        grp.add(wall);
+      } else {
+        // Default: building cuboid (also covers 10-storey / neighbour /
+        // generic building / "other").
+        const isHigh = h >= 12;
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(w, h, d),
+          new THREE.MeshStandardMaterial({
+            color: isHigh ? 0x8a8a96 : 0xb5b59e,
+            roughness: 0.85
+          })
+        );
+        body.castShadow = true; body.receiveShadow = true;
+        body.position.y = h / 2;
+        grp.add(body);
+        // A few windows on the lit face for visual interest.
+        const winRows = Math.max(1, Math.min(8, Math.floor(h / 3)));
+        const winCols = Math.max(1, Math.min(5, Math.floor(w / 1.5)));
+        for (let r = 0; r < winRows; r++) {
+          for (let c = 0; c < winCols; c++) {
+            const win = new THREE.Mesh(
+              new THREE.PlaneGeometry(0.5, 0.7),
+              new THREE.MeshStandardMaterial({
+                color: 0xffeaa0, emissive: 0x55411a, emissiveIntensity: 0.6
+              })
+            );
+            const wx = -w / 2 + (c + 1) * w / (winCols + 1) - w / 2 + 0;
+            win.position.set((c + 0.5 - winCols / 2) * (w / (winCols + 1)),
+                             (r + 1) * (h / (winRows + 1)),
+                             d / 2 + 0.01);
+            grp.add(win);
+          }
+        }
+      }
+      return grp;
+    }
+    obstructions.forEach((obs, i) => {
+      const mesh = makeObstructionMesh(obs);
+      const dist = Math.max(0.5, parseFloat(obs.distance) || 5);
+      const az   = THREE.MathUtils.degToRad(DIR_AZ[obs.direction] ?? 180);
+      // Site frame: +x East = sin(az), +y North (in three.js this is -Z).
+      // Three.js axes: x = east, y = up, z = south (because three.js Z
+      // increases toward camera/down-page; we treat -z = north so that
+      // sun "south at noon" lights the south-facing array correctly).
+      const x =  Math.sin(az) * dist;
+      const z =  Math.cos(az) * dist;
+      mesh.position.set(x, 0, z);
+      // Add a numbered label sprite over the obstruction.
+      const cv = document.createElement('canvas');
+      cv.width = 64; cv.height = 64;
+      const cx = cv.getContext('2d');
+      cx.fillStyle = '#f59e0b'; cx.beginPath();
+      cx.arc(32, 32, 26, 0, Math.PI * 2); cx.fill();
+      cx.fillStyle = '#000'; cx.font = 'bold 34px sans-serif';
+      cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      cx.fillText(String(i + 1), 32, 34);
+      const tex = new THREE.CanvasTexture(cv);
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+      const obsH = Math.max(0.2, parseFloat(obs.height) || 1);
+      spr.position.set(0, obsH + 1.5, 0);
+      spr.scale.set(2, 2, 1);
+      mesh.add(spr);
+      obstructionGroup.add(mesh);
+    });
+    scene.add(obstructionGroup);
+
+    // ── Visible sun rays — a fan from the sun toward the array.
+    const raysGroup = new THREE.Group();
+    function rebuildRays() {
+      while (raysGroup.children.length) raysGroup.remove(raysGroup.children[0]);
+      const sp = sunMesh.position;
+      const targets = [
+        new THREE.Vector3(-totalW / 2, arrayY, 0),
+        new THREE.Vector3( totalW / 2, arrayY, 0),
+        new THREE.Vector3(0, arrayY, -totalH / 2),
+        new THREE.Vector3(0, arrayY,  totalH / 2),
+        new THREE.Vector3(0, arrayY, 0),
+      ];
+      const mat = new THREE.LineBasicMaterial({
+        color: 0xffe066, transparent: true, opacity: 0.55
+      });
+      targets.forEach(t => {
+        const g = new THREE.BufferGeometry().setFromPoints([sp, t]);
+        raysGroup.add(new THREE.Line(g, mat));
+      });
+    }
+    rebuildRays();
+    scene.add(raysGroup);
+
+    // ── Sun-path arc — half-dome arc from sunrise to sunset using the
+    //    engine time-series so it tracks the actual day computed.
+    const sunPathGroup = new THREE.Group();
+    if (engineData.series && engineData.series.length) {
+      const pts = [];
+      engineData.series.forEach(s => {
+        if (s.alt <= 0) return;
+        const alt = THREE.MathUtils.degToRad(s.alt);
+        const az  = THREE.MathUtils.degToRad(s.az);
+        const r = 38;
+        pts.push(new THREE.Vector3(
+          Math.sin(az) * Math.cos(alt) * r,
+          Math.sin(alt) * r,
+          Math.cos(az) * Math.cos(alt) * r
+        ));
+      });
+      if (pts.length > 1) {
+        const arcGeo = new THREE.BufferGeometry().setFromPoints(pts);
+        const arc = new THREE.Line(arcGeo,
+          new THREE.LineDashedMaterial({
+            color: 0xffd24a, dashSize: 1.0, gapSize: 0.6,
+            transparent: true, opacity: 0.6
+          }));
+        arc.computeLineDistances();
+        sunPathGroup.add(arc);
+      }
+    }
+    scene.add(sunPathGroup);
 
     // OrbitControls
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -274,6 +626,128 @@
     controls.minDistance = 8;
     controls.maxDistance = 120;
     controls.maxPolarAngle = Math.PI / 2 - 0.05;
+    controls.target.set(0, 2, 0);
+
+    // ── Display-layer toggle wiring.
+    const layerTargets = {
+      sun:          [sunMesh],
+      rays:         [raysGroup],
+      sunpath:      [sunPathGroup],
+      obstructions: [obstructionGroup],
+      panels:       [panelGroup],
+    };
+    document.querySelectorAll('.shading-toggle').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const layer = cb.dataset.layer;
+        const on    = cb.checked;
+        if (layer === 'shadows') {
+          // Toggle shadow casting on the directional light AND all
+          // mesh.castShadow flags (cheapest way to flip the visual).
+          sun.castShadow = on;
+          panelMeshes.forEach(m => { m.castShadow = on; });
+          obstructionGroup.traverse(o => { if (o.isMesh) o.castShadow = on; });
+        } else if (layer === 'affected') {
+          // Reset each panel to its un-tinted base, or re-apply heat tint.
+          panelMeshes.forEach(m => {
+            const f = m.userData.shadedFrac;
+            m.material.color.setHex(on ? shadeColor(f) : 0x3949ab);
+          });
+        } else if (layerTargets[layer]) {
+          layerTargets[layer].forEach(t => { t.visible = on; });
+        }
+      });
+    });
+
+    // ── Camera preset buttons.
+    const homePos = camera.position.clone();
+    document.getElementById('shadingReset')?.addEventListener('click', () => {
+      camera.position.copy(homePos);
+      controls.target.set(0, 2, 0);
+      controls.update();
+    });
+    document.querySelectorAll('.shading-view').forEach(b => {
+      b.addEventListener('click', () => {
+        const view = b.dataset.view;
+        if (view === 'top')   camera.position.set(0, 50, 0.01);
+        if (view === 'south') camera.position.set(0, 12, 40);
+        if (view === 'east')  camera.position.set(40, 12, 0);
+        controls.target.set(0, 2, 0);
+        controls.update();
+      });
+    });
+
+    // ── Sun-path dome SVG overlay (E-S-W half-dome) — independent of
+    //    Three.js so the user can scan a tiny diagram even when the 3D
+    //    view is reset or rotated.
+    const sp = document.getElementById('shadingSunPath');
+    if (sp && engineData.series && engineData.series.length) {
+      // Project sun-position series onto E-W (x) and altitude (y).
+      // Center at (120, 130). Radius 110 horizontal, 90 vertical.
+      const cx = 120, cy = 130, rx = 110, ry = 95;
+      const parts = [];
+      // Dome boundary
+      parts.push(`<path d="M ${cx - rx} ${cy} A ${rx} ${ry} 0 0 1 ${cx + rx} ${cy}"
+        fill="none" stroke="#3a3a5e" stroke-width="1"/>`);
+      // Cardinal labels
+      parts.push(`<text x="${cx - rx + 4}" y="${cy + 12}" fill="#a0a0c8"
+        font-size="10">W</text>`);
+      parts.push(`<text x="${cx + rx - 12}" y="${cy + 12}" fill="#a0a0c8"
+        font-size="10">E</text>`);
+      parts.push(`<text x="${cx - 4}" y="${cy - ry + 8}" fill="#a0a0c8"
+        font-size="10">N</text>`);
+      parts.push(`<text x="${cx - 4}" y="${cy + 12}" fill="#a0a0c8"
+        font-size="10">S</text>`);
+      // Day arc — connect series points using altitude + (az - 180) so
+      // South is at the top of the dome.
+      const arcPts = [];
+      engineData.series.forEach(s => {
+        if (s.alt <= 0) return;
+        const altR = s.alt * Math.PI / 180;
+        const azR  = (s.az - 180) * Math.PI / 180;
+        const x = cx + Math.sin(azR) * rx * Math.cos(altR);
+        const y = cy - Math.sin(altR) * ry;
+        arcPts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+      });
+      if (arcPts.length > 1) {
+        parts.push(`<polyline points="${arcPts.join(' ')}"
+          fill="none" stroke="#f59e0b" stroke-width="2"
+          stroke-dasharray="3,2" opacity="0.8"/>`);
+      }
+      // Peak sun marker (largest altitude in series).
+      let peak = engineData.series[0];
+      engineData.series.forEach(s => { if (s.alt > peak.alt) peak = s; });
+      if (peak.alt > 0) {
+        const altR = peak.alt * Math.PI / 180;
+        const azR  = (peak.az - 180) * Math.PI / 180;
+        const px = cx + Math.sin(azR) * rx * Math.cos(altR);
+        const py = cy - Math.sin(altR) * ry;
+        parts.push(`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}"
+          r="6" fill="#ffe066" stroke="#f59e0b" stroke-width="1.5"/>`);
+        const lbl = document.getElementById('shadingSunPathLabel');
+        if (lbl) lbl.textContent =
+          `Peak sun: ${peak.alt.toFixed(1)}° altitude at ${peak.az.toFixed(0)}° azimuth (${peak.time})`;
+      }
+      sp.innerHTML = parts.join('');
+    }
+
+    // ── Affected-panel HTML grid (re-uses per_panel_max_frac from engine).
+    const grid = document.getElementById('shadingPanelGrid');
+    if (grid) {
+      grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+      const html = [];
+      for (let i = 0; i < totalPanels; i++) {
+        const frac = perPanelFracs[i] || 0;
+        let color = '#3949ab', border = 'none';
+        if (frac >= 0.95)      { color = '#000000'; border = '1px solid #c62828'; }
+        else if (frac >= 0.50) color = '#c62828';
+        else if (frac >= 0.20) color = '#f57c00';
+        else if (frac >= 0.05) color = '#ffb74d';
+        html.push(`<div title="Panel ${i + 1}: ${(frac * 100).toFixed(0)}% max shaded"
+          style="aspect-ratio:1.13/1.72;background:${color};border:${border};
+                 border-radius:2px"></div>`);
+      }
+      grid.innerHTML = html.join('');
+    }
 
     // Resize
     function onResize() {
