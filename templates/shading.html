@@ -41,6 +41,260 @@
   </div>
 </div>
 
+{# ───────────────────────────────────────────────────────────────────── #}
+{# AI 3D Shading Simulation — v2 scaffold (Day 1 of the upgrade).        #}
+{# Visible only with ?v2=1 so the live page is unchanged for everyone     #}
+{# else. Reads engine output (data.shading.engine) — produced by the     #}
+{# deterministic core engine.shading_engine.run_full_analysis when the   #}
+{# operator last saved obstructions. Day 2 adds cast shadows + display   #}
+{# toggles; Day 3 adds time slider + ADK LlmAgent narration.             #}
+{# ───────────────────────────────────────────────────────────────────── #}
+{% if request.args.get('v2') %}
+{% set _eng = shading.get('engine') if shading else None %}
+<div class="solar-card p-0 mb-4 overflow-hidden"
+     style="border:1px solid rgba(245,158,11,.35);
+            background:linear-gradient(180deg,#0a0a1a 0%,#0d1023 60%,#101632 100%);">
+  <div class="d-flex justify-content-between align-items-center p-3 flex-wrap gap-2"
+       style="border-bottom:1px solid #1e1e3a">
+    <div>
+      <div class="fw-black" style="color:var(--solar-gold);font-size:18px">
+        <i class="bi bi-box me-2"></i>AI 3D Shading Simulation
+      </div>
+      <div class="text-secondary" style="font-size:11px">
+        v2 scaffold — Day 1 of the upgraded shading agent. Drag to rotate, scroll to zoom.
+        Sun position driven by GPS + date.
+      </div>
+    </div>
+    {% if _eng %}
+    <div class="d-flex gap-2 align-items-center flex-wrap" style="font-size:11px">
+      <span class="badge"
+            style="background:rgba(245,158,11,.18);color:var(--solar-gold);
+                   border:1px solid rgba(245,158,11,.45);font-size:11px">
+        AI factor {{ "%.2f"|format(_eng.bucket_factor) }} · {{ _eng.bucket_label }}
+      </span>
+      <span class="text-secondary">
+        Loss: <span class="text-danger fw-bold">{{ _eng.system_loss_pct }}%</span>
+      </span>
+      <span class="text-secondary">
+        Affected: <span class="text-warning fw-bold">{{ _eng.affected_panels }}/{{ _eng.total_panels }}</span>
+      </span>
+      <span class="text-secondary">
+        Window: {{ _eng.shading_start }}–{{ _eng.shading_end }}
+        ({{ _eng.shading_duration_h }}h)
+      </span>
+    </div>
+    {% else %}
+    <div class="small text-secondary">
+      Engine has not produced output yet. Save the form below at least once with
+      obstructions + a Location step so the engine can run with site GPS + panel count.
+    </div>
+    {% endif %}
+  </div>
+  <div id="shading3d-canvas" style="width:100%;height:540px;background:transparent;
+                                    cursor:grab"></div>
+</div>
+
+{# Engine output serialised for the Three.js scene to consume. Empty {} #}
+{# placeholder keeps the JSON parse path stable on first load.          #}
+<script id="shading-engine-data" type="application/json">
+{{ (shading.get('engine') or {})|tojson }}
+</script>
+
+<script type="module">
+  // Day-1 scaffold: scene + ground + panel array as flat boxes + sun
+  // directional light + ambient + hemisphere + OrbitControls. Day 2
+  // extends this with obstruction cuboids/cylinders/cones, shadow
+  // mapping, and per-panel shading material based on per_panel_max_frac.
+  import * as THREE       from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+  import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+
+  const host = document.getElementById('shading3d-canvas');
+  if (host) {
+    let engineData = {};
+    try {
+      engineData = JSON.parse(
+        document.getElementById('shading-engine-data').textContent.trim() || '{}'
+      );
+    } catch (e) { console.warn('shading-engine-data parse', e); }
+
+    // Scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a1a);
+    scene.fog = new THREE.Fog(0x0a0a1a, 50, 200);
+
+    // Camera
+    const camera = new THREE.PerspectiveCamera(
+      45, host.clientWidth / host.clientHeight, 0.1, 500
+    );
+    camera.position.set(28, 22, 32);
+    camera.lookAt(0, 2, 0);
+
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(host.clientWidth, host.clientHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    host.appendChild(renderer.domElement);
+
+    // Lights
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x202040, 0.4);
+    scene.add(hemi);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.20);
+    scene.add(ambient);
+
+    // Sun (directional). Initial position will be set from engine series.
+    const sun = new THREE.DirectionalLight(0xfff5d6, 1.1);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left   = -40;
+    sun.shadow.camera.right  =  40;
+    sun.shadow.camera.top    =  40;
+    sun.shadow.camera.bottom = -40;
+    sun.shadow.camera.near   =   1;
+    sun.shadow.camera.far    = 200;
+    scene.add(sun);
+    scene.add(sun.target);
+
+    // Visible sun disc + glow.
+    const sunMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1.4, 24, 24),
+      new THREE.MeshBasicMaterial({ color: 0xffe066 })
+    );
+    scene.add(sunMesh);
+
+    // Place sun from engine: use peak-shading step's altitude/azimuth.
+    function placeSun(altDeg, azDeg) {
+      const alt = THREE.MathUtils.degToRad(altDeg);
+      const az  = THREE.MathUtils.degToRad(azDeg);
+      // Site frame: +x East, +y North, +z Up. Three.js Y is up — remap:
+      //   threeX =  east-component =  -sin(az)*cos(alt)   (sun direction reversed)
+      //   threeY =  altitude       =   sin(alt)
+      //   threeZ =  north-component =  -cos(az)*cos(alt)
+      const dist = 38;
+      const x =  Math.sin(az) * Math.cos(alt) * dist;
+      const y =  Math.sin(alt) * dist;
+      const z =  Math.cos(az) * Math.cos(alt) * dist;
+      sun.position.set(x, y, z);
+      sunMesh.position.copy(sun.position);
+      sun.target.position.set(0, 0, 0);
+    }
+    let _placedSun = false;
+    if (engineData.series && engineData.series.length) {
+      // Pick the time step with the highest average shading — that's the
+      // most visually informative instant to render by default.
+      let peak = engineData.series[0];
+      for (const s of engineData.series) {
+        if (s.avg_frac > peak.avg_frac) peak = s;
+      }
+      if (peak.alt > 0) {
+        placeSun(peak.alt, peak.az);
+        _placedSun = true;
+      }
+    }
+    if (!_placedSun) placeSun(60, 180);   // sane default — noon, south
+
+    // Ground (large grass-coloured disc).
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(80, 64),
+      new THREE.MeshStandardMaterial({ color: 0x202c1a, roughness: 1.0 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // North arrow (small cone at +Z away from camera).
+    const arrowGroup = new THREE.Group();
+    const shaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.08, 4, 12),
+      new THREE.MeshStandardMaterial({ color: 0xff6b6b })
+    );
+    shaft.position.y = 0.02; shaft.rotation.z = Math.PI / 2;
+    arrowGroup.add(shaft);
+    const head = new THREE.Mesh(
+      new THREE.ConeGeometry(0.4, 0.9, 16),
+      new THREE.MeshStandardMaterial({ color: 0xff6b6b })
+    );
+    head.position.set(0, 0.02, -2.4);
+    head.rotation.x = -Math.PI / 2;
+    arrowGroup.add(head);
+    arrowGroup.position.set(-22, 0.05, 0);
+    scene.add(arrowGroup);
+
+    // PV panel grid. Day 1 = flat boxes at hardcoded positions matching
+    // engine.total_panels with auto rows/cols. Day 2 will pull real
+    // 3D corners from the engine so layout matches the deterministic
+    // shadow calculation 1:1.
+    const totalPanels = engineData.total_panels || 12;
+    const cols = Math.max(1, Math.round(Math.sqrt(totalPanels * 1.6)));
+    const rows = Math.ceil(totalPanels / cols);
+    const panelW = 1.13, panelH = 1.72, gapU = 0.05, gapV = 0.30;
+    const totalW = cols * panelW + (cols - 1) * gapU;
+    const totalH = rows * panelH + (rows - 1) * gapV;
+    const tiltDeg = engineData.tilt_deg || 15;
+    const tiltRad = THREE.MathUtils.degToRad(tiltDeg);
+    const arrayY  = 1.0;
+    const panelGroup = new THREE.Group();
+    panelGroup.rotation.x = -tiltRad;
+    // Centre the array on origin in its OWN tilted plane.
+    const panelMat = new THREE.MeshStandardMaterial({
+      color: 0x1a2a4d, roughness: 0.45, metalness: 0.15,
+      emissive: 0x0a1428, emissiveIntensity: 0.2
+    });
+    const perPanelFracs = engineData.per_panel_max_frac || [];
+    let pid = 0;
+    for (let r = 0; r < rows && pid < totalPanels; r++) {
+      for (let c = 0; c < cols && pid < totalPanels; c++) {
+        const mat = panelMat.clone();
+        // Heat-tint shaded panels for instant visual feedback.
+        const frac = perPanelFracs[pid] || 0;
+        if (frac > 0.5)      mat.color.setHex(0xc62828);
+        else if (frac > 0.2) mat.color.setHex(0xf57c00);
+        else if (frac > 0.05) mat.color.setHex(0xffb74d);
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(panelW, panelH, 0.04),
+          mat
+        );
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        const x = -totalW / 2 + panelW / 2 + c * (panelW + gapU);
+        const y = -totalH / 2 + panelH / 2 + r * (panelH + gapV);
+        mesh.position.set(x, y, 0);
+        panelGroup.add(mesh);
+        pid++;
+      }
+    }
+    panelGroup.position.y = arrayY;
+    scene.add(panelGroup);
+
+    // OrbitControls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 8;
+    controls.maxDistance = 120;
+    controls.maxPolarAngle = Math.PI / 2 - 0.05;
+
+    // Resize
+    function onResize() {
+      const w = host.clientWidth, h = host.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+    window.addEventListener('resize', onResize);
+
+    // Render loop
+    function tick() {
+      controls.update();
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    tick();
+  }
+</script>
+{% endif %}
+
 <form method="POST" id="shadingForm">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   {# Note: there is no hidden `shading_factor` here anymore — the agent      #}

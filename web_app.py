@@ -2648,6 +2648,12 @@ def project_location(pid):
             data.pop("purc_category", None)   # clear if country changed
         # Save funding mode
         data["funding_mode"] = f.get("funding_mode", "loan")
+        # Day-1 wiring: also run the deterministic engine. Adds rich
+        # output under data["shading"]["engine"]; legacy keys above are
+        # preserved unchanged so this is a pure additive change.
+        _eng = _engine_full_analysis(project, obstructions)
+        if _eng:
+            data["shading"]["engine"] = _eng
         save_project_data(pid, data)
         return redirect(url_for("project_loads", pid=pid))
 
@@ -12155,6 +12161,145 @@ def _compute_shading_factor(obstructions):
         "summary":            f"Combined severity {combined:.0%} across {len(obstructions)} obstruction(s) -> "
                               f"{best[0]} (factor {best[2]:.2f}, ~{best[1]} loss).",
     }
+
+
+
+
+def _engine_full_analysis(project, obstructions, on_date=None,
+                          step_minutes=30, mitigation_default="Bypass diodes"):
+    """Run the deterministic shading engine for a project.
+
+    Returns the engine.run_full_analysis() dict on success, or None if
+    project context is incomplete or the engine raises. Never propagates
+    exceptions to the route — falling back to the legacy heuristic keeps
+    the page working if the engine path is broken.
+    """
+    try:
+        # Import lazily so a missing engine module never crashes app startup.
+        from engine.shading_engine import Obstruction, run_full_analysis
+        from config.global_solar_data import GLOBAL_DATA
+        from datetime import datetime as _dt
+
+        data = project.get("data", {}) or {}
+        country = (data.get("country") or "").strip()
+        region  = (data.get("region")  or "").strip()
+        tilt    = float(data.get("tilt_angle") or 15.0)
+        azimuth = float(data.get("azimuth") or 180.0)
+        results = data.get("results", {}) or {}
+        n_panels = int(results.get("num_panels") or 0)
+
+        # Without a panel count there is nothing to project shadows onto.
+        if n_panels <= 0:
+            return None
+
+        # Lat/lon — try region table then fall back to country first-region.
+        info = (GLOBAL_DATA.get(country) or {}).get("regions", {}).get(region)
+        if not info:
+            for v in (GLOBAL_DATA.get(country) or {}).get("regions", {}).values():
+                info = v
+                break
+        if not info or "lat" not in info or "lon" not in info:
+            return None
+
+        lat = float(info["lat"])
+        lon = float(info["lon"])
+
+        # Pick the first non-None mitigation across obstructions; default
+        # to Bypass diodes (covers the typical modern module).
+        mitigation = mitigation_default
+        for o in obstructions:
+            m = (o.get("mitigation") or "").strip()
+            if m and m.lower() != "none":
+                mitigation = m
+                break
+
+        # Build engine Obstruction objects. The form gives us height +
+        # width + distance + direction; depth is unknown, so we mirror the
+        # width (square footprint) as a safe v1 default.
+        engine_obs = []
+        for i, o in enumerate(obstructions or []):
+            try:
+                engine_obs.append(Obstruction(
+                    obs_id=i + 1,
+                    type=str(o.get("type") or "obstruction"),
+                    height_m=float(o.get("height") or 0),
+                    width_m=float(o.get("width") or 0),
+                    depth_m=float(o.get("width") or 0),
+                    distance_m=float(o.get("distance") or 0),
+                    direction=str(o.get("direction") or "South"),
+                    mitigation=str(o.get("mitigation") or "None"),
+                    notes=str(o.get("notes") or ""),
+                ))
+            except Exception:
+                continue
+
+        if on_date is None:
+            # Owner spec uses summer solstice (21 June) as the worst-case
+            # day for the equatorial fleet; we'll let UI pick a date later.
+            on_date = _dt(_dt.utcnow().year, 6, 21)
+
+        result = run_full_analysis(
+            lat_deg=lat, lon_deg=lon, on_date=on_date,
+            tz_offset_h=0.0,
+            num_panels=n_panels, tilt_deg=tilt,
+            array_azimuth_deg=azimuth,
+            mount_height_m=float(data.get("shading", {}).get("roof_height_m") or 1.0),
+            obstructions=engine_obs,
+            mitigation=mitigation,
+            step_minutes=step_minutes,
+        )
+
+        # Strip non-JSON-serialisable bits (Panel/TimeStepResult are dataclasses
+        # containing tuples — fine for json.dumps in Python 3, but we still
+        # shape it for the UI so the template stays simple).
+        return {
+            "lat":                lat,
+            "lon":                lon,
+            "on_date":            on_date.strftime("%Y-%m-%d"),
+            "tilt_deg":           tilt,
+            "array_azimuth_deg":  azimuth,
+            "total_panels":       result["total_panels"],
+            "affected_panels":    result["affected_panels"],
+            "heavily_affected":   result["heavily_affected"],
+            "shading_start":      result["shading_start"],
+            "shading_end":        result["shading_end"],
+            "shading_duration_h": result["shading_duration_h"],
+            "system_loss_pct":    result["energy"]["system_loss_pct"],
+            "peak_step_loss_pct": result["energy"]["peak_step_loss_pct"],
+            "weighted_avg_fraction": result["energy"]["weighted_avg_fraction"],
+            "bucket_label":       result["bucket_label"],
+            "bucket_loss_pct":    result["bucket_loss_pct"],
+            "bucket_factor":      result["bucket_factor"],
+            "mitigation":         result["mitigation"],
+            "n_strings":          result["n_strings"],
+            # Snapshot of per-step shading for the time slider.
+            # Each entry: {time, alt, az, avg_frac, partially, fully}.
+            "series": [
+                {
+                    "time": s.when.strftime("%H:%M"),
+                    "alt":  round(s.altitude_deg, 1),
+                    "az":   round(s.azimuth_deg, 1),
+                    "avg_frac": round(s.avg_fraction, 4),
+                    "partially": s.panels_partially_shaded,
+                    "fully":     s.panels_fully_shaded,
+                }
+                for s in result["series"]
+            ],
+            # Per-panel max shaded fraction across the day (for grid heatmap).
+            "per_panel_max_frac": [
+                round(max((s.per_panel_fraction[i] for s in result["series"]), default=0.0), 3)
+                for i in range(result["total_panels"])
+            ],
+            # Engine version stamp — bump when the algorithm changes so we
+            # can detect stale persisted results.
+            "engine_version": "shading-engine-v1-2026-06-14",
+        }
+    except Exception as _e:
+        try:
+            app.logger.warning("shading engine failure (falling back): %s", _e)
+        except Exception:
+            pass
+        return None
 
 
 @app.route("/project/<int:pid>/shading", methods=["GET", "POST"])
