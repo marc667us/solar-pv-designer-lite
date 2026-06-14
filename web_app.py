@@ -12051,6 +12051,9 @@ def project_shading(pid):
         data["shading"] = {
             "factor":               factor,
             "label":                (request.form.get("shading_label", "") or "").strip()[:60],
+            # Units: "metric" (m, default) or "imperial" (ft). Per-project
+            # owner choice; numeric fields are stored as-typed.
+            "units":                ("imperial" if (request.form.get("units","") == "imperial") else "metric"),
             "obstruction_type":     (request.form.get("obstruction_type", "") or "").strip()[:60],
             "obstruction_height_m": _shading_num(request.form.get("obstruction_height_m")),
             "obstruction_width_m":  _shading_num(request.form.get("obstruction_width_m")),

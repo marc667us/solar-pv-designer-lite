@@ -46,6 +46,43 @@
   <input type="hidden" name="shading_factor" id="shadingFactorInput" value="{{ shading.factor or 1.00 }}">
   <input type="hidden" name="shading_label" id="shadingLabelInput" value="{{ shading.label or 'No shading' }}">
 
+  {# ── Units selector (per owner spec: metric or imperial) ─────────────── #}
+  {# Saved as data.shading.units ('metric' default | 'imperial'). The form  #}
+  {# labels and live SVG tiltAz indicator both react to the choice.        #}
+  {% set _u = shading.units or 'metric' %}
+  <div class="solar-card p-3 mb-3" style="border-left:3px solid var(--solar-gold)">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-rulers" style="color:var(--solar-gold);font-size:18px"></i>
+        <div>
+          <div class="small fw-bold">Measurement Units</div>
+          <div class="text-secondary" style="font-size:11px">
+            All dimension fields below will show the unit you pick.
+          </div>
+        </div>
+      </div>
+      <div class="btn-group" role="group" aria-label="Units">
+        <input type="radio" class="btn-check" name="units" id="unitsMetric"
+               value="metric" {% if _u == 'metric' %}checked{% endif %}>
+        <label class="btn btn-sm" for="unitsMetric"
+               style="background:{{ 'rgba(245,158,11,.18)' if _u == 'metric' else 'rgba(255,255,255,.04)' }};
+                      color:{{ 'var(--solar-gold)' if _u == 'metric' else '#a0a0c8' }};
+                      border:1px solid {{ 'rgba(245,158,11,.45)' if _u == 'metric' else '#1e1e3a' }}">
+          <i class="bi bi-rulers me-1"></i>Metric (m)
+        </label>
+
+        <input type="radio" class="btn-check" name="units" id="unitsImperial"
+               value="imperial" {% if _u == 'imperial' %}checked{% endif %}>
+        <label class="btn btn-sm" for="unitsImperial"
+               style="background:{{ 'rgba(245,158,11,.18)' if _u == 'imperial' else 'rgba(255,255,255,.04)' }};
+                      color:{{ 'var(--solar-gold)' if _u == 'imperial' else '#a0a0c8' }};
+                      border:1px solid {{ 'rgba(245,158,11,.45)' if _u == 'imperial' else '#1e1e3a' }}">
+          <i class="bi bi-rulers me-1"></i>Imperial (ft)
+        </label>
+      </div>
+    </div>
+  </div>
+
   <div class="row g-3 mb-4">
 
     {# ── Left column: obstruction + site geometry ──────────────────── #}
@@ -63,17 +100,23 @@
             </select>
           </div>
           <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">Height (m)</label>
+            <label class="form-label small text-secondary fw-bold">
+              Height (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
+            </label>
             <input name="obstruction_height_m" type="number" step="0.1" min="0"
                    class="form-control sp-input" value="{{ shading.obstruction_height_m or '' }}">
           </div>
           <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">Width (m)</label>
+            <label class="form-label small text-secondary fw-bold">
+              Width (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
+            </label>
             <input name="obstruction_width_m" type="number" step="0.1" min="0"
                    class="form-control sp-input" value="{{ shading.obstruction_width_m or '' }}">
           </div>
           <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">Distance to PV (m)</label>
+            <label class="form-label small text-secondary fw-bold">
+              Distance to PV (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
+            </label>
             <input name="distance_m" type="number" step="0.1" min="0"
                    class="form-control sp-input" value="{{ shading.distance_m or '' }}">
           </div>
@@ -94,22 +137,60 @@
             </select>
           </div>
           <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">Roof Height (m)</label>
+            <label class="form-label small text-secondary fw-bold">
+              Roof Height (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
+            </label>
             <input name="roof_height_m" type="number" step="0.1" min="0"
                    class="form-control sp-input" value="{{ shading.roof_height_m or '' }}">
           </div>
+          {# ── PV tilt + azimuth are read from the Location step. Read-only ── #}
+          {# here so the operator can't accidentally introduce a mismatch     #}
+          {# between the shading model and the rest of the design.            #}
+          {% set _tilt = project.data.get('tilt_angle', 15) %}
+          {% set _az = project.data.get('azimuth', 0) %}
+          {% set _az_dir = 'S' if -22.5 <= _az|float <= 22.5 else
+                          'SE' if 22.5 < _az|float <= 67.5 else
+                          'E'  if 67.5 < _az|float <= 112.5 else
+                          'NE' if 112.5 < _az|float <= 157.5 else
+                          'N'  if (_az|float > 157.5 or _az|float < -157.5) else
+                          'NW' if -157.5 <= _az|float < -112.5 else
+                          'W'  if -112.5 <= _az|float < -67.5 else
+                          'SW' %}
           <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">PV Tilt (&deg;)</label>
-            <input name="tilt_deg" type="number" step="1" min="0" max="60"
-                   class="form-control sp-input" value="{{ shading.tilt_deg or '' }}">
+            <label class="form-label small text-secondary fw-bold">
+              PV Tilt
+              <span class="badge ms-1" style="font-size:8px;background:rgba(160,160,200,.15);color:#9090c0;border:1px solid #1e1e3a">
+                FROM LOCATION
+              </span>
+            </label>
+            <div class="form-control sp-input d-flex align-items-center"
+                 style="background:rgba(255,255,255,.02)!important;cursor:not-allowed">
+              <i class="bi bi-rulers me-2 text-secondary"></i>
+              <span id="readTilt" class="fw-bold" style="color:var(--solar-gold)">{{ _tilt }}&deg;</span>
+            </div>
+            <input type="hidden" name="tilt_deg" value="{{ _tilt }}">
           </div>
           <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">Azimuth</label>
-            <select name="azimuth" class="form-select form-control sp-input">
-              {% for opt in ['North','South','East','West','South-East','South-West','East-West (bifacial)'] %}
-                <option value="{{ opt }}" {% if shading.azimuth == opt %}selected{% endif %}>{{ opt }}</option>
-              {% endfor %}
-            </select>
+            <label class="form-label small text-secondary fw-bold">
+              Azimuth
+              <span class="badge ms-1" style="font-size:8px;background:rgba(160,160,200,.15);color:#9090c0;border:1px solid #1e1e3a">
+                FROM LOCATION
+              </span>
+            </label>
+            <div class="form-control sp-input d-flex align-items-center"
+                 style="background:rgba(255,255,255,.02)!important;cursor:not-allowed">
+              <i class="bi bi-compass me-2 text-secondary"></i>
+              <span id="readAz" class="fw-bold" style="color:var(--solar-gold)">{{ _az }}&deg; ({{ _az_dir }})</span>
+            </div>
+            <input type="hidden" name="azimuth" value="{{ _az }}">
+          </div>
+          <div class="col-12">
+            <div class="text-secondary small">
+              <i class="bi bi-info-circle me-1"></i>
+              Tilt and azimuth were captured at the
+              <a href="{{ url_for('project_location', pid=project.id) }}" class="text-warning">Location step</a>.
+              Edit them there if the site survey produced different values.
+            </div>
           </div>
         </div>
       </div>
@@ -472,10 +553,37 @@
     }
 
     function refreshTiltAz(){
-      const t = tiltInput && tiltInput.value ? tiltInput.value : '15';
-      const a = azInput && azInput.value ? azInput.value : 'South';
-      svgTiltAz.textContent = `${t}° / ${a}`;
+      // Tilt + azimuth are sourced from the Location step (read-only here).
+      const t = (document.getElementById('readTilt')
+                 && document.getElementById('readTilt').textContent.trim()) || '15°';
+      const a = (document.getElementById('readAz')
+                 && document.getElementById('readAz').textContent.trim()) || '0° (S)';
+      svgTiltAz.textContent = `${t} / ${a}`;
     }
+
+    // ── Units toggle (metric ↔ imperial) ────────────────────────────────
+    // Swap the suffix on every `.js-unit-len` label live. Stored values are
+    // left as-typed; the units flag carries the meaning. (No auto-convert
+    // because the operator may want to retype after switching.)
+    function applyUnits(unit){
+      const suffix = (unit === 'imperial') ? 'ft' : 'm';
+      document.querySelectorAll('.js-unit-len').forEach(el => {
+        el.textContent = suffix;
+      });
+      // Highlight the active button.
+      document.querySelectorAll('label[for="unitsMetric"],label[for="unitsImperial"]')
+        .forEach(lb => {
+          const active = (lb.getAttribute('for') === ('units' + (unit === 'imperial' ? 'Imperial' : 'Metric')));
+          lb.style.background = active ? 'rgba(245,158,11,.18)' : 'rgba(255,255,255,.04)';
+          lb.style.color      = active ? 'var(--solar-gold)'    : '#a0a0c8';
+          lb.style.border     = '1px solid ' + (active ? 'rgba(245,158,11,.45)' : '#1e1e3a');
+        });
+    }
+    document.querySelectorAll('input[name="units"]').forEach(rb => {
+      rb.addEventListener('change', () => applyUnits(rb.value));
+    });
+    const _initialUnit = (document.querySelector('input[name="units"]:checked') || {}).value || 'metric';
+    applyUnits(_initialUnit);
 
     function apply(row){
       const f = parseFloat(row.getAttribute('data-factor'));
