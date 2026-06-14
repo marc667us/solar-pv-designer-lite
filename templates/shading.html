@@ -1212,25 +1212,35 @@
       return 0x3949ab;                          // unshaded panel base
     }
 
+    // Console checkpoints — let the operator open F12 and see exactly
+    // where the 3D scene init stops if anything fails silently.
+    function _ck(label) { try { console.log('[shading3d] ' + label); } catch (_) {} }
+    _ck('init starting (engine total_panels=' + (engineData.total_panels || 0) +
+        ', obstructions=' + obstructions.length + ')');
+
     // Scene
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0a1a);
     scene.fog = new THREE.Fog(0x0a0a1a, 50, 200);
+    _ck('scene created');
 
-    // Camera
-    const camera = new THREE.PerspectiveCamera(
-      45, host.clientWidth / host.clientHeight, 0.1, 500
-    );
+    // Camera — guard against a 0-width host (can happen if Bootstrap grid
+    // layout hasn't settled when the module runs). Force a sane aspect.
+    var hw = host.clientWidth || 800;
+    var hh = host.clientHeight || 560;
+    const camera = new THREE.PerspectiveCamera(45, hw / hh, 0.1, 500);
     camera.position.set(28, 22, 32);
     camera.lookAt(0, 2, 0);
+    _ck('camera created (' + hw + 'x' + hh + ')');
 
     // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(host.clientWidth, host.clientHeight);
+    renderer.setSize(hw, hh);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     host.appendChild(renderer.domElement);
+    _ck('renderer attached');
 
     // Lights
     const hemi = new THREE.HemisphereLight(0xffffff, 0x202040, 0.4);
@@ -1356,6 +1366,7 @@
     }
     panelGroup.position.y = arrayY;
     scene.add(panelGroup);
+    _ck('panel grid added (' + panelMeshes.length + ' panels)');
 
     // ── Obstructions (cuboid for buildings/walls, cylinder for tanks/
     //    masts/antennas, cylinder+cone for trees). Positioned at
@@ -1451,34 +1462,45 @@
       return grp;
     }
     obstructions.forEach((obs, i) => {
-      const mesh = makeObstructionMesh(obs);
-      const dist = Math.max(0.5, parseFloat(obs.distance) || 5);
-      const az   = THREE.MathUtils.degToRad(DIR_AZ[obs.direction] ?? 180);
-      // Site frame: +x East = sin(az), +y North (in three.js this is -Z).
-      // Three.js axes: x = east, y = up, z = south (because three.js Z
-      // increases toward camera/down-page; we treat -z = north so that
-      // sun "south at noon" lights the south-facing array correctly).
-      const x =  Math.sin(az) * dist;
-      const z =  Math.cos(az) * dist;
-      mesh.position.set(x, 0, z);
-      // Add a numbered label sprite over the obstruction.
-      const cv = document.createElement('canvas');
-      cv.width = 64; cv.height = 64;
-      const cx = cv.getContext('2d');
-      cx.fillStyle = '#f59e0b'; cx.beginPath();
-      cx.arc(32, 32, 26, 0, Math.PI * 2); cx.fill();
-      cx.fillStyle = '#000'; cx.font = 'bold 34px sans-serif';
-      cx.textAlign = 'center'; cx.textBaseline = 'middle';
-      cx.fillText(String(i + 1), 32, 34);
-      const tex = new THREE.CanvasTexture(cv);
-      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
-      const obsH = Math.max(0.2, parseFloat(obs.height) || 1);
-      spr.position.set(0, obsH + 1.5, 0);
-      spr.scale.set(2, 2, 1);
-      mesh.add(spr);
-      obstructionGroup.add(mesh);
+      // Per-obstruction try/catch — one malformed obstruction or one
+      // failed sprite-texture creation should NEVER kill the whole scene.
+      try {
+        const mesh = makeObstructionMesh(obs);
+        const dist = Math.max(0.5, parseFloat(obs.distance) || 5);
+        const az   = THREE.MathUtils.degToRad(DIR_AZ[obs.direction] ?? 180);
+        const x =  Math.sin(az) * dist;
+        const z =  Math.cos(az) * dist;
+        mesh.position.set(x, 0, z);
+        // Add a numbered label sprite. CanvasTexture creation can fail
+        // on some browsers if the canvas is offscreen/zero-sized.
+        try {
+          const cv = document.createElement('canvas');
+          cv.width = 64; cv.height = 64;
+          const cx = cv.getContext('2d');
+          if (cx) {
+            cx.fillStyle = '#f59e0b'; cx.beginPath();
+            cx.arc(32, 32, 26, 0, Math.PI * 2); cx.fill();
+            cx.fillStyle = '#000'; cx.font = 'bold 34px sans-serif';
+            cx.textAlign = 'center'; cx.textBaseline = 'middle';
+            cx.fillText(String(i + 1), 32, 34);
+            const tex = new THREE.CanvasTexture(cv);
+            const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+            const obsH = Math.max(0.2, parseFloat(obs.height) || 1);
+            spr.position.set(0, obsH + 1.5, 0);
+            spr.scale.set(2, 2, 1);
+            mesh.add(spr);
+          }
+        } catch (sprErr) {
+          console.warn('[shading3d] obstruction label sprite #' + (i + 1) +
+                       ' failed:', sprErr);
+        }
+        obstructionGroup.add(mesh);
+      } catch (obsErr) {
+        console.warn('[shading3d] obstruction #' + (i + 1) + ' failed:', obsErr);
+      }
     });
     scene.add(obstructionGroup);
+    _ck('obstructions added (' + obstructions.length + ')');
 
     // ── Visible sun rays — a fan from the sun toward the array.
     const raysGroup = new THREE.Group();
@@ -1502,6 +1524,7 @@
     }
     rebuildRays();
     scene.add(raysGroup);
+    _ck('sun rays added');
 
     // ── Sun-path arc — half-dome arc from sunrise to sunset using the
     //    engine time-series so it tracks the actual day computed.
@@ -1531,6 +1554,7 @@
       }
     }
     scene.add(sunPathGroup);
+    _ck('sun-path arc added');
 
     // OrbitControls
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -1540,6 +1564,7 @@
     controls.maxDistance = 120;
     controls.maxPolarAngle = Math.PI / 2 - 0.05;
     controls.target.set(0, 2, 0);
+    _ck('OrbitControls wired');
 
     // ── Display-layer toggle wiring.
     const layerTargets = {
@@ -2063,10 +2088,12 @@
         if (load) load.style.display = 'none';
         const err = document.getElementById('shading3d-error');
         if (err) err.style.display = 'none';
+        _ck('first paint complete — render loop running');
       }
       requestAnimationFrame(tick);
     }
     tick();
+    _ck('scene init complete; tick() scheduled');
 
     // ── Test with 10% shading: navigate to the same URL with ?demo=10
     //    so the route injects a sample obstruction on the server side and
