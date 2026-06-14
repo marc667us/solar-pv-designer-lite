@@ -38,9 +38,37 @@
           <label class="form-label small fw-bold text-secondary text-uppercase" style="letter-spacing:.5px">
             Folder <span class="text-secondary text-lowercase fw-normal">(optional)</span>
           </label>
-          <input name="folder" list="folder-suggestions" maxlength="80"
+
+          {# ── Open an existing folder: click any chip to drop the name in ── #}
+          {% if folders %}
+          <div class="mb-2">
+            <div class="text-secondary small mb-1">
+              <i class="bi bi-folder2-open me-1" style="color:var(--solar-gold)"></i>
+              Open existing folder &mdash; tap one:
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+              {% for f in folders %}
+              <button type="button"
+                      class="js-folder-chip btn btn-sm"
+                      data-folder="{{ f }}"
+                      style="background:rgba(245,158,11,.12);color:var(--solar-gold);
+                             border:1px solid rgba(245,158,11,.4);font-size:12px">
+                <i class="bi bi-folder-fill me-1"></i>{{ f }}
+              </button>
+              {% endfor %}
+              <button type="button" id="newFolderChip"
+                      class="btn btn-sm"
+                      style="background:rgba(34,197,94,.12);color:#22c55e;
+                             border:1px dashed rgba(34,197,94,.45);font-size:12px">
+                <i class="bi bi-plus-lg me-1"></i>New folder
+              </button>
+            </div>
+          </div>
+          {% endif %}
+
+          <input name="folder" id="folderInput" list="folder-suggestions" maxlength="80"
                  class="form-control form-control-lg bg-dark text-light border-secondary"
-                 placeholder="e.g. Lagos Clients, 2026 Pipeline, Demo"
+                 placeholder="{{ 'Tap a folder above, or type a new folder name' if folders else 'e.g. Lagos Clients, 2026 Pipeline, Demo' }}"
                  autocomplete="off"/>
           <datalist id="folder-suggestions">
             {% for f in (folders or []) %}<option value="{{ f }}"></option>{% endfor %}
@@ -50,6 +78,38 @@
             Group projects under a folder. All reports for this project will be downloadable
             together from the folder view. Leave blank for an un-grouped project.
           </div>
+
+          {% if folders %}
+          <script>
+            (function(){
+              const input = document.getElementById('folderInput');
+              const chips = document.querySelectorAll('.js-folder-chip');
+              const newChip = document.getElementById('newFolderChip');
+              function highlight(active){
+                chips.forEach(c => {
+                  const on = c === active;
+                  c.style.background = on ? 'rgba(245,158,11,.32)' : 'rgba(245,158,11,.12)';
+                  c.style.borderColor = on ? 'rgba(245,158,11,.85)' : 'rgba(245,158,11,.4)';
+                });
+                if (newChip) newChip.style.opacity = active === newChip ? '1' : '0.85';
+              }
+              chips.forEach(chip => {
+                chip.addEventListener('click', function(){
+                  input.value = chip.getAttribute('data-folder') || '';
+                  highlight(chip);
+                  input.focus();
+                });
+              });
+              if (newChip) newChip.addEventListener('click', function(){
+                input.value = '';
+                highlight(newChip);
+                input.focus();
+              });
+              // If user types something, drop highlight from chips
+              input.addEventListener('input', function(){ highlight(null); });
+            })();
+          </script>
+          {% endif %}
         </div>
         <button type="submit" class="btn btn-solar w-100 btn-lg">
           <i class="bi bi-arrow-right me-2"></i>Create & Set Location
