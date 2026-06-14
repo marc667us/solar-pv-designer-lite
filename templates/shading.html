@@ -43,8 +43,8 @@
 
 <form method="POST" id="shadingForm">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-  <input type="hidden" name="shading_factor" id="shadingFactorInput" value="{{ shading.factor or 1.00 }}">
-  <input type="hidden" name="shading_label" id="shadingLabelInput" value="{{ shading.label or 'No shading' }}">
+  {# Note: there is no hidden `shading_factor` here anymore — the agent      #}
+  {# computes the factor on submit from the obstruction inputs below.       #}
 
   {# ── Units selector (per owner spec: metric or imperial) ─────────────── #}
   {# Saved as data.shading.units ('metric' default | 'imperial'). The form  #}
@@ -578,20 +578,86 @@
     </div>
     <div class="text-secondary small mt-2">
       <i class="bi bi-info-circle me-1"></i>
-      The illustration reacts to the factor you pick below — the shaded modules and shadow extent grow with the loss.
-      Phase 2 will replace this with a 3D AI-driven simulation that auto-selects the factor from obstruction geometry,
-      sun path, and PV layout.
+      The illustration reflects the <strong>agent's last verdict</strong> &mdash; the shaded modules and shadow extent
+      grow with the loss. Phase 2 will replace this with a 3D AI-driven simulation; Phase 1 agent uses obstruction
+      geometry, duration, area, time-of-day, season, and mitigation to pick the factor.
     </div>
   </div>
 
-  {# ── Shading factor selection table ─────────────────────────────── #}
+  {# ── Last agent verdict (saved from previous submit, if any) ────── #}
+  {% if shading.agent_summary %}
+  <div class="solar-card p-3 mb-3"
+       style="border-left:4px solid #a78bfa;background:linear-gradient(90deg,rgba(167,139,250,.08),transparent)">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-cpu" style="color:#a78bfa;font-size:18px"></i>
+        <div>
+          <div class="fw-bold">PV Shading Agent — Last Analysis</div>
+          <div class="text-secondary small">
+            {{ shading.agent_summary }}
+            <span class="badge ms-2" style="font-size:9px;background:rgba(160,160,200,.15);color:#9090c0;border:1px solid #1e1e3a">
+              {{ shading.agent_version or "phase1" }}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="text-end">
+        <div class="text-secondary" style="font-size:10px;text-transform:uppercase;letter-spacing:.5px">Factor / Loss</div>
+        <div class="fw-bold" style="font-size:20px;color:var(--solar-gold)">
+          {{ "%.2f"|format(shading.factor) }}
+          <span style="font-size:13px;color:#ef4444;font-weight:600">· {{ shading.loss_pct }}% loss</span>
+        </div>
+      </div>
+    </div>
+    {% if shading.per_obstruction %}
+    <div class="table-responsive mt-2">
+      <table class="table table-sm align-middle mb-0" style="font-size:12px">
+        <thead>
+          <tr style="color:#7878b0;font-size:10px;letter-spacing:.4px">
+            <th>#</th>
+            <th>Obstruction</th>
+            <th class="text-end">Geom</th>
+            <th class="text-end">Duration</th>
+            <th class="text-end">Area</th>
+            <th class="text-end">Mitig.</th>
+            <th class="text-end">Severity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in shading.per_obstruction %}
+          <tr>
+            <td class="text-secondary">{{ loop.index }}</td>
+            <td>{{ r.type or "—" }}</td>
+            <td class="text-end text-secondary">{{ "%.2f"|format(r.geom) }}</td>
+            <td class="text-end text-secondary">{{ "%.2f"|format(r.duration) }}</td>
+            <td class="text-end text-secondary">{{ "%.2f"|format(r.area) }}</td>
+            <td class="text-end text-secondary">×{{ "%.2f"|format(r.mitig_w) }}</td>
+            <td class="text-end fw-bold" style="color:var(--solar-gold)">{{ "%.2f"|format(r.severity) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ── Shading factor reference table (READ-ONLY) ────────────────────── #}
+  {# Per owner spec: the AGENT picks the factor from obstruction inputs,  #}
+  {# not the user. This table is now reference-only — the agent's pick is #}
+  {# highlighted; clicking does nothing.                                  #}
   <div class="solar-card p-3 mb-4">
-    <div class="section-head mb-3"><i class="bi bi-table me-1"></i>Select Shading Factor</div>
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+      <div class="section-head mb-0"><i class="bi bi-table me-1"></i>Shading Factor Reference Table</div>
+      <span class="badge" style="background:rgba(167,139,250,.12);color:#a78bfa;border:1px solid rgba(167,139,250,.35);font-size:10px">
+        <i class="bi bi-info-circle me-1"></i>AGENT-SELECTED · reference only
+      </span>
+    </div>
     <div class="table-responsive">
       <table class="table table-sm align-middle mb-0">
         <thead>
           <tr>
-            <th>Select</th>
+            <th></th>
             <th>Condition</th>
             <th>Loss</th>
             <th>Factor</th>
@@ -602,15 +668,13 @@
           {% for label, loss, factor in shading_factors %}
           {% set is_current = (shading.factor and (factor - 0.0001) <= shading.factor <= (factor + 0.0001))
                               or (not shading.factor and factor == 1.0) %}
-          <tr class="shading-row" data-factor="{{ factor }}" data-label="{{ label }}"
-              style="cursor:pointer; {% if is_current %}background:rgba(245,158,11,.08){% endif %}">
-            <td>
-              <input type="radio" name="shading_choice"
-                     value="{{ factor }}"
-                     {% if is_current %}checked{% endif %}
-                     class="form-check-input">
+          <tr style="{% if is_current %}background:rgba(245,158,11,.10){% endif %}">
+            <td style="width:36px">
+              {% if is_current %}
+                <i class="bi bi-arrow-right-circle-fill" style="color:var(--solar-gold);font-size:16px" title="Agent's pick"></i>
+              {% endif %}
             </td>
-            <td>{{ label }}</td>
+            <td class="{% if is_current %}fw-bold{% endif %}">{{ label }}</td>
             <td><span class="badge bg-dark border" style="color:#ef4444;border-color:#ef444444!important">{{ loss }}</span></td>
             <td><span class="fw-bold" style="color:var(--solar-gold)">{{ "%.2f"|format(factor) }}</span></td>
             <td class="text-secondary small">
@@ -632,24 +696,25 @@
       <i class="bi bi-arrow-left me-1"></i>Cancel
     </a>
     <button type="submit" class="btn btn-solar">
-      <i class="bi bi-check2-square me-1"></i>Apply Shading Factor
+      <i class="bi bi-cpu me-1"></i>Run Shading Analysis with Agent
     </button>
   </div>
 </form>
 
 <script>
-  // ── Shading factor table + SVG reactor ─────────────────────────────
-  // Clicking a table row (or its radio) updates the hidden form inputs
-  // AND redraws the SVG: number of shaded PV modules grows with the
-  // loss, and the cast shadow widens. Defaults to current saved factor.
+  // ── SVG reactor + units toggle + multi-obstruction list ────────────
+  // The factor itself is decided by the server-side agent on submit.
+  // This script just paints the SVG with the LAST-SAVED factor and
+  // handles the units toggle + obstruction add/remove buttons.
   (function(){
-    const factorInput = document.getElementById('shadingFactorInput');
-    const labelInput  = document.getElementById('shadingLabelInput');
     const svgLabel    = document.getElementById('svgFactorLabel');
     const svgTiltAz   = document.getElementById('svgTiltAz');
     const shadowPoly  = document.getElementById('shadowPoly');
     const tiltInput   = document.querySelector('input[name="tilt_deg"]');
     const azInput     = document.querySelector('select[name="azimuth"]');
+    // Saved factor + label come from the server-rendered shading record.
+    const SAVED_FACTOR = parseFloat({{ (shading.factor or 1.0) | tojson }});
+    const SAVED_LABEL  = {{ (shading.label or 'No shading') | tojson }};
 
     // All PV panel elements (one rect per panel, pv_0 .. pv_{N-1}).
     // Cached on first call; refreshed if N changes (it doesn't on this page).
@@ -726,24 +791,8 @@
     const _initialUnit = (document.querySelector('input[name="units"]:checked') || {}).value || 'metric';
     applyUnits(_initialUnit);
 
-    function apply(row){
-      const f = parseFloat(row.getAttribute('data-factor'));
-      const l = row.getAttribute('data-label');
-      factorInput.value = f.toFixed(2);
-      labelInput.value  = l;
-      document.querySelectorAll('.shading-row').forEach(r => {
-        r.style.background = (r === row) ? 'rgba(245,158,11,.08)' : '';
-        const rb = r.querySelector('input[type=radio]');
-        if (rb) rb.checked = (r === row);
-      });
-      redrawSvg(f, l);
-    }
-
-    document.querySelectorAll('.shading-row').forEach(row => {
-      row.addEventListener('click', function(){ apply(row); });
-      const rb = row.querySelector('input[type=radio]');
-      if (rb) rb.addEventListener('change', function(){ apply(row); });
-    });
+    // Paint the SVG once on load from the SAVED factor (no row-click reactor).
+    redrawSvg(SAVED_FACTOR, SAVED_LABEL);
     if (tiltInput) tiltInput.addEventListener('input', refreshTiltAz);
     if (azInput)   azInput.addEventListener('change', refreshTiltAz);
 
@@ -794,11 +843,6 @@
     // Initial pass to set indices + button states correctly.
     renumberObstructions();
 
-    // Initial paint from currently-checked row (or first row otherwise).
-    const initialRow = document.querySelector('.shading-row input[type=radio]:checked')
-                        ? document.querySelector('.shading-row input[type=radio]:checked').closest('.shading-row')
-                        : document.querySelector('.shading-row');
-    if (initialRow) apply(initialRow);
     refreshTiltAz();
   })();
 </script>

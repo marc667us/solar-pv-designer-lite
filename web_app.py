@@ -12074,6 +12074,89 @@ def _parse_obstructions(form):
     return out
 
 
+def _compute_shading_factor(obstructions):
+    """Phase 1 deterministic shading agent.
+
+    Per-obstruction severity score (0..1) combines:
+      geometric (height / distance) -- tall close obstruction matters most
+      duration (hours/day shaded)
+      affected PV area (%)
+      time-of-day weight (midday > morning/afternoon > evening)
+      seasonal weight (high > medium > low)
+      mitigation multiplier (bypass diodes, optimisers, micro-inv reduce sev)
+
+    Combined severity across N obstructions uses probabilistic union
+    (1 - prod(1 - sev_i)) so a single shading source can never exceed 1.0
+    and multiple sources combine sub-additively.
+
+    Combined severity is then mapped to a loss% (0..40) and snapped to
+    the nearest row in SHADING_FACTORS so the final factor is always one
+    of the spec's 8 canonical classes.
+
+    Returns a dict ready to persist on the project under data["shading"].
+    Phase 2 swaps this for a true Google ADK agent with 3D simulation.
+    """
+    if not obstructions:
+        return {
+            "factor": 1.00, "label": "No shading", "loss_pct": 0.0,
+            "combined_severity": 0.0, "per_obstruction": [],
+            "summary": "No obstructions recorded -- shading factor 1.00 applied.",
+        }
+    TIME_W   = {"Morning": 0.65, "Midday": 1.00, "Afternoon": 0.65,
+                "Evening": 0.35, "All day": 1.00}
+    SEASON_W = {"Low": 0.50, "Medium": 0.75, "High": 1.00}
+    MITIG_W  = {"None": 1.00, "Bypass diodes": 0.80, "DC optimisers": 0.60,
+                "Micro-inverters": 0.50, "Combination": 0.40}
+    per = []
+    for o in obstructions:
+        try: h = float(o.get("height") or 0)
+        except Exception: h = 0.0
+        try: d = max(float(o.get("distance") or 0), 0.5)
+        except Exception: d = 0.5
+        try: hours = float(o.get("hours") or 0)
+        except Exception: hours = 0.0
+        try: area_pct = float(o.get("shaded_area_pct") or 0)
+        except Exception: area_pct = 0.0
+        time_w   = TIME_W.get(o.get("time", "") or "Morning", 0.65)
+        season_w = SEASON_W.get(o.get("season", "") or "Low", 0.50)
+        mitig_w  = MITIG_W.get(o.get("mitigation", "") or "None", 1.00)
+        geom = min(1.0, (h / d) / 3.0)
+        dur  = min(1.0, hours / 6.0)
+        area = min(1.0, area_pct / 100.0)
+        sev  = 0.30*geom + 0.25*dur + 0.30*area + 0.10*time_w + 0.05*season_w
+        sev  = max(0.0, min(1.0, sev * mitig_w))
+        per.append({
+            "type":      o.get("type", ""),
+            "severity":  round(sev, 4),
+            "geom":      round(geom, 3),
+            "duration":  round(dur,  3),
+            "area":      round(area, 3),
+            "time_w":    time_w,
+            "season_w":  season_w,
+            "mitig_w":   mitig_w,
+        })
+    prod = 1.0
+    for r in per:
+        prod *= (1.0 - r["severity"])
+    combined = 1.0 - prod
+    loss_pct = combined * 40.0
+    # Snap to nearest SHADING_FACTORS row (use highest row whose loss <= computed).
+    best = SHADING_FACTORS[0]
+    for row in SHADING_FACTORS:
+        row_loss = float(row[1].rstrip("%"))
+        if loss_pct >= row_loss:
+            best = row
+    return {
+        "factor":             best[2],
+        "label":              best[0],
+        "loss_pct":           round(loss_pct, 1),
+        "combined_severity": round(combined, 4),
+        "per_obstruction":   per,
+        "summary":            f"Combined severity {combined:.0%} across {len(obstructions)} obstruction(s) -> "
+                              f"{best[0]} (factor {best[2]:.2f}, ~{best[1]} loss).",
+    }
+
+
 @app.route("/project/<int:pid>/shading", methods=["GET", "POST"])
 @login_required
 @limiter.limit("30 per hour")
@@ -12085,15 +12168,22 @@ def project_shading(pid):
 
     if request.method == "POST":
         csrf_protect()
-        factor = _shading_num(request.form.get("shading_factor"), default=1.0)
-        # Clamp [0.10, 1.00] so the divide in calc_pv stays safe even if the
-        # form is hand-edited. 0.10 = catastrophic shading; 1.00 = none.
-        factor = max(0.10, min(1.00, factor))
+        # Parse the obstruction cards first, then let the agent decide the
+        # shading factor from those inputs. Per owner spec, the operator
+        # models the obstructions; the agent picks the factor.
+        obstructions = _parse_obstructions(request.form)
+        analysis = _compute_shading_factor(obstructions)
+        factor = analysis["factor"]
 
         data = project["data"]
         data["shading"] = {
             "factor":               factor,
-            "label":                (request.form.get("shading_label", "") or "").strip()[:60],
+            "label":                analysis["label"],
+            "loss_pct":             analysis["loss_pct"],
+            "combined_severity":   analysis["combined_severity"],
+            "per_obstruction":     analysis["per_obstruction"],
+            "agent_summary":       analysis["summary"],
+            "agent_version":       "phase1-deterministic-v1",
             # Units: "metric" (m, default) or "imperial" (ft). Per-project
             # owner choice; numeric fields are stored as-typed.
             "units":                ("imperial" if (request.form.get("units","") == "imperial") else "metric"),
@@ -12105,7 +12195,7 @@ def project_shading(pid):
             "inspection_confirmed": bool(request.form.get("inspection_confirmed")),
             # Obstructions: parallel arrays from the cloneable cards. We
             # zip into a list of dicts. Empty trailing rows are dropped.
-            "obstructions":         _parse_obstructions(request.form),
+            "obstructions":         obstructions,
             "saved_at":             datetime.utcnow().isoformat() + "Z",
             "saved_by":             session.get("username", ""),
         }
@@ -12126,11 +12216,11 @@ def project_shading(pid):
             pass
 
         if factor >= 0.999:
-            flash("Shading cleared (factor 1.00). The base PV size will be used.", "info")
+            flash("Shading agent: no obstructions found (factor 1.00). The base PV size will be used.", "info")
         else:
-            loss_pct = round((1.0 - factor) * 100)
-            flash(f"Shading factor {factor:.2f} saved ({loss_pct}% loss). "
-                  f"Re-run the loads step to apply the correction to PV sizing.",
+            flash(f"Shading agent picked factor {factor:.2f} ({analysis['label']}, "
+                  f"{analysis['loss_pct']:.1f}% loss) from {len(obstructions)} obstruction(s). "
+                  f"Re-run the loads step to apply.",
                   "success")
         return redirect(url_for("project_loads", pid=pid))
 
