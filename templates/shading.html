@@ -1002,6 +1002,40 @@
       });
     }
   } catch (e) { console.warn('[shading] demo button wire failed', e); }
+
+  // ── 12-second timeout (lives in REGULAR script, NOT in the module
+  //    below, so it always runs even when Three.js never resolves its
+  //    imports). If the canvas loading spinner is still visible after
+  //    12 s, swap it for an explanatory error message.
+  setTimeout(function() {
+    try {
+      var load = document.getElementById('shading3d-loading');
+      var err  = document.getElementById('shading3d-error');
+      if (load && load.style.display !== 'none') {
+        load.style.display = 'none';
+        if (err) {
+          err.style.display = 'flex';
+          err.innerHTML =
+            '<i class="bi bi-exclamation-triangle" style="font-size:28px;color:#f59e0b"></i>' +
+            '<div style="font-size:14px"><strong>3D scene could not load within 12 seconds.</strong></div>' +
+            '<div style="color:#a0a0c8;font-size:12px;max-width:560px;line-height:1.5">' +
+              'The 2D charts above and below still work fine. ' +
+              'The 3D view needs to download Three.js from cdn.jsdelivr.net — ' +
+              'this is most likely being blocked by:<br><br>' +
+              '<strong style="color:#fff">1.</strong> Browser extension (uBlock, NoScript, Brave shields, Ghostery)<br>' +
+              '<strong style="color:#fff">2.</strong> Corporate firewall / proxy<br>' +
+              '<strong style="color:#fff">3.</strong> A pi-hole / DNS filter on your network<br>' +
+              '<strong style="color:#fff">4.</strong> Very slow connection (rare on broadband)' +
+            '</div>' +
+            '<div style="color:#6e6e9a;font-size:11px;max-width:560px">' +
+              'Open the browser console (F12) and look for messages mentioning ' +
+              '<code>three.module.js</code> or <code>jsdelivr</code>. ' +
+              'Whitelist cdn.jsdelivr.net + hard-refresh to retry.' +
+            '</div>';
+        }
+      }
+    } catch (e) { console.warn('[shading] timeout fallback failed', e); }
+  }, 12000);
 })();
 </script>
 
@@ -1931,7 +1965,9 @@
     }
     window.addEventListener('resize', onResize);
 
-    // Render loop. On first paint, hide the "Initializing…" overlay.
+    // Render loop. On first paint, hide both the "Initializing…" overlay
+    // AND any error overlay (in case the regular-script 12-s timeout
+    // already fired before Three.js eventually loaded — slow CDN case).
     let _firstPaint = false;
     function tick() {
       controls.update();
@@ -1940,6 +1976,8 @@
         _firstPaint = true;
         const load = document.getElementById('shading3d-loading');
         if (load) load.style.display = 'none';
+        const err = document.getElementById('shading3d-error');
+        if (err) err.style.display = 'none';
       }
       requestAnimationFrame(tick);
     }
