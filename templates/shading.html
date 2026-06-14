@@ -1213,8 +1213,25 @@
     }
 
     // Console checkpoints — let the operator open F12 and see exactly
-    // where the 3D scene init stops if anything fails silently.
-    function _ck(label) { try { console.log('[shading3d] ' + label); } catch (_) {} }
+    // where the 3D scene init stops if anything fails silently. ALSO
+    // mirrors checkpoints into a tiny overlay div so non-technical users
+    // can see progress without opening the console.
+    var _dbgOverlay = null;
+    if (new URLSearchParams(window.location.search).get('debug') === '1') {
+      _dbgOverlay = document.createElement('div');
+      _dbgOverlay.style.cssText =
+        'position:absolute;top:8px;right:8px;z-index:10;background:rgba(0,0,0,.85);' +
+        'color:#4ade80;font-family:monospace;font-size:10px;padding:8px;' +
+        'border-radius:4px;max-width:280px;line-height:1.4;border:1px solid #1e1e3a;' +
+        'pointer-events:none';
+      host.appendChild(_dbgOverlay);
+    }
+    function _ck(label) {
+      try { console.log('[shading3d] ' + label); } catch (_) {}
+      if (_dbgOverlay) {
+        _dbgOverlay.innerHTML += '<div>&#x2713; ' + label + '</div>';
+      }
+    }
     _ck('init starting (engine total_panels=' + (engineData.total_panels || 0) +
         ', obstructions=' + obstructions.length + ')');
 
@@ -1242,10 +1259,11 @@
     host.appendChild(renderer.domElement);
     _ck('renderer attached');
 
-    // Lights
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x202040, 0.4);
+    // Lights — increased intensity so geometry stays visible even when
+    // the sun is below horizon or shadow-mapping is off.
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x303060, 0.85);
     scene.add(hemi);
-    const ambient = new THREE.AmbientLight(0xffffff, 0.20);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.55);
     scene.add(ambient);
 
     // Sun (directional). Initial position will be set from engine series.
@@ -1366,7 +1384,14 @@
     }
     panelGroup.position.y = arrayY;
     scene.add(panelGroup);
-    _ck('panel grid added (' + panelMeshes.length + ' panels)');
+    _ck('panel grid added (' + panelMeshes.length + '/' + totalPanels +
+        ' panels, cols=' + cols + ', rows=' + rows + ', tilt=' + tiltDeg + ')');
+    if (panelMeshes.length === 0) {
+      _ck('WARNING: 0 panels rendered — engineData.total_panels=' +
+          engineData.total_panels);
+    }
+    _ck('starting obstruction setup, count=' + obstructions.length +
+        ', sample=' + JSON.stringify(obstructions[0] || {}).substring(0, 120));
 
     // ── Obstructions (cuboid for buildings/walls, cylinder for tanks/
     //    masts/antennas, cylinder+cone for trees). Positioned at
