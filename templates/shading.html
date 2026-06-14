@@ -521,78 +521,85 @@
         <text x="478" y="78"  fill="#f59e0b" font-size="11" font-weight="600">12:00</text>
         <text x="930" y="377" fill="#f59e0b" font-size="11" font-weight="600">18:00</text>
 
-        {# ── Sun (upper area, slightly left) with glow + body + ray spokes ─── #}
-        <circle cx="240" cy="90" r="55" fill="url(#sunGlow)" filter="url(#softGlow)"/>
-        <circle cx="240" cy="90" r="30" fill="url(#sunGrad)"/>
+        {# ── Sun (well above building) with glow + body + ray spokes ────── #}
+        <circle cx="140" cy="80" r="55" fill="url(#sunGlow)" filter="url(#softGlow)"/>
+        <circle cx="140" cy="80" r="30" fill="url(#sunGrad)"/>
         <g stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round">
-          <line x1="240" y1="46"  x2="240" y2="30"/>
-          <line x1="240" y1="134" x2="240" y2="150"/>
-          <line x1="196" y1="90"  x2="180" y2="90"/>
-          <line x1="284" y1="90"  x2="300" y2="90"/>
-          <line x1="208" y1="58"  x2="196" y2="46"/>
-          <line x1="272" y1="58"  x2="284" y2="46"/>
-          <line x1="208" y1="122" x2="196" y2="134"/>
-          <line x1="272" y1="122" x2="284" y2="134"/>
+          <line x1="140" y1="36"  x2="140" y2="20"/>
+          <line x1="140" y1="124" x2="140" y2="140"/>
+          <line x1="96"  y1="80"  x2="80"  y2="80"/>
+          <line x1="184" y1="80"  x2="200" y2="80"/>
+          <line x1="108" y1="48"  x2="96"  y2="36"/>
+          <line x1="172" y1="48"  x2="184" y2="36"/>
+          <line x1="108" y1="112" x2="96"  y2="124"/>
+          <line x1="172" y1="112" x2="184" y2="124"/>
         </g>
-        <text x="310" y="78" fill="#fbbf24" font-size="12" font-weight="700">Sun</text>
-        <text x="310" y="92" fill="#9090c0" font-size="10">light direction →</text>
+        <text x="210" y="68" fill="#fbbf24" font-size="12" font-weight="700">Sun</text>
+        <text x="210" y="82" fill="#9090c0" font-size="10">light direction →</text>
 
         {# ── Sun rays: parallel beams from sun, aimed at the tilted PV     #}
         {# face. Beams arrive at the TOP edge of the array (back-top row)  #}
-        {# at a near-perpendicular angle, demonstrating the panel faces    #}
-        {# the sun.                                                        #}
+        {# at a near-perpendicular angle.                                  #}
         {% set _arr_top_x = ARR_X0 - _shx * _rows %}
         {% set _arr_top_y = ARR_Y0 - _shy * _rows %}
         {% set _arr_right_x = _arr_top_x + _cols * _pw %}
         <g stroke="#fbbf24" stroke-width="1.4" stroke-opacity="0.55" stroke-dasharray="3 4">
           {% for k in range(7) %}
             {% set _t = k / 6.0 %}
-            <line x1="{{ 200 + k*36 }}" y1="{{ 110 + k*8 }}"
+            <line x1="{{ 180 + k*30 }}" y1="{{ 110 + k*5 }}"
                   x2="{{ _arr_top_x + _t * (_arr_right_x - _arr_top_x) }}"
                   y2="{{ _arr_top_y + 4 }}"/>
           {% endfor %}
         </g>
 
-        {# ── 3D Building (obstruction). Bottom-front-right corner at
-           (380, 410); width 80 (front face), depth 50, height 130. #}
+        {# ── 3D Building (obstruction) — MUCH taller than the array.     #}
+        {# Front face: (270, 110) to (390, 410) = 300 tall. Depth 45.      #}
+        {# Sun at upper-left → front face lit medium, right face dark,    #}
+        {# top face lit.                                                   #}
         <g>
-          {# front face (lit medium because sun is at upper-LEFT) #}
-          <polygon points="300,280 380,280 380,410 300,410"
+          {# front face #}
+          <polygon points="270,110 390,110 390,410 270,410"
                    fill="url(#bldgFront)" stroke="#0a0a14" stroke-width="1.2"/>
-          {# right side face (darker — facing away from sun) #}
-          <polygon points="380,280 420,250 420,380 380,410"
+          {# right side face #}
+          <polygon points="390,110 435,78 435,378 390,410"
                    fill="url(#bldgRight)" stroke="#0a0a14" stroke-width="1.2"/>
-          {# top face (lit — receives direct sun) #}
-          <polygon points="300,280 380,280 420,250 340,250"
+          {# top face #}
+          <polygon points="270,110 390,110 435,78 315,78"
                    fill="url(#bldgTop)" stroke="#0a0a14" stroke-width="1.2"/>
-          {# windows on lit front face #}
-          <rect x="312" y="298" width="14" height="14" fill="#fbbf24" opacity="0.55"/>
-          <rect x="338" y="298" width="14" height="14" fill="#fbbf24" opacity="0.55"/>
-          <rect x="362" y="298" width="14" height="14" fill="#fbbf24" opacity="0.45"/>
-          <rect x="312" y="328" width="14" height="14" fill="#fbbf24" opacity="0.35"/>
-          <rect x="338" y="328" width="14" height="14" fill="#fbbf24" opacity="0.35"/>
-          <rect x="362" y="328" width="14" height="14" fill="#fbbf24" opacity="0.30"/>
-          <rect x="320" y="370" width="22" height="38" fill="#1a1a2a" stroke="#3a3a5a" stroke-width="0.5"/>
+
+          {# Window grid: 4 columns × 5 rows on the lit face. #}
+          {% for r in range(5) %}
+            {% for c in range(4) %}
+              <rect x="{{ 282 + c*26 }}" y="{{ 130 + r*48 }}" width="16" height="22"
+                    fill="#fbbf24"
+                    opacity="{{ 0.55 - r * 0.07 }}"/>
+            {% endfor %}
+          {% endfor %}
+          {# Door on the ground floor #}
+          <rect x="318" y="368" width="24" height="42" fill="#1a1a2a"
+                stroke="#3a3a5a" stroke-width="0.5"/>
+          <circle cx="338" cy="392" r="1.5" fill="#fbbf24"/>
         </g>
 
         {# ── Dimension annotation: building HEIGHT (H) ─────────────── #}
-        <line x1="282" y1="280" x2="282" y2="410"
+        <line x1="252" y1="110" x2="252" y2="410"
               stroke="#a0a0c8" stroke-width="1"
               marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>
-        <text x="246" y="350" fill="#a0a0c8" font-size="11" font-weight="700"
-              transform="rotate(-90, 246, 350)">H = obstruction height</text>
+        <text x="216" y="270" fill="#a0a0c8" font-size="11" font-weight="700"
+              transform="rotate(-90, 216, 270)">H = obstruction height</text>
 
         {# ── Cast shadow on ground falling toward array (SE) ────────── #}
-        {# JS reshapes its right-edge as factor grows. #}
+        {# JS reshapes its right-edge as factor grows; opacity goes 0 at #}
+        {# factor=1.0 (agent found no shading).                          #}
         <polygon id="shadowPoly"
-                 points="380,410 420,415 540,418 560,425 460,430 380,425"
-                 fill="url(#shadowGrad)" opacity="0.75"/>
+                 points="390,410 510,414 490,435 390,432"
+                 fill="url(#shadowGrad)" opacity="0"/>
 
         {# ── Dimension annotation: DISTANCE building → array (D) ──── #}
-        <line x1="380" y1="475" x2="{{ ARR_X0 }}" y2="475"
+        <line x1="390" y1="475" x2="{{ ARR_X0 }}" y2="475"
               stroke="#a0a0c8" stroke-width="1"
               marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>
-        <text x="{{ ((380 + ARR_X0) / 2) - 60 }}" y="492"
+        <text x="{{ ((390 + ARR_X0) / 2) - 60 }}" y="492"
               fill="#a0a0c8" font-size="11" font-weight="700">D = distance to PV</text>
 
         {# ── 3D PV array: each panel is a parallelogram projected in
@@ -878,17 +885,21 @@
         pvAll[i].setAttribute('fill', i < n ? 'url(#pvCellsShaded)' : 'url(#pvCells)');
       }
       // Shadow polygon: cast from the building's front-right corner toward
-      // the SE (away from the upper-LEFT sun). Length and darkness grow
-      // with loss. Bound to the ground plane so it doesn't climb the
-      // array's tilted face — the tilt is its own visual cue.
+      // the SE. Building is tall (y=110 to 410), so shadow can reach
+      // deep into the array. Hidden entirely when factor=1.00 because
+      // the agent determined no shading hits the PV.
       const loss = 1.0 - factor;
-      const baseRight = 460;            // no-loss shadow ends just past the building
-      const maxRight  = 820;            // max shadow reaches well into the array
-      const rightEdge = baseRight + (maxRight - baseRight) * loss;
-      const bottomEdgeR = rightEdge - 20 - 30 * loss;
-      shadowPoly.setAttribute('points',
-        `380,410 ${rightEdge.toFixed(0)},414 ${bottomEdgeR.toFixed(0)},433 380,430`);
-      shadowPoly.setAttribute('opacity', String(0.55 + loss * 0.9));
+      if (factor >= 0.999) {
+        shadowPoly.setAttribute('opacity', '0');
+      } else {
+        const baseRight = 510;            // 5% loss shadow reaches array front
+        const maxRight  = 880;            // 40% loss shadow covers full depth
+        const rightEdge = baseRight + (maxRight - baseRight) * loss;
+        const bottomEdgeR = rightEdge - 20 - 40 * loss;
+        shadowPoly.setAttribute('points',
+          `390,410 ${rightEdge.toFixed(0)},414 ${bottomEdgeR.toFixed(0)},435 390,432`);
+        shadowPoly.setAttribute('opacity', String(0.55 + loss * 0.9));
+      }
 
       // Label
       const lossPct = Math.round(loss * 100);
