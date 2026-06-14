@@ -134,7 +134,32 @@
   <div class="row g-0">
     <div class="col-12 col-lg-9">
       <div id="shading3d-canvas" style="width:100%;height:560px;background:transparent;
-                                        cursor:grab"></div>
+                                        cursor:grab;position:relative">
+        {# Fallback visible until Three.js takes over. If you can still see #}
+        {# this text after the page loads, the JS module failed — the error #}
+        {# message will appear in #shading3d-error below or in the browser  #}
+        {# console.                                                          #}
+        <div id="shading3d-loading"
+             style="position:absolute;inset:0;display:flex;align-items:center;
+                    justify-content:center;color:#6060a0;font-size:13px;
+                    flex-direction:column;gap:8px">
+          <div class="spinner-border spinner-border-sm" role="status"
+               style="color:var(--solar-gold)"></div>
+          <div>Initializing 3D scene…</div>
+        </div>
+        <div id="shading3d-error"
+             style="position:absolute;inset:0;display:none;align-items:center;
+                    justify-content:center;color:#ef4444;font-size:12px;
+                    padding:20px;text-align:center;flex-direction:column;gap:8px"></div>
+        <div class="d-flex gap-2 mt-2 flex-wrap p-2"
+             style="position:absolute;top:8px;left:8px;z-index:5">
+          <button type="button" id="shadingDemo10"
+                  class="btn btn-sm btn-warning fw-bold"
+                  style="font-size:11px;box-shadow:0 2px 8px rgba(245,158,11,.4)">
+            <i class="bi bi-play-circle me-1"></i>Test with 10% shading
+          </button>
+        </div>
+      </div>
       {# Time slider — drag to scrub through the day. Sun moves, panel #}
       {# heat-tint updates, and the strip below shows avg shaded % per #}
       {# step.                                                          #}
@@ -637,7 +662,33 @@
   import * as THREE       from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
   import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
+  // Helper — show a visible error in the canvas if init blows up so the
+  // operator never sees a silently-blank box.
+  function _shadingShowError(msg) {
+    const err = document.getElementById('shading3d-error');
+    const load = document.getElementById('shading3d-loading');
+    if (load) load.style.display = 'none';
+    if (err) {
+      err.style.display = 'flex';
+      err.innerHTML =
+        '<i class="bi bi-exclamation-triangle" style="font-size:24px"></i>' +
+        '<div><strong>3D scene failed to load.</strong></div>' +
+        '<div style="font-family:monospace;font-size:11px;color:#c0a070;' +
+        'max-width:520px;word-wrap:break-word">' + msg + '</div>' +
+        '<div style="color:#a0a0c8;font-size:11px;max-width:520px">' +
+        'Hard-refresh (Ctrl+Shift+R). If it persists, the Three.js CDN ' +
+        'or your browser may be blocking the module. Open the browser ' +
+        'console (F12) for the full error.</div>';
+    }
+  }
+  window.addEventListener('error', (ev) => {
+    if (ev.message && /three|module|TypeError/i.test(ev.message)) {
+      _shadingShowError(ev.message + ' (' + (ev.filename || '?') + ')');
+    }
+  });
+
   const host = document.getElementById('shading3d-canvas');
+  try {
   if (host) {
     let engineData = {};
     let obstructions = [];
@@ -1511,13 +1562,32 @@
     }
     window.addEventListener('resize', onResize);
 
-    // Render loop
+    // Render loop. On first paint, hide the "Initializing…" overlay.
+    let _firstPaint = false;
     function tick() {
       controls.update();
       renderer.render(scene, camera);
+      if (!_firstPaint) {
+        _firstPaint = true;
+        const load = document.getElementById('shading3d-loading');
+        if (load) load.style.display = 'none';
+      }
       requestAnimationFrame(tick);
     }
     tick();
+
+    // ── Test with 10% shading: navigate to the same URL with ?demo=10
+    //    so the route injects a sample obstruction on the server side and
+    //    re-renders the full dashboard with real engine output.
+    document.getElementById('shadingDemo10')?.addEventListener('click', () => {
+      const url = new URL(window.location.href);
+      url.searchParams.set('demo', '10');
+      window.location.href = url.toString();
+    });
+  }
+  } catch (_err) {
+    console.error('shading3d init failed:', _err);
+    _shadingShowError(_err && _err.message || String(_err));
   }
 </script>
 {% endif %}

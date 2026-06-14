@@ -12396,6 +12396,34 @@ def project_shading(pid):
     # obstructions are already saved. Result is local-only
     # (we do NOT save_project_data on GET); it persists only
     # when the operator hits Save on the form.
+    # ?demo=<level> injects sample obstructions so the dashboard shows
+    # something even on a project with no real obstructions saved. The
+    # operator can test the engine + agent + 3D scene with one click.
+    _demo = (request.args.get("demo") or "").strip().lower()
+    _demo_obs = {
+        "10":  [{"type": "parapet wall", "height": 1.8, "width": 8.0,
+                 "distance": 4.0, "direction": "South",
+                 "mitigation": "Bypass diodes",
+                 "notes": "demo: light shading sample"}],
+        "20":  [{"type": "neighbour building", "height": 8.0, "width": 10.0,
+                 "distance": 8.0, "direction": "West",
+                 "mitigation": "Bypass diodes",
+                 "notes": "demo: significant shading sample"}],
+        "25":  [{"type": "large tree", "height": 9.0, "width": 6.0,
+                 "distance": 5.0, "direction": "South-West",
+                 "mitigation": "Bypass diodes",
+                 "notes": "demo: heavy shading sample"}],
+        "30":  [{"type": "10-storey building", "height": 32.0, "width": 18.0,
+                 "distance": 18.0, "direction": "West",
+                 "mitigation": "Bypass diodes",
+                 "notes": "demo: severe shading sample"}],
+    }
+    if _demo in _demo_obs:
+        shading = dict(shading)
+        shading["obstructions"] = _demo_obs[_demo]
+        shading.pop("engine", None)
+        shading.pop("agent_v2", None)
+
     # Engine runs on GET whenever no engine output exists yet, regardless
     # of the v1/v2 flag — the template decides which view to render.
     if not shading.get("engine"):
