@@ -42,16 +42,12 @@
 </div>
 
 {# ───────────────────────────────────────────────────────────────────── #}
-{# AI 3D Shading Simulation — v2 scaffold (Day 2 of the upgrade).        #}
-{# Visible only with ?v2=1 so the live page is unchanged for everyone     #}
-{# else. Reads engine output (data.shading.engine) + obstructions from   #}
-{# the saved form. Day 2 ships: real obstruction meshes (cuboids/cones/  #}
-{# cylinders) at correct distance + direction, real cast shadows, sun-   #}
-{# path dome SVG overlay, display-layer toggle checkboxes, and an HTML   #}
-{# affected-panel grid keyed off per_panel_max_frac. Day 3 adds time     #}
-{# slider + ADK LlmAgent narration.                                     #}
+{# AI 3D Shading Simulation Agent — the dashboard.                      #}
+{# Default view from 2026-06-14. The legacy 2.5D SVG view below is      #}
+{# kept as a fallback; add `?v1=1` to the URL to hide this and show     #}
+{# only the legacy view if needed.                                      #}
 {# ───────────────────────────────────────────────────────────────────── #}
-{% if request.args.get('v2') %}
+{% if not request.args.get('v1') %}
 {% set _eng = shading.get('engine') if shading else None %}
 {% set _obs = shading.get('obstructions') or [] %}
 {% set _results = project.data.get('results', {}) if project else {} %}
@@ -1651,9 +1647,9 @@
     </div>
   </template>
 
-  {# ── SVG illustration: sun path, obstruction, shadow, PV array ───── #}
-  {# Reactive: the number of shaded panels + shadow opacity reflect the     #}
-  {# selected shading factor. Updated by the radio handler in <script>.     #}
+  {# ── Legacy 2.5D SVG illustration — kept for the ?v1=1 fallback only. #}
+  {# The v2 Three.js dashboard above replaces this as the default view.   #}
+  {% if request.args.get('v1') %}
   <div class="solar-card p-3 mb-4">
     <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
       <div class="section-head mb-0"><i class="bi bi-diagram-3 me-1"></i>PV Shading Model View</div>
@@ -1963,6 +1959,7 @@
       geometry, duration, area, time-of-day, season, and mitigation to pick the factor.
     </div>
   </div>
+  {% endif %}{# end ?v1=1 legacy SVG block #}
 
   {# ── Last agent verdict (saved from previous submit, if any) ────── #}
   {% if shading.agent_summary %}

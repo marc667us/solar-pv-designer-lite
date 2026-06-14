@@ -12202,9 +12202,13 @@ def _engine_full_analysis(project, obstructions, on_date=None,
         results = data.get("results", {}) or {}
         n_panels = int(results.get("num_panels") or 0)
 
-        # Without a panel count there is nothing to project shadows onto.
+        # Day-5 hotfix: default to 12 panels (typical residential
+        # array) when Loads step hasn't produced num_panels yet so
+        # the v2 dashboard renders a representative scene even on a
+        # fresh project. Real PV sizing comes from the loads handler
+        # downstream; this is just for the shading visualization.
         if n_panels <= 0:
-            return None
+            n_panels = 12
 
         # Lat/lon — try region table then fall back to country first-region.
         info = (GLOBAL_DATA.get(country) or {}).get("regions", {}).get(region)
@@ -12387,6 +12391,31 @@ def project_shading(pid):
         return redirect(url_for("project_loads", pid=pid))
 
     shading = project["data"].get("shading", {}) or {}
+    # Day-5 hotfix: if the v2 flag is set and the engine has
+    # never run on this project, run it now using whatever
+    # obstructions are already saved. Result is local-only
+    # (we do NOT save_project_data on GET); it persists only
+    # when the operator hits Save on the form.
+    if request.args.get("v2") and not shading.get("engine"):
+        try:
+            _eng = _engine_full_analysis(project, shading.get("obstructions") or [])
+            if _eng:
+                shading = dict(shading)
+                shading["engine"] = _eng
+                # Also fire the agent so the analysis card appears
+                # the first time the user sees the v2 dashboard.
+                try:
+                    from engine.agents.shading_agent import run_shading_agent
+                    _ag = run_shading_agent(_eng, {"obstructions": shading.get("obstructions") or []})
+                    if _ag:
+                        shading["agent_v2"] = _ag
+                except Exception:
+                    pass
+        except Exception as _e:
+            try:
+                app.logger.warning("v2 GET engine failure: %s", _e)
+            except Exception:
+                pass
     return render_template("shading.html",
                            user=current_user(),
                            project=project,
