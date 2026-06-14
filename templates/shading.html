@@ -755,27 +755,59 @@
       <table class="table table-sm align-middle mb-0">
         <thead>
           <tr>
-            <th></th>
-            <th>Condition</th>
-            <th>Loss</th>
-            <th>Factor</th>
-            <th>Corrected / Base</th>
+            <th style="width:120px">
+              <span class="d-inline-flex align-items-center gap-1 small text-secondary fw-bold text-uppercase" style="letter-spacing:.4px;font-size:10px">
+                <i class="bi bi-cpu" style="color:#a78bfa"></i> Agent
+              </span>
+            </th>
+            <th class="small text-secondary fw-bold text-uppercase" style="letter-spacing:.4px;font-size:10px">Condition</th>
+            <th class="small text-secondary fw-bold text-uppercase" style="letter-spacing:.4px;font-size:10px">Loss</th>
+            <th class="small text-secondary fw-bold text-uppercase" style="letter-spacing:.4px;font-size:10px">Factor</th>
+            <th class="small text-secondary fw-bold text-uppercase" style="letter-spacing:.4px;font-size:10px">Corrected / Base</th>
           </tr>
         </thead>
         <tbody>
           {% for label, loss, factor in shading_factors %}
           {% set is_current = (shading.factor and (factor - 0.0001) <= shading.factor <= (factor + 0.0001))
                               or (not shading.factor and factor == 1.0) %}
-          <tr style="{% if is_current %}background:rgba(245,158,11,.10){% endif %}">
-            <td style="width:36px">
+          <tr style="{% if is_current %}
+                      background:linear-gradient(90deg,rgba(245,158,11,.22),rgba(245,158,11,.06));
+                      box-shadow:inset 4px 0 0 var(--solar-gold), 0 0 12px rgba(245,158,11,.25);
+                      {% endif %}">
+            <td style="width:120px">
               {% if is_current %}
-                <i class="bi bi-arrow-right-circle-fill" style="color:var(--solar-gold);font-size:16px" title="Agent's pick"></i>
+                <span class="badge d-inline-flex align-items-center gap-1"
+                      style="background:var(--solar-gold);color:#0a0a14;
+                             font-size:11px;font-weight:900;letter-spacing:.4px;
+                             padding:5px 9px;border-radius:6px;
+                             box-shadow:0 0 10px rgba(245,158,11,.65)">
+                  <i class="bi bi-cpu"></i> AGENT PICK
+                </span>
               {% endif %}
             </td>
-            <td class="{% if is_current %}fw-bold{% endif %}">{{ label }}</td>
-            <td><span class="badge bg-dark border" style="color:#ef4444;border-color:#ef444444!important">{{ loss }}</span></td>
-            <td><span class="fw-bold" style="color:var(--solar-gold)">{{ "%.2f"|format(factor) }}</span></td>
-            <td class="text-secondary small">
+            <td>
+              {% if is_current %}
+                <span class="fw-black" style="font-size:15px;color:#f5f5fa">{{ label }}</span>
+              {% else %}
+                <span class="text-secondary">{{ label }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge bg-dark border"
+                    style="color:{% if is_current %}#ef4444{% else %}#9090c0{% endif %};
+                           border-color:{% if is_current %}#ef444466{% else %}#1e1e3a{% endif %} !important;
+                           {% if is_current %}font-weight:800;font-size:12px{% endif %}">
+                {{ loss }}
+              </span>
+            </td>
+            <td>
+              <span class="{% if is_current %}fw-black{% else %}fw-bold{% endif %}"
+                    style="color:{% if is_current %}var(--solar-gold){% else %}#a0a0c8{% endif %};
+                           font-size:{% if is_current %}17px{% else %}13px{% endif %}">
+                {{ "%.2f"|format(factor) }}
+              </span>
+            </td>
+            <td class="small" style="color:{% if is_current %}#fbbf24{% else %}#6868a0{% endif %}">
               {% if factor < 1.0 %}
                 &times; {{ "%.3f"|format(1.0/factor) }}
               {% else %}
