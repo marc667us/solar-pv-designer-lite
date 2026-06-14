@@ -12031,6 +12031,49 @@ def _shading_num(raw, default=0.0):
         return float(default)
 
 
+def _parse_obstructions(form):
+    """Zip the parallel obs_*[] arrays from the shading form into a list of
+    dicts. Empty trailing rows (no type AND no numeric value entered) are
+    dropped so the operator can leave a card blank."""
+    types     = form.getlist("obs_type[]")
+    heights   = form.getlist("obs_height[]")
+    widths    = form.getlist("obs_width[]")
+    distances = form.getlist("obs_distance[]")
+    dirs      = form.getlist("obs_direction[]")
+    times     = form.getlist("obs_time[]")
+    hours_a   = form.getlist("obs_hours[]")
+    shaded_a  = form.getlist("obs_shaded_area_pct[]")
+    seasons   = form.getlist("obs_season[]")
+    mitig     = form.getlist("obs_mitigation[]")
+    notes_a   = form.getlist("obs_notes[]")
+    n = max(len(types), len(heights), len(widths), len(distances),
+            len(dirs), len(times), len(hours_a), len(shaded_a),
+            len(seasons), len(mitig), len(notes_a))
+    out = []
+    for i in range(n):
+        def pick(arr, i):
+            return arr[i] if i < len(arr) else ""
+        row = {
+            "type":            (pick(types, i) or "").strip()[:60],
+            "height":          _shading_num(pick(heights, i)),
+            "width":           _shading_num(pick(widths, i)),
+            "distance":        _shading_num(pick(distances, i)),
+            "direction":       (pick(dirs, i) or "").strip()[:10],
+            "time":            (pick(times, i) or "").strip()[:30],
+            "hours":           _shading_num(pick(hours_a, i)),
+            "shaded_area_pct": _shading_num(pick(shaded_a, i)),
+            "season":          (pick(seasons, i) or "").strip()[:20],
+            "mitigation":      (pick(mitig, i) or "").strip()[:60],
+            "notes":           (pick(notes_a, i) or "").strip()[:400],
+        }
+        # Drop rows that are entirely empty (no type AND no numeric value).
+        nums = (row["height"], row["width"], row["distance"], row["hours"], row["shaded_area_pct"])
+        if not row["type"] and not any(nums) and not row["notes"]:
+            continue
+        out.append(row)
+    return out
+
+
 @app.route("/project/<int:pid>/shading", methods=["GET", "POST"])
 @login_required
 @limiter.limit("30 per hour")
@@ -12054,22 +12097,15 @@ def project_shading(pid):
             # Units: "metric" (m, default) or "imperial" (ft). Per-project
             # owner choice; numeric fields are stored as-typed.
             "units":                ("imperial" if (request.form.get("units","") == "imperial") else "metric"),
-            "obstruction_type":     (request.form.get("obstruction_type", "") or "").strip()[:60],
-            "obstruction_height_m": _shading_num(request.form.get("obstruction_height_m")),
-            "obstruction_width_m":  _shading_num(request.form.get("obstruction_width_m")),
-            "distance_m":           _shading_num(request.form.get("distance_m")),
-            "direction_from_array": (request.form.get("direction_from_array", "") or "").strip()[:30],
+            # Site-level fields (apply to whole project, not per obstruction).
             "tilt_deg":             _shading_num(request.form.get("tilt_deg")),
             "azimuth":              (request.form.get("azimuth", "") or "").strip()[:30],
             "roof_type":            (request.form.get("roof_type", "") or "").strip()[:40],
             "roof_height_m":        _shading_num(request.form.get("roof_height_m")),
-            "shading_time":         (request.form.get("shading_time", "") or "").strip()[:40],
-            "shading_hours":        _shading_num(request.form.get("shading_hours")),
-            "shaded_area_pct":      _shading_num(request.form.get("shaded_area_pct")),
-            "season_impact":        (request.form.get("season_impact", "") or "").strip()[:20],
-            "mitigation":           (request.form.get("mitigation", "") or "").strip()[:60],
             "inspection_confirmed": bool(request.form.get("inspection_confirmed")),
-            "notes":                (request.form.get("notes", "") or "").strip()[:500],
+            # Obstructions: parallel arrays from the cloneable cards. We
+            # zip into a list of dicts. Empty trailing rows are dropped.
+            "obstructions":         _parse_obstructions(request.form),
             "saved_at":             datetime.utcnow().isoformat() + "Z",
             "saved_by":             session.get("username", ""),
         }

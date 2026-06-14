@@ -83,178 +83,304 @@
     </div>
   </div>
 
-  <div class="row g-3 mb-4">
-
-    {# ── Left column: obstruction + site geometry ──────────────────── #}
-    <div class="col-md-6">
-      <div class="solar-card p-3 h-100">
-        <div class="section-head mb-3"><i class="bi bi-building me-1"></i>Obstruction &amp; Site Geometry</div>
-
-        <div class="row g-3">
-          <div class="col-12">
-            <label class="form-label small text-secondary fw-bold">Obstruction Type</label>
-            <select name="obstruction_type" class="form-select form-control sp-input">
-              {% for opt in ['Tree','Nearby building','Mast / antenna','Water tank','Parapet wall','Hill','Tower','Other'] %}
-                <option value="{{ opt }}" {% if shading.obstruction_type == opt %}selected{% endif %}>{{ opt }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">
-              Height (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
-            </label>
-            <input name="obstruction_height_m" type="number" step="0.1" min="0"
-                   class="form-control sp-input" value="{{ shading.obstruction_height_m or '' }}">
-          </div>
-          <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">
-              Width (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
-            </label>
-            <input name="obstruction_width_m" type="number" step="0.1" min="0"
-                   class="form-control sp-input" value="{{ shading.obstruction_width_m or '' }}">
-          </div>
-          <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">
-              Distance to PV (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
-            </label>
-            <input name="distance_m" type="number" step="0.1" min="0"
-                   class="form-control sp-input" value="{{ shading.distance_m or '' }}">
-          </div>
-          <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">Direction from Array</label>
-            <select name="direction_from_array" class="form-select form-control sp-input">
-              {% for opt in ['N','NE','E','SE','S','SW','W','NW'] %}
-                <option value="{{ opt }}" {% if shading.direction_from_array == opt %}selected{% endif %}>{{ opt }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">Roof Type</label>
-            <select name="roof_type" class="form-select form-control sp-input">
-              {% for opt in ['Flat roof','Pitched roof','Metal roof','Membrane roof','Ground mounted'] %}
-                <option value="{{ opt }}" {% if shading.roof_type == opt %}selected{% endif %}>{{ opt }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">
-              Roof Height (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
-            </label>
-            <input name="roof_height_m" type="number" step="0.1" min="0"
-                   class="form-control sp-input" value="{{ shading.roof_height_m or '' }}">
-          </div>
-          {# ── PV tilt + azimuth are read from the Location step. Read-only ── #}
-          {# here so the operator can't accidentally introduce a mismatch     #}
-          {# between the shading model and the rest of the design.            #}
-          {% set _tilt = project.data.get('tilt_angle', 15) %}
-          {% set _az = project.data.get('azimuth', 0) %}
-          {% set _az_dir = 'S' if -22.5 <= _az|float <= 22.5 else
-                          'SE' if 22.5 < _az|float <= 67.5 else
-                          'E'  if 67.5 < _az|float <= 112.5 else
-                          'NE' if 112.5 < _az|float <= 157.5 else
-                          'N'  if (_az|float > 157.5 or _az|float < -157.5) else
-                          'NW' if -157.5 <= _az|float < -112.5 else
-                          'W'  if -112.5 <= _az|float < -67.5 else
-                          'SW' %}
-          <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">
-              PV Tilt
-              <span class="badge ms-1" style="font-size:8px;background:rgba(160,160,200,.15);color:#9090c0;border:1px solid #1e1e3a">
-                FROM LOCATION
-              </span>
-            </label>
-            <div class="form-control sp-input d-flex align-items-center"
-                 style="background:rgba(255,255,255,.02)!important;cursor:not-allowed">
-              <i class="bi bi-rulers me-2 text-secondary"></i>
-              <span id="readTilt" class="fw-bold" style="color:var(--solar-gold)">{{ _tilt }}&deg;</span>
-            </div>
-            <input type="hidden" name="tilt_deg" value="{{ _tilt }}">
-          </div>
-          <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">
-              Azimuth
-              <span class="badge ms-1" style="font-size:8px;background:rgba(160,160,200,.15);color:#9090c0;border:1px solid #1e1e3a">
-                FROM LOCATION
-              </span>
-            </label>
-            <div class="form-control sp-input d-flex align-items-center"
-                 style="background:rgba(255,255,255,.02)!important;cursor:not-allowed">
-              <i class="bi bi-compass me-2 text-secondary"></i>
-              <span id="readAz" class="fw-bold" style="color:var(--solar-gold)">{{ _az }}&deg; ({{ _az_dir }})</span>
-            </div>
-            <input type="hidden" name="azimuth" value="{{ _az }}">
-          </div>
-          <div class="col-12">
-            <div class="text-secondary small">
-              <i class="bi bi-info-circle me-1"></i>
-              Tilt and azimuth were captured at the
-              <a href="{{ url_for('project_location', pid=project.id) }}" class="text-warning">Location step</a>.
-              Edit them there if the site survey produced different values.
-            </div>
-          </div>
+  {# ── Site context card (single — applies to the whole project) ────── #}
+  {% set _tilt = project.data.get('tilt_angle', 15) %}
+  {% set _az = project.data.get('azimuth', 0) %}
+  {% set _az_dir = 'S' if -22.5 <= _az|float <= 22.5 else
+                  'SE' if 22.5 < _az|float <= 67.5 else
+                  'E'  if 67.5 < _az|float <= 112.5 else
+                  'NE' if 112.5 < _az|float <= 157.5 else
+                  'N'  if (_az|float > 157.5 or _az|float < -157.5) else
+                  'NW' if -157.5 <= _az|float < -112.5 else
+                  'W'  if -112.5 <= _az|float < -67.5 else
+                  'SW' %}
+  <div class="solar-card p-3 mb-3">
+    <div class="section-head mb-3"><i class="bi bi-house me-1"></i>Site Context</div>
+    <div class="row g-3">
+      <div class="col-md-3 col-6">
+        <label class="form-label small text-secondary fw-bold">Roof Type</label>
+        <select name="roof_type" class="form-select form-control sp-input">
+          {% for opt in ['Flat roof','Pitched roof','Metal roof','Membrane roof','Ground mounted'] %}
+            <option value="{{ opt }}" {% if shading.roof_type == opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 col-6">
+        <label class="form-label small text-secondary fw-bold">
+          Roof Height (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
+        </label>
+        <input name="roof_height_m" type="number" step="0.1" min="0"
+               class="form-control sp-input" value="{{ shading.roof_height_m or '' }}">
+      </div>
+      <div class="col-md-3 col-6">
+        <label class="form-label small text-secondary fw-bold">
+          PV Tilt
+          <span class="badge ms-1" style="font-size:8px;background:rgba(160,160,200,.15);color:#9090c0;border:1px solid #1e1e3a">
+            FROM LOCATION
+          </span>
+        </label>
+        <div class="form-control sp-input d-flex align-items-center"
+             style="background:rgba(255,255,255,.02)!important;cursor:not-allowed">
+          <i class="bi bi-rulers me-2 text-secondary"></i>
+          <span id="readTilt" class="fw-bold" style="color:var(--solar-gold)">{{ _tilt }}&deg;</span>
+        </div>
+        <input type="hidden" name="tilt_deg" value="{{ _tilt }}">
+      </div>
+      <div class="col-md-3 col-6">
+        <label class="form-label small text-secondary fw-bold">
+          Azimuth
+          <span class="badge ms-1" style="font-size:8px;background:rgba(160,160,200,.15);color:#9090c0;border:1px solid #1e1e3a">
+            FROM LOCATION
+          </span>
+        </label>
+        <div class="form-control sp-input d-flex align-items-center"
+             style="background:rgba(255,255,255,.02)!important;cursor:not-allowed">
+          <i class="bi bi-compass me-2 text-secondary"></i>
+          <span id="readAz" class="fw-bold" style="color:var(--solar-gold)">{{ _az }}&deg; ({{ _az_dir }})</span>
+        </div>
+        <input type="hidden" name="azimuth" value="{{ _az }}">
+      </div>
+      <div class="col-12">
+        <div class="text-secondary small">
+          <i class="bi bi-info-circle me-1"></i>
+          Tilt and azimuth were captured at the
+          <a href="{{ url_for('project_location', pid=project.id) }}" class="text-warning">Location step</a>.
+          Edit them there if the site survey produced different values.
+        </div>
+      </div>
+      <div class="col-12">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="inspection_confirmed" id="inspChk"
+                 value="1" {% if shading.inspection_confirmed %}checked{% endif %}>
+          <label class="form-check-label small" for="inspChk">
+            The final site inspection report confirms one or more shading sources at this site.
+          </label>
         </div>
       </div>
     </div>
+  </div>
 
-    {# ── Right column: time / season / mitigation ──────────────────── #}
-    <div class="col-md-6">
-      <div class="solar-card p-3 h-100">
-        <div class="section-head mb-3"><i class="bi bi-cloud-sun me-1"></i>Shading Time, Season &amp; Mitigation</div>
+  {# ── Obstructions list (one card per obstruction; clone-able) ─────── #}
+  {# Back-compat: legacy single-obstruction records (pre-multi commit)    #}
+  {# get wrapped into a single-element list so the page renders the same. #}
+  {% set _obstructions = shading.obstructions
+                          if shading.obstructions
+                          else ([{
+                            'type':             shading.obstruction_type or 'Tree',
+                            'height':           shading.obstruction_height_m or '',
+                            'width':            shading.obstruction_width_m or '',
+                            'distance':         shading.distance_m or '',
+                            'direction':        shading.direction_from_array or 'S',
+                            'time':             shading.shading_time or 'Morning',
+                            'hours':            shading.shading_hours or '',
+                            'shaded_area_pct':  shading.shaded_area_pct or '',
+                            'season':           shading.season_impact or 'Low',
+                            'mitigation':       shading.mitigation or 'None',
+                            'notes':            shading.notes or '',
+                          }] if shading.obstruction_type
+                            else [{'type':'Tree','direction':'S','time':'Morning','season':'Low','mitigation':'None'}]) %}
 
+  <div class="solar-card p-3 mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+      <div class="section-head mb-0">
+        <i class="bi bi-list-ul me-1"></i>Obstructions
+        <span id="obsCount" class="badge ms-2" style="background:rgba(245,158,11,.18);color:var(--solar-gold);border:1px solid rgba(245,158,11,.4)">
+          {{ _obstructions|length }}
+        </span>
+      </div>
+      <button type="button" id="addObstructionBtn" class="btn btn-sm"
+              style="background:rgba(34,197,94,.12);color:#22c55e;border:1px solid rgba(34,197,94,.4)">
+        <i class="bi bi-plus-lg me-1"></i>Add Obstruction
+      </button>
+    </div>
+
+    <div id="obstructionList">
+      {% for o in _obstructions %}
+      <div class="obstruction-card mb-3 p-3" style="border:1px solid #1e1e3a;border-radius:10px;background:rgba(255,255,255,.015)">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <div class="fw-bold small">
+            <i class="bi bi-cone-striped me-1" style="color:var(--solar-gold)"></i>
+            Obstruction <span class="obs-index">{{ loop.index }}</span>
+          </div>
+          <button type="button" class="btn btn-sm remove-obs"
+                  style="background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.35)"
+                  {% if _obstructions|length == 1 %}disabled title="Keep at least one"{% endif %}>
+            <i class="bi bi-trash me-1"></i>Remove
+          </button>
+        </div>
         <div class="row g-3">
-          <div class="col-6">
+          <div class="col-md-4 col-6">
+            <label class="form-label small text-secondary fw-bold">Obstruction Type</label>
+            <select name="obs_type[]" class="form-select form-control sp-input">
+              {% for opt in ['Tree','Nearby building','Mast / antenna','Water tank','Parapet wall','Hill','Tower','Other'] %}
+                <option value="{{ opt }}" {% if o.type == opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 col-6">
+            <label class="form-label small text-secondary fw-bold">
+              Height (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
+            </label>
+            <input name="obs_height[]" type="number" step="0.1" min="0"
+                   class="form-control sp-input" value="{{ o.height or '' }}">
+          </div>
+          <div class="col-md-2 col-6">
+            <label class="form-label small text-secondary fw-bold">
+              Width (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
+            </label>
+            <input name="obs_width[]" type="number" step="0.1" min="0"
+                   class="form-control sp-input" value="{{ o.width or '' }}">
+          </div>
+          <div class="col-md-2 col-6">
+            <label class="form-label small text-secondary fw-bold">
+              Distance (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
+            </label>
+            <input name="obs_distance[]" type="number" step="0.1" min="0"
+                   class="form-control sp-input" value="{{ o.distance or '' }}">
+          </div>
+          <div class="col-md-2 col-6">
+            <label class="form-label small text-secondary fw-bold">Direction</label>
+            <select name="obs_direction[]" class="form-select form-control sp-input">
+              {% for opt in ['N','NE','E','SE','S','SW','W','NW'] %}
+                <option value="{{ opt }}" {% if o.direction == opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 col-6">
             <label class="form-label small text-secondary fw-bold">Time of Shading</label>
-            <select name="shading_time" class="form-select form-control sp-input">
+            <select name="obs_time[]" class="form-select form-control sp-input">
               {% for opt in ['Morning','Midday','Afternoon','Evening','All day'] %}
-                <option value="{{ opt }}" {% if shading.shading_time == opt %}selected{% endif %}>{{ opt }}</option>
+                <option value="{{ opt }}" {% if o.time == opt %}selected{% endif %}>{{ opt }}</option>
               {% endfor %}
             </select>
           </div>
-          <div class="col-6">
+          <div class="col-md-2 col-6">
             <label class="form-label small text-secondary fw-bold">Duration (hrs/day)</label>
-            <input name="shading_hours" type="number" step="0.5" min="0" max="12"
-                   class="form-control sp-input" value="{{ shading.shading_hours or '' }}">
+            <input name="obs_hours[]" type="number" step="0.5" min="0" max="12"
+                   class="form-control sp-input" value="{{ o.hours or '' }}">
           </div>
-          <div class="col-6">
-            <label class="form-label small text-secondary fw-bold">Shaded Panel Area (%)</label>
-            <input name="shaded_area_pct" type="number" step="1" min="0" max="100"
-                   class="form-control sp-input" value="{{ shading.shaded_area_pct or '' }}">
+          <div class="col-md-2 col-6">
+            <label class="form-label small text-secondary fw-bold">Shaded Area (%)</label>
+            <input name="obs_shaded_area_pct[]" type="number" step="1" min="0" max="100"
+                   class="form-control sp-input" value="{{ o.shaded_area_pct or '' }}">
           </div>
-          <div class="col-6">
+          <div class="col-md-3 col-6">
             <label class="form-label small text-secondary fw-bold">Season Impact</label>
-            <select name="season_impact" class="form-select form-control sp-input">
+            <select name="obs_season[]" class="form-select form-control sp-input">
               {% for opt in ['Low','Medium','High'] %}
-                <option value="{{ opt }}" {% if shading.season_impact == opt %}selected{% endif %}>{{ opt }}</option>
+                <option value="{{ opt }}" {% if o.season == opt %}selected{% endif %}>{{ opt }}</option>
               {% endfor %}
             </select>
           </div>
-          <div class="col-12">
-            <label class="form-label small text-secondary fw-bold">Mitigation Available</label>
-            <select name="mitigation" class="form-select form-control sp-input">
+          <div class="col-md-3 col-6">
+            <label class="form-label small text-secondary fw-bold">Mitigation</label>
+            <select name="obs_mitigation[]" class="form-select form-control sp-input">
               {% for opt in ['None','Bypass diodes','DC optimisers','Micro-inverters','Combination'] %}
-                <option value="{{ opt }}" {% if shading.mitigation == opt %}selected{% endif %}>{{ opt }}</option>
+                <option value="{{ opt }}" {% if o.mitigation == opt %}selected{% endif %}>{{ opt }}</option>
               {% endfor %}
             </select>
           </div>
           <div class="col-12">
             <label class="form-label small text-secondary fw-bold">Inspector Notes</label>
-            <textarea name="notes" rows="3" maxlength="500"
+            <textarea name="obs_notes[]" rows="2" maxlength="400"
                       class="form-control sp-input"
-                      placeholder="Describe the obstruction and the time-of-day it casts shadow over the PV area.">{{ shading.notes or '' }}</textarea>
-          </div>
-          <div class="col-12">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" name="inspection_confirmed" id="inspChk"
-                     value="1" {% if shading.inspection_confirmed %}checked{% endif %}>
-              <label class="form-check-label small" for="inspChk">
-                The final site inspection report confirms this shading source.
-              </label>
-            </div>
+                      placeholder="Describe this obstruction and when it casts shadow over the PV array.">{{ o.notes or '' }}</textarea>
           </div>
         </div>
       </div>
+      {% endfor %}
+    </div>
+
+    <div class="text-secondary small mt-2">
+      <i class="bi bi-info-circle me-1"></i>
+      Add one card per distinct shading source identified during the site inspection. The combined effect is judged in the
+      <strong>Shading Factor</strong> table further down.
     </div>
   </div>
+
+  {# ── Empty-template (cloned into the list by Add Obstruction) ─────── #}
+  {# Lives outside the form so its inputs don't post until cloned in.   #}
+  <template id="obstructionTemplate">
+    <div class="obstruction-card mb-3 p-3" style="border:1px solid #1e1e3a;border-radius:10px;background:rgba(255,255,255,.015)">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <div class="fw-bold small">
+          <i class="bi bi-cone-striped me-1" style="color:var(--solar-gold)"></i>
+          Obstruction <span class="obs-index">?</span>
+        </div>
+        <button type="button" class="btn btn-sm remove-obs"
+                style="background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.35)">
+          <i class="bi bi-trash me-1"></i>Remove
+        </button>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-4 col-6">
+          <label class="form-label small text-secondary fw-bold">Obstruction Type</label>
+          <select name="obs_type[]" class="form-select form-control sp-input">
+            <option>Tree</option><option>Nearby building</option><option>Mast / antenna</option>
+            <option>Water tank</option><option>Parapet wall</option><option>Hill</option>
+            <option>Tower</option><option>Other</option>
+          </select>
+        </div>
+        <div class="col-md-2 col-6">
+          <label class="form-label small text-secondary fw-bold">
+            Height (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
+          </label>
+          <input name="obs_height[]" type="number" step="0.1" min="0" class="form-control sp-input">
+        </div>
+        <div class="col-md-2 col-6">
+          <label class="form-label small text-secondary fw-bold">
+            Width (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
+          </label>
+          <input name="obs_width[]" type="number" step="0.1" min="0" class="form-control sp-input">
+        </div>
+        <div class="col-md-2 col-6">
+          <label class="form-label small text-secondary fw-bold">
+            Distance (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
+          </label>
+          <input name="obs_distance[]" type="number" step="0.1" min="0" class="form-control sp-input">
+        </div>
+        <div class="col-md-2 col-6">
+          <label class="form-label small text-secondary fw-bold">Direction</label>
+          <select name="obs_direction[]" class="form-select form-control sp-input">
+            <option>N</option><option>NE</option><option>E</option><option>SE</option>
+            <option selected>S</option><option>SW</option><option>W</option><option>NW</option>
+          </select>
+        </div>
+        <div class="col-md-2 col-6">
+          <label class="form-label small text-secondary fw-bold">Time of Shading</label>
+          <select name="obs_time[]" class="form-select form-control sp-input">
+            <option selected>Morning</option><option>Midday</option><option>Afternoon</option>
+            <option>Evening</option><option>All day</option>
+          </select>
+        </div>
+        <div class="col-md-2 col-6">
+          <label class="form-label small text-secondary fw-bold">Duration (hrs/day)</label>
+          <input name="obs_hours[]" type="number" step="0.5" min="0" max="12" class="form-control sp-input">
+        </div>
+        <div class="col-md-2 col-6">
+          <label class="form-label small text-secondary fw-bold">Shaded Area (%)</label>
+          <input name="obs_shaded_area_pct[]" type="number" step="1" min="0" max="100" class="form-control sp-input">
+        </div>
+        <div class="col-md-3 col-6">
+          <label class="form-label small text-secondary fw-bold">Season Impact</label>
+          <select name="obs_season[]" class="form-select form-control sp-input">
+            <option selected>Low</option><option>Medium</option><option>High</option>
+          </select>
+        </div>
+        <div class="col-md-3 col-6">
+          <label class="form-label small text-secondary fw-bold">Mitigation</label>
+          <select name="obs_mitigation[]" class="form-select form-control sp-input">
+            <option selected>None</option><option>Bypass diodes</option>
+            <option>DC optimisers</option><option>Micro-inverters</option><option>Combination</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label small text-secondary fw-bold">Inspector Notes</label>
+          <textarea name="obs_notes[]" rows="2" maxlength="400" class="form-control sp-input"></textarea>
+        </div>
+      </div>
+    </div>
+  </template>
 
   {# ── SVG illustration: sun path, obstruction, shadow, PV array ───── #}
   {# Reactive: the number of shaded panels + shadow opacity reflect the     #}
@@ -381,26 +507,43 @@
 
         {# ── PV array: perspective view (12 modules in 2 rows of 6) ──── #}
         {# Drawn in inclined-look: front edge lower than back, slight tilt. #}
+        {# ── Full PV array grid (every panel from results.num_panels) ──── #}
+        {# Falls back to a representative 36-panel grid when the project    #}
+        {# hasn't been calculated yet. JS reactor shades panels left→right  #}
+        {# as the operator picks a heavier loss class.                     #}
+        {% set _np = project.data.get('results', {}).get('num_panels', 0) | int %}
+        {% if _np <= 0 %}
+          {% set _np = 36 %}
+          {% set _np_is_placeholder = True %}
+        {% else %}
+          {% set _np_is_placeholder = False %}
+        {% endif %}
+        {# Choose a grid that roughly matches the array space (580 × 75).   #}
+        {% set _rows = 2 if _np <= 20 else 3 if _np <= 45 else 4 if _np <= 80 else 5 if _np <= 130 else 6 %}
+        {% set _cols = ((_np + _rows - 1) // _rows) %}
+        {% set _grid_x = 240 %}
+        {% set _grid_y = 252 %}
+        {% set _grid_w = 580 %}
+        {% set _grid_h = 90 %}
+        {% set _cell_w = (_grid_w / _cols) - 1 %}
+        {% set _cell_h = (_grid_h / _rows) - 1 %}
         <g id="pvArray">
-          {% for i in range(6) %}
-            {# back row (further) #}
-            <polygon id="pvBack{{ i }}"
-                     points="{{ 240 + i*90 }},255 {{ 320 + i*90 }},250 {{ 318 + i*90 }},290 {{ 238 + i*90 }},295"
-                     fill="url(#pvCells)" stroke="#1e1e3a" stroke-width="1"/>
-            {# front row (closer) #}
-            <polygon id="pvFront{{ i }}"
-                     points="{{ 238 + i*90 }},295 {{ 318 + i*90 }},290 {{ 316 + i*90 }},335 {{ 236 + i*90 }},340"
-                     fill="url(#pvCells)" stroke="#1e1e3a" stroke-width="1"/>
-            {# tilt label (back row only, first panel) #}
-            {% if i == 0 %}
-              <text x="245" y="270" fill="#fff" font-size="9" opacity="0.7">PV{{ i+1 }}</text>
-              <text x="245" y="310" fill="#fff" font-size="9" opacity="0.7">PV{{ i+7 }}</text>
-            {% else %}
-              <text x="{{ 245 + i*90 }}" y="270" fill="#fff" font-size="9" opacity="0.7">PV{{ i+1 }}</text>
-              <text x="{{ 245 + i*90 }}" y="310" fill="#fff" font-size="9" opacity="0.7">PV{{ i+7 }}</text>
-            {% endif %}
+          {% for i in range(_np) %}
+            {% set _r = (i // _cols) %}
+            {% set _c = (i %  _cols) %}
+            {% set _x = _grid_x + _c * (_grid_w / _cols) %}
+            {% set _y = _grid_y + _r * (_grid_h / _rows) %}
+            <rect id="pv_{{ i }}"
+                  x="{{ "%.2f"|format(_x) }}" y="{{ "%.2f"|format(_y) }}"
+                  width="{{ "%.2f"|format(_cell_w) }}" height="{{ "%.2f"|format(_cell_h) }}"
+                  fill="url(#pvCells)" stroke="#0a0a14" stroke-width="0.5"/>
           {% endfor %}
         </g>
+        <text x="{{ _grid_x }}" y="{{ _grid_y - 6 }}" fill="#a0a0c8" font-size="10" font-weight="600">
+          PV Array — <tspan fill="#fbbf24">{{ _np }} panels</tspan>
+          ({{ _rows }} rows &times; {{ _cols }} cols
+          {% if _np_is_placeholder %} · representative grid · run loads to update{% endif %})
+        </text>
 
         {# ── Compass + tilt indicator (lower-right) ──────────────────── #}
         <g transform="translate(820, 320)">
@@ -508,32 +651,30 @@
     const tiltInput   = document.querySelector('input[name="tilt_deg"]');
     const azInput     = document.querySelector('select[name="azimuth"]');
 
-    function pvEl(prefix, i){ return document.getElementById(prefix + i); }
+    // All PV panel elements (one rect per panel, pv_0 .. pv_{N-1}).
+    // Cached on first call; refreshed if N changes (it doesn't on this page).
+    const pvAll = Array.from(document.querySelectorAll('#pvArray rect[id^="pv_"]'));
+    const pvTotal = pvAll.length;
 
-    // factor (1.00 -> 0.60) maps to a number of shaded modules out of 12.
-    // Smooth-ish ramp: each 5% loss tier shades ~1.5 panels on average.
+    // factor (1.00 -> 0.60) maps to the share of modules shaded. Heavy
+    // loss covers the whole array; light loss covers only the leading
+    // edge nearest the obstruction.
     function shadedCount(factor){
-      const loss = 1.0 - factor;
-      const n = Math.round(loss * 12 * 2.4);
-      return Math.max(0, Math.min(12, n));
+      const loss = 1.0 - factor;       // 0 .. 0.40
+      // 5% loss -> ~10% of panels; 40% loss -> ~100%.
+      const share = Math.min(1, loss * 2.5);
+      return Math.max(0, Math.min(pvTotal, Math.round(pvTotal * share)));
     }
 
     function redrawSvg(factor, label){
       const n = shadedCount(factor);
-      // Order: shade front-row left-to-right first (closer to obstruction),
-      // then back-row left-to-right. Matches the spatial intuition that
-      // a side obstruction shadows the near modules first.
-      const order = [
-        ['pvFront', 0],['pvFront', 1],['pvFront', 2],
-        ['pvBack',  0],['pvBack',  1],['pvBack',  2],
-        ['pvFront', 3],['pvBack',  3],
-        ['pvFront', 4],['pvBack',  4],
-        ['pvFront', 5],['pvBack',  5],
-      ];
-      for (let i = 0; i < order.length; i++){
-        const el = pvEl(order[i][0], order[i][1]);
-        if (!el) continue;
-        el.setAttribute('fill', i < n ? 'url(#pvCellsShaded)' : 'url(#pvCells)');
+      // Order: shade panels left-to-right (closest to obstruction first),
+      // top-to-bottom within each column when more than one row exists.
+      // Because IDs run row-major (top-left -> right -> next row), shading
+      // the first N IDs already matches "near the obstruction first" given
+      // our obstruction is drawn on the left side of the scene.
+      for (let i = 0; i < pvTotal; i++){
+        pvAll[i].setAttribute('fill', i < n ? 'url(#pvCellsShaded)' : 'url(#pvCells)');
       }
       // Shadow polygon: widens + darkens with loss. Caps so 60% factor
       // still leaves room to see the array under it.
@@ -605,6 +746,53 @@
     });
     if (tiltInput) tiltInput.addEventListener('input', refreshTiltAz);
     if (azInput)   azInput.addEventListener('change', refreshTiltAz);
+
+    // ── Multi-obstruction list ─────────────────────────────────────────
+    const obsList    = document.getElementById('obstructionList');
+    const obsCounter = document.getElementById('obsCount');
+    const obsTmpl    = document.getElementById('obstructionTemplate');
+    const addBtn     = document.getElementById('addObstructionBtn');
+
+    function renumberObstructions(){
+      const cards = obsList.querySelectorAll('.obstruction-card');
+      cards.forEach((card, i) => {
+        const idx = card.querySelector('.obs-index');
+        if (idx) idx.textContent = (i + 1);
+      });
+      // Keep at least one card; disable all remove buttons when only one.
+      const onlyOne = cards.length <= 1;
+      obsList.querySelectorAll('.remove-obs').forEach(btn => {
+        btn.disabled = onlyOne;
+        btn.title = onlyOne ? 'Keep at least one obstruction' : '';
+      });
+      if (obsCounter) obsCounter.textContent = cards.length;
+      // Re-apply units to any newly cloned `.js-unit-len` spans.
+      applyUnits((document.querySelector('input[name="units"]:checked') || {}).value || 'metric');
+    }
+
+    addBtn && addBtn.addEventListener('click', function(){
+      const frag = obsTmpl.content.cloneNode(true);
+      obsList.appendChild(frag);
+      renumberObstructions();
+      // Scroll the newly added card into view so the operator can see it.
+      const cards = obsList.querySelectorAll('.obstruction-card');
+      const last = cards[cards.length - 1];
+      if (last && last.scrollIntoView) last.scrollIntoView({behavior:'smooth', block:'center'});
+    });
+
+    // Delegated remove handler — works for both the server-rendered cards
+    // and any cloned at runtime.
+    obsList && obsList.addEventListener('click', function(ev){
+      const btn = ev.target.closest('.remove-obs');
+      if (!btn || btn.disabled) return;
+      const card = btn.closest('.obstruction-card');
+      if (!card) return;
+      card.remove();
+      renumberObstructions();
+    });
+
+    // Initial pass to set indices + button states correctly.
+    renumberObstructions();
 
     // Initial paint from currently-checked row (or first row otherwise).
     const initialRow = document.querySelector('.shading-row input[type=radio]:checked')
