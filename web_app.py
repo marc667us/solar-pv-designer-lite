@@ -2654,6 +2654,20 @@ def project_location(pid):
         _eng = _engine_full_analysis(project, obstructions)
         if _eng:
             data["shading"]["engine"] = _eng
+            # Day-3 wiring: hand the engine output to the ADK shading
+            # agent for narrative + per-obstruction analysis + mitigation
+            # what-ifs. Agent never raises; on full failure it returns a
+            # deterministic narrative built from the engine numbers.
+            try:
+                from engine.agents.shading_agent import run_shading_agent
+                _agent_out = run_shading_agent(_eng, {"obstructions": obstructions})
+                if _agent_out:
+                    data["shading"]["agent_v2"] = _agent_out
+            except Exception as _ae:
+                try:
+                    app.logger.warning("shading agent failure: %s", _ae)
+                except Exception:
+                    pass
         save_project_data(pid, data)
         return redirect(url_for("project_loads", pid=pid))
 
@@ -12282,6 +12296,9 @@ def _engine_full_analysis(project, obstructions, on_date=None,
                     "avg_frac": round(s.avg_fraction, 4),
                     "partially": s.panels_partially_shaded,
                     "fully":     s.panels_fully_shaded,
+                    # Day-3 add: per-panel fraction at THIS step
+                    # so the time slider can re-color panels live.
+                    "panel_fracs": [round(f, 3) for f in s.per_panel_fraction],
                 }
                 for s in result["series"]
             ],
