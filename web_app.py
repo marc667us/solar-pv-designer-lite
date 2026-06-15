@@ -9430,6 +9430,52 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                              "Try different search criteria or add an ANTHROPIC_API_KEY."})
 
 
+@app.route("/admin/agent/leads/batch-delete", methods=["POST"])
+@admin_required
+@limiter.limit("5 per hour")
+def admin_agent_leads_batch_delete():
+    """Wipe every lead row where source='agent' in a single SQL.
+
+    Triggered from the admin_agent.html batch-delete button. Owner
+    spec 2026-06-15: "batch delete button to delete all project[s]
+    created by the agent and stored on the admin page".
+
+    Guards (defence-in-depth):
+      - @admin_required (only admin role)
+      - CSRF token via csrf_protect()
+      - rate-limited 5/hr (slow accidental loops)
+      - explicit confirm field must be the literal string DELETE
+        (the template forces a 2-step JS confirm before setting it)
+      - audit_logs row with action=agent_leads_batch_delete + count
+    """
+    csrf_protect()
+    if (request.form.get("confirm") or "").strip() != "DELETE":
+        flash("Delete not confirmed.", "warning")
+        return redirect(url_for("admin_agent"))
+    deleted = 0
+    try:
+        with get_db() as c:
+            deleted = c.execute(
+                "SELECT COUNT(*) FROM leads WHERE source='agent'"
+            ).fetchone()[0] or 0
+            c.execute("DELETE FROM leads WHERE source='agent'")
+            try:
+                c.execute(
+                    "INSERT INTO audit_logs (user_id, username, action, "
+                    "ip_address, details) VALUES (?,?,?,?,?)",
+                    (session.get("user_id"), session.get("username", ""),
+                     "agent_leads_batch_delete", _get_real_ip(),
+                     f"deleted={deleted}"))
+            except Exception:
+                pass
+    except Exception as e:
+        flash(f"Batch delete failed: {e}", "danger")
+        return redirect(url_for("admin_agent"))
+    flash(f"Wiped {deleted} agent-saved prospect(s) from the Leads table.",
+          "success")
+    return redirect(url_for("admin_agent"))
+
+
 @app.route("/admin/agent/notify", methods=["POST"])
 @admin_required
 def admin_agent_notify():
