@@ -120,36 +120,87 @@
 <div class="solar-card v2-shading-card p-0 mb-4 overflow-hidden"
      style="border:1px solid rgba(245,158,11,.45);
             background:linear-gradient(180deg,#0a0a1a 0%,#0d1023 60%,#101632 100%);">
-  {# ── Top header — title left, location/date/time strip right.       #}
-  <div class="d-flex justify-content-between align-items-center p-3 flex-wrap gap-2"
-       style="border-bottom:1px solid #1e1e3a">
-    <div>
-      <div class="fw-black" style="color:var(--solar-gold);font-size:18px">
-        <i class="bi bi-box me-2"></i>AI 3D Shading Simulation
+  {# ── Spec-style header banner — title + site type + location + date  #}
+  {# + time, matching the AI 3D SHADING SIMULATION header in the spec   #}
+  {# image (pvsolar1/3d issue/ChatGPT*11_51_24*.png).                    #}
+  <div class="p-3"
+       style="background:linear-gradient(90deg, #061224 0%, #0b2c4d 100%);
+              border-bottom:2px solid #1f3b57">
+    <div class="d-flex justify-content-between align-items-end flex-wrap gap-3">
+      <div>
+        <div class="fw-black" style="color:#fff;font-size:24px;letter-spacing:.4px;
+                                      line-height:1.1">
+          <i class="bi bi-box me-2" style="color:var(--solar-gold)"></i>
+          AI 3D SHADING SIMULATION
+          {% if _obs and _obs|length > 1 %}
+            <span style="color:#9ec5fe;font-size:18px"> — MULTIPLE OBSTRUCTIONS</span>
+          {% elif _obs %}
+            <span style="color:#9ec5fe;font-size:18px"> — SINGLE OBSTRUCTION</span>
+          {% endif %}
+        </div>
+        <div class="mt-1" style="color:#dbeafe;font-size:13px;letter-spacing:.3px">
+          SITE: {{ (project.name or 'Untitled Project') | upper }}
+          {% set _mt = project.data.mounting_type or '' %}
+          {% if _mt %}
+            &nbsp;·&nbsp; {{ _mt.replace('_',' ').upper() }}
+          {% endif %}
+        </div>
       </div>
-      <div class="text-secondary" style="font-size:11px">
-        Drag to rotate · scroll to zoom · right-drag to pan. Sun position from GPS + date.
+      <div class="d-flex flex-wrap gap-2" style="font-size:11px">
+        {# Location chip. #}
+        <div class="p-2 rounded text-center" style="background:rgba(0,0,0,.35);
+                                                     border:1px solid #1f3b57;
+                                                     min-width:120px">
+          <div style="color:#7c98c0;font-size:9px;letter-spacing:.4px">LOCATION</div>
+          <div class="fw-bold" style="color:#9ec5fe;font-size:12px">
+            {{ project.data.region or '—' }}
+          </div>
+          <div style="color:#7c98c0;font-size:10px">
+            {% if _eng %}
+              {{ "%.4f"|format(_eng.lat) }}°
+              / {{ "%.4f"|format(_eng.lon) }}°
+            {% else %}
+              {{ project.data.country or '' }}
+            {% endif %}
+          </div>
+        </div>
+        {# Date chip. #}
+        <div class="p-2 rounded text-center" style="background:rgba(0,0,0,.35);
+                                                     border:1px solid #1f3b57;
+                                                     min-width:120px">
+          <div style="color:#7c98c0;font-size:9px;letter-spacing:.4px">DATE</div>
+          <div class="fw-bold" style="color:#fff;font-size:12px">
+            {{ _eng.on_date if _eng else '21 June' }}
+          </div>
+          <div style="color:#7c98c0;font-size:10px">Summer solstice</div>
+        </div>
+        {# Time chip. #}
+        <div class="p-2 rounded text-center" style="background:rgba(0,0,0,.35);
+                                                     border:1px solid #1f3b57;
+                                                     min-width:90px">
+          <div style="color:#7c98c0;font-size:9px;letter-spacing:.4px">TIME</div>
+          <div class="fw-bold" style="color:#ffd24a;font-size:12px">
+            {% if _eng and _eng.series %}
+              {{ _eng.series[0].time }}–{{ _eng.series[-1].time }}
+            {% else %}
+              07:00–18:00
+            {% endif %}
+          </div>
+          <div style="color:#7c98c0;font-size:10px">Local solar</div>
+        </div>
       </div>
     </div>
-    {% if _eng %}
-    <div class="p-2 rounded text-end" style="background:rgba(255,255,255,.04);
-                                              border:1px solid #1e1e3a;font-size:11px">
-      <div class="text-secondary" style="font-size:10px">LOCATION</div>
-      <div class="fw-bold" style="color:var(--solar-gold);font-size:12px">
-        {{ project.data.region or '—' }}, {{ project.data.country or '—' }}
-      </div>
-      <div class="text-secondary mt-1" style="font-size:10px">
-        GPS {{ "%.4f"|format(_eng.lat) }}° / {{ "%.4f"|format(_eng.lon) }}°
-        · Date {{ _eng.on_date }}
-      </div>
-    </div>
-    {% endif %}
     {% if not _eng %}
-    <div class="small text-secondary mt-2">
+    <div class="mt-2 small" style="color:#9ec5fe;font-size:11px">
       Engine has not produced output yet. Save the form below at least once with
-      obstructions + a Location step so the engine can run with site GPS + panel count.
+      obstructions + a Location step so the engine can run with site GPS +
+      panel count.
     </div>
     {% endif %}
+    <div class="mt-2 small" style="color:#9ec5fe;font-size:11px;opacity:.8">
+      <i class="bi bi-info-circle me-1"></i>
+      Drag to rotate · scroll to zoom · right-drag to pan
+    </div>
   </div>
 
   {# ── Manual factor override row (the human can introduce a factor;  #}
