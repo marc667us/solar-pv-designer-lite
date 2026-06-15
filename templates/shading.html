@@ -46,27 +46,13 @@
 {# Default view from 2026-06-14. The legacy 2.5D SVG view below is      #}
 {# kept as a fallback; add `?v1=1` to the URL to hide this and show     #}
 {# only the legacy view if needed.                                      #}
-{# Mobile auto-fallback (added 2026-06-15): phones get the lightweight  #}
-{# v1 SVG view automatically so they don't download the 1.27 MB         #}
-{# Three.js bundle on a slow carrier. Operator can force the desktop    #}
-{# 3D view from a phone with ?force_v2=1.                                #}
+{# Mobile auto-fallback REMOVED 2026-06-15 per owner: "mobile app still #}
+{# show old shading model picture" + "must check mobile side 3d         #}
+{# shading model". The v2 dashboard now renders on mobile by default;   #}
+{# canvas height already adapts via the responsive media queries        #}
+{# (440 px <992px, 340 px <576px). The legacy 2D view is still          #}
+{# available with ?v1=1 if Three.js fails on a particular device.       #}
 {# ───────────────────────────────────────────────────────────────────── #}
-<script>
-(function(){
-  if (window.location.search.indexOf('v1=1')      !== -1) return;
-  if (window.location.search.indexOf('force_v2=1') !== -1) return;
-  if (sessionStorage.getItem('shading_force_v2') === '1') return;
-  // Treat narrow viewports and modern mobile UAs the same.
-  var narrow = window.matchMedia('(max-width: 575px)').matches;
-  var mobUA  = /Android|iPhone|iPad|iPod|Mobile|Opera Mini|BlackBerry/i.test(navigator.userAgent);
-  if (narrow && mobUA) {
-    var u = new URL(window.location.href);
-    u.searchParams.set('v1', '1');
-    u.searchParams.set('m',  '1');
-    window.location.replace(u.toString());
-  }
-})();
-</script>
 {% if not request.args.get('v1') %}
 {% set _eng = shading.get('engine') if shading else None %}
 {% set _obs = shading.get('obstructions') or [] %}
