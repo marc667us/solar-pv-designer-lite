@@ -12451,6 +12451,27 @@ def project_shading(pid):
             return redirect(url_for("project_shading", pid=pid))
         return redirect(url_for("project_loads", pid=pid))
 
+    # -- Server-side mobile fallback (added 2026-06-15 after
+    #    "mobile dont work / site can not be reach" reports).
+    #    Narrow-screen phones get an HTTP 302 to ?v1=1 before any
+    #    of the heavy v2 HTML is rendered. Cheap, conservative,
+    #    and skippable with ?force_v2=1 if the operator wants the
+    #    full dashboard on a phone.
+    try:
+        if (not request.args.get("v1")
+                and not request.args.get("force_v2")
+                and not request.args.get("manual_factor")
+                and not request.args.get("demo")):
+            _ua = (request.headers.get("User-Agent") or "").lower()
+            _mob = any(t in _ua for t in (
+                "android", "iphone", "ipod", "blackberry",
+                "opera mini", "iemobile", "windows phone"))
+            if _mob:
+                return redirect(url_for("project_shading", pid=pid,
+                                        v1="1", m="1"))
+    except Exception:
+        pass
+
     shading = project["data"].get("shading", {}) or {}
     # Day-5 hotfix: if the v2 flag is set and the engine has
     # never run on this project, run it now using whatever
