@@ -1248,8 +1248,8 @@
     var hw = host.clientWidth || 800;
     var hh = host.clientHeight || 560;
     const camera = new THREE.PerspectiveCamera(50, hw / hh, 0.1, 500);
-    camera.position.set(24, 14, 26);
-    camera.lookAt(0, 3, 0);
+    camera.position.set(28, 18, 32);
+    camera.lookAt(0, 4, 0);
     _ck('camera created (' + hw + 'x' + hh + ')');
 
     // Renderer
@@ -1325,7 +1325,11 @@
         _placedSun = true;
       }
     }
-    if (!_placedSun) placeSun(60, 180);   // sane default — noon, south
+    // Default sun: 09:00 morning ESE, matching the spec image
+    // (altitude 28.6°, azimuth 115°) so the scene reads identical to
+    // the AI 3D Shading Simulation reference even when the project has
+    // no engine series yet.
+    if (!_placedSun) placeSun(28.6, 115);
 
     // Ground — bright green grass like the reference images. Two
     // discs: a wider tan "earth" base in the distance plus the green
@@ -1374,61 +1378,130 @@
     const totalH = rows * panelH + (rows - 1) * gapV;
     const tiltDeg = engineData.tilt_deg || 15;
     const tiltRad = THREE.MathUtils.degToRad(tiltDeg);
-    const arrayY  = 1.0;
 
-    // ── Installation building (host for the PV array). Per the AI 3D
-    //    Shading Simulation spec image, every scene shows the building
-    //    that hosts the solar installation — a low pitched-roof house
-    //    sized to seat the PV array on its roof. Renders even when no
-    //    engine data is present so the empty-state still looks like a
-    //    real solar site.
+    // ── Installation building — proper 4-bedroom single-storey house
+    //    with full-height walls (3.0 m), true hip roof (4 faces meeting
+    //    at a horizontal ridge), windows on all four faces, and a
+    //    front door. Sized to seat the PV array on the south slope of
+    //    the roof. Per the AI 3D Shading Simulation spec image
+    //    (pvsolar1/3d issue/ and /real shading/), the scene must
+    //    show a recognisable residential dwelling, not a slab.
+    const HOUSE = {
+      W: Math.max(14, totalW + 4.0),
+      D: Math.max(11, totalH + 4.0),
+      wallH:  3.0,         // proper 1-storey wall height
+      roofRise: 2.0,       // hip-roof rise above the eave line
+    };
+    const HOUSE_EAVE  = HOUSE.wallH;
+    const HOUSE_RIDGE = HOUSE.wallH + HOUSE.roofRise;
+    // Array sits on the south slope, mid-way between eave and ridge.
+    const arrayY = (HOUSE_EAVE + HOUSE_RIDGE) / 2 + 0.10;
+    const arrayZ = HOUSE.D * 0.18;          // slight push toward south face
+
     const houseGroup = new THREE.Group();
     {
-      const houseW = Math.max(14, totalW + 3.0);
-      const houseD = Math.max(11, totalH + 3.0);
-      const wallH  = 0.55;
+      const hx = HOUSE.W / 2, hz = HOUSE.D / 2;
+      // ── Walls (solid box, full storey height, cream stucco).
       const wallMat = new THREE.MeshStandardMaterial({
-        color: 0xe8d5b7, roughness: 0.95
+        color: 0xeadbb9, roughness: 0.96
       });
       const walls = new THREE.Mesh(
-        new THREE.BoxGeometry(houseW, wallH, houseD),
+        new THREE.BoxGeometry(HOUSE.W, HOUSE.wallH, HOUSE.D),
         wallMat
       );
-      walls.position.y = wallH / 2;
+      walls.position.y = HOUSE.wallH / 2;
       walls.castShadow = true; walls.receiveShadow = true;
       houseGroup.add(walls);
-      // Pitched roof matching panel tilt so the array visually sits on
-      // the south-facing slope. Slightly oversized so panels never poke
-      // through the eaves.
+
+      // ── Hip roof — 4 faces meeting at a horizontal ridge along the
+      //    long axis (X). Two long trapezoidal faces (south + north),
+      //    two short triangular faces (east + west). Built from raw
+      //    BufferGeometries so we get clean, properly-shaded planes.
       const roofMat = new THREE.MeshStandardMaterial({
         color: 0xb04531, roughness: 0.85, side: THREE.DoubleSide
       });
-      const roof = new THREE.Mesh(
-        new THREE.PlaneGeometry(houseW * 1.04, houseD * 1.04),
-        roofMat
-      );
-      roof.rotation.x = -Math.PI / 2 + tiltRad;
-      roof.position.y = wallH + 0.05;
-      roof.castShadow = true; roof.receiveShadow = true;
-      houseGroup.add(roof);
-      // Front door + two windows on the south face for "house-ness".
+      const ridgeHalfX = Math.max(0.5, hx - hz);  // ridge length along X
+      // 4 eave corners + 2 ridge endpoints.
+      const eSW = [-hx, HOUSE_EAVE,  hz];
+      const eSE = [ hx, HOUSE_EAVE,  hz];
+      const eNE = [ hx, HOUSE_EAVE, -hz];
+      const eNW = [-hx, HOUSE_EAVE, -hz];
+      const rW  = [-ridgeHalfX, HOUSE_RIDGE, 0];
+      const rE  = [ ridgeHalfX, HOUSE_RIDGE, 0];
+      function makeRoofFace(verts) {
+        // verts is an array of 3 or 4 [x,y,z] points. We triangulate
+        // as a fan from verts[0]. Computes normals + adds to roof.
+        const triCount = verts.length - 2;
+        const pos = new Float32Array(triCount * 9);
+        let idx = 0;
+        for (let i = 1; i <= triCount; i++) {
+          pos.set(verts[0],     idx); idx += 3;
+          pos.set(verts[i],     idx); idx += 3;
+          pos.set(verts[i + 1], idx); idx += 3;
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        g.computeVertexNormals();
+        const m = new THREE.Mesh(g, roofMat);
+        m.castShadow = true; m.receiveShadow = true;
+        houseGroup.add(m);
+      }
+      // South face — eSW -> eSE -> rE -> rW (trapezoid).
+      makeRoofFace([eSW, eSE, rE, rW]);
+      // North face — eNE -> eNW -> rW -> rE (trapezoid, reversed winding).
+      makeRoofFace([eNE, eNW, rW, rE]);
+      // East face — eSE -> eNE -> rE (triangle).
+      makeRoofFace([eSE, eNE, rE]);
+      // West face — eNW -> eSW -> rW (triangle).
+      makeRoofFace([eNW, eSW, rW]);
+
+      // ── Front door (south face, slightly offset west of centre).
       const door = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.55, 0.95),
-        new THREE.MeshStandardMaterial({ color: 0x6d4c41, roughness: 0.8 })
+        new THREE.PlaneGeometry(0.95, 2.05),
+        new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.75 })
       );
-      door.position.set(0, wallH * 0.5, houseD / 2 + 0.01);
+      door.position.set(-HOUSE.W * 0.18, 1.05, hz + 0.02);
       houseGroup.add(door);
+
+      // ── Glazing on all four faces (south + north get 3 windows each,
+      //    east + west get 2). Slight emissive so they read from a
+      //    distance like the reference image.
       const winMat = new THREE.MeshStandardMaterial({
-        color: 0xffeaa0, emissive: 0x55411a, emissiveIntensity: 0.45
+        color: 0xa9d2ea, emissive: 0x1f2f44, emissiveIntensity: 0.45,
+        roughness: 0.30, metalness: 0.5
       });
-      [-houseW * 0.28, houseW * 0.28].forEach(wx => {
-        const win = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.4), winMat);
-        win.position.set(wx, wallH * 0.62, houseD / 2 + 0.01);
-        houseGroup.add(win);
+      function addWin(x, y, z, ry, ww, wh) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), winMat);
+        m.position.set(x, y, z);
+        if (ry) m.rotation.y = ry;
+        houseGroup.add(m);
+      }
+      // South face — 3 windows (skipping the spot where the door sits).
+      [-HOUSE.W * 0.36, HOUSE.W * 0.06, HOUSE.W * 0.32].forEach(wx => {
+        addWin(wx, 1.7, hz + 0.02, 0, 1.3, 1.0);
       });
+      // North face — 3 evenly spaced.
+      [-HOUSE.W * 0.32, 0, HOUSE.W * 0.32].forEach(wx => {
+        addWin(wx, 1.7, -hz - 0.02, Math.PI, 1.3, 1.0);
+      });
+      // East + West faces — 2 windows each.
+      [-HOUSE.D * 0.25, HOUSE.D * 0.25].forEach(wz => {
+        addWin( hx + 0.02, 1.7, wz,  Math.PI / 2, 1.3, 1.0);
+        addWin(-hx - 0.02, 1.7, wz, -Math.PI / 2, 1.3, 1.0);
+      });
+
+      // ── Eave fascia — a thin dark band where the wall meets the roof
+      //    so the roof line reads cleanly from a distance.
+      const fascia = new THREE.Mesh(
+        new THREE.BoxGeometry(HOUSE.W + 0.4, 0.12, HOUSE.D + 0.4),
+        new THREE.MeshStandardMaterial({ color: 0x3a2820, roughness: 0.9 })
+      );
+      fascia.position.y = HOUSE_EAVE - 0.06;
+      houseGroup.add(fascia);
     }
     scene.add(houseGroup);
-    _ck('installation house added');
+    _ck('installation house added (' + HOUSE.W.toFixed(1) + 'x' +
+        HOUSE.D.toFixed(1) + 'x' + HOUSE_RIDGE.toFixed(1) + ' m, hip roof)');
 
     const panelGroup = new THREE.Group();
     panelGroup.rotation.x = -tiltRad;
@@ -1458,7 +1531,8 @@
         pid++;
       }
     }
-    panelGroup.position.y = arrayY;
+    // Seat the array on the south slope of the hip roof.
+    panelGroup.position.set(0, arrayY, arrayZ);
     scene.add(panelGroup);
     _ck('panel grid added (' + panelMeshes.length + '/' + totalPanels +
         ' panels, cols=' + cols + ', rows=' + rows + ', tilt=' + tiltDeg + ')');
@@ -1651,6 +1725,64 @@
           console.warn('[shading3d] obstruction label sprite #' + (i + 1) +
                        ' failed:', sprErr);
         }
+        // ── Engineering dimension callout — H/D card next to the
+        //    obstruction, matching the labelled boxes in the spec image.
+        try {
+          const obsH = Math.max(0.2, parseFloat(obs.height)   || 1);
+          const obsD = Math.max(0.5, parseFloat(obs.distance) || 5);
+          const titleText = String(obs.type || 'Obstruction').toUpperCase();
+          const cv2 = document.createElement('canvas');
+          cv2.width = 260; cv2.height = 132;
+          const cx2 = cv2.getContext('2d');
+          if (cx2) {
+            // Dark card background with light border.
+            cx2.fillStyle = 'rgba(8, 16, 32, 0.92)';
+            cx2.strokeStyle = '#f59e0b';
+            cx2.lineWidth = 3;
+            cx2.beginPath();
+            const r = 14;
+            cx2.moveTo(r, 0);
+            cx2.lineTo(260 - r, 0);
+            cx2.quadraticCurveTo(260, 0, 260, r);
+            cx2.lineTo(260, 132 - r);
+            cx2.quadraticCurveTo(260, 132, 260 - r, 132);
+            cx2.lineTo(r, 132);
+            cx2.quadraticCurveTo(0, 132, 0, 132 - r);
+            cx2.lineTo(0, r);
+            cx2.quadraticCurveTo(0, 0, r, 0);
+            cx2.closePath();
+            cx2.fill();
+            cx2.stroke();
+            // Title (orange).
+            cx2.fillStyle = '#f59e0b';
+            cx2.font = 'bold 16px Segoe UI, Arial, sans-serif';
+            cx2.textAlign = 'left'; cx2.textBaseline = 'top';
+            cx2.fillText('#' + (i + 1) + '  ' +
+                         (titleText.length > 18 ? titleText.slice(0, 18) : titleText),
+                         14, 12);
+            // Dimension rows (white).
+            cx2.fillStyle = '#ffffff';
+            cx2.font = 'bold 18px Segoe UI, Arial, sans-serif';
+            cx2.fillText('Height: '   + obsH.toFixed(1) + ' m', 14, 42);
+            cx2.fillText('Distance: ' + obsD.toFixed(1) + ' m', 14, 68);
+            cx2.fillStyle = '#9ec5fe';
+            cx2.font = '14px Segoe UI, Arial, sans-serif';
+            cx2.fillText('Direction: ' + String(obs.direction || 'South'),
+                         14, 100);
+            const tex2 = new THREE.CanvasTexture(cv2);
+            const spr2 = new THREE.Sprite(new THREE.SpriteMaterial({
+              map: tex2, depthTest: false
+            }));
+            // Place the card a metre above the obstruction's top, sized
+            // so it reads at the typical 30 m scene scale.
+            spr2.position.set(0, obsH + 3.0, 0);
+            spr2.scale.set(7.5, 3.8, 1);
+            mesh.add(spr2);
+          }
+        } catch (dimErr) {
+          console.warn('[shading3d] dimension callout #' + (i + 1) +
+                       ' failed:', dimErr);
+        }
         obstructionGroup.add(mesh);
       } catch (obsErr) {
         console.warn('[shading3d] obstruction #' + (i + 1) + ' failed:', obsErr);
@@ -1722,20 +1854,31 @@
     scene.add(shadowPolyGroup);
     _ck('cast-shadow polygons added (' + shadowPolyGroup.children.length + ')');
 
-    // ── Visible sun rays — a fan from the sun toward the array.
+    // ── Visible sun rays — dense fan of parallel lines streaming from
+    //    the sun toward the array, like the reference image. The
+    //    pattern is built by sampling targets on a small grid around
+    //    the array centre, so the rays clearly read as "this sun is
+    //    illuminating that array" rather than 5 isolated lines.
     const raysGroup = new THREE.Group();
     function rebuildRays() {
       while (raysGroup.children.length) raysGroup.remove(raysGroup.children[0]);
       const sp = sunMesh.position;
-      const targets = [
-        new THREE.Vector3(-totalW / 2, arrayY, 0),
-        new THREE.Vector3( totalW / 2, arrayY, 0),
-        new THREE.Vector3(0, arrayY, -totalH / 2),
-        new THREE.Vector3(0, arrayY,  totalH / 2),
-        new THREE.Vector3(0, arrayY, 0),
-      ];
+      const targets = [];
+      // 7-wide × 3-deep grid spanning the array footprint.
+      const RAY_COLS = 7, RAY_ROWS = 3;
+      for (let r = 0; r < RAY_ROWS; r++) {
+        for (let c = 0; c < RAY_COLS; c++) {
+          const u = (c / (RAY_COLS - 1)) - 0.5;
+          const v = (r / (RAY_ROWS - 1)) - 0.5;
+          targets.push(new THREE.Vector3(
+            u * totalW * 1.05,
+            arrayY,
+            arrayZ + v * totalH * 1.05
+          ));
+        }
+      }
       const mat = new THREE.LineBasicMaterial({
-        color: 0xffe066, transparent: true, opacity: 0.55
+        color: 0xffe066, transparent: true, opacity: 0.45
       });
       targets.forEach(t => {
         const g = new THREE.BufferGeometry().setFromPoints([sp, t]);
@@ -1783,7 +1926,7 @@
     controls.minDistance = 8;
     controls.maxDistance = 120;
     controls.maxPolarAngle = Math.PI / 2 - 0.05;
-    controls.target.set(0, 2, 0);
+    controls.target.set(0, 4, 0);
     _ck('OrbitControls wired');
 
     // ── Display-layer toggle wiring.
@@ -1824,7 +1967,7 @@
     const homePos = camera.position.clone();
     document.getElementById('shadingReset')?.addEventListener('click', () => {
       camera.position.copy(homePos);
-      controls.target.set(0, 2, 0);
+      controls.target.set(0, 4, 0);
       controls.update();
     });
     document.querySelectorAll('.shading-view').forEach(b => {
@@ -1833,7 +1976,7 @@
         if (view === 'top')   camera.position.set(0, 50, 0.01);
         if (view === 'south') camera.position.set(0, 12, 40);
         if (view === 'east')  camera.position.set(40, 12, 0);
-        controls.target.set(0, 2, 0);
+        controls.target.set(0, 4, 0);
         controls.update();
       });
     });
@@ -2284,7 +2427,7 @@
     // re-render of the heatmap from the latest engine output.
     document.getElementById('shadingRegen3d')?.addEventListener('click', () => {
       camera.position.copy(homePos);
-      controls.target.set(0, 2, 0);
+      controls.target.set(0, 4, 0);
       controls.update();
       // Re-tint panels with current slider step.
       if (slider) slider.dispatchEvent(new Event('input'));
