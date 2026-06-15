@@ -53,6 +53,12 @@
 {% set _results = project.data.get('results', {}) if project else {} %}
 {% set _pv_base = _results.get('pv_kw_base') or _results.get('pv_kw') or 0 %}
 {% set _factor  = _eng.bucket_factor if _eng else (shading.factor or 1.0) %}
+{# Engine bucket label + loss%, with fallbacks so the action paragraph #}
+{# at line ~763 never references an undefined name. Added 2026-06-15   #}
+{# to fix a regression where _loss / _label were left undefined when   #}
+{# the action block was introduced in 6d3cb21.                          #}
+{% set _label = (_eng.bucket_label if _eng else shading.label) or '' %}
+{% set _loss  = (_eng.bucket_loss_pct if _eng else shading.loss_pct) or 0 %}
 {% set _pv_corrected = (_pv_base / _factor) if _factor and _factor > 0 else _pv_base %}
 {% set _pv_recommended = (_pv_corrected | round(0, 'ceil')) %}
 <style>
