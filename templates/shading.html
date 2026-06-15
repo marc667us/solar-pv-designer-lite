@@ -122,6 +122,104 @@
   @media (max-width: 575px) {
     .shading3d-canvas-responsive { height: 340px !important; }
   }
+
+  /* ── Print stylesheet for the WHOLE shading dashboard. Triggered by
+     the "Print / Save as PDF" button. Owner: "shading 3d must have
+     print screen to print to pdf ... the whole screen 3d and analysis
+     and agent selectable and obstruction form with values ... panels
+     with time and shade effect, print whole to attach to pdf report".
+     Strategy: switch everything to white-paper colours, force the v2
+     dashboard out of its dark gradient shell, hide nav/buttons/admin-
+     ops chrome, and let the 3D canvas, time-step thumbnails, agent
+     analysis, factor table, and obstruction form (with their saved
+     values) flow as a single document.                              */
+  @media print {
+    /* Engineering shell -> printable paper. */
+    .v2-shading-card {
+      background: #fff !important; color: #000 !important;
+      border: 1px solid #888 !important; box-shadow: none !important;
+      overflow: visible !important;
+    }
+    .v2-shading-card * {
+      background: transparent !important; color: #000 !important;
+      box-shadow: none !important; text-shadow: none !important;
+    }
+    .v2-shading-card .text-secondary,
+    .v2-shading-card .small { color: #444 !important; }
+    .v2-shading-card .fw-black,
+    .v2-shading-card .fw-bold { color: #000 !important; }
+    /* Restore the orange highlight on the agent-selected factor
+       row so the printed PDF shows which factor is in effect. */
+    .v2-shading-card tr.table-warning,
+    .v2-shading-card tr[style*="background:rgba(245,158,11"] {
+      background: #fff3cd !important;
+      border-left: 3px solid #f59e0b !important;
+    }
+    /* 3D canvas — fix height so the print page allocates space for
+       the captured frame. preserveDrawingBuffer:true on the renderer
+       keeps the latest frame in the buffer so it actually prints. */
+    .shading3d-canvas-responsive {
+      height: 360px !important; page-break-inside: avoid !important;
+      border: 1px solid #888 !important;
+    }
+    /* Hide the overlay loading spinner, error pane, demo button, and
+       slider controls -- they're irrelevant in print. */
+    #shading3d-loading, #shading3d-error,
+    #shadingDemo10, #shadingTimePlay,
+    .shading-toggle,           /* layer checkboxes (the labels still print) */
+    #shadingPrintBtn,          /* the Print button itself */
+    .obs-remove                /* per-row remove buttons in the form */
+    { display: none !important; }
+    /* Time-step thumbnails strip — keep it on one page. */
+    #shadingThumbStrip { page-break-inside: avoid !important; }
+    #shadingThumbStrip .thumb-card {
+      background: #fff !important;
+      border: 1px solid #888 !important;
+    }
+    /* Affected-panel heat-map cells keep their colour so the bucket
+       legend is meaningful in the printed PDF. */
+    [style*="background:#3949ab"], [style*="background: #3949ab"]
+      { background: #3949ab !important; -webkit-print-color-adjust: exact; }
+    [style*="background:#ffb74d"], [style*="background: #ffb74d"]
+      { background: #ffb74d !important; -webkit-print-color-adjust: exact; }
+    [style*="background:#f57c00"], [style*="background: #f57c00"]
+      { background: #f57c00 !important; -webkit-print-color-adjust: exact; }
+    [style*="background:#c62828"], [style*="background: #c62828"]
+      { background: #c62828 !important; -webkit-print-color-adjust: exact; }
+    [style*="background:#000000"], [style*="background: #000000"]
+      { background: #000 !important; -webkit-print-color-adjust: exact; }
+    /* SVG (sun-path dome + thumbnails) — preserve fills. */
+    .v2-shading-card svg, .v2-shading-card svg * {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    /* Obstruction form (cards below the dashboard) -- values inside
+       inputs / selects print as plain text in every modern browser;
+       just make sure the surrounding card prints with borders.    */
+    form#shadingForm .solar-card, form#shadingForm fieldset {
+      background: #fff !important; color: #000 !important;
+      border: 1px solid #888 !important;
+      page-break-inside: avoid !important;
+    }
+    form#shadingForm input, form#shadingForm select,
+    form#shadingForm textarea {
+      background: #fff !important; color: #000 !important;
+      border: 1px solid #888 !important;
+    }
+    /* Page-break hints so cards don't split awkwardly. */
+    .row.g-0, .row.g-3, .solar-card { page-break-inside: avoid !important; }
+    /* Force solid colour for any inline gradient-text (already handled
+       in base.html for kpi-value etc., re-asserted here so the v2 stat
+       strip's AGENT FACTOR / SYSTEM LOSS values are guaranteed visible). */
+    .v2-shading-card [style*="background-clip:text"],
+    .v2-shading-card [style*="background-clip: text"] {
+      background: none !important;
+      -webkit-text-fill-color: initial !important;
+      background-clip: initial !important;
+      -webkit-background-clip: initial !important;
+      color: #000 !important;
+    }
+  }
 </style>
 <div class="solar-card v2-shading-card p-0 mb-4 overflow-hidden"
      style="border:1px solid rgba(245,158,11,.45);
@@ -208,17 +306,32 @@
         <i class="bi bi-info-circle me-1"></i>
         Drag to rotate · scroll to zoom · right-drag to pan
       </div>
-      {# Quick link to the site-inspection form. Added 2026-06-15 after  #}
-      {# "where is the shading site assessment form, i dont see it".    #}
-      {# Operators land on /shading and now have a direct way to jump   #}
-      {# to the inspection form without going back through /loads.       #}
-      <a href="{{ url_for('inspection_form', pid=project.id) }}"
-         class="btn btn-sm fw-bold"
-         style="background:#f59e0b;color:#0a0a14;border:1px solid #f59e0b;
-                font-size:11px;padding:5px 14px;text-decoration:none">
-        <i class="bi bi-clipboard2-check-fill me-1"></i>
-        Open Site Inspection Form
-      </a>
+      <div class="d-flex gap-2 flex-wrap">
+        {# Quick link to the site-inspection form. Added 2026-06-15.  #}
+        <a href="{{ url_for('inspection_form', pid=project.id) }}"
+           class="btn btn-sm fw-bold"
+           style="background:#f59e0b;color:#0a0a14;border:1px solid #f59e0b;
+                  font-size:11px;padding:5px 14px;text-decoration:none">
+          <i class="bi bi-clipboard2-check-fill me-1"></i>
+          Open Site Inspection Form
+        </a>
+        {# Print-to-PDF entry point. Triggers window.print() which the
+           browser routes through Save-as-PDF on Win / mac. The print
+           stylesheet below restyles every section (3D scene + analysis +
+           factor table + form values) so the operator can attach the
+           result to a shading report. Added 2026-06-15 per owner spec
+           "shading 3d must have print screen to print to pdf of the 3d
+           screen ... panels with time and shade effect, print whole to
+           attach to pdf report". #}
+        <button type="button" id="shadingPrintBtn"
+                class="btn btn-sm fw-bold"
+                style="background:#22c55e;color:#0a0a14;border:1px solid #22c55e;
+                       font-size:11px;padding:5px 14px"
+                title="Open the browser print dialog. Choose 'Save as PDF' to attach the full screen to a report.">
+          <i class="bi bi-printer-fill me-1"></i>
+          Print / Save as PDF
+        </button>
+      </div>
     </div>
   </div>
 
@@ -1404,8 +1517,13 @@
     camera.lookAt(0, 4, 0);
     _ck('camera created (' + hw + 'x' + hh + ')');
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    // Renderer. preserveDrawingBuffer: true so the canvas content
+    // survives long enough to be printed / snapshotted to PDF. Without
+    // it Chromium-based browsers print a blank canvas because the
+    // backbuffer is cleared right after each frame.
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true, alpha: true, preserveDrawingBuffer: true
+    });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(hw, hh);
     renderer.shadowMap.enabled = true;
@@ -2743,6 +2861,21 @@
       const url = new URL(window.location.href);
       url.searchParams.set('demo', '10');
       window.location.href = url.toString();
+    });
+
+    // ── Print / Save-as-PDF button.
+    // 1. Force one fresh render so the canvas buffer holds the latest
+    //    frame BEFORE the browser starts capturing for print.
+    // 2. Wait one rAF tick + 60 ms so the canvas image is committed.
+    // 3. Open the browser print dialog.
+    // The @media print rules above restyle everything for paper.
+    document.getElementById('shadingPrintBtn')?.addEventListener('click', () => {
+      try {
+        renderer.render(scene, camera);
+      } catch (_e) { /* ignore — print will still work without canvas */ }
+      requestAnimationFrame(() => {
+        setTimeout(() => { window.print(); }, 60);
+      });
     });
   }
   } catch (_err) {
