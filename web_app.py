@@ -2651,8 +2651,22 @@ def project_location(pid):
         # Day-1 wiring: also run the deterministic engine. Adds rich
         # output under data["shading"]["engine"]; legacy keys above are
         # preserved unchanged so this is a pure additive change.
-        _eng = _engine_full_analysis(project, obstructions)
+        # Fix 2026-06-15: pull obstructions from the saved shading
+        # block (was an undefined NameError that 500-d every location
+        # POST). Whole block wrapped in try/except so a misbehaving
+        # engine never blocks the operator from saving the location.
+        try:
+            _obstructions_for_engine = (
+                (data.get("shading") or {}).get("obstructions") or []
+            )
+            _eng = _engine_full_analysis(project, _obstructions_for_engine)
+        except Exception as _e:
+            try: app.logger.warning("location engine run failed: %s", _e)
+            except Exception: pass
+            _eng = None
         if _eng:
+            if "shading" not in data or not isinstance(data.get("shading"), dict):
+                data["shading"] = {}
             data["shading"]["engine"] = _eng
             # Day-3 wiring: hand the engine output to the ADK shading
             # agent for narrative + per-obstruction analysis + mitigation
@@ -2660,7 +2674,7 @@ def project_location(pid):
             # deterministic narrative built from the engine numbers.
             try:
                 from engine.agents.shading_agent import run_shading_agent
-                _agent_out = run_shading_agent(_eng, {"obstructions": obstructions})
+                _agent_out = run_shading_agent(_eng, {"obstructions": _obstructions_for_engine})
                 if _agent_out:
                     data["shading"]["agent_v2"] = _agent_out
             except Exception as _ae:
