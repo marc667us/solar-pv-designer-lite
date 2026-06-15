@@ -1378,7 +1378,10 @@
     var hw = host.clientWidth || 800;
     var hh = host.clientHeight || 560;
     const camera = new THREE.PerspectiveCamera(50, hw / hh, 0.1, 500);
-    camera.position.set(28, 18, 32);
+    // Closer framing than v1 so the house + obstructions fill more of
+    // the canvas, matching the dramatic 3/4 perspective in the spec
+    // image (pvsolar1/3d issue/ChatGPT*11_51_24*.png).
+    camera.position.set(22, 14, 26);
     camera.lookAt(0, 4, 0);
     _ck('camera created (' + hw + 'x' + hh + ')');
 
