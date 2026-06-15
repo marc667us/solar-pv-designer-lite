@@ -668,3 +668,176 @@ Next Recommended Step:
    so we can see which iteration breaks.
 
 ---
+
+# Implementation Log Entry
+
+**Date:** 2026-06-15
+**Task:** Shading dashboard reskin to spec image + new site-inspection form + 5 latent hotfixes + Print/Save-as-PDF + admin batch-delete + wizard reroute
+**Status:** SHIPPED — live HEAD `bb726fc3bbb1` on https://solarpro.aiappinvent.com
+
+## Objective
+
+Close the gap between the deployed AI 3D Shading Simulation dashboard
+(HEAD `69594b8` from prior evening session) and the spec image at
+`Documents\pvsolar1\3d issue\ChatGPT*11_51_24*.png`. Add an editable
+site-inspection form that feeds shading data into the load calculation
+on the first save. Fix three blocking 500s discovered along the way.
+Print the full /shading screen to PDF for client deliverables.
+
+## Files Changed
+
+### Server (`web_app.py`)
+- Engine output (~line 12311): added `per_panel_bucket` 5-class field
+  alongside `per_panel_max_frac`
+- `project_location` (~line 2654): wrapped engine-run in try/except;
+  derive `_obstructions_for_engine` from saved data instead of an
+  undefined NameError; redirect on save → `/inspection`
+- `project_shading` POST (~line 12450): route by `action` field —
+  `run_ai` stays on /shading, others go to /loads
+- `_engine_full_analysis` defaults `n_panels` to 12 (existing)
+- **Injected via patch:** 4 new routes from `new_inspection_form_routes.py`:
+  - GET/POST `/project/<pid>/inspection`
+  - GET `/project/<pid>/inspection/upload/<filename>`
+  - POST `/project/<pid>/inspection/upload/<filename>/delete`
+- **Injected:** `/admin/agent/leads/batch-delete` route — wipes
+  `leads WHERE source='agent'` with admin + CSRF + 5/hr rate limit +
+  DELETE-confirm string check + audit log
+
+### Templates
+- `shading.html` — major reskin (see commit list below)
+- `inspection_form.html` — **NEW** (370+ LOC)
+- `admin_agent.html` — batch-delete button + 2-step JS confirm
+- `loads.html` — Step 1/Step 2 ladder with Inspection chip
+- `dashboard.html` — Site Inspection chip on every project tile
+- `base.html` — `@media print` overrides that restore solid colour
+  on every gradient-on-transparent text element
+
+### New source files
+- `new_inspection_form_routes.py` — route source
+- `patch_inspection_form_routes.py` — idempotent byte-injector
+
+### CI
+- `.github/workflows/render-deploy-now.yml` — accept HTTP 202 + robust
+  DEPLOY_ID parse (one-line python to keep YAML scanner happy)
+
+## Commit list (20 feature/fix commits)
+
+`5ebca09` → `8fed125` → `55130b9` → `8aad8ed` → `0d3bc5c` → `085b7f9`
+→ `2d712f9` → `9b0d5a4` → `413bc94` → `c2e084b` → `b04a785` → `cb82313`
+→ (`5f1d274` / `7b6795d` CI recovery pair) → `fa7496c` → `c68fd26`
+→ `4352a16` → `251d45d` → `59f0e1e` → `49ce61b` → `b4577ba` → `e7cad18`
+→ `3513a89` → `bb726fc`
+
+## Database Changes
+
+None. `data["inspection"]` and `data["shading"]` keys are added under
+the existing `projects.data_json` blob; no schema changes.
+
+## API Changes
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET/POST | `/project/<pid>/inspection` | Editable site-inspection form |
+| GET | `/project/<pid>/inspection/upload/<filename>` | Serve uploaded photo/drawing |
+| POST | `/project/<pid>/inspection/upload/<filename>/delete` | Remove a single upload |
+| POST | `/admin/agent/leads/batch-delete` | Wipe all `leads WHERE source='agent'` |
+
+`/project/<pid>/location` POST now redirects to `/inspection` (was
+`/loads`). `/project/<pid>/shading` POST now branches on `action` field.
+
+## Frontend Changes
+
+- Spec-style header banner on `/shading` (gradient navy + title + 3
+  chips)
+- Obstruction Summary table in `/shading` right rail (top section)
+- 6-button bottom action bar (Back / Reset / Generate 3D / Run AI /
+  Calculate / Recalculate / Export Report)
+- Reset Form button on `/shading` AND `/inspection` (2-step confirm)
+- Print / Save-as-PDF button in `/shading` header
+- `/loads` Step 1/Step 2 ladder with green-chip status of inspection
+  submission
+- Dashboard project tile gets Site Inspection chip in step-nav row
+- 3D scene completely upgraded: 3 m hip-roof house + panels on roof,
+  10-storey floor bands, multi-layer tree, 4-leg water tank with
+  cross-bracing, driveway + apron, cast-shadow polygons, dim
+  callouts with leader lines, brighter sun + 21-ray fan, tighter
+  camera
+
+## Security Changes
+
+- `/admin/agent/leads/batch-delete`: `@admin_required` + CSRF +
+  5/hr rate limit + explicit `confirm == "DELETE"` form check +
+  audit_log row with `action=agent_leads_batch_delete`
+- Site-inspection photo uploads: filename sanitised
+  (`_insp_safe_filename` → `secrets.token_hex(10)`), whitelist
+  extensions, 8 MB / 12 file cap, only files recorded in
+  inspection metadata are served back via the upload route
+  (defence-in-depth against path traversal)
+
+## Tests Added
+
+End-to-end wizard curl test (manual, run 2026-06-15 21:00 UTC):
+```
+Login → New project → Location → Inspection → Shading → Loads → Results
+       302         302         302→ins      302→sh      302→ld    200
+```
+Engine output verified at step 6: `bucket_factor=0.6`,
+`bucket_label="Very severe shading"`, `total_panels=4`,
+`per_panel_bucket=["full"]*4`. Results page shows AGENT FACTOR 0.60
++ "Corrected PV Sizing Applied".
+
+No automated test changes this session.
+
+## Documentation Updated
+
+- `memory/project_solar_pv_session_2026-06-15.md` — full session
+  record in the user's memory store
+- `memory/MEMORY.md` — index entry at the top pointing to this
+  session
+- This entry in `docs/IMPLEMENTATION_LOG.md`
+
+## What Was Completed
+
+- All 20 feature/fix commits live in production
+- E2E wizard verified: Location → Inspection → Shading → Loads →
+  Results produces a shading-corrected PV array sizing first-time
+- Print/Save-as-PDF works for the whole shading dashboard
+- Mobile gets the v2 3D dashboard (not legacy v1)
+- Admin batch-delete for agent prospects shipped with audit log
+- All three discovered latent 500s patched
+- CI workflow accepts Render's HTTP 202 and tolerates empty response
+  bodies
+
+## What Remains
+
+1. No server-side PDF for the shading dashboard — browser-native
+   Print is the route for now. Future work: Playwright or
+   wkhtmltopdf for headless PDF capture.
+2. Render free tier has no persistent disk — inspection_uploads/
+   are ephemeral. Needs Render disk attachment or MinIO before the
+   feature is used in client deliverables.
+3. Mobile not real-device-tested; only curl-tested with synthetic
+   User-Agents.
+4. `_compute_shading_factor` is deterministic; the AI agent on
+   `/shading` may override. Last-writer-wins on
+   `data["shading"]["factor"]`.
+
+## Known Risks
+
+- `preserveDrawingBuffer:true` slightly increases GPU memory usage.
+  Unlikely to matter on the laptop / phones the project targets but
+  flagged.
+- The wizard reroute (`/location → /inspection`) is a behavioural
+  change. Existing users who muscle-memory click through Location →
+  Loads will land on Inspection instead. Mitigation: Site Inspection
+  chips on the dashboard step-nav + Skip-friendly "Cancel" link back
+  to /results.
+
+## Next Recommended Step
+
+If the next session is a feature push: attach a Render disk so
+inspection uploads persist + add server-side PDF capture (Playwright
+in a separate worker). If the next session is owner-driven debugging:
+real-device mobile test of the 3D dashboard.
+
+---
