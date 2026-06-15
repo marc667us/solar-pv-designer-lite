@@ -368,6 +368,68 @@
       </div>
     </div>
     <div class="col-12 col-lg-3 p-3" style="border-left:1px solid #1e1e3a;background:rgba(255,255,255,.02)">
+
+      {# ── Obstruction Summary table — top of the right rail, matching   #}
+      {# the spec image. Each row = one saved obstruction with #, type,   #}
+      {# height, distance, direction. The same orange circled number      #}
+      {# appears in the 3D scene above each obstruction.                  #}
+      <div class="fw-bold small mb-2" style="color:var(--solar-gold);font-size:12px">
+        <i class="bi bi-list-ol me-1"></i>OBSTRUCTION SUMMARY
+      </div>
+      {% if _obs %}
+        <div class="mb-3" style="background:rgba(0,0,0,.25);border:1px solid #1e1e3a;
+                                  border-radius:6px;overflow:hidden">
+          <table class="table table-sm mb-0" style="font-size:11px;color:#e6e6f5">
+            <thead>
+              <tr style="background:rgba(0,0,0,.30);color:#9ec5fe">
+                <th style="padding:6px 8px;width:24px">#</th>
+                <th style="padding:6px 4px">Type</th>
+                <th style="padding:6px 4px;text-align:right">H&nbsp;(m)</th>
+                <th style="padding:6px 4px;text-align:right">D&nbsp;(m)</th>
+                <th style="padding:6px 8px">Dir</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for o in _obs %}
+              <tr style="border-top:1px solid #1e1e3a">
+                <td style="padding:5px 8px">
+                  <span style="display:inline-block;width:18px;height:18px;
+                                background:#f59e0b;color:#0a0a14;border-radius:50%;
+                                text-align:center;line-height:18px;
+                                font-weight:700;font-size:11px">{{ loop.index }}</span>
+                </td>
+                <td style="padding:5px 4px;text-transform:capitalize">
+                  {{ o.type or '—' }}
+                </td>
+                <td style="padding:5px 4px;text-align:right;color:#ffd24a;
+                            font-weight:700">
+                  {{ "%.1f"|format(o.height|float) if o.height else '—' }}
+                </td>
+                <td style="padding:5px 4px;text-align:right;color:#ffd24a;
+                            font-weight:700">
+                  {{ "%.1f"|format(o.distance|float) if o.distance else '—' }}
+                </td>
+                <td style="padding:5px 8px;color:#9ec5fe">
+                  {{ o.direction or '—' }}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-secondary mb-3" style="font-size:11px;
+                                                  padding:8px;background:rgba(0,0,0,.20);
+                                                  border:1px dashed #1e1e3a;
+                                                  border-radius:6px">
+          <i class="bi bi-info-circle me-1"></i>
+          No obstructions saved yet. Add them in the
+          <a href="{{ url_for('inspection_form', pid=project.id) }}"
+             style="color:var(--solar-gold)">Site Inspection</a>
+          form or below.
+        </div>
+      {% endif %}
+
       {# Display-layer toggle checkboxes. Each toggle drives a Three.js  #}
       {# group visibility AND the cast-shadow flag for "Shadows".        #}
       <div class="fw-bold small mb-2" style="color:var(--solar-gold);font-size:12px">
