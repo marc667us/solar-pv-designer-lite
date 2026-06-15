@@ -97,8 +97,25 @@ jobs:
           # started yet). 202 is a perfectly valid success here.
           [ "$HTTP" = "201" ] || [ "$HTTP" = "200" ] || [ "$HTTP" = "202" ] || { echo "::error::Deploy trigger failed ($HTTP)"; exit 1; }
 
-          DEPLOY_ID=$(cat /tmp/deploy.json | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+          # Robust ID extraction. Render occasionally returns an empty
+          # body with 202; the prior `cat | python3` chain killed the
+          # whole job under `set -euo pipefail`. The `|| true` + the
+          # tolerant python script keep DEPLOY_ID empty instead of
+          # exiting — the polling loop below handles an empty ID by
+          # treating the deploy as fire-and-forget.
+          DEPLOY_ID=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('/tmp/deploy.json'))
+    print(d.get('id', '') if isinstance(d, dict) else '')
+except Exception:
+    pass
+" 2>/dev/null || true)
           echo "Deploy ID: $DEPLOY_ID — polling up to 12 minutes..."
+          if [ -z "$DEPLOY_ID" ]; then
+            echo "::warning::No DEPLOY_ID extracted from Render response — Render accepted the deploy ($HTTP) but didn't return an id we could parse. Skipping the status poll; check the Render service or /api/version to confirm the new build is live."
+            exit 0
+          fi
 
           for i in $(seq 1 24); do
             sleep 30
