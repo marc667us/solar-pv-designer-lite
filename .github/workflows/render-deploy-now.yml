@@ -92,7 +92,10 @@ jobs:
             "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys")
           echo "Deploy trigger: HTTP $HTTP"
           cat /tmp/deploy.json | python3 -m json.tool 2>/dev/null || cat /tmp/deploy.json
-          [ "$HTTP" = "201" ] || [ "$HTTP" = "200" ] || { echo "::error::Deploy trigger failed"; exit 1; }
+          # Accept 200, 201 (sync create) and 202 (queued/async — Render
+          # returns this when the deploy is accepted but a build hasn't
+          # started yet). 202 is a perfectly valid success here.
+          [ "$HTTP" = "201" ] || [ "$HTTP" = "200" ] || [ "$HTTP" = "202" ] || { echo "::error::Deploy trigger failed ($HTTP)"; exit 1; }
 
           DEPLOY_ID=$(cat /tmp/deploy.json | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
           echo "Deploy ID: $DEPLOY_ID — polling up to 12 minutes..."
