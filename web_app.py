@@ -12441,6 +12441,14 @@ def project_shading(pid):
                   f"{analysis['loss_pct']:.1f}% loss) from {len(obstructions)} obstruction(s). "
                   f"Re-run the loads step to apply.",
                   "success")
+        # Route by which action button was used (spec image's 6-button
+        # footer). "run_ai" stays on the shading page so the operator
+        # sees the new factor + 3D scene. "calculate" / "recalculate"
+        # go to /loads so PV sizing re-runs with the new factor. Any
+        # other value (or none) keeps the legacy /loads redirect.
+        _action = (request.form.get("action") or "").strip().lower()
+        if _action == "run_ai":
+            return redirect(url_for("project_shading", pid=pid))
         return redirect(url_for("project_loads", pid=pid))
 
     shading = project["data"].get("shading", {}) or {}

@@ -3411,20 +3411,76 @@
     </div>
   </div>
 
-  <div class="d-flex gap-2 justify-content-end flex-wrap">
-    <a href="{{ url_for('project_loads', pid=project.id) }}" class="btn btn-outline-secondary">
-      <i class="bi bi-arrow-left me-1"></i>Cancel
-    </a>
-    <button type="button" id="shadingResetForm" class="btn btn-outline-warning"
-            title="Clear every obstruction + reset units / tilt / azimuth to defaults.
+  {# ── Bottom action bar matching the spec image's 6-button footer.   #}
+  {# All buttons live inside the form so submit-types pick the form    #}
+  {# state (Run AI = persist obstructions + run agent; Calculate /     #}
+  {# Recalculate = same submit, with a hidden flag that tells the      #}
+  {# server to forward to /loads afterwards so PV sizing is rerun).    #}
+  <div class="d-flex gap-2 justify-content-between align-items-center flex-wrap mt-3 p-3"
+       style="background:linear-gradient(180deg, rgba(15,15,34,0.6), rgba(8,8,20,0.9));
+              border:1px solid #1e1e3a; border-radius:14px">
+
+    {# Left: back / reset (destructive-ish stays separated). #}
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('project_loads', pid=project.id) }}"
+         class="btn btn-outline-secondary fw-bold">
+        <i class="bi bi-arrow-left me-1"></i>Back to Load Calculation
+      </a>
+      <button type="button" id="shadingResetForm"
+              class="btn btn-outline-warning fw-bold"
+              title="Clear every obstruction + reset units / tilt / azimuth to defaults.
 Does not delete saved engine output until you Save.">
-      <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Form
-    </button>
-    <button type="submit" class="btn btn-solar">
-      <i class="bi bi-cpu me-1"></i>Run Shading Analysis with Agent
-    </button>
+        <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Form
+      </button>
+    </div>
+
+    {# Right: the 5 primary actions from the spec image. #}
+    <div class="d-flex gap-2 flex-wrap">
+      <button type="button" id="shadingRegen3dFooter"
+              class="btn fw-bold"
+              style="background:#2563eb;color:#fff;border:1px solid #2563eb"
+              title="Refresh the 3D scene with the latest engine output (no save).">
+        <i class="bi bi-box me-1"></i>Generate 3D Simulation
+      </button>
+      <button type="submit" name="action" value="run_ai"
+              class="btn fw-bold"
+              style="background:#7c3aed;color:#fff;border:1px solid #7c3aed"
+              title="Persist obstructions + run the AI 3D shading agent.">
+        <i class="bi bi-cpu me-1"></i>Run AI Shading Analysis
+      </button>
+      <button type="submit" name="action" value="calculate"
+              class="btn fw-bold"
+              style="background:#15803d;color:#fff;border:1px solid #15803d"
+              title="Save shading + apply the factor + run PV sizing on the Loads page.">
+        <i class="bi bi-calculator me-1"></i>Calculate
+      </button>
+      <button type="submit" name="action" value="recalculate"
+              class="btn fw-bold"
+              style="background:#a855f7;color:#fff;border:1px solid #a855f7"
+              title="Re-run the shading agent + PV sizing from scratch.">
+        <i class="bi bi-arrow-clockwise me-1"></i>Recalculate
+      </button>
+      <a href="{{ url_for('report_shading', pid=project.id) }}"
+         class="btn btn-outline-light fw-bold"
+         title="Open the standalone Shading Analysis Report.">
+        <i class="bi bi-file-earmark-text me-1"></i>Export Report
+      </a>
+    </div>
   </div>
 </form>
+
+<script>
+/* Bind the footer "Generate 3D Simulation" button to the same handler
+   the existing in-canvas Regen button uses (re-tints heatmap + resets
+   camera). Added 2026-06-15 with the spec-style 6-button action bar. */
+(function(){
+  var foot = document.getElementById('shadingRegen3dFooter');
+  var head = document.getElementById('shadingRegen3d');
+  if (foot && head) {
+    foot.addEventListener('click', function(){ head.click(); });
+  }
+})();
+</script>
 
 <script>
 /* Reset button — wipes every obstruction card + scalar field on the
