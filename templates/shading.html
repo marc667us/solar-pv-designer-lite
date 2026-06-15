@@ -1375,6 +1375,61 @@
     const tiltDeg = engineData.tilt_deg || 15;
     const tiltRad = THREE.MathUtils.degToRad(tiltDeg);
     const arrayY  = 1.0;
+
+    // ── Installation building (host for the PV array). Per the AI 3D
+    //    Shading Simulation spec image, every scene shows the building
+    //    that hosts the solar installation — a low pitched-roof house
+    //    sized to seat the PV array on its roof. Renders even when no
+    //    engine data is present so the empty-state still looks like a
+    //    real solar site.
+    const houseGroup = new THREE.Group();
+    {
+      const houseW = Math.max(14, totalW + 3.0);
+      const houseD = Math.max(11, totalH + 3.0);
+      const wallH  = 0.55;
+      const wallMat = new THREE.MeshStandardMaterial({
+        color: 0xe8d5b7, roughness: 0.95
+      });
+      const walls = new THREE.Mesh(
+        new THREE.BoxGeometry(houseW, wallH, houseD),
+        wallMat
+      );
+      walls.position.y = wallH / 2;
+      walls.castShadow = true; walls.receiveShadow = true;
+      houseGroup.add(walls);
+      // Pitched roof matching panel tilt so the array visually sits on
+      // the south-facing slope. Slightly oversized so panels never poke
+      // through the eaves.
+      const roofMat = new THREE.MeshStandardMaterial({
+        color: 0xb04531, roughness: 0.85, side: THREE.DoubleSide
+      });
+      const roof = new THREE.Mesh(
+        new THREE.PlaneGeometry(houseW * 1.04, houseD * 1.04),
+        roofMat
+      );
+      roof.rotation.x = -Math.PI / 2 + tiltRad;
+      roof.position.y = wallH + 0.05;
+      roof.castShadow = true; roof.receiveShadow = true;
+      houseGroup.add(roof);
+      // Front door + two windows on the south face for "house-ness".
+      const door = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.55, 0.95),
+        new THREE.MeshStandardMaterial({ color: 0x6d4c41, roughness: 0.8 })
+      );
+      door.position.set(0, wallH * 0.5, houseD / 2 + 0.01);
+      houseGroup.add(door);
+      const winMat = new THREE.MeshStandardMaterial({
+        color: 0xffeaa0, emissive: 0x55411a, emissiveIntensity: 0.45
+      });
+      [-houseW * 0.28, houseW * 0.28].forEach(wx => {
+        const win = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.4), winMat);
+        win.position.set(wx, wallH * 0.62, houseD / 2 + 0.01);
+        houseGroup.add(win);
+      });
+    }
+    scene.add(houseGroup);
+    _ck('installation house added');
+
     const panelGroup = new THREE.Group();
     panelGroup.rotation.x = -tiltRad;
     const perPanelFracs = engineData.per_panel_max_frac || [];
@@ -1474,8 +1529,13 @@
         grp.add(wall);
       } else {
         // Default: building cuboid (also covers 10-storey / neighbour /
-        // generic building / "other").
+        // generic building / "other"). For tall buildings we render
+        // explicit floor bands (1 band ≈ 1 storey) per the AI 3D
+        // Shading Simulation spec image — much more readable than a
+        // sprinkle of window planes.
         const isHigh = h >= 12;
+        const storeyH = 3.2;
+        const nFloors = Math.max(1, Math.round(h / storeyH));
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(w, h, d),
           new THREE.MeshStandardMaterial({
@@ -1486,22 +1546,73 @@
         body.castShadow = true; body.receiveShadow = true;
         body.position.y = h / 2;
         grp.add(body);
-        // A few windows on the lit face for visual interest.
-        const winRows = Math.max(1, Math.min(8, Math.floor(h / 3)));
-        const winCols = Math.max(1, Math.min(5, Math.floor(w / 1.5)));
-        for (let r = 0; r < winRows; r++) {
-          for (let c = 0; c < winCols; c++) {
-            const win = new THREE.Mesh(
-              new THREE.PlaneGeometry(0.5, 0.7),
-              new THREE.MeshStandardMaterial({
-                color: 0xffeaa0, emissive: 0x55411a, emissiveIntensity: 0.6
-              })
+        if (isHigh) {
+          // 10-storey style: continuous horizontal floor bands on all
+          // four faces, dark slab between every storey + glazed window
+          // strip per floor on the front (south) face.
+          const slabMat = new THREE.MeshStandardMaterial({
+            color: 0x4a4a55, roughness: 0.7
+          });
+          const winMat = new THREE.MeshStandardMaterial({
+            color: 0xa0c8e0, emissive: 0x1a2a3a, emissiveIntensity: 0.35,
+            roughness: 0.35, metalness: 0.4
+          });
+          const slabH   = 0.18;
+          const stripH  = storeyH - slabH * 1.4;
+          const inset   = 0.012;
+          for (let i = 0; i < nFloors; i++) {
+            const yCenter = i * storeyH + storeyH / 2;
+            if (yCenter > h - storeyH * 0.2) break;
+            // Slab (between storeys) — slim ring around all four faces.
+            const slab = new THREE.Mesh(
+              new THREE.BoxGeometry(w + inset, slabH, d + inset),
+              slabMat
             );
-            const wx = -w / 2 + (c + 1) * w / (winCols + 1) - w / 2 + 0;
-            win.position.set((c + 0.5 - winCols / 2) * (w / (winCols + 1)),
-                             (r + 1) * (h / (winRows + 1)),
-                             d / 2 + 0.01);
-            grp.add(win);
+            slab.position.y = i * storeyH + slabH * 0.5 + 0.05;
+            grp.add(slab);
+            // Glazing strip on the south face (visible side from PV array).
+            const strip = new THREE.Mesh(
+              new THREE.PlaneGeometry(w * 0.82, stripH * 0.78),
+              winMat
+            );
+            strip.position.set(0, yCenter, d / 2 + 0.01);
+            grp.add(strip);
+            // Mirror strip on the north face so the building reads from
+            // both sides when the camera orbits.
+            const stripN = new THREE.Mesh(
+              new THREE.PlaneGeometry(w * 0.82, stripH * 0.78),
+              winMat
+            );
+            stripN.position.set(0, yCenter, -d / 2 - 0.01);
+            stripN.rotation.y = Math.PI;
+            grp.add(stripN);
+          }
+          // Rooftop parapet (small lip) so the silhouette reads as a
+          // commercial building, not a featureless block.
+          const parapet = new THREE.Mesh(
+            new THREE.BoxGeometry(w + 0.1, 0.35, d + 0.1),
+            new THREE.MeshStandardMaterial({ color: 0x6b6b75, roughness: 0.9 })
+          );
+          parapet.position.y = h + 0.175;
+          grp.add(parapet);
+        } else {
+          // Short building: keep the legacy sprinkle of window planes —
+          // simple and cheap, looks fine on neighbour / small buildings.
+          const winRows = Math.max(1, Math.min(8, Math.floor(h / 3)));
+          const winCols = Math.max(1, Math.min(5, Math.floor(w / 1.5)));
+          for (let r = 0; r < winRows; r++) {
+            for (let c = 0; c < winCols; c++) {
+              const win = new THREE.Mesh(
+                new THREE.PlaneGeometry(0.5, 0.7),
+                new THREE.MeshStandardMaterial({
+                  color: 0xffeaa0, emissive: 0x55411a, emissiveIntensity: 0.6
+                })
+              );
+              win.position.set((c + 0.5 - winCols / 2) * (w / (winCols + 1)),
+                               (r + 1) * (h / (winRows + 1)),
+                               d / 2 + 0.01);
+              grp.add(win);
+            }
           }
         }
       }
@@ -1547,6 +1658,69 @@
     });
     scene.add(obstructionGroup);
     _ck('obstructions added (' + obstructions.length + ')');
+
+    // ── Cast-shadow polygons (per obstruction). Per the AI 3D Shading
+    //    Simulation spec, each obstruction casts a visible dark
+    //    polygon on the ground pointing away from the sun. We compute
+    //    a simple rectangular footprint (obstruction width × shadow
+    //    length) projected from the base, where:
+    //        shadow_length = height / tan(sun_altitude)
+    //    The polygon is a thin Mesh on the ground plane (y≈0.02) with
+    //    a semi-transparent dark material so it reads as a shadow
+    //    without competing with the WebGL-shadow-map shadows the
+    //    DirectionalLight already produces. Drawn AFTER the
+    //    obstructionGroup so it can be toggled separately.
+    const shadowPolyGroup = new THREE.Group();
+    {
+      const sp = sunMesh.position;
+      // Direction FROM sun TO origin (i.e., where shadows point).
+      const sunDir = new THREE.Vector3(-sp.x, 0, -sp.z);
+      if (sunDir.lengthSq() > 0.01) sunDir.normalize();
+      else sunDir.set(0, 0, 1);   // sun overhead → tiny pool, point south
+      // Sun altitude angle for shadow-length math.
+      const sunDist3D = sp.length();
+      const sunAltRad = sunDist3D > 0.01 ? Math.asin(sp.y / sunDist3D) : Math.PI / 3;
+      obstructions.forEach((obs) => {
+        try {
+          const h    = Math.max(0.2, parseFloat(obs.height)   || 1);
+          const w    = Math.max(0.2, parseFloat(obs.width)    || 1);
+          const dist = Math.max(0.5, parseFloat(obs.distance) || 5);
+          const az   = THREE.MathUtils.degToRad(DIR_AZ[obs.direction] ?? 180);
+          const ox   = Math.sin(az) * dist;
+          const oz   = Math.cos(az) * dist;
+          // Shadow length on the ground: capped so 5°-altitude sunrise
+          // doesn't produce kilometre-long shadows that clip the camera.
+          const shLen = Math.min(60, h / Math.max(0.08, Math.tan(sunAltRad)));
+          // Build a thin Plane the size of (w × shLen), positioned at
+          // the obstruction base and rotated so its long axis points
+          // along sunDir.
+          const planeGeo = new THREE.PlaneGeometry(w * 1.05, shLen);
+          const planeMat = new THREE.MeshBasicMaterial({
+            color: 0x0a0a14, transparent: true, opacity: 0.40,
+            depthWrite: false, polygonOffset: true,
+            polygonOffsetFactor: -1, polygonOffsetUnits: -2,
+          });
+          const poly = new THREE.Mesh(planeGeo, planeMat);
+          // Default PlaneGeometry sits in XY plane. Lay it flat
+          // (rotate about X by -π/2) so it lies on the ground (XZ).
+          poly.rotation.x = -Math.PI / 2;
+          // Then rotate about Y so the local +Y (now world -Z after the
+          // first rotation) aligns with sunDir on the ground plane.
+          const yaw = Math.atan2(sunDir.x, sunDir.z);
+          poly.rotation.z = yaw;
+          // Offset the plane so its near edge sits at the obstruction
+          // base — translate along sunDir by shLen/2.
+          poly.position.set(ox + sunDir.x * shLen * 0.5,
+                            0.02,
+                            oz + sunDir.z * shLen * 0.5);
+          shadowPolyGroup.add(poly);
+        } catch (e) {
+          console.warn('[shading3d] shadow polygon failed:', e);
+        }
+      });
+    }
+    scene.add(shadowPolyGroup);
+    _ck('cast-shadow polygons added (' + shadowPolyGroup.children.length + ')');
 
     // ── Visible sun rays — a fan from the sun toward the array.
     const raysGroup = new THREE.Group();
@@ -1614,7 +1788,7 @@
 
     // ── Display-layer toggle wiring.
     const layerTargets = {
-      sun:          [sunMesh],
+      sun:          [sunMesh, sunGlow],
       rays:         [raysGroup],
       sunpath:      [sunPathGroup],
       obstructions: [obstructionGroup],
@@ -1625,11 +1799,15 @@
         const layer = cb.dataset.layer;
         const on    = cb.checked;
         if (layer === 'shadows') {
-          // Toggle shadow casting on the directional light AND all
-          // mesh.castShadow flags (cheapest way to flip the visual).
+          // Toggle BOTH the directional-light shadow map AND the
+          // ground-projected shadow polygons (added 2026-06-15 per the
+          // AI 3D Shading Simulation spec image — the dark quads are
+          // the human-readable shadow, the shadow-map is the realistic
+          // one; the operator can hide both with one click).
           sun.castShadow = on;
           panelMeshes.forEach(m => { m.castShadow = on; });
           obstructionGroup.traverse(o => { if (o.isMesh) o.castShadow = on; });
+          shadowPolyGroup.visible = on;
         } else if (layer === 'affected') {
           // Reset each panel to its un-tinted base, or re-apply heat tint.
           panelMeshes.forEach(m => {
