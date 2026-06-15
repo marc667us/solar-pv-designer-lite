@@ -107,6 +107,15 @@
   /* Tables — slightly larger + brighter row text. */
   .v2-shading-card table { font-size: 13px !important; color: #e6e6f5 !important; }
   .v2-shading-card table thead th { font-size: 12px !important; color: #a8a8d0 !important; }
+  /* Mobile-responsive 3D canvas — smaller on phones so the dashboard
+     fits in one viewport. Added 2026-06-15 after the "page can not be
+     reached" mobile report. */
+  @media (max-width: 991px) {
+    .shading3d-canvas-responsive { height: 440px !important; }
+  }
+  @media (max-width: 575px) {
+    .shading3d-canvas-responsive { height: 340px !important; }
+  }
 </style>
 <div class="solar-card v2-shading-card p-0 mb-4 overflow-hidden"
      style="border:1px solid rgba(245,158,11,.45);
@@ -248,8 +257,10 @@
   {# ── Main 3D canvas + right-side control rail ──────────────────────── #}
   <div class="row g-0">
     <div class="col-12 col-lg-9">
-      <div id="shading3d-canvas" style="width:100%;height:560px;background:transparent;
-                                        cursor:grab;position:relative">
+      <div id="shading3d-canvas"
+           class="shading3d-canvas-responsive"
+           style="width:100%;height:560px;background:transparent;
+                  cursor:grab;position:relative">
         {# Fallback visible until Three.js takes over. If you can still see #}
         {# this text after the page loads, the JS module failed — the error #}
         {# message will appear in #shading3d-error below or in the browser  #}
@@ -1275,8 +1286,9 @@
     const ambient = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambient);
 
-    // Sun (directional). Initial position will be set from engine series.
-    const sun = new THREE.DirectionalLight(0xfff5d6, 1.1);
+    // Sun (directional). Brighter than v1 to match the spec image's
+    // crisp midday-style lighting on the obstructions.
+    const sun = new THREE.DirectionalLight(0xfff5d6, 1.55);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.left   = -40;
@@ -1288,18 +1300,26 @@
     scene.add(sun);
     scene.add(sun.target);
 
-    // Visible sun disc + glow ring (bigger + brighter to match images).
+    // Visible sun disc + double-glow ring — bigger, brighter, and with
+    // two halos so the sun reads as a luminous disc not a flat sphere
+    // (matches the prominent glowing sun in the spec image).
     const sunMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(2.6, 24, 24),
-      new THREE.MeshBasicMaterial({ color: 0xffff66 })
+      new THREE.SphereGeometry(3.2, 28, 28),
+      new THREE.MeshBasicMaterial({ color: 0xfff79a })
     );
     scene.add(sunMesh);
     const sunGlow = new THREE.Mesh(
-      new THREE.SphereGeometry(3.8, 24, 24),
+      new THREE.SphereGeometry(5.2, 28, 28),
       new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true,
-                                    opacity: 0.30, side: THREE.BackSide })
+                                    opacity: 0.38, side: THREE.BackSide })
     );
     scene.add(sunGlow);
+    const sunGlow2 = new THREE.Mesh(
+      new THREE.SphereGeometry(8.0, 28, 28),
+      new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true,
+                                    opacity: 0.16, side: THREE.BackSide })
+    );
+    scene.add(sunGlow2);
 
     // Place sun from engine: use peak-shading step's altitude/azimuth.
     function placeSun(altDeg, azDeg) {
@@ -1316,6 +1336,7 @@
       sun.position.set(x, y, z);
       sunMesh.position.copy(sun.position);
       sunGlow.position.copy(sun.position);
+      sunGlow2.position.copy(sun.position);
       sun.target.position.set(0, 0, 0);
     }
     let _placedSun = false;
@@ -1813,57 +1834,89 @@
         }
         // ── Engineering dimension callout — H/D card next to the
         //    obstruction, matching the labelled boxes in the spec image.
+        //    Bigger + crisper than v1 (450×220 px canvas at 2x DPR), with
+        //    a yellow leader line connecting the card to the top of the
+        //    obstruction. Reads like a CAD callout.
         try {
           const obsH = Math.max(0.2, parseFloat(obs.height)   || 1);
           const obsD = Math.max(0.5, parseFloat(obs.distance) || 5);
           const titleText = String(obs.type || 'Obstruction').toUpperCase();
+          const cardW = 450, cardH = 220, dpr = 2;
           const cv2 = document.createElement('canvas');
-          cv2.width = 260; cv2.height = 132;
+          cv2.width = cardW * dpr; cv2.height = cardH * dpr;
           const cx2 = cv2.getContext('2d');
           if (cx2) {
-            // Dark card background with light border.
-            cx2.fillStyle = 'rgba(8, 16, 32, 0.92)';
+            cx2.scale(dpr, dpr);
+            // Dark card background with bright orange border (matches
+            // the spec image's labelled boxes).
+            cx2.fillStyle = 'rgba(8, 16, 32, 0.94)';
             cx2.strokeStyle = '#f59e0b';
-            cx2.lineWidth = 3;
+            cx2.lineWidth = 4;
+            const r = 18;
             cx2.beginPath();
-            const r = 14;
             cx2.moveTo(r, 0);
-            cx2.lineTo(260 - r, 0);
-            cx2.quadraticCurveTo(260, 0, 260, r);
-            cx2.lineTo(260, 132 - r);
-            cx2.quadraticCurveTo(260, 132, 260 - r, 132);
-            cx2.lineTo(r, 132);
-            cx2.quadraticCurveTo(0, 132, 0, 132 - r);
+            cx2.lineTo(cardW - r, 0);
+            cx2.quadraticCurveTo(cardW, 0, cardW, r);
+            cx2.lineTo(cardW, cardH - r);
+            cx2.quadraticCurveTo(cardW, cardH, cardW - r, cardH);
+            cx2.lineTo(r, cardH);
+            cx2.quadraticCurveTo(0, cardH, 0, cardH - r);
             cx2.lineTo(0, r);
             cx2.quadraticCurveTo(0, 0, r, 0);
             cx2.closePath();
             cx2.fill();
             cx2.stroke();
-            // Title (orange).
+            // Numbered badge top-left.
             cx2.fillStyle = '#f59e0b';
-            cx2.font = 'bold 16px Segoe UI, Arial, sans-serif';
-            cx2.textAlign = 'left'; cx2.textBaseline = 'top';
-            cx2.fillText('#' + (i + 1) + '  ' +
-                         (titleText.length > 18 ? titleText.slice(0, 18) : titleText),
-                         14, 12);
-            // Dimension rows (white).
+            cx2.beginPath();
+            cx2.arc(34, 34, 22, 0, Math.PI * 2);
+            cx2.fill();
+            cx2.fillStyle = '#0a0a14';
+            cx2.font = 'bold 28px Segoe UI, Arial, sans-serif';
+            cx2.textAlign = 'center'; cx2.textBaseline = 'middle';
+            cx2.fillText(String(i + 1), 34, 36);
+            // Title (orange, beside badge).
+            cx2.fillStyle = '#f59e0b';
+            cx2.font = 'bold 22px Segoe UI, Arial, sans-serif';
+            cx2.textAlign = 'left'; cx2.textBaseline = 'middle';
+            cx2.fillText(
+              (titleText.length > 26 ? titleText.slice(0, 26) : titleText),
+              68, 34
+            );
+            // Dimension rows.
+            cx2.font = 'bold 28px Segoe UI, Arial, sans-serif';
             cx2.fillStyle = '#ffffff';
-            cx2.font = 'bold 18px Segoe UI, Arial, sans-serif';
-            cx2.fillText('Height: '   + obsH.toFixed(1) + ' m', 14, 42);
-            cx2.fillText('Distance: ' + obsD.toFixed(1) + ' m', 14, 68);
+            cx2.textBaseline = 'top';
+            cx2.fillText('Height',   24,  78);
+            cx2.fillText('Distance', 24, 124);
+            cx2.fillText('Direction', 24, 170);
+            cx2.textAlign = 'right';
+            cx2.fillStyle = '#ffd24a';
+            cx2.fillText(obsH.toFixed(1) + ' m', cardW - 24,  78);
+            cx2.fillText(obsD.toFixed(1) + ' m', cardW - 24, 124);
             cx2.fillStyle = '#9ec5fe';
-            cx2.font = '14px Segoe UI, Arial, sans-serif';
-            cx2.fillText('Direction: ' + String(obs.direction || 'South'),
-                         14, 100);
+            cx2.font = 'bold 24px Segoe UI, Arial, sans-serif';
+            cx2.fillText(String(obs.direction || 'South'), cardW - 24, 170);
+            // ── Build the sprite + leader line.
             const tex2 = new THREE.CanvasTexture(cv2);
+            tex2.minFilter = THREE.LinearFilter;
             const spr2 = new THREE.Sprite(new THREE.SpriteMaterial({
               map: tex2, depthTest: false
             }));
-            // Place the card a metre above the obstruction's top, sized
-            // so it reads at the typical 30 m scene scale.
-            spr2.position.set(0, obsH + 3.0, 0);
-            spr2.scale.set(7.5, 3.8, 1);
+            // Sized so the card reads at the typical 30 m scene scale.
+            const labelY = obsH + Math.max(3.5, obsH * 0.20);
+            spr2.position.set(0, labelY, 0);
+            spr2.scale.set(11, 5.4, 1);
             mesh.add(spr2);
+            // Leader line from the obstruction top up to the callout.
+            const leaderGeo = new THREE.BufferGeometry().setFromPoints([
+              new THREE.Vector3(0, obsH,         0),
+              new THREE.Vector3(0, labelY - 0.4, 0),
+            ]);
+            const leaderMat = new THREE.LineBasicMaterial({
+              color: 0xf59e0b, transparent: true, opacity: 0.85
+            });
+            mesh.add(new THREE.Line(leaderGeo, leaderMat));
           }
         } catch (dimErr) {
           console.warn('[shading3d] dimension callout #' + (i + 1) +
@@ -2017,7 +2070,7 @@
 
     // ── Display-layer toggle wiring.
     const layerTargets = {
-      sun:          [sunMesh, sunGlow],
+      sun:          [sunMesh, sunGlow, sunGlow2],
       rays:         [raysGroup],
       sunpath:      [sunPathGroup],
       obstructions: [obstructionGroup],
