@@ -3362,11 +3362,51 @@
     <a href="{{ url_for('project_loads', pid=project.id) }}" class="btn btn-outline-secondary">
       <i class="bi bi-arrow-left me-1"></i>Cancel
     </a>
+    <button type="button" id="shadingResetForm" class="btn btn-outline-warning"
+            title="Clear every obstruction + reset units / tilt / azimuth to defaults.
+Does not delete saved engine output until you Save.">
+      <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Form
+    </button>
     <button type="submit" class="btn btn-solar">
       <i class="bi bi-cpu me-1"></i>Run Shading Analysis with Agent
     </button>
   </div>
 </form>
+
+<script>
+/* Reset button — wipes every obstruction card + scalar field on the
+   shading form. Client-side only: re-submit Save to persist the empty
+   state to the server. Added 2026-06-15 per owner request "forms in
+   shading as well as inspection forms must have reset too". */
+(function(){
+  var btn = document.getElementById('shadingResetForm');
+  if (!btn) return;
+  btn.addEventListener('click', function(){
+    if (!confirm('Reset every obstruction + form field on this page? '
+               + 'Saved server data is NOT touched until you Save afterwards.')) {
+      return;
+    }
+    var form = document.getElementById('shadingForm');
+    if (!form) return;
+    // Remove every cloneable obstruction card.
+    form.querySelectorAll('[data-obs-card], .obs-card').forEach(function(card){
+      if (card.parentNode) card.parentNode.removeChild(card);
+    });
+    // Reset every native input / select / textarea inside the form.
+    form.querySelectorAll('input:not([type=hidden]), select, textarea').forEach(function(el){
+      if (el.type === 'checkbox' || el.type === 'radio') {
+        el.checked = el.defaultChecked;
+      } else if (el.tagName === 'SELECT') {
+        // Re-pick the default-selected <option>, else the first.
+        var def = el.querySelector('option[selected]');
+        el.value = def ? def.value : (el.options[0] && el.options[0].value) || '';
+      } else {
+        el.value = el.defaultValue || '';
+      }
+    });
+  });
+})();
+</script>
 
 <script>
   // ── SVG reactor + units toggle + multi-obstruction list ────────────

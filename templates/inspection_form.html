@@ -301,15 +301,23 @@
   </div>
 
   <!-- ── Submit bar ─────────────────────────────────────────────── -->
-  <div class="d-flex justify-content-between align-items-center my-4">
+  <div class="d-flex justify-content-between align-items-center my-4 flex-wrap gap-2">
     <a href="{{ url_for('project_results', pid=project.id) }}"
        class="btn btn-outline-secondary">
       <i class="bi bi-arrow-left me-1"></i>Cancel
     </a>
-    <button type="submit" class="btn btn-success btn-lg fw-bold">
-      <i class="bi bi-check2-circle me-1"></i>
-      Save Inspection &amp; Pass to Shading Model
-    </button>
+    <div class="d-flex gap-2 flex-wrap">
+      <button type="button" id="inspResetForm" class="btn btn-outline-warning"
+              title="Clear every obstruction + reset scalar fields to defaults.
+Uploaded photos and drawings are kept (use their Remove buttons to delete).
+Saved server data is unchanged until you Save afterwards.">
+        <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Form
+      </button>
+      <button type="submit" class="btn btn-success btn-lg fw-bold">
+        <i class="bi bi-check2-circle me-1"></i>
+        Save Inspection &amp; Pass to Shading Model
+      </button>
+    </div>
   </div>
 </form>
 
@@ -394,6 +402,38 @@
   }
   /* Wire the REMOVE buttons that came pre-rendered from saved data. */
   document.querySelectorAll('#obsList .obs-card').forEach(wireRemove);
+
+  /* Reset button — wipes every obstruction card + scalar field on the
+     inspection form. Client-side only: re-submit Save to persist the
+     empty state. Uploaded photos / drawings are kept (use their per-tile
+     Remove buttons). */
+  var resetBtn = document.getElementById('inspResetForm');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function() {
+      if (!confirm('Reset every obstruction + scalar field on this form? '
+                 + 'Uploaded photos / drawings are kept. '
+                 + 'Saved server data is unchanged until you Save afterwards.')) {
+        return;
+      }
+      list.innerHTML = '';   // remove every obstruction card (saved + cloned)
+      var form = resetBtn.closest('form');
+      form.querySelectorAll('input:not([type=hidden]):not([type=file]), select, textarea')
+          .forEach(function(el) {
+        if (el.type === 'radio' || el.type === 'checkbox') {
+          el.checked = el.defaultChecked;
+        } else if (el.tagName === 'SELECT') {
+          var def = el.querySelector('option[selected]');
+          el.value = def ? def.value : (el.options[0] && el.options[0].value) || '';
+        } else {
+          el.value = el.defaultValue || '';
+        }
+      });
+      // Also clear file input selections (file inputs are intentionally
+      // skipped above to avoid throwing in browsers that reject programmatic
+      // value clears; .value = "" is the safe API).
+      form.querySelectorAll('input[type=file]').forEach(function(el){ el.value = ''; });
+    });
+  }
 })();
 </script>
 
