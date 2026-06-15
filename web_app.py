@@ -2683,7 +2683,13 @@ def project_location(pid):
                 except Exception:
                     pass
         save_project_data(pid, data)
-        return redirect(url_for("project_loads", pid=pid))
+        # Route to the site-inspection form (shading + photos +
+        # roof drawings) immediately after site info. Per owner
+        # 2026-06-15: "i need shading form to file when adding
+        # site info[r]". /inspection POST in turn redirects to
+        # /shading (shading confirmed) or /loads (no shading), so
+        # the wizard still flows location -> loads end-to-end.
+        return redirect(url_for("inspection_form", pid=pid))
 
     return render_template("location.html", user=current_user(),
                            project=project, countries=get_countries(),
