@@ -201,6 +201,41 @@ def inspection_form(pid):
         mirrored["azimuth"]             = azimuth
         mirrored["inspection_confirmed"] = (shading_present in ("yes", "partial"))
         mirrored["source"]              = "inspection_form"
+
+        # ── 5b. Compute the shading factor immediately so /loads can use
+        #        it on the very next calc, without forcing a detour through
+        #        /shading. Per owner 2026-06-15: "need to capture shading
+        #        information and persist it and pass it to the load
+        #        calculation [first time around]". The deterministic
+        #        _compute_shading_factor lives in web_app.py and is in
+        #        scope at runtime because this file is byte-injected into
+        #        web_app.py by patch_inspection_form_routes.py.
+        try:
+            if shading_present in ("yes", "partial") and obstructions:
+                _analysis = _compute_shading_factor(obstructions)
+                mirrored["factor"]            = _analysis["factor"]
+                mirrored["label"]             = _analysis["label"]
+                mirrored["loss_pct"]          = _analysis["loss_pct"]
+                mirrored["combined_severity"] = _analysis.get("combined_severity")
+                mirrored["per_obstruction"]   = _analysis.get("per_obstruction") or []
+                mirrored["agent_summary"]     = _analysis.get("summary", "")
+                mirrored["agent_version"]     = "inspection-form-deterministic-v1"
+                mirrored["factor_source"]     = "inspection_form_deterministic"
+            else:
+                # No shading on site: lock the factor to 1.0 so the loads
+                # calc skips any correction (was potentially carrying a
+                # stale factor from a previous /shading visit).
+                mirrored["factor"]        = 1.0
+                mirrored["label"]         = "No shading"
+                mirrored["loss_pct"]      = 0.0
+                mirrored["factor_source"] = "inspection_form_no_shading"
+        except Exception as _e:
+            try:
+                app.logger.warning(
+                    "inspection deterministic factor compute failed: %s", _e)
+            except Exception:
+                pass
+
         # Clear stale engine output so /shading recomputes against new
         # obstructions on next GET.
         mirrored.pop("engine", None)
