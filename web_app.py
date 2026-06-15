@@ -12312,6 +12312,20 @@ def _engine_full_analysis(project, obstructions, on_date=None,
                 round(max((s.per_panel_fraction[i] for s in result["series"]), default=0.0), 3)
                 for i in range(result["total_panels"])
             ],
+            # Per-panel 5-class severity bucket (matches the heat-map
+            # colour code in templates/shading.html and the spec image).
+            # unshaded / light / moderate / heavy / full.
+            "per_panel_bucket": [
+                ("full"     if f >= 0.95 else
+                 "heavy"    if f >= 0.50 else
+                 "moderate" if f >= 0.20 else
+                 "light"    if f >= 0.05 else
+                 "unshaded")
+                for f in (
+                    round(max((s.per_panel_fraction[i] for s in result["series"]), default=0.0), 3)
+                    for i in range(result["total_panels"])
+                )
+            ],
             # Engine version stamp — bump when the algorithm changes so we
             # can detect stale persisted results.
             "engine_version": "shading-engine-v1-2026-06-14",
