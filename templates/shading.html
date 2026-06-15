@@ -217,9 +217,22 @@
       panel count.
     </div>
     {% endif %}
-    <div class="mt-2 small" style="color:#9ec5fe;font-size:11px;opacity:.8">
-      <i class="bi bi-info-circle me-1"></i>
-      Drag to rotate · scroll to zoom · right-drag to pan
+    <div class="mt-2 d-flex justify-content-between flex-wrap gap-2 align-items-center">
+      <div class="small" style="color:#9ec5fe;font-size:11px;opacity:.8">
+        <i class="bi bi-info-circle me-1"></i>
+        Drag to rotate · scroll to zoom · right-drag to pan
+      </div>
+      {# Quick link to the site-inspection form. Added 2026-06-15 after  #}
+      {# "where is the shading site assessment form, i dont see it".    #}
+      {# Operators land on /shading and now have a direct way to jump   #}
+      {# to the inspection form without going back through /loads.       #}
+      <a href="{{ url_for('inspection_form', pid=project.id) }}"
+         class="btn btn-sm fw-bold"
+         style="background:#f59e0b;color:#0a0a14;border:1px solid #f59e0b;
+                font-size:11px;padding:5px 14px;text-decoration:none">
+        <i class="bi bi-clipboard2-check-fill me-1"></i>
+        Open Site Inspection Form
+      </a>
     </div>
   </div>
 

@@ -379,6 +379,15 @@
         <a href="{{ url_for('project_loads', pid=p.id) }}" class="step-nav-btn lds">
           <i class="bi bi-list-check me-1"></i>Loads
         </a>
+        {# Direct access to the site-inspection form. Added 2026-06-15 #}
+        {# after "where is the shading site assessment form, i dont    #}
+        {# see it" — now reachable from any project on the dashboard.  #}
+        <a href="{{ url_for('inspection_form', pid=p.id) }}" class="step-nav-btn"
+           style="background:rgba(245,158,11,.12);color:#f59e0b;
+                  border:1px solid rgba(245,158,11,.4)"
+           title="Site inspection form — capture obstructions, photos, roof drawings; feeds the shading model">
+          <i class="bi bi-clipboard2-check me-1"></i>Site Inspection
+        </a>
         <a href="{{ url_for('project_results', pid=p.id) }}" class="step-nav-btn res active">
           <i class="bi bi-bar-chart me-1"></i>Results
         </a>

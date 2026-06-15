@@ -111,7 +111,38 @@
   /* Accessibility / readability — make link underlines visible on hover for body text */
   main a:not(.btn):not(.nav-link):not(.dropdown-item):not(.footer-link):hover{text-decoration:underline}
 
-  @media print{.no-print{display:none!important}.report-header::before{display:none}}
+  @media print{
+    .no-print{display:none!important}
+    .report-header::before{display:none}
+    /* Print-friendly text — the on-screen design uses
+       gradient-on-transparent text for headline values + report
+       titles, which renders as INVISIBLE in print because printers
+       don't apply the gradient. Restore solid colour so values appear
+       on paper / PDF. Fix 2026-06-15 after the
+       "design report in print mode dont show values" report.        */
+    .kpi-value, .report-title, .navbar-brand,
+    [style*="background-clip:text"],
+    [style*="background-clip: text"]{
+      background:none !important;
+      -webkit-text-fill-color:initial !important;
+      background-clip:initial !important;
+      -webkit-background-clip:initial !important;
+      color:#000 !important;
+    }
+    /* Force readable colours on the rest of the design report so it
+       prints well on white paper. */
+    body{background:#fff !important;color:#000 !important}
+    .solar-card,.kpi-card,.data-row{
+      background:#fff !important;color:#000 !important;
+      border:1px solid #ccc !important;
+    }
+    .lbl,.kpi-label,.kpi-unit,.text-secondary,.small.text-secondary{
+      color:#444 !important;
+    }
+    .val,.data-row .val{color:#000 !important;font-weight:700 !important}
+    .data-row.total .val{color:#b06000 !important}
+    .section-head{color:#000 !important;border-bottom:1px solid #888 !important}
+  }
   @media(max-width:991px){.navbar-nav{padding:.5rem 0;gap:.25rem!important}}
 
   /* ── Mobile layout (≤767px — tablets and below) ── */
