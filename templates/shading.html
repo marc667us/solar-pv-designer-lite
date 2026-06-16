@@ -2077,44 +2077,86 @@
         wall.position.y = h / 2;
         grp.add(wall);
       } else if (t.includes('hill') || t.includes('terrain') || t.includes('mound')) {
-        // Hill / terrain: a dome of earth + grass.
-        // 2026-06-16 fixes:
-        //   * baseR was max(h,w) which produced a 20m radius for a tall
-        //     hill, eating the whole scene ("hill is on the house").
-        //     Now baseR = w/2 (user width = diameter at ground), with a
-        //     floor of max(h*0.6, 3) so the operator always sees a hill
-        //     even if they didn't fill in width.
-        //   * scale.y was clamped at 1.0 which made every hill look flat
-        //     once height >= baseR ("the hill is flat"). Now scale.y =
-        //     h / baseR, clamped only up to 2.5 so very tall peaks still
-        //     look right and don't disappear off-camera.
+        // Natural hill: main mound + 3 side bumps + scattered grass
+        // tufts + a few earth patches near the crown. Built from
+        // overlapping spheres so the silhouette is irregular like real
+        // terrain, NOT a perfect dome. Sizing honours the user's typed
+        // width (ground diameter) and height (peak above ground); a
+        // floor on each ensures blank fields still produce a visible
+        // hill. Vertical scale up to 2.5 so a tall narrow peak reads
+        // as a peak.
         const w_eff = Math.max(w, h * 0.6, 3);
         const baseR = w_eff / 2;
-        const dome = new THREE.Mesh(
-          new THREE.SphereGeometry(baseR, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-          new THREE.MeshStandardMaterial({
-            color: 0x6b8e3a, roughness: 0.98
-          })
+        const vScale = Math.max(0.30, Math.min(2.5, h / Math.max(baseR, 0.1)));
+        const earthMat = new THREE.MeshStandardMaterial({
+          color: 0x7d8c4d, roughness: 0.98
+        });
+        const earthMatLight = new THREE.MeshStandardMaterial({
+          color: 0x8fa05a, roughness: 0.98
+        });
+        // Main central mound — the dominant lump.
+        const main = new THREE.Mesh(
+          new THREE.SphereGeometry(baseR, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+          earthMat
         );
-        dome.castShadow = true; dome.receiveShadow = true;
-        dome.scale.y = Math.max(0.3, Math.min(2.5, h / Math.max(baseR, 0.1)));
-        dome.position.y = 0;
-        grp.add(dome);
-        // Sprinkle a few dark patches (rocks / shrubs) so the dome
-        // doesn't read as a perfect ball from a distance. Scale them
-        // off the dome's actual height after scale.y was applied.
+        main.castShadow = true; main.receiveShadow = true;
+        main.scale.y = vScale;
+        grp.add(main);
+        // Three side bumps to break the perfect-dome silhouette.
+        const sideBumps = [
+          { x:  baseR * 0.55, z:  baseR * 0.30, r: baseR * 0.50,
+            vs: vScale * 0.72, mat: earthMatLight },
+          { x: -baseR * 0.45, z:  baseR * 0.55, r: baseR * 0.45,
+            vs: vScale * 0.60, mat: earthMatLight },
+          { x:  baseR * 0.10, z: -baseR * 0.60, r: baseR * 0.55,
+            vs: vScale * 0.80, mat: earthMat },
+        ];
+        sideBumps.forEach(b => {
+          const m = new THREE.Mesh(
+            new THREE.SphereGeometry(b.r, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+            b.mat
+          );
+          m.scale.y = b.vs;
+          m.position.set(b.x, 0, b.z);
+          m.castShadow = true; m.receiveShadow = true;
+          grp.add(m);
+        });
+        // Grass tufts (small bright ellipsoids) scattered on the slope.
+        // Tuft count tracks the hill's perimeter so larger hills get
+        // proportionally more vegetation.
+        const grassMat = new THREE.MeshStandardMaterial({
+          color: 0x6ab33b, roughness: 1.0
+        });
+        const nTufts = Math.min(14, Math.max(6, Math.floor(baseR * 1.5)));
+        for (let i = 0; i < nTufts; i++) {
+          const ang = (i / nTufts) * Math.PI * 2 + Math.sin(i * 1.3) * 0.4;
+          const rRatio = 0.30 + 0.55 * ((i * 31) % 7) / 6.0;
+          const r = baseR * rRatio;
+          const y_surf = vScale *
+            Math.sqrt(Math.max(0, baseR * baseR - r * r));
+          const tuft = new THREE.Mesh(
+            new THREE.SphereGeometry(baseR * 0.045, 7, 5), grassMat);
+          tuft.position.set(Math.cos(ang) * r,
+                            y_surf + baseR * 0.02,
+                            Math.sin(ang) * r);
+          tuft.scale.y = 0.6;
+          grp.add(tuft);
+        }
+        // Brown earth patches near the crown for texture.
         const rockMat = new THREE.MeshStandardMaterial({
           color: 0x5a4633, roughness: 1.0
         });
-        const domeApexY = baseR * dome.scale.y;
-        for (let i = 0; i < 5; i++) {
-          const ang = (i / 5) * Math.PI * 2;
-          const r2 = baseR * (0.55 + 0.15 * Math.sin(i * 1.7));
+        for (let i = 0; i < 4; i++) {
+          const ang = (i / 4) * Math.PI * 2 + 0.7;
+          const r2 = baseR * 0.35;
+          const y_surf = vScale *
+            Math.sqrt(Math.max(0, baseR * baseR - r2 * r2));
           const rock = new THREE.Mesh(
-            new THREE.SphereGeometry(baseR * 0.06, 8, 6), rockMat);
-          rock.position.set(Math.cos(ang) * r2, domeApexY * 0.22,
+            new THREE.SphereGeometry(baseR * 0.055, 7, 5), rockMat);
+          rock.position.set(Math.cos(ang) * r2,
+                            y_surf + baseR * 0.02,
                             Math.sin(ang) * r2);
-          rock.scale.y = 0.6;
+          rock.scale.y = 0.45;
           grp.add(rock);
         }
       } else if (t.includes('chimney') || t.includes('flue') || t.includes('stack')) {
