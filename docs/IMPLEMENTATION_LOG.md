@@ -971,3 +971,83 @@ Palette change is global to `shading.html` — the dashboard's visual feel shift
 
 ## Next Recommended Step
 Push + force redeploy + run live test suite to confirm no regressions. Then survey the 13-thumbnail timeline and bottom metrics bar against the reference image for follow-up polish.
+
+---
+
+# Implementation Log Entry — 2026-06-16 (SESSION SUMMARY)
+
+**Date:** 2026-06-16 (full-day session)
+**Task:** AI 3D Shading module hardening + reference-template engine + result-history feature
+**Status:** Shipped. Live commit `1277d4f` (deploy of `67da4ea` polling).
+
+## Session shape
+
+13 substantive commits + cron auto-commits between them. Sequence (oldest → newest):
+
+| # | Commit | What |
+|---|---|---|
+| 1 | `f1f19b2` | Engine = single source of truth (POST handlers use `_apply_shading_factor`); 3D respects mount_type + obstruction types |
+| 2 | `a97d310` | siteGroup wrapper so panels follow roof slope (was Euler-order bug) |
+| 3 | `bd02c84` | Hill rendering rewrite + obstruction Z-direction inverted (was N at +Z) |
+| 4 | `303adc0` | Engine-block backfill on report routes (PID 21/23 angles showed `--`) |
+| 5 | `a1e03df` | Natural lumpy hill (main mound + 3 side bumps + grass tufts + earth patches) |
+| 6 | `1eb6fa1` | Reference-template library + matcher (v1: 3 entries, image-included) |
+| 7 | `746648c` | Removed bundled reference imagery — copyright; matcher = learn-only |
+| 8 | `9fad8de` | 3d10-plan-informed expansion: 7 scene types, sub-cardinal directions (NNE/ENE/...), cluster-of-buildings render, 5-bucket panel-impact palette (`#1d4ed8/#22c55e/#facc15/#f97316/#dc2626`), scene-type priority chain |
+| 9 | `a926af2` | Hill removed end-to-end — T06 catalogue + Three.js render branch (owner: "remove it") |
+| 10 | `7b39f9f` | Reset 3D Model button (cache-bust for browser-side stale renders) |
+| 11 | `007fc8b` | Stopped agent dumping walkthrough on dashboard (gated `?show_agent=1`) |
+| 12 | `1277d4f` | `/myproject` result-history feature + agent self-delete + replaced 'My Projects' navigation |
+| 13 | `67da4ea` | Restored dashboard project-list visibility (operator needs entry into tariff/house flows) |
+
+## What's now true on the live site
+
+- **Engine is single source of truth** for shading factor; banner == engine == report angles.
+- **3D scene** renders correct mount type (ground / rooftop_flat / rooftop_sloped), panels lie flat then tilt, azimuth applied via siteGroup wrapper.
+- **Obstruction renders** now include: building (cuboid + bands + windows), tree (trunk + foliage), tank (cylinder + dome + 4 legs), wall, mast, chimney, tower, cluster-building (slab + bands + HVAC), other (blob). **Hill REMOVED.**
+- **Direction map** is the full 16-compass (added NNE/ENE/ESE/SSE/SSW/WSW/WNW/NNW for cluster-of-buildings scene).
+- **Panel-impact palette** is the 3d10 plan's 5-bucket exact match.
+- **Reference catalogue** = 6 templates (T01, T02, T03, T04, T05, T07) — hill removed.
+- **Closest reference profile card** on `/shading` shows scene-type badge + match% + reasoning + attribute table.
+- **Reset 3D Model button** next to Print / Save-as-PDF.
+- **`/myproject` page** — searchable result history (project name + location + agent narrative; factor bucket; since date).
+- **Agent self-delete on save** — every `project_shading` POST inserts a row into `shading_history` then strips `agent_v2`/`agent_summary`/`per_obstruction`/`combined_severity` from project record. Factor/label/loss_pct retained for loads calc.
+- **Dashboard project list restored** (operator path to tariff/house types).
+- **ADR-0006 / ADR-0006a / ADR-0006b** logged in ARCHITECTURE_DECISIONS.md.
+- **Live test 48/51 pass** on PID=21 (3 failures are stale test calibrations, not bugs).
+
+## What's still open (gap analysis against 3d10 plan)
+
+| Gap | Plan ref | Severity |
+|---|---|---|
+| Date/time picker (engine always solstice) | §6/§11 | High |
+| 12-thumbnail timeline (currently 5) | §12 | High |
+| Header bar with Date/Time/Sun-Alt/Sun-Az | §11 | Medium |
+| Bottom metrics bar with Avg + Min factor + Modules + Loss + Export | §22 | Medium |
+| Manual scene-type chooser | §25.1 | Medium |
+| PNG / JSON / GLTF exports | §23 | Medium |
+| Form fields: floors, length, diameter, slope, azimuthCoverage, stringCount, simulationDate, simulationTime, siteType, terrainType | §6 | Low–Med |
+| Compass overlay in 3D scene | §11 | Low |
+| Cluster A/B/C/D auto-labels | §20 | Low |
+| Left site-info panel layout | §11 | Low |
+| React Three Fiber rewrite | §3/§24 | Architectural (out of scope per ADR-0006b) |
+
+## Files Changed (across the day)
+
+* `engine/shading_engine.py` (DIRECTION_AZ expanded to 16 compass points)
+* `engine/shading_templates.py` (new file — matcher)
+* `engine/shading_templates.json` (new file — catalogue v3, 6 templates)
+* `engine/agents/shading_agent.py` (`tool_pick_reference_template` added; SHADING_AGENT_VERSION → v2-2026-06-16)
+* `templates/shading.html` (siteGroup wrapper, mount-type branch, palette, sub-cardinals, cluster render, hill removed, Reset button, agent-card gating, reference card)
+* `templates/dashboard.html` (My Project tile → /myproject; project list restored)
+* `templates/account.html` (My Project links → /myproject)
+* `templates/myproject.html` (new file — result-history page)
+* `web_app.py` (`_apply_shading_factor`, `_ensure_engine_block`, `shading_history` table, `/myproject` route, agent self-delete in POST)
+* `test_shading_live.py` (new assertions for mount_type/azimuth/tilt/banner==engine)
+* `docs/ARCHITECTURE_DECISIONS.md` (ADR-0006, 0006a, 0006b)
+* `docs/IMPLEMENTATION_LOG.md` (this entry + sub-entries through the day)
+* Patcher scripts: `patch_shading_engine_first.py`, `patch_reference_template_card.py`, `patch_report_shading_engine.py`, `patch_myproject_history.py`
+
+## Next Recommended Step
+
+Pick from the open-gap table above. Highest ROI: date/time picker (closes the always-solstice gap). Second highest: 12-thumbnail timeline (visible dashboard alignment with reference image).

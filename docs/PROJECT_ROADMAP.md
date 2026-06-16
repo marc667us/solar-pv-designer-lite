@@ -39,3 +39,7 @@
 - Phase 20 (2026-06-01): Ground mount diagrams, AI agent fixes, globe widget complete
 - Phase 21 (2026-06-02): K8s infra, security architecture spec, monitoring stack, admin ops center (26/29 live tests passing)
 - 2026-06-03..05: Referral program + Brevo + Render primary
+
+## 2026-06-16 — Shading session
+
+13 substantive commits: engine-first source of truth, siteGroup wrapper for azimuth-rotated panels-on-roof, 3D obstruction renders aligned to engineering types (building/tree/tank/wall/mast/chimney/tower/cluster/other; hill removed per owner), full 16-compass direction support, 5-bucket panel-impact palette (3d10 plan §21), reference-template library + matcher (6 catalogued profiles, scene_type priority chain), agent self-delete on save, new `/myproject` searchable history, dashboard project list preserved. Live commit `67da4ea`. See IMPLEMENTATION_LOG for the full sequence + open gaps against the 3d10 plan.
