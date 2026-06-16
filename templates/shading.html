@@ -1269,11 +1269,71 @@
       <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Energy Loss</div>
       <div class="fw-bold" style="color:#ef4444;font-size:13px">{{ "%.1f"|format(_eng.peak_step_loss_pct or 0) }}%</div>
     </div>
-    <a href="{{ url_for('export_pdf_shading', pid=project.id) }}"
-       class="btn btn-warning fw-bold ms-auto" style="font-size:11px;letter-spacing:.4px">
-      <i class="bi bi-download me-1"></i>EXPORT REPORT
-    </a>
+    <div class="btn-group ms-auto" role="group">
+      <button type="button" id="shadingExportPng"
+              class="btn btn-sm btn-outline-info" style="font-size:11px;letter-spacing:.3px"
+              title="Download the current 3D viewport as a PNG snapshot">
+        <i class="bi bi-camera me-1"></i>PNG
+      </button>
+      <button type="button" id="shadingExportJson"
+              class="btn btn-sm btn-outline-light" style="font-size:11px;letter-spacing:.3px"
+              title="Download the engine output + obstruction data as JSON">
+        <i class="bi bi-filetype-json me-1"></i>JSON
+      </button>
+      <a href="{{ url_for('export_pdf_shading', pid=project.id) }}"
+         class="btn btn-sm btn-warning fw-bold" style="font-size:11px;letter-spacing:.4px">
+        <i class="bi bi-download me-1"></i>EXPORT REPORT
+      </a>
+    </div>
   </div>
+  <script>
+  (function() {
+    // PNG export: dump the active Three.js canvas to a PNG blob and trigger
+    // a download. The renderer is created with preserveDrawingBuffer:true
+    // earlier in this template so toDataURL works without re-rendering.
+    function _downloadBlob(blob, name) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click();
+      setTimeout(function() { try { URL.revokeObjectURL(url); } catch (_) {} a.remove(); }, 1200);
+    }
+    var pngBtn = document.getElementById('shadingExportPng');
+    if (pngBtn) pngBtn.addEventListener('click', function() {
+      try {
+        var host = document.getElementById('shading3d-canvas');
+        var cv = host && host.querySelector('canvas');
+        if (!cv) { alert('3D scene has not finished loading. Wait a few seconds and try again.'); return; }
+        cv.toBlob(function(b) {
+          if (!b) { alert('PNG export failed: browser returned empty blob.'); return; }
+          var d = new Date();
+          var stamp = d.toISOString().slice(0, 19).replace(/[:T]/g, '-');
+          _downloadBlob(b, 'shading-3d-{{ project.id }}-' + stamp + '.png');
+        }, 'image/png');
+      } catch (e) { console.warn('[shading] PNG export failed', e); alert('PNG export failed: ' + e.message); }
+    });
+    // JSON export: bundle engineData + obstructionsData + project metadata.
+    var jsonBtn = document.getElementById('shadingExportJson');
+    if (jsonBtn) jsonBtn.addEventListener('click', function() {
+      try {
+        var eng = JSON.parse((document.getElementById('shading-engine-data') || {textContent:'{}'}).textContent.trim() || '{}');
+        var obs = JSON.parse((document.getElementById('shading-obstructions-data') || {textContent:'[]'}).textContent.trim() || '[]');
+        var payload = {
+          schema: 'solarpro-shading/v1',
+          exported_at: new Date().toISOString(),
+          project: { id: {{ project.id }}, name: {{ project.name|tojson }} },
+          engine: eng,
+          obstructions: obs,
+          reference_template: {{ (reference_template or {})|tojson }}
+        };
+        var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        var d = new Date();
+        var stamp = d.toISOString().slice(0, 19).replace(/[:T]/g, '-');
+        _downloadBlob(blob, 'shading-3d-{{ project.id }}-' + stamp + '.json');
+      } catch (e) { console.warn('[shading] JSON export failed', e); alert('JSON export failed: ' + e.message); }
+    });
+  })();
+  </script>
   <script>
   (function() {
     try {
