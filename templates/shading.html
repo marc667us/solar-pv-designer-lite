@@ -1816,16 +1816,36 @@
 <!-- firewalls, and DNS filters can't block the CDN. The import map -->
 <!-- below makes OrbitControls's bare `import { ... } from "three"` -->
 <!-- resolve to our self-hosted URL.                                  -->
-<script type="importmap">
-{
-  "imports": {
-    "three": "{{ url_for('static', filename='vendor/three-0.170.0/three.module.js') }}"
+<!-- Three.js UMD r147 — loaded as plain <script src> tags so we do NOT
+     depend on ES modules / importmap, which silently fails in some
+     environments. Adds window.THREE + THREE.OrbitControls. -->
+<script src="{{ url_for('static', filename='vendor/three-r147-umd/three.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/three-r147-umd/OrbitControls.js') }}"></script>
+<script>
+  // Pull THREE + OrbitControls off the window so the rest of this
+  // block (originally an ES module) keeps its named references.
+  var THREE = window.THREE;
+  var OrbitControls = THREE && THREE.OrbitControls;
+  if (!THREE) {
+    // If THREE is still missing we cannot init the 3D scene — surface
+    // a clear error and bail before the rest of the script throws.
+    try {
+      var _e = document.getElementById('shading3d-error');
+      var _l = document.getElementById('shading3d-loading');
+      if (_l) _l.style.display = 'none';
+      if (_e) {
+        _e.style.display = 'flex';
+        _e.innerHTML =
+          '<i class="bi bi-exclamation-triangle" style="font-size:24px;color:#f59e0b"></i>' +
+          '<div><strong>3D scene unavailable.</strong> The 2D dashboard above is unaffected.</div>' +
+          '<div style="font-family:monospace;font-size:11px;color:#c0a070;max-width:560px;text-align:left">' +
+          'Three.js failed to load from /static/vendor/three-r147-umd/three.min.js. ' +
+          'Check Network tab — most likely a 404 from a stale deploy or a blocking browser extension.' +
+          '</div>';
+      }
+    } catch (_) {}
+    throw new Error('THREE not loaded — bailing on 3D init.');
   }
-}
-</script>
-<script type="module">
-  import * as THREE       from 'three';
-  import { OrbitControls } from '{{ url_for("static", filename="vendor/three-0.170.0/OrbitControls.js") }}';
 
   // Helper — show a visible error in the canvas if init blows up so the
   // operator never sees a silently-blank box.
