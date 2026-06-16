@@ -1407,7 +1407,7 @@
       try {
         const sc = window._shadingScene;
         if (!sc) { alert('3D scene has not finished loading. Wait a few seconds and try again.'); return; }
-        const mod = await import('{{ url_for("static", filename="vendor/three-0.160.0/GLTFExporter.js") }}');
+        const mod = await import('{{ url_for("static", filename="vendor/three-0.170.0/GLTFExporter.js") }}');
         const exp = new mod.GLTFExporter();
         exp.parse(sc, (gltf) => {
           const text = JSON.stringify(gltf, null, 2);
@@ -1779,20 +1779,20 @@
 </script>
 
 <!-- ── MODULE SCRIPT — Three.js 3D scene. Now SELF-HOSTED at -->
-<!-- /static/vendor/three-0.160.0/ so browser extensions, corporate -->
+<!-- /static/vendor/three-0.170.0/ so browser extensions, corporate -->
 <!-- firewalls, and DNS filters can't block the CDN. The import map -->
 <!-- below makes OrbitControls's bare `import { ... } from "three"` -->
 <!-- resolve to our self-hosted URL.                                  -->
 <script type="importmap">
 {
   "imports": {
-    "three": "{{ url_for('static', filename='vendor/three-0.160.0/three.module.js') }}"
+    "three": "{{ url_for('static', filename='vendor/three-0.170.0/three.module.js') }}"
   }
 }
 </script>
 <script type="module">
   import * as THREE       from 'three';
-  import { OrbitControls } from '{{ url_for("static", filename="vendor/three-0.160.0/OrbitControls.js") }}';
+  import { OrbitControls } from '{{ url_for("static", filename="vendor/three-0.170.0/OrbitControls.js") }}';
 
   // Helper — show a visible error in the canvas if init blows up so the
   // operator never sees a silently-blank box.
