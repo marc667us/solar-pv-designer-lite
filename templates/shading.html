@@ -2829,13 +2829,27 @@
 
     if (slider && series.length) {
       slider.max = series.length - 1;
-      // Default to the peak-shading step so the canvas opens on the
-      // most informative instant.
-      let peakIdx = 0;
-      for (let i = 0; i < series.length; i++) {
-        if (series[i].avg_frac > series[peakIdx].avg_frac) peakIdx = i;
+      // 3d10 plan §6: if the operator picked a sim_time, seed the
+      // slider to the closest series step. Else default to peak-shading
+      // so the canvas opens on the most informative instant.
+      const simTime = {{ (shading.sim_time or '')|tojson }};
+      let startIdx = 0;
+      if (simTime && /^\d{2}:\d{2}$/.test(simTime)) {
+        let bestDiff = Infinity;
+        for (let i = 0; i < series.length; i++) {
+          const t = String(series[i].time || '');
+          if (!/^\d{2}:\d{2}$/.test(t)) continue;
+          const a = parseInt(simTime.slice(0,2),10)*60 + parseInt(simTime.slice(3,5),10);
+          const b = parseInt(t.slice(0,2),10)*60 + parseInt(t.slice(3,5),10);
+          const d = Math.abs(a - b);
+          if (d < bestDiff) { bestDiff = d; startIdx = i; }
+        }
+      } else {
+        for (let i = 0; i < series.length; i++) {
+          if (series[i].avg_frac > series[startIdx].avg_frac) startIdx = i;
+        }
       }
-      slider.value = peakIdx;
+      slider.value = startIdx;
 
       function applyStep(idx) {
         const s = series[idx];
@@ -3311,6 +3325,38 @@
                   'SW' %}
   <div class="solar-card p-3 mb-3">
     <div class="section-head mb-3"><i class="bi bi-house me-1"></i>Site Context</div>
+    {# ── Simulation Date / Time (3d10 plan §6 universal data contract) ──
+       Engine reads sim_date and runs the day's sun path for that date;
+       the time slider seeds to sim_time. Empty values fall back to
+       summer solstice (worst-case for equatorial fleet). Added 2026-06-16. #}
+    <div class="row g-3 mb-3">
+      <div class="col-md-3 col-6">
+        <label class="form-label small text-secondary fw-bold">
+          <i class="bi bi-calendar3 me-1"></i>Simulation Date
+        </label>
+        <input type="date" name="sim_date"
+               value="{{ shading.sim_date or '' }}"
+               class="form-control sp-input"
+               title="Date for the sun-path simulation. Empty = 21 June (worst-case solstice).">
+      </div>
+      <div class="col-md-3 col-6">
+        <label class="form-label small text-secondary fw-bold">
+          <i class="bi bi-clock me-1"></i>Simulation Time
+        </label>
+        <input type="time" name="sim_time"
+               value="{{ shading.sim_time or '' }}"
+               class="form-control sp-input"
+               title="Default time of day shown on the dashboard. Empty = solar noon.">
+      </div>
+      <div class="col-md-6">
+        <div class="text-secondary small pt-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Leave blank to use the worst-case summer solstice (21 June) at
+          solar noon. Change date to model a specific month — the sun
+          path, shadow lengths, and affected-panel map all re-compute.
+        </div>
+      </div>
+    </div>
     <div class="row g-3">
       <div class="col-md-3 col-6">
         <label class="form-label small text-secondary fw-bold">Roof Type</label>

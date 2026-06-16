@@ -12494,9 +12494,18 @@ def _engine_full_analysis(project, obstructions, on_date=None,
                 continue
 
         if on_date is None:
-            # Owner spec uses summer solstice (21 June) as the worst-case
-            # day for the equatorial fleet; we'll let UI pick a date later.
-            on_date = _dt(_dt.utcnow().year, 6, 21)
+            # 3d10 plan: sim_date/sim_time picker (2026-06-16 late).
+            # Read the form-persisted simulation date if set, else fall
+            # back to summer solstice (21 June) for worst-case analysis.
+            _sd_raw = (_sh_pre.get("sim_date") or "").strip()
+            on_date = None
+            if _sd_raw:
+                try:
+                    on_date = _dt.strptime(_sd_raw[:10], "%Y-%m-%d")
+                except Exception:
+                    on_date = None
+            if on_date is None:
+                on_date = _dt(_dt.utcnow().year, 6, 21)
 
         result = run_full_analysis(
             lat_deg=lat, lon_deg=lon, on_date=on_date,
@@ -12649,6 +12658,12 @@ def project_shading(pid):
                                        request.form.get("roof_type") or data.get("mounting_type")),
             "roof_height_m":        _shading_num(request.form.get("roof_height_m")),
             "inspection_confirmed": bool(request.form.get("inspection_confirmed")),
+            # 3d10 plan sim_date/sim_time picker (2026-06-16 late).
+            # YYYY-MM-DD + HH:MM strings; the engine reads sim_date in
+            # _engine_full_analysis, the dashboard JS seeds the time
+            # slider with sim_time on initial render.
+            "sim_date":             (request.form.get("sim_date", "") or "").strip()[:10],
+            "sim_time":             (request.form.get("sim_time", "") or "").strip()[:5],
             "obstructions":         obstructions,
             "saved_at":             datetime.utcnow().isoformat() + "Z",
             "saved_by":             session.get("username", ""),
