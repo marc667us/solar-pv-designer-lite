@@ -1280,6 +1280,11 @@
               title="Download the engine output + obstruction data as JSON">
         <i class="bi bi-filetype-json me-1"></i>JSON
       </button>
+      <button type="button" id="shadingExportGltf"
+              class="btn btn-sm btn-outline-success" style="font-size:11px;letter-spacing:.3px"
+              title="Download the 3D scene as glTF for Blender, Unity, sceneviewer">
+        <i class="bi bi-box me-1"></i>GLTF
+      </button>
       <a href="{{ url_for('export_pdf_shading', pid=project.id) }}"
          class="btn btn-sm btn-warning fw-bold" style="font-size:11px;letter-spacing:.4px">
         <i class="bi bi-download me-1"></i>EXPORT REPORT
@@ -1333,6 +1338,39 @@
       } catch (e) { console.warn('[shading] JSON export failed', e); alert('JSON export failed: ' + e.message); }
     });
   })();
+  </script>
+  <script type="module">
+  // GLTF export - dynamic-import the exporter so failure to load it
+  // doesn't break the rest of the page (older browsers, blocked
+  // modules, etc.). The scene is exposed as window._shadingScene
+  // from inside the main Three.js module right after scene creation.
+  try {
+    const btn = document.getElementById('shadingExportGltf');
+    if (btn) btn.addEventListener('click', async () => {
+      try {
+        const sc = window._shadingScene;
+        if (!sc) { alert('3D scene has not finished loading. Wait a few seconds and try again.'); return; }
+        const mod = await import('{{ url_for("static", filename="vendor/three-0.160.0/GLTFExporter.js") }}');
+        const exp = new mod.GLTFExporter();
+        exp.parse(sc, (gltf) => {
+          const text = JSON.stringify(gltf, null, 2);
+          const blob = new Blob([text], { type: 'model/gltf+json' });
+          const url  = URL.createObjectURL(blob);
+          const a    = document.createElement('a');
+          const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+          a.href = url; a.download = 'shading-3d-{{ project.id }}-' + stamp + '.gltf';
+          document.body.appendChild(a); a.click();
+          setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) {} a.remove(); }, 1500);
+        }, (err) => {
+          console.warn('[shading] GLTF parse failed', err);
+          alert('GLTF export failed: ' + (err && err.message || err));
+        }, { binary: false });
+      } catch (e) {
+        console.warn('[shading] GLTF export failed', e);
+        alert('GLTF export failed: ' + e.message);
+      }
+    });
+  } catch (e) { console.warn('[shading] GLTF wiring failed', e); }
   </script>
   <script>
   (function() {
@@ -1822,6 +1860,9 @@
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB);    // sky blue
     scene.fog = new THREE.Fog(0xb3e0f2, 80, 280);    // hazy horizon
+    // Expose the scene so the GLTF export button (lives in a separate
+    // <script> block outside this module) can grab a reference.
+    try { window._shadingScene = scene; } catch (_) {}
     _ck('scene created (daytime sky)');
 
     // Camera — eye-level 3/4 perspective like the reference images
