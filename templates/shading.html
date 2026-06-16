@@ -1717,6 +1717,17 @@
       arrayZ = HOUSE.D / 4;
     }
 
+    // ── Site group — wraps the building + the panel array so a single
+    //    rotation around Y aligns the WHOLE site (sloped roof + panels)
+    //    with the user-chosen azimuth. Without this wrapper the house
+    //    would always face South while the panels rotated alone, leaving
+    //    the array floating off the slope (the 2026-06-16 second bug).
+    //    Obstructions + cast-shadow polys stay in world coords so they
+    //    remain at their true compass-direction from the array.
+    const siteGroup = new THREE.Group();
+    siteGroup.rotation.y = azRad;
+    scene.add(siteGroup);
+
     // ── Build the building (rooftop modes only).
     if (mountType !== 'ground') {
       const houseGroup = new THREE.Group();
@@ -1865,7 +1876,7 @@
       drive.receiveShadow = true;
       houseGroup.add(drive);
 
-      scene.add(houseGroup);
+      siteGroup.add(houseGroup);
       _ck('installation building added (' + mountType + ', ' +
           HOUSE.W.toFixed(1) + 'x' + HOUSE.D.toFixed(1) + 'x' +
           HOUSE_RIDGE.toFixed(1) + ' m)');
@@ -1897,20 +1908,18 @@
         rail.position.set(0, frameY, zr);
         rackGroup.add(rail);
       });
-      scene.add(rackGroup);
+      siteGroup.add(rackGroup);
       _ck('ground rack added (4 legs, frameY=' + frameY.toFixed(2) + 'm)');
     }
 
     // ── PV panel grid. Construct panels in the local XY plane (face = +Z),
-    //    then rotate the whole group so panels lie FLAT and tilt UP from
-    //    horizontal by `tiltRad`, then rotate around Y so the array faces
-    //    the user-selected azimuth. Without these two rotations the
-    //    panels appeared standing up (the 2026-06-16 bug the operator hit).
+    //    then rotate the group by `-π/2 + tiltRad` around X so panels lie
+    //    FLAT and tilt UP from horizontal by `tiltRad`. The azimuth is
+    //    handled by the siteGroup wrapper -- panels follow whatever slope
+    //    the (rotated) house presents. With this split, the panels always
+    //    rest ON the pitched roof, never floating beside it.
     const panelGroup = new THREE.Group();
-    // rotation.x = -π/2 + tiltRad → panels flat then tilted up by tilt.
     panelGroup.rotation.x = -Math.PI / 2 + tiltRad;
-    // rotation.y = (180 - azDeg) so 'South' = 0 rotation, 'East' = +90°.
-    panelGroup.rotation.y = azRad;
     const perPanelFracs = engineData.per_panel_max_frac || [];
     const panelMeshes = [];
     let pid = 0;
@@ -1938,7 +1947,7 @@
       }
     }
     panelGroup.position.set(0, arrayY, arrayZ);
-    scene.add(panelGroup);
+    siteGroup.add(panelGroup);
     _ck('panel grid added (' + panelMeshes.length + '/' + totalPanels +
         ' panels, cols=' + cols + ', rows=' + rows + ', tilt=' + tiltDeg +
         '°, azimuth=' + azDeg + '°, mount=' + mountType + ')');
