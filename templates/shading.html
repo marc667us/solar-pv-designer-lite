@@ -660,38 +660,327 @@
   </div>
   {% endif %}
 
-  {# ── Main 3D canvas + right-side control rail ──────────────────────── #}
+  {# ── PV Shading Simulation (browser-friendly inline SVG view).      #}
+  {#    Browser-friendly: pure server-rendered SVG + Jinja math. No     #}
+  {#    Three.js, no ES modules, no WebGL — works in every environment. #}
+  {#    Matches 3d10 reference image style (sun direction, obstruction  #}
+  {#    cuboid, cast shadow, tilted array, compass).                    #}
   <div class="row g-0">
     <div class="col-12 col-lg-9">
-      <div id="shading3d-canvas"
-           class="shading3d-canvas-responsive"
-           style="width:100%;height:560px;background:transparent;
-                  cursor:grab;position:relative">
-        {# Fallback visible until Three.js takes over. If you can still see #}
-        {# this text after the page loads, the JS module failed — the error #}
-        {# message will appear in #shading3d-error below or in the browser  #}
-        {# console.                                                          #}
-        <div id="shading3d-loading"
-             style="position:absolute;inset:0;display:flex;align-items:center;
-                    justify-content:center;color:#6060a0;font-size:13px;
-                    flex-direction:column;gap:8px">
-          <div class="spinner-border spinner-border-sm" role="status"
-               style="color:var(--solar-gold)"></div>
-          <div>Initializing 3D scene…</div>
-        </div>
-        <div id="shading3d-error"
-             style="position:absolute;inset:0;display:none;align-items:center;
-                    justify-content:center;color:#ef4444;font-size:12px;
-                    padding:20px;text-align:center;flex-direction:column;gap:8px"></div>
-        <div class="d-flex gap-2 mt-2 flex-wrap p-2"
-             style="position:absolute;top:8px;left:8px;z-index:5">
-          <button type="button" id="shadingDemo10"
-                  class="btn btn-sm btn-warning fw-bold"
-                  style="font-size:11px;box-shadow:0 2px 8px rgba(245,158,11,.4)">
-            <i class="bi bi-play-circle me-1"></i>Test with 10% shading
-          </button>
-        </div>
+  {# ── PV Shading Simulation — SVG 2.5D primary view (browser-friendly,    #}
+  {#    works in every browser, no Three.js / no ES modules / no WebGL).   #}
+  {#    Always renders; the Three.js canvas above is an optional 3D layer  #}
+  {#    that may be disabled by browser policy without breaking the page.  #}
+  <div class="solar-card p-3 mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+      <div class="section-head mb-0"><i class="bi bi-diagram-3 me-1"></i>PV Shading Model View</div>
+      <div class="small">
+        <span class="text-secondary">Live preview — </span>
+        <span id="svgFactorLabel" class="fw-bold" style="color:var(--solar-gold)">Factor 1.00 · No shading</span>
       </div>
+    </div>
+    <div class="text-center">
+      <svg id="shadingSvg" viewBox="0 0 1000 540"
+           style="max-width:100%;height:auto;border-radius:12px;border:1px solid #1e1e3a;background:#0a0a14">
+
+        {# ── Layout constants used to project panels in 3D ───────────── #}
+        {# Panel count → row/column layout. Place the array front-left    #}
+        {# corner at (ARR_X0, ARR_Y0) on the ground; tilt projects each   #}
+        {# back row UP and slightly LEFT toward the sun.                  #}
+        {% set _np = project.data.get('results', {}).get('num_panels', 0) | int %}
+        {% if _np <= 0 %}
+          {% set _np = 36 %}
+          {% set _np_is_placeholder = True %}
+        {% else %}
+          {% set _np_is_placeholder = False %}
+        {% endif %}
+        {% set _rows = 2 if _np <= 16 else 3 if _np <= 36 else 4 if _np <= 64 else 5 if _np <= 100 else 6 %}
+        {% set _cols = ((_np + _rows - 1) // _rows) %}
+        {% set ARR_X0 = 500 %}
+        {% set ARR_Y0 = 450 %}
+        {% set _pw   = 380 / _cols %}        {# panel width on screen (horizontal) #}
+        {% set _shx  = 50 / _rows %}         {# total horizontal back-shift (LEFT toward sun)  #}
+        {% set _shy  = 270 / _rows %}        {# total vertical back-shift (UP, tilt) — bigger so the array clearly faces UP toward the sun #}
+
+        {# ── Defs: gradients, patterns, filters, markers ────────────── #}
+        <defs>
+          {# Sky -> ground gradient #}
+          <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%"  stop-color="#0a0a18"/>
+            <stop offset="55%" stop-color="#0a1530"/>
+            <stop offset="100%" stop-color="#0c1a24"/>
+          </linearGradient>
+          <linearGradient id="groundGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%"  stop-color="#1a2810"/>
+            <stop offset="100%" stop-color="#080f06"/>
+          </linearGradient>
+
+          {# Sun #}
+          <radialGradient id="sunGrad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stop-color="#fffbe6"/>
+            <stop offset="55%"  stop-color="#fbbf24"/>
+            <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.9"/>
+          </radialGradient>
+          <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stop-color="#fbbf24" stop-opacity="0.55"/>
+            <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+          </radialGradient>
+
+          {# Building faces (sun comes from upper-LEFT, so left face = LIT,
+             right face = dark, top = lit medium). #}
+          <linearGradient id="bldgFront" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%"  stop-color="#4f4f7a"/>
+            <stop offset="100%" stop-color="#2a2a48"/>
+          </linearGradient>
+          <linearGradient id="bldgRight" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%"  stop-color="#1d1d30"/>
+            <stop offset="100%" stop-color="#0c0c1a"/>
+          </linearGradient>
+          <linearGradient id="bldgTop" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%"  stop-color="#6a6a92"/>
+            <stop offset="100%" stop-color="#3f3f66"/>
+          </linearGradient>
+
+          {# Panels: top face (toward sun) gets a brighter gradient than the
+             thin side face that we draw just for thickness. #}
+          <linearGradient id="pvFace" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%"  stop-color="#22d3ee"/>
+            <stop offset="60%" stop-color="#0ea5e9"/>
+            <stop offset="100%" stop-color="#0369a1"/>
+          </linearGradient>
+          <linearGradient id="pvSide" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%"  stop-color="#1e1e3a"/>
+            <stop offset="100%" stop-color="#0a0a14"/>
+          </linearGradient>
+          <linearGradient id="pvShaded" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%"  stop-color="#22243a"/>
+            <stop offset="100%" stop-color="#0a0a14"/>
+          </linearGradient>
+          <pattern id="pvCells" patternUnits="userSpaceOnUse"
+                   width="10" height="10" patternTransform="skewX(-15)">
+            <rect width="10" height="10" fill="url(#pvFace)"/>
+            <path d="M0 0 H10 M0 0 V10" stroke="#062c43" stroke-width="0.6"/>
+          </pattern>
+          <pattern id="pvCellsShaded" patternUnits="userSpaceOnUse"
+                   width="10" height="10" patternTransform="skewX(-15)">
+            <rect width="10" height="10" fill="url(#pvShaded)"/>
+            <path d="M0 0 H10 M0 0 V10" stroke="#1e1e3a" stroke-width="0.6"/>
+          </pattern>
+
+          {# Shadow + ray gradient #}
+          <linearGradient id="shadowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"  stop-color="#000" stop-opacity="0.85"/>
+            <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+          </linearGradient>
+
+          <filter id="softGlow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="8"/>
+          </filter>
+
+          {# Arrow markers for dimension lines #}
+          <marker id="dimArrow" viewBox="0 0 10 10" refX="5" refY="5"
+                  markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 Z" fill="#a0a0c8"/>
+          </marker>
+        </defs>
+
+        {# ── Sky and ground ───────────────────────────────────────────── #}
+        <rect x="0" y="0" width="1000" height="380" fill="url(#skyGrad)"/>
+        <rect x="0" y="380" width="1000" height="160" fill="url(#groundGrad)"/>
+        <line x1="0" y1="380" x2="1000" y2="380"
+              stroke="#22c55e" stroke-width="0.6" stroke-opacity="0.3"/>
+
+        {# ── Perspective ground grid (depth cue) ─────────────────────── #}
+        <g stroke="#22c55e" stroke-opacity="0.10" stroke-width="0.5" fill="none">
+          {% for k in range(0, 11) %}
+            <line x1="{{ 80 + k*90 }}" y1="380" x2="{{ 30 + k*100 }}" y2="540"/>
+          {% endfor %}
+          <line x1="0" y1="410" x2="1000" y2="410"/>
+          <line x1="0" y1="450" x2="1000" y2="450"/>
+          <line x1="0" y1="495" x2="1000" y2="495"/>
+        </g>
+
+        {# ── Sun path arc (subtle, background) ───────────────────────── #}
+        <path d="M 50 360 Q 500 60 950 360" stroke="#f59e0b"
+              stroke-width="1.2" stroke-dasharray="3 6" fill="none" stroke-opacity="0.35"/>
+        <text x="40"  y="377" fill="#f59e0b" font-size="11" font-weight="600">06:00</text>
+        <text x="478" y="78"  fill="#f59e0b" font-size="11" font-weight="600">12:00</text>
+        <text x="930" y="377" fill="#f59e0b" font-size="11" font-weight="600">18:00</text>
+
+        {# ── Sun (well above building) with glow + body + ray spokes ────── #}
+        <circle cx="140" cy="80" r="55" fill="url(#sunGlow)" filter="url(#softGlow)"/>
+        <circle cx="140" cy="80" r="30" fill="url(#sunGrad)"/>
+        <g stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round">
+          <line x1="140" y1="36"  x2="140" y2="20"/>
+          <line x1="140" y1="124" x2="140" y2="140"/>
+          <line x1="96"  y1="80"  x2="80"  y2="80"/>
+          <line x1="184" y1="80"  x2="200" y2="80"/>
+          <line x1="108" y1="48"  x2="96"  y2="36"/>
+          <line x1="172" y1="48"  x2="184" y2="36"/>
+          <line x1="108" y1="112" x2="96"  y2="124"/>
+          <line x1="172" y1="112" x2="184" y2="124"/>
+        </g>
+        <text x="210" y="68" fill="#fbbf24" font-size="12" font-weight="700">Sun</text>
+        <text x="210" y="82" fill="#9090c0" font-size="10">light direction →</text>
+
+        {# ── Sun rays: parallel beams from sun, aimed at the tilted PV     #}
+        {# face. Beams arrive at the TOP edge of the array (back-top row)  #}
+        {# at a near-perpendicular angle.                                  #}
+        {% set _arr_top_x = ARR_X0 - _shx * _rows %}
+        {% set _arr_top_y = ARR_Y0 - _shy * _rows %}
+        {% set _arr_right_x = _arr_top_x + _cols * _pw %}
+        <g stroke="#fbbf24" stroke-width="1.4" stroke-opacity="0.55" stroke-dasharray="3 4">
+          {% for k in range(7) %}
+            {% set _t = k / 6.0 %}
+            <line x1="{{ 180 + k*30 }}" y1="{{ 110 + k*5 }}"
+                  x2="{{ _arr_top_x + _t * (_arr_right_x - _arr_top_x) }}"
+                  y2="{{ _arr_top_y + 4 }}"/>
+          {% endfor %}
+        </g>
+
+        {# ── 3D Building (obstruction) — MUCH taller than the array.     #}
+        {# Front face: (270, 110) to (390, 410) = 300 tall. Depth 45.      #}
+        {# Sun at upper-left → front face lit medium, right face dark,    #}
+        {# top face lit.                                                   #}
+        <g>
+          {# front face #}
+          <polygon points="270,110 390,110 390,410 270,410"
+                   fill="url(#bldgFront)" stroke="#0a0a14" stroke-width="1.2"/>
+          {# right side face #}
+          <polygon points="390,110 435,78 435,378 390,410"
+                   fill="url(#bldgRight)" stroke="#0a0a14" stroke-width="1.2"/>
+          {# top face #}
+          <polygon points="270,110 390,110 435,78 315,78"
+                   fill="url(#bldgTop)" stroke="#0a0a14" stroke-width="1.2"/>
+
+          {# Window grid: 4 columns × 5 rows on the lit face. #}
+          {% for r in range(5) %}
+            {% for c in range(4) %}
+              <rect x="{{ 282 + c*26 }}" y="{{ 130 + r*48 }}" width="16" height="22"
+                    fill="#fbbf24"
+                    opacity="{{ 0.55 - r * 0.07 }}"/>
+            {% endfor %}
+          {% endfor %}
+          {# Door on the ground floor #}
+          <rect x="318" y="368" width="24" height="42" fill="#1a1a2a"
+                stroke="#3a3a5a" stroke-width="0.5"/>
+          <circle cx="338" cy="392" r="1.5" fill="#fbbf24"/>
+        </g>
+
+        {# ── Dimension annotation: building HEIGHT (H) ─────────────── #}
+        <line x1="252" y1="110" x2="252" y2="410"
+              stroke="#a0a0c8" stroke-width="1"
+              marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>
+        <text x="216" y="270" fill="#a0a0c8" font-size="11" font-weight="700"
+              transform="rotate(-90, 216, 270)">H = obstruction height</text>
+
+        {# ── Cast shadow on ground falling toward array (SE) ────────── #}
+        {# JS reshapes its right-edge as factor grows; opacity goes 0 at #}
+        {# factor=1.0 (agent found no shading).                          #}
+        <polygon id="shadowPoly"
+                 points="390,410 510,414 490,435 390,432"
+                 fill="url(#shadowGrad)" opacity="0"/>
+
+        {# ── Dimension annotation: DISTANCE building → array (D) ──── #}
+        <line x1="390" y1="475" x2="{{ ARR_X0 }}" y2="475"
+              stroke="#a0a0c8" stroke-width="1"
+              marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>
+        <text x="{{ ((390 + ARR_X0) / 2) - 60 }}" y="492"
+              fill="#a0a0c8" font-size="11" font-weight="700">D = distance to PV</text>
+
+        {# ── 3D PV array: each panel is a parallelogram projected in
+           perspective from a tilted plane. Front-left base at
+           (ARR_X0, ARR_Y0). Back rows shift LEFT (toward sun) and UP.   #}
+        <g id="pvArray">
+          {% for i in range(_np) %}
+            {% set _r = (i // _cols) %}
+            {% set _c = (i %  _cols) %}
+            {% set _x_bl = ARR_X0 + _c     * _pw - _r     * _shx %}
+            {% set _y_bl = ARR_Y0          - _r     * _shy %}
+            {% set _x_br = ARR_X0 + (_c+1) * _pw - _r     * _shx %}
+            {% set _y_br = ARR_Y0          - _r     * _shy %}
+            {% set _x_tr = ARR_X0 + (_c+1) * _pw - (_r+1) * _shx %}
+            {% set _y_tr = ARR_Y0          - (_r+1) * _shy %}
+            {% set _x_tl = ARR_X0 + _c     * _pw - (_r+1) * _shx %}
+            {% set _y_tl = ARR_Y0          - (_r+1) * _shy %}
+            <polygon id="pv_{{ i }}"
+                     points="{{ "%.2f"|format(_x_bl) }},{{ "%.2f"|format(_y_bl) }} {{ "%.2f"|format(_x_br) }},{{ "%.2f"|format(_y_br) }} {{ "%.2f"|format(_x_tr) }},{{ "%.2f"|format(_y_tr) }} {{ "%.2f"|format(_x_tl) }},{{ "%.2f"|format(_y_tl) }}"
+                     fill="url(#pvCells)" stroke="#062c43" stroke-width="0.6"/>
+          {% endfor %}
+        </g>
+
+        {# ── Array thickness (front-bottom face) — gives 3D feel ────── #}
+        {# Front edge of the whole array drawn as a slim shaded strip.   #}
+        {% set _arr_right = ARR_X0 + _cols * _pw %}
+        <polygon points="{{ ARR_X0 }},{{ ARR_Y0 }} {{ _arr_right }},{{ ARR_Y0 }} {{ _arr_right }},{{ ARR_Y0 + 6 }} {{ ARR_X0 }},{{ ARR_Y0 + 6 }}"
+                 fill="url(#pvSide)" stroke="#0a0a14" stroke-width="0.5"/>
+
+        {# ── Array mounting frame (suggested support legs) ────────── #}
+        <g stroke="#6868a0" stroke-width="1.8" stroke-linecap="round">
+          <line x1="{{ ARR_X0 + _pw*0.5 }}"     y1="{{ ARR_Y0 + 6 }}" x2="{{ ARR_X0 + _pw*0.5 - 6 }}"     y2="{{ ARR_Y0 + 22 }}"/>
+          <line x1="{{ _arr_right - _pw*0.5 }}" y1="{{ ARR_Y0 + 6 }}" x2="{{ _arr_right - _pw*0.5 - 6 }}" y2="{{ ARR_Y0 + 22 }}"/>
+        </g>
+
+        {# ── Tilt-angle arc (β) at front-left corner of array ─────── #}
+        {% set _t_x = ARR_X0 %}
+        {% set _t_y = ARR_Y0 %}
+        {% set _t_x2 = ARR_X0 - _shx %}
+        {% set _t_y2 = ARR_Y0 - _shy %}
+        <line x1="{{ _t_x }}" y1="{{ _t_y }}" x2="{{ _t_x + 70 }}" y2="{{ _t_y }}"
+              stroke="#9090c0" stroke-width="1" stroke-dasharray="3 3"/>
+        <line x1="{{ _t_x }}" y1="{{ _t_y }}" x2="{{ _t_x2 }}" y2="{{ _t_y2 }}"
+              stroke="#fbbf24" stroke-width="1.5"/>
+        <path d="M {{ _t_x + 30 }} {{ _t_y }} A 30 30 0 0 0 {{ _t_x + 30 * (1 - _shx / (_shx*_shx + _shy*_shy)**0.5 * 0.5) }} {{ _t_y - 14 }}"
+              stroke="#fbbf24" stroke-width="1.2" fill="none"/>
+        <text x="{{ _t_x + 14 }}" y="{{ _t_y - 16 }}" fill="#fbbf24" font-size="11" font-weight="700">β = {{ _tilt }}°</text>
+
+        {# ── Array label + panel count ───────────────────────────── #}
+        <text x="{{ ARR_X0 }}" y="{{ ARR_Y0 - _shy * _rows - 14 }}"
+              fill="#a0a0c8" font-size="11" font-weight="700">
+          PV Array &mdash; <tspan fill="#fbbf24">{{ _np }} panels</tspan>
+          &nbsp;({{ _rows }} &times; {{ _cols }}{% if _np_is_placeholder %} · representative · run loads to lock in{% endif %})
+        </text>
+
+        {# ── Compass (upper-right) ──────────────────────────────── #}
+        <g transform="translate(920, 80)">
+          <circle r="32" fill="#0a0a14" stroke="#1e1e3a" stroke-width="1.5"/>
+          <path d="M 0 -28 L 6 0 L 0 -6 L -6 0 Z" fill="#ef4444"/>
+          <text x="0" y="-12" fill="#ef4444" font-size="11" text-anchor="middle" font-weight="800">N</text>
+          <text x="0" y="22"  fill="#a0a0c8" font-size="11" text-anchor="middle">S</text>
+          <text x="-20" y="4" fill="#a0a0c8" font-size="11" text-anchor="middle">W</text>
+          <text x="20"  y="4" fill="#a0a0c8" font-size="11" text-anchor="middle">E</text>
+        </g>
+
+        {# ── Header + tilt/azimuth + legend ─────────────────────── #}
+        <text x="20" y="30" fill="#f5f5fa" font-size="14" font-weight="800">PV Shading Simulation</text>
+        <text x="20" y="46" fill="#9090c0" font-size="10">
+          3D view &middot; sun direction &middot; obstruction cuboid &middot; cast shadow &middot; tilted array
+        </text>
+
+        <g transform="translate(20, 510)">
+          <text x="0" y="0" fill="#a0a0c8" font-size="10">PV tilt &amp; azimuth (from Location):</text>
+          <text x="170" y="0" fill="#fbbf24" font-size="11" font-weight="800" id="svgTiltAz">15° / South</text>
+        </g>
+
+        <g transform="translate(540, 502)">
+          <rect width="14" height="9" fill="url(#pvFace)" stroke="#062c43" stroke-width="0.5"/>
+          <text x="20" y="8" fill="#a0a0c8" font-size="10">Active module</text>
+          <rect x="120" y="0" width="14" height="9" fill="url(#pvShaded)" stroke="#1e1e3a" stroke-width="0.5"/>
+          <text x="140" y="8" fill="#a0a0c8" font-size="10">Shaded</text>
+          <rect x="210" y="0" width="14" height="9" fill="url(#shadowGrad)"/>
+          <text x="230" y="8" fill="#a0a0c8" font-size="10">Cast shadow</text>
+        </g>
+
+      </svg>
+    </div>
+    <div class="text-secondary small mt-2">
+      <i class="bi bi-info-circle me-1"></i>
+      The illustration reflects the <strong>agent's last verdict</strong> &mdash; the shaded modules and shadow extent
+      grow with the loss. Phase 2 will replace this with a 3D AI-driven simulation; Phase 1 agent uses obstruction
+      geometry, duration, area, time-of-day, season, and mitigation to pick the factor.
+    </div>
+  </div>
+  {# end PV Shading Simulation SVG block #}
       {# Time slider — drag to scrub through the day. Sun moves, panel #}
       {# heat-tint updates, and the strip below shows avg shaded % per #}
       {# step.                                                          #}
@@ -4058,320 +4347,6 @@
     </div>
   </template>
 
-  {# ── PV Shading Simulation — SVG 2.5D primary view (browser-friendly,    #}
-  {#    works in every browser, no Three.js / no ES modules / no WebGL).   #}
-  {#    Always renders; the Three.js canvas above is an optional 3D layer  #}
-  {#    that may be disabled by browser policy without breaking the page.  #}
-  <div class="solar-card p-3 mb-4">
-    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-      <div class="section-head mb-0"><i class="bi bi-diagram-3 me-1"></i>PV Shading Model View</div>
-      <div class="small">
-        <span class="text-secondary">Live preview — </span>
-        <span id="svgFactorLabel" class="fw-bold" style="color:var(--solar-gold)">Factor 1.00 · No shading</span>
-      </div>
-    </div>
-    <div class="text-center">
-      <svg id="shadingSvg" viewBox="0 0 1000 540"
-           style="max-width:100%;height:auto;border-radius:12px;border:1px solid #1e1e3a;background:#0a0a14">
-
-        {# ── Layout constants used to project panels in 3D ───────────── #}
-        {# Panel count → row/column layout. Place the array front-left    #}
-        {# corner at (ARR_X0, ARR_Y0) on the ground; tilt projects each   #}
-        {# back row UP and slightly LEFT toward the sun.                  #}
-        {% set _np = project.data.get('results', {}).get('num_panels', 0) | int %}
-        {% if _np <= 0 %}
-          {% set _np = 36 %}
-          {% set _np_is_placeholder = True %}
-        {% else %}
-          {% set _np_is_placeholder = False %}
-        {% endif %}
-        {% set _rows = 2 if _np <= 16 else 3 if _np <= 36 else 4 if _np <= 64 else 5 if _np <= 100 else 6 %}
-        {% set _cols = ((_np + _rows - 1) // _rows) %}
-        {% set ARR_X0 = 500 %}
-        {% set ARR_Y0 = 450 %}
-        {% set _pw   = 380 / _cols %}        {# panel width on screen (horizontal) #}
-        {% set _shx  = 50 / _rows %}         {# total horizontal back-shift (LEFT toward sun)  #}
-        {% set _shy  = 270 / _rows %}        {# total vertical back-shift (UP, tilt) — bigger so the array clearly faces UP toward the sun #}
-
-        {# ── Defs: gradients, patterns, filters, markers ────────────── #}
-        <defs>
-          {# Sky -> ground gradient #}
-          <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%"  stop-color="#0a0a18"/>
-            <stop offset="55%" stop-color="#0a1530"/>
-            <stop offset="100%" stop-color="#0c1a24"/>
-          </linearGradient>
-          <linearGradient id="groundGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%"  stop-color="#1a2810"/>
-            <stop offset="100%" stop-color="#080f06"/>
-          </linearGradient>
-
-          {# Sun #}
-          <radialGradient id="sunGrad" cx="50%" cy="50%" r="50%">
-            <stop offset="0%"   stop-color="#fffbe6"/>
-            <stop offset="55%"  stop-color="#fbbf24"/>
-            <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.9"/>
-          </radialGradient>
-          <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%"   stop-color="#fbbf24" stop-opacity="0.55"/>
-            <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
-          </radialGradient>
-
-          {# Building faces (sun comes from upper-LEFT, so left face = LIT,
-             right face = dark, top = lit medium). #}
-          <linearGradient id="bldgFront" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%"  stop-color="#4f4f7a"/>
-            <stop offset="100%" stop-color="#2a2a48"/>
-          </linearGradient>
-          <linearGradient id="bldgRight" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%"  stop-color="#1d1d30"/>
-            <stop offset="100%" stop-color="#0c0c1a"/>
-          </linearGradient>
-          <linearGradient id="bldgTop" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%"  stop-color="#6a6a92"/>
-            <stop offset="100%" stop-color="#3f3f66"/>
-          </linearGradient>
-
-          {# Panels: top face (toward sun) gets a brighter gradient than the
-             thin side face that we draw just for thickness. #}
-          <linearGradient id="pvFace" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%"  stop-color="#22d3ee"/>
-            <stop offset="60%" stop-color="#0ea5e9"/>
-            <stop offset="100%" stop-color="#0369a1"/>
-          </linearGradient>
-          <linearGradient id="pvSide" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%"  stop-color="#1e1e3a"/>
-            <stop offset="100%" stop-color="#0a0a14"/>
-          </linearGradient>
-          <linearGradient id="pvShaded" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%"  stop-color="#22243a"/>
-            <stop offset="100%" stop-color="#0a0a14"/>
-          </linearGradient>
-          <pattern id="pvCells" patternUnits="userSpaceOnUse"
-                   width="10" height="10" patternTransform="skewX(-15)">
-            <rect width="10" height="10" fill="url(#pvFace)"/>
-            <path d="M0 0 H10 M0 0 V10" stroke="#062c43" stroke-width="0.6"/>
-          </pattern>
-          <pattern id="pvCellsShaded" patternUnits="userSpaceOnUse"
-                   width="10" height="10" patternTransform="skewX(-15)">
-            <rect width="10" height="10" fill="url(#pvShaded)"/>
-            <path d="M0 0 H10 M0 0 V10" stroke="#1e1e3a" stroke-width="0.6"/>
-          </pattern>
-
-          {# Shadow + ray gradient #}
-          <linearGradient id="shadowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%"  stop-color="#000" stop-opacity="0.85"/>
-            <stop offset="100%" stop-color="#000" stop-opacity="0"/>
-          </linearGradient>
-
-          <filter id="softGlow" x="-60%" y="-60%" width="220%" height="220%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="8"/>
-          </filter>
-
-          {# Arrow markers for dimension lines #}
-          <marker id="dimArrow" viewBox="0 0 10 10" refX="5" refY="5"
-                  markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 Z" fill="#a0a0c8"/>
-          </marker>
-        </defs>
-
-        {# ── Sky and ground ───────────────────────────────────────────── #}
-        <rect x="0" y="0" width="1000" height="380" fill="url(#skyGrad)"/>
-        <rect x="0" y="380" width="1000" height="160" fill="url(#groundGrad)"/>
-        <line x1="0" y1="380" x2="1000" y2="380"
-              stroke="#22c55e" stroke-width="0.6" stroke-opacity="0.3"/>
-
-        {# ── Perspective ground grid (depth cue) ─────────────────────── #}
-        <g stroke="#22c55e" stroke-opacity="0.10" stroke-width="0.5" fill="none">
-          {% for k in range(0, 11) %}
-            <line x1="{{ 80 + k*90 }}" y1="380" x2="{{ 30 + k*100 }}" y2="540"/>
-          {% endfor %}
-          <line x1="0" y1="410" x2="1000" y2="410"/>
-          <line x1="0" y1="450" x2="1000" y2="450"/>
-          <line x1="0" y1="495" x2="1000" y2="495"/>
-        </g>
-
-        {# ── Sun path arc (subtle, background) ───────────────────────── #}
-        <path d="M 50 360 Q 500 60 950 360" stroke="#f59e0b"
-              stroke-width="1.2" stroke-dasharray="3 6" fill="none" stroke-opacity="0.35"/>
-        <text x="40"  y="377" fill="#f59e0b" font-size="11" font-weight="600">06:00</text>
-        <text x="478" y="78"  fill="#f59e0b" font-size="11" font-weight="600">12:00</text>
-        <text x="930" y="377" fill="#f59e0b" font-size="11" font-weight="600">18:00</text>
-
-        {# ── Sun (well above building) with glow + body + ray spokes ────── #}
-        <circle cx="140" cy="80" r="55" fill="url(#sunGlow)" filter="url(#softGlow)"/>
-        <circle cx="140" cy="80" r="30" fill="url(#sunGrad)"/>
-        <g stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round">
-          <line x1="140" y1="36"  x2="140" y2="20"/>
-          <line x1="140" y1="124" x2="140" y2="140"/>
-          <line x1="96"  y1="80"  x2="80"  y2="80"/>
-          <line x1="184" y1="80"  x2="200" y2="80"/>
-          <line x1="108" y1="48"  x2="96"  y2="36"/>
-          <line x1="172" y1="48"  x2="184" y2="36"/>
-          <line x1="108" y1="112" x2="96"  y2="124"/>
-          <line x1="172" y1="112" x2="184" y2="124"/>
-        </g>
-        <text x="210" y="68" fill="#fbbf24" font-size="12" font-weight="700">Sun</text>
-        <text x="210" y="82" fill="#9090c0" font-size="10">light direction →</text>
-
-        {# ── Sun rays: parallel beams from sun, aimed at the tilted PV     #}
-        {# face. Beams arrive at the TOP edge of the array (back-top row)  #}
-        {# at a near-perpendicular angle.                                  #}
-        {% set _arr_top_x = ARR_X0 - _shx * _rows %}
-        {% set _arr_top_y = ARR_Y0 - _shy * _rows %}
-        {% set _arr_right_x = _arr_top_x + _cols * _pw %}
-        <g stroke="#fbbf24" stroke-width="1.4" stroke-opacity="0.55" stroke-dasharray="3 4">
-          {% for k in range(7) %}
-            {% set _t = k / 6.0 %}
-            <line x1="{{ 180 + k*30 }}" y1="{{ 110 + k*5 }}"
-                  x2="{{ _arr_top_x + _t * (_arr_right_x - _arr_top_x) }}"
-                  y2="{{ _arr_top_y + 4 }}"/>
-          {% endfor %}
-        </g>
-
-        {# ── 3D Building (obstruction) — MUCH taller than the array.     #}
-        {# Front face: (270, 110) to (390, 410) = 300 tall. Depth 45.      #}
-        {# Sun at upper-left → front face lit medium, right face dark,    #}
-        {# top face lit.                                                   #}
-        <g>
-          {# front face #}
-          <polygon points="270,110 390,110 390,410 270,410"
-                   fill="url(#bldgFront)" stroke="#0a0a14" stroke-width="1.2"/>
-          {# right side face #}
-          <polygon points="390,110 435,78 435,378 390,410"
-                   fill="url(#bldgRight)" stroke="#0a0a14" stroke-width="1.2"/>
-          {# top face #}
-          <polygon points="270,110 390,110 435,78 315,78"
-                   fill="url(#bldgTop)" stroke="#0a0a14" stroke-width="1.2"/>
-
-          {# Window grid: 4 columns × 5 rows on the lit face. #}
-          {% for r in range(5) %}
-            {% for c in range(4) %}
-              <rect x="{{ 282 + c*26 }}" y="{{ 130 + r*48 }}" width="16" height="22"
-                    fill="#fbbf24"
-                    opacity="{{ 0.55 - r * 0.07 }}"/>
-            {% endfor %}
-          {% endfor %}
-          {# Door on the ground floor #}
-          <rect x="318" y="368" width="24" height="42" fill="#1a1a2a"
-                stroke="#3a3a5a" stroke-width="0.5"/>
-          <circle cx="338" cy="392" r="1.5" fill="#fbbf24"/>
-        </g>
-
-        {# ── Dimension annotation: building HEIGHT (H) ─────────────── #}
-        <line x1="252" y1="110" x2="252" y2="410"
-              stroke="#a0a0c8" stroke-width="1"
-              marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>
-        <text x="216" y="270" fill="#a0a0c8" font-size="11" font-weight="700"
-              transform="rotate(-90, 216, 270)">H = obstruction height</text>
-
-        {# ── Cast shadow on ground falling toward array (SE) ────────── #}
-        {# JS reshapes its right-edge as factor grows; opacity goes 0 at #}
-        {# factor=1.0 (agent found no shading).                          #}
-        <polygon id="shadowPoly"
-                 points="390,410 510,414 490,435 390,432"
-                 fill="url(#shadowGrad)" opacity="0"/>
-
-        {# ── Dimension annotation: DISTANCE building → array (D) ──── #}
-        <line x1="390" y1="475" x2="{{ ARR_X0 }}" y2="475"
-              stroke="#a0a0c8" stroke-width="1"
-              marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>
-        <text x="{{ ((390 + ARR_X0) / 2) - 60 }}" y="492"
-              fill="#a0a0c8" font-size="11" font-weight="700">D = distance to PV</text>
-
-        {# ── 3D PV array: each panel is a parallelogram projected in
-           perspective from a tilted plane. Front-left base at
-           (ARR_X0, ARR_Y0). Back rows shift LEFT (toward sun) and UP.   #}
-        <g id="pvArray">
-          {% for i in range(_np) %}
-            {% set _r = (i // _cols) %}
-            {% set _c = (i %  _cols) %}
-            {% set _x_bl = ARR_X0 + _c     * _pw - _r     * _shx %}
-            {% set _y_bl = ARR_Y0          - _r     * _shy %}
-            {% set _x_br = ARR_X0 + (_c+1) * _pw - _r     * _shx %}
-            {% set _y_br = ARR_Y0          - _r     * _shy %}
-            {% set _x_tr = ARR_X0 + (_c+1) * _pw - (_r+1) * _shx %}
-            {% set _y_tr = ARR_Y0          - (_r+1) * _shy %}
-            {% set _x_tl = ARR_X0 + _c     * _pw - (_r+1) * _shx %}
-            {% set _y_tl = ARR_Y0          - (_r+1) * _shy %}
-            <polygon id="pv_{{ i }}"
-                     points="{{ "%.2f"|format(_x_bl) }},{{ "%.2f"|format(_y_bl) }} {{ "%.2f"|format(_x_br) }},{{ "%.2f"|format(_y_br) }} {{ "%.2f"|format(_x_tr) }},{{ "%.2f"|format(_y_tr) }} {{ "%.2f"|format(_x_tl) }},{{ "%.2f"|format(_y_tl) }}"
-                     fill="url(#pvCells)" stroke="#062c43" stroke-width="0.6"/>
-          {% endfor %}
-        </g>
-
-        {# ── Array thickness (front-bottom face) — gives 3D feel ────── #}
-        {# Front edge of the whole array drawn as a slim shaded strip.   #}
-        {% set _arr_right = ARR_X0 + _cols * _pw %}
-        <polygon points="{{ ARR_X0 }},{{ ARR_Y0 }} {{ _arr_right }},{{ ARR_Y0 }} {{ _arr_right }},{{ ARR_Y0 + 6 }} {{ ARR_X0 }},{{ ARR_Y0 + 6 }}"
-                 fill="url(#pvSide)" stroke="#0a0a14" stroke-width="0.5"/>
-
-        {# ── Array mounting frame (suggested support legs) ────────── #}
-        <g stroke="#6868a0" stroke-width="1.8" stroke-linecap="round">
-          <line x1="{{ ARR_X0 + _pw*0.5 }}"     y1="{{ ARR_Y0 + 6 }}" x2="{{ ARR_X0 + _pw*0.5 - 6 }}"     y2="{{ ARR_Y0 + 22 }}"/>
-          <line x1="{{ _arr_right - _pw*0.5 }}" y1="{{ ARR_Y0 + 6 }}" x2="{{ _arr_right - _pw*0.5 - 6 }}" y2="{{ ARR_Y0 + 22 }}"/>
-        </g>
-
-        {# ── Tilt-angle arc (β) at front-left corner of array ─────── #}
-        {% set _t_x = ARR_X0 %}
-        {% set _t_y = ARR_Y0 %}
-        {% set _t_x2 = ARR_X0 - _shx %}
-        {% set _t_y2 = ARR_Y0 - _shy %}
-        <line x1="{{ _t_x }}" y1="{{ _t_y }}" x2="{{ _t_x + 70 }}" y2="{{ _t_y }}"
-              stroke="#9090c0" stroke-width="1" stroke-dasharray="3 3"/>
-        <line x1="{{ _t_x }}" y1="{{ _t_y }}" x2="{{ _t_x2 }}" y2="{{ _t_y2 }}"
-              stroke="#fbbf24" stroke-width="1.5"/>
-        <path d="M {{ _t_x + 30 }} {{ _t_y }} A 30 30 0 0 0 {{ _t_x + 30 * (1 - _shx / (_shx*_shx + _shy*_shy)**0.5 * 0.5) }} {{ _t_y - 14 }}"
-              stroke="#fbbf24" stroke-width="1.2" fill="none"/>
-        <text x="{{ _t_x + 14 }}" y="{{ _t_y - 16 }}" fill="#fbbf24" font-size="11" font-weight="700">β = {{ _tilt }}°</text>
-
-        {# ── Array label + panel count ───────────────────────────── #}
-        <text x="{{ ARR_X0 }}" y="{{ ARR_Y0 - _shy * _rows - 14 }}"
-              fill="#a0a0c8" font-size="11" font-weight="700">
-          PV Array &mdash; <tspan fill="#fbbf24">{{ _np }} panels</tspan>
-          &nbsp;({{ _rows }} &times; {{ _cols }}{% if _np_is_placeholder %} · representative · run loads to lock in{% endif %})
-        </text>
-
-        {# ── Compass (upper-right) ──────────────────────────────── #}
-        <g transform="translate(920, 80)">
-          <circle r="32" fill="#0a0a14" stroke="#1e1e3a" stroke-width="1.5"/>
-          <path d="M 0 -28 L 6 0 L 0 -6 L -6 0 Z" fill="#ef4444"/>
-          <text x="0" y="-12" fill="#ef4444" font-size="11" text-anchor="middle" font-weight="800">N</text>
-          <text x="0" y="22"  fill="#a0a0c8" font-size="11" text-anchor="middle">S</text>
-          <text x="-20" y="4" fill="#a0a0c8" font-size="11" text-anchor="middle">W</text>
-          <text x="20"  y="4" fill="#a0a0c8" font-size="11" text-anchor="middle">E</text>
-        </g>
-
-        {# ── Header + tilt/azimuth + legend ─────────────────────── #}
-        <text x="20" y="30" fill="#f5f5fa" font-size="14" font-weight="800">PV Shading Simulation</text>
-        <text x="20" y="46" fill="#9090c0" font-size="10">
-          3D view &middot; sun direction &middot; obstruction cuboid &middot; cast shadow &middot; tilted array
-        </text>
-
-        <g transform="translate(20, 510)">
-          <text x="0" y="0" fill="#a0a0c8" font-size="10">PV tilt &amp; azimuth (from Location):</text>
-          <text x="170" y="0" fill="#fbbf24" font-size="11" font-weight="800" id="svgTiltAz">15° / South</text>
-        </g>
-
-        <g transform="translate(540, 502)">
-          <rect width="14" height="9" fill="url(#pvFace)" stroke="#062c43" stroke-width="0.5"/>
-          <text x="20" y="8" fill="#a0a0c8" font-size="10">Active module</text>
-          <rect x="120" y="0" width="14" height="9" fill="url(#pvShaded)" stroke="#1e1e3a" stroke-width="0.5"/>
-          <text x="140" y="8" fill="#a0a0c8" font-size="10">Shaded</text>
-          <rect x="210" y="0" width="14" height="9" fill="url(#shadowGrad)"/>
-          <text x="230" y="8" fill="#a0a0c8" font-size="10">Cast shadow</text>
-        </g>
-
-      </svg>
-    </div>
-    <div class="text-secondary small mt-2">
-      <i class="bi bi-info-circle me-1"></i>
-      The illustration reflects the <strong>agent's last verdict</strong> &mdash; the shaded modules and shadow extent
-      grow with the loss. Phase 2 will replace this with a 3D AI-driven simulation; Phase 1 agent uses obstruction
-      geometry, duration, area, time-of-day, season, and mitigation to pick the factor.
-    </div>
-  </div>
-  {# end PV Shading Simulation SVG block #}
 
   {# ── Last agent verdict — HIDDEN 2026-06-16 per owner. Same reason
        as the analysis card above. The factor is shown in the top KPI
