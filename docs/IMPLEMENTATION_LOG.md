@@ -923,3 +923,51 @@ Smoke against the live site once Render redeploy lands. Then start collecting ne
 **What Remains:** Smoke against the live deploy once redeploy lands.
 
 **Known Risks:** Owner now expects the 3D scene itself to reflect the matched profile's hints. Current code already does this via the engine (mount type, obstructions, tilt, azimuth flow through). Future: explicit profile→3D style hooks (e.g. building colour palette, scene composition) — deferred.
+
+---
+
+# Implementation Log Entry — 2026-06-16 (late afternoon)
+
+**Date:** 2026-06-16
+**Task:** AI 3D Shading Module — 3d10-plan-informed expansion
+**Status:** Shipped to master
+
+## Objective
+Owner pointed at `Documents/pvsolar1/3d10/3d10.txt` + reference image and instructed: "read the plan and the markdown and update to achieve the goal". Goal: align the existing module with the plan's 7-scene-type architecture, strict coordinate system, panel-impact palette, and scene-template-selector logic — without the React Three Fiber rewrite (that's a separate project).
+
+## Files Changed
+* `engine/shading_templates.json` — schema v3; 7 templates (was 3); each tagged with `scene_type`.
+* `engine/shading_templates.py` — added `_has_hill`/`_has_cluster` features; re-weighted scoring per 3d10 §7 priority; returns `scene_type`; sub-cardinal direction aliases.
+* `engine/shading_engine.py` — full 16-point compass direction map (added NNE/ENE/ESE/SSE/SSW/WSW/WNW/NNW).
+* `templates/shading.html` — full 16-point JS direction map; new cluster-of-buildings render branch; panel-impact palette aligned to 3d10 §21 (`#1d4ed8/#22c55e/#facc15/#f97316/#dc2626`); legend "Full" → "Severe"; dashboard card shows matched scene_type as a green badge.
+* `docs/ARCHITECTURE_DECISIONS.md` — ADR-0006b amendment appended.
+* `docs/IMPLEMENTATION_LOG.md` — this entry.
+
+## Tests Added
+Smoke test of all 7 scene types via `pick_reference_template()`:
+
+| Site | Expected scene_type | Result |
+|---|---|---|
+| ground + 10-storey | ground_mounted_building | T01 100% |
+| rooftop + 1 tall bldg | residential_roof_building | T02 100% |
+| rooftop + tree | residential_roof_tree | T04 100% |
+| rooftop + water tank | residential_roof_water_tank | T05 100% |
+| rooftop + hill | hill_obstruction | T06 100% |
+| rooftop + 4 cluster bldgs | cluster_of_buildings | T07 88% |
+| rooftop + 3 mixed | multiple_obstructions | T03 89% |
+
+All 7 categorisations correct on first try.
+
+## What Was Completed
+6 of 7 planned items (catalogue expansion / sub-cardinals / cluster render / palette / priority chain / scene_type badge).
+
+## What Remains
+* Item 7 (hill azimuthCoverage cone): DEFERRED. Form doesn't collect `slope` or `azimuthCoverage` fields yet; existing lumpy-mound render is the correct baseline until those land.
+* React Three Fiber rewrite: separate project per ADR-0006b.
+* GLTF/GLB export: not started.
+
+## Known Risks
+Palette change is global to `shading.html` — the dashboard's visual feel shifts toward the 3d10 plan's engineering colours. Tested against jinja + matcher; no regressions in the live test suite expected.
+
+## Next Recommended Step
+Push + force redeploy + run live test suite to confirm no regressions. Then survey the 13-thumbnail timeline and bottom metrics bar against the reference image for follow-up polish.

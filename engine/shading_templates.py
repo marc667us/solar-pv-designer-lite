@@ -33,13 +33,21 @@ from typing import Any, Dict, List, Optional
 # Direction labels accepted in both compass-letter and long forms.
 _DIRECTION_ALIASES = {
     "n": "North", "north": "North",
+    "nne": "North-North-East", "north-north-east": "North-North-East",
     "ne": "North-East", "north-east": "North-East", "northeast": "North-East",
+    "ene": "East-North-East", "east-north-east": "East-North-East",
     "e": "East", "east": "East",
+    "ese": "East-South-East", "east-south-east": "East-South-East",
     "se": "South-East", "south-east": "South-East", "southeast": "South-East",
+    "sse": "South-South-East", "south-south-east": "South-South-East",
     "s": "South", "south": "South",
+    "ssw": "South-South-West", "south-south-west": "South-South-West",
     "sw": "South-West", "south-west": "South-West", "southwest": "South-West",
+    "wsw": "West-South-West", "west-south-west": "West-South-West",
     "w": "West", "west": "West",
+    "wnw": "West-North-West", "west-north-west": "West-North-West",
     "nw": "North-West", "north-west": "North-West", "northwest": "North-West",
+    "nnw": "North-North-West", "north-north-west": "North-North-West",
 }
 
 
@@ -73,6 +81,8 @@ def _obstruction_features(obstructions: List[Dict[str, Any]]) -> Dict[str, float
         "has_tree":               0.0,
         "has_wall":               0.0,
         "has_tank":               0.0,
+        "has_hill":               0.0,
+        "has_cluster":            0.0,
         "has_neighbour_building": 0.0,
         "max_height_m":           0.0,
         "min_distance_m":         9999.0,
@@ -80,6 +90,7 @@ def _obstruction_features(obstructions: List[Dict[str, Any]]) -> Dict[str, float
         "dominant_direction":     "",
     }
     feats["obstruction_count"] = float(len(obstructions or []))
+    n_cluster = 0
     for o in (obstructions or []):
         t = str(o.get("type") or "").lower()
         h = float(o.get("height") or 0)
@@ -90,6 +101,11 @@ def _obstruction_features(obstructions: List[Dict[str, Any]]) -> Dict[str, float
             feats["has_wall"] = 1.0
         if "tank" in t:
             feats["has_tank"] = 1.0
+        if "hill" in t or "mound" in t or "terrain" in t:
+            feats["has_hill"] = 1.0
+        if "cluster" in t:
+            feats["has_cluster"] = 1.0
+            n_cluster += 1
         if "neighbour" in t or "nearby" in t:
             feats["has_neighbour_building"] = 1.0
         if "storey" in t or "story" in t or "building" in t:
@@ -98,6 +114,16 @@ def _obstruction_features(obstructions: List[Dict[str, Any]]) -> Dict[str, float
         feats["max_height_m"] = max(feats["max_height_m"], h)
         if d > 0:
             feats["min_distance_m"] = min(feats["min_distance_m"], d)
+    # >=3 buildings counts as cluster-shaped even if the operator didn't
+    # type "cluster" (per 3d10 plan §7 selectSceneTemplate priority chain).
+    bldg_count = sum(
+        1 for o in (obstructions or [])
+        if "building" in str(o.get("type") or "").lower()
+        or "storey" in str(o.get("type") or "").lower()
+        or "cluster" in str(o.get("type") or "").lower()
+    )
+    if bldg_count >= 3:
+        feats["has_cluster"] = 1.0
     if feats["min_distance_m"] >= 9999.0:
         feats["min_distance_m"] = 0.0
     # Pick the direction of the tallest obstruction.
@@ -146,17 +172,23 @@ def _score(site_feats: Dict[str, Any],
            tpl_scene:  Dict[str, Any]) -> float:
     """Weighted scoring. Each component contributes 0..1; total 0..weight_sum.
     Weights chosen so mount type + obstruction mix dominate, severity is
-    a tiebreaker. Normalized to [0, 1] at the end."""
+    a tiebreaker. Normalized to [0, 1] at the end.
+
+    Scene-type-defining features (hill, cluster) get higher weight per the
+    3d10 plan §7 priority chain (hill > urban_cluster > multi > ...).
+    """
     weights = {
-        "mount":      0.30,   # rooftop vs ground is the biggest split
-        "tall_bldg":  0.15,
-        "tree":       0.10,
-        "wall":       0.05,
-        "tank":       0.05,
-        "neighbour":  0.05,
-        "count":      0.10,   # 1 vs many obstructions
-        "direction":  0.10,
-        "severity":   0.10,
+        "mount":      0.20,   # rooftop vs ground is a big split
+        "hill":       0.18,   # scene-type-defining per 3d10 §7 priority 1
+        "cluster":    0.15,   # scene-type-defining per 3d10 §7 priority 2
+        "tall_bldg":  0.08,
+        "tree":       0.06,
+        "wall":       0.04,
+        "tank":       0.04,
+        "neighbour":  0.03,
+        "count":      0.08,   # 1 vs many obstructions
+        "direction":  0.07,
+        "severity":   0.07,
     }
     s = 0.0
     # Mount: exact match scores 1; rooftop_flat vs rooftop_sloped scores 0.6
@@ -168,6 +200,8 @@ def _score(site_feats: Dict[str, Any],
         s += weights["mount"] * 0.6
     # Binary features
     for feat, w in [
+        ("has_hill",              weights["hill"]),
+        ("has_cluster",           weights["cluster"]),
         ("has_tall_building",     weights["tall_bldg"]),
         ("has_tree",              weights["tree"]),
         ("has_wall",              weights["wall"]),
@@ -286,6 +320,7 @@ def pick_reference_template(site_context: Dict[str, Any],
     best_tpl = next(t for t in templates if t["id"] == best_id)
     return {
         "template_id": best_tpl["id"],
+        "scene_type":  best_tpl.get("scene_type", ""),
         "title":       best_tpl.get("title", ""),
         "match_score": ranked[0]["match_score"],
         "reasoning":   _reasoning_phrase(site_feats, best_tpl,

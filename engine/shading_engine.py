@@ -57,14 +57,22 @@ SHADING_BUCKETS: List[Tuple[str, float, float]] = [
 # Cardinal direction label → azimuth degrees (where the obstruction SITS
 # relative to the array).
 DIRECTION_AZ: Dict[str, float] = {
-    "N":  0,   "North":       0,
-    "NE": 45,  "North-East":  45,  "NorthEast": 45,
-    "E":  90,  "East":        90,
-    "SE": 135, "South-East":  135, "SouthEast": 135,
-    "S":  180, "South":       180,
-    "SW": 225, "South-West":  225, "SouthWest": 225,
-    "W":  270, "West":        270,
-    "NW": 315, "North-West":  315, "NorthWest": 315,
+    "N":   0,   "North":       0,
+    "NNE": 22.5, "North-North-East":  22.5,
+    "NE":  45,  "North-East":  45,   "NorthEast": 45,
+    "ENE": 67.5, "East-North-East":   67.5,
+    "E":   90,  "East":        90,
+    "ESE": 112.5, "East-South-East": 112.5,
+    "SE":  135, "South-East":  135,  "SouthEast": 135,
+    "SSE": 157.5, "South-South-East": 157.5,
+    "S":   180, "South":       180,
+    "SSW": 202.5, "South-South-West": 202.5,
+    "SW":  225, "South-West":  225,  "SouthWest": 225,
+    "WSW": 247.5, "West-South-West": 247.5,
+    "W":   270, "West":        270,
+    "WNW": 292.5, "West-North-West": 292.5,
+    "NW":  315, "North-West":  315,  "NorthWest": 315,
+    "NNW": 337.5, "North-North-West": 337.5,
 }
 
 # Default module electrical topology (most modern 60/72-cell modules).

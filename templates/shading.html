@@ -178,14 +178,14 @@
     }
     /* Affected-panel heat-map cells keep their colour so the bucket
        legend is meaningful in the printed PDF. */
-    [style*="background:#3949ab"], [style*="background: #3949ab"]
-      { background: #3949ab !important; -webkit-print-color-adjust: exact; }
-    [style*="background:#ffb74d"], [style*="background: #ffb74d"]
-      { background: #ffb74d !important; -webkit-print-color-adjust: exact; }
-    [style*="background:#f57c00"], [style*="background: #f57c00"]
-      { background: #f57c00 !important; -webkit-print-color-adjust: exact; }
-    [style*="background:#c62828"], [style*="background: #c62828"]
-      { background: #c62828 !important; -webkit-print-color-adjust: exact; }
+    [style*="background:#1d4ed8"], [style*="background: #1d4ed8"]
+      { background: #1d4ed8 !important; -webkit-print-color-adjust: exact; }
+    [style*="background:#22c55e"], [style*="background: #22c55e"]
+      { background: #22c55e !important; -webkit-print-color-adjust: exact; }
+    [style*="background:#facc15"], [style*="background: #facc15"]
+      { background: #facc15 !important; -webkit-print-color-adjust: exact; }
+    [style*="background:#f97316"], [style*="background: #f97316"]
+      { background: #f97316 !important; -webkit-print-color-adjust: exact; }
     [style*="background:#000000"], [style*="background: #000000"]
       { background: #000 !important; -webkit-print-color-adjust: exact; }
     /* SVG (sun-path dome + thumbnails) — preserve fills. */
@@ -452,6 +452,14 @@
       <div class="flex-grow-1" style="min-width:260px">
         <div class="fw-bold small mb-1" style="color:#9bd1ff;letter-spacing:.4px">
           <i class="bi bi-bookmark-check me-1"></i>CLOSEST REFERENCE PROFILE
+          {% if reference_template.scene_type %}
+          <span class="badge ms-2"
+                style="background:rgba(34,197,94,.14);color:#4ade80;
+                       border:1px solid rgba(34,197,94,.4);
+                       text-transform:uppercase;letter-spacing:.4px">
+            {{ reference_template.scene_type.replace('_',' ') }}
+          </span>
+          {% endif %}
           <span class="badge ms-2"
                 style="background:rgba(155,209,255,.18);color:#9bd1ff;
                        border:1px solid rgba(155,209,255,.4)">
@@ -866,20 +874,20 @@
       </div>
       <div class="d-flex gap-2 mt-2 flex-wrap" style="font-size:10px;color:#a0a0c8">
         <span><span style="display:inline-block;width:10px;height:10px;
-                           background:#3949ab;border-radius:2px;vertical-align:middle"></span>
+                           background:#1d4ed8;border-radius:2px;vertical-align:middle"></span>
           Unshaded</span>
         <span><span style="display:inline-block;width:10px;height:10px;
-                           background:#ffb74d;border-radius:2px;vertical-align:middle"></span>
+                           background:#22c55e;border-radius:2px;vertical-align:middle"></span>
           Light</span>
         <span><span style="display:inline-block;width:10px;height:10px;
-                           background:#f57c00;border-radius:2px;vertical-align:middle"></span>
+                           background:#facc15;border-radius:2px;vertical-align:middle"></span>
           Moderate</span>
         <span><span style="display:inline-block;width:10px;height:10px;
-                           background:#c62828;border-radius:2px;vertical-align:middle"></span>
+                           background:#f97316;border-radius:2px;vertical-align:middle"></span>
           Heavy</span>
         <span><span style="display:inline-block;width:10px;height:10px;
-                           background:#000;border:1px solid #c62828;border-radius:2px;vertical-align:middle"></span>
-          Full</span>
+                           background:#dc2626;border-radius:2px;vertical-align:middle"></span>
+          Severe</span>
       </div>
     </div>
   </div>
@@ -1173,13 +1181,15 @@
 <!-- without the 3D scene.                                                -->
 <script>
 (function() {
-  // Heat-tint colour for a panel's max shaded fraction across the day.
+  // Panel-impact colours — 5-bucket palette from the 3d10 plan §21
+  // (none / low / medium / high / severe). Updated 2026-06-16 to match
+  // the canonical engineering colour system across the platform.
   function shadeColor(frac) {
-    if (frac >= 0.95) return '#000000';
-    if (frac >= 0.50) return '#c62828';
-    if (frac >= 0.20) return '#f57c00';
-    if (frac >= 0.05) return '#ffb74d';
-    return '#3949ab';
+    if (frac >= 0.95) return '#dc2626';   // severe
+    if (frac >= 0.50) return '#f97316';   // high
+    if (frac >= 0.20) return '#facc15';   // medium
+    if (frac >= 0.05) return '#22c55e';   // low
+    return '#1d4ed8';                     // none / unaffected
   }
 
   var engineData = {};
@@ -1240,11 +1250,11 @@
       var cells = [];
       for (var i = 0; i < totalPanels; i++) {
         var frac = perPanelFracs[i] || 0;
-        var color = '#3949ab', border = 'none';
-        if (frac >= 0.95)      { color = '#000000'; border = '1px solid #c62828'; }
-        else if (frac >= 0.50) color = '#c62828';
-        else if (frac >= 0.20) color = '#f57c00';
-        else if (frac >= 0.05) color = '#ffb74d';
+        var color = '#1d4ed8', border = 'none';
+        if (frac >= 0.95)      { color = '#dc2626'; border = '1px solid #f97316'; }
+        else if (frac >= 0.50) color = '#f97316';
+        else if (frac >= 0.20) color = '#facc15';
+        else if (frac >= 0.05) color = '#22c55e';
         cells.push('<div title="Panel ' + (i+1) + ': ' + (frac*100).toFixed(0) + '% max shaded" style="aspect-ratio:1.13/1.72;background:' + color + ';border:' + border + ';border-radius:2px"></div>');
       }
       grid.innerHTML = cells.join('');
@@ -1360,11 +1370,11 @@
         series.forEach(function(s){ if (s.avg_frac > peak2.avg_frac) peak2 = s; });
         var fracs = peak2.panel_fracs || [];
         var buckets = [
-          {label:'Unshaded',lo:0,hi:0.05,color:'#3949ab',n:0},
-          {label:'Light',lo:0.05,hi:0.20,color:'#ffb74d',n:0},
-          {label:'Moderate',lo:0.20,hi:0.50,color:'#f57c00',n:0},
-          {label:'Heavy',lo:0.50,hi:0.95,color:'#c62828',n:0},
-          {label:'Full',lo:0.95,hi:1.01,color:'#000',n:0}
+          {label:'Unshaded',lo:0,hi:0.05,color:'#1d4ed8',n:0},
+          {label:'Light',lo:0.05,hi:0.20,color:'#22c55e',n:0},
+          {label:'Moderate',lo:0.20,hi:0.50,color:'#facc15',n:0},
+          {label:'Heavy',lo:0.50,hi:0.95,color:'#f97316',n:0},
+          {label:'Severe',lo:0.95,hi:1.01,color:'#dc2626',n:0}
         ];
         fracs.forEach(function(f) {
           for (var i = 0; i < buckets.length; i++) {
@@ -1383,7 +1393,7 @@
         buckets.forEach(function(b,i) {
           var cx2 = padL + (i+0.5)*(plotW/buckets.length);
           var x = cx2 - barW/2, y = yOf3(b.n), h = padT + plotH - y;
-          var stroke = b.color === '#000' ? 'stroke="#c62828" stroke-width="1.5"' : '';
+          var stroke = b.color === '#000' ? 'stroke="#f97316" stroke-width="1.5"' : '';
           g += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + h + '" fill="' + b.color + '" ' + stroke + '/>';
           g += '<text x="' + cx2 + '" y="' + (y-4) + '" fill="#fff" font-size="10" text-anchor="middle" font-weight="700">' + b.n + '</text>';
           g += '<text x="' + cx2 + '" y="' + (H-padB+12) + '" fill="#a0a0c8" font-size="8" text-anchor="middle">' + b.label + '</text>';
@@ -1517,25 +1527,38 @@
       );
     } catch (e) { console.warn('shading-obstructions-data parse', e); }
 
-    // Cardinal direction → azimuth degrees, matching engine.DIRECTION_AZ.
+    // Cardinal + sub-cardinal direction → azimuth degrees.
+    // Matches engine.DIRECTION_AZ; sub-cardinals (NNE/ENE/ESE/SSE/SSW/WSW/WNW/NNW)
+    // added 2026-06-16 per the 3d10 plan's cluster-of-buildings scene
+    // which uses WNW/NNW/ENE for staggered tower placement.
     const DIR_AZ = {
       'N': 0, 'North': 0,
+      'NNE': 22.5, 'North-North-East': 22.5,
       'NE': 45, 'North-East': 45, 'NorthEast': 45,
+      'ENE': 67.5, 'East-North-East': 67.5,
       'E': 90, 'East': 90,
+      'ESE': 112.5, 'East-South-East': 112.5,
       'SE': 135, 'South-East': 135, 'SouthEast': 135,
+      'SSE': 157.5, 'South-South-East': 157.5,
       'S': 180, 'South': 180,
+      'SSW': 202.5, 'South-South-West': 202.5,
       'SW': 225, 'South-West': 225, 'SouthWest': 225,
+      'WSW': 247.5, 'West-South-West': 247.5,
       'W': 270, 'West': 270,
+      'WNW': 292.5, 'West-North-West': 292.5,
       'NW': 315, 'North-West': 315, 'NorthWest': 315,
+      'NNW': 337.5, 'North-North-West': 337.5,
     };
 
     // Heat-tint colour for a panel's max shaded fraction across the day.
     function shadeColor(frac) {
-      if (frac >= 0.95) return 0x000000;        // full
-      if (frac >= 0.50) return 0xc62828;        // heavy
-      if (frac >= 0.20) return 0xf57c00;        // moderate
-      if (frac >= 0.05) return 0xffb74d;        // light
-      return 0x3949ab;                          // unshaded panel base
+      // Three.js variant of the 5-bucket palette from the 3d10 plan §21.
+      // none / low / medium / high / severe.
+      if (frac >= 0.95) return 0xdc2626;   // severe
+      if (frac >= 0.50) return 0xf97316;   // high
+      if (frac >= 0.20) return 0xfacc15;   // medium
+      if (frac >= 0.05) return 0x22c55e;   // low
+      return 0x1d4ed8;                     // none / unaffected
     }
 
     // Console checkpoints — let the operator open F12 and see exactly
@@ -2265,6 +2288,61 @@
           ring.position.y = ry;
           grp.add(ring);
         });
+      } else if (t.includes('cluster')) {
+        // Cluster building (per the 3d10 plan §19): one tall slab with
+        // explicit floor bands and a labelled letter mark. Differs from
+        // the generic 10-storey because it leans into the "one of many
+        // in a cluster" framing — the operator places several of these
+        // and the scene reads as an urban canyon.
+        const storeyH = 3.2;
+        const nFloors = Math.max(1, Math.round(h / storeyH));
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(w, h, d),
+          new THREE.MeshStandardMaterial({
+            color: 0x9a9aa8, roughness: 0.85
+          })
+        );
+        body.castShadow = true; body.receiveShadow = true;
+        body.position.y = h / 2;
+        grp.add(body);
+        const slabMat = new THREE.MeshStandardMaterial({
+          color: 0x3b3b46, roughness: 0.7
+        });
+        const winMat = new THREE.MeshStandardMaterial({
+          color: 0xa0c8e0, emissive: 0x1a2a3a, emissiveIntensity: 0.35,
+          roughness: 0.35, metalness: 0.4
+        });
+        const slabH = 0.16, stripH = storeyH - slabH * 1.4, inset = 0.012;
+        for (let i = 0; i < nFloors; i++) {
+          const yCenter = i * storeyH + storeyH / 2;
+          if (yCenter > h - storeyH * 0.2) break;
+          const slab = new THREE.Mesh(
+            new THREE.BoxGeometry(w + inset, slabH, d + inset), slabMat);
+          slab.position.y = i * storeyH + slabH * 0.5 + 0.05;
+          grp.add(slab);
+          const strip = new THREE.Mesh(
+            new THREE.PlaneGeometry(w * 0.82, stripH * 0.78), winMat);
+          strip.position.set(0, yCenter, d / 2 + 0.01);
+          grp.add(strip);
+          const stripN = new THREE.Mesh(
+            new THREE.PlaneGeometry(w * 0.82, stripH * 0.78), winMat);
+          stripN.position.set(0, yCenter, -d / 2 - 0.01);
+          stripN.rotation.y = Math.PI;
+          grp.add(stripN);
+        }
+        // Parapet lip + small rooftop equipment cube for variety.
+        const parapet = new THREE.Mesh(
+          new THREE.BoxGeometry(w + 0.1, 0.40, d + 0.1),
+          new THREE.MeshStandardMaterial({ color: 0x6b6b75, roughness: 0.9 })
+        );
+        parapet.position.y = h + 0.20;
+        grp.add(parapet);
+        const hvac = new THREE.Mesh(
+          new THREE.BoxGeometry(w * 0.30, 0.65, d * 0.40),
+          new THREE.MeshStandardMaterial({ color: 0x4a4a55, roughness: 0.9 })
+        );
+        hvac.position.set(w * 0.20, h + 0.70, -d * 0.10);
+        grp.add(hvac);
       } else if (t === 'other' || t === '' ||
                  !(t.includes('building') || t.includes('storey') ||
                    t.includes('neighbour') || t.includes('nearby'))) {
@@ -2668,7 +2746,7 @@
           // Reset each panel to its un-tinted base, or re-apply heat tint.
           panelMeshes.forEach(m => {
             const f = m.userData.shadedFrac;
-            m.material.color.setHex(on ? shadeColor(f) : 0x3949ab);
+            m.material.color.setHex(on ? shadeColor(f) : 0x1d4ed8);
           });
         } else if (layerTargets[layer]) {
           layerTargets[layer].forEach(t => { t.visible = on; });
@@ -2755,11 +2833,11 @@
       const html = [];
       for (let i = 0; i < totalPanels; i++) {
         const frac = perPanelFracs[i] || 0;
-        let color = '#3949ab', border = 'none';
-        if (frac >= 0.95)      { color = '#000000'; border = '1px solid #c62828'; }
-        else if (frac >= 0.50) color = '#c62828';
-        else if (frac >= 0.20) color = '#f57c00';
-        else if (frac >= 0.05) color = '#ffb74d';
+        let color = '#1d4ed8', border = 'none';
+        if (frac >= 0.95)      { color = '#dc2626'; border = '1px solid #f97316'; }
+        else if (frac >= 0.50) color = '#f97316';
+        else if (frac >= 0.20) color = '#facc15';
+        else if (frac >= 0.05) color = '#22c55e';
         html.push(`<div title="Panel ${i + 1}: ${(frac * 100).toFixed(0)}% max shaded"
           style="aspect-ratio:1.13/1.72;background:${color};border:${border};
                  border-radius:2px"></div>`);
@@ -2838,10 +2916,10 @@
         const parts = [];
         const maxFrac = Math.max(0.01, ...series.map(s => s.avg_frac));
         series.forEach((s, i) => {
-          let bg = '#3949ab';
-          if (s.avg_frac >= 0.50)      bg = '#c62828';
-          else if (s.avg_frac >= 0.20) bg = '#f57c00';
-          else if (s.avg_frac >= 0.05) bg = '#ffb74d';
+          let bg = '#1d4ed8';
+          if (s.avg_frac >= 0.50)      bg = '#f97316';
+          else if (s.avg_frac >= 0.20) bg = '#facc15';
+          else if (s.avg_frac >= 0.05) bg = '#22c55e';
           parts.push(`<div title="${s.time}: ${(s.avg_frac*100).toFixed(1)}% avg shaded"
             style="flex:1;background:${bg};opacity:${0.3 + 0.7 * (s.avg_frac/maxFrac)};
                    cursor:pointer" data-idx="${i}"></div>`);
@@ -2882,11 +2960,11 @@
       });
 
       function colorFor(frac) {
-        if (frac >= 0.95) return '#000';
-        if (frac >= 0.50) return '#c62828';
-        if (frac >= 0.20) return '#f57c00';
-        if (frac >= 0.05) return '#ffb74d';
-        return '#3949ab';
+        if (frac >= 0.95) return '#dc2626';
+        if (frac >= 0.50) return '#f97316';
+        if (frac >= 0.20) return '#facc15';
+        if (frac >= 0.05) return '#22c55e';
+        return '#1d4ed8';
       }
 
       const cells = [];
@@ -3086,11 +3164,11 @@
         const fracs = peak.panel_fracs || [];
         // 5 buckets: 0-5%, 5-20%, 20-50%, 50-95%, 95-100%.
         const buckets = [
-          { label: 'Unshaded', lo: 0,    hi: 0.05, color: '#3949ab', n: 0 },
-          { label: 'Light',    lo: 0.05, hi: 0.20, color: '#ffb74d', n: 0 },
-          { label: 'Moderate', lo: 0.20, hi: 0.50, color: '#f57c00', n: 0 },
-          { label: 'Heavy',    lo: 0.50, hi: 0.95, color: '#c62828', n: 0 },
-          { label: 'Full',     lo: 0.95, hi: 1.01, color: '#000',    n: 0 },
+          { label: 'Unshaded', lo: 0,    hi: 0.05, color: '#1d4ed8', n: 0 },
+          { label: 'Light',    lo: 0.05, hi: 0.20, color: '#22c55e', n: 0 },
+          { label: 'Moderate', lo: 0.20, hi: 0.50, color: '#facc15', n: 0 },
+          { label: 'Heavy',    lo: 0.50, hi: 0.95, color: '#f97316', n: 0 },
+          { label: 'Severe',   lo: 0.95, hi: 1.01, color: '#dc2626', n: 0 },
         ];
         fracs.forEach(f => {
           for (const b of buckets) {
@@ -3117,7 +3195,7 @@
           const x = cx - barW / 2;
           const y = yOf(b.n);
           const h = padT + plotH - y;
-          const stroke = b.color === '#000' ? 'stroke="#c62828" stroke-width="1.5"' : '';
+          const stroke = b.color === '#000' ? 'stroke="#f97316" stroke-width="1.5"' : '';
           g += `<rect x="${x}" y="${y}" width="${barW}" height="${h}"
             fill="${b.color}" ${stroke}/>`;
           g += `<text x="${cx}" y="${y - 4}" fill="#fff" font-size="10"

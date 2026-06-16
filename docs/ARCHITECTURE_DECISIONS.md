@@ -242,3 +242,33 @@ change to remove the fallback once ADK lands in requirements.
 * Footnote in the card explicitly states the 3D render is ours, not a recreation of any reference image.
 
 **Impact on Cost / Performance / Security:** All neutral or better. ~6.7 MB of static assets removed from the repo.
+
+---
+
+## ADR-0006b — Amendment: 3d10-plan-informed expansion (2026-06-16, late afternoon)
+
+**Status:** Accepted, amends ADR-0006 / ADR-0006a same day.
+
+**Context:** Owner pointed to a new plan + reference image at `Documents/pvsolar1/3d10/3d10.txt` and `Documents/pvsolar1/3d10/ChatGPT Image Jun 16, 2026, 06_26_55 PM.png` and said "read the plan and the markdown and update to achieve the goal". The 3d10 plan is a comprehensive spec for a 7-scene-type 3D shading module with a universal data contract, strict coordinate system, panel-impact colour scheme, and scene-template-selector logic.
+
+**Decision:** Apply the high-impact items from the 3d10 plan to the existing Flask + Three.js implementation. Do NOT do the React Three Fiber rewrite (the plan's stack target) — that's a separate project. The applied items:
+
+1. **Catalogue expansion** — `engine/shading_templates.json` schema v3 with 7 entries (one per 3d10 scene type), each carrying `scene_type`, exact engineering data from the plan's §13-§19 templates, and richer match-feature flags (`has_hill`, `has_cluster`).
+2. **Sub-cardinal directions** — `WNW`, `NNW`, `ENE` (and full set: `NNE/ENE/ESE/SSE/SSW/WSW/WNW/NNW`) added to `engine/shading_engine.py::DIRECTION_AZ`, `engine/shading_templates.py::_DIRECTION_ALIASES`, and `templates/shading.html::DIR_AZ`. The cluster-of-buildings scene uses these.
+3. **Cluster-of-buildings render** — new branch in `templates/shading.html::makeObstructionMesh` for `cluster_*` types: tall slab with floor bands, parapet, and rooftop HVAC. Triggered when obstruction type contains "cluster".
+4. **Panel-impact colour palette** — aligned to the 3d10 plan §21 exact palette: `#1d4ed8` (none) / `#22c55e` (low) / `#facc15` (medium) / `#f97316` (high) / `#dc2626` (severe). Legend label "Full" → "Severe". Applied across `shadeColor()` (2 copies), heatmap fills, histogram buckets, and dashboard legend.
+5. **Scene-type priority chain in matcher** — `engine/shading_templates.py::_score()` re-weighted per 3d10 §7 priority (hill > cluster > multi > ground+building > tree > tank > default). Hill and cluster get higher weights (0.18 / 0.15) than other binary features because they are scene-type-defining.
+6. **Dashboard card surfaces scene_type** — new green badge on the "Closest reference profile" card shows the matched scene type (e.g. "HILL OBSTRUCTION", "CLUSTER OF BUILDINGS") so the operator can see the categorisation.
+
+Deferred from this iteration: hill `azimuthCoverage` cone (form doesn't collect the field yet; existing lumpy-mound render is the right baseline until then); React Three Fiber rewrite; GLTF export.
+
+**Reason for decision:** The plan provides exact engineering data (lat/lon, dimensions, sun trajectories, expected factors) that strengthens the catalogue's diagnostic value at zero recurring cost. The colour palette + sub-cardinal directions + cluster render are pure visual quality improvements with no architectural impact. The matcher's priority chain is a 30-line rewrite that materially improves classification correctness on the new scene types.
+
+**Consequences:**
+* Catalogue is now 7 templates, each tagged with `scene_type`; the matcher returns `scene_type` alongside `template_id`.
+* `shading.html` palette change is global to that file (all shadeColor variants, legend swatches, heatmap fills, histogram buckets). The visual feel of the dashboard shifts to the 3d10 plan's engineering colours.
+* Direction maps now cover all 16 compass points across Python engine + Python matcher + JS scene.
+
+**Impact on Cost / Performance / Security:** Neutral. Catalogue file is +6 KB; no new dependencies; no per-call API costs.
+
+**Impact on Maintenance:** New cluster-of-buildings render block in `makeObstructionMesh` (~50 lines). Catalogue entries are pure data; adding new scenes is a JSON edit.
