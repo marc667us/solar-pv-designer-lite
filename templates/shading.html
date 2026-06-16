@@ -1796,7 +1796,13 @@
 
   // Helper — show a visible error in the canvas if init blows up so the
   // operator never sees a silently-blank box.
-  function _shadingShowError(msg) {
+  function _shadingShowError(info) {
+    // Accept either a string (legacy) or {msg, lastCheckpoint, stack}.
+    var msg = typeof info === 'string' ? info : (info && info.msg) || String(info);
+    var ckpt = (info && info.lastCheckpoint) || '(unknown)';
+    var stk  = (info && info.stack) || '';
+    var stkShort = stk ? stk.split('\n').slice(0, 4).join('<br>') : '';
+    var ua = (navigator && navigator.userAgent || '').slice(0, 120);
     const err = document.getElementById('shading3d-error');
     const load = document.getElementById('shading3d-loading');
     if (load) load.style.display = 'none';
@@ -1807,12 +1813,15 @@
         '<div><strong>3D scene unavailable.</strong> The dashboard charts below ' +
         'still work — only the interactive 3D view is missing.</div>' +
         '<div style="font-family:monospace;font-size:11px;color:#c0a070;' +
-        'max-width:520px;word-wrap:break-word">' + msg + '</div>' +
-        '<div style="color:#a0a0c8;font-size:11px;max-width:520px">' +
-        'Cause is usually: (a) Three.js CDN blocked by your network or ' +
-        'browser extension; or (b) the page was served before Three.js ' +
-        'finished loading. Hard-refresh (Ctrl+Shift+R) to retry. ' +
-        'Open the browser console (F12) for the full JS error.</div>';
+        'max-width:640px;word-wrap:break-word;text-align:left;margin-top:6px">' +
+        '<strong>Error:</strong> ' + msg + '<br>' +
+        '<strong>Last checkpoint:</strong> ' + ckpt + '<br>' +
+        (stkShort ? '<strong>Stack:</strong><br>' + stkShort + '<br>' : '') +
+        '<strong>UA:</strong> ' + ua +
+        '</div>' +
+        '<div style="color:#a0a0c8;font-size:11px;max-width:560px">' +
+        'Three.js is self-hosted (no CDN). Hard-refresh (Ctrl+Shift+R) to retry. ' +
+        'If this persists, copy the error block above and report it.</div>';
     }
   }
   // Catch ALL errors (sync + async module-load) so init failures never
@@ -1902,12 +1911,17 @@
         'pointer-events:none';
       host.appendChild(_dbgOverlay);
     }
+    let _lastCheckpoint = 'init-entry';
     function _ck(label) {
+      _lastCheckpoint = label;
       try { console.log('[shading3d] ' + label); } catch (_) {}
       if (_dbgOverlay) {
         _dbgOverlay.innerHTML += '<div>&#x2713; ' + label + '</div>';
       }
     }
+    // Expose so the outer catch can read it even if we never
+    // entered the inner host-true branch.
+    try { window._shading3dLastCk = function() { return _lastCheckpoint; }; } catch (_) {}
     _ck('init starting (engine total_panels=' + (engineData.total_panels || 0) +
         ', obstructions=' + obstructions.length + ')');
 
@@ -3555,7 +3569,13 @@
   }
   } catch (_err) {
     console.error('shading3d init failed:', _err);
-    _shadingShowError(_err && _err.message || String(_err));
+    var _ckLast = (typeof window._shading3dLastCk === 'function')
+                ? window._shading3dLastCk() : '(no checkpoint reached)';
+    _shadingShowError({
+      msg: (_err && _err.message) || String(_err),
+      lastCheckpoint: _ckLast,
+      stack: (_err && _err.stack) || ''
+    });
   }
 </script>
 {% endif %}
