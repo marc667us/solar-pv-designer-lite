@@ -8300,7 +8300,7 @@ def project_email(pid):
                 attachments=_attachments,
             )
         except Exception as _send_exc:
-            logger.exception("project_email: _send_email raised for pid=%s recipients=%s", pid, recipients)
+            app.logger.exception("project_email: _send_email raised for pid=%s recipients=%s", pid, recipients)
             _ok, _err = False, f"send exception: {type(_send_exc).__name__}: {_send_exc}"
         if _ok:
             with get_db() as c:
