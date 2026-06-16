@@ -12271,6 +12271,35 @@ def _apply_shading_factor(project, obstructions, base_shading=None):
     return out
 
 
+def _ensure_engine_block(project, pid):
+    """Populate data["shading"]["engine"] if it is missing.
+
+    The /shading GET handler patches the engine in transiently so the
+    dashboard always renders, but never saves it. As a result, routes
+    that read directly from disk (the standalone shading report HTML +
+    PDF) saw an empty engine block on any project that had never been
+    saved through a POST. This helper runs the engine and persists.
+    """
+    try:
+        data = project.get("data") or {}
+        sh = data.get("shading", {}) or {}
+        if sh.get("engine"):
+            return
+        eng = _engine_full_analysis(project, sh.get("obstructions") or [])
+        if not eng:
+            return
+        sh = dict(sh)
+        sh["engine"] = eng
+        data["shading"] = sh
+        save_project_data(pid, data)
+        project["data"] = data
+    except Exception as _e:
+        try:
+            app.logger.warning("engine-block backfill failed: %s", _e)
+        except Exception:
+            pass
+
+
 def _compute_shading_factor(obstructions):
     """Phase 1 deterministic shading agent.
 
@@ -12736,6 +12765,10 @@ def report_shading(pid):
     if not project:
         flash("Project not found.", "warning")
         return redirect(url_for("dashboard"))
+    # Ensure engine angles are present even on projects that were last
+    # touched before the engine-first fix. Persists, so subsequent loads
+    # are a no-op.
+    _ensure_engine_block(project, pid)
     return render_template("report_shading.html",
                            user=current_user(),
                            project=project,
@@ -12755,6 +12788,8 @@ def export_pdf_shading(pid):
     if not project:
         flash("Project not found.", "warning")
         return redirect(url_for("dashboard"))
+    # Backfill engine block if missing so the PDF carries angles.
+    _ensure_engine_block(project, pid)
     d   = project["data"]
     r   = d.get("results", {}) or {}
     sh  = d.get("shading", {}) or {}
