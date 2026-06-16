@@ -1176,6 +1176,74 @@
   {% endif %}
 
   {# ───────────────────────────────────────────────────────────────── #}
+  {# Bottom metrics bar — matches the strip at the foot of the 3d10    #}
+  {# reference image (3d10.txt §12). Current Time / Sun Alt / Sun Az    #}
+  {# are JS-populated; Avg Factor / Affected / Energy Loss are SSR.    #}
+  {# ───────────────────────────────────────────────────────────────── #}
+  {% if _eng and _eng.series %}
+  <div class="d-flex flex-wrap align-items-center gap-3 px-3 py-2"
+       id="shadingMetricsBar"
+       style="border-top:1px solid #1e1e3a;
+              background:linear-gradient(180deg,#0d1023 0%,#080916 100%)">
+    <div class="text-center" style="min-width:78px">
+      <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Current Time</div>
+      <div class="fw-bold" id="metricCurrentTime" style="color:#f5f5fa;font-size:13px">--:--</div>
+    </div>
+    <div class="text-center" style="min-width:78px">
+      <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Sun Altitude</div>
+      <div class="fw-bold" id="metricSunAlt" style="color:#f5f5fa;font-size:13px">--&deg;</div>
+    </div>
+    <div class="text-center" style="min-width:78px">
+      <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Sun Azimuth</div>
+      <div class="fw-bold" id="metricSunAz" style="color:#f5f5fa;font-size:13px">--&deg;</div>
+    </div>
+    <div class="text-center" style="min-width:78px">
+      <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Avg Factor</div>
+      <div class="fw-bold" style="color:#fbbf24;font-size:13px">{{ "%.2f"|format(1.0 - (_eng.weighted_avg_fraction or 0.0)) }}</div>
+    </div>
+    <div class="text-center" style="min-width:78px">
+      <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Min Factor</div>
+      <div class="fw-bold" id="metricMinFactor" style="color:#facc15;font-size:13px">--</div>
+    </div>
+    <div class="text-center" style="min-width:90px">
+      <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Affected Modules</div>
+      <div class="fw-bold" style="color:#f5f5fa;font-size:13px">{{ _eng.affected_panels or 0 }} / {{ _eng.total_panels or 0 }}</div>
+    </div>
+    <div class="text-center" style="min-width:78px">
+      <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Energy Loss</div>
+      <div class="fw-bold" style="color:#ef4444;font-size:13px">{{ "%.1f"|format(_eng.peak_step_loss_pct or 0) }}%</div>
+    </div>
+    <a href="{{ url_for('export_pdf_shading', pid=project.id) }}"
+       class="btn btn-warning fw-bold ms-auto" style="font-size:11px;letter-spacing:.4px">
+      <i class="bi bi-download me-1"></i>EXPORT REPORT
+    </a>
+  </div>
+  <script>
+  (function() {
+    try {
+      var d = document.getElementById('shading-engine-data');
+      if (!d) return;
+      var eng = JSON.parse((d.textContent || '{}').trim() || '{}');
+      var s = eng.series || [];
+      if (!s.length) return;
+      var noon = s[0];
+      for (var i = 0; i < s.length; i++) if (s[i].time === '12:00') { noon = s[i]; break; }
+      var ct = document.getElementById('metricCurrentTime'); if (ct) ct.textContent = noon.time || '--:--';
+      var sa = document.getElementById('metricSunAlt');     if (sa) sa.innerHTML  = (Math.round((noon.alt||0)*10)/10) + '&deg;';
+      var sz = document.getElementById('metricSunAz');      if (sz) sz.innerHTML  = (Math.round(noon.az||0)) + '&deg;';
+      var maxFrac = 0;
+      for (var j = 0; j < s.length; j++) {
+        if ((s[j].alt||0) <= 0) continue;
+        if ((s[j].avg_frac||0) > maxFrac) maxFrac = s[j].avg_frac;
+      }
+      var mf = document.getElementById('metricMinFactor');
+      if (mf) mf.textContent = (1.0 - maxFrac).toFixed(2);
+    } catch (e) { console.warn('[shading] metrics-bar init failed', e); }
+  })();
+  </script>
+  {% endif %}
+
+  {# ───────────────────────────────────────────────────────────────── #}
   {# Action bar at the bottom of the v2 dashboard — matches the       #}
   {# button row in the reference images.                               #}
   {# ───────────────────────────────────────────────────────────────── #}
@@ -1313,7 +1381,7 @@
   try {
     var thumb = document.getElementById('shadingThumbStrip');
     if (thumb && series.length) {
-      var targets = ['07:00','09:00','12:00','15:00','18:00'];
+      var targets = ['06:00','07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'];
       var picks = targets.map(function(t) {
         var tm = function(s) { var p = (s.time||'00:00').split(':').map(Number); return p[0]*60+p[1]; };
         var tgt = parseInt(t.split(':')[0],10) * 60;
@@ -2928,7 +2996,7 @@
     //    a thumbnail jumps the main slider to that step.
     const thumbHost = document.getElementById('shadingThumbStrip');
     if (thumbHost && series.length) {
-      const targetTimes = ['07:00', '09:00', '12:00', '15:00', '18:00'];
+      const targetTimes = ['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
       const picks = targetTimes.map(t => {
         // Closest step (by absolute minute distance).
         const tm = (s) => {
