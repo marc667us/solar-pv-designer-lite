@@ -8293,11 +8293,15 @@ def project_email(pid):
                         _attachments = [(_fname, _pdf_bytes, "application/pdf")]
                 except Exception as _pdf_exc:
                     logger.warning("PDF attachment render failed for %s: %s", _report_label, _pdf_exc)
-        _ok, _err = _send_email(
-            recipients, subject, _phtml, text_body=_ptxt,
-            from_addr=eff_from, resend_key=eff_resend or None,
-            attachments=_attachments,
-        )
+        try:
+            _ok, _err = _send_email(
+                recipients, subject, _phtml, text_body=_ptxt,
+                from_addr=eff_from, resend_key=eff_resend or None,
+                attachments=_attachments,
+            )
+        except Exception as _send_exc:
+            logger.exception("project_email: _send_email raised for pid=%s recipients=%s", pid, recipients)
+            _ok, _err = False, f"send exception: {type(_send_exc).__name__}: {_send_exc}"
         if _ok:
             with get_db() as c:
                 c.execute(
@@ -9231,7 +9235,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                         data=_payload4,
                         headers={"Content-Type": "application/json"}
                     )
-                    with _ur_ai.urlopen(_req4, timeout=120) as _r4:
+                    with _ur_ai.urlopen(_req4, timeout=20) as _r4:
                         _result4 = _json_ai.loads(_r4.read())
                     raw = _result4["message"]["content"].strip()
                     ai_source = "web+ollama"
