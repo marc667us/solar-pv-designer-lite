@@ -188,16 +188,18 @@
   {% endfor %}
 </div>
 
-<!-- ── Projects -- OLD My Projects section removed 2026-06-16 per owner.
-     Replaced by /myproject (result-history page). The block below is
-     kept gated on ?show_old_projects=1 so a user can re-reveal it if
-     needed without a code change; default is hidden. -->
+<!-- ── Projects -- 2026-06-16 update: this section was briefly hidden
+     after the My Project history page shipped, but operator feedback
+     confirmed the project list is still the entry point into the
+     project setup flow (tariff / house type / load calc). RESTORED
+     to visible-by-default. The new /myproject page lives alongside
+     this section as the result-history view. -->
 {% set saved  = projects | selectattr('stage', 'equalto', 'results') | list %}
 {% set drafts = projects | rejectattr('stage', 'equalto', 'results') | list %}
 
 <div id="projects-section"></div>
 
-{% if request.args.get('show_old_projects') == '1' and projects %}
+{% if projects %}
 
 <!-- Search + header row -->
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
