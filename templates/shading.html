@@ -743,9 +743,19 @@
     </div>
   </div>
 
-  {# ── AI agent analysis card (Day 3) ───────────────────────────────── #}
+  {# ── AI agent analysis card — HIDDEN 2026-06-16 per owner.
+       Owner: "stop the agent from dumping its walk through results on
+       the dashboard ... the agent must delete it result on success
+       after being to create and calculated and get reports".
+       Wrapped behind ?show_agent=1 so the markup is still available for
+       development debugging, but the live dashboard no longer shows it.
+       The agent's narrative is persisted to data["shading"]["agent_v2"]
+       only as the latest run record, and is cleared by the next
+       successful save (see web_app.py inspection_form + project_shading
+       POST handlers). The history of past agent runs will move to
+       My Projects (separate feature). #}
   {% set _agent = shading.get('agent_v2') if shading else None %}
-  {% if _agent %}
+  {% if _agent and request.args.get('show_agent') == '1' %}
   <div class="p-3" style="border-top:1px solid #1e1e3a;background:rgba(245,158,11,.04)">
     <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
       <div>
@@ -3907,8 +3917,10 @@
   </div>
   {% endif %}{# end ?v1=1 legacy SVG block #}
 
-  {# ── Last agent verdict (saved from previous submit, if any) ────── #}
-  {% if shading.agent_summary %}
+  {# ── Last agent verdict — HIDDEN 2026-06-16 per owner. Same reason
+       as the analysis card above. The factor is shown in the top KPI
+       strip; the narrative belongs in My Projects history, not here. #}
+  {% if shading.agent_summary and request.args.get('show_agent') == '1' %}
   <div class="solar-card p-3 mb-3"
        style="border-left:4px solid #a78bfa;background:linear-gradient(90deg,rgba(167,139,250,.08),transparent)">
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
