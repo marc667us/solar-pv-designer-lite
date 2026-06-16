@@ -1,0 +1,1138 @@
+# AI 3D Solar Shading Simulation Module
+
+## Senior AI App Engineering Plan and Claude Code Implementation Markdown
+
+## 1. Objective
+
+Build a professional, data-driven, interactive 3D solar shading simulation module that can visually reproduce the reference dashboards for:
+
+1. Residential roof-mounted PV with building obstruction
+2. Residential roof-mounted PV with tree obstruction
+3. Residential roof-mounted PV with water tank obstruction
+4. Ground-mounted solar farm with building obstruction
+5. Multiple obstructions combined shading
+6. Hill obstruction
+7. Cluster of buildings obstruction
+
+The module must not generate random decorative 3D graphics. It must use real solar project data, site data, obstruction dimensions, PV layout, sun position, sun trajectory, and shadow-calculation outputs.
+
+---
+
+# 2. Engineering Approach
+
+The correct architecture is:
+
+```text
+Solar Project Data
+      ↓
+Scene Template Selector
+      ↓
+3D Scene Data Normalizer
+      ↓
+Sun Position Engine
+      ↓
+Obstruction Geometry Builder
+      ↓
+PV Array Geometry Builder
+      ↓
+Shadow Projection Engine
+      ↓
+Panel Impact Engine
+      ↓
+3D Renderer
+      ↓
+Dashboard UI
+      ↓
+Report Export
+```
+
+Claude Code must not attempt to create the whole scene directly from text. It must build a reusable 3D engine using scene templates.
+
+---
+
+# 3. Required Technology Stack
+
+Use:
+
+```text
+React / Next.js
+TypeScript
+React Three Fiber
+Three.js
+@react-three/drei
+Zustand or existing state manager
+Tailwind CSS or existing styling system
+html2canvas for PNG export
+jsPDF for PDF export
+```
+
+Optional but recommended:
+
+```text
+react-icons or lucide-react
+date-fns
+uuid
+```
+
+---
+
+# 4. Core Files to Create
+
+```text
+src/modules/solar-shading-3d/
+  components/
+    Shading3DDashboard.tsx
+    SceneViewport.tsx
+    SceneTopBar.tsx
+    LeftControlPanel.tsx
+    ObstructionDetailsPanel.tsx
+    ShadingSummaryPanel.tsx
+    ShadingImpactLegend.tsx
+    ModuleShadingMap.tsx
+    ShadowTimeline.tsx
+    BottomMetricsBar.tsx
+    ViewControls.tsx
+    SunPathOverlay.tsx
+    DimensionLabel.tsx
+
+  scene/
+    SolarScene.tsx
+    BuildingModel.tsx
+    HouseModel.tsx
+    RoofModel.tsx
+    PVArrayModel.tsx
+    GroundMountedPVModel.tsx
+    SunModel.tsx
+    SunRayModel.tsx
+    ShadowPlane.tsx
+    TreeModel.tsx
+    WaterTankModel.tsx
+    HillModel.tsx
+    ClusterBuildingModel.tsx
+    BoundaryWallModel.tsx
+
+  engine/
+    sceneTemplateSelector.ts
+    sceneNormalizer.ts
+    sunPositionEngine.ts
+    shadowProjectionEngine.ts
+    panelImpactEngine.ts
+    shadingFactorEngine.ts
+    geometryUtils.ts
+
+  data/
+    sampleScenes.ts
+    sceneTypes.ts
+
+  export/
+    exportShadingDashboard.ts
+
+  store/
+    useShading3DStore.ts
+```
+
+---
+
+# 5. Scene Types
+
+Create the following scene types:
+
+```ts
+export type ShadingSceneType =
+  | "residential_roof_building"
+  | "residential_roof_tree"
+  | "residential_roof_water_tank"
+  | "ground_mounted_building"
+  | "multiple_obstructions"
+  | "hill_obstruction"
+  | "cluster_of_buildings";
+```
+
+---
+
+# 6. Universal Data Contract
+
+Create this data contract and use it across the full module.
+
+```ts
+export type SolarShading3DInput = {
+  project: {
+    projectId: string;
+    projectName: string;
+    clientName?: string;
+    locationName: string;
+    latitude: number;
+    longitude: number;
+    simulationDate: string;
+    simulationTime: string;
+    timeZone?: string;
+  };
+
+  site: {
+    siteType: "residential" | "commercial" | "hospital" | "industrial" | "open_land";
+    terrainType: "flat" | "sloped" | "hill" | "urban_cluster";
+    boundaryLength?: number;
+    boundaryWidth?: number;
+  };
+
+  building: {
+    buildingType: "house" | "commercial" | "hospital" | "warehouse" | "ground_site";
+    length: number;
+    width: number;
+    height: number;
+    roofType: "hip" | "gable" | "pitched" | "flat" | "metal";
+    roofTilt: number;
+    roofAzimuth: number;
+    floors?: number;
+  };
+
+  pvArray: {
+    mountingType: "roof_mounted" | "ground_mounted";
+    moduleRows: number;
+    moduleColumns: number;
+    totalModules: number;
+    moduleLength: number;
+    moduleWidth: number;
+    moduleWattage: number;
+    moduleTilt: number;
+    moduleAzimuth: number;
+    rowSpacing: number;
+    columnSpacing: number;
+    basePVSizeKw: number;
+    correctedPVSizeKw?: number;
+    stringCount?: number;
+  };
+
+  sun: {
+    altitude: number;
+    azimuth: number;
+    trajectory: Array<{
+      time: string;
+      altitude: number;
+      azimuth: number;
+    }>;
+  };
+
+  obstructions: Array<{
+    id: string;
+    label: string;
+    type:
+      | "building"
+      | "tree"
+      | "water_tank"
+      | "boundary_wall"
+      | "hill"
+      | "mast"
+      | "cluster_building";
+    height: number;
+    width?: number;
+    length?: number;
+    diameter?: number;
+    floors?: number;
+    distanceFromArray: number;
+    directionFromArray:
+      | "N"
+      | "S"
+      | "E"
+      | "W"
+      | "NE"
+      | "NW"
+      | "SE"
+      | "SW"
+      | "WNW"
+      | "NNW"
+      | "ENE";
+    x?: number;
+    y?: number;
+    z?: number;
+    slope?: number;
+    azimuthCoverage?: [number, number];
+  }>;
+
+  shadingResult?: {
+    shadingPeriod: string;
+    totalShadedHours: string;
+    averageShadingFactor: number;
+    minimumShadingFactor: number;
+    energyLossPercent: number;
+    affectedModules: number;
+    totalModules: number;
+    moduleImpactMap: Array<{
+      moduleId: string;
+      impactLevel: "none" | "low" | "medium" | "high" | "severe";
+      remainingOutputPercent: number;
+    }>;
+  };
+};
+```
+
+---
+
+# 7. Scene Template Selection Logic
+
+Create `sceneTemplateSelector.ts`.
+
+```ts
+export function selectSceneTemplate(input: SolarShading3DInput): ShadingSceneType {
+  const obstructionTypes = input.obstructions.map(o => o.type);
+
+  if (input.site.terrainType === "hill" || obstructionTypes.includes("hill")) {
+    return "hill_obstruction";
+  }
+
+  if (input.site.terrainType === "urban_cluster" || obstructionTypes.filter(t => t === "cluster_building" || t === "building").length >= 3) {
+    return "cluster_of_buildings";
+  }
+
+  if (input.obstructions.length > 1) {
+    return "multiple_obstructions";
+  }
+
+  if (input.pvArray.mountingType === "ground_mounted" && obstructionTypes.includes("building")) {
+    return "ground_mounted_building";
+  }
+
+  if (input.pvArray.mountingType === "roof_mounted" && obstructionTypes.includes("tree")) {
+    return "residential_roof_tree";
+  }
+
+  if (input.pvArray.mountingType === "roof_mounted" && obstructionTypes.includes("water_tank")) {
+    return "residential_roof_water_tank";
+  }
+
+  return "residential_roof_building";
+}
+```
+
+---
+
+# 8. Coordinate System
+
+Use a strict coordinate system.
+
+```text
+X axis = East / West
+Y axis = Height
+Z axis = North / South
+
+PV array centre = [0, 0, 0]
+
+East  = +X
+West  = -X
+North = -Z
+South = +Z
+```
+
+Direction mapping:
+
+```ts
+export function directionToVector(direction: string): [number, number, number] {
+  const d = direction.toUpperCase();
+
+  const map: Record<string, [number, number, number]> = {
+    N: [0, 0, -1],
+    S: [0, 0, 1],
+    E: [1, 0, 0],
+    W: [-1, 0, 0],
+    NE: [0.707, 0, -0.707],
+    NW: [-0.707, 0, -0.707],
+    SE: [0.707, 0, 0.707],
+    SW: [-0.707, 0, 0.707],
+    WNW: [-0.92, 0, -0.38],
+    NNW: [-0.38, 0, -0.92],
+    ENE: [0.92, 0, -0.38]
+  };
+
+  return map[d] ?? [0, 0, 1];
+}
+```
+
+---
+
+# 9. Sun and Shadow Geometry
+
+Use the following formulas as the first reliable engineering approximation.
+
+```ts
+export function solarVector(altitudeDeg: number, azimuthDeg: number): [number, number, number] {
+  const alt = THREE.MathUtils.degToRad(altitudeDeg);
+  const azi = THREE.MathUtils.degToRad(azimuthDeg);
+
+  const x = Math.sin(azi) * Math.cos(alt);
+  const y = Math.sin(alt);
+  const z = Math.cos(azi) * Math.cos(alt);
+
+  return [x, y, z];
+}
+
+export function shadowLength(height: number, altitudeDeg: number): number {
+  const alt = THREE.MathUtils.degToRad(Math.max(altitudeDeg, 1));
+  return height / Math.tan(alt);
+}
+```
+
+Shadow direction:
+
+```text
+Shadow direction = opposite direction of sun ground vector
+```
+
+---
+
+# 10. 3D Visual Design Rules
+
+Use this visual language:
+
+```text
+Background: dark navy dashboard
+Scene: realistic 3D environment
+Sun: bright yellow glowing sphere
+Sun path: dashed yellow arc
+Sun rays: thin yellow lines
+PV modules: dark blue
+No impact modules: blue
+Low impact: green
+Medium impact: yellow
+High impact: orange
+Severe impact: red
+Shadows: semi-transparent charcoal or tinted per obstruction
+UI panels: dark translucent navy
+Labels: white text on dark cards
+Dimension lines: yellow or white
+```
+
+---
+
+# 11. Dashboard Layout
+
+The dashboard must visually match the reference images.
+
+```text
+ ---------------------------------------------------------------
+| 3D SHADING ANALYSIS – SELECTED SCENE TYPE                     |
+| Date | Time | Sun Altitude | Sun Azimuth                      |
+ ---------------------------------------------------------------
+| LEFT SITE INFO PANEL | MAIN 3D VIEWPORT              | RIGHT  |
+|                      |                               | PANELS |
+| Site Information     | 3D site, building, PV, sun,   | Obstr. |
+| View Controls        | rays, shadows, labels         | Summary|
+| Display Layers       |                               | Impact |
+ ---------------------------------------------------------------
+| SHADOW TIMELINE WITH TIME THUMBNAILS                          |
+ ---------------------------------------------------------------
+| CURRENT TIME | SUN ALTITUDE | SUN AZIMUTH | FACTOR | MODULES |
+ ---------------------------------------------------------------
+```
+
+---
+
+# 12. Required Dashboard Panels
+
+## Left Panel
+
+Show:
+
+```text
+Location
+Latitude / Longitude
+System Type
+PV Capacity
+Tilt / Azimuth
+Simulation Date
+Simulation Time
+Time Step
+View Controls
+Display Layers
+```
+
+## Main Viewport
+
+Show:
+
+```text
+3D building or site
+PV array
+Obstructions
+Sun
+Sun trajectory arc
+Sun time markers
+Sun rays
+Shadow cast
+Affected panels
+Compass
+Dimension labels
+```
+
+## Right Panel
+
+Show:
+
+```text
+Obstruction Details
+Obstruction Summary
+Shading Summary
+Shading Impact Legend
+Module Shading Map
+```
+
+## Bottom Timeline
+
+Show:
+
+```text
+6:00 AM
+7:00 AM
+8:00 AM
+9:00 AM
+10:00 AM
+11:00 AM
+12:00 PM
+1:00 PM
+2:00 PM
+3:00 PM
+4:00 PM
+5:00 PM
+6:00 PM
+```
+
+## Bottom Metrics Bar
+
+Show:
+
+```text
+Current Time
+Sun Altitude
+Sun Azimuth
+Shading Factor
+Affected Modules
+Energy Loss
+Export Report Button
+```
+
+---
+
+# 13. Scene Template A – Residential Roof Building Obstruction
+
+Use this for a house affected by a nearby building.
+
+```ts
+export const residentialRoofBuildingScene: SolarShading3DInput = {
+  project: {
+    projectId: "scene-a",
+    projectName: "Residential Roof – Building Obstruction",
+    locationName: "Accra, Ghana",
+    latitude: 5.6037,
+    longitude: -0.1870,
+    simulationDate: "21 May 2024",
+    simulationTime: "12:00 PM"
+  },
+  site: {
+    siteType: "residential",
+    terrainType: "flat",
+    boundaryLength: 35,
+    boundaryWidth: 25
+  },
+  building: {
+    buildingType: "house",
+    length: 14,
+    width: 11,
+    height: 5,
+    roofType: "hip",
+    roofTilt: 20,
+    roofAzimuth: 180,
+    floors: 1
+  },
+  pvArray: {
+    mountingType: "roof_mounted",
+    moduleRows: 4,
+    moduleColumns: 7,
+    totalModules: 28,
+    moduleLength: 1.9,
+    moduleWidth: 1.1,
+    moduleWattage: 450,
+    moduleTilt: 20,
+    moduleAzimuth: 180,
+    rowSpacing: 0.15,
+    columnSpacing: 0.05,
+    basePVSizeKw: 6.72
+  },
+  sun: {
+    altitude: 68.2,
+    azimuth: 115.4,
+    trajectory: [
+      { time: "9:00 AM", altitude: 32, azimuth: 95 },
+      { time: "12:00 PM", altitude: 68.2, azimuth: 115.4 },
+      { time: "3:00 PM", altitude: 38, azimuth: 245 }
+    ]
+  },
+  obstructions: [
+    {
+      id: "OBS-1",
+      label: "10 Storey Building",
+      type: "building",
+      height: 32,
+      width: 18,
+      length: 25,
+      floors: 10,
+      distanceFromArray: 18,
+      directionFromArray: "W"
+    }
+  ]
+};
+```
+
+---
+
+# 14. Scene Template B – Residential Roof Tree Obstruction
+
+```ts
+export const residentialRoofTreeScene: SolarShading3DInput = {
+  ...residentialRoofBuildingScene,
+  project: {
+    ...residentialRoofBuildingScene.project,
+    projectId: "scene-b",
+    projectName: "Residential Roof – Tree Obstruction"
+  },
+  obstructions: [
+    {
+      id: "OBS-2",
+      label: "Large Tree",
+      type: "tree",
+      height: 12,
+      diameter: 6,
+      distanceFromArray: 6,
+      directionFromArray: "SW"
+    }
+  ]
+};
+```
+
+---
+
+# 15. Scene Template C – Residential Roof Water Tank Obstruction
+
+```ts
+export const residentialRoofWaterTankScene: SolarShading3DInput = {
+  ...residentialRoofBuildingScene,
+  project: {
+    ...residentialRoofBuildingScene.project,
+    projectId: "scene-c",
+    projectName: "Residential Roof – Water Tank Obstruction"
+  },
+  obstructions: [
+    {
+      id: "OBS-3",
+      label: "Water Tank",
+      type: "water_tank",
+      height: 6,
+      diameter: 2.5,
+      distanceFromArray: 8,
+      directionFromArray: "E"
+    }
+  ]
+};
+```
+
+---
+
+# 16. Scene Template D – Ground Mounted Solar Farm
+
+```ts
+export const groundMountedBuildingScene: SolarShading3DInput = {
+  project: {
+    projectId: "scene-d",
+    projectName: "Ground Mounted Solar Farm – Building Obstruction",
+    locationName: "Accra, Ghana",
+    latitude: 5.6037,
+    longitude: -0.1870,
+    simulationDate: "21 May 2024",
+    simulationTime: "12:00 PM"
+  },
+  site: {
+    siteType: "open_land",
+    terrainType: "flat",
+    boundaryLength: 60,
+    boundaryWidth: 40
+  },
+  building: {
+    buildingType: "ground_site",
+    length: 0,
+    width: 0,
+    height: 0,
+    roofType: "flat",
+    roofTilt: 0,
+    roofAzimuth: 180
+  },
+  pvArray: {
+    mountingType: "ground_mounted",
+    moduleRows: 6,
+    moduleColumns: 14,
+    totalModules: 84,
+    moduleLength: 1.9,
+    moduleWidth: 1.1,
+    moduleWattage: 450,
+    moduleTilt: 15,
+    moduleAzimuth: 180,
+    rowSpacing: 0.7,
+    columnSpacing: 0.05,
+    basePVSizeKw: 37.8
+  },
+  sun: {
+    altitude: 68.2,
+    azimuth: 115.4,
+    trajectory: [
+      { time: "9:00 AM", altitude: 32, azimuth: 95 },
+      { time: "12:00 PM", altitude: 68.2, azimuth: 115.4 },
+      { time: "3:00 PM", altitude: 38, azimuth: 245 }
+    ]
+  },
+  obstructions: [
+    {
+      id: "OBS-4",
+      label: "10 Storey Building",
+      type: "building",
+      height: 32,
+      width: 18,
+      length: 25,
+      floors: 10,
+      distanceFromArray: 25,
+      directionFromArray: "W"
+    }
+  ]
+};
+```
+
+---
+
+# 17. Scene Template E – Multiple Obstructions
+
+```ts
+export const multipleObstructionScene: SolarShading3DInput = {
+  ...residentialRoofBuildingScene,
+  project: {
+    ...residentialRoofBuildingScene.project,
+    projectId: "scene-e",
+    projectName: "Multiple Obstructions – Combined Shading"
+  },
+  obstructions: [
+    {
+      id: "OBS-1",
+      label: "Building",
+      type: "building",
+      height: 32,
+      width: 18,
+      length: 25,
+      floors: 10,
+      distanceFromArray: 18,
+      directionFromArray: "W"
+    },
+    {
+      id: "OBS-2",
+      label: "Tree",
+      type: "tree",
+      height: 12,
+      diameter: 6,
+      distanceFromArray: 6,
+      directionFromArray: "SW"
+    },
+    {
+      id: "OBS-3",
+      label: "Water Tank",
+      type: "water_tank",
+      height: 6,
+      diameter: 2.5,
+      distanceFromArray: 8,
+      directionFromArray: "E"
+    },
+    {
+      id: "OBS-4",
+      label: "Boundary Wall",
+      type: "boundary_wall",
+      height: 3,
+      length: 20,
+      distanceFromArray: 3,
+      directionFromArray: "E"
+    }
+  ],
+  shadingResult: {
+    shadingPeriod: "6:45 AM – 11:10 AM",
+    totalShadedHours: "4h 25m",
+    averageShadingFactor: 0.78,
+    minimumShadingFactor: 0.34,
+    energyLossPercent: 22,
+    affectedModules: 14,
+    totalModules: 28,
+    moduleImpactMap: []
+  }
+};
+```
+
+---
+
+# 18. Scene Template F – Hill Obstruction
+
+```ts
+export const hillObstructionScene: SolarShading3DInput = {
+  project: {
+    projectId: "scene-f",
+    projectName: "3D Shading Analysis – Hill Obstruction",
+    locationName: "Accra, Ghana",
+    latitude: 5.6037,
+    longitude: -0.1870,
+    simulationDate: "21 May 2024",
+    simulationTime: "9:00 AM"
+  },
+  site: {
+    siteType: "residential",
+    terrainType: "hill",
+    boundaryLength: 45,
+    boundaryWidth: 30
+  },
+  building: {
+    buildingType: "house",
+    length: 16,
+    width: 12,
+    height: 5,
+    roofType: "metal",
+    roofTilt: 20,
+    roofAzimuth: 0,
+    floors: 1
+  },
+  pvArray: {
+    mountingType: "roof_mounted",
+    moduleRows: 4,
+    moduleColumns: 7,
+    totalModules: 28,
+    moduleLength: 1.9,
+    moduleWidth: 1.1,
+    moduleWattage: 240,
+    moduleTilt: 20,
+    moduleAzimuth: 0,
+    rowSpacing: 0.15,
+    columnSpacing: 0.05,
+    basePVSizeKw: 6.72
+  },
+  sun: {
+    altitude: 28.6,
+    azimuth: 112.4,
+    trajectory: [
+      { time: "6:00 AM", altitude: 8, azimuth: 78 },
+      { time: "9:00 AM", altitude: 28.6, azimuth: 112.4 },
+      { time: "12:00 PM", altitude: 68, azimuth: 180 },
+      { time: "3:00 PM", altitude: 35, azimuth: 240 },
+      { time: "6:00 PM", altitude: 9, azimuth: 278 }
+    ]
+  },
+  obstructions: [
+    {
+      id: "OBS-HILL",
+      label: "Hill Obstruction",
+      type: "hill",
+      height: 28,
+      distanceFromArray: 62,
+      directionFromArray: "SW",
+      slope: 18,
+      azimuthCoverage: [200, 280]
+    }
+  ],
+  shadingResult: {
+    shadingPeriod: "6:45 AM – 11:10 AM",
+    totalShadedHours: "4h 25m",
+    averageShadingFactor: 0.82,
+    minimumShadingFactor: 0.34,
+    energyLossPercent: 12.6,
+    affectedModules: 14,
+    totalModules: 28,
+    moduleImpactMap: []
+  }
+};
+```
+
+---
+
+# 19. Scene Template G – Cluster of Buildings
+
+```ts
+export const clusterOfBuildingsScene: SolarShading3DInput = {
+  project: {
+    projectId: "scene-g",
+    projectName: "3D Shading Analysis – Cluster of Buildings",
+    locationName: "Accra Urban Site",
+    latitude: 5.6037,
+    longitude: -0.1870,
+    simulationDate: "21 May 2024",
+    simulationTime: "10:00 AM"
+  },
+  site: {
+    siteType: "commercial",
+    terrainType: "urban_cluster",
+    boundaryLength: 70,
+    boundaryWidth: 55
+  },
+  building: {
+    buildingType: "commercial",
+    length: 32,
+    width: 24,
+    height: 16,
+    roofType: "flat",
+    roofTilt: 0,
+    roofAzimuth: 180,
+    floors: 4
+  },
+  pvArray: {
+    mountingType: "roof_mounted",
+    moduleRows: 7,
+    moduleColumns: 24,
+    totalModules: 168,
+    moduleLength: 1.9,
+    moduleWidth: 1.1,
+    moduleWattage: 450,
+    moduleTilt: 10,
+    moduleAzimuth: 180,
+    rowSpacing: 0.35,
+    columnSpacing: 0.05,
+    basePVSizeKw: 75.6,
+    stringCount: 28
+  },
+  sun: {
+    altitude: 32.6,
+    azimuth: 118.5,
+    trajectory: [
+      { time: "6:00 AM", altitude: 8, azimuth: 75 },
+      { time: "8:00 AM", altitude: 22, azimuth: 96 },
+      { time: "10:00 AM", altitude: 32.6, azimuth: 118.5 },
+      { time: "12:00 PM", altitude: 68, azimuth: 180 },
+      { time: "2:00 PM", altitude: 45, azimuth: 225 },
+      { time: "4:00 PM", altitude: 25, azimuth: 255 },
+      { time: "6:00 PM", altitude: 9, azimuth: 278 }
+    ]
+  },
+  obstructions: [
+    {
+      id: "A",
+      label: "8 Storey Building",
+      type: "cluster_building",
+      height: 24,
+      width: 18,
+      length: 22,
+      floors: 8,
+      distanceFromArray: 18,
+      directionFromArray: "W"
+    },
+    {
+      id: "B",
+      label: "12 Storey Building",
+      type: "cluster_building",
+      height: 36,
+      width: 22,
+      length: 25,
+      floors: 12,
+      distanceFromArray: 22,
+      directionFromArray: "WNW"
+    },
+    {
+      id: "C",
+      label: "10 Storey Building",
+      type: "cluster_building",
+      height: 30,
+      width: 20,
+      length: 24,
+      floors: 10,
+      distanceFromArray: 28,
+      directionFromArray: "NNW"
+    },
+    {
+      id: "D",
+      label: "6 Storey Building",
+      type: "cluster_building",
+      height: 18,
+      width: 18,
+      length: 20,
+      floors: 6,
+      distanceFromArray: 15,
+      directionFromArray: "ENE"
+    }
+  ],
+  shadingResult: {
+    shadingPeriod: "6:10 AM – 5:20 PM",
+    totalShadedHours: "11h 10m",
+    averageShadingFactor: 0.76,
+    minimumShadingFactor: 0.38,
+    energyLossPercent: 14.8,
+    affectedModules: 47,
+    totalModules: 168,
+    moduleImpactMap: []
+  }
+};
+```
+
+---
+
+# 20. Obstruction Rendering Rules
+
+## Building
+
+Render as:
+
+```text
+Rectangular block
+Floor bands
+Windows
+Roof equipment
+Height label
+Distance label
+```
+
+## Tree
+
+Render as:
+
+```text
+Cylinder trunk
+Sphere cluster crown
+Irregular green canopy
+Shadow from canopy
+```
+
+## Water Tank
+
+Render as:
+
+```text
+Cylinder tank
+Dome top
+Steel support legs
+Shadow from tank and stand
+```
+
+## Hill
+
+Render as:
+
+```text
+Terrain mound / elevated mesh
+Green rocky texture
+Semi-transparent shadow cast cone
+Azimuth coverage lines
+```
+
+## Cluster Buildings
+
+Render as:
+
+```text
+Several rectangular buildings
+Different heights
+Floor bands
+Labels A, B, C, D
+Shadow cones toward array
+```
+
+---
+
+# 21. Panel Impact Colours
+
+```ts
+export const panelImpactColors = {
+  none: "#1d4ed8",
+  low: "#22c55e",
+  medium: "#facc15",
+  high: "#f97316",
+  severe: "#dc2626"
+};
+```
+
+---
+
+# 22. Dashboard Metrics
+
+Show:
+
+```text
+Current Time
+Sun Altitude
+Sun Azimuth
+Average Shading Factor
+Minimum Shading Factor
+Affected Modules
+Energy Loss
+Export Report
+```
+
+---
+
+# 23. Report Export
+
+Export formats:
+
+```text
+PNG dashboard image
+PDF report
+JSON simulation data
+GLTF/GLB 3D scene
+```
+
+Report must include:
+
+```text
+Project information
+Site information
+PV array details
+Obstruction details
+Sun path
+Shadow timeline
+Module impact map
+Shading factor
+Energy loss
+Corrected PV size
+Recommendations
+```
+
+---
+
+# 24. Claude Code Task Instruction
+
+Build the full module now.
+
+Do not create a static screenshot.
+Do not create only a CSS mockup.
+Do not rely on AI image generation for the final product.
+
+Create a real interactive React Three Fiber 3D shading module with:
+
+1. Scene template selector
+2. Seven scene templates
+3. Real 3D objects
+4. Sun path
+5. Sun trajectory markers
+6. Sun rays
+7. Shadow projection
+8. Module impact heat map
+9. Obstruction details
+10. Shading summary
+11. Timeline scrubber
+12. View controls
+13. Display layer toggles
+14. Bottom metrics bar
+15. Export report buttons
+
+The 3D output must resemble the provided reference images in composition, layout, labels, colour system, and engineering dashboard style.
+
+---
+
+# 25. Acceptance Criteria
+
+The implementation is accepted only when:
+
+1. User can choose any of the seven scene types.
+2. 3D scene updates from data.
+3. Building, house, hill, tree, water tank, wall, and cluster buildings render correctly.
+4. PV modules render individually.
+5. Sun path and sun markers appear.
+6. Shadows appear between obstructions and PV modules.
+7. Affected panels change colour.
+8. Shading summary updates.
+9. Timeline changes sun and shadow state.
+10. Dashboard resembles the attached reference images.
+11. Export to PNG and PDF works.
+12. Module connects to existing solar design workflow.

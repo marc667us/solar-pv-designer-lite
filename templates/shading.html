@@ -475,6 +475,63 @@
   </div>
   {% endif %}
 
+  {# ───────────────────────────────────────────────────────────────── #}
+  {# 3D SHADING SIMULATION header bar (3d10.txt §11). Project + scene  #}
+  {# chip on the left; Date / Time / Sun Altitude / Sun Azimuth across #}
+  {# the row matching the reference image strip.                       #}
+  {# ───────────────────────────────────────────────────────────────── #}
+  {% if _eng and _eng.series %}
+  <div class="d-flex flex-wrap align-items-center gap-3 px-3 py-2 mb-3"
+       id="shadingHeaderBar"
+       style="border-radius:10px;
+              background:linear-gradient(180deg,#11142e 0%,#080916 100%);
+              border:1px solid #1e1e3a">
+    <div class="flex-grow-1" style="min-width:220px">
+      <div class="fw-bold" style="color:#f5f5fa;font-size:14px;letter-spacing:.4px">
+        <i class="bi bi-cpu me-1" style="color:#9bd1ff"></i>3D SHADING SIMULATION
+      </div>
+      <div class="text-secondary" style="font-size:11px;line-height:1.4">
+        {{ project.name }}{% if reference_template and reference_template.scene_type %}
+        &middot; <span style="color:#4ade80;text-transform:uppercase;letter-spacing:.4px">
+          {{ reference_template.scene_type.replace('_',' ') }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="text-center" style="min-width:78px">
+      <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Date</div>
+      <div class="fw-bold" style="color:#f5f5fa;font-size:13px">{{ _eng.on_date or '--' }}</div>
+    </div>
+    <div class="text-center" style="min-width:78px">
+      <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Time</div>
+      <div class="fw-bold" id="headerCurrentTime" style="color:#f5f5fa;font-size:13px">--:--</div>
+    </div>
+    <div class="text-center" style="min-width:78px">
+      <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Sun Altitude</div>
+      <div class="fw-bold" id="headerSunAlt" style="color:#fbbf24;font-size:13px">--&deg;</div>
+    </div>
+    <div class="text-center" style="min-width:78px">
+      <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Sun Azimuth</div>
+      <div class="fw-bold" id="headerSunAz" style="color:#fbbf24;font-size:13px">--&deg;</div>
+    </div>
+  </div>
+  <script>
+  (function() {
+    try {
+      var d = document.getElementById('shading-engine-data');
+      if (!d) return;
+      var eng = JSON.parse((d.textContent || '{}').trim() || '{}');
+      var s = eng.series || [];
+      if (!s.length) return;
+      var noon = s[0];
+      for (var i = 0; i < s.length; i++) if (s[i].time === '12:00') { noon = s[i]; break; }
+      var t = document.getElementById('headerCurrentTime'); if (t) t.textContent = noon.time || '--:--';
+      var a = document.getElementById('headerSunAlt');      if (a) a.innerHTML  = (Math.round((noon.alt||0)*10)/10) + '&deg;';
+      var z = document.getElementById('headerSunAz');       if (z) z.innerHTML  = (Math.round(noon.az||0)) + '&deg;';
+    } catch (e) { console.warn('[shading] header-bar init failed', e); }
+  })();
+  </script>
+  {% endif %}
+
   {# ── Closest reference profile (2026-06-16 AI Shading Agent v2) ─────── #}
   {# The agent LEARNS from a curated catalogue of engineering attributes   #}
   {# distilled from owner-provided reference dashboards. No reference     #}
@@ -2643,6 +2700,7 @@
       }
       return grp;
     }
+    let _clusterCounter = 0;  // 3d10 plan section 19 - A/B/C/D for cluster buildings
     obstructions.forEach((obs, i) => {
       // Per-obstruction try/catch — one malformed obstruction or one
       // failed sprite-texture creation should NEVER kill the whole scene.
@@ -2664,11 +2722,18 @@
           cv.width = 64; cv.height = 64;
           const cx = cv.getContext('2d');
           if (cx) {
-            cx.fillStyle = '#f59e0b'; cx.beginPath();
+            const _otype = (obs.type || '').toLowerCase();
+            const _isCluster = _otype.includes('cluster');
+            const _lbl = _isCluster
+              ? String.fromCharCode(65 + (_clusterCounter++ % 26))
+              : String(i + 1);
+            cx.fillStyle = _isCluster ? '#1d4ed8' : '#f59e0b';
+            cx.beginPath();
             cx.arc(32, 32, 26, 0, Math.PI * 2); cx.fill();
-            cx.fillStyle = '#000'; cx.font = 'bold 34px sans-serif';
+            cx.fillStyle = _isCluster ? '#fff' : '#000';
+            cx.font = 'bold 34px sans-serif';
             cx.textAlign = 'center'; cx.textBaseline = 'middle';
-            cx.fillText(String(i + 1), 32, 34);
+            cx.fillText(_lbl, 32, 34);
             const tex = new THREE.CanvasTexture(cv);
             const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
             const obsH = Math.max(0.2, parseFloat(obs.height) || 1);
