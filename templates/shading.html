@@ -728,16 +728,20 @@
           {# Sun position (default noon-ish) — read from engine if available #}
           {% set _sun_x = 700 %}
           {% set _sun_y = 70 %}
-          <circle cx="{{ _sun_x }}" cy="{{ _sun_y }}" r="50" fill="url(#sunGradN)" opacity="0.55"/>
-          <circle cx="{{ _sun_x }}" cy="{{ _sun_y }}" r="22" fill="#ffeb3b"/>
-          {# Sun rays #}
-          {% for _ray in range(12) %}
-            {% set _rx = _sun_x + ((_ray - 6) * 24) %}
-            {% set _ry = _sun_y + 90 + ((_ray * 3) % 18) %}
-            <line x1="{{ _sun_x }}" y1="{{ _sun_y + 22 }}"
-                  x2="{{ _rx }}" y2="{{ _ry }}"
-                  stroke="#fbbf24" stroke-width="1" opacity="0.35"/>
-          {% endfor %}
+          <g id="svgSunGroup">
+            <circle id="svgSunGlow" cx="{{ _sun_x }}" cy="{{ _sun_y }}" r="50" fill="url(#sunGradN)" opacity="0.55"/>
+            <circle id="svgSunDisk" cx="{{ _sun_x }}" cy="{{ _sun_y }}" r="22" fill="#ffeb3b"/>
+            <g id="svgSunRays">
+              {# Sun rays render at the same origin as the disk. JS adjusts via the group transform when the slider moves. #}
+              {% for _ray in range(12) %}
+                {% set _rx = _sun_x + ((_ray - 6) * 24) %}
+                {% set _ry = _sun_y + 90 + ((_ray * 3) % 18) %}
+                <line x1="{{ _sun_x }}" y1="{{ _sun_y + 22 }}"
+                      x2="{{ _rx }}" y2="{{ _ry }}"
+                      stroke="#fbbf24" stroke-width="1" opacity="0.35"/>
+              {% endfor %}
+            </g>
+          </g>
           {# ── Obstructions — render at TRUE engineering scale. #}
           {% for o in (_obs or []) %}
             {% set _obs_h_m = o.height|float if o.height else 5.0 %}
@@ -929,9 +933,78 @@
             Scale 8 px/m · sun direction · obstruction · cast shadow · tilted array
           </text>
         </svg>
+        <script>
+        (function() {
+          // Sun animation tied to #shadingTimeSlider. Sun follows a parabolic arc:
+          //   6 AM  -> (60, 460)   on the eastern horizon
+          //   12 N  -> (500, 60)   at the zenith
+          //   6 PM  -> (940, 460)  on the western horizon
+          // Outside 6..18 the sun is hidden (it's nighttime).
+          var slider = document.getElementById('shadingTimeSlider');
+          var disk   = document.getElementById('svgSunDisk');
+          var glow   = document.getElementById('svgSunGlow');
+          var rays   = document.getElementById('svgSunRays');
+          var group  = document.getElementById('svgSunGroup');
+          var label  = document.getElementById('shadingTimeLabel');
+          if (!slider || !disk || !group) return;
+          var BASE_X = 500, BASE_Y = 70;  // server-rendered noon position
+          function sunXY(hour) {
+            // Quadratic interpolation. h=6 -> (60,460), h=12 -> (500,60), h=18 -> (940,460).
+            if (hour < 6 || hour > 18) return null;
+            var t = (hour - 6) / 12;  // 0..1
+            var x = (1 - t) * (1 - t) * 60 + 2 * (1 - t) * t * 500 + t * t * 940;
+            var y = (1 - t) * (1 - t) * 460 + 2 * (1 - t) * t * (-340) + t * t * 460;
+            return { x: x, y: y };
+          }
+          function paintSun(hour) {
+            var p = sunXY(hour);
+            if (!p) {
+              group.style.display = 'none';
+              return;
+            }
+            group.style.display = '';
+            // Move the entire group via a translate so disk + glow + rays all follow.
+            var dx = p.x - BASE_X, dy = p.y - BASE_Y;
+            group.setAttribute('transform', 'translate(' + dx.toFixed(1) + ',' + dy.toFixed(1) + ')');
+            // Lower opacity near the horizon - golden-hour effect.
+            var horizonProx = Math.min(1.0, (460 - p.y) / 400);
+            if (disk) disk.setAttribute('fill-opacity', (0.5 + 0.5 * horizonProx).toFixed(2));
+            if (glow) glow.setAttribute('opacity', (0.25 + 0.30 * horizonProx).toFixed(2));
+            // Update the time label too if present.
+            if (label) {
+              var hr = Math.floor(hour);
+              var mn = Math.round((hour - hr) * 60);
+              label.textContent = (hr < 10 ? '0' : '') + hr + ':' + (mn < 10 ? '0' : '') + mn;
+            }
+          }
+          slider.addEventListener('input', function() { paintSun(parseFloat(slider.value)); });
+          paintSun(parseFloat(slider.value) || 12);
+          // -- Wire the Play button to auto-advance.
+          var playBtn = document.getElementById('shadingTimePlay');
+          if (playBtn) {
+            var playing = false, timer = null;
+            playBtn.addEventListener('click', function() {
+              if (playing) {
+                clearInterval(timer); playing = false;
+                playBtn.innerHTML = '<i class="bi bi-play-fill"></i> Play';
+                return;
+              }
+              playing = true;
+              playBtn.innerHTML = '<i class="bi bi-pause-fill"></i> Pause';
+              timer = setInterval(function() {
+                var v = parseFloat(slider.value) || 6;
+                v += 0.5;  // 30 minutes per tick
+                if (v > 18) v = 6;
+                slider.value = v;
+                paintSun(v);
+              }, 350);
+            });
+          }
+        })();
+        </script>
         <div class="text-secondary small mt-2">
           <i class="bi bi-info-circle me-1"></i>
-          Proportional engineering view at 8 px/m. A 10-storey building is 256 px tall vs the house at 40 px — matches reality. Server-rendered SVG (no JS / no WebGL).
+          Proportional engineering view at 8 px/m. Drag the time slider below to watch the sun arc from horizon (6 AM) to peak (12 N) to horizon (6 PM). Server-rendered SVG (no JS module / no WebGL).
         </div>
       </div>
       {# Time slider — drag to scrub through the day. Sun moves, panel #}
