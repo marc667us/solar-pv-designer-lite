@@ -12161,6 +12161,116 @@ def _parse_obstructions(form):
     return out
 
 
+# Engine-first shading source of truth (2026-06-16) -- helpers below.
+_AZIMUTH_LABEL_DEG = {
+    "N": 0.0, "NORTH": 0.0,
+    "NE": 45.0, "NORTH-EAST": 45.0, "NORTHEAST": 45.0,
+    "E": 90.0, "EAST": 90.0,
+    "SE": 135.0, "SOUTH-EAST": 135.0, "SOUTHEAST": 135.0,
+    "S": 180.0, "SOUTH": 180.0,
+    "SW": 225.0, "SOUTH-WEST": 225.0, "SOUTHWEST": 225.0,
+    "W": 270.0, "WEST": 270.0,
+    "NW": 315.0, "NORTH-WEST": 315.0, "NORTHWEST": 315.0,
+}
+
+def _coerce_float(value, default):
+    # Tolerant float() that returns `default` on None/''/garbage.
+    try:
+        if value is None or value == "":
+            return float(default)
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+def _azimuth_to_deg(value, default=180.0):
+    # Accept compass labels ("South"/"South-East"/"S") OR numbers.
+    if value is None:
+        return float(default)
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip()
+    if not s:
+        return float(default)
+    deg = _AZIMUTH_LABEL_DEG.get(s.upper())
+    if deg is not None:
+        return float(deg)
+    try:
+        return float(s)
+    except ValueError:
+        return float(default)
+
+def _normalize_mount_type(raw):
+    # Map any of the eight roof_type / mounting_type values down to
+    # the three buckets the 3D scene actually branches on.
+    # Inputs accepted: flat / pitched / hip / gable / metal / concrete /
+    # ground / rooftop_pitched / rooftop_flat / rooftop_metal /
+    # rooftop_membrane / ground_fixed / ground_tracking.
+    s = (raw or "").strip().lower()
+    if not s:
+        return "rooftop_sloped"
+    if "ground" in s:
+        return "ground"
+    if s in ("flat", "membrane", "concrete",
+             "rooftop_flat", "rooftop_membrane"):
+        return "rooftop_flat"
+    # pitched / hip / gable / metal / rooftop_pitched / rooftop_metal
+    return "rooftop_sloped"
+
+def _apply_shading_factor(project, obstructions, base_shading=None):
+    """Single source of truth for the shading factor.
+
+    Runs _engine_full_analysis() first (real sun-position math). On
+    engine success: writes the engine bucket into
+    shading["factor"|"label"|"loss_pct"] and stores the full engine
+    block at shading["engine"]. On engine failure (missing lat/lon
+    etc.): falls back to the legacy heuristic so the page keeps
+    working. Never raises.
+    """
+    out = dict(base_shading or {})
+    out["obstructions"] = obstructions or []
+    eng = None
+    try:
+        eng = _engine_full_analysis(project, out['obstructions'])
+    except Exception:
+        eng = None
+    if eng:
+        out["factor"]        = eng["bucket_factor"]
+        out["label"]         = eng["bucket_label"]
+        out["loss_pct"]      = eng["bucket_loss_pct"]
+        out["engine"]        = eng
+        out["factor_source"] = "engine"
+        out["agent_version"] = "shading-engine-v1-2026-06-16"
+        out["agent_summary"] = (
+            f"Engine: {eng['bucket_label']} (factor {eng['bucket_factor']:.2f}, "
+            f"{eng['bucket_loss_pct']:.1f}% loss) across {eng['affected_panels']} "
+            f"of {eng['total_panels']} panels."
+        )
+        # Engine result has its own per-step series; clear the legacy
+        # per-obstruction heuristic payload to avoid confusing the UI.
+        out["per_obstruction"] = []
+    elif obstructions:
+        h = _compute_shading_factor(obstructions)
+        out["factor"]            = h["factor"]
+        out["label"]             = h["label"]
+        out["loss_pct"]          = h["loss_pct"]
+        out["combined_severity"] = h.get("combined_severity")
+        out["per_obstruction"]   = h.get("per_obstruction", [])
+        out["factor_source"]     = "heuristic_fallback"
+        out["agent_version"]     = "phase1-deterministic-v1"
+        out["agent_summary"]     = h.get("summary", "")
+        out.pop("engine", None)
+    else:
+        out["factor"]            = 1.00
+        out["label"]             = "No shading"
+        out["loss_pct"]          = 0.0
+        out["factor_source"]     = "no_obstructions"
+        out["agent_version"]     = "shading-engine-v1-2026-06-16"
+        out["agent_summary"]     = "No obstructions recorded -- shading factor 1.00 applied."
+        out["per_obstruction"]   = []
+        out.pop("engine", None)
+    return out
+
+
 def _compute_shading_factor(obstructions):
     """Phase 1 deterministic shading agent.
 
@@ -12264,8 +12374,20 @@ def _engine_full_analysis(project, obstructions, on_date=None,
         data = project.get("data", {}) or {}
         country = (data.get("country") or "").strip()
         region  = (data.get("region")  or "").strip()
-        tilt    = float(data.get("tilt_angle") or 15.0)
-        azimuth = float(data.get("azimuth") or 180.0)
+        # Prefer shading-form tilt/azimuth (set via inspection form or
+        # /shading page), fall back to project-level Location values.
+        # Azimuth may arrive as a compass label ("South") or a number.
+        _sh_pre = data.get("shading") or {}
+        tilt = _coerce_float(_sh_pre.get("tilt_deg"),
+                             float(data.get("tilt_angle") or 15.0))
+        azimuth = _azimuth_to_deg(
+            _sh_pre.get("azimuth") if _sh_pre.get("azimuth") not in (None, "", 0)
+            else data.get("azimuth"),
+            180.0,
+        )
+        # Single mount-type value the 3D scene can branch on.
+        mount_type = _normalize_mount_type(
+            _sh_pre.get("roof_type") or data.get("mounting_type"))
         results = data.get("results", {}) or {}
         n_panels = int(results.get("num_panels") or 0)
 
@@ -12343,6 +12465,7 @@ def _engine_full_analysis(project, obstructions, on_date=None,
             "on_date":            on_date.strftime("%Y-%m-%d"),
             "tilt_deg":           tilt,
             "array_azimuth_deg":  azimuth,
+            "mount_type":         mount_type,
             "total_panels":       result["total_panels"],
             "affected_panels":    result["affected_panels"],
             "heavily_affected":   result["heavily_affected"],
@@ -12457,33 +12580,33 @@ def project_shading(pid):
         # shading factor from those inputs. Per owner spec, the operator
         # models the obstructions; the agent picks the factor.
         obstructions = _parse_obstructions(request.form)
-        analysis = _compute_shading_factor(obstructions)
-        factor = analysis["factor"]
-
         data = project["data"]
-        data["shading"] = {
-            "factor":               factor,
-            "label":                analysis["label"],
-            "loss_pct":             analysis["loss_pct"],
-            "combined_severity":   analysis["combined_severity"],
-            "per_obstruction":     analysis["per_obstruction"],
-            "agent_summary":       analysis["summary"],
-            "agent_version":       "phase1-deterministic-v1",
-            # Units: "metric" (m, default) or "imperial" (ft). Per-project
-            # owner choice; numeric fields are stored as-typed.
+        # Engine-first source of truth (fix 2026-06-16): build the
+        # shading scalars from the form, then run the deterministic
+        # engine via _apply_shading_factor. The engine drives factor /
+        # label / loss_pct so the dashboard banner, the 3D scene, the
+        # agent narrative, and the PV-sizing card all agree.
+        _existing = data.get("shading", {}) or {}
+        _existing.update({
             "units":                ("imperial" if (request.form.get("units","") == "imperial") else "metric"),
-            # Site-level fields (apply to whole project, not per obstruction).
             "tilt_deg":             _shading_num(request.form.get("tilt_deg")),
             "azimuth":              (request.form.get("azimuth", "") or "").strip()[:30],
             "roof_type":            (request.form.get("roof_type", "") or "").strip()[:40],
+            "mount_type":           _normalize_mount_type(
+                                       request.form.get("roof_type") or data.get("mounting_type")),
             "roof_height_m":        _shading_num(request.form.get("roof_height_m")),
             "inspection_confirmed": bool(request.form.get("inspection_confirmed")),
-            # Obstructions: parallel arrays from the cloneable cards. We
-            # zip into a list of dicts. Empty trailing rows are dropped.
             "obstructions":         obstructions,
             "saved_at":             datetime.utcnow().isoformat() + "Z",
             "saved_by":             session.get("username", ""),
-        }
+        })
+        # Clear stale engine output so the helper re-runs on this save.
+        _existing.pop("engine", None)
+        data["shading"] = _existing
+        project["data"] = data
+        data["shading"] = _apply_shading_factor(
+            project, obstructions, base_shading=data["shading"])
+        factor = data["shading"]["factor"]
         save_project_data(pid, data)
 
         # Audit log — operator overrode the un-shaded design. Important record
@@ -12503,8 +12626,8 @@ def project_shading(pid):
         if factor >= 0.999:
             flash("Shading agent: no obstructions found (factor 1.00). The base PV size will be used.", "info")
         else:
-            flash(f"Shading agent picked factor {factor:.2f} ({analysis['label']}, "
-                  f"{analysis['loss_pct']:.1f}% loss) from {len(obstructions)} obstruction(s). "
+            flash(f"Shading agent picked factor {factor:.2f} ({data['shading'].get('label','')}, "
+                  f"{data['shading'].get('loss_pct',0):.1f}% loss) from {len(obstructions)} obstruction(s). "
                   f"Re-run the loads step to apply.",
                   "success")
         # Route by which action button was used (spec image's 6-button
@@ -13064,55 +13187,42 @@ def inspection_form(pid):
             "saved_by":        session.get("username", ""),
         }
 
-        # ── 5. Mirror shading-relevant inputs into data["shading"] ─────
-        # The /shading page reads from data["shading"]; by mirroring here
-        # we make the inspection form the single source of truth for
-        # shading inputs (per owner spec: "must pass shading input
-        # information collected to the shading model to limit human
-        # filling the shading form").
+        # ── 5. Mirror shading-relevant inputs into data["shading"] AND
+        #      run the deterministic engine now so /loads has the
+        #      canonical factor on the very next calc. Engine-first
+        #      source of truth (fix 2026-06-16) -- the 3D scene, the
+        #      agent narrative, the obstruction-form badge, and the
+        #      PV-sizing card all read the same numbers.
         mirrored = dict(shading)
-        mirrored["obstructions"]        = obstructions
-        mirrored["units"]               = units
-        mirrored["roof_type"]           = roof_type
-        mirrored["roof_height_m"]       = (float(roof_height) if roof_height.replace(".","",1).isdigit() else None)
-        mirrored["tilt_deg"]            = (float(tilt_deg)    if tilt_deg.replace(".","",1).isdigit()    else None)
-        mirrored["azimuth"]             = azimuth
+        mirrored["obstructions"]         = obstructions
+        mirrored["units"]                = units
+        mirrored["roof_type"]            = roof_type
+        mirrored["mount_type"]           = _normalize_mount_type(
+                                              roof_type or data.get("mounting_type"))
+        mirrored["roof_height_m"]        = (float(roof_height) if roof_height.replace(".","",1).isdigit() else None)
+        mirrored["tilt_deg"]             = (float(tilt_deg)    if tilt_deg.replace(".","",1).isdigit()    else None)
+        mirrored["azimuth"]              = azimuth
         mirrored["inspection_confirmed"] = (shading_present in ("yes", "partial"))
-        mirrored["source"]              = "inspection_form"
-
-        # -- 5b. Compute the shading factor immediately so /loads
-        #        can use it on the very next calc, without forcing a
-        #        detour through /shading. Per owner 2026-06-15:
-        #        "need to capture shading information and persist it
-        #        and pass it to the load calculation [first time
-        #        around]".
+        mirrored["source"]               = "inspection_form"
+        # Clear stale engine output so the helper re-runs on this save.
+        mirrored.pop("engine", None)
+        data["shading"] = mirrored
+        project["data"] = data
         try:
-            if shading_present in ("yes", "partial") and obstructions:
-                _analysis = _compute_shading_factor(obstructions)
-                mirrored["factor"]            = _analysis["factor"]
-                mirrored["label"]             = _analysis["label"]
-                mirrored["loss_pct"]          = _analysis["loss_pct"]
-                mirrored["combined_severity"] = _analysis.get("combined_severity")
-                mirrored["per_obstruction"]   = _analysis.get("per_obstruction") or []
-                mirrored["agent_summary"]     = _analysis.get("summary", "")
-                mirrored["agent_version"]     = "inspection-form-deterministic-v1"
-                mirrored["factor_source"]     = "inspection_form_deterministic"
+            if shading_present in ("yes", "partial"):
+                data["shading"] = _apply_shading_factor(
+                    project, obstructions, base_shading=data["shading"])
             else:
-                mirrored["factor"]        = 1.0
-                mirrored["label"]         = "No shading"
-                mirrored["loss_pct"]      = 0.0
-                mirrored["factor_source"] = "inspection_form_no_shading"
+                data["shading"]["factor"]        = 1.0
+                data["shading"]["label"]         = "No shading"
+                data["shading"]["loss_pct"]      = 0.0
+                data["shading"]["factor_source"] = "inspection_form_no_shading"
         except Exception as _e:
             try:
                 app.logger.warning(
-                    "inspection deterministic factor compute failed: %s", _e)
+                    "inspection engine compute failed: %s", _e)
             except Exception:
                 pass
-
-        # Clear stale engine output so /shading recomputes against new
-        # obstructions on next GET.
-        mirrored.pop("engine", None)
-        data["shading"] = mirrored
 
         save_project_data(pid, data)
 

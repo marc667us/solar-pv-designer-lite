@@ -204,6 +204,28 @@ def main() -> int:
             test("series steps carry panel_fracs",
                  "panel_fracs" in (eng.get("series") or [{}])[0],
                  "missing panel_fracs in step 0")
+            # Engine-first source-of-truth fields (2026-06-16):
+            test("engine carries mount_type (drives 3D scene branch)",
+                 isinstance(eng.get("mount_type"), str) and eng["mount_type"] in
+                 ("ground", "rooftop_flat", "rooftop_sloped"),
+                 f"mount_type={eng.get('mount_type')}")
+            test("engine carries array_azimuth_deg (drives 3D rotation.y)",
+                 isinstance(eng.get("array_azimuth_deg"), (int, float)),
+                 f"azimuth={eng.get('array_azimuth_deg')}")
+            test("engine carries tilt_deg (drives panel rotation.x)",
+                 isinstance(eng.get("tilt_deg"), (int, float)),
+                 f"tilt={eng.get('tilt_deg')}")
+            # Single source of truth: the banner factor (shading.factor)
+            # must match the engine's bucket_factor after the fix. Before
+            # the 2026-06-16 fix, those came from two different paths and
+            # could disagree by several buckets.
+            m = re.search(
+                r'Current factor:\s*<span[^>]*>\s*(\d+\.\d+)\s*</span>', html)
+            if m:
+                banner_factor = float(m.group(1))
+                test("banner shading.factor matches engine.bucket_factor",
+                     abs(banner_factor - float(eng["bucket_factor"])) < 0.005,
+                     f"banner={banner_factor:.2f} engine={eng['bucket_factor']:.2f}")
     except Exception as e:
         test("shading page fetch", False, str(e))
 

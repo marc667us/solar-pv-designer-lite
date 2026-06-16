@@ -1649,7 +1649,17 @@
     arrowGroup.position.set(-22, 0.05, 0);
     scene.add(arrowGroup);
 
-    // ── PV panel grid (layered group so the display toggle can hide it).
+    // ── PV panel grid + mounting (mount-type-aware, 2026-06-16 rewrite).
+    //    Three modes drive the scene topology:
+    //      'ground'         → no house; panels on a 4-leg ground rack.
+    //      'rooftop_flat'   → single-storey box building; panels on a
+    //                         tilted rack on top of the flat deck.
+    //      'rooftop_sloped' → hip-roof house whose south-slope angle
+    //                         equals the inspection tilt so panels lie
+    //                         FLAT on the roof following the slope.
+    //    Mount type comes from engineData.mount_type which web_app.py
+    //    derives from data['shading']['mount_type'] (inspection form's
+    //    roof_type) or data['mounting_type'] (project-level fallback).
     const totalPanels = engineData.total_panels || 12;
     const cols = Math.max(1, Math.round(Math.sqrt(totalPanels * 1.6)));
     const rows = Math.ceil(totalPanels / cols);
@@ -1658,153 +1668,249 @@
     const totalH = rows * panelH + (rows - 1) * gapV;
     const tiltDeg = engineData.tilt_deg || 15;
     const tiltRad = THREE.MathUtils.degToRad(tiltDeg);
+    // Array azimuth: engineData.array_azimuth_deg is degrees clockwise
+    // from north (180° = South). To rotate around Y so the array faces
+    // its declared azimuth (default South = no rotation), the offset is
+    // (180 - azDeg). South → 0°, East → +90°, West → -90°.
+    const azDeg = (engineData.array_azimuth_deg === undefined ||
+                   engineData.array_azimuth_deg === null)
+                  ? 180 : engineData.array_azimuth_deg;
+    const azRad = THREE.MathUtils.degToRad(180 - azDeg);
+    const mountType = (engineData.mount_type || 'rooftop_sloped').toLowerCase();
+    _ck('mount type: ' + mountType + ' (tilt=' + tiltDeg + '°, azimuth=' +
+        azDeg + '°)');
 
-    // ── Installation building — proper 4-bedroom single-storey house
-    //    with full-height walls (3.0 m), true hip roof (4 faces meeting
-    //    at a horizontal ridge), windows on all four faces, and a
-    //    front door. Sized to seat the PV array on the south slope of
-    //    the roof. Per the AI 3D Shading Simulation spec image
-    //    (pvsolar1/3d issue/ and /real shading/), the scene must
-    //    show a recognisable residential dwelling, not a slab.
+    // ── House dimensions (shared by both rooftop modes).
+    //    Roof rise is now driven by the inspection-form tilt so the
+    //    south-face pitch matches the panel tilt — panels then lie ON
+    //    the roof rather than floating above it.
     const HOUSE = {
       W: Math.max(14, totalW + 4.0),
       D: Math.max(11, totalH + 4.0),
-      wallH:  3.0,         // proper 1-storey wall height
-      roofRise: 2.0,       // hip-roof rise above the eave line
+      wallH:  3.0,
+      roofRise: 0,
     };
+    if (mountType === 'rooftop_sloped') {
+      const _hzPre = HOUSE.D / 2;
+      // tan(tilt) × half-depth, clamped so very low/high tilts still
+      // produce a believable house silhouette.
+      HOUSE.roofRise = Math.max(0.4, Math.min(4.5, _hzPre * Math.tan(tiltRad)));
+    }
     const HOUSE_EAVE  = HOUSE.wallH;
     const HOUSE_RIDGE = HOUSE.wallH + HOUSE.roofRise;
-    // Array sits on the south slope, mid-way between eave and ridge.
-    const arrayY = (HOUSE_EAVE + HOUSE_RIDGE) / 2 + 0.10;
-    const arrayZ = HOUSE.D * 0.18;          // slight push toward south face
 
-    const houseGroup = new THREE.Group();
-    {
+    // ── Array seat position:
+    //    ground         → on a rack at ~1 m clearance
+    //    rooftop_flat   → on a 0.3 m tilted rack on top of the flat deck
+    //    rooftop_sloped → ON the south slope, mid-way between eave + ridge
+    let arrayY, arrayZ;
+    if (mountType === 'ground') {
+      arrayY = 1.0 + (totalH / 2) * Math.sin(tiltRad);
+      arrayZ = 0;
+    } else if (mountType === 'rooftop_flat') {
+      arrayY = HOUSE_EAVE + 0.30 + (totalH / 2) * Math.sin(tiltRad);
+      arrayZ = 0;
+    } else {
+      // Sloped: south slope rises from eave (HOUSE.D/2, HOUSE_EAVE) to
+      // ridge (0, HOUSE_RIDGE). Place the array centred on that face.
+      arrayY = (HOUSE_EAVE + HOUSE_RIDGE) / 2 + 0.08;
+      arrayZ = HOUSE.D / 4;
+    }
+
+    // ── Build the building (rooftop modes only).
+    if (mountType !== 'ground') {
+      const houseGroup = new THREE.Group();
       const hx = HOUSE.W / 2, hz = HOUSE.D / 2;
-      // ── Walls (solid box, full storey height, cream stucco).
+      // Walls.
       const wallMat = new THREE.MeshStandardMaterial({
         color: 0xeadbb9, roughness: 0.96
       });
       const walls = new THREE.Mesh(
-        new THREE.BoxGeometry(HOUSE.W, HOUSE.wallH, HOUSE.D),
-        wallMat
-      );
+        new THREE.BoxGeometry(HOUSE.W, HOUSE.wallH, HOUSE.D), wallMat);
       walls.position.y = HOUSE.wallH / 2;
       walls.castShadow = true; walls.receiveShadow = true;
       houseGroup.add(walls);
 
-      // ── Hip roof — 4 faces meeting at a horizontal ridge along the
-      //    long axis (X). Two long trapezoidal faces (south + north),
-      //    two short triangular faces (east + west). Built from raw
-      //    BufferGeometries so we get clean, properly-shaded planes.
-      const roofMat = new THREE.MeshStandardMaterial({
-        color: 0xb04531, roughness: 0.85, side: THREE.DoubleSide
-      });
-      const ridgeHalfX = Math.max(0.5, hx - hz);  // ridge length along X
-      // 4 eave corners + 2 ridge endpoints.
-      const eSW = [-hx, HOUSE_EAVE,  hz];
-      const eSE = [ hx, HOUSE_EAVE,  hz];
-      const eNE = [ hx, HOUSE_EAVE, -hz];
-      const eNW = [-hx, HOUSE_EAVE, -hz];
-      const rW  = [-ridgeHalfX, HOUSE_RIDGE, 0];
-      const rE  = [ ridgeHalfX, HOUSE_RIDGE, 0];
-      function makeRoofFace(verts) {
-        // verts is an array of 3 or 4 [x,y,z] points. We triangulate
-        // as a fan from verts[0]. Computes normals + adds to roof.
-        const triCount = verts.length - 2;
-        const pos = new Float32Array(triCount * 9);
-        let idx = 0;
-        for (let i = 1; i <= triCount; i++) {
-          pos.set(verts[0],     idx); idx += 3;
-          pos.set(verts[i],     idx); idx += 3;
-          pos.set(verts[i + 1], idx); idx += 3;
-        }
-        const g = new THREE.BufferGeometry();
-        g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-        g.computeVertexNormals();
-        const m = new THREE.Mesh(g, roofMat);
-        m.castShadow = true; m.receiveShadow = true;
-        houseGroup.add(m);
+      if (mountType === 'rooftop_sloped') {
+        // Hip roof — 4 faces meeting at a horizontal ridge along the
+        // long axis (X). Two long trapezoidal faces (south + north),
+        // two short triangular faces (east + west). South slope pitch
+        // equals the inspection tilt — so the panel rotation below
+        // (tilt about X) makes panels lie flat ON the slope.
+        const roofMat = new THREE.MeshStandardMaterial({
+          color: 0xb04531, roughness: 0.85, side: THREE.DoubleSide
+        });
+        const ridgeHalfX = Math.max(0.5, hx - hz);
+        const eSW = [-hx, HOUSE_EAVE,  hz];
+        const eSE = [ hx, HOUSE_EAVE,  hz];
+        const eNE = [ hx, HOUSE_EAVE, -hz];
+        const eNW = [-hx, HOUSE_EAVE, -hz];
+        const rW  = [-ridgeHalfX, HOUSE_RIDGE, 0];
+        const rE  = [ ridgeHalfX, HOUSE_RIDGE, 0];
+        const makeRoofFace = function(verts) {
+          const triCount = verts.length - 2;
+          const pos = new Float32Array(triCount * 9);
+          let idx = 0;
+          for (let i = 1; i <= triCount; i++) {
+            pos.set(verts[0],     idx); idx += 3;
+            pos.set(verts[i],     idx); idx += 3;
+            pos.set(verts[i + 1], idx); idx += 3;
+          }
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+          g.computeVertexNormals();
+          const m = new THREE.Mesh(g, roofMat);
+          m.castShadow = true; m.receiveShadow = true;
+          houseGroup.add(m);
+        };
+        makeRoofFace([eSW, eSE, rE, rW]);   // south
+        makeRoofFace([eNE, eNW, rW, rE]);   // north
+        makeRoofFace([eSE, eNE, rE]);       // east
+        makeRoofFace([eNW, eSW, rW]);       // west
+      } else if (mountType === 'rooftop_flat') {
+        // Flat membrane deck + low parapet wall. Panel rack sits on top.
+        const deckMat = new THREE.MeshStandardMaterial({
+          color: 0x6b6b78, roughness: 0.92, side: THREE.DoubleSide
+        });
+        const deck = new THREE.Mesh(
+          new THREE.BoxGeometry(HOUSE.W, 0.08, HOUSE.D), deckMat);
+        deck.position.y = HOUSE_EAVE + 0.04;
+        deck.castShadow = true; deck.receiveShadow = true;
+        houseGroup.add(deck);
+        const parapetH = 0.55;
+        const parapetMat = new THREE.MeshStandardMaterial({
+          color: 0xc8b88a, roughness: 0.9
+        });
+        [
+          { w: HOUSE.W + 0.2, d: 0.15, z:  hz + 0.05 },
+          { w: HOUSE.W + 0.2, d: 0.15, z: -hz - 0.05 },
+        ].forEach(p => {
+          const m = new THREE.Mesh(
+            new THREE.BoxGeometry(p.w, parapetH, p.d), parapetMat);
+          m.position.set(0, HOUSE_EAVE + parapetH / 2 + 0.08, p.z);
+          houseGroup.add(m);
+        });
+        [
+          { w: 0.15, d: HOUSE.D + 0.2, x:  hx + 0.05 },
+          { w: 0.15, d: HOUSE.D + 0.2, x: -hx - 0.05 },
+        ].forEach(p => {
+          const m = new THREE.Mesh(
+            new THREE.BoxGeometry(p.w, parapetH, p.d), parapetMat);
+          m.position.set(p.x, HOUSE_EAVE + parapetH / 2 + 0.08, 0);
+          houseGroup.add(m);
+        });
+        // Simple aluminium rack to seat the tilted panel array.
+        const rackMat = new THREE.MeshStandardMaterial({
+          color: 0x9ea6b1, roughness: 0.6, metalness: 0.6
+        });
+        [
+          { x: -totalW / 2, z: -totalH / 2 - 0.10 },
+          { x:  totalW / 2, z: -totalH / 2 - 0.10 },
+          { x: -totalW / 2, z:  totalH / 2 + 0.10 },
+          { x:  totalW / 2, z:  totalH / 2 + 0.10 },
+        ].forEach(p => {
+          const leg = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.05, 0.05, 0.30, 10), rackMat);
+          leg.position.set(p.x, HOUSE_EAVE + 0.15 + 0.04, p.z);
+          houseGroup.add(leg);
+        });
       }
-      // South face — eSW -> eSE -> rE -> rW (trapezoid).
-      makeRoofFace([eSW, eSE, rE, rW]);
-      // North face — eNE -> eNW -> rW -> rE (trapezoid, reversed winding).
-      makeRoofFace([eNE, eNW, rW, rE]);
-      // East face — eSE -> eNE -> rE (triangle).
-      makeRoofFace([eSE, eNE, rE]);
-      // West face — eNW -> eSW -> rW (triangle).
-      makeRoofFace([eNW, eSW, rW]);
 
-      // ── Front door (south face, slightly offset west of centre).
+      // ── Door + windows + fascia + apron + driveway — shared between
+      //    sloped and flat rooftop modes so the building reads as a
+      //    real dwelling not a slab.
       const door = new THREE.Mesh(
         new THREE.PlaneGeometry(0.95, 2.05),
         new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.75 })
       );
       door.position.set(-HOUSE.W * 0.18, 1.05, hz + 0.02);
       houseGroup.add(door);
-
-      // ── Glazing on all four faces (south + north get 3 windows each,
-      //    east + west get 2). Slight emissive so they read from a
-      //    distance like the reference image.
       const winMat = new THREE.MeshStandardMaterial({
         color: 0xa9d2ea, emissive: 0x1f2f44, emissiveIntensity: 0.45,
         roughness: 0.30, metalness: 0.5
       });
-      function addWin(x, y, z, ry, ww, wh) {
+      const addWin = function(x, y, z, ry, ww, wh) {
         const m = new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), winMat);
         m.position.set(x, y, z);
         if (ry) m.rotation.y = ry;
         houseGroup.add(m);
-      }
-      // South face — 3 windows (skipping the spot where the door sits).
+      };
       [-HOUSE.W * 0.36, HOUSE.W * 0.06, HOUSE.W * 0.32].forEach(wx => {
         addWin(wx, 1.7, hz + 0.02, 0, 1.3, 1.0);
       });
-      // North face — 3 evenly spaced.
       [-HOUSE.W * 0.32, 0, HOUSE.W * 0.32].forEach(wx => {
         addWin(wx, 1.7, -hz - 0.02, Math.PI, 1.3, 1.0);
       });
-      // East + West faces — 2 windows each.
       [-HOUSE.D * 0.25, HOUSE.D * 0.25].forEach(wz => {
         addWin( hx + 0.02, 1.7, wz,  Math.PI / 2, 1.3, 1.0);
         addWin(-hx - 0.02, 1.7, wz, -Math.PI / 2, 1.3, 1.0);
       });
-
-      // ── Eave fascia — a thin dark band where the wall meets the roof
-      //    so the roof line reads cleanly from a distance.
       const fascia = new THREE.Mesh(
         new THREE.BoxGeometry(HOUSE.W + 0.4, 0.12, HOUSE.D + 0.4),
         new THREE.MeshStandardMaterial({ color: 0x3a2820, roughness: 0.9 })
       );
       fascia.position.y = HOUSE_EAVE - 0.06;
       houseGroup.add(fascia);
-
-      // ── Concrete pad + driveway in front of the south face (the
-      //    reference image shows a clear apron in front of the house).
       const padMat = new THREE.MeshStandardMaterial({
         color: 0xc8c1b3, roughness: 0.95
       });
       const apron = new THREE.Mesh(
-        new THREE.BoxGeometry(HOUSE.W * 0.7, 0.04, 3.5),
-        padMat
-      );
+        new THREE.BoxGeometry(HOUSE.W * 0.7, 0.04, 3.5), padMat);
       apron.position.set(0, 0.02, hz + 3.5 / 2 + 0.05);
       apron.receiveShadow = true;
       houseGroup.add(apron);
       const drive = new THREE.Mesh(
-        new THREE.BoxGeometry(3.8, 0.04, 5.5),
-        padMat
-      );
+        new THREE.BoxGeometry(3.8, 0.04, 5.5), padMat);
       drive.position.set(-HOUSE.W * 0.25, 0.022, hz + 3.5 + 5.5 / 2 - 0.5);
       drive.receiveShadow = true;
       houseGroup.add(drive);
-    }
-    scene.add(houseGroup);
-    _ck('installation house added (' + HOUSE.W.toFixed(1) + 'x' +
-        HOUSE.D.toFixed(1) + 'x' + HOUSE_RIDGE.toFixed(1) + ' m, hip roof)');
 
+      scene.add(houseGroup);
+      _ck('installation building added (' + mountType + ', ' +
+          HOUSE.W.toFixed(1) + 'x' + HOUSE.D.toFixed(1) + 'x' +
+          HOUSE_RIDGE.toFixed(1) + ' m)');
+    } else {
+      // Ground mount: 4 steel legs + horizontal cross-rails the panel
+      // array sits on. No house. The frame height is set so the panel
+      // group's bottom edge clears the ground after tilt.
+      const rackGroup = new THREE.Group();
+      const legMat = new THREE.MeshStandardMaterial({
+        color: 0x37474f, roughness: 0.8, metalness: 0.55
+      });
+      const frameY = Math.max(0.6,
+        arrayY - (totalH / 2) * Math.sin(tiltRad) - 0.15);
+      [
+        [ totalW / 2 + 0.10,  totalH / 2 + 0.10],
+        [-totalW / 2 - 0.10,  totalH / 2 + 0.10],
+        [ totalW / 2 + 0.10, -totalH / 2 - 0.10],
+        [-totalW / 2 - 0.10, -totalH / 2 - 0.10],
+      ].forEach(p => {
+        const leg = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.07, 0.07, frameY, 10), legMat);
+        leg.position.set(p[0], frameY / 2, p[1]);
+        leg.castShadow = true; leg.receiveShadow = true;
+        rackGroup.add(leg);
+      });
+      [-totalH / 2 - 0.10, totalH / 2 + 0.10].forEach(zr => {
+        const rail = new THREE.Mesh(
+          new THREE.BoxGeometry(totalW + 0.30, 0.08, 0.08), legMat);
+        rail.position.set(0, frameY, zr);
+        rackGroup.add(rail);
+      });
+      scene.add(rackGroup);
+      _ck('ground rack added (4 legs, frameY=' + frameY.toFixed(2) + 'm)');
+    }
+
+    // ── PV panel grid. Construct panels in the local XY plane (face = +Z),
+    //    then rotate the whole group so panels lie FLAT and tilt UP from
+    //    horizontal by `tiltRad`, then rotate around Y so the array faces
+    //    the user-selected azimuth. Without these two rotations the
+    //    panels appeared standing up (the 2026-06-16 bug the operator hit).
     const panelGroup = new THREE.Group();
-    panelGroup.rotation.x = -tiltRad;
+    // rotation.x = -π/2 + tiltRad → panels flat then tilted up by tilt.
+    panelGroup.rotation.x = -Math.PI / 2 + tiltRad;
+    // rotation.y = (180 - azDeg) so 'South' = 0 rotation, 'East' = +90°.
+    panelGroup.rotation.y = azRad;
     const perPanelFracs = engineData.per_panel_max_frac || [];
     const panelMeshes = [];
     let pid = 0;
@@ -1831,11 +1937,11 @@
         pid++;
       }
     }
-    // Seat the array on the south slope of the hip roof.
     panelGroup.position.set(0, arrayY, arrayZ);
     scene.add(panelGroup);
     _ck('panel grid added (' + panelMeshes.length + '/' + totalPanels +
-        ' panels, cols=' + cols + ', rows=' + rows + ', tilt=' + tiltDeg + ')');
+        ' panels, cols=' + cols + ', rows=' + rows + ', tilt=' + tiltDeg +
+        '°, azimuth=' + azDeg + '°, mount=' + mountType + ')');
     if (panelMeshes.length === 0) {
       _ck('WARNING: 0 panels rendered — engineData.total_panels=' +
           engineData.total_panels);
@@ -1961,12 +2067,99 @@
         wall.castShadow = true; wall.receiveShadow = true;
         wall.position.y = h / 2;
         grp.add(wall);
+      } else if (t.includes('hill') || t.includes('terrain') || t.includes('mound')) {
+        // Hill / terrain: a low dome of earth + grass — NOT a cuboid
+        // (operator hit "still giving me the 10 storey building" on
+        // 2026-06-16). The hill is wider than it is tall, so we scale
+        // a hemisphere: base radius = max(width, height), vertical
+        // scale = height / radius, capping at 1.0 so very-tall narrow
+        // "hills" still look like a mound, not a cone.
+        const baseR = Math.max(h, w);
+        const dome = new THREE.Mesh(
+          new THREE.SphereGeometry(baseR, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+          new THREE.MeshStandardMaterial({
+            color: 0x6b8e3a, roughness: 0.98
+          })
+        );
+        dome.castShadow = true; dome.receiveShadow = true;
+        dome.scale.y = Math.min(1.0, h / Math.max(baseR, 0.1));
+        // Sit the dome on the ground (its hemisphere base is at y=0).
+        dome.position.y = 0;
+        grp.add(dome);
+        // Sprinkle a few dark patches (rocks / shrubs) so it doesn't
+        // read as a perfect dome from a distance.
+        const rockMat = new THREE.MeshStandardMaterial({
+          color: 0x5a4633, roughness: 1.0
+        });
+        for (let i = 0; i < 5; i++) {
+          const ang = (i / 5) * Math.PI * 2;
+          const r2 = baseR * (0.55 + 0.15 * Math.sin(i * 1.7));
+          const rock = new THREE.Mesh(
+            new THREE.SphereGeometry(baseR * 0.06, 8, 6), rockMat);
+          rock.position.set(Math.cos(ang) * r2, h * 0.18, Math.sin(ang) * r2);
+          rock.scale.y = 0.6;
+          grp.add(rock);
+        }
+      } else if (t.includes('chimney') || t.includes('flue') || t.includes('stack')) {
+        // Chimney: thin tall cylinder with a cap. Width is the chimney
+        // width, height is the chimney height. Default brick colour.
+        const cw = Math.max(0.20, w * 0.5);
+        const stack = new THREE.Mesh(
+          new THREE.CylinderGeometry(cw, cw * 1.05, h, 16),
+          new THREE.MeshStandardMaterial({ color: 0x8b3a2b, roughness: 0.92 })
+        );
+        stack.castShadow = true; stack.receiveShadow = true;
+        stack.position.y = h / 2;
+        grp.add(stack);
+        const cap = new THREE.Mesh(
+          new THREE.BoxGeometry(cw * 2.5, 0.18, cw * 2.5),
+          new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.8 })
+        );
+        cap.castShadow = true; cap.receiveShadow = true;
+        cap.position.y = h + 0.09;
+        grp.add(cap);
+      } else if (t.includes('tower')) {
+        // Tower: tall cylinder, slightly tapered, lattice-grey colour.
+        // Distinct from a mast (thinner) and from a chimney (no cap).
+        const tw = Math.max(0.30, w * 0.5);
+        const tower = new THREE.Mesh(
+          new THREE.CylinderGeometry(tw * 0.7, tw, h, 16),
+          new THREE.MeshStandardMaterial({
+            color: 0x8a8a96, roughness: 0.7, metalness: 0.45
+          })
+        );
+        tower.castShadow = true; tower.receiveShadow = true;
+        tower.position.y = h / 2;
+        grp.add(tower);
+        // Two thin horizontal rings for a lattice feel.
+        const ringMat = new THREE.MeshStandardMaterial({
+          color: 0x5a5a64, roughness: 0.8
+        });
+        [h * 0.35, h * 0.7].forEach(ry => {
+          const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(tw * 0.95, 0.06, 6, 24), ringMat);
+          ring.rotation.x = Math.PI / 2;
+          ring.position.y = ry;
+          grp.add(ring);
+        });
+      } else if (t === 'other' || t === '' ||
+                 !(t.includes('building') || t.includes('storey') ||
+                   t.includes('neighbour') || t.includes('nearby'))) {
+        // "Other" / unknown type: render a simple grey blob (low cylinder
+        // with rounded top) so it doesn't masquerade as a building. The
+        // operator is reminded by the label callout what they typed.
+        const blob = new THREE.Mesh(
+          new THREE.CylinderGeometry(Math.max(0.3, w * 0.5),
+                                     Math.max(0.3, w * 0.55), h, 14),
+          new THREE.MeshStandardMaterial({ color: 0x7a7a7a, roughness: 0.85 })
+        );
+        blob.castShadow = true; blob.receiveShadow = true;
+        blob.position.y = h / 2;
+        grp.add(blob);
       } else {
-        // Default: building cuboid (also covers 10-storey / neighbour /
-        // generic building / "other"). For tall buildings we render
-        // explicit floor bands (1 band ≈ 1 storey) per the AI 3D
-        // Shading Simulation spec image — much more readable than a
-        // sprinkle of window planes.
+        // Buildings only: 10-storey / neighbour / nearby / generic
+        // building. We render explicit floor bands when h >= 12 m (≈
+        // 4+ storeys), matching the AI 3D Shading Simulation spec image.
         const isHigh = h >= 12;
         const storeyH = 3.2;
         const nFloors = Math.max(1, Math.round(h / storeyH));
@@ -3014,7 +3207,7 @@
                             'height':           shading.obstruction_height_m or '',
                             'width':            shading.obstruction_width_m or '',
                             'distance':         shading.distance_m or '',
-                            'direction':        shading.direction_from_array or 'S',
+                            'direction':        shading.direction_from_array or 'South',
                             'time':             shading.shading_time or 'Morning',
                             'hours':            shading.shading_hours or '',
                             'shaded_area_pct':  shading.shaded_area_pct or '',
@@ -3085,8 +3278,13 @@
           <div class="col-md-2 col-6">
             <label class="form-label small text-secondary fw-bold">Direction</label>
             <select name="obs_direction[]" class="form-select form-control sp-input">
-              {% for opt in ['N','NE','E','SE','S','SW','W','NW'] %}
-                <option value="{{ opt }}" {% if o.direction == opt %}selected{% endif %}>{{ opt }}</option>
+              {# Long-form labels match the inspection form so a value saved
+                 there ("South" / "South-East") pre-selects here without being
+                 silently clobbered to "N" on re-save. Engine accepts both. #}
+              {% set _DIR_ALIAS = {'North':'N','North-East':'NE','East':'E','South-East':'SE','South':'S','South-West':'SW','West':'W','North-West':'NW'} %}
+              {% for opt in ['North','North-East','East','South-East','South','South-West','West','North-West'] %}
+                <option value="{{ opt }}"
+                  {% if o.direction == opt or o.direction == _DIR_ALIAS[opt] %}selected{% endif %}>{{ opt }}</option>
               {% endfor %}
             </select>
           </div>
@@ -3186,8 +3384,9 @@
         <div class="col-md-2 col-6">
           <label class="form-label small text-secondary fw-bold">Direction</label>
           <select name="obs_direction[]" class="form-select form-control sp-input">
-            <option>N</option><option>NE</option><option>E</option><option>SE</option>
-            <option selected>S</option><option>SW</option><option>W</option><option>NW</option>
+            <option>North</option><option>North-East</option><option>East</option>
+            <option>South-East</option><option selected>South</option>
+            <option>South-West</option><option>West</option><option>North-West</option>
           </select>
         </div>
         <div class="col-md-2 col-6">
