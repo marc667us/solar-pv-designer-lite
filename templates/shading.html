@@ -2077,13 +2077,19 @@
         wall.position.y = h / 2;
         grp.add(wall);
       } else if (t.includes('hill') || t.includes('terrain') || t.includes('mound')) {
-        // Hill / terrain: a low dome of earth + grass — NOT a cuboid
-        // (operator hit "still giving me the 10 storey building" on
-        // 2026-06-16). The hill is wider than it is tall, so we scale
-        // a hemisphere: base radius = max(width, height), vertical
-        // scale = height / radius, capping at 1.0 so very-tall narrow
-        // "hills" still look like a mound, not a cone.
-        const baseR = Math.max(h, w);
+        // Hill / terrain: a dome of earth + grass.
+        // 2026-06-16 fixes:
+        //   * baseR was max(h,w) which produced a 20m radius for a tall
+        //     hill, eating the whole scene ("hill is on the house").
+        //     Now baseR = w/2 (user width = diameter at ground), with a
+        //     floor of max(h*0.6, 3) so the operator always sees a hill
+        //     even if they didn't fill in width.
+        //   * scale.y was clamped at 1.0 which made every hill look flat
+        //     once height >= baseR ("the hill is flat"). Now scale.y =
+        //     h / baseR, clamped only up to 2.5 so very tall peaks still
+        //     look right and don't disappear off-camera.
+        const w_eff = Math.max(w, h * 0.6, 3);
+        const baseR = w_eff / 2;
         const dome = new THREE.Mesh(
           new THREE.SphereGeometry(baseR, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2),
           new THREE.MeshStandardMaterial({
@@ -2091,21 +2097,23 @@
           })
         );
         dome.castShadow = true; dome.receiveShadow = true;
-        dome.scale.y = Math.min(1.0, h / Math.max(baseR, 0.1));
-        // Sit the dome on the ground (its hemisphere base is at y=0).
+        dome.scale.y = Math.max(0.3, Math.min(2.5, h / Math.max(baseR, 0.1)));
         dome.position.y = 0;
         grp.add(dome);
-        // Sprinkle a few dark patches (rocks / shrubs) so it doesn't
-        // read as a perfect dome from a distance.
+        // Sprinkle a few dark patches (rocks / shrubs) so the dome
+        // doesn't read as a perfect ball from a distance. Scale them
+        // off the dome's actual height after scale.y was applied.
         const rockMat = new THREE.MeshStandardMaterial({
           color: 0x5a4633, roughness: 1.0
         });
+        const domeApexY = baseR * dome.scale.y;
         for (let i = 0; i < 5; i++) {
           const ang = (i / 5) * Math.PI * 2;
           const r2 = baseR * (0.55 + 0.15 * Math.sin(i * 1.7));
           const rock = new THREE.Mesh(
             new THREE.SphereGeometry(baseR * 0.06, 8, 6), rockMat);
-          rock.position.set(Math.cos(ang) * r2, h * 0.18, Math.sin(ang) * r2);
+          rock.position.set(Math.cos(ang) * r2, domeApexY * 0.22,
+                            Math.sin(ang) * r2);
           rock.scale.y = 0.6;
           grp.add(rock);
         }
@@ -2261,8 +2269,12 @@
         const mesh = makeObstructionMesh(obs);
         const dist = Math.max(0.5, parseFloat(obs.distance) || 5);
         const az   = THREE.MathUtils.degToRad(DIR_AZ[obs.direction] ?? 180);
+        // World convention: north arrow points to -Z, so an obstruction
+        // tagged "North" must land at z = -dist. Before this fix the
+        // sign was inverted -- a North-tagged hill ended up on the
+        // SOUTH side of the house, visually inside it.
         const x =  Math.sin(az) * dist;
-        const z =  Math.cos(az) * dist;
+        const z = -Math.cos(az) * dist;
         mesh.position.set(x, 0, z);
         // Add a numbered label sprite. CanvasTexture creation can fail
         // on some browsers if the canvas is offscreen/zero-sized.
@@ -2412,8 +2424,9 @@
           const w    = Math.max(0.2, parseFloat(obs.width)    || 1);
           const dist = Math.max(0.5, parseFloat(obs.distance) || 5);
           const az   = THREE.MathUtils.degToRad(DIR_AZ[obs.direction] ?? 180);
+          // North = -Z, matching the obstruction-mesh placement fix above.
           const ox   = Math.sin(az) * dist;
-          const oz   = Math.cos(az) * dist;
+          const oz   = -Math.cos(az) * dist;
           // Shadow length on the ground: capped so 5°-altitude sunrise
           // doesn't produce kilometre-long shadows that clip the camera.
           const shLen = Math.min(60, h / Math.max(0.08, Math.tan(sunAltRad)));
