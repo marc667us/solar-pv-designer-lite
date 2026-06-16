@@ -169,7 +169,7 @@
 <!-- ── Quick actions ──────────────────────────────────────────────────── -->
 <div class="row g-2 mb-4">
   {% for href,icon,bg,title,sub in [
-    ('#projects-section',          'bi-folder2-open',            '#22c55e', 'My Projects',     'View &amp; edit your designs'),
+    (url_for('myproject_list'),    'bi-folder2-open',            '#22c55e', 'My Project',      'Result history -- searchable'),
     (url_for('project_new'),       'bi-plus-circle-fill',        '#f59e0b', 'New Project',     'Start a solar design'),
     (url_for('project_open'),      'bi-floppy-fill',             '#0ea5e9', 'Open File',       'Restore a saved .solarpro file'),
     (url_for('assessment_request'),'bi-clipboard2-pulse-fill',   '#a78bfa', 'Site Assessment', 'Submit a client request'),
@@ -188,13 +188,16 @@
   {% endfor %}
 </div>
 
-<!-- ── Projects ───────────────────────────────────────────────────────── -->
+<!-- ── Projects -- OLD My Projects section removed 2026-06-16 per owner.
+     Replaced by /myproject (result-history page). The block below is
+     kept gated on ?show_old_projects=1 so a user can re-reveal it if
+     needed without a code change; default is hidden. -->
 {% set saved  = projects | selectattr('stage', 'equalto', 'results') | list %}
 {% set drafts = projects | rejectattr('stage', 'equalto', 'results') | list %}
 
 <div id="projects-section"></div>
 
-{% if projects %}
+{% if request.args.get('show_old_projects') == '1' and projects %}
 
 <!-- Search + header row -->
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">

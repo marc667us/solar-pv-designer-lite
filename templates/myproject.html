@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}My Project — Result History{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <div class="fw-black" style="font-size:22px;color:var(--solar-gold);
+                                 letter-spacing:.5px">
+      <i class="bi bi-folder2-open me-2"></i>My Project
+    </div>
+    <div class="text-secondary small">
+      Searchable history of every shading run you have saved.
+      Click a row to open the project.
+    </div>
+  </div>
+  <div class="text-end">
+    <span class="badge"
+          style="background:rgba(34,197,94,.18);color:#22c55e;
+                 border:1px solid rgba(34,197,94,.45);font-size:11px">
+      {{ rows|length }} result{{ '' if rows|length == 1 else 's' }}
+    </span>
+  </div>
+</div>
+
+{# ── Search + filter bar ─────────────────────────────────────────────── #}
+<form method="GET" action="{{ url_for('myproject_list') }}"
+      class="solar-card p-3 mb-3"
+      style="background:rgba(255,255,255,.02);border:1px solid #1e1e3a">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-6">
+      <label class="form-label small text-secondary mb-1">
+        <i class="bi bi-search me-1"></i>Search
+      </label>
+      <input type="text" name="q" value="{{ q }}"
+             class="form-control form-control-sm"
+             placeholder="Project name, location, or narrative...">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-secondary mb-1">
+        <i class="bi bi-funnel me-1"></i>Factor bucket
+      </label>
+      <select name="bucket" class="form-select form-select-sm">
+        <option value="">All</option>
+        {% for b in bucket_choices %}
+          <option value="{{ b }}" {% if bucket == b %}selected{% endif %}>{{ b }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small text-secondary mb-1">
+        <i class="bi bi-calendar3 me-1"></i>Since
+      </label>
+      <input type="date" name="since" value="{{ since }}"
+             class="form-control form-control-sm">
+    </div>
+    <div class="col-md-1">
+      <button type="submit" class="btn btn-warning btn-sm w-100">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </div>
+  {% if q or bucket or since %}
+  <div class="mt-2">
+    <a href="{{ url_for('myproject_list') }}"
+       class="text-secondary small text-decoration-none">
+      <i class="bi bi-x-circle me-1"></i>Clear filters
+    </a>
+  </div>
+  {% endif %}
+</form>
+
+{# ── Results table ──────────────────────────────────────────────────── #}
+{% if rows %}
+<div class="solar-card p-0" style="overflow:hidden">
+  <div class="table-responsive">
+    <table class="table table-sm mb-0" style="color:#e6e6f5">
+      <thead style="background:#0a0a14;color:#a0a0c8">
+        <tr style="font-size:11px;letter-spacing:.4px;text-transform:uppercase">
+          <th>Date</th>
+          <th>Project</th>
+          <th>Location</th>
+          <th>Mount</th>
+          <th class="text-end">Factor</th>
+          <th>Bucket</th>
+          <th class="text-end">Loss</th>
+          <th class="text-end">Obstr.</th>
+          <th class="text-end">Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr style="font-size:13px;border-top:1px solid #1e1e3a">
+          <td class="text-secondary" style="font-size:11px">
+            {{ r.created_at[:16] }}
+          </td>
+          <td class="fw-bold">{{ r.project_name }}</td>
+          <td class="text-secondary" style="font-size:12px">
+            {{ r.location }}
+          </td>
+          <td class="text-secondary" style="font-size:12px">
+            {{ r.mount_type or '—' }}
+          </td>
+          <td class="text-end fw-bold"
+              style="color:var(--solar-gold)">
+            {{ "%.2f"|format(r.factor) }}
+          </td>
+          <td>
+            {% set _lbl = (r.label or '').lower() %}
+            {% set _col = '#22c55e' if 'no shading' in _lbl or 'very light' in _lbl
+                          else '#facc15' if 'light' in _lbl or 'moderate' in _lbl
+                          else '#f97316' if 'significant' in _lbl or 'heavy' in _lbl
+                          else '#dc2626' if 'severe' in _lbl
+                          else '#9bd1ff' %}
+            <span class="badge"
+                  style="background:{{ _col }}28;color:{{ _col }};
+                         border:1px solid {{ _col }}66;font-size:10px">
+              {{ r.label }}
+            </span>
+          </td>
+          <td class="text-end" style="color:#ef4444">
+            {{ "%.1f"|format(r.loss_pct) }}%
+          </td>
+          <td class="text-end text-secondary">
+            {{ r.obstructions_n }}
+          </td>
+          <td class="text-end">
+            <a href="{{ url_for('project_shading', pid=r.project_id) }}"
+               class="btn btn-sm"
+               style="background:rgba(155,209,255,.14);color:#9bd1ff;
+                      border:1px solid rgba(155,209,255,.4);font-size:11px">
+              <i class="bi bi-box-arrow-up-right"></i>
+            </a>
+          </td>
+        </tr>
+        {% if r.agent_narrative %}
+        <tr style="background:rgba(245,158,11,.04)">
+          <td></td>
+          <td colspan="8" class="text-secondary"
+              style="font-size:11px;font-style:italic;border-top:0;padding-top:0">
+            <i class="bi bi-chat-quote me-1"></i>{{ r.agent_narrative[:280] }}{% if r.agent_narrative|length > 280 %}…{% endif %}
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="solar-card p-4 text-center">
+  <i class="bi bi-archive" style="font-size:32px;color:#3a3a5a"></i>
+  <div class="mt-2 text-secondary">
+    {% if q or bucket or since %}
+      No results match those filters.
+    {% else %}
+      No shading runs saved yet. Open any project and save the shading
+      form to create your first history entry.
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

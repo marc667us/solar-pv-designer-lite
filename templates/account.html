@@ -238,9 +238,9 @@
         {% endif %}
       </a>
 
-      <a href="{{ url_for('dashboard') }}" class="act-btn"
+      <a href="{{ url_for('myproject_list') }}" class="act-btn"
          style="background:#1e1e3a;border-color:#2a2a5a;color:#8888b0">
-        <i class="bi bi-folder2-open" style="font-size:16px"></i>My Projects
+        <i class="bi bi-folder2-open" style="font-size:16px"></i>My Project
       </a>
 
       {% if plan not in ('free', 'disabled') %}
@@ -452,7 +452,7 @@
           {% for href,icon,color,title,sub in [
             (url_for('tickets'),  'bi-headset',         '#0ea5e9', 'Submit a Ticket',   'Billing, bugs, or technical help'),
             (url_for('upgrade'),  'bi-arrow-up-circle', pl_color,  'Manage Plan',        'Upgrade, change, or cancel'),
-            (url_for('dashboard'),'bi-folder2-open',    '#f59e0b', 'My Projects',        'View and manage your designs'),
+            (url_for('myproject_list'),'bi-folder2-open','#f59e0b', 'My Project',         'Result history -- searchable'),
           ] %}
           <div class="col-sm-4">
             <a href="{{ href }}" class="d-flex align-items-center gap-2 p-3 rounded text-decoration-none"

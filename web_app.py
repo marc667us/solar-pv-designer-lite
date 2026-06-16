@@ -507,6 +507,30 @@ def init_db():
                 ip_address  TEXT NOT NULL,
                 created_at  TEXT DEFAULT CURRENT_TIMESTAMP
             );
+            -- myproject result-history feature (2026-06-16).
+            -- One row per successful shading save. Agent narrative
+            -- migrates to here on save; project record no longer
+            -- carries the walkthrough (per owner spec).
+            CREATE TABLE IF NOT EXISTS shading_history (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id         INTEGER NOT NULL,
+                username        TEXT DEFAULT '',
+                project_id      INTEGER NOT NULL,
+                project_name    TEXT DEFAULT '',
+                location        TEXT DEFAULT '',
+                mount_type      TEXT DEFAULT '',
+                factor          REAL DEFAULT 1.0,
+                label           TEXT DEFAULT '',
+                loss_pct        REAL DEFAULT 0,
+                agent_narrative TEXT DEFAULT '',
+                agent_version   TEXT DEFAULT '',
+                obstructions_n  INTEGER DEFAULT 0,
+                created_at      TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_shading_history_user
+                ON shading_history(user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_shading_history_project
+                ON shading_history(project_id, created_at DESC);
             """)
         # Migrate older DBs — ignore if column already exists.
         # SQLite swallows the duplicate-column error via try/except. Postgres
@@ -12637,6 +12661,52 @@ def project_shading(pid):
             project, obstructions, base_shading=data["shading"])
         factor = data["shading"]["factor"]
         save_project_data(pid, data)
+        # myproject result-history feature (2026-06-16):
+        # Append the agent narrative to shading_history then strip it
+        # from the project record so the dashboard stops dumping the
+        # walkthrough. The factor + bucket label stay on the project
+        # so loads/calc continues to work.
+        try:
+            _sh = data.get("shading", {}) or {}
+            _narr = _sh.get("agent_summary", "") or ""
+            with get_db() as _c:
+                _c.execute(
+                    "INSERT INTO shading_history "
+                    "(user_id, username, project_id, project_name, location, "
+                    " mount_type, factor, label, loss_pct, agent_narrative, "
+                    " agent_version, obstructions_n) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (session.get("user_id") or 0,
+                     session.get("username", "") or "",
+                     pid,
+                     project.get("name", "") or "",
+                     (str(data.get("region","") or "") + ", " +
+                      str(data.get("country","") or "")).strip(", "),
+                     _sh.get("mount_type", "") or "",
+                     float(_sh.get("factor") or 1.0),
+                     _sh.get("label", "") or "",
+                     float(_sh.get("loss_pct") or 0),
+                     _narr[:4000],
+                     _sh.get("agent_version", "") or "",
+                     len(obstructions or [])))
+        except Exception as _hist_err:
+            try:
+                app.logger.warning(
+                    "shading_history insert failed: %s", _hist_err)
+            except Exception:
+                pass
+        # Strip agent walkthrough from project record (owner spec:
+        # "the agent must delete its result on success ... no holding
+        # on to results"). Keep factor/label/loss_pct so loads works.
+        try:
+            _sh2 = data.get("shading") or {}
+            for _k in ("agent_v2", "agent_summary", "per_obstruction",
+                       "combined_severity"):
+                _sh2.pop(_k, None)
+            data["shading"] = _sh2
+            save_project_data(pid, data)
+        except Exception:
+            pass
 
         # Audit log — operator overrode the un-shaded design. Important record
         # because the corrected PV size is materially larger.
@@ -13375,6 +13445,59 @@ def inspection_upload_delete(pid, filename):
         pass
     flash("Removed.", "info")
     return redirect(url_for("inspection_form", pid=pid))
+
+
+# myproject result-history feature (2026-06-16) -- the new 'My Project'
+# folder per owner spec. Replaces the old dashboard project-list section.
+@app.route("/myproject")
+@login_required
+def myproject_list():
+    """Searchable history of every shading run the logged-in user has
+    saved. Query params:
+      q       -- full-text search over project name + location + narrative
+      bucket  -- filter by factor bucket (light/moderate/significant/...)
+      since   -- ISO date; only rows on or after this date
+    """
+    q       = (request.args.get("q") or "").strip()[:200]
+    bucket  = (request.args.get("bucket") or "").strip()[:40]
+    since   = (request.args.get("since") or "").strip()[:20]
+    uid     = session.get("user_id") or 0
+    sql = ("SELECT id, project_id, project_name, location, mount_type, "
+           "factor, label, loss_pct, agent_narrative, agent_version, "
+           "obstructions_n, created_at "
+           "FROM shading_history WHERE user_id = ?")
+    params = [uid]
+    if q:
+        sql += (" AND (project_name LIKE ? OR location LIKE ? "
+                "OR agent_narrative LIKE ?)")
+        like = "%" + q + "%"
+        params.extend([like, like, like])
+    if bucket:
+        sql += " AND label = ?"
+        params.append(bucket)
+    if since:
+        sql += " AND created_at >= ?"
+        params.append(since)
+    sql += " ORDER BY created_at DESC LIMIT 500"
+    rows = []
+    try:
+        with get_db() as c:
+            cur = c.execute(sql, params)
+            cols = [d[0] for d in cur.description]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+    except Exception as _e:
+        try:
+            app.logger.warning("myproject_list query failed: %s", _e)
+        except Exception:
+            pass
+    bucket_choices = [b[0] for b in SHADING_BUCKETS] if "SHADING_BUCKETS" in globals() else \
+        ["No shading", "Very light", "Light", "Moderate",
+         "Significant", "Heavy", "Severe", "Very severe"]
+    return render_template("myproject.html",
+                           user=current_user(),
+                           rows=rows,
+                           q=q, bucket=bucket, since=since,
+                           bucket_choices=bucket_choices)
 
 
 if __name__ == "__main__":
