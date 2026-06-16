@@ -8292,7 +8292,7 @@ def project_email(pid):
                         _fname = getattr(_resp, "download_name", None) or (_report_label.replace(" ", "_") + ".pdf")
                         _attachments = [(_fname, _pdf_bytes, "application/pdf")]
                 except Exception as _pdf_exc:
-                    logger.warning("PDF attachment render failed for %s: %s", _report_label, _pdf_exc)
+                    app.logger.warning("PDF attachment render failed for %s: %s", _report_label, _pdf_exc)
         try:
             _ok, _err = _send_email(
                 recipients, subject, _phtml, text_body=_ptxt,
