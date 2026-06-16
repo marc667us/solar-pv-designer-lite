@@ -12845,6 +12845,33 @@ def project_shading(pid):
             app.logger.warning("reference template pick failed: %s", _e)
         except Exception:
             pass
+    # Manual scene-type override (3d10.txt section 5). If ?scene= is set,
+    # swap reference_template for the catalogue entry of the requested
+    # scene type so the user can audit how a different scene would render.
+    _forced_scene = (request.args.get("scene") or "").strip()
+    if _forced_scene and reference_template:
+        try:
+            from engine.shading_templates import load_catalogue as _lc
+            _cat = _lc()
+            _match = next((t for t in (_cat.get("templates") or [])
+                           if t.get("scene_type") == _forced_scene), None)
+            if _match:
+                reference_template = dict(reference_template)
+                reference_template["template_id"] = _match["id"]
+                reference_template["scene_type"]  = _match.get("scene_type", "")
+                reference_template["title"]       = _match.get("title", "")
+                reference_template["template"]    = _match
+                reference_template["match_score"] = 1.0
+                reference_template["forced"]      = True
+                reference_template["reasoning"]   = (
+                    "Manual override: scene type forced to \""
+                    + _forced_scene.replace("_", " ")
+                    + "\" by user (auto-match disabled).")
+        except Exception as _eo:
+            try:
+                app.logger.warning("scene override failed: %s", _eo)
+            except Exception:
+                pass
     return render_template("shading.html",
                            user=current_user(),
                            project=project,

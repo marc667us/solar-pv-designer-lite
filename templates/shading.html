@@ -503,7 +503,63 @@
                        border:1px solid rgba(155,209,255,.4)">
             {{ "%.0f"|format(reference_template.match_score * 100) }}% match
           </span>
+          {% if reference_template.forced %}
+          <span class="badge ms-2"
+                style="background:rgba(245,158,11,.18);color:#fbbf24;
+                       border:1px solid rgba(245,158,11,.4);
+                       text-transform:uppercase;letter-spacing:.4px">
+            Manual override
+          </span>
+          {% endif %}
         </div>
+        {# Manual scene-type chooser (3d10.txt §5) — auto-match is the    #}
+        {# default; the dropdown lets the operator force a specific scene  #}
+        {# without changing the project's obstruction list.                #}
+        <form method="get" action="{{ url_for('project_shading', pid=project.id) }}"
+              class="d-flex align-items-center gap-2 mt-2 mb-2"
+              style="font-size:11px">
+          <label for="sceneTypePick" class="text-secondary mb-0"
+                 style="font-size:10px;letter-spacing:.5px;text-transform:uppercase">
+            Scene type:
+          </label>
+          <select id="sceneTypePick" name="scene" onchange="this.form.submit()"
+                  class="form-select form-select-sm"
+                  style="background:#0a0a14;color:#e6e6f5;border:1px solid #1e1e3a;
+                         font-size:11px;max-width:280px">
+            <option value="">Auto-match (closest profile)</option>
+            <option value="residential_roof_building"
+              {% if reference_template.scene_type == 'residential_roof_building' %}selected{% endif %}>
+              Residential roof — Building obstruction
+            </option>
+            <option value="residential_roof_tree"
+              {% if reference_template.scene_type == 'residential_roof_tree' %}selected{% endif %}>
+              Residential roof — Tree obstruction
+            </option>
+            <option value="residential_roof_water_tank"
+              {% if reference_template.scene_type == 'residential_roof_water_tank' %}selected{% endif %}>
+              Residential roof — Water-tank obstruction
+            </option>
+            <option value="ground_mounted_building"
+              {% if reference_template.scene_type == 'ground_mounted_building' %}selected{% endif %}>
+              Ground-mounted — Building obstruction
+            </option>
+            <option value="multiple_obstructions"
+              {% if reference_template.scene_type == 'multiple_obstructions' %}selected{% endif %}>
+              Multiple obstructions
+            </option>
+            <option value="cluster_of_buildings"
+              {% if reference_template.scene_type == 'cluster_of_buildings' %}selected{% endif %}>
+              Cluster of buildings
+            </option>
+          </select>
+          {% if reference_template.forced %}
+          <a href="{{ url_for('project_shading', pid=project.id) }}"
+             class="btn btn-sm btn-outline-secondary"
+             style="font-size:10px;padding:.15rem .5rem">
+            Reset to auto
+          </a>
+          {% endif %}
+        </form>
         <div class="fw-bold" style="font-size:15px;color:#e6e6f5">
           {{ reference_template.title }}
         </div>
