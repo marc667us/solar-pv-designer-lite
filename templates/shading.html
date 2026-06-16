@@ -1800,9 +1800,8 @@
             '<strong>UA:</strong> ' + (navigator.userAgent || '').slice(0, 120) +
             '</div>' +
             '<div style="color:#a0a0c8;font-size:11px;max-width:560px;margin-top:8px">' +
-              'Three.js is self-hosted at /static/vendor/three-0.170.0/. ' +
-              'If "Module body ran: NO" you are hitting an import / network issue (DevTools Network tab will show the failing request). ' +
-              'If "Caught errors" lists something, that is the actual JS error.' +
+              '<strong style="color:#4ade80">The PV Shading Simulation below works fine</strong> — the interactive 3D layer is optional. ' +
+              'If you want the 3D back, the next-session task is to track down the failed import / WebGL feature using the diagnostic info above.' +
             '</div>';
         }
       }
@@ -1858,7 +1857,18 @@
     var ua = (navigator && navigator.userAgent || '').slice(0, 120);
     const err = document.getElementById('shading3d-error');
     const load = document.getElementById('shading3d-loading');
+    const host = document.getElementById('shading3d-canvas');
     if (load) load.style.display = 'none';
+    // Collapse the 560px canvas wrapper to a thin notice strip so the
+    // SVG simulation below is what the operator actually sees.
+    if (host) {
+      host.style.height = 'auto';
+      host.style.minHeight = '60px';
+      host.style.padding = '6px 12px';
+      host.style.background = 'rgba(245, 158, 11, 0.06)';
+      host.style.border = '1px solid rgba(245, 158, 11, 0.3)';
+      host.style.borderRadius = '6px';
+    }
     if (err) {
       err.style.display = 'flex';
       err.innerHTML =
@@ -4048,9 +4058,10 @@
     </div>
   </template>
 
-  {# ── Legacy 2.5D SVG illustration — kept for the ?v1=1 fallback only. #}
-  {# The v2 Three.js dashboard above replaces this as the default view.   #}
-  {% if request.args.get('v1') %}
+  {# ── PV Shading Simulation — SVG 2.5D primary view (browser-friendly,    #}
+  {#    works in every browser, no Three.js / no ES modules / no WebGL).   #}
+  {#    Always renders; the Three.js canvas above is an optional 3D layer  #}
+  {#    that may be disabled by browser policy without breaking the page.  #}
   <div class="solar-card p-3 mb-4">
     <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
       <div class="section-head mb-0"><i class="bi bi-diagram-3 me-1"></i>PV Shading Model View</div>
@@ -4360,7 +4371,7 @@
       geometry, duration, area, time-of-day, season, and mitigation to pick the factor.
     </div>
   </div>
-  {% endif %}{# end ?v1=1 legacy SVG block #}
+  {# end PV Shading Simulation SVG block #}
 
   {# ── Last agent verdict — HIDDEN 2026-06-16 per owner. Same reason
        as the analysis card above. The factor is shown in the top KPI
