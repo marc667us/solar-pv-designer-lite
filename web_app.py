@@ -12153,6 +12153,9 @@ def _parse_obstructions(form):
     types     = form.getlist("obs_type[]")
     heights   = form.getlist("obs_height[]")
     widths    = form.getlist("obs_width[]")
+    lengths_a = form.getlist("obs_length[]")
+    diams_a   = form.getlist("obs_diameter[]")
+    floors_a  = form.getlist("obs_floors[]")
     distances = form.getlist("obs_distance[]")
     dirs      = form.getlist("obs_direction[]")
     times     = form.getlist("obs_time[]")
@@ -12161,7 +12164,8 @@ def _parse_obstructions(form):
     seasons   = form.getlist("obs_season[]")
     mitig     = form.getlist("obs_mitigation[]")
     notes_a   = form.getlist("obs_notes[]")
-    n = max(len(types), len(heights), len(widths), len(distances),
+    n = max(len(types), len(heights), len(widths), len(lengths_a),
+            len(diams_a), len(floors_a), len(distances),
             len(dirs), len(times), len(hours_a), len(shaded_a),
             len(seasons), len(mitig), len(notes_a))
     out = []
@@ -12172,6 +12176,9 @@ def _parse_obstructions(form):
             "type":            (pick(types, i) or "").strip()[:60],
             "height":          _shading_num(pick(heights, i)),
             "width":           _shading_num(pick(widths, i)),
+            "length":          _shading_num(pick(lengths_a, i)),
+            "diameter":        _shading_num(pick(diams_a, i)),
+            "floors":          _shading_num(pick(floors_a, i)),
             "distance":        _shading_num(pick(distances, i)),
             "direction":       (pick(dirs, i) or "").strip()[:10],
             "time":            (pick(times, i) or "").strip()[:30],
@@ -12182,7 +12189,7 @@ def _parse_obstructions(form):
             "notes":           (pick(notes_a, i) or "").strip()[:400],
         }
         # Drop rows that are entirely empty (no type AND no numeric value).
-        nums = (row["height"], row["width"], row["distance"], row["hours"], row["shaded_area_pct"])
+        nums = (row["height"], row["width"], row["length"], row["diameter"], row["floors"], row["distance"], row["hours"], row["shaded_area_pct"])
         if not row["type"] and not any(nums) and not row["notes"]:
             continue
         out.append(row)
