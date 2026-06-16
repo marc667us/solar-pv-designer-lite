@@ -331,9 +331,47 @@
           <i class="bi bi-printer-fill me-1"></i>
           Print / Save as PDF
         </button>
+        {# Reset 3D Model button (2026-06-16). Owner-requested.
+           Hard-reloads the shading page bypassing browser cache so old
+           rendered images / sprites / Three.js textures are dropped. The
+           ?reset_view=1 query-string is also a cache-bust so any CDN /
+           service-worker between the user and Render returns fresh
+           HTML. Engine + persisted shading data are NOT touched. #}
+        <button type="button" id="shadingResetBtn"
+                class="btn btn-sm fw-bold"
+                style="background:#ef4444;color:#fff;border:1px solid #ef4444;
+                       font-size:11px;padding:5px 14px"
+                title="Drop all cached images / Three.js textures and reload the dashboard with fresh data. Saved obstructions are kept.">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>
+          Reset 3D Model
+        </button>
       </div>
     </div>
   </div>
+
+  <script>
+  (function() {
+    // Reset-3D-Model: bypass every layer of cache and reload the page.
+    // 1) Drop any sprite/canvas-texture URLs we created in this session
+    //    by revoking their object URLs (silent if none were made).
+    // 2) Add a cache-bust + reset_view=1 query param and force-reload
+    //    via location.replace so the browser doesn't reuse the bfcache.
+    var btn = document.getElementById('shadingResetBtn');
+    if (btn) btn.addEventListener('click', function() {
+      try {
+        document.querySelectorAll('img').forEach(function(el) {
+          if (el.src && el.src.startsWith('blob:')) {
+            try { URL.revokeObjectURL(el.src); } catch (_) {}
+          }
+        });
+      } catch (_) {}
+      var url = new URL(window.location.href);
+      url.searchParams.set('reset_view', '1');
+      url.searchParams.set('_t', String(Date.now()));
+      window.location.replace(url.toString());
+    });
+  })();
+  </script>
 
   {# ── Manual factor override row (the human can introduce a factor;  #}
   {# the agent + PV calc respond by modelling THAT scenario).          #}
