@@ -5,7 +5,6 @@
     "purpose": "Lookup library the AI Shading Agent uses to pick the closest reference scene for the user's site.",
     "matcher": "engine.shading_templates.pick_reference_template",
     "scene_type_priority": [
-      "hill_obstruction",
       "cluster_of_buildings",
       "multiple_obstructions",
       "ground_mounted_building",
@@ -266,60 +265,6 @@
         "has_neighbour_building": 0.0,
         "obstruction_count_bucket": "1",
         "severity_bucket": "very_light"
-      }
-    },
-    {
-      "id": "T06-rooftop-hill",
-      "scene_type": "hill_obstruction",
-      "title": "Hill obstruction to the south-west on sloped terrain",
-      "summary": "Residential metal-roof house on hill terrain with a 28 m hill 62 m to the south-west covering an azimuth arc of 200deg-280deg. Hill blocks the array during the late afternoon return.",
-      "scene_profile": {
-        "mount_type": "rooftop_sloped",
-        "roof_type": "metal",
-        "roof_height_m": 5.0,
-        "array_tilt_deg": 20,
-        "array_azimuth_deg": 0,
-        "num_obstructions": 1,
-        "dominant_obstruction_type": "hill",
-        "max_obstruction_height_m": 28.0,
-        "min_obstruction_distance_m": 62.0,
-        "dominant_direction": "South-West",
-        "site_type": "residential",
-        "terrain_type": "hill",
-        "module_rows": 4,
-        "module_columns": 7,
-        "total_modules": 28,
-        "hill_slope_deg": 18,
-        "hill_azimuth_coverage_deg": [200, 280]
-      },
-      "engine_result": {
-        "shading_start": "06:45",
-        "shading_end":   "11:10",
-        "shading_duration_h": 4.42,
-        "shaded_area_pct": 50.0,
-        "energy_loss_pct": 12.6,
-        "bucket_label": "Light",
-        "bucket_factor": 0.90,
-        "min_factor": 0.34,
-        "affected_modules": 14
-      },
-      "pv_calc": {
-        "base_kwp": 6.72,
-        "corrected_kwp": 7.47,
-        "recommended_kwp": 7.5
-      },
-      "match_features": {
-        "is_ground_mounted": 0.0,
-        "is_rooftop": 1.0,
-        "has_tall_building": 0.0,
-        "has_tree": 0.0,
-        "has_wall": 0.0,
-        "has_tank": 0.0,
-        "has_hill": 1.0,
-        "has_cluster": 0.0,
-        "has_neighbour_building": 0.0,
-        "obstruction_count_bucket": "1",
-        "severity_bucket": "light"
       }
     },
     {
