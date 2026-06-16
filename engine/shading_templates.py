@@ -1,10 +1,13 @@
 """Reference-template matcher for the AI 3D Shading Simulation Agent.
 
-This module is the "image library" the shading agent searches when the
-operator asks "show me the closest reference scene to my site". It
-implements zero-cost, deterministic, weighted-feature retrieval over a
-JSON catalogue authored from the spec images at
-Documents/pvsolar1/real shading/ (2026-06-14).
+The catalogue holds engineering-attribute fingerprints extracted from
+the owner's reference dashboards (Documents/pvsolar1/real shading/,
+2026-06-14). We LEARN from those reference scenes' engineering profile
+(mount type, obstruction mix, severity, PV calc) -- we do NOT ship the
+original images. The agent picks the closest catalogue entry by
+weighted feature scoring; the dashboard renders the user's site with
+our own original 3D scene, optionally informed by the matched
+profile's hints.
 
 Design choice — per the four-gate review (gate 1: Codex, gate 2:
 Supervisor, gate 3: Work Reviewer, gate 4: Work Scheduler), we use
@@ -262,15 +265,12 @@ def pick_reference_template(site_context: Dict[str, Any],
         return {
             "template_id": None,
             "title": "(empty catalogue)",
-            "image_url": "",
             "match_score": 0.0,
             "reasoning": "Template catalogue is empty.",
             "template": None,
             "ranked": [],
         }
     site_feats = _site_feature_vector(site_context or {})
-    prefix = (cat.get("_meta") or {}).get(
-        "static_url_prefix", "/static/shading_templates")
     ranked = []
     for tpl in templates:
         scene = tpl.get("scene_profile") or {}
@@ -287,7 +287,6 @@ def pick_reference_template(site_context: Dict[str, Any],
     return {
         "template_id": best_tpl["id"],
         "title":       best_tpl.get("title", ""),
-        "image_url":   f"{prefix}/{best_tpl['image']}",
         "match_score": ranked[0]["match_score"],
         "reasoning":   _reasoning_phrase(site_feats, best_tpl,
                                          ranked[0]["match_score"]),

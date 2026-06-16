@@ -437,25 +437,21 @@
   </div>
   {% endif %}
 
-  {# ── Reference scene match (2026-06-16 AI Shading Agent v2) ─────────── #}
-  {# Surfaces the closest scene from the curated reference library at      #}
-  {# engine/shading_templates.json so the operator can see at a glance     #}
-  {# how their site compares to a known dashboard example.                 #}
+  {# ── Closest reference profile (2026-06-16 AI Shading Agent v2) ─────── #}
+  {# The agent LEARNS from a curated catalogue of engineering attributes   #}
+  {# distilled from owner-provided reference dashboards. No reference     #}
+  {# imagery ships -- the 3D view below is our own original render driven  #}
+  {# by the engine + the matched profile's hints.                          #}
   {% if reference_template and reference_template.template_id %}
+  {% set _t  = reference_template.template %}
+  {% set _ep = (_t.engine_result if _t else {}) or {} %}
+  {% set _sp = (_t.scene_profile if _t else {}) or {} %}
   <div class="solar-card p-3 mb-3"
        style="border-left:4px solid #9bd1ff;background:rgba(155,209,255,.04)">
-    <div class="row g-3 align-items-center">
-      <div class="col-md-4">
-        <a href="{{ reference_template.image_url }}" target="_blank"
-           title="Open reference image full-size">
-          <img src="{{ reference_template.image_url }}"
-               alt="Reference scene: {{ reference_template.title }}"
-               style="width:100%;border-radius:6px;border:1px solid #2e3a55">
-        </a>
-      </div>
-      <div class="col-md-8">
+    <div class="d-flex align-items-start gap-3 flex-wrap">
+      <div class="flex-grow-1" style="min-width:260px">
         <div class="fw-bold small mb-1" style="color:#9bd1ff;letter-spacing:.4px">
-          <i class="bi bi-images me-1"></i>REFERENCE SCENE MATCH
+          <i class="bi bi-bookmark-check me-1"></i>CLOSEST REFERENCE PROFILE
           <span class="badge ms-2"
                 style="background:rgba(155,209,255,.18);color:#9bd1ff;
                        border:1px solid rgba(155,209,255,.4)">
@@ -468,9 +464,9 @@
         <div class="text-secondary mt-1" style="font-size:12px;line-height:1.5">
           {{ reference_template.reasoning }}
         </div>
-        {% if reference_template.template and reference_template.template.summary %}
+        {% if _t and _t.summary %}
         <div class="mt-2" style="font-size:12px;color:#c0c0d8;line-height:1.5">
-          {{ reference_template.template.summary }}
+          {{ _t.summary }}
         </div>
         {% endif %}
         {% if reference_template.ranked and reference_template.ranked|length > 1 %}
@@ -482,6 +478,25 @@
         </div>
         {% endif %}
       </div>
+      <div style="min-width:240px;font-size:11px;color:#c0c0d8">
+        <div style="color:#9bd1ff;letter-spacing:.4px;font-weight:700">PROFILE ATTRIBUTES</div>
+        <div class="mt-1">Mount: <strong>{{ _sp.mount_type or '—' }}</strong></div>
+        <div>Tilt: <strong>{{ _sp.array_tilt_deg or '—' }}°</strong> ·
+             Azimuth: <strong>{{ _sp.array_azimuth_deg or '—' }}°</strong></div>
+        <div>Obstructions: <strong>{{ _sp.num_obstructions or 0 }}</strong>
+             ({{ _sp.dominant_obstruction_type or '—' }})</div>
+        <div>Dominant direction: <strong>{{ _sp.dominant_direction or '—' }}</strong></div>
+        {% if _ep %}
+        <div class="mt-2" style="color:#9bd1ff;letter-spacing:.4px;font-weight:700">REFERENCE FACTOR</div>
+        <div>{{ _ep.bucket_label or '—' }} ·
+             Factor <strong style="color:#f59e0b">{{ "%.2f"|format(_ep.bucket_factor or 0) }}</strong></div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="text-secondary mt-2" style="font-size:10px;font-style:italic">
+      The 3D model below is our own render based on your site inputs;
+      this card shows the closest matching engineering profile from the
+      reference catalogue — not a recreation of any reference image.
     </div>
   </div>
   {% endif %}

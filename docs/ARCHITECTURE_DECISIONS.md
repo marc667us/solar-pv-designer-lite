@@ -221,3 +221,24 @@ change to remove the fallback once ADK lands in requirements.
 **Impact on Cost:** Zero recurring. One-off owner spend: nil.
 
 **Impact on Maintenance:** +1 ADR. +1 JSON file. +1 static dir. The matcher API is stable; future swaps are mechanical.
+
+---
+
+## ADR-0006a — Amendment: Reference imagery removed; learn-only catalogue (2026-06-16)
+
+**Status:** Accepted, amends ADR-0006 same day.
+
+**Context:** ADR-0006 shipped 3 reference images into `static/shading_templates/` so the dashboard could surface the closest scene as a thumbnail. Owner flagged that bundling AI-generated reference imagery — even owner-generated — is a copyright violation in their assessment. Owner reframed the goal as: *"learn from the pictures to generate your own original 3D"*.
+
+**Decision:** Remove all reference PNGs from the repo and from production. Keep the JSON catalogue (engineering attributes only) and the matcher. The dashboard card displays the matched **profile** as text: title, summary, attribute table, reference factor, ranked alternatives. The 3D scene above is our own original Three.js render driven by the engine; the matched profile's attributes inform tuning hints (mount type, obstruction mix) but no pixels from the reference set ship.
+
+**Reason:** The owner's call carries. The matcher's value (closest-profile retrieval based on engineering attributes) is unchanged by removing the imagery — the profiles ARE the learning artefact. Text-only display also keeps the dashboard light (no MB-scale assets) and removes the copyright surface entirely.
+
+**Consequences:**
+* `/static/shading_templates/` directory removed.
+* Matcher API no longer returns `image_url`.
+* Dashboard "Reference scene match" card is text-only; renamed to "Closest reference profile" to make the framing explicit.
+* JSON schema bumped to v2 (removed `image` field per template).
+* Footnote in the card explicitly states the 3D render is ours, not a recreation of any reference image.
+
+**Impact on Cost / Performance / Security:** All neutral or better. ~6.7 MB of static assets removed from the repo.

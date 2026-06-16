@@ -900,3 +900,26 @@ Inline smoke (`python -c …`) of three representative sites confirms each maps 
 
 ## Next Recommended Step
 Smoke against the live site once Render redeploy lands. Then start collecting new reference scenes for additional mount-type / obstruction combinations the owner wants to model.
+
+---
+
+# Implementation Log Entry — 2026-06-16 (afternoon, amendment)
+
+**Date:** 2026-06-16
+**Task:** Reference-template feature — remove all bundled reference imagery
+**Status:** Shipped
+
+**Objective:** Owner flagged that shipping the reference PNGs is a copyright violation regardless of provenance. Reframed: *"just learn from the pictures to generate your own original 3D"*. Removed all reference images; kept only the learned engineering metadata.
+
+**Files Changed:**
+* **Removed** `static/shading_templates/*.png` (3 files, ~6.7 MB)
+* `engine/shading_templates.json` — schema v2; dropped `image` field from each template
+* `engine/shading_templates.py` — dropped `image_url` from matcher return; updated docstring
+* `templates/shading.html` — card retitled "Closest reference profile"; text-only layout; explicit footnote that 3D render is ours
+* `docs/ARCHITECTURE_DECISIONS.md` — ADR-0006a amendment appended
+
+**What Was Completed:** No imagery in production; matcher unaffected functionally; card still shows the closest profile + match% + attributes + factor.
+
+**What Remains:** Smoke against the live deploy once redeploy lands.
+
+**Known Risks:** Owner now expects the 3D scene itself to reflect the matched profile's hints. Current code already does this via the engine (mount type, obstructions, tilt, azimuth flow through). Future: explicit profile→3D style hooks (e.g. building colour palette, scene composition) — deferred.

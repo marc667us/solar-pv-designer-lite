@@ -1,17 +1,15 @@
 {
   "_meta": {
-    "schema_version": 1,
-    "source": "Reference dashboard images authored by the project owner in Documents/pvsolar1/real shading/ (2026-06-14).",
+    "schema_version": 2,
+    "source": "Engineering attributes hand-extracted from owner-provided reference dashboards (Documents/pvsolar1/real shading/, 2026-06-14). The reference images themselves are NOT bundled with this catalogue or served to end users — only the structured engineering metadata (mount type, obstruction mix, dimensions, severity, PV calc) is used. Schema v2 (2026-06-16) drops all image references for copyright safety.",
     "purpose": "Lookup library the AI Shading Agent uses to pick the closest reference scene for the user's site.",
-    "matcher": "engine.shading_templates.pick_reference_template",
-    "static_url_prefix": "/static/shading_templates"
+    "matcher": "engine.shading_templates.pick_reference_template"
   },
   "templates": [
     {
       "id": "T01-ground-mounted-vs-10-storey",
       "title": "10-storey building shading a ground-mounted PV array",
-      "image": "T01-ground-mounted-vs-10-storey.png",
-      "summary": "Single ground-mounted array on a green field with one 10-storey commercial building 25 m to the west casting a long morning shadow across the south row of modules.",
+"summary": "Single ground-mounted array on a green field with one 10-storey commercial building 25 m to the west casting a long morning shadow across the south row of modules.",
       "scene_profile": {
         "mount_type": "ground",
         "array_tilt_deg": 20,
@@ -51,8 +49,7 @@
     {
       "id": "T02-rooftop-house-vs-10-storey",
       "title": "Pitched-roof house overshadowed by a 10-storey neighbour",
-      "image": "T02-rooftop-house-vs-10-storey.png",
-      "summary": "Four-bedroom pitched-roof house with a south-facing PV array; a single 10-storey building 18 m to the west casts a morning shadow across the lower modules.",
+"summary": "Four-bedroom pitched-roof house with a south-facing PV array; a single 10-storey building 18 m to the west casts a morning shadow across the lower modules.",
       "scene_profile": {
         "mount_type": "rooftop_sloped",
         "roof_type": "pitched",
@@ -94,8 +91,7 @@
     {
       "id": "T03-rooftop-multi-obstruction",
       "title": "Residential rooftop with five mixed obstructions",
-      "image": "T03-rooftop-multi-obstruction.png",
-      "summary": "Roof-mounted residential array hemmed in by five labelled obstructions: a 10-storey building W, a large tree SW, a neighbour building N, a water tank E, and a boundary wall E. The combined shadow envelope covers most of the array each morning.",
+"summary": "Roof-mounted residential array hemmed in by five labelled obstructions: a 10-storey building W, a large tree SW, a neighbour building N, a water tank E, and a boundary wall E. The combined shadow envelope covers most of the array each morning.",
       "scene_profile": {
         "mount_type": "rooftop_sloped",
         "roof_type": "pitched",
