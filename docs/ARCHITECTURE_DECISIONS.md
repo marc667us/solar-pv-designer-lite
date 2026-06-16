@@ -187,3 +187,37 @@ OpenRouter free-tier rate limit (200 req/day at time of writing).
 +1 ADR to keep in sync. -150 MB of deps not in production. Single-line
 change to remove the fallback once ADK lands in requirements.
 
+
+---
+
+## ADR-0006 — Reference-template library + matcher for the AI 3D Shading Agent (2026-06-16)
+
+**Status:** Accepted.
+
+**Context:** Owner requested that the shading agent ingest the 4 spec dashboard images at `Documents/pvsolar1/real shading/` and `3d issue/` and "select the closest" based on the user's site profile. The literal request was framed as "train the agent to digitise images" with an off-the-shelf choice between paid VLM digitisation (4a), real ML training (4b), local OpenCV (4c) or per-render synthesis (4d). Owner picked option 4 ("something else") and asked Claude Code to use its professional judgement.
+
+**Decision:** Implement option 4c — *deterministic weighted-feature retrieval over a hand-curated JSON catalogue* — with a twist: the catalogue is **authored manually by Claude Code reading the images directly in this session** (no per-call cost; Claude is already multimodal). The matcher lives in `engine/shading_templates.py` and is exposed as an ADK `FunctionTool` `tool_pick_reference_template` on the existing shading agent (`engine/agents/shading_agent.py`, version bumped to `v2-2026-06-16`). The dashboard surfaces the matched scene as a "Reference scene match" card above the 3D scene.
+
+**Alternatives considered:**
+1. **Paid Claude Vision digitisation (4a)** — rejected; the one-shot ~$0.60 spend is fine but I am the LLM with vision already in this session, so this becomes free dead weight.
+2. **Fine-tune CLIP/SigLIP (4b)** — rejected; multi-week, GPU cost, requires hundreds of labelled pairs; library has 3 unique scenes.
+3. **Local OpenCV histogram + ORB (4c base)** — rejected as primary; pixel-level matching ignores the engineering attributes the operator actually cares about (mount type, obstruction mix, severity).
+4. **DALL-E / Imagen per render (4d)** — rejected; ongoing per-render cost violates the zero-cost rule and does not solve "select closest" anyway.
+5. **Defer entirely** — rejected; the owner explicitly authorised work under option 4.
+
+**Reason for decision:** The match-feature schema (`is_ground_mounted`, `has_tall_building`, obstruction count bucket, severity bucket, dominant direction) maps 1:1 to the engineering attributes a solar engineer compares scenes by. Weighted scoring against these is more predictive than image-embedding similarity for a 3-scene library, deterministic, free, and trivially extensible — adding a new reference scene is one block of JSON, no retrain.
+
+**Consequences:**
+* Zero recurring cost; runs on Render free tier.
+* New scene = JSON edit + image copy + smoke test. No code change.
+* If the library grows past ~50 scenes, swap the matcher implementation behind the same `pick_reference_template(site_context)` signature. UI + agent tool surface unchanged.
+* "Train the agent" semantically means: append to the catalogue. The agent does not actually update weights; the JSON IS the training data.
+* Copyright: the catalogue contains only images authored by the project owner via ChatGPT (owner-owned per OpenAI terms). No third-party imagery enters the pipeline.
+
+**Impact on Security:** Static images served from `static/shading_templates/`. No new user-input surface. The matcher accepts only the same fields already collected by the shading form.
+
+**Impact on Performance:** +~5 ms per `/shading` GET (one JSON load + 3 scoring loops). Catalogue is small; no caching needed.
+
+**Impact on Cost:** Zero recurring. One-off owner spend: nil.
+
+**Impact on Maintenance:** +1 ADR. +1 JSON file. +1 static dir. The matcher API is stable; future swaps are mechanical.

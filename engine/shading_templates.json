@@ -1,0 +1,144 @@
+{
+  "_meta": {
+    "schema_version": 1,
+    "source": "Reference dashboard images authored by the project owner in Documents/pvsolar1/real shading/ (2026-06-14).",
+    "purpose": "Lookup library the AI Shading Agent uses to pick the closest reference scene for the user's site.",
+    "matcher": "engine.shading_templates.pick_reference_template",
+    "static_url_prefix": "/static/shading_templates"
+  },
+  "templates": [
+    {
+      "id": "T01-ground-mounted-vs-10-storey",
+      "title": "10-storey building shading a ground-mounted PV array",
+      "image": "T01-ground-mounted-vs-10-storey.png",
+      "summary": "Single ground-mounted array on a green field with one 10-storey commercial building 25 m to the west casting a long morning shadow across the south row of modules.",
+      "scene_profile": {
+        "mount_type": "ground",
+        "array_tilt_deg": 20,
+        "array_azimuth_deg": 180,
+        "num_obstructions": 1,
+        "dominant_obstruction_type": "10-storey building",
+        "max_obstruction_height_m": 32.0,
+        "min_obstruction_distance_m": 25.0,
+        "dominant_direction": "West"
+      },
+      "engine_result": {
+        "shading_start": "07:35",
+        "shading_end":   "10:45",
+        "shading_duration_h": 3.17,
+        "shaded_area_pct": 28.6,
+        "energy_loss_pct": 19.8,
+        "bucket_label": "Significant",
+        "bucket_factor": 0.80
+      },
+      "pv_calc": {
+        "base_kwp": 37.27,
+        "corrected_kwp": 46.59,
+        "recommended_kwp": 47.0
+      },
+      "match_features": {
+        "is_ground_mounted": 1.0,
+        "is_rooftop": 0.0,
+        "has_tall_building": 1.0,
+        "has_tree": 0.0,
+        "has_wall": 0.0,
+        "has_tank": 0.0,
+        "has_neighbour_building": 0.0,
+        "obstruction_count_bucket": "1",
+        "severity_bucket": "significant"
+      }
+    },
+    {
+      "id": "T02-rooftop-house-vs-10-storey",
+      "title": "Pitched-roof house overshadowed by a 10-storey neighbour",
+      "image": "T02-rooftop-house-vs-10-storey.png",
+      "summary": "Four-bedroom pitched-roof house with a south-facing PV array; a single 10-storey building 18 m to the west casts a morning shadow across the lower modules.",
+      "scene_profile": {
+        "mount_type": "rooftop_sloped",
+        "roof_type": "pitched",
+        "roof_height_m": 5.0,
+        "array_tilt_deg": 20,
+        "array_azimuth_deg": 180,
+        "num_obstructions": 1,
+        "dominant_obstruction_type": "10-storey building",
+        "max_obstruction_height_m": 32.0,
+        "min_obstruction_distance_m": 18.0,
+        "dominant_direction": "West"
+      },
+      "engine_result": {
+        "shading_start": "07:37",
+        "shading_end":   "10:46",
+        "shading_duration_h": 3.09,
+        "shaded_area_pct": 22.7,
+        "energy_loss_pct": 18.0,
+        "bucket_label": "Moderate",
+        "bucket_factor": 0.85
+      },
+      "pv_calc": {
+        "base_kwp": 6.20,
+        "corrected_kwp": 7.29,
+        "recommended_kwp": 7.5
+      },
+      "match_features": {
+        "is_ground_mounted": 0.0,
+        "is_rooftop": 1.0,
+        "has_tall_building": 1.0,
+        "has_tree": 0.0,
+        "has_wall": 0.0,
+        "has_tank": 0.0,
+        "has_neighbour_building": 0.0,
+        "obstruction_count_bucket": "1",
+        "severity_bucket": "moderate"
+      }
+    },
+    {
+      "id": "T03-rooftop-multi-obstruction",
+      "title": "Residential rooftop with five mixed obstructions",
+      "image": "T03-rooftop-multi-obstruction.png",
+      "summary": "Roof-mounted residential array hemmed in by five labelled obstructions: a 10-storey building W, a large tree SW, a neighbour building N, a water tank E, and a boundary wall E. The combined shadow envelope covers most of the array each morning.",
+      "scene_profile": {
+        "mount_type": "rooftop_sloped",
+        "roof_type": "pitched",
+        "array_tilt_deg": 15,
+        "array_azimuth_deg": 180,
+        "num_obstructions": 5,
+        "dominant_obstruction_type": "10-storey building",
+        "max_obstruction_height_m": 32.0,
+        "min_obstruction_distance_m": 6.0,
+        "dominant_direction": "West",
+        "obstructions": [
+          {"type": "10-storey building", "height_m": 32, "distance_m": 18, "direction": "West"},
+          {"type": "Large tree",         "height_m": 12, "distance_m":  9, "direction": "South-West"},
+          {"type": "Neighbour building", "height_m": 10, "distance_m": 10, "direction": "North"},
+          {"type": "Water tank",         "height_m":  6, "distance_m": 10, "direction": "East"},
+          {"type": "Boundary wall",      "height_m":  3, "distance_m":  6, "direction": "East"}
+        ]
+      },
+      "engine_result": {
+        "shading_start": "07:00",
+        "shading_end":   "12:00",
+        "shading_duration_h": 3.09,
+        "shaded_area_pct": 60.7,
+        "energy_loss_pct": 23.4,
+        "bucket_label": "Significant",
+        "bucket_factor": 0.77
+      },
+      "pv_calc": {
+        "base_kwp": 6.20,
+        "corrected_kwp": 8.05,
+        "recommended_kwp": 8.1
+      },
+      "match_features": {
+        "is_ground_mounted": 0.0,
+        "is_rooftop": 1.0,
+        "has_tall_building": 1.0,
+        "has_tree": 1.0,
+        "has_wall": 1.0,
+        "has_tank": 1.0,
+        "has_neighbour_building": 1.0,
+        "obstruction_count_bucket": "many",
+        "severity_bucket": "significant"
+      }
+    }
+  ]
+}

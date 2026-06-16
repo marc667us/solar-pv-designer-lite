@@ -12740,10 +12740,27 @@ def project_shading(pid):
         shading["engine"] = _eng2
         shading["manual_override"] = {"factor": _mf, "label": _label,
                                        "loss_pct": _loss}
+    # AI 3D Shading Agent v2: pick reference template (2026-06-16)
+    # See engine/shading_templates.py + ADR for the catalogue + scoring.
+    reference_template = None
+    try:
+        from engine.shading_templates import pick_reference_template as _prt
+        _eng_block = shading.get("engine") or {}
+        reference_template = _prt({
+            "mount_type":    shading.get("mount_type") or _eng_block.get("mount_type"),
+            "obstructions":  shading.get("obstructions") or [],
+            "bucket_factor": _eng_block.get("bucket_factor") or shading.get("factor") or 0,
+        })
+    except Exception as _e:
+        try:
+            app.logger.warning("reference template pick failed: %s", _e)
+        except Exception:
+            pass
     return render_template("shading.html",
                            user=current_user(),
                            project=project,
                            shading=shading,
+                           reference_template=reference_template,
                            shading_factors=SHADING_FACTORS)
 
 

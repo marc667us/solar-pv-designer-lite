@@ -36,9 +36,10 @@ from engine.shading_engine import (
     run_full_analysis,
     sun_position,
 )
+from engine.shading_templates import pick_reference_template
 
 
-SHADING_AGENT_VERSION = "shading-agent-v1-2026-06-14"
+SHADING_AGENT_VERSION = "shading-agent-v2-2026-06-16"
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -294,12 +295,37 @@ def tool_pick_bucket(loss_pct: float) -> Dict[str, Any]:
     return {"label": label, "loss_pct": bucket_loss, "factor": factor}
 
 
+def tool_pick_reference_template(mount_type: str,
+                                 obstructions: List[Dict[str, Any]],
+                                 bucket_factor: float = 0.0,
+                                 ) -> Dict[str, Any]:
+    """Pick the closest reference dashboard scene from the curated library.
+
+    Library lives at engine/shading_templates.json and was authored from
+    the spec images in Documents/pvsolar1/real shading/ (2026-06-14).
+    Returns the matched template ID, its image URL, a match score in
+    [0, 1], and a one-sentence reasoning string. The full ranked list is
+    included so the agent can narrate "X scored 0.85; Y scored 0.62" if
+    the operator wants to see alternatives.
+
+    Use this when the operator asks "show me a reference for my site" or
+    when generating a Recommendations section that benchmarks the
+    current site against a known example.
+    """
+    return pick_reference_template({
+        "mount_type":   mount_type,
+        "obstructions": obstructions or [],
+        "bucket_factor": bucket_factor,
+    })
+
+
 # Tool registry. Both ADK and the fallback path read this.
 TOOL_REGISTRY = {
-    "compute_sun_position":  tool_compute_sun_position,
-    "run_full_analysis":     tool_run_full_analysis,
-    "what_if_mitigation":    tool_what_if_mitigation,
-    "pick_bucket":           tool_pick_bucket,
+    "compute_sun_position":       tool_compute_sun_position,
+    "run_full_analysis":          tool_run_full_analysis,
+    "what_if_mitigation":         tool_what_if_mitigation,
+    "pick_bucket":                tool_pick_bucket,
+    "pick_reference_template":    tool_pick_reference_template,
 }
 
 

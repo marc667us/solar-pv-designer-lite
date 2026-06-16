@@ -437,6 +437,55 @@
   </div>
   {% endif %}
 
+  {# ── Reference scene match (2026-06-16 AI Shading Agent v2) ─────────── #}
+  {# Surfaces the closest scene from the curated reference library at      #}
+  {# engine/shading_templates.json so the operator can see at a glance     #}
+  {# how their site compares to a known dashboard example.                 #}
+  {% if reference_template and reference_template.template_id %}
+  <div class="solar-card p-3 mb-3"
+       style="border-left:4px solid #9bd1ff;background:rgba(155,209,255,.04)">
+    <div class="row g-3 align-items-center">
+      <div class="col-md-4">
+        <a href="{{ reference_template.image_url }}" target="_blank"
+           title="Open reference image full-size">
+          <img src="{{ reference_template.image_url }}"
+               alt="Reference scene: {{ reference_template.title }}"
+               style="width:100%;border-radius:6px;border:1px solid #2e3a55">
+        </a>
+      </div>
+      <div class="col-md-8">
+        <div class="fw-bold small mb-1" style="color:#9bd1ff;letter-spacing:.4px">
+          <i class="bi bi-images me-1"></i>REFERENCE SCENE MATCH
+          <span class="badge ms-2"
+                style="background:rgba(155,209,255,.18);color:#9bd1ff;
+                       border:1px solid rgba(155,209,255,.4)">
+            {{ "%.0f"|format(reference_template.match_score * 100) }}% match
+          </span>
+        </div>
+        <div class="fw-bold" style="font-size:15px;color:#e6e6f5">
+          {{ reference_template.title }}
+        </div>
+        <div class="text-secondary mt-1" style="font-size:12px;line-height:1.5">
+          {{ reference_template.reasoning }}
+        </div>
+        {% if reference_template.template and reference_template.template.summary %}
+        <div class="mt-2" style="font-size:12px;color:#c0c0d8;line-height:1.5">
+          {{ reference_template.template.summary }}
+        </div>
+        {% endif %}
+        {% if reference_template.ranked and reference_template.ranked|length > 1 %}
+        <div class="text-secondary mt-2" style="font-size:10px">
+          Ranked alternatives:
+          {% for r in reference_template.ranked[1:] %}
+            {{ r.template_id }} ({{ "%.0f"|format(r.match_score * 100) }}%){% if not loop.last %} · {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   {# ── Main 3D canvas + right-side control rail ──────────────────────── #}
   <div class="row g-0">
     <div class="col-12 col-lg-9">

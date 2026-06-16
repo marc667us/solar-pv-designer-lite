@@ -841,3 +841,62 @@ in a separate worker). If the next session is owner-driven debugging:
 real-device mobile test of the 3D dashboard.
 
 ---
+
+---
+
+# Implementation Log Entry — 2026-06-16 (afternoon)
+
+**Date:** 2026-06-16
+**Task:** AI 3D Shading Agent v2 — reference-template library + matcher
+**Status:** Shipped to master (commit pending push)
+
+## Objective
+Owner instruction (paraphrased): "Use the spec images in `Documents/pvsolar1/real shading/` and `3d issue/` to give the shading agent the ability to pick the closest reference scene based on the user's site info, and surface it on the dashboard."
+
+Owner picked option 4 (non-default), instructed "be careful with copyright but do it anyway" + "use your professional experience". Reasoned choice: hand-curated JSON catalogue + weighted-feature matcher. See ADR-0006.
+
+## Files Changed
+* **New** — `engine/shading_templates.json` (3-template catalogue)
+* **New** — `engine/shading_templates.py` (matcher + scoring)
+* **New** — `static/shading_templates/T01-…png`, `T02-…png`, `T03-…png` (6.7 MB total)
+* **New** — `patch_reference_template_card.py` (wires the matcher into `project_shading` GET)
+* `engine/agents/shading_agent.py` — version → `v2-2026-06-16`; added `tool_pick_reference_template` ADK FunctionTool, registered in TOOL_REGISTRY.
+* `templates/shading.html` — new "Reference scene match" card above the 3D canvas.
+* `web_app.py` — `project_shading` GET now calls `pick_reference_template()` and passes the result to `render_template` as `reference_template`.
+
+## Database Changes
+None. The matcher is a stateless lookup over a JSON file shipped with the app.
+
+## API Changes
+None. The matched template flows through the existing `project_shading` route.
+
+## Frontend Changes
+New "Reference scene match" card on `/project/<pid>/shading`. Shows the image, title, match %, agent-narrated reasoning, and ranked alternatives.
+
+## Security Changes
+None new. Images served via existing Flask static handler.
+
+## Tests Added
+Inline smoke (`python -c …`) of three representative sites confirms each maps to the expected reference template at ≥0.80 match. Full pytest module deferred.
+
+## Documentation Updated
+* `docs/ARCHITECTURE_DECISIONS.md` — ADR-0006 added.
+* `docs/IMPLEMENTATION_LOG.md` — this entry.
+
+## What Was Completed
+* Catalogued the 3 unique reference scenes from the 4 owner-provided images.
+* Built the weighted-feature matcher (mount, obstruction mix, severity, direction).
+* Exposed as ADK FunctionTool — `shading_agent.py` v2 includes it in TOOL_REGISTRY so both the ADK path and the OpenRouter fallback can invoke it.
+* Dashboard card renders above the 3D scene with match score + reasoning.
+
+## What Remains
+* Phase 4 (full pytest module) deferred — covered by inline smoke for this push.
+* Library is 3 scenes; expand as the owner adds new reference dashboards.
+* Future: if the library grows past ~50 scenes, swap the matcher for an embedding-based retriever behind the same `pick_reference_template(site_context)` signature.
+
+## Known Risks
+* The match score is deterministic; if the catalogue grows, the weight tuning may need revisiting. Tracked under "swap to embeddings" above.
+* The card adds ~6.7 MB of static assets to the repo; impact on Render free-tier build size is negligible (well under the 100 MB ceiling).
+
+## Next Recommended Step
+Smoke against the live site once Render redeploy lands. Then start collecting new reference scenes for additional mount-type / obstruction combinations the owner wants to model.
