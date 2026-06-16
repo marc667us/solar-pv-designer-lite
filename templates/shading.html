@@ -1501,6 +1501,28 @@
 {{ (shading.get('obstructions') or [])|tojson }}
 </script>
 
+<!-- ── GLOBAL ERROR CAPTURE — must come BEFORE any other script so it -->
+<!-- catches module-import failures the inner try/catches never see.    -->
+<script>
+  window._shading3dCaughtErrors = [];
+  window._shading3dModuleStarted = false;
+  window.addEventListener('error', function(e) {
+    try {
+      var src = (e.filename || '').split('/').pop();
+      var msg = (e.message || '').slice(0, 200);
+      window._shading3dCaughtErrors.push(
+        msg + ' @ ' + src + ':' + (e.lineno || '?') + ':' + (e.colno || '?'));
+    } catch (_) {}
+  }, true);
+  window.addEventListener('unhandledrejection', function(e) {
+    try {
+      var r = e.reason || '';
+      var msg = r && r.message ? r.message : String(r);
+      window._shading3dCaughtErrors.push('[promise rejected] ' + msg.slice(0, 200));
+    } catch (_) {}
+  });
+</script>
+
 <!-- ── REGULAR SCRIPT — runs first, no module deps. Draws every 2D    -->
 <!-- thing on the page (SVG sun-path, affected-panel grid, 5-thumbnails, -->
 <!-- 3 daily curves). If Three.js below fails to load (CDN block, etc.)  -->
@@ -1756,20 +1778,31 @@
         load.style.display = 'none';
         if (err) {
           err.style.display = 'flex';
+          var _errs = (window._shading3dCaughtErrors || []).slice(-5);
+          var _modStarted = !!window._shading3dModuleStarted;
+          var _hasThree = (typeof THREE !== 'undefined') || (typeof window.THREE !== 'undefined');
+          var _engDoc = document.getElementById('shading-engine-data');
+          var _engLen = _engDoc ? (_engDoc.textContent || '').trim().length : 0;
+          var _supportsModules = ('noModule' in document.createElement('script'));
           err.innerHTML =
             '<i class="bi bi-exclamation-triangle" style="font-size:28px;color:#f59e0b"></i>' +
             '<div style="font-size:14px"><strong>3D scene could not load within 12 seconds.</strong></div>' +
-            '<div style="color:#a0a0c8;font-size:12px;max-width:560px;line-height:1.5">' +
-              'The 2D charts above and below still work fine. ' +
-              'Three.js is now SELF-HOSTED (no CDN), so a CDN block is no longer the cause. ' +
-              'Most likely:<br><br>' +
-              '<strong style="color:#fff">1.</strong> Browser extension blocking ES module scripts (NoScript, strict shields)<br>' +
-              '<strong style="color:#fff">2.</strong> Very old browser without ES module support (Chrome <61, Edge <16)<br>' +
-              '<strong style="color:#fff">3.</strong> WebGL disabled in your browser (chrome://gpu)' +
+            '<div style="font-family:monospace;font-size:11px;color:#c0a070;text-align:left;' +
+            'max-width:680px;word-wrap:break-word;margin-top:6px;line-height:1.45">' +
+            '<strong>Module body ran:</strong> ' + (_modStarted ? 'YES (failure is INSIDE module)' : 'NO (imports never resolved)') + '<br>' +
+            '<strong>THREE global present:</strong> ' + (_hasThree ? 'YES' : 'NO') + '<br>' +
+            '<strong>Browser supports ES modules:</strong> ' + (_supportsModules ? 'YES' : 'NO') + '<br>' +
+            '<strong>Engine-data block length:</strong> ' + _engLen + ' bytes<br>' +
+            '<strong>Caught errors (' + _errs.length + '):</strong><br>' +
+            (_errs.length
+              ? _errs.map(function(s) { return '&nbsp;&nbsp;\u2022 ' + s; }).join('<br>')
+              : '&nbsp;&nbsp;(none captured)') + '<br>' +
+            '<strong>UA:</strong> ' + (navigator.userAgent || '').slice(0, 120) +
             '</div>' +
-            '<div style="color:#6e6e9a;font-size:11px;max-width:560px">' +
-              'Open the browser console (F12) for the exact error. ' +
-              'Try a different browser (Chrome / Edge / Firefox) or hard-refresh.' +
+            '<div style="color:#a0a0c8;font-size:11px;max-width:560px;margin-top:8px">' +
+              'Three.js is self-hosted at /static/vendor/three-0.170.0/. ' +
+              'If "Module body ran: NO" you are hitting an import / network issue (DevTools Network tab will show the failing request). ' +
+              'If "Caught errors" lists something, that is the actual JS error.' +
             '</div>';
         }
       }
@@ -1847,6 +1880,7 @@
     }
   }, 12000);
 
+  try { window._shading3dModuleStarted = true; } catch (_) {}
   const host = document.getElementById('shading3d-canvas');
   try {
   if (host) {
