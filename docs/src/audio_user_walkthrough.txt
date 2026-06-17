@@ -28,6 +28,12 @@ Total time from start to finished proposal is about twenty minutes for a typical
 
 For technical questions during the process, the AI helpline in the bottom right corner answers in two seconds.
 
+A short note on what changed in the platform on June seventeenth, twenty twenty six. The shading dashboard has three new cards on the right side. Obstruction details, shading summary, and shading impact per module. The shading impact card has a colour-coded grid showing which panels in the array carry the heaviest shadow. The main sun viewport now has five visible time markers along the sun-path arc, at seven hundred hours, nine thirty, twelve hundred, fourteen thirty, and seventeen hundred. The moving sun lands exactly on each marker as you scrub the timeline. The bottom thumbnail strip now extends to eighteen hundred.
+
+If you click one of the gold pill buttons to override the agent's chosen shading factor, the dashboard now visibly switches to your chosen number with a manual label, so you can confirm the override at a glance.
+
+The installation drawings report has a new diagram called Drawing 1B, between the panel internal wiring and the battery bank. It shows your project's actual cable routing from the array to the combiner box to the inverter, with the route appropriate to your mount type. Sloped roofs show under-rail cable management with EPDM-flashed roof penetration. Flat roofs show galvanised cable tray on ballast stands. Ground mounts show armoured conduit buried at least six hundred millimetres, with cable draw-pits every twenty metres. The notes column cites the correct British Standard or IEC reference for each routing topology.
+
 Sign up free at SolarPro Global. No credit card required. The beta closes on July fifteenth twenty twenty six, and the first fifteen Ghana companies get a fifty percent lifetime discount.
 
 That's the walkthrough. Thank you for listening.

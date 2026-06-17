@@ -323,7 +323,39 @@ EU-region encrypted database. Per-tenant row-level isolation. Daily backups.
 
 ---
 
-## 15. Screenshots index
+## 15. What's new (June 17, 2026)
+
+Workflow-relevant changes shipped today. None of them changes the order of steps; they all sharpen what you see at the shading step and at the Installation Drawings report.
+
+### 15.1 Shading dashboard — three new right-rail cards
+
+After saving your inspection / obstruction form, open **Shading**. The right rail now opens with three cards:
+
+1. **Obstruction Details** — name, type, height, distance, direction of the primary obstruction. An amber **MODERATE**, orange **HIGH** or red **SEVERE** chip carries the impact assessment at a glance.
+2. **Shading Summary** — total shading hours per day, average shading index (the saved factor), peak shading hour, energy loss percentage.
+3. **Shading Impact (PV Modules)** — a five-step legend bar (None → Low → Med → High → Severe) and a 4 × 7 module grid (28 cells in a typical residential array) coloured per cell. Cells in the NE-facing wedge carry the high / severe colours; cells unaffected stay deep blue. This is the "where will the shadow actually hit?" view a client wants to see before signing.
+
+The sun-path arc in the central viewport now displays five visible time markers along the curve — 07:00, 09:30, 12:00, 14:30, 17:00. Scrub the timeline slider; the moving sun disk passes through each marker exactly.
+
+### 15.2 Manual factor override — what you save is what you see
+
+If you disagree with the agent's chosen factor (you have site knowledge the form can't capture), click one of the gold pill buttons under the SHADING_FACTORS table and hit Save. The factor you picked now drives every visible number on the page — top stat strip, big banner, summary card, the AGENT PICK row highlight in the table. The label is suffixed `· MANUAL` so the source is obvious.
+
+Before today, the page would silently keep showing the engine's number while the system actually saved (and applied downstream) yours. The bug was cosmetic — your save was always honoured by the loads / sizing step — but the visible mismatch was confusing. Fixed.
+
+### 15.3 Installation Drawings — mount-specific routing diagram
+
+Open Results → **Installation Diagrams** → Page 2. Between Drawing 1 (PV panel internal wiring) and Drawing 2 (battery bank), you now have **Drawing 1B — String Cable Routing & Combiner**. It draws your actual project's strings (colour-coded per string) running into the combiner box and out to the inverter, with the cable management appropriate to your project's mount:
+
+- **Sloped roof** — cables under aluminium rails, EPDM-flashed roof penetration, IP65 conduit drop to indoor inverter wall.
+- **Flat roof** — galvanised cable tray clipped to ballast stands, parapet transition to UV-rated rigid conduit, plant-room drop.
+- **Ground** — IP67 armoured conduit buried at least 600 mm with draw pits every 20 m, combiner mounted on the equipment shelter.
+
+The notes panel below the diagram references the right derating standard (BS 7671 Table 4D4A for buried, IEC 60364-5-52 for tray, Method B + 0.85 factor for through-insulation), so your installer's electrical sign-off has a defensible citation.
+
+---
+
+## 16. Screenshots index
 
 When this guide is updated, screenshots will be referenced here:
 

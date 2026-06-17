@@ -181,7 +181,45 @@ Anytime, click the red **"Take the tour"** floating button in the bottom-right o
 
 ---
 
-## 14. Recording your own video (if you really want one)
+## 14. What's new (June 17, 2026)
+
+Four user-visible changes shipped today. None changes the navigation; they all make the existing pages clearer or more accurate.
+
+### 14.1 3D shading dashboard — right-rail cards + visible sun-arc waypoints
+
+Open any project → **Shading**. Above the existing Obstruction Summary, the right rail now carries three new cards lifted from the 3d10 reference design:
+
+| Card | Shows |
+|---|---|
+| **Obstruction Details** | The primary obstruction (name, type, height, distance, direction) plus an impact chip — colour-coded green / amber / orange / red. |
+| **Shading Summary** | Four KPIs: total shading hours, average shading index, peak shading hour, energy loss percentage. |
+| **Shading Impact (PV Modules)** | Five-colour heatmap legend (None → Severe) and a row × column module grid showing per-panel impact, biased to the NE wedge where shadows actually fall. |
+
+The main viewport now also shows five labelled time markers along the dashed yellow sun-path arc — 07:00, 09:30, 12:00, 14:30, 17:00 — and the moving sun disk lands exactly on each marker as you scrub the timeline slider. The shadow-timeline strip at the bottom extends to 18:00 (was 17:00).
+
+### 14.2 Manual factor override now visibly wins
+
+When you click one of the gold "Save as manual factor" pill buttons under the shading dashboard, the chosen factor was always being saved — but the dashboard's big numbers used to keep showing the engine's pick, which made it look like nothing happened. As of today every visible factor (top stat strip, banner, summary cards, AGENT PICK row highlight) tracks the actually-saved factor, and the label is suffixed `· MANUAL` so the operator can see immediately which source is active.
+
+The downstream loads / sizing step always used the saved factor, so nothing changes downstream — this is purely a "what you see matches what you saved" fix.
+
+### 14.3 Installation Drawings — mount-aware string + wiring diagram
+
+Open any project's results → **Installation Diagrams** → Page 2. Between the existing PV-panel internal wiring diagram and the battery-bank diagram, you'll find a new **Drawing 1B — String Cable Routing & Combiner**. Its SVG switches to one of three layouts depending on the project's mounting type:
+
+- **Sloped roof** (pitched / hip / gable / metal) — cables under aluminium rails, EPDM-flashed roof penetration, IP65 conduit drop to indoor utility wall.
+- **Flat roof** (flat / membrane / concrete) — galvanised cable tray on ballast stands, parapet transition to UV-rated rigid conduit, drop to plant room.
+- **Ground** (ground_fixed / ground_tracking) — IP67 armoured conduit buried ≥ 600 mm with draw pits every 20 m, combiner on equipment shelter.
+
+The notes column cites the relevant standard for cable derating in each case (BS 7671 Table 4D4A for buried, IEC 60364-5-52 for cable-tray fill, Method B for in-roof).
+
+### 14.4 Sun-on-track sanity (engineering note)
+
+The sun disk's animation Bézier is now anchored to `M 60 460 Q 500 -340 940 460`, the exact curve the dashed yellow sun-path arc is drawn from. The two share a single mathematical formula, so the disk no longer drifts off the line at dawn / noon / dusk — it travels exactly through the 5 marker circles. If a client questions the simulation's accuracy, this is what to point to.
+
+---
+
+## 15. Recording your own video (if you really want one)
 
 If you must have a video, the cheapest way is to record the in-app tour yourself:
 

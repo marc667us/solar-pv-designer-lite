@@ -68,6 +68,7 @@ DOCS_TO_BUILD = [
     ("sales_pitch.md",      "SolarPro_Sales_Pitch.pdf",      "Inbound Sales Call Pitch",  "Sales enablement"),
     ("user_guide.md",       "SolarPro_User_Guide.pdf",       "User Guide",                "End-user workflow"),
     ("technical_guide.md",  "SolarPro_Technical_Guide.pdf",  "Technical Guide",           "Engineering basis"),
+    ("portal_tutorial.md",  "SolarPro_Portal_Tutorial.pdf",  "Portal Tutorial",           "Admin onboarding walkthrough"),
 ]
 
 

@@ -422,7 +422,66 @@ Feature requests during beta: send to `support@aiappinvent.com` or via in-app ch
 
 ---
 
-## 18. Screenshots index
+## 18. Engineering changelog (June 17, 2026)
+
+Four mechanical changes shipped to master today. The first three concern the shading dashboard's mathematical contract; the fourth introduces a mount-aware electrical drawing.
+
+### 18.1 Sun-position Bézier — single source of truth
+
+The shading dashboard's central viewport draws a dashed yellow sun-path arc as the SVG path
+
+```
+M 60 460 Q 500 -340 940 460
+```
+
+a quadratic Bézier with horizon endpoints (60, 460) and (940, 460) and control point (500, −340) so the noon peak sits at (500, 60). The same Bézier coefficients now drive the JS animation:
+
+```js
+function sunXY(hour) {
+  var t = (hour - 6) / 12;
+  var x = (1 - t) * (1 - t) * 60  + 2 * (1 - t) * t * 500 + t * t * 940;
+  var y = (1 - t) * (1 - t) * 460 + 2 * (1 - t) * t * (-340) + t * t * 460;
+  return { x: x, y: y };
+}
+```
+
+with `BASE_X = 700, BASE_Y = 70` matching the server-rendered `_sun_x` / `_sun_y` defaults, so the disk's transform `translate(p.x − BASE_X, p.y − BASE_Y)` puts it at `(p.x, p.y)` for every hour. Five visible marker circles sit on the curve at t = 1/12, 3.5/12, 6/12, 8.5/12, 11/12 (07:00, 09:30, 12:00, 14:30, 17:00) — pre-computed Jinja constants so they never drift.
+
+Net: the visible curve and the moving disk are guaranteed to share a single mathematical formula. Any client asking "is your simulation accurate?" can be shown both the SVG path string and the JS coefficients side by side.
+
+### 18.2 Shading-factor precedence chain
+
+The dashboard now reads `_factor` / `_label` / `_loss` from a single ordered precedence:
+
+1. **`shading.factor`** (the saved value written by `_apply_shading_factor`)
+2. **`_eng.bucket_factor`** (cached engine block, used only when no save exists)
+3. **`1.00`** / `''` / `0` (no-data defaults)
+
+`_apply_shading_factor` (in `web_app.py`) runs the deterministic geometry engine first, falls back to the heuristic agent `_compute_shading_factor` when project context is incomplete, and yields to a manual operator override when the gold-pill Save handler fires. All three write the same `data["shading"]["factor"]` field, so the dashboard now displays the actually-applied value regardless of which source produced it.
+
+When `factor_source == "manual"`, a `· MANUAL` suffix is appended to the displayed label, and the AGENT PICK row highlight in the SHADING_FACTORS table tracks the saved factor rather than the cached engine bucket. The engine block remains in `data["shading"]["engine"]` so the 3D scene still has geometry to render against.
+
+### 18.3 Engine ↔ heuristic snapping parity
+
+Both `engine.shading_engine.SHADING_BUCKETS` and `web_app.SHADING_FACTORS` are the same eight rows (No shading → Very severe shading, 0% → 40% loss, 1.00 → 0.60 factor) with the same conservative snap rule: pick the highest row whose loss% is ≤ the computed loss%. When either path runs alone its output is one of those eight rows, so the visible factor on the dashboard is one of eight discrete values — never a continuous figure. Downstream code (loads / sizing / BOQ) reads only the snapped row.
+
+### 18.4 Installation drawings — mount-aware string routing (Drawing 1B)
+
+The Installation Drawings report (`/project/<pid>/report/installation/drawings`) carries a new Drawing 1B between the existing PV-panel internal-wiring diagram and the battery-bank diagram. One SVG with three Jinja branches keyed on the project's stored `mounting_type`:
+
+| Mount class | Topology rendered | Standards cited |
+|---|---|---|
+| `rooftop_sloped` (default — pitched, hip, gable, metal, rooftop_pitched, rooftop_metal) | Cables clipped to under-rail tray, EPDM-flashed pitched penetration, IP65 rigid conduit to indoor inverter wall | BS 7671 Method B + 0.85 thermal-insulation factor; §712 PV bonding |
+| `rooftop_flat` (flat, membrane, concrete, rooftop_flat, rooftop_membrane) | Galvanised cable tray on ballast stands, parapet transition to UV-rated rigid conduit, drop to plant room | IEC 60364-5-52 tray fill ≤ 40 %, 70 °C PVC; FM 4474 ballast wind-load |
+| `ground_*` (ground_fixed, ground_tracking) | IP67 armoured conduit buried ≥ 600 mm, cable draw-pits every 20 m, combiner on equipment shelter | BS 7671 Tab 4D4A buried-cable derating; BS 7430 array-frame bonding |
+
+The diagram is sized from the project's actual `pps` (panels per string) × `num_strings`, colours each string from an 8-step palette (red → orange → yellow → green → blue → violet → magenta → cyan), and draws DC+ red / DC− blue cable paths from the array to the combiner box (fuse + DC isolator per string, IP65 housing, "{N}-in / 1-out") and out to the inverter (MPPT input ceiling annotated). The notes panel adds string-balance, derating, and combiner-termination guidance with BS 7671 §537 lockout requirement.
+
+Implementation: see `templates/report_installation_drawings.html` block "DRAWING 1B" (≈ 150 LOC SVG + 3-column notes panel). All `mt` branches are derived from the lower-cased `mounting_type` string, so any new raw mount value the form might add ("ground_pole", "rooftop_carport", etc.) defaults to the closest-class topology rather than 500'ing.
+
+---
+
+## 19. Screenshots index
 
 The technical guide references the same screens as the user guide:
 
