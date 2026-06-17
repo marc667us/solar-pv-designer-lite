@@ -714,6 +714,9 @@
               <stop offset="60%" stop-color="#ff9800"/>
               <stop offset="100%" stop-color="#ff9800" stop-opacity="0"/>
             </radialGradient>
+            <clipPath id="aboveHorizonClip">
+              <rect x="-200" y="-200" width="1400" height="660"/>
+            </clipPath>
           </defs>
           {# ── Ground strip #}
           <rect x="0" y="460" width="1000" height="80" fill="#7cb342"/>
@@ -728,17 +731,27 @@
           {# Sun position (default noon-ish) — read from engine if available #}
           {% set _sun_x = 700 %}
           {% set _sun_y = 70 %}
-          <g id="svgSunGroup">
+          <g id="svgSunGroup" clip-path="url(#aboveHorizonClip)">
             <circle id="svgSunGlow" cx="{{ _sun_x }}" cy="{{ _sun_y }}" r="50" fill="url(#sunGradN)" opacity="0.55"/>
             <circle id="svgSunDisk" cx="{{ _sun_x }}" cy="{{ _sun_y }}" r="22" fill="#ffeb3b"/>
             <g id="svgSunRays">
-              {# Sun rays render at the same origin as the disk. JS adjusts via the group transform when the slider moves. #}
-              {% for _ray in range(12) %}
-                {% set _rx = _sun_x + ((_ray - 6) * 24) %}
-                {% set _ry = _sun_y + 90 + ((_ray * 3) % 18) %}
+              {# Rays converge from the sun toward the PV array centre. #}
+              {# 7 main rays, fanning out around the line sun->array. #}
+              {% set _arr_cx = _house_x + _house_w_px // 2 %}
+              {% set _arr_cy = _house_y - 14 %}
+              {% for _ray in range(7) %}
+                {% set _spread = (_ray - 3) * 18 %}
                 <line x1="{{ _sun_x }}" y1="{{ _sun_y + 22 }}"
-                      x2="{{ _rx }}" y2="{{ _ry }}"
-                      stroke="#fbbf24" stroke-width="1" opacity="0.35"/>
+                      x2="{{ _arr_cx + _spread }}" y2="{{ _arr_cy + ((_ray - 3)|abs) * 3 }}"
+                      stroke="#fbbf24" stroke-width="{{ 1.4 if _ray == 3 else 1 }}"
+                      opacity="{{ 0.55 if _ray == 3 else 0.30 }}"/>
+              {% endfor %}
+              {# 5 short halo rays radiating out from disk for sparkle effect. #}
+              {% for _hray in range(5) %}
+                {% set _hangle = (_hray - 2) * 36 %}
+                <line x1="{{ _sun_x }}" y1="{{ _sun_y }}"
+                      x2="{{ _sun_x + _hangle }}" y2="{{ _sun_y - 32 - (_hray * 2) }}"
+                      stroke="#fff9c4" stroke-width="1" opacity="0.45"/>
               {% endfor %}
             </g>
           </g>
@@ -995,9 +1008,11 @@
           if (!slider || !disk || !group) return;
           var BASE_X = 500, BASE_Y = 70;  // server-rendered noon position
           function sunXY(hour) {
-            // Quadratic interpolation. h=6 -> (60,460), h=12 -> (500,60), h=18 -> (940,460).
-            if (hour < 6 || hour > 18) return null;
-            var t = (hour - 6) / 12;  // 0..1
+            // Extended range 4..20 so the sun visibly rises from below
+            // horizon at dawn and sinks below at dusk (clip-path hides
+            // anything below y=460 via the ground rect).
+            if (hour < 4 || hour > 20) return null;
+            var t = (hour - 6) / 12;  // -1/6 at 4 AM ... 7/6 at 8 PM
             var x = (1 - t) * (1 - t) * 60 + 2 * (1 - t) * t * 500 + t * t * 940;
             var y = (1 - t) * (1 - t) * 460 + 2 * (1 - t) * t * (-340) + t * t * 460;
             return { x: x, y: y };
@@ -1124,9 +1139,9 @@
               playing = true;
               playBtn.innerHTML = '<i class="bi bi-pause-fill"></i> Pause';
               timer = setInterval(function() {
-                var v = parseFloat(slider.value) || 6;
+                var v = parseFloat(slider.value) || 5;
                 v += 0.5;  // 30 minutes per tick
-                if (v > 18) v = 6;
+                if (v > 19) v = 5;  // wrap with twilight visible
                 slider.value = v;
                 paintSun(v);
               }, 350);
