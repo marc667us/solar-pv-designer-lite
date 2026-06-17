@@ -1026,6 +1026,19 @@
             Scale 8 px/m · sun direction · obstruction · cast shadow · tilted array
           </text>
         </svg>
+        {# Inline mini-slider strip - operator sees sun + control in one view. #}
+        <div class="d-flex align-items-center gap-2 mt-2 p-2"
+             style="background:rgba(10,10,20,0.55);border:1px solid #1e1e3a;border-radius:6px">
+          <button type="button" id="shadingMiniPlay"
+                  class="btn btn-sm btn-warning fw-bold" style="font-size:11px">
+            <i class="bi bi-play-fill"></i> Play
+          </button>
+          <span class="fw-bold" id="shadingMiniLabel"
+                style="min-width:64px;color:var(--solar-gold);font-size:13px">09:00</span>
+          <input type="range" id="shadingMiniSlider" class="form-range flex-grow-1"
+                 min="4" max="20" value="9" step="0.5"
+                 style="accent-color:#f59e0b;height:1.5rem">
+        </div>
         <div class="d-flex align-items-center gap-2 mt-2 p-2"
              style="background:linear-gradient(90deg,rgba(245,158,11,0.18) 0%,rgba(245,158,11,0.04) 100%);
                     border:1px solid rgba(245,158,11,0.4);border-radius:6px;font-size:11px;color:#fbbf24;
@@ -1117,6 +1130,11 @@
         </div>
         <script>
         (function() {
+          // The slider lives further down the page so it does NOT exist
+          // at script-parse time. Defer init until the DOM is fully
+          // built so getElementById('shadingTimeSlider') actually finds
+          // it.
+          function init() {
           // Sun animation tied to #shadingTimeSlider. Sun follows a parabolic arc:
           //   6 AM  -> (60, 460)   on the eastern horizon
           //   12 N  -> (500, 60)   at the zenith
@@ -1307,34 +1325,65 @@
             paintSunPathDot(hour);
           };
           slider.addEventListener('input', function() { paintSun(parseFloat(slider.value)); });
-          paintSky(parseFloat(slider.value) || 12);
-          paintSun(parseFloat(slider.value) || 12);
-          // -- Wire the Play button to auto-advance.
-          var playBtn = document.getElementById('shadingTimePlay');
-          if (playBtn) {
+          // Mini slider + mini play button mirror the main controls.
+          var miniSlider = document.getElementById('shadingMiniSlider');
+          var miniLabel  = document.getElementById('shadingMiniLabel');
+          var miniPlay   = document.getElementById('shadingMiniPlay');
+          function syncMini(v) {
+            if (miniSlider) miniSlider.value = v;
+            if (miniLabel) {
+              var hr = Math.floor(v); var mn = Math.round((v - hr) * 60);
+              miniLabel.textContent = (hr < 10 ? '0' : '') + hr + ':' + (mn < 10 ? '0' : '') + mn;
+            }
+          }
+          if (miniSlider) {
+            miniSlider.addEventListener('input', function() {
+              var v = parseFloat(miniSlider.value);
+              slider.value = v;
+              paintSun(v);
+              syncMini(v);
+            });
+          }
+          // Hook BOTH play buttons (mini + main) to the same auto-advance.
+          function wirePlay(btn) {
+            if (!btn) return;
             var playing = false, timer = null;
-            playBtn.addEventListener('click', function() {
+            btn.addEventListener('click', function() {
               if (playing) {
                 clearInterval(timer); playing = false;
-                playBtn.innerHTML = '<i class="bi bi-play-fill"></i> Play';
+                btn.innerHTML = '<i class="bi bi-play-fill"></i> Play';
                 return;
               }
               playing = true;
-              playBtn.innerHTML = '<i class="bi bi-pause-fill"></i> Pause';
+              btn.innerHTML = '<i class="bi bi-pause-fill"></i> Pause';
               timer = setInterval(function() {
                 var v = parseFloat(slider.value) || 5;
-                v += 0.5;  // 30 minutes per tick
-                if (v > 19) v = 5;  // wrap with twilight visible
+                v += 0.5;
+                if (v > 19) v = 5;
                 slider.value = v;
                 paintSun(v);
+                syncMini(v);
               }, 350);
             });
+          }
+          wirePlay(miniPlay);
+          paintSky(parseFloat(slider.value) || 12);
+          paintSun(parseFloat(slider.value) || 12);
+          // -- Wire the Play button to auto-advance.
+          wirePlay(document.getElementById('shadingTimePlay'));
+          }
+          // Run init after DOM is parsed; if already parsed, run now.
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+          } else {
+            // setTimeout 0 gives the browser a tick to settle DOM.
+            setTimeout(init, 0);
           }
         })();
         </script>
         <div class="text-secondary small mt-2">
           <i class="bi bi-info-circle me-1"></i>
-          Proportional engineering view at 8 px/m. Drag the time slider below to watch the sun arc from horizon (6 AM) to peak (12 N) to horizon (6 PM). Server-rendered SVG (no JS module / no WebGL).
+          Proportional engineering view at 8 px/m. Drag the time slider to watch the sun arc from horizon (6 AM) to peak (12 N) to horizon (6 PM). Server-rendered SVG (no JS module / no WebGL).
         </div>
       </div>
       {# Time slider — drag to scrub through the day. Sun moves, panel #}
