@@ -818,7 +818,7 @@
                              {{ _obs_x + _obs_w_px }},{{ _ground_y }}
                              {{ _obs_x + _obs_w_px + (_obs_h_px * 0.7 * _shdir)|int }},{{ _ground_y + 6 }}
                              {{ _obs_x + (_obs_h_px * 0.5 * _shdir)|int }},{{ _ground_y + 6 }}"
-                     fill="rgba(0,0,0,0.30)"/>
+                     fill="rgba(0,0,0,0.45)"/>
             {% if "tree" in _otype %}
               {# Tree: trunk + 3 canopy spheres #}
               <rect x="{{ _obs_x + _obs_w_px//2 - 5 }}"
@@ -1257,7 +1257,7 @@
             //   below horizon: hide shadows
             var shadows = document.querySelectorAll('[id^="shadow-"]');
             if (!shadows.length) return;
-            if (hour < 6 || hour > 18) {
+            if (hour < 5 || hour > 19) {
               for (var i = 0; i < shadows.length; i++) shadows[i].style.display = 'none';
               return;
             }
@@ -1344,9 +1344,9 @@
         <div class="d-flex align-items-center gap-2 flex-wrap">
           <i class="bi bi-clock" style="color:var(--solar-gold)"></i>
           <span class="small fw-bold" id="shadingTimeLabel"
-                style="min-width:90px;color:var(--solar-gold)">12:00</span>
+                style="min-width:90px;color:var(--solar-gold)">09:00</span>
           <input type="range" id="shadingTimeSlider" class="form-range flex-grow-1"
-                 min="4" max="20" value="12" step="0.5"
+                 min="4" max="20" value="9" step="0.5"
                  style="accent-color:#f59e0b;height:1.5rem">
           <button type="button" id="shadingTimePlay"
                   class="btn btn-sm btn-outline-warning" style="font-size:11px">
