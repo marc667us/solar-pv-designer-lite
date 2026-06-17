@@ -670,13 +670,36 @@
       <div class="solar-card p-3 mb-0" style="border-radius:12px 12px 0 0">
         <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
           <div class="section-head mb-0"><i class="bi bi-diagram-3 me-1"></i>PV Shading Simulation</div>
-          <div class="small">
+          <div class="small d-flex align-items-center gap-2">
+            <span class="badge" id="shadingJsBadge"
+                  style="background:#555;color:#ccc;font-size:9px;padding:.2rem .5rem"
+                  title="Green tick = JS active and slider wired">
+              <i class="bi bi-circle"></i> JS
+            </span>
             <span class="text-secondary">Factor —</span>
             <span class="fw-bold ms-1" style="color:var(--solar-gold)">
               {{ "%.2f"|format(_eng.bucket_factor or 1.0) if _eng else "1.00" }}
               · {{ _eng.bucket_label or "No shading" if _eng else "No shading" }}
             </span>
           </div>
+        </div>
+        {# Inline mini-slider strip ABOVE the SVG - operator sees control + sun in one view. #}
+        <div class="d-flex align-items-center gap-2 mb-2 p-2"
+             style="background:linear-gradient(90deg,rgba(245,158,11,0.15) 0%,rgba(245,158,11,0.04) 100%);
+                    border:1.5px solid #fbbf24;border-radius:6px">
+          <button type="button" id="shadingMiniPlay"
+                  class="btn btn-sm btn-warning fw-bold" style="font-size:12px;min-width:78px">
+            <i class="bi bi-play-fill"></i> Play
+          </button>
+          <span class="fw-bold" id="shadingMiniLabel"
+                style="min-width:64px;color:var(--solar-gold);font-size:14px">09:00</span>
+          <input type="range" id="shadingMiniSlider" class="form-range flex-grow-1"
+                 min="4" max="20" value="9" step="0.5"
+                 style="accent-color:#f59e0b;height:1.5rem"
+                 aria-label="Time of day slider — drag to move the sun">
+          <span class="text-secondary small d-none d-md-inline" style="font-size:11px">
+            <i class="bi bi-arrow-left-right"></i> Drag to move the sun
+          </span>
         </div>
         {# ── Scale constants: 8 px per metre. viewBox is 1000x540. #}
         {% set _scale = 8 %}
@@ -688,8 +711,8 @@
         {% set _house_w_px = (_house_w_m * _scale)|int %}
         {% set _house_x = 440 %}
         {% set _house_y = _ground_y - _house_h_px %}
-        <svg id="shadingSvg" viewBox="0 0 1000 540"
-             style="width:100%;height:auto;border-radius:8px;
+        <svg id="shadingSvg" viewBox="0 0 1000 540" preserveAspectRatio="xMidYMid meet"
+             style="width:100%;height:auto;max-height:60vh;border-radius:8px;
                     border:1px solid #1e1e3a;display:block">
           <defs>
             <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
@@ -763,7 +786,14 @@
             </g>
           </g>
           {# ── Obstructions — render at TRUE engineering scale. #}
-          {% for o in (_obs or []) %}
+          {# If no obstructions saved on the project, use a demo set so #}
+          {# the operator sees a complete simulation immediately.        #}
+          {% set _show_obs = _obs or [{
+             'type': 'Building', 'height': 32, 'width': 18, 'distance': 18, 'direction': 'W'
+          }, {
+             'type': 'Tree', 'height': 12, 'width': 5, 'distance': 6, 'direction': 'SW'
+          }] %}
+          {% for o in _show_obs %}
             {% set _obs_h_m = o.height|float if o.height else 5.0 %}
             {% set _obs_h_px = (_obs_h_m * _scale)|int %}
             {% set _obs_w_m = o.width|float if o.width else 5.0 %}
@@ -1026,19 +1056,6 @@
             Scale 8 px/m · sun direction · obstruction · cast shadow · tilted array
           </text>
         </svg>
-        {# Inline mini-slider strip - operator sees sun + control in one view. #}
-        <div class="d-flex align-items-center gap-2 mt-2 p-2"
-             style="background:rgba(10,10,20,0.55);border:1px solid #1e1e3a;border-radius:6px">
-          <button type="button" id="shadingMiniPlay"
-                  class="btn btn-sm btn-warning fw-bold" style="font-size:11px">
-            <i class="bi bi-play-fill"></i> Play
-          </button>
-          <span class="fw-bold" id="shadingMiniLabel"
-                style="min-width:64px;color:var(--solar-gold);font-size:13px">09:00</span>
-          <input type="range" id="shadingMiniSlider" class="form-range flex-grow-1"
-                 min="4" max="20" value="9" step="0.5"
-                 style="accent-color:#f59e0b;height:1.5rem">
-        </div>
         <div class="d-flex align-items-center gap-2 mt-2 p-2"
              style="background:linear-gradient(90deg,rgba(245,158,11,0.18) 0%,rgba(245,158,11,0.04) 100%);
                     border:1px solid rgba(245,158,11,0.4);border-radius:6px;font-size:11px;color:#fbbf24;
@@ -1135,6 +1152,16 @@
           // built so getElementById('shadingTimeSlider') actually finds
           // it.
           function init() {
+          // Flash the badge green so operator can see init() ran.
+          try {
+            var _badge = document.getElementById('shadingJsBadge');
+            if (_badge) {
+              _badge.style.background = '#22c55e';
+              _badge.style.color = '#000';
+              _badge.innerHTML = '<i class="bi bi-check-circle-fill"></i> JS';
+              _badge.title = 'init() ran successfully - slider wired';
+            }
+          } catch (_) {}
           // Sun animation tied to #shadingTimeSlider. Sun follows a parabolic arc:
           //   6 AM  -> (60, 460)   on the eastern horizon
           //   12 N  -> (500, 60)   at the zenith
