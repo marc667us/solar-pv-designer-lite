@@ -221,6 +221,155 @@
 </div>
 
 {# ═══════════════════════════════════════════════════════════════
+   DRAWING 1B — STRING CABLE ROUTING & COMBINER, PER MOUNT TYPE
+   Sloped / flat / ground each have their own cable-management
+   topology. The same series-string electrical diagram (Drawing 1)
+   feeds into the routing shown here for the project's actual mount.
+   ═══════════════════════════════════════════════════════════════ #}
+{% set _mt_l = (mt or '')|lower %}
+{% set _is_ground = ('ground' in _mt_l) %}
+{% set _is_flat = (not _is_ground) and (_mt_l in ['flat','membrane','concrete','rooftop_flat','rooftop_membrane']) %}
+{% set _is_sloped = (not _is_ground) and (not _is_flat) %}
+{% set _mt_title = 'Ground-Mounted Array' if _is_ground else ('Flat-Roof Array' if _is_flat else 'Sloped-Roof Array') %}
+{% set _str_colors = ['#ef4444','#f97316','#facc15','#22c55e','#3b82f6','#a78bfa','#ec4899','#06b6d4'] %}
+{% set _n_str_shown = [num_strings, 4]|min %}
+<div class="diag-wrap">
+  <div class="diag-head">
+    <div class="num" style="background:linear-gradient(135deg,#06b6d4,#0891b2)">1B</div>
+    <div class="ttl">String Cable Routing &amp; Combiner — {{ _mt_title }}</div>
+  </div>
+  <div class="diag-body">
+    <svg viewBox="0 0 960 460" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;background:#07071a">
+      <text x="480" y="18" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="700">
+        STRING CABLE PATH FROM ARRAY → COMBINER → INVERTER · {{ pps }} pps × {{ num_strings }} strings · {{ r.num_panels }} panels · {{ r.pv_kw|fmt(2) }} kWp
+      </text>
+
+      {# ── ARRAY BLOCK (panels by string, colour per string) ── #}
+      {% set ay = 50 %}
+      {% set ax = 40 %}
+      {% set cell_w = 36 %}
+      {% set cell_h = 22 %}
+      {% set _max_cols = pps %}
+      {% set _array_w = (_max_cols * (cell_w + 4)) - 4 %}
+      <rect x="{{ ax-8 }}" y="{{ ay-14 }}" width="{{ _array_w + 16 }}"
+            height="{{ _n_str_shown * (cell_h + 6) + 18 }}" rx="6"
+            fill="#080816" stroke="#1e1e3a" stroke-width="1.2"/>
+      <text x="{{ ax }}" y="{{ ay-2 }}" fill="#94a3b8" font-size="9" font-weight="700">
+        PV ARRAY ({{ _max_cols }} × {{ _n_str_shown }}{% if num_strings > 4 %} + {{ num_strings - 4 }} more strings{% endif %})
+      </text>
+      {% for s in range(_n_str_shown) %}
+        {% set sy = ay + s * (cell_h + 6) + 6 %}
+        {% set sc = _str_colors[s % _str_colors|length] %}
+        {% for c in range(_max_cols) %}
+          <rect x="{{ ax + c * (cell_w + 4) }}" y="{{ sy }}"
+                width="{{ cell_w }}" height="{{ cell_h }}" rx="2"
+                fill="#0f1729" stroke="{{ sc }}" stroke-width="1.2"/>
+          <text x="{{ ax + c * (cell_w + 4) + cell_w // 2 }}" y="{{ sy + cell_h - 6 }}"
+                text-anchor="middle" fill="{{ sc }}" font-size="7" font-weight="700">P{{ s * pps + c + 1 }}</text>
+        {% endfor %}
+        {# String exit cable: one + and one − leaving the array on the right. #}
+        {% set cx = ax + _max_cols * (cell_w + 4) %}
+        {% set cy_pos = sy + 5 %}
+        {% set cy_neg = sy + cell_h - 4 %}
+        <text x="{{ cx + 6 }}" y="{{ sy + cell_h // 2 + 3 }}" fill="{{ sc }}" font-size="9" font-weight="800">S{{ s + 1 }}</text>
+        {# Cable paths to combiner — colour DC+ red / DC− blue, override stroke for routing visibility. #}
+        <path d="M {{ cx }} {{ cy_pos }} H {{ cx + 30 }} V {{ cy_pos + (s * 4) }} H 540" stroke="#ef4444" stroke-width="1.6" fill="none"/>
+        <path d="M {{ cx }} {{ cy_neg }} H {{ cx + 40 }} V {{ cy_neg - (s * 4) }} H 540" stroke="#3b82f6" stroke-width="1.6" fill="none"/>
+      {% endfor %}
+
+      {# ── COMBINER BOX ── #}
+      {% set kx = 540 %}
+      {% set ky = ay - 6 %}
+      {% set kh = _n_str_shown * (cell_h + 6) + 18 %}
+      <rect x="{{ kx }}" y="{{ ky }}" width="110" height="{{ kh }}" rx="6"
+            fill="#0f172a" stroke="#fbbf24" stroke-width="1.6"/>
+      <text x="{{ kx + 55 }}" y="{{ ky + 14 }}" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="800">DC COMBINER</text>
+      <text x="{{ kx + 55 }}" y="{{ ky + 26 }}" text-anchor="middle" fill="#94a3b8" font-size="8">IP65 · {{ num_strings }}-in / 1-out</text>
+      {# String fuse + isolator block inside combiner. #}
+      {% for s in range(_n_str_shown) %}
+        {% set sy = ay + s * (cell_h + 6) + 6 %}
+        <rect x="{{ kx + 10 }}" y="{{ sy + 4 }}" width="20" height="14" rx="2"
+              fill="#1e293b" stroke="#fbbf24" stroke-width="1"/>
+        <text x="{{ kx + 20 }}" y="{{ sy + 14 }}" text-anchor="middle" fill="#fbbf24" font-size="6" font-weight="700">F{{ s + 1 }}</text>
+        <circle cx="{{ kx + 50 }}" cy="{{ sy + 11 }}" r="3.5" fill="#1e293b" stroke="#22c55e" stroke-width="1"/>
+      {% endfor %}
+      <text x="{{ kx + 50 }}" y="{{ ky + kh - 4 }}" text-anchor="middle" fill="#22c55e" font-size="7">DC isolators</text>
+
+      {# ── DC LINE TO INVERTER (mount-specific routing) ── #}
+      {% set ix = 760 %}
+      {% set iy = ay + 30 %}
+      <path d="M {{ kx + 110 }} {{ ky + kh // 2 }} H {{ ix }}" stroke="#ef4444" stroke-width="2.2" fill="none"/>
+      <path d="M {{ kx + 110 }} {{ ky + kh // 2 + 10 }} H {{ ix }}" stroke="#3b82f6" stroke-width="2.2" fill="none"/>
+
+      {# ── INVERTER BOX ── #}
+      <rect x="{{ ix }}" y="{{ iy }}" width="160" height="120" rx="6"
+            fill="#0f172a" stroke="#06b6d4" stroke-width="1.8"/>
+      <text x="{{ ix + 80 }}" y="{{ iy + 18 }}" text-anchor="middle" fill="#06b6d4" font-size="11" font-weight="800">HYBRID INVERTER</text>
+      <text x="{{ ix + 80 }}" y="{{ iy + 32 }}" text-anchor="middle" fill="#94a3b8" font-size="9">{{ r.inv_kw|fmt(1) }} kW · {{ (d.phase or 'single')|title }}-phase</text>
+      <text x="{{ ix + 80 }}" y="{{ iy + 50 }}" text-anchor="middle" fill="#cbd5e1" font-size="9">MPPT in: ≤{{ pps * 50 }} V DC</text>
+      <text x="{{ ix + 80 }}" y="{{ iy + 65 }}" text-anchor="middle" fill="#cbd5e1" font-size="9">AC out: {{ v_ac }} V {{ '3-phase' if (d.phase or 'single') == 'three' else '1-phase' }}</text>
+      <text x="{{ ix + 80 }}" y="{{ iy + 82 }}" text-anchor="middle" fill="#cbd5e1" font-size="9">DC isol. integral · AFCI · IP65</text>
+      <text x="{{ ix + 80 }}" y="{{ iy + 100 }}" text-anchor="middle" fill="#fbbf24" font-size="8" font-weight="700">{% if _is_ground %}EQUIPMENT SHELTER{% elif _is_flat %}PLANT ROOM / TECH BAY{% else %}INDOOR · UTILITY ROOM{% endif %}</text>
+
+      {# ── MOUNT-SPECIFIC ROUTING CALLOUTS ── #}
+      <rect x="40" y="320" width="600" height="118" rx="6" fill="#0a0a18" stroke="#1e293b" stroke-width="1"/>
+      <text x="50" y="338" fill="#06b6d4" font-size="10" font-weight="800">
+        {% if _is_ground %}A — GROUND-MOUNT CABLE MANAGEMENT
+        {% elif _is_flat %}A — FLAT-ROOF CABLE MANAGEMENT
+        {% else %}A — SLOPED-ROOF CABLE MANAGEMENT{% endif %}
+      </text>
+      {% if _is_ground %}
+        <text x="50" y="358" fill="#cbd5e1" font-size="10">• String cables from each sub-array enter <tspan fill="#fbbf24" font-weight="700">IP67 armoured conduit buried ≥600 mm</tspan> below grade.</text>
+        <text x="50" y="374" fill="#cbd5e1" font-size="10">• Cable draw-pits every 20 m for pull, lock MC4 with proper spanners before bury.</text>
+        <text x="50" y="390" fill="#cbd5e1" font-size="10">• Array-side exit: rigid IP65 sweep conduit + weatherproof gland; sleeve through array sub-frame.</text>
+        <text x="50" y="406" fill="#cbd5e1" font-size="10">• Combiner mounted outdoor on equipment shelter exterior wall (IP65), or inside shelter wall.</text>
+        <text x="50" y="422" fill="#cbd5e1" font-size="10">• Buried earth conductor (16 mm² CU bare) bonds array sub-frames and combiner box (BS 7430).</text>
+      {% elif _is_flat %}
+        <text x="50" y="358" fill="#cbd5e1" font-size="10">• String cables run in <tspan fill="#fbbf24" font-weight="700">galvanised cable tray</tspan> clipped to ballast feet or membrane stands (no direct membrane contact).</text>
+        <text x="50" y="374" fill="#cbd5e1" font-size="10">• At parapet, transition to UV-rated rigid conduit before the wall drop. EPDM sleeves at every membrane crossing.</text>
+        <text x="50" y="390" fill="#cbd5e1" font-size="10">• Combiner mounted at parapet (IP65) or just inside the technical bay below.</text>
+        <text x="50" y="406" fill="#cbd5e1" font-size="10">• Strut frame to inverter wall must keep cable bend radius ≥ 8× cable OD.</text>
+        <text x="50" y="422" fill="#cbd5e1" font-size="10">• All cable-tray earth-bonded; ballast mass + wind-load calcs per FM 4474 / FOREMAN.</text>
+      {% else %}
+        <text x="50" y="358" fill="#cbd5e1" font-size="10">• String cables clipped to <tspan fill="#fbbf24" font-weight="700">aluminium rails under panels</tspan>, exit at top-of-slope rail end.</text>
+        <text x="50" y="374" fill="#cbd5e1" font-size="10">• Roof penetration: pre-flashed boot or pitched-tile flashing kit, sealed with EPDM + polyurethane mastic.</text>
+        <text x="50" y="390" fill="#cbd5e1" font-size="10">• Drop through ceiling void in IP65 rigid conduit to inverter wall. Maintain 50 mm separation from AC cables.</text>
+        <text x="50" y="406" fill="#cbd5e1" font-size="10">• Combiner usually mounted indoor on inverter wall; outdoor variant requires IP65 box + UV-rated glands.</text>
+        <text x="50" y="422" fill="#cbd5e1" font-size="10">• Earth bond: 6 mm² CU from array rails to MET via earth-rod near inverter (BS 7671 §712).</text>
+      {% endif %}
+
+      {# ── LEGEND ── #}
+      <rect x="670" y="320" width="270" height="118" rx="6" fill="#0a0a18" stroke="#1e293b" stroke-width="1"/>
+      <text x="680" y="338" fill="#94a3b8" font-size="10" font-weight="800">LEGEND</text>
+      {% set _leg = [
+        (358, '#ef4444', 'DC+ string cable (6 mm² red)'),
+        (374, '#3b82f6', 'DC− string cable (6 mm² blue)'),
+        (390, '#fbbf24', 'String fuse / DC combiner box (IP65)'),
+        (406, '#22c55e', 'DC isolator (lockable, 1000 V DC)'),
+        (422, '#06b6d4', 'Inverter — MPPT input (≤ rated DC Vmax)')
+      ] %}
+      {% for ly, lc, lt in _leg %}
+        <rect x="685" y="{{ ly - 8 }}" width="22" height="6" rx="1.5" fill="{{ lc }}"/>
+        <text x="715" y="{{ ly - 2 }}" fill="#cbd5e1" font-size="9">{{ lt }}</text>
+      {% endfor %}
+    </svg>
+  </div>
+  <div class="notes-panel">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="note-item"><span class="dot">①</span><span class="txt"><strong>String balance:</strong> All {{ num_strings }} strings carry the SAME panel count ({{ pps }}) for matched Voc/Isc. Last string may carry {{ last_str_panels }} panels if {{ r.num_panels }} doesn't divide evenly — in that case, terminate the short string on its OWN MPPT input (do not parallel mismatched strings).</span></div>
+      </div>
+      <div class="col-md-4">
+        <div class="note-item"><span class="dot">②</span><span class="txt"><strong>{% if _is_ground %}Buried cable derating:{% elif _is_flat %}Cable-tray derating:{% else %}Conduit-in-roof derating:{% endif %}</strong> {% if _is_ground %}Buried armoured ratings per BS 7671 Tab 4D4A. Verify CCC at 30°C ambient and depth ≥ 600 mm.{% elif _is_flat %}Tray fill ≤ 40%; conductor temp limited to 70°C PVC. Confirm spacing per IEC 60364-5-52.{% else %}Cable in conduit on/in thermally-insulated wall uses Method B; apply rating factor 0.85 if total run > 3 m through insulation.{% endif %} Document the rating factor used on the as-built schedule.</span></div>
+      </div>
+      <div class="col-md-4">
+        <div class="note-item"><span class="dot">③</span><span class="txt"><strong>Combiner termination:</strong> Each string lands on its own fuse-holder (gPV {{ "%.0f"|format(pps * 12.0) }} A — round up to next standard size) and isolator. Combiner OUT to inverter via single common DC+/DC− pair. Lock the combiner DC isolator before inverter work; tag with name + date per BS 7671 §537.</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════
    DRAWING 2 — BATTERY BANK WIRING DIAGRAM
    ═══════════════════════════════════════════════════════════════ #}
 <div class="diag-wrap">
