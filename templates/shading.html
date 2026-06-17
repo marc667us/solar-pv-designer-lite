@@ -690,8 +690,15 @@
         {% set _house_y = _ground_y - _house_h_px %}
         <svg id="shadingSvg" viewBox="0 0 1000 540"
              style="width:100%;height:auto;border-radius:8px;
-                    background:linear-gradient(180deg,#87CEEB 0%,#a3d4e8 55%,#cfe4ec 95%);
                     border:1px solid #1e1e3a;display:block">
+          <defs>
+            <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop id="skyTop"    offset="0%"   stop-color="#87CEEB"/>
+              <stop id="skyMid"    offset="55%"  stop-color="#a3d4e8"/>
+              <stop id="skyBottom" offset="100%" stop-color="#cfe4ec"/>
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="1000" height="460" fill="url(#skyGrad)"/>
           <defs>
             <linearGradient id="bldgGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stop-color="#9a9aa6"/>
@@ -960,6 +967,17 @@
             Scale 8 px/m · sun direction · obstruction · cast shadow · tilted array
           </text>
         </svg>
+        <div class="d-flex align-items-center gap-2 mt-2 p-2"
+             style="background:linear-gradient(90deg,rgba(245,158,11,0.18) 0%,rgba(245,158,11,0.04) 100%);
+                    border:1px solid rgba(245,158,11,0.4);border-radius:6px;font-size:11px;color:#fbbf24;
+                    font-weight:600">
+          <i class="bi bi-arrow-down-circle-fill" style="font-size:16px"></i>
+          <span>
+            <strong>This is interactive.</strong>
+            Drag the time slider below or press <strong>Play</strong> to watch the sun arc across the sky
+            and shadows move in real time.
+          </span>
+        </div>
         <div class="d-flex flex-wrap align-items-center gap-3 mt-3 p-2"
              id="sunPositionStrip"
              style="background:rgba(8,16,32,0.55);border:1px solid #1e1e3a;
@@ -1007,6 +1025,46 @@
           var label  = document.getElementById('shadingTimeLabel');
           if (!slider || !disk || !group) return;
           var BASE_X = 500, BASE_Y = 70;  // server-rendered noon position
+          // Sky colour palette stops by hour: top/mid/bottom of the gradient.
+          // Tinted to match the time of day (deep blue noon, golden dawn/dusk,
+          // pink/purple twilight, navy night).
+          var SKY = {
+            5:  ['#0c1a4d', '#2a2a5c', '#5d3a6d'],  // pre-dawn
+            6:  ['#3d3b6b', '#a0667a', '#e7a07a'],  // dawn pink
+            7:  ['#5f8ec4', '#c8a06b', '#f4d18a'],  // golden
+            8:  ['#7eb4d8', '#bfd8e6', '#e6f0f3'],  // morning
+            10: ['#87CEEB', '#a3d4e8', '#cfe4ec'],  // bright morning
+            12: ['#4d8bcc', '#7fb1de', '#bcd9eb'],  // peak blue
+            14: ['#87CEEB', '#a3d4e8', '#cfe4ec'],  // bright afternoon
+            16: ['#7eb4d8', '#bfd8e6', '#e6f0f3'],  // late afternoon
+            17: ['#5f8ec4', '#c8a06b', '#f4d18a'],  // golden
+            18: ['#3d3b6b', '#a0667a', '#e7a07a'],  // dusk pink
+            19: ['#0c1a4d', '#2a2a5c', '#5d3a6d']   // twilight
+          };
+          var SKY_KEYS = Object.keys(SKY).map(function(k) { return parseInt(k, 10); })
+                                            .sort(function(a, b) { return a - b; });
+          function paintSky(hour) {
+            // Find the nearest two breakpoints and lerp between them.
+            var lower = SKY_KEYS[0], upper = SKY_KEYS[SKY_KEYS.length - 1];
+            for (var i = 0; i < SKY_KEYS.length - 1; i++) {
+              if (hour >= SKY_KEYS[i] && hour <= SKY_KEYS[i + 1]) {
+                lower = SKY_KEYS[i]; upper = SKY_KEYS[i + 1]; break;
+              }
+            }
+            var t = (upper === lower) ? 0 : (hour - lower) / (upper - lower);
+            t = Math.max(0, Math.min(1, t));
+            function lerp(a, b, k) { return Math.round(a + (b - a) * k); }
+            function hex2rgb(h) { return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
+            function rgb2hex(r,g,b) { var s = function(v){var h=v.toString(16);return h.length<2?'0'+h:h;}; return '#' + s(r) + s(g) + s(b); }
+            var stops = ['skyTop', 'skyMid', 'skyBottom'];
+            for (var s = 0; s < 3; s++) {
+              var c1 = hex2rgb(SKY[lower][s]);
+              var c2 = hex2rgb(SKY[upper][s]);
+              var c  = rgb2hex(lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t));
+              var el = document.getElementById(stops[s]);
+              if (el) el.setAttribute('stop-color', c);
+            }
+          }
           function sunXY(hour) {
             // Extended range 4..20 so the sun visibly rises from below
             // horizon at dawn and sinks below at dusk (clip-path hides
@@ -1123,8 +1181,9 @@
             }
           }
           var _origPaintSun = paintSun;
-          paintSun = function(hour) { _origPaintSun(hour); paintShadows(hour); };
+          paintSun = function(hour) { _origPaintSun(hour); paintShadows(hour); paintSky(hour); };
           slider.addEventListener('input', function() { paintSun(parseFloat(slider.value)); });
+          paintSky(parseFloat(slider.value) || 12);
           paintSun(parseFloat(slider.value) || 12);
           // -- Wire the Play button to auto-advance.
           var playBtn = document.getElementById('shadingTimePlay');
@@ -1163,8 +1222,8 @@
           <span class="small fw-bold" id="shadingTimeLabel"
                 style="min-width:90px;color:var(--solar-gold)">12:00</span>
           <input type="range" id="shadingTimeSlider" class="form-range flex-grow-1"
-                 min="0" max="24" value="12" step="1"
-                 style="accent-color:#f59e0b">
+                 min="4" max="20" value="12" step="0.5"
+                 style="accent-color:#f59e0b;height:1.5rem">
           <button type="button" id="shadingTimePlay"
                   class="btn btn-sm btn-outline-warning" style="font-size:11px">
             <i class="bi bi-play-fill"></i> Play
