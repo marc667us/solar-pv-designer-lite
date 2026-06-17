@@ -187,11 +187,15 @@ import subprocess  # noqa: E402
 
 VIDEO_TO_BUILD = [
     # (audio_filename_in_docs, screenshot_path_relative_to_project, mp4_out_name)
+    # Screenshots are LIVE-app captures taken by
+    # scripts/screenshot_for_walkthroughs.py (see CLAUDE.md /
+    # project_solar_pv_credentials memory for the admin creds). Re-run
+    # that script to refresh before a rebuild if the UI has changed.
     ("SolarPro_User_Walkthrough.mp3",
-     "docs/SolarPro_Beta_Flyer_1080.png",
+     "docs/screens/walkthrough_user.png",
      "SolarPro_User_Walkthrough.mp4"),
     ("SolarPro_Tech_Walkthrough.mp3",
-     "docs/shading_3d10_reference/3d10_dashboard_reference.png",
+     "docs/screens/walkthrough_tech.png",
      "SolarPro_Tech_Walkthrough.mp4"),
 ]
 

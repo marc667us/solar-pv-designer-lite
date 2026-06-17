@@ -217,7 +217,11 @@ The notes column cites the relevant standard for cable derating in each case (BS
 
 The shading viewport's sunlight is no longer a stick of yellow lines. Each illuminated target now renders as a three-layer beam: a wide warm-yellow cone polygon for the soft glow, a brighter cream-yellow inner cone for the hot core, and a fan of sharper ray accents drawn on top. The PV array gets a 9-ray fan with a 180 px wide beam. Each obstruction gets its own beam scaled to its width — a thin tree gets a 44 px beam, a 10-storey block gets the full 120 px. Both the beam and the ray accents recompute on every slider tick from the current sun position, so as you scrub the time the entire beam rotates with the sun. The shadow on the ground falls behind each obstruction exactly opposite the beam, making the geometric chain visible end-to-end: sun position → beam direction → obstruction face → shadow length.
 
-### 14.5 Sun-on-track sanity (engineering note)
+### 14.5 Video walkthroughs in Support
+
+The Resources & Tutorials page (**Support** in the nav) now serves MP4 video walkthroughs alongside the PDFs. Each "Watch (MP4)" button plays a 1280×720 video with a paired screenshot looping under the same neural-voice narration we previously distributed as MP3-only. The User Walkthrough plays under the SolarPro brand flyer; the Technical Walkthrough plays under the 3d10 shading dashboard reference. Both are also mirrored to the Desktop alongside the PDFs, so an installer team can sideload them to a laptop for a kitchen-table demo with no network.
+
+### 14.6 Sun-on-track sanity (engineering note)
 
 The sun disk's animation Bézier is now anchored to `M 60 460 Q 500 -340 940 460`, the exact curve the dashed yellow sun-path arc is drawn from. The two share a single mathematical formula, so the disk no longer drifts off the line at dawn / noon / dusk — it travels exactly through the 5 marker circles. If a client questions the simulation's accuracy, this is what to point to.
 

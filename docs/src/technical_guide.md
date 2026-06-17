@@ -477,7 +477,11 @@ Per illuminated target the renderer stacks three layers in z-order:
 
 Obstruction geometry is read live from each `[id^="shadow-"]` polygon's `data-base-x` / `data-base-w` / `data-h` attributes, so beams stay in sync with whatever obstruction set the project carries. The group is cleared (`innerHTML = ''`) when `hour < 5 || hour > 19` to mirror the existing `paintShadows` night cutoff. Implementation lives in `templates/shading.html`, function `paintDirectedRays`, immediately above the `paintSun` wrapper.
 
-### 18.5 Installation drawings — mount-aware string routing (Drawing 1B)
+### 18.5 Collateral build pipeline — PDFs, TTS audio, paired-image video
+
+`build_collateral_pdfs.py` is now a three-stage pipeline rather than just a PDF build. Stage 1 renders each `docs/src/*.md` source to a branded PDF via `markdown-pdf` (the same `MarkdownPdf` + `Section` flow we've used since the beta). Stage 2 calls `edge-tts` with anonymous Microsoft Edge endpoints (`en-US-AriaNeural` for the user walkthrough, `en-US-GuyNeural` for the technical walkthrough) to produce zero-cost neural-voice MP3s — see [[feedback-zero-cost-apis]]. Stage 3 composes each MP3 with a paired screenshot via the `ffmpeg` binary bundled by `imageio-ffmpeg` (no system install required) into a 1280×720 MP4 with letterbox padding and `-tune stillimage` for tiny file sizes. The `/support/asset/<slug>` route exposes the MP4s under the `video/mp4` MIME, replacing the earlier MP3 entries in the `_SUPPORT_ASSETS` whitelist.
+
+### 18.6 Installation drawings — mount-aware string routing (Drawing 1B)
 
 The Installation Drawings report (`/project/<pid>/report/installation/drawings`) carries a new Drawing 1B between the existing PV-panel internal-wiring diagram and the battery-bank diagram. One SVG with three Jinja branches keyed on the project's stored `mounting_type`:
 
