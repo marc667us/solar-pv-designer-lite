@@ -1383,6 +1383,14 @@
             // #svgDirectedRays, OUTSIDE the sun group, so they don't
             // translate with the disk — we always recompute (sun -> target)
             // afresh so the geometry stays correct as the slider moves.
+            //
+            // Beam construction (per target):
+            //   1) A wide, semi-transparent YELLOW POLYGON apex-at-sun,
+            //      base-on-target — this is the "cone of sunlight"
+            //      that gives the wide-beam look.
+            //   2) A denser fan of THIN ray lines drawn ON TOP of the
+            //      polygon — these are the "shafts of light" you see
+            //      in real sunlight piercing through.
             var rays = document.getElementById('svgDirectedRays');
             if (!rays) return;
             // Hide rays at night.
@@ -1396,22 +1404,41 @@
             var sx = p.x, sy = p.y + 22;
             // Build SVG string in memory so we hit the DOM once.
             var parts = [];
-            // 5-ray fan onto the panels (centre ray strongest).
-            var fanSpread = [-30, -15, 0, 15, 30];
-            for (var i = 0; i < fanSpread.length; i++) {
-              var spread = fanSpread[i];
+
+            // --- Beam onto the PV array ---------------------------------
+            // Cone half-width at the array: 90 px (so total beam ≈ 180 px).
+            var beamHalfArr = 90;
+            // Polygon: apex (sx, sy), spread at array y.
+            parts.push('<polygon points="' +
+                       sx.toFixed(1) + ',' + sy.toFixed(1) + ' ' +
+                       (ax - beamHalfArr).toFixed(1) + ',' + ay.toFixed(1) + ' ' +
+                       (ax + beamHalfArr).toFixed(1) + ',' + ay.toFixed(1) +
+                       '" fill="#fde68a" opacity="0.18"/>');
+            // Inner brighter polygon for the hot core of the beam.
+            parts.push('<polygon points="' +
+                       sx.toFixed(1) + ',' + sy.toFixed(1) + ' ' +
+                       (ax - beamHalfArr * 0.45).toFixed(1) + ',' + ay.toFixed(1) + ' ' +
+                       (ax + beamHalfArr * 0.45).toFixed(1) + ',' + ay.toFixed(1) +
+                       '" fill="#fef3c7" opacity="0.22"/>');
+            // 9 ray accents fanning across the full cone (more density than
+            // before — at ±90 / ±67 / ±45 / ±22 / 0).
+            var arrFan = [-90, -67, -45, -22, 0, 22, 45, 67, 90];
+            for (var i = 0; i < arrFan.length; i++) {
+              var spread = arrFan[i];
               var isCenter = (spread === 0);
               parts.push('<line x1="' + sx.toFixed(1) +
                          '" y1="' + sy.toFixed(1) +
                          '" x2="' + (ax + spread).toFixed(1) +
-                         '" y2="' + (ay + Math.abs(spread) * 0.15).toFixed(1) +
+                         '" y2="' + (ay + Math.abs(spread) * 0.10).toFixed(1) +
                          '" stroke="#fbbf24" stroke-width="' +
-                         (isCenter ? 1.6 : 1.0) +
-                         '" opacity="' + (isCenter ? 0.55 : 0.32) +
+                         (isCenter ? 1.8 : 1.0) +
+                         '" opacity="' + (isCenter ? 0.65 : 0.38) +
                          '" stroke-linecap="round"/>');
             }
-            // One ray per obstruction onto its top-centre. data-base-x,
-            // data-base-w, data-h are server-set on each shadow polygon.
+
+            // --- Beam onto each obstruction -----------------------------
+            // data-base-x, data-base-w, data-h are server-set on each
+            // shadow polygon.
             var shadows = document.querySelectorAll('[id^="shadow-"]');
             for (var j = 0; j < shadows.length; j++) {
               var sh = shadows[j];
@@ -1421,14 +1448,29 @@
               if (bw <= 0) continue;
               var obsCx = bx + bw / 2;
               var obsTopY = 460 - bh;  // ground_y is 460
-              // Draw 2 rays per obstruction so it looks lit, not stabbed.
-              for (var k = -1; k <= 1; k += 2) {
-                var endX = obsCx + k * Math.min(bw * 0.3, 10);
+              // Cone base half-width: at least 22 px, at most a third of
+              // the obstruction width — so even thin trees get a visible
+              // beam, but tall buildings don't drown in light.
+              var beamHalfObs = Math.max(22, Math.min(bw * 0.55, 60));
+              // Wide cone polygon.
+              parts.push('<polygon points="' +
+                         sx.toFixed(1) + ',' + sy.toFixed(1) + ' ' +
+                         (obsCx - beamHalfObs).toFixed(1) + ',' + obsTopY.toFixed(1) + ' ' +
+                         (obsCx + beamHalfObs).toFixed(1) + ',' + obsTopY.toFixed(1) +
+                         '" fill="#fde68a" opacity="0.14"/>');
+              // 5 ray accents per obstruction (±50%, ±25%, 0% of beam half).
+              var obsFan = [-1.0, -0.5, 0, 0.5, 1.0];
+              for (var k = 0; k < obsFan.length; k++) {
+                var rel = obsFan[k];
+                var isCenterRay = (rel === 0);
                 parts.push('<line x1="' + sx.toFixed(1) +
                            '" y1="' + sy.toFixed(1) +
-                           '" x2="' + endX.toFixed(1) +
+                           '" x2="' + (obsCx + rel * beamHalfObs).toFixed(1) +
                            '" y2="' + obsTopY.toFixed(1) +
-                           '" stroke="#fbbf24" stroke-width="1" opacity="0.40" stroke-linecap="round"/>');
+                           '" stroke="#fbbf24" stroke-width="' +
+                           (isCenterRay ? 1.4 : 0.9) +
+                           '" opacity="' + (isCenterRay ? 0.55 : 0.30) +
+                           '" stroke-linecap="round"/>');
               }
             }
             rays.innerHTML = parts.join('');
