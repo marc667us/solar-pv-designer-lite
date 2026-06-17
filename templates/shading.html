@@ -58,13 +58,16 @@
 {% set _obs = shading.get('obstructions') or [] %}
 {% set _results = project.data.get('results', {}) if project else {} %}
 {% set _pv_base = _results.get('pv_kw_base') or _results.get('pv_kw') or 0 %}
-{% set _factor  = _eng.bucket_factor if _eng else (shading.factor or 1.0) %}
-{# Engine bucket label + loss%, with fallbacks so the action paragraph #}
-{# at line ~763 never references an undefined name. Added 2026-06-15   #}
-{# to fix a regression where _loss / _label were left undefined when   #}
-{# the action block was introduced in 6d3cb21.                          #}
-{% set _label = (_eng.bucket_label if _eng else shading.label) or '' %}
-{% set _loss  = (_eng.bucket_loss_pct if _eng else shading.loss_pct) or 0 %}
+{# Active-factor precedence (fix 2026-06-17): the saved shading.factor
+   is the source of truth. _apply_shading_factor always writes it from
+   whichever source ran (engine / heuristic_fallback / manual). When a
+   manual override has been saved, the cached _eng block is left intact
+   for the 3D scene to render against, but the displayed factor MUST
+   come from the saved value or it silently ignores the user's pick. #}
+{% set _src = shading.get('factor_source') if shading else '' %}
+{% set _factor = (shading.factor if shading and shading.factor else (_eng.bucket_factor if _eng else 1.0)) %}
+{% set _label  = (shading.label  if shading and shading.label  else (_eng.bucket_label  if _eng else '')) or '' %}
+{% set _loss   = (shading.loss_pct if shading and shading.loss_pct is not none else (_eng.bucket_loss_pct if _eng else 0)) or 0 %}
 {% set _pv_corrected = (_pv_base / _factor) if _factor and _factor > 0 else _pv_base %}
 {% set _pv_recommended = (_pv_corrected | round(0, 'ceil')) %}
 <style>
@@ -441,9 +444,9 @@
     <div class="col-6 col-md-3 p-3 text-center" style="border-right:1px solid #1e1e3a">
       <div class="text-secondary" style="font-size:10px">AGENT FACTOR</div>
       <div class="fw-black" style="color:var(--solar-gold);font-size:22px">
-        {{ "%.2f"|format(_eng.bucket_factor) }}
+        {{ "%.2f"|format(_factor) }}
       </div>
-      <div class="text-secondary" style="font-size:10px">{{ _eng.bucket_label }}</div>
+      <div class="text-secondary" style="font-size:10px">{{ _label }}{% if _src == 'manual' %} · MANUAL{% endif %}</div>
     </div>
     <div class="col-6 col-md-3 p-3 text-center" style="border-right:1px solid #1e1e3a">
       <div class="text-secondary" style="font-size:10px">SYSTEM LOSS</div>
@@ -678,8 +681,8 @@
             </span>
             <span class="text-secondary">Factor —</span>
             <span class="fw-bold ms-1" style="color:var(--solar-gold)">
-              {{ "%.2f"|format(_eng.bucket_factor or 1.0) if _eng else "1.00" }}
-              · {{ _eng.bucket_label or "No shading" if _eng else "No shading" }}
+              {{ "%.2f"|format(_factor) }}
+              · {{ _label or "No shading" }}{% if _src == 'manual' %} · MANUAL{% endif %}
             </span>
           </div>
         </div>
@@ -1533,7 +1536,7 @@
           </div>
           <div class="col-6">
             <div class="text-secondary" style="font-size:9px;letter-spacing:.5px;text-transform:uppercase">Avg Index</div>
-            <div class="fw-black" style="color:#fff;font-size:18px">{{ "%.2f"|format(_eng.bucket_factor if _eng else 1.0) }}</div>
+            <div class="fw-black" style="color:#fff;font-size:18px">{{ "%.2f"|format(_factor) }}</div>
             <div class="text-secondary" style="font-size:9px">factor</div>
           </div>
           <div class="col-6">
@@ -2009,7 +2012,10 @@
           </thead>
           <tbody>
           {% for label, loss_pct, factor in shading_factors %}
-          {% set _is_pick = (factor == _eng.bucket_factor) %}
+          {# Active-factor pick (fix 2026-06-17): row highlight follows
+             the actually-saved factor (_factor) not the cached engine
+             bucket — so a manual override visibly wins the badge. #}
+          {% set _is_pick = (factor == _factor) %}
           <tr {% if _is_pick %}
               style="background:linear-gradient(90deg,
                        rgba(245,158,11,.20) 0%,
@@ -2066,13 +2072,15 @@
         <div class="d-flex justify-content-between align-items-center p-2 rounded"
              style="background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.35)">
           <div>
-            <div class="text-secondary" style="font-size:10px">AI SELECTED FACTOR</div>
+            <div class="text-secondary" style="font-size:10px">
+              {% if _src == 'manual' %}MANUAL FACTOR{% else %}AI SELECTED FACTOR{% endif %}
+            </div>
             <div class="small" style="color:var(--solar-gold);font-size:11px">
-              {{ _eng.bucket_label }}
+              {{ _label }}
             </div>
           </div>
           <div class="fw-black" style="color:var(--solar-gold);font-size:22px">
-            {{ "%.2f"|format(_eng.bucket_factor) }}
+            {{ "%.2f"|format(_factor) }}
           </div>
         </div>
         <div class="d-flex justify-content-between align-items-center p-2 rounded"
