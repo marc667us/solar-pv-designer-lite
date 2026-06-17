@@ -770,17 +770,42 @@
             {% set _obs_w_px = (_obs_w_m * _scale)|int %}
             {% set _obs_d_m = o.distance|float if o.distance else 10.0 %}
             {% set _dir = (o.direction or "W")|upper %}
-            {# Position west of house or east of house based on direction. #}
-            {% if "W" in _dir %}
-              {% set _obs_x = _house_x - _obs_w_px - ((_obs_d_m * _scale * 0.6)|int) %}
-            {% elif "E" in _dir %}
-              {% set _obs_x = _house_x + _house_w_px + ((_obs_d_m * _scale * 0.6)|int) %}
-            {% else %}
-              {% set _obs_x = _house_x + (_house_w_px // 2) - (_obs_w_px // 2) %}
-            {% endif %}
+            {# Radial placement: 16-compass direction -> (dx, dy, scale). #}
+            {# dx is east(+)/west(-) offset from house centre.            #}
+            {# dy moves obstruction back (-y, smaller) or forward (+y).   #}
+            {# scale shrinks back-row obstructions for depth illusion.    #}
+            {% set _RAD = {
+              'N':   {'dx':  0.0, 'dy': -0.50, 'sc': 0.78},
+              'NNE': {'dx':  0.38,'dy': -0.45, 'sc': 0.82},
+              'NE':  {'dx':  0.70,'dy': -0.32, 'sc': 0.85},
+              'ENE': {'dx':  0.92,'dy': -0.15, 'sc': 0.92},
+              'E':   {'dx':  1.00,'dy':  0.00, 'sc': 1.00},
+              'ESE': {'dx':  0.92,'dy':  0.15, 'sc': 1.05},
+              'SE':  {'dx':  0.70,'dy':  0.32, 'sc': 1.10},
+              'SSE': {'dx':  0.38,'dy':  0.45, 'sc': 1.12},
+              'S':   {'dx':  0.0, 'dy':  0.50, 'sc': 1.15},
+              'SSW': {'dx': -0.38,'dy':  0.45, 'sc': 1.12},
+              'SW':  {'dx': -0.70,'dy':  0.32, 'sc': 1.10},
+              'WSW': {'dx': -0.92,'dy':  0.15, 'sc': 1.05},
+              'W':   {'dx': -1.00,'dy':  0.00, 'sc': 1.00},
+              'WNW': {'dx': -0.92,'dy': -0.15, 'sc': 0.92},
+              'NW':  {'dx': -0.70,'dy': -0.32, 'sc': 0.85},
+              'NNW': {'dx': -0.38,'dy': -0.45, 'sc': 0.82}
+            } %}
+            {% set _r = _RAD.get(_dir) or _RAD['W'] %}
+            {# Apply scale to obstruction sizes (back row smaller). #}
+            {% set _obs_w_px = (_obs_w_px * _r.sc)|int %}
+            {% set _obs_h_px = (_obs_h_px * _r.sc)|int %}
+            {# x offset: scaled by distance + canvas spread. #}
+            {% set _dx_px = (_r.dx * (_obs_d_m * _scale * 0.7 + _house_w_px))|int %}
+            {% set _dy_px = (_r.dy * 60)|int %}
+            {# Anchor at house centre + horizon line. #}
+            {% set _obs_x = _house_x + (_house_w_px // 2) - (_obs_w_px // 2) + _dx_px %}
             {% if _obs_x < 20 %}{% set _obs_x = 20 %}{% endif %}
             {% if _obs_x + _obs_w_px > 980 %}{% set _obs_x = 980 - _obs_w_px %}{% endif %}
-            {% set _obs_y = _ground_y - _obs_h_px %}
+            {# Base sits on the horizon line; back-row obstructions      #}
+            {# shift UP a touch via _dy_px so they appear further away.  #}
+            {% set _obs_y = _ground_y - _obs_h_px + _dy_px %}
             {% set _otype = (o.type or "")|lower %}
             {# Cast shadow polygon - id'd so JS can move it with the sun. #}
             {% set _shdir = -1 if "E" in _dir else 1 %}
