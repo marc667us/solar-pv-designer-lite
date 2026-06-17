@@ -32,6 +32,8 @@ A short note on what changed in the platform on June seventeenth, twenty twenty 
 
 If you click one of the gold pill buttons to override the agent's chosen shading factor, the dashboard now visibly switches to your chosen number with a manual label, so you can confirm the override at a glance.
 
+The shading viewport now shows broad sunlight beams instead of stick-thin lines. Each obstruction in your project gets its own beam, scaled to its width, with the shadow falling directly opposite. The customer can see the full geometric chain: sun, beam, obstruction, shadow. Use this when explaining at the kitchen table why a north-east tree matters for an afternoon shading event.
+
 The installation drawings report has a new diagram called Drawing 1B, between the panel internal wiring and the battery bank. It shows your project's actual cable routing from the array to the combiner box to the inverter, with the route appropriate to your mount type. Sloped roofs show under-rail cable management with EPDM-flashed roof penetration. Flat roofs show galvanised cable tray on ballast stands. Ground mounts show armoured conduit buried at least six hundred millimetres, with cable draw-pits every twenty metres. The notes column cites the correct British Standard or IEC reference for each routing topology.
 
 Sign up free at SolarPro Global. No credit card required. The beta closes on July fifteenth twenty twenty six, and the first fifteen Ghana companies get a fifty percent lifetime discount.

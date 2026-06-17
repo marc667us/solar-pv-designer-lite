@@ -343,7 +343,11 @@ If you disagree with the agent's chosen factor (you have site knowledge the form
 
 Before today, the page would silently keep showing the engine's number while the system actually saved (and applied downstream) yours. The bug was cosmetic — your save was always honoured by the loads / sizing step — but the visible mismatch was confusing. Fixed.
 
-### 15.3 Installation Drawings — mount-specific routing diagram
+### 15.3 Sunlight beams onto panels AND obstructions
+
+The shading viewport's rays are now broad cones of light, not stick-thin lines. Each illuminated target — the PV array first, then every obstruction in your project — gets its own three-layer beam: a wide warm-yellow outer cone for soft glow, a brighter cream-yellow inner cone for the hot core, and a fan of sharper ray accents drawn on top. As you scrub the time slider, every beam rotates with the sun in lock-step. The shadow on the ground continues to fall directly opposite each beam, so the customer can see the full geometric chain: sun → beam → obstruction → shadow. Use this when explaining at the kitchen table why their north-east tree matters for an afternoon shading event.
+
+### 15.4 Installation Drawings — mount-specific routing diagram
 
 Open Results → **Installation Diagrams** → Page 2. Between Drawing 1 (PV panel internal wiring) and Drawing 2 (battery bank), you now have **Drawing 1B — String Cable Routing & Combiner**. It draws your actual project's strings (colour-coded per string) running into the combiner box and out to the inverter, with the cable management appropriate to your project's mount:
 

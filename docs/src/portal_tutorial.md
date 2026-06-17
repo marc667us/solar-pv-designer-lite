@@ -213,7 +213,11 @@ Open any project's results → **Installation Diagrams** → Page 2. Between the
 
 The notes column cites the relevant standard for cable derating in each case (BS 7671 Table 4D4A for buried, IEC 60364-5-52 for cable-tray fill, Method B for in-roof).
 
-### 14.4 Sun-on-track sanity (engineering note)
+### 14.4 Sun rays now illuminate panels AND obstructions
+
+The shading viewport's sunlight is no longer a stick of yellow lines. Each illuminated target now renders as a three-layer beam: a wide warm-yellow cone polygon for the soft glow, a brighter cream-yellow inner cone for the hot core, and a fan of sharper ray accents drawn on top. The PV array gets a 9-ray fan with a 180 px wide beam. Each obstruction gets its own beam scaled to its width — a thin tree gets a 44 px beam, a 10-storey block gets the full 120 px. Both the beam and the ray accents recompute on every slider tick from the current sun position, so as you scrub the time the entire beam rotates with the sun. The shadow on the ground falls behind each obstruction exactly opposite the beam, making the geometric chain visible end-to-end: sun position → beam direction → obstruction face → shadow length.
+
+### 14.5 Sun-on-track sanity (engineering note)
 
 The sun disk's animation Bézier is now anchored to `M 60 460 Q 500 -340 940 460`, the exact curve the dashed yellow sun-path arc is drawn from. The two share a single mathematical formula, so the disk no longer drifts off the line at dawn / noon / dusk — it travels exactly through the 5 marker circles. If a client questions the simulation's accuracy, this is what to point to.
 

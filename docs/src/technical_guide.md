@@ -465,7 +465,19 @@ When `factor_source == "manual"`, a `· MANUAL` suffix is appended to the displa
 
 Both `engine.shading_engine.SHADING_BUCKETS` and `web_app.SHADING_FACTORS` are the same eight rows (No shading → Very severe shading, 0% → 40% loss, 1.00 → 0.60 factor) with the same conservative snap rule: pick the highest row whose loss% is ≤ the computed loss%. When either path runs alone its output is one of those eight rows, so the visible factor on the dashboard is one of eight discrete values — never a continuous figure. Downstream code (loads / sizing / BOQ) reads only the snapped row.
 
-### 18.4 Installation drawings — mount-aware string routing (Drawing 1B)
+### 18.4 Directed sun-rays — wide-beam cone-of-light rendering
+
+The shading viewport's sun-rays used to live inside `#svgSunGroup` and translate with the disk, which made them look frozen relative to the array. They have been moved into a sibling `<g id="svgDirectedRays">` group OUTSIDE the sun group, and a new `paintDirectedRays(hour)` is wired into the `paintSun` wrapper chain. Per slider tick the group's `innerHTML` is replaced with a fresh build.
+
+Per illuminated target the renderer stacks three layers in z-order:
+
+1. An OUTER cone polygon `<polygon fill="#fde68a" opacity="0.18">` — apex at the current sun emit point `(p.x, p.y + 22)`, base on the target's plane with half-width 90 px for the PV array and a per-obstruction clamped `Math.max(22, Math.min(bw * 0.55, 60))` for each obstruction.
+2. An INNER hot-core polygon `<polygon fill="#fef3c7" opacity="0.22">` at 45 % of the outer half-width.
+3. A fan of ray accents `<line stroke="#fbbf24">` on top — 9 lines across the array at ±90 / ±67 / ±45 / ±22 / 0 px (centre 1.8 px @ 0.65 opacity, outer 1.0 px @ 0.38 opacity) and 5 lines per obstruction at relative offsets −1.0 / −0.5 / 0 / +0.5 / +1.0 × that target's beam half-width.
+
+Obstruction geometry is read live from each `[id^="shadow-"]` polygon's `data-base-x` / `data-base-w` / `data-h` attributes, so beams stay in sync with whatever obstruction set the project carries. The group is cleared (`innerHTML = ''`) when `hour < 5 || hour > 19` to mirror the existing `paintShadows` night cutoff. Implementation lives in `templates/shading.html`, function `paintDirectedRays`, immediately above the `paintSun` wrapper.
+
+### 18.5 Installation drawings — mount-aware string routing (Drawing 1B)
 
 The Installation Drawings report (`/project/<pid>/report/installation/drawings`) carries a new Drawing 1B between the existing PV-panel internal-wiring diagram and the battery-bank diagram. One SVG with three Jinja branches keyed on the project's stored `mounting_type`:
 
