@@ -1201,7 +1201,12 @@
           var group  = document.getElementById('svgSunGroup');
           var label  = document.getElementById('shadingTimeLabel');
           if (!slider || !disk || !group) return;
-          var BASE_X = 500, BASE_Y = 70;  // server-rendered noon position
+          // The server-rendered sun-group children sit at (_sun_x, _sun_y)
+          // = (700, 70) — see the Jinja set block near L762. The translate
+          // we apply must use those EXACT coords; using the curve's noon
+          // peak (500, 60) here would offset every position by (-200, -10)
+          // and the disk would visibly miss the dashed sun-path arc.
+          var BASE_X = 700, BASE_Y = 70;  // matches _sun_x / _sun_y above
           // Sky colour palette stops by hour: top/mid/bottom of the gradient.
           // Tinted to match the time of day (deep blue noon, golden dawn/dusk,
           // pink/purple twilight, navy night).
