@@ -161,6 +161,65 @@ def main():
             # should NOT kill the docs build. Surface and move on.
             print(f"  FAIL: {out} ({voice}) -- {type(e).__name__}: {e}")
 
+    print("=== Video ===")
+    for mp3_name, png_path, mp4_name in VIDEO_TO_BUILD:
+        audio = DOCS / mp3_name
+        image = (PROJECT / png_path) if not Path(png_path).is_absolute() else Path(png_path)
+        out = DOCS / mp4_name
+        if not audio.exists() or not image.exists():
+            print(f"  skip: missing {audio if not audio.exists() else image}")
+            continue
+        try:
+            render_video(image, audio, out)
+            shutil.copy2(out, DESKTOP / mp4_name)
+            print(f"  wrote: {out}")
+            print(f"  wrote: {DESKTOP / mp4_name}")
+        except Exception as e:
+            print(f"  FAIL: {out} -- {type(e).__name__}: {e}")
+
+
+# ── VIDEO BUILD ──────────────────────────────────────────────────────
+# Compose the MP3 walkthroughs into MP4 videos with a paired screenshot
+# (still image looped under the audio). Uses the ffmpeg binary bundled
+# by imageio-ffmpeg so no system install is required. Picks a relevant
+# screenshot per walkthrough.
+import subprocess  # noqa: E402
+
+VIDEO_TO_BUILD = [
+    # (audio_filename_in_docs, screenshot_path_relative_to_project, mp4_out_name)
+    ("SolarPro_User_Walkthrough.mp3",
+     "docs/SolarPro_Beta_Flyer_1080.png",
+     "SolarPro_User_Walkthrough.mp4"),
+    ("SolarPro_Tech_Walkthrough.mp3",
+     "docs/shading_3d10_reference/3d10_dashboard_reference.png",
+     "SolarPro_Tech_Walkthrough.mp4"),
+]
+
+
+def render_video(image: Path, audio: Path, out: Path):
+    """ffmpeg: loop still image under MP3 audio, output H.264/AAC MP4.
+
+    Scales the image into a 1280x720 frame with letterbox padding so
+    every player has consistent dimensions regardless of source PNG
+    aspect ratio. -tune stillimage + -shortest keeps the file tiny
+    (one I-frame per few seconds, stops when audio ends).
+    """
+    import imageio_ffmpeg
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    cmd = [
+        ffmpeg, "-y",
+        "-loop", "1", "-i", str(image),
+        "-i", str(audio),
+        "-c:v", "libx264",
+        "-tune", "stillimage",
+        "-c:a", "aac", "-b:a", "192k",
+        "-pix_fmt", "yuv420p",
+        "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black",
+        "-shortest",
+        str(out),
+    ]
+    subprocess.run(cmd, check=True, capture_output=True, text=True)
+
 
 if __name__ == "__main__":
     main()

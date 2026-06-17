@@ -2019,9 +2019,12 @@ _SUPPORT_ASSETS = {
     "technical-guide":  ("SolarPro_Technical_Guide.pdf",  "application/pdf"),
     "portal-tutorial":  ("SolarPro_Portal_Tutorial.pdf",  "application/pdf"),
     "sales-pitch":      ("SolarPro_Sales_Pitch.pdf",      "application/pdf"),
-    # Audio walkthroughs (edge-tts, en-US-AriaNeural / en-US-GuyNeural)
-    "user-walkthrough": ("SolarPro_User_Walkthrough.mp3", "audio/mpeg"),
-    "tech-walkthrough": ("SolarPro_Tech_Walkthrough.mp3", "audio/mpeg"),
+    # Video walkthroughs (edge-tts MP3 + paired screenshot composited
+    # into MP4 via ffmpeg; 2026-06-17 user request "audios need to
+    # have screenshots"). The MP3-only files are still on disk if
+    # someone needs audio-only - just not exposed here.
+    "user-walkthrough": ("SolarPro_User_Walkthrough.mp4", "video/mp4"),
+    "tech-walkthrough": ("SolarPro_Tech_Walkthrough.mp4", "video/mp4"),
 }
 
 @app.route("/support/asset/<slug>")
