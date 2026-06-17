@@ -101,7 +101,40 @@ def render(src: Path, out: Path, title: str, subject: str):
     return out
 
 
+# ── AUDIO BUILD ──────────────────────────────────────────────────────
+# Render the walkthrough text scripts to MP3 via edge-tts (Microsoft
+# Edge TTS, anonymous free endpoint — no API key, no per-call cost).
+# Pinned voices are professional neural ones; rate/pitch defaults so
+# the platform's own anti-spoof watermark works downstream.
+import asyncio  # edge-tts is async-only
+
+AUDIO_TO_BUILD = [
+    # (src_name, out_name, voice_id)
+    # voice_id list: `edge-tts --list-voices` from the CLI; en-US-AriaNeural
+    # is the standard warm-female professional voice, en-US-GuyNeural is
+    # the male equivalent. Both stream in 24 kHz mono MP3 by default.
+    ("audio_user_walkthrough.txt", "SolarPro_User_Walkthrough.mp3", "en-US-AriaNeural"),
+    ("audio_tech_walkthrough.txt", "SolarPro_Tech_Walkthrough.mp3", "en-US-GuyNeural"),
+]
+
+
+async def _render_audio_async(src: Path, out: Path, voice: str):
+    """Run edge-tts on `src` text -> `out` MP3. Async because edge-tts is."""
+    import edge_tts  # local import so PDF-only runs don't require it
+    text = src.read_text(encoding="utf-8")
+    # Strip blank lines that bloat output and confuse SSML inference.
+    text = "\n".join(line for line in text.splitlines() if line.strip())
+    communicate = edge_tts.Communicate(text=text, voice=voice)
+    await communicate.save(str(out))
+
+
+def render_audio(src: Path, out: Path, voice: str):
+    """Sync wrapper. Lets main() stay non-async."""
+    asyncio.run(_render_audio_async(src, out, voice))
+
+
 def main():
+    print("=== PDFs ===")
     for src_name, out_name, title, subject in DOCS_TO_BUILD:
         src = SRC_DIR / src_name
         out = DOCS / out_name
@@ -110,6 +143,23 @@ def main():
         shutil.copy2(out, DESKTOP / out_name)
         print(f"  wrote: {out}")
         print(f"  wrote: {DESKTOP / out_name}")
+
+    print("=== Audio ===")
+    for src_name, out_name, voice in AUDIO_TO_BUILD:
+        src = SRC_DIR / src_name
+        out = DOCS / out_name
+        if not src.exists():
+            print(f"  skip: {src} not found")
+            continue
+        try:
+            render_audio(src, out, voice)
+            shutil.copy2(out, DESKTOP / out_name)
+            print(f"  wrote: {out} ({voice})")
+            print(f"  wrote: {DESKTOP / out_name}")
+        except Exception as e:
+            # Audio is best-effort — a network glitch or TTS service blip
+            # should NOT kill the docs build. Surface and move on.
+            print(f"  FAIL: {out} ({voice}) -- {type(e).__name__}: {e}")
 
 
 if __name__ == "__main__":
