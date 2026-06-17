@@ -762,9 +762,14 @@
             {% if _obs_x + _obs_w_px > 980 %}{% set _obs_x = 980 - _obs_w_px %}{% endif %}
             {% set _obs_y = _ground_y - _obs_h_px %}
             {% set _otype = (o.type or "")|lower %}
-            {# Cast shadow polygon — extends from base toward PV array. #}
+            {# Cast shadow polygon - id'd so JS can move it with the sun. #}
             {% set _shdir = -1 if "E" in _dir else 1 %}
-            <polygon points="{{ _obs_x }},{{ _ground_y }}
+            <polygon id="shadow-{{ loop.index0 }}"
+                     data-base-x="{{ _obs_x }}"
+                     data-base-w="{{ _obs_w_px }}"
+                     data-h="{{ _obs_h_px }}"
+                     data-dir="{{ _dir }}"
+                     points="{{ _obs_x }},{{ _ground_y }}
                              {{ _obs_x + _obs_w_px }},{{ _ground_y }}
                              {{ _obs_x + _obs_w_px + (_obs_h_px * 0.7 * _shdir)|int }},{{ _ground_y + 6 }}
                              {{ _obs_x + (_obs_h_px * 0.5 * _shdir)|int }},{{ _ground_y + 6 }}"
@@ -796,9 +801,9 @@
               <rect x="{{ _obs_x }}" y="{{ _obs_y + _legH }}"
                     width="{{ _obs_w_px }}" height="{{ (_obs_h_px * 0.40)|int }}"
                     fill="#1976d2" stroke="#0d47a1" stroke-width="1"/>
-              <ellipse cx="{{ _obs_x + _obs_w_px//2 }}" cy="{{ _obs_y + _legH }}"
-                       rx="{{ _obs_w_px//2 }}" ry="{{ (_obs_w_px * 0.15)|int }}"
-                       fill="#2196f3" stroke="#0d47a1" stroke-width="1"/>
+              <line x1="{{ _obs_x }}" y1="{{ _obs_y + _legH }}"
+                    x2="{{ _obs_x + _obs_w_px }}" y2="{{ _obs_y + _legH }}"
+                    stroke="#0d47a1" stroke-width="1.5"/>
             {% else %}
               {# Building (default) — taller renders with floor bands + windows. #}
               <rect x="{{ _obs_x }}" y="{{ _obs_y }}"
@@ -861,6 +866,15 @@
                   fill="#fbbf24" font-size="9" font-weight="700" text-anchor="middle">
               D={{ "%.0f"|format(_obs_d_m) }}m · {{ _dir }}
             </text>
+            {# Numbered orange circle at the base - matches the reference image. #}
+            <g>
+              <circle cx="{{ _obs_x + _obs_w_px // 2 }}" cy="{{ _ground_y - 12 }}" r="14"
+                      fill="#f59e0b" stroke="#fff" stroke-width="2"/>
+              <text x="{{ _obs_x + _obs_w_px // 2 }}" y="{{ _ground_y - 8 }}"
+                    fill="#0a0a14" font-size="15" font-weight="900" text-anchor="middle">
+                {{ loop.index }}
+              </text>
+            </g>
           {% endfor %}
           {# ── House (smaller than tall obstructions per real scale). #}
           <rect x="{{ _house_x }}" y="{{ _house_y }}"
@@ -933,6 +947,38 @@
             Scale 8 px/m · sun direction · obstruction · cast shadow · tilted array
           </text>
         </svg>
+        <div class="d-flex flex-wrap align-items-center gap-3 mt-3 p-2"
+             id="sunPositionStrip"
+             style="background:rgba(8,16,32,0.55);border:1px solid #1e1e3a;
+                    border-radius:8px;font-size:11px">
+          <div class="px-2">
+            <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Sun Position</div>
+            <div class="fw-bold" style="color:#fbbf24;font-size:13px">
+              <i class="bi bi-brightness-high"></i>
+              <span id="sunPosTime">12:00</span>
+            </div>
+          </div>
+          <div class="px-2 border-start" style="border-color:#1e1e3a !important">
+            <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Altitude</div>
+            <div class="fw-bold" style="color:#f5f5fa;font-size:13px">
+              <span id="sunPosAlt">--</span><span>&deg;</span>
+            </div>
+          </div>
+          <div class="px-2 border-start" style="border-color:#1e1e3a !important">
+            <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Azimuth</div>
+            <div class="fw-bold" style="color:#f5f5fa;font-size:13px">
+              <span id="sunPosAz">--</span><span>&deg;</span>
+            </div>
+          </div>
+          <div class="px-2 border-start" style="border-color:#1e1e3a !important">
+            <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Direction</div>
+            <div class="fw-bold" id="sunPosDir" style="color:#9bd1ff;font-size:13px">--</div>
+          </div>
+          <div class="px-2 border-start ms-auto" style="border-color:#1e1e3a !important">
+            <div class="text-secondary" style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Status</div>
+            <div class="fw-bold" id="sunPosStatus" style="color:#4ade80;font-size:13px">Daylight</div>
+          </div>
+        </div>
         <script>
         (function() {
           // Sun animation tied to #shadingTimeSlider. Sun follows a parabolic arc:
@@ -976,7 +1022,93 @@
               var mn = Math.round((hour - hr) * 60);
               label.textContent = (hr < 10 ? '0' : '') + hr + ':' + (mn < 10 ? '0' : '') + mn;
             }
+            // Sun Position panel update.
+            var sunPosTime   = document.getElementById('sunPosTime');
+            var sunPosAlt    = document.getElementById('sunPosAlt');
+            var sunPosAz     = document.getElementById('sunPosAz');
+            var sunPosDir    = document.getElementById('sunPosDir');
+            var sunPosStatus = document.getElementById('sunPosStatus');
+            var hr2 = Math.floor(hour); var mn2 = Math.round((hour - hr2) * 60);
+            var hrText = (hr2 < 10 ? '0' : '') + hr2 + ':' + (mn2 < 10 ? '0' : '') + mn2;
+            if (sunPosTime) sunPosTime.textContent = hrText;
+            if (hour < 6 || hour > 18) {
+              if (sunPosAlt) sunPosAlt.textContent = '0';
+              if (sunPosAz) sunPosAz.textContent = '--';
+              if (sunPosDir) sunPosDir.textContent = '(below horizon)';
+              if (sunPosStatus) { sunPosStatus.textContent = 'Night'; sunPosStatus.style.color = '#6e6e9a'; }
+            } else {
+              // Simple altitude model: peaks at noon, 0 at horizons.
+              var alt = Math.max(0, Math.sin((hour - 6) / 12 * Math.PI) * 80);
+              // Azimuth: at 6 AM ~ 90 (East), at noon 180 (South), at 6 PM ~ 270 (West).
+              var az = 90 + (hour - 6) / 12 * 180;
+              if (sunPosAlt) sunPosAlt.textContent = alt.toFixed(1);
+              if (sunPosAz) sunPosAz.textContent = Math.round(az);
+              if (sunPosDir) {
+                var dirs = ['E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W'];
+                var idx = Math.min(dirs.length - 1, Math.max(0, Math.round((az - 90) / 22.5)));
+                sunPosDir.textContent = dirs[idx];
+              }
+              if (sunPosStatus) {
+                if (alt < 15) { sunPosStatus.textContent = 'Golden hour'; sunPosStatus.style.color = '#fbbf24'; }
+                else if (alt > 60) { sunPosStatus.textContent = 'Peak sun'; sunPosStatus.style.color = '#facc15'; }
+                else { sunPosStatus.textContent = 'Daylight'; sunPosStatus.style.color = '#4ade80'; }
+              }
+            }
+            // Highlight active thumbnail.
+            var thumbs = document.querySelectorAll('#shadingThumbStrip .thumb-card');
+            if (thumbs.length) {
+              var hourTimes = ['06:00','07:00','08:00','09:00','10:00','11:00','12:00',
+                               '13:00','14:00','15:00','16:00','17:00'];
+              var hrIdx = Math.max(0, Math.min(hourTimes.length - 1, Math.floor(hour) - 6));
+              for (var t = 0; t < thumbs.length; t++) {
+                if (t === hrIdx) {
+                  thumbs[t].style.boxShadow = '0 0 0 2px #f59e0b';
+                  thumbs[t].style.background = 'linear-gradient(180deg, #2a2030 0%, #1a1023 100%)';
+                } else {
+                  thumbs[t].style.boxShadow = '';
+                  thumbs[t].style.background = 'linear-gradient(180deg, #1a253d 0%, #0d1023 100%)';
+                }
+              }
+            }
           }
+          function paintShadows(hour) {
+            // Recompute each shadow polygon for the current sun hour.
+            // Sun-to-shadow geometry: shadow length grows as sun lowers.
+            //   noon: length factor ~0.10 of obstruction height
+            //   6/18: length factor ~1.50
+            //   below horizon: hide shadows
+            var shadows = document.querySelectorAll('[id^="shadow-"]');
+            if (!shadows.length) return;
+            if (hour < 6 || hour > 18) {
+              for (var i = 0; i < shadows.length; i++) shadows[i].style.display = 'none';
+              return;
+            }
+            // Sun altitude proxy: t=0 at horizon, t=1 at noon.
+            var solar_t = 1 - Math.abs(hour - 12) / 6;  // 0..1
+            var len_factor = 0.10 + (1 - solar_t) * 1.80;  // 0.10 high noon, 1.90 at horizon
+            // Shadow direction: sun east at 6 AM -> shadow goes WEST (negative);
+            //                   sun west at 6 PM -> shadow goes EAST (positive).
+            var shadow_dx_sign = (hour - 12) < 0 ? -1 : 1;
+            for (var s = 0; s < shadows.length; s++) {
+              var sh = shadows[s];
+              sh.style.display = '';
+              var bx = parseFloat(sh.getAttribute('data-base-x')) || 0;
+              var bw = parseFloat(sh.getAttribute('data-base-w')) || 0;
+              var bh = parseFloat(sh.getAttribute('data-h')) || 0;
+              var dir = sh.getAttribute('data-dir') || 'W';
+              // Skip dynamic sign when the operator-saved direction conflicts;
+              // we still want the shadow to track the sun authoritatively.
+              var dx = bh * len_factor * shadow_dx_sign;
+              var ground_y = 460;
+              var pts = bx + ',' + ground_y + ' ' +
+                        (bx + bw) + ',' + ground_y + ' ' +
+                        (bx + bw + dx).toFixed(1) + ',' + (ground_y + 6) + ' ' +
+                        (bx + dx).toFixed(1) + ',' + (ground_y + 6);
+              sh.setAttribute('points', pts);
+            }
+          }
+          var _origPaintSun = paintSun;
+          paintSun = function(hour) { _origPaintSun(hour); paintShadows(hour); };
           slider.addEventListener('input', function() { paintSun(parseFloat(slider.value)); });
           paintSun(parseFloat(slider.value) || 12);
           // -- Wire the Play button to auto-advance.
