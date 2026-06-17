@@ -1035,6 +1035,52 @@
             <div class="fw-bold" id="sunPosStatus" style="color:#4ade80;font-size:13px">Daylight</div>
           </div>
         </div>
+        {# ── Sun Path Diagram — compass-style plan view with the daily arc + sun dot. #}
+        <div class="d-flex align-items-stretch gap-3 mt-2"
+             style="background:rgba(8,16,32,0.55);border:1px solid #1e1e3a;
+                    border-radius:8px;padding:10px">
+          <div class="text-center" style="min-width:200px">
+            <div class="text-secondary mb-1"
+                 style="font-size:9px;letter-spacing:.6px;text-transform:uppercase">Sun Path Diagram</div>
+            <svg viewBox="0 0 200 200" width="180" height="180" style="display:block;margin:0 auto">
+              <defs>
+                <radialGradient id="domeGrad" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%"   stop-color="#1a253d"/>
+                  <stop offset="100%" stop-color="#0a0a14"/>
+                </radialGradient>
+              </defs>
+              <circle cx="100" cy="100" r="90" fill="url(#domeGrad)" stroke="#1e1e3a" stroke-width="1"/>
+              <circle cx="100" cy="100" r="60" fill="none" stroke="#1e1e3a" stroke-width="0.5"/>
+              <circle cx="100" cy="100" r="30" fill="none" stroke="#1e1e3a" stroke-width="0.5"/>
+              <line x1="10" y1="100" x2="190" y2="100" stroke="#1e1e3a" stroke-width="0.5"/>
+              <line x1="100" y1="10" x2="100" y2="190" stroke="#1e1e3a" stroke-width="0.5"/>
+              <text x="100" y="20"  fill="#ef4444" font-size="10" text-anchor="middle" font-weight="800">N</text>
+              <text x="100" y="195" fill="#9bd1ff" font-size="10" text-anchor="middle" font-weight="700">S</text>
+              <text x="8"   y="104" fill="#9bd1ff" font-size="10" text-anchor="start" font-weight="700">W</text>
+              <text x="192" y="104" fill="#9bd1ff" font-size="10" text-anchor="end"   font-weight="700">E</text>
+              {# Daily sun-path arc (east -> south -> west for northern hemisphere). #}
+              <path id="sunPathArc" d="M 175 100 Q 100 30 25 100" stroke="#fbbf24"
+                    stroke-width="2" fill="none" stroke-dasharray="4 3" opacity="0.8"/>
+              {# Hour marker rings on the arc. #}
+              <g id="sunPathMarkers" fill="#fbbf24" stroke="#fff" stroke-width="0.8">
+                <circle cx="175" cy="100" r="2.5"/>
+                <circle cx="138" cy="62"  r="2.5"/>
+                <circle cx="100" cy="35"  r="2.5"/>
+                <circle cx="62"  cy="62"  r="2.5"/>
+                <circle cx="25"  cy="100" r="2.5"/>
+              </g>
+              {# Live sun-position dot. #}
+              <circle id="sunPathDot" cx="100" cy="35" r="6" fill="#ffd24a" stroke="#fff" stroke-width="1.5"/>
+            </svg>
+          </div>
+          <div class="flex-grow-1 d-flex flex-column justify-content-center small text-secondary"
+               style="font-size:11px;line-height:1.6">
+            <div><span style="color:#fbbf24">Arc:</span> the sun's daily path traced across the sky dome (E → S → W in the northern hemisphere).</div>
+            <div><span style="color:#ef4444">N:</span> north is the top of the diagram, matching the on-canvas compass.</div>
+            <div><span style="color:#ffd24a">Yellow dot:</span> live sun position. Drag the time slider below to watch it move.</div>
+            <div><span style="color:#9bd1ff">Hour markers:</span> 06:00 (east) · 09:00 · 12:00 (north peak) · 15:00 · 18:00 (west).</div>
+          </div>
+        </div>
         <script>
         (function() {
           // Sun animation tied to #shadingTimeSlider. Sun follows a parabolic arc:
@@ -1205,8 +1251,27 @@
               sh.setAttribute('points', pts);
             }
           }
+          function paintSunPathDot(hour) {
+            var dot = document.getElementById('sunPathDot');
+            if (!dot) return;
+            if (hour < 5 || hour > 19) { dot.style.display = 'none'; return; }
+            dot.style.display = '';
+            // Map the daily arc onto the (180x180) circle. Arc parameter
+            // t goes 0 at 6 AM -> 0.5 at noon -> 1 at 6 PM.
+            var t = Math.max(0, Math.min(1, (hour - 6) / 12));
+            // Quadratic Bezier from (175,100) via (100,30) to (25,100).
+            var x = (1 - t) * (1 - t) * 175 + 2 * (1 - t) * t * 100 + t * t * 25;
+            var y = (1 - t) * (1 - t) * 100 + 2 * (1 - t) * t * 30  + t * t * 100;
+            dot.setAttribute('cx', x.toFixed(1));
+            dot.setAttribute('cy', y.toFixed(1));
+          }
           var _origPaintSun = paintSun;
-          paintSun = function(hour) { _origPaintSun(hour); paintShadows(hour); paintSky(hour); };
+          paintSun = function(hour) {
+            _origPaintSun(hour);
+            paintShadows(hour);
+            paintSky(hour);
+            paintSunPathDot(hour);
+          };
           slider.addEventListener('input', function() { paintSun(parseFloat(slider.value)); });
           paintSky(parseFloat(slider.value) || 12);
           paintSun(parseFloat(slider.value) || 12);
