@@ -46,11 +46,13 @@
            style="background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;border:none">
           <i class="bi bi-book me-1"></i>Read Guide
         </a>
-        <a href="{{ url_for('support_user_guide') }}#audio" class="btn btn-sm px-3"
+        <a href="{{ url_for('support_asset', slug='user-walkthrough') }}" class="btn btn-sm px-3"
+           target="_blank"
            style="background:#0ea5e922;color:#0ea5e9;border:1px solid #0ea5e944">
-          <i class="bi bi-play-circle me-1"></i>Listen
+          <i class="bi bi-play-circle me-1"></i>Listen (MP3)
         </a>
-        <a href="{{ url_for('support_user_guide_pdf') }}" class="btn btn-sm px-3"
+        <a href="{{ url_for('support_asset', slug='user-guide') }}" class="btn btn-sm px-3"
+           target="_blank"
            style="background:#ef444422;color:#ef4444;border:1px solid #ef444444">
           <i class="bi bi-file-earmark-pdf me-1"></i>PDF
         </a>
@@ -97,34 +99,104 @@
     </div>
   </div>
 
-  <!-- Placeholder — more coming -->
+  <!-- Portal Tutorial (admin onboarding walkthrough) -->
   <div class="col-md-6">
-    <div class="solar-card p-4 h-100 d-flex flex-column" style="opacity:.5">
+    <div class="solar-card p-4 h-100 d-flex flex-column">
       <div class="d-flex align-items-center gap-3 mb-3">
-        <div style="width:48px;height:48px;border-radius:12px;background:#1e1e3a;border:1px solid #1e1e3a;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
-          ðŸ“Š
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#f59e0b22,#f59e0b44);border:1px solid #f59e0b44;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
+          <i class="bi bi-mortarboard-fill" style="color:#f59e0b"></i>
         </div>
         <div>
-          <div class="fw-bold" style="font-size:15px">Financial Analysis Guide</div>
-          <div class="text-secondary" style="font-size:12px">NPV, IRR, payback, loan modelling</div>
+          <div class="fw-bold" style="font-size:15px">Portal Tutorial</div>
+          <div class="text-secondary" style="font-size:12px">Admin onboarding — invite reps, watch projects, run reports</div>
         </div>
       </div>
-      <p class="text-secondary" style="font-size:13px">Coming soon.</p>
+      <p class="text-secondary" style="font-size:13px;line-height:1.6">
+        Covers logging in for the first time, the dashboard layout, staff management,
+        the in-app tour, troubleshooting, and the June 17 shipped features
+        (shading dashboard cards, sun-on-track Bézier, manual factor override,
+        mount-aware wiring diagram).
+      </p>
+      <div class="mt-2 mb-3 d-flex flex-wrap gap-2" style="font-size:11px">
+        <span class="badge" style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44">15 Sections</span>
+        <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">Admin-Friendly</span>
+        <span class="badge" style="background:#0ea5e922;color:#0ea5e9;border:1px solid #0ea5e944">~12 min read</span>
+      </div>
+      <div class="mt-auto d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('support_asset', slug='portal-tutorial') }}" class="btn btn-sm px-3 fw-bold"
+           target="_blank"
+           style="background:linear-gradient(135deg,#f59e0b,#ea580c);color:#000;border:none">
+          <i class="bi bi-file-earmark-pdf me-1"></i>Open PDF
+        </a>
+      </div>
     </div>
   </div>
 
+  <!-- Technical Guide (engineering basis) -->
   <div class="col-md-6">
-    <div class="solar-card p-4 h-100 d-flex flex-column" style="opacity:.5">
+    <div class="solar-card p-4 h-100 d-flex flex-column">
       <div class="d-flex align-items-center gap-3 mb-3">
-        <div style="width:48px;height:48px;border-radius:12px;background:#1e1e3a;border:1px solid #1e1e3a;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
-          ðŸ”‹
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#a78bfa22,#a78bfa44);border:1px solid #a78bfa44;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
+          <i class="bi bi-cpu-fill" style="color:#a78bfa"></i>
         </div>
         <div>
-          <div class="fw-bold" style="font-size:15px">Load Scheduling Guide</div>
-          <div class="text-secondary" style="font-size:12px">Accurate load entry for reliable sizing</div>
+          <div class="fw-bold" style="font-size:15px">Technical Guide</div>
+          <div class="text-secondary" style="font-size:12px">Engineering basis — formulas, standards, integration</div>
         </div>
       </div>
-      <p class="text-secondary" style="font-size:13px">Coming soon.</p>
+      <p class="text-secondary" style="font-size:13px;line-height:1.6">
+        Every formula and standard the platform applies. PV / battery / inverter / DC / AC
+        sizing, BS 7671 + IEC 62548 + IEC 60364 citations, the BOQ engine, IEC 61724 yield,
+        economic analysis, and the June 17 engineering changelog (Bézier sun model,
+        factor precedence chain, mount-aware Drawing 1B).
+      </p>
+      <div class="mt-2 mb-3 d-flex flex-wrap gap-2" style="font-size:11px">
+        <span class="badge" style="background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44">18 Sections</span>
+        <span class="badge" style="background:#ef444422;color:#ef4444;border:1px solid #ef444444">Engineer-Grade</span>
+        <span class="badge" style="background:#0ea5e922;color:#0ea5e9;border:1px solid #0ea5e944">~30 min read</span>
+      </div>
+      <div class="mt-auto d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('support_asset', slug='tech-walkthrough') }}" class="btn btn-sm px-3"
+           target="_blank"
+           style="background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44">
+          <i class="bi bi-play-circle me-1"></i>Listen (MP3)
+        </a>
+        <a href="{{ url_for('support_asset', slug='technical-guide') }}" class="btn btn-sm px-3 fw-bold"
+           target="_blank"
+           style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;border:none">
+          <i class="bi bi-file-earmark-pdf me-1"></i>Open PDF
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sales Pitch (inbound call script) -->
+  <div class="col-md-6">
+    <div class="solar-card p-4 h-100 d-flex flex-column">
+      <div class="d-flex align-items-center gap-3 mb-3">
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#ec489922,#ec489944);border:1px solid #ec489944;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
+          <i class="bi bi-megaphone-fill" style="color:#ec4899"></i>
+        </div>
+        <div>
+          <div class="fw-bold" style="font-size:15px">Sales Pitch (Inbound Call Script)</div>
+          <div class="text-secondary" style="font-size:12px">For your reps — handle inbound prospect calls</div>
+        </div>
+      </div>
+      <p class="text-secondary" style="font-size:13px;line-height:1.6">
+        Discovery questions, value framing, objection handling, the 20-minute proposal demo,
+        pricing tier explanations, and the qualifying close. Ghana-tailored examples.
+      </p>
+      <div class="mt-2 mb-3 d-flex flex-wrap gap-2" style="font-size:11px">
+        <span class="badge" style="background:#ec489922;color:#ec4899;border:1px solid #ec489944">Sales Enablement</span>
+        <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">5-Minute Refresh</span>
+      </div>
+      <div class="mt-auto d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('support_asset', slug='sales-pitch') }}" class="btn btn-sm px-3 fw-bold"
+           target="_blank"
+           style="background:linear-gradient(135deg,#ec4899,#db2777);color:#fff;border:none">
+          <i class="bi bi-file-earmark-pdf me-1"></i>Open PDF
+        </a>
+      </div>
     </div>
   </div>
 
