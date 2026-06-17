@@ -872,17 +872,60 @@
                           fill="#a8c8e0" opacity="0.92"/>
                   {% endfor %}
                 {% endfor %}
-                <text x="{{ _obs_x + _obs_w_px//2 }}" y="{{ _obs_y - 10 }}"
-                      fill="#1a1a2e" font-size="11" font-weight="700" text-anchor="middle">
-                  {{ _n_floors }}-storey · {{ "%.0f"|format(_obs_h_m) }}m
-                </text>
-              {% else %}
-                <text x="{{ _obs_x + _obs_w_px//2 }}" y="{{ _obs_y - 10 }}"
-                      fill="#1a1a2e" font-size="11" font-weight="700" text-anchor="middle">
-                  {{ (o.type or "Obstruction")|capitalize }} · {{ "%.0f"|format(_obs_h_m) }}m
-                </text>
               {% endif %}
             {% endif %}
+            {# Styled label card next to the obstruction. Sits OUTBOARD #}
+            {# (left for W directions, right for E directions) with a   #}
+            {# leader line connecting to the top of the obstruction.    #}
+            {% set _card_w = 140 %}
+            {% set _card_h = 60 %}
+            {% if 'W' in _dir %}
+              {% set _card_x = _obs_x - _card_w - 8 %}
+            {% else %}
+              {% set _card_x = _obs_x + _obs_w_px + 8 %}
+            {% endif %}
+            {% if _card_x < 4 %}{% set _card_x = _obs_x + _obs_w_px + 8 %}{% endif %}
+            {% if _card_x + _card_w > 996 %}{% set _card_x = _obs_x - _card_w - 8 %}{% endif %}
+            {# Clamp y so the card never falls below ground or off top. #}
+            {% set _card_y = _obs_y - 10 %}
+            {% if _card_y < 50 %}{% set _card_y = 50 %}{% endif %}
+            {% if _card_y + _card_h > _ground_y - 6 %}{% set _card_y = _ground_y - _card_h - 6 %}{% endif %}
+            {# Leader line from card edge to obstruction top. #}
+            {% set _leader_x1 = _card_x + (_card_w if 'W' in _dir else 0) %}
+            {% set _leader_y1 = _card_y + 12 %}
+            {% set _leader_x2 = _obs_x + (_obs_w_px // 2) %}
+            {% set _leader_y2 = _obs_y %}
+            <line x1="{{ _leader_x1 }}" y1="{{ _leader_y1 }}"
+                  x2="{{ _leader_x2 }}" y2="{{ _leader_y2 }}"
+                  stroke="#fbbf24" stroke-width="1" stroke-dasharray="3 2" opacity="0.75"/>
+            <rect x="{{ _card_x }}" y="{{ _card_y }}"
+                  width="{{ _card_w }}" height="{{ _card_h }}"
+                  fill="rgba(8,16,32,0.92)" stroke="#fbbf24" stroke-width="1.4"
+                  rx="6" ry="6"/>
+            {# Numbered orange circle in top-left of the card. #}
+            <circle cx="{{ _card_x + 14 }}" cy="{{ _card_y + 14 }}" r="10"
+                    fill="#f59e0b" stroke="#fff" stroke-width="1.4"/>
+            <text x="{{ _card_x + 14 }}" y="{{ _card_y + 18 }}"
+                  fill="#0a0a14" font-size="12" font-weight="900" text-anchor="middle">
+              {{ loop.index }}
+            </text>
+            <text x="{{ _card_x + 30 }}" y="{{ _card_y + 18 }}"
+                  fill="#fbbf24" font-size="10" font-weight="800"
+                  style="text-transform:uppercase;letter-spacing:.5px">
+              {{ ((o.type or "Obstruction")[:18])|capitalize }}
+            </text>
+            <text x="{{ _card_x + 8 }}" y="{{ _card_y + 33 }}"
+                  fill="#e6e6f5" font-size="9">
+              Height: <tspan fill="#ffd24a" font-weight="700">{{ "%.1f"|format(_obs_h_m) }}m</tspan>
+            </text>
+            <text x="{{ _card_x + 8 }}" y="{{ _card_y + 45 }}"
+                  fill="#e6e6f5" font-size="9">
+              Distance: <tspan fill="#ffd24a" font-weight="700">{{ "%.1f"|format(_obs_d_m) }}m</tspan>
+            </text>
+            <text x="{{ _card_x + 8 }}" y="{{ _card_y + 56 }}"
+                  fill="#e6e6f5" font-size="9">
+              Direction: <tspan fill="#9ec5fe" font-weight="700">{{ _dir }}</tspan>
+            </text>
             {# Height dimension callout — yellow lines + label on outboard side. #}
             {% set _cx_off = (-20 if "W" in _dir else (_obs_w_px + 20)) %}
             <line x1="{{ _obs_x + _cx_off }}" y1="{{ _obs_y }}"
@@ -911,15 +954,6 @@
                   fill="#fbbf24" font-size="9" font-weight="700" text-anchor="middle">
               D={{ "%.0f"|format(_obs_d_m) }}m · {{ _dir }}
             </text>
-            {# Numbered orange circle at the base - matches the reference image. #}
-            <g>
-              <circle cx="{{ _obs_x + _obs_w_px // 2 }}" cy="{{ _ground_y - 12 }}" r="14"
-                      fill="#f59e0b" stroke="#fff" stroke-width="2"/>
-              <text x="{{ _obs_x + _obs_w_px // 2 }}" y="{{ _ground_y - 8 }}"
-                    fill="#0a0a14" font-size="15" font-weight="900" text-anchor="middle">
-                {{ loop.index }}
-              </text>
-            </g>
           {% endfor %}
           {# ── House (smaller than tall obstructions per real scale). #}
           <rect x="{{ _house_x }}" y="{{ _house_y }}"
