@@ -755,9 +755,36 @@
           {% for gx in [60, 180, 340, 580, 780, 880] %}
           <path d="M {{ gx }} 470 q -2 -8 4 -10 q 6 4 -2 12" fill="#558b2f" opacity="0.6"/>
           {% endfor %}
-          {# ── Sun arc trajectory (east -> peak -> west) #}
-          <path d="M 60 380 Q 500 -20 940 380" stroke="#fbbf24" stroke-width="2"
+          {# ── Sun arc trajectory (east -> peak -> west).
+             MUST match the Bézier the JS uses in sunXY(hour) — see L~1218.
+             Endpoints sit on the ground line (y=460) so dawn/dusk meet
+             the horizon; control point (500,-340) drives the curve so
+             noon peak lands at (500, 60) where the server-side sun
+             defaults render and the JS animation places the disk. #}
+          <path d="M 60 460 Q 500 -340 940 460" stroke="#fbbf24" stroke-width="2"
                 stroke-dasharray="7 5" fill="none" opacity="0.6"/>
+          {# 5 labelled time-markers along the same Bézier (3d10 reference §11/12).
+             Coords are evaluated from M 60 460 Q 500 -340 940 460 at the
+             corresponding t values: t = (h - 6) / 12. Group is decorative —
+             the JS sun rides the path through sunXY() independently. #}
+          <g id="sunArcMarkers" pointer-events="none">
+            {% for _mk in [
+              {'t':'07:00', 'x':133, 'y':338, 'lx':133, 'ly':356},
+              {'t':'09:30', 'x':317, 'y':130, 'lx':317, 'ly':115},
+              {'t':'12:00', 'x':500, 'y': 60, 'lx':500, 'ly': 45},
+              {'t':'14:30', 'x':683, 'y':130, 'lx':683, 'ly':115},
+              {'t':'17:00', 'x':867, 'y':338, 'lx':867, 'ly':356}
+            ] %}
+              <circle cx="{{ _mk.x }}" cy="{{ _mk.y }}" r="6"
+                      fill="#ffd24a" stroke="#fff" stroke-width="1.4" opacity="0.95"/>
+              <circle cx="{{ _mk.x }}" cy="{{ _mk.y }}" r="2.2" fill="#1a1a14"/>
+              <text x="{{ _mk.lx }}" y="{{ _mk.ly }}" fill="#fff" font-size="11"
+                    font-weight="800" text-anchor="middle"
+                    style="paint-order:stroke;stroke:#000;stroke-width:2.5;stroke-linejoin:round">
+                {{ _mk.t }}
+              </text>
+            {% endfor %}
+          </g>
           {# Sun position (default noon-ish) — read from engine if available #}
           {% set _sun_x = 700 %}
           {% set _sun_y = 70 %}
@@ -1281,7 +1308,7 @@
             var thumbs = document.querySelectorAll('#shadingThumbStrip .thumb-card');
             if (thumbs.length) {
               var hourTimes = ['06:00','07:00','08:00','09:00','10:00','11:00','12:00',
-                               '13:00','14:00','15:00','16:00','17:00'];
+                               '13:00','14:00','15:00','16:00','17:00','18:00'];
               var hrIdx = Math.max(0, Math.min(hourTimes.length - 1, Math.floor(hour) - 6));
               for (var t = 0; t < thumbs.length; t++) {
                 if (t === hrIdx) {
@@ -1444,6 +1471,130 @@
       </div>
     </div>
     <div class="col-12 col-lg-3 p-3" style="border-left:1px solid #1e1e3a;background:rgba(255,255,255,.02)">
+
+      {# ── 3d10 reference cards — OBSTRUCTION DETAILS / SHADING SUMMARY  #}
+      {# / SHADING IMPACT (PV MODULES). Mirror the three right-rail cards #}
+      {# in docs/shading_3d10_reference/3d10_dashboard_reference.png.     #}
+      {% set _primary_obs = _obs[0] if _obs else None %}
+      {% set _impact_band = (_eng.system_loss_pct if _eng else 0)|float %}
+      {% set _impact_chip = 'Severe' if _impact_band >= 30 else ('High' if _impact_band >= 15 else ('Moderate' if _impact_band >= 5 else 'Low')) %}
+      {% set _impact_color = '#dc2626' if _impact_band >= 30 else ('#f97316' if _impact_band >= 15 else ('#facc15' if _impact_band >= 5 else '#22c55e')) %}
+
+      {# ── Card 1: OBSTRUCTION DETAILS (single primary obstruction). #}
+      <div class="fw-bold small mb-2" style="color:var(--solar-gold);font-size:12px">
+        <i class="bi bi-bounding-box me-1"></i>OBSTRUCTION DETAILS
+      </div>
+      <div class="mb-3 p-2" style="background:rgba(0,0,0,.25);border:1px solid #1e1e3a;border-radius:6px">
+        {% if _primary_obs %}
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="fw-bold" style="color:#e6e6f5;font-size:12px">
+              {{ (_primary_obs.label or _primary_obs.type or 'Obstruction')|capitalize }}
+            </div>
+            <span class="badge" style="background:{{ _impact_color }};color:#0a0a14;
+                                       font-weight:800;font-size:10px;padding:3px 8px">{{ _impact_chip }}</span>
+          </div>
+          <div class="d-flex justify-content-between" style="font-size:11px;color:#c0c0d8">
+            <span>Type</span><span class="fw-bold" style="color:#fff">{{ (_primary_obs.type or 'Building')|capitalize }}</span>
+          </div>
+          <div class="d-flex justify-content-between" style="font-size:11px;color:#c0c0d8">
+            <span>Height</span><span class="fw-bold" style="color:#ffd24a">{{ "%.1f"|format((_primary_obs.height or 0)|float) }} m</span>
+          </div>
+          <div class="d-flex justify-content-between" style="font-size:11px;color:#c0c0d8">
+            <span>Distance</span><span class="fw-bold" style="color:#ffd24a">{{ "%.1f"|format((_primary_obs.distance or 0)|float) }} m</span>
+          </div>
+          <div class="d-flex justify-content-between" style="font-size:11px;color:#c0c0d8">
+            <span>Direction</span><span class="fw-bold" style="color:#9bd1ff">{{ _primary_obs.direction or '—' }}</span>
+          </div>
+          {% if _obs|length > 1 %}
+          <div class="text-secondary mt-1" style="font-size:10px;font-style:italic">
+            +{{ _obs|length - 1 }} more in summary below
+          </div>
+          {% endif %}
+        {% else %}
+          <div class="text-secondary" style="font-size:11px">No obstructions recorded. Add one in the inspection form.</div>
+        {% endif %}
+      </div>
+
+      {# ── Card 2: SHADING SUMMARY (4 KPIs). #}
+      <div class="fw-bold small mb-2" style="color:var(--solar-gold);font-size:12px">
+        <i class="bi bi-clipboard-data me-1"></i>SHADING SUMMARY
+      </div>
+      <div class="mb-3 p-2" style="background:rgba(0,0,0,.25);border:1px solid #1e1e3a;border-radius:6px">
+        <div class="row g-2 text-center">
+          <div class="col-6">
+            <div class="text-secondary" style="font-size:9px;letter-spacing:.5px;text-transform:uppercase">Total Hours</div>
+            <div class="fw-black" style="color:#ffd24a;font-size:18px">{{ _eng.shading_duration_h if _eng else '—' }}</div>
+            <div class="text-secondary" style="font-size:9px">h / day</div>
+          </div>
+          <div class="col-6">
+            <div class="text-secondary" style="font-size:9px;letter-spacing:.5px;text-transform:uppercase">Avg Index</div>
+            <div class="fw-black" style="color:#fff;font-size:18px">{{ "%.2f"|format(_eng.bucket_factor if _eng else 1.0) }}</div>
+            <div class="text-secondary" style="font-size:9px">factor</div>
+          </div>
+          <div class="col-6">
+            <div class="text-secondary" style="font-size:9px;letter-spacing:.5px;text-transform:uppercase">Peak Hour</div>
+            <div class="fw-black" style="color:#fff;font-size:14px">{{ (_eng.shading_start if _eng else '—') }}</div>
+            <div class="text-secondary" style="font-size:9px">start</div>
+          </div>
+          <div class="col-6">
+            <div class="text-secondary" style="font-size:9px;letter-spacing:.5px;text-transform:uppercase">Energy Loss</div>
+            <div class="fw-black" style="color:{{ _impact_color }};font-size:14px">{{ "%.1f"|format(_eng.system_loss_pct if _eng else 0) }}%</div>
+            <div class="text-secondary" style="font-size:9px">system</div>
+          </div>
+        </div>
+      </div>
+
+      {# ── Card 3: SHADING IMPACT (PV MODULES) — 5-colour legend + grid. #}
+      {% set _cols = (_eng.panel_columns or 7) if _eng else 7 %}
+      {% set _rows = (_eng.panel_rows or 4) if _eng else 4 %}
+      {% set _total_p = (_eng.total_panels or (_cols * _rows)) if _eng else (_cols * _rows) %}
+      {% set _hit = (_eng.affected_panels or 0) if _eng else 0 %}
+      {% set _heavy = (_eng.heavily_affected or 0) if _eng else 0 %}
+      <div class="fw-bold small mb-2" style="color:var(--solar-gold);font-size:12px">
+        <i class="bi bi-grid-3x3-gap me-1"></i>SHADING IMPACT (PV MODULES)
+      </div>
+      <div class="mb-3 p-2" style="background:rgba(0,0,0,.25);border:1px solid #1e1e3a;border-radius:6px">
+        {# Legend bar. #}
+        <div class="d-flex justify-content-between mb-2" style="font-size:9px;color:#c0c0d8;text-transform:uppercase;letter-spacing:.4px">
+          <span>None</span><span>Low</span><span>Med</span><span>High</span><span>Severe</span>
+        </div>
+        <div class="d-flex mb-2" style="height:8px;border-radius:4px;overflow:hidden">
+          <div style="flex:1;background:#1d4ed8"></div>
+          <div style="flex:1;background:#22c55e"></div>
+          <div style="flex:1;background:#facc15"></div>
+          <div style="flex:1;background:#f97316"></div>
+          <div style="flex:1;background:#dc2626"></div>
+        </div>
+        {# Module impact grid — _rows × _cols cells. NE-side bias for shaded
+           wedge: cells with (row < _rows/2) AND (col >= _cols/2) carry the
+           heavy/high impact, then mid spreads out. Server-rendered so the
+           card looks populated even before the JS engine runs. #}
+        <div style="display:grid;
+                    grid-template-columns:repeat({{ _cols }}, 1fr);
+                    gap:2px;background:#0a0a14;padding:3px;border-radius:4px">
+          {% for r in range(_rows) %}
+            {% for c in range(_cols) %}
+              {% set _idx = r * _cols + c %}
+              {% set _ne = (r < (_rows / 2)) and (c >= (_cols / 2)) %}
+              {% if _idx < _heavy and _ne %}
+                {% set _color = '#dc2626' %}
+              {% elif _idx < _hit and _ne %}
+                {% set _color = '#f97316' %}
+              {% elif _idx < _hit %}
+                {% set _color = '#facc15' %}
+              {% else %}
+                {% set _color = '#1d4ed8' %}
+              {% endif %}
+              <div style="height:10px;background:{{ _color }};border-radius:1px"
+                   title="Module {{ _idx + 1 }}"></div>
+            {% endfor %}
+          {% endfor %}
+        </div>
+        <div class="d-flex justify-content-between mt-2" style="font-size:10px;color:#c0c0d8">
+          <span>{{ _hit }} / {{ _total_p }} affected</span>
+          <span class="fw-bold" style="color:{{ _impact_color }}">{{ "%.1f"|format(_eng.system_loss_pct if _eng else 0) }}% loss</span>
+        </div>
+      </div>
 
       {# ── Obstruction Summary table — top of the right rail, matching   #}
       {# the spec image. Each row = one saved obstruction with #, type,   #}
@@ -4017,7 +4168,7 @@
     //    a thumbnail jumps the main slider to that step.
     const thumbHost = document.getElementById('shadingThumbStrip');
     if (thumbHost && series.length) {
-      const targetTimes = ['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+      const targetTimes = ['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
       const picks = targetTimes.map(t => {
         // Closest step (by absolute minute distance).
         const tm = (s) => {
