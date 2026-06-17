@@ -791,22 +791,20 @@
           {# Sun position (default noon-ish) — read from engine if available #}
           {% set _sun_x = 700 %}
           {% set _sun_y = 70 %}
+          {% set _arr_cx = _house_x + _house_w_px // 2 %}
+          {% set _arr_cy = _house_y - 14 %}
+          {# Directed rays group lives OUTSIDE the sun group so it doesn't
+             translate with the disk. JS paintDirectedRays(p) clears and
+             redraws this on each slider tick so the rays always span
+             (sun position → panel) and (sun position → each obstruction
+             top), regardless of where the sun has moved to. #}
+          <g id="svgDirectedRays" pointer-events="none"
+             data-arr-cx="{{ _arr_cx }}" data-arr-cy="{{ _arr_cy }}"></g>
           <g id="svgSunGroup" clip-path="url(#aboveHorizonClip)">
             <circle id="svgSunGlow" cx="{{ _sun_x }}" cy="{{ _sun_y }}" r="50" fill="url(#sunGradN)" opacity="0.55"/>
             <circle id="svgSunDisk" cx="{{ _sun_x }}" cy="{{ _sun_y }}" r="22" fill="#ffeb3b"/>
             <g id="svgSunRays">
-              {# Rays converge from the sun toward the PV array centre. #}
-              {# 7 main rays, fanning out around the line sun->array. #}
-              {% set _arr_cx = _house_x + _house_w_px // 2 %}
-              {% set _arr_cy = _house_y - 14 %}
-              {% for _ray in range(7) %}
-                {% set _spread = (_ray - 3) * 18 %}
-                <line x1="{{ _sun_x }}" y1="{{ _sun_y + 22 }}"
-                      x2="{{ _arr_cx + _spread }}" y2="{{ _arr_cy + ((_ray - 3)|abs) * 3 }}"
-                      stroke="#fbbf24" stroke-width="{{ 1.4 if _ray == 3 else 1 }}"
-                      opacity="{{ 0.55 if _ray == 3 else 0.30 }}"/>
-              {% endfor %}
-              {# 5 short halo rays radiating out from disk for sparkle effect. #}
+              {# Halo radial sparkle rays — translate with the sun (live inside the group). #}
               {% for _hray in range(5) %}
                 {% set _hangle = (_hray - 2) * 36 %}
                 <line x1="{{ _sun_x }}" y1="{{ _sun_y }}"
@@ -1379,12 +1377,69 @@
             dot.setAttribute('cx', x.toFixed(1));
             dot.setAttribute('cy', y.toFixed(1));
           }
+          function paintDirectedRays(hour) {
+            // Redraw the sun-rays that fan from the moving sun onto the
+            // PV array AND onto each obstruction top. Rays live in
+            // #svgDirectedRays, OUTSIDE the sun group, so they don't
+            // translate with the disk — we always recompute (sun -> target)
+            // afresh so the geometry stays correct as the slider moves.
+            var rays = document.getElementById('svgDirectedRays');
+            if (!rays) return;
+            // Hide rays at night.
+            if (hour < 5 || hour > 19) { rays.innerHTML = ''; return; }
+            var p = sunXY(hour);
+            if (!p) { rays.innerHTML = ''; return; }
+            // PV array centre — server-rendered into data attributes.
+            var ax = parseFloat(rays.getAttribute('data-arr-cx')) || 496;
+            var ay = parseFloat(rays.getAttribute('data-arr-cy')) || 406;
+            // Sun emit point is the bottom of the disk (sunY + disk radius).
+            var sx = p.x, sy = p.y + 22;
+            // Build SVG string in memory so we hit the DOM once.
+            var parts = [];
+            // 5-ray fan onto the panels (centre ray strongest).
+            var fanSpread = [-30, -15, 0, 15, 30];
+            for (var i = 0; i < fanSpread.length; i++) {
+              var spread = fanSpread[i];
+              var isCenter = (spread === 0);
+              parts.push('<line x1="' + sx.toFixed(1) +
+                         '" y1="' + sy.toFixed(1) +
+                         '" x2="' + (ax + spread).toFixed(1) +
+                         '" y2="' + (ay + Math.abs(spread) * 0.15).toFixed(1) +
+                         '" stroke="#fbbf24" stroke-width="' +
+                         (isCenter ? 1.6 : 1.0) +
+                         '" opacity="' + (isCenter ? 0.55 : 0.32) +
+                         '" stroke-linecap="round"/>');
+            }
+            // One ray per obstruction onto its top-centre. data-base-x,
+            // data-base-w, data-h are server-set on each shadow polygon.
+            var shadows = document.querySelectorAll('[id^="shadow-"]');
+            for (var j = 0; j < shadows.length; j++) {
+              var sh = shadows[j];
+              var bx = parseFloat(sh.getAttribute('data-base-x')) || 0;
+              var bw = parseFloat(sh.getAttribute('data-base-w')) || 0;
+              var bh = parseFloat(sh.getAttribute('data-h')) || 0;
+              if (bw <= 0) continue;
+              var obsCx = bx + bw / 2;
+              var obsTopY = 460 - bh;  // ground_y is 460
+              // Draw 2 rays per obstruction so it looks lit, not stabbed.
+              for (var k = -1; k <= 1; k += 2) {
+                var endX = obsCx + k * Math.min(bw * 0.3, 10);
+                parts.push('<line x1="' + sx.toFixed(1) +
+                           '" y1="' + sy.toFixed(1) +
+                           '" x2="' + endX.toFixed(1) +
+                           '" y2="' + obsTopY.toFixed(1) +
+                           '" stroke="#fbbf24" stroke-width="1" opacity="0.40" stroke-linecap="round"/>');
+              }
+            }
+            rays.innerHTML = parts.join('');
+          }
           var _origPaintSun = paintSun;
           paintSun = function(hour) {
             _origPaintSun(hour);
             paintShadows(hour);
             paintSky(hour);
             paintSunPathDot(hour);
+            paintDirectedRays(hour);
           };
           slider.addEventListener('input', function() { paintSun(parseFloat(slider.value)); });
           // Mini slider + mini play button mirror the main controls.
