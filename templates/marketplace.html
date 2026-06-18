@@ -78,19 +78,32 @@
         <input type="text" class="form-control" name="q" value="{{ q }}" placeholder="Search by name, brand, model, or spec..." style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
       </div>
     </div>
+    {% if currencies %}
+    <select name="currency" class="form-select" style="background:#0a0a14;border-color:#1e1e3a;color:#fff;max-width:130px" onchange="this.form.submit()">
+      {% for code in currencies %}
+      <option value="{{ code }}" {% if currency == code %}selected{% endif %}>{{ code }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
     <button class="btn btn-warning fw-bold px-4" type="submit"><i class="bi bi-funnel me-1"></i>Filter</button>
     {% if q or selected_category %}
     <a href="{{ url_for('marketplace_public') }}" class="btn btn-outline-secondary"><i class="bi bi-x-circle me-1"></i>Clear</a>
     {% endif %}
   </form>
+  {% if currency and currency != 'USD' %}
+  <div class="rounded-3 px-3 py-2 mb-3" style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.30);font-size:12px;color:#e0e0f0">
+    <i class="bi bi-info-circle me-1 text-warning"></i>
+    <strong>Indicative pricing.</strong> Prices shown in {{ currency }} are converted from supplier-listed USD at indicative FX rates valid {{ rates_as_of }}. Local market rates (e.g. Agenda Electricals, Grand Pacific, B Appah) may differ — always verify with the supplier before ordering.
+  </div>
+  {% endif %}
   <div class="d-flex flex-wrap gap-2">
-    <a href="{{ url_for('marketplace_public') }}{% if q %}?q={{ q }}{% endif %}"
+    <a href="{{ url_for('marketplace_public', q=q or none, currency=currency or none) }}"
        class="badge text-decoration-none px-3 py-2 {% if not selected_category %}bg-warning text-dark{% else %}bg-secondary text-white{% endif %}"
        style="font-size:12px;font-weight:600;border-radius:999px">
       <i class="bi bi-grid me-1"></i>All ({{ total_products }})
     </a>
     {% for cat in categories %}
-    <a href="{{ url_for('marketplace_public') }}?cat={{ cat.id }}{% if q %}&q={{ q }}{% endif %}"
+    <a href="{{ url_for('marketplace_public', cat=cat.id, q=q or none, currency=currency or none) }}"
        class="badge text-decoration-none px-3 py-2 {% if selected_category and selected_category.id == cat.id %}bg-warning text-dark{% else %}bg-secondary text-white{% endif %}"
        style="font-size:12px;font-weight:600;border-radius:999px">
       <i class="{{ cat.icon }} me-1"></i>{{ cat.name }}
@@ -118,8 +131,8 @@
           {% endif %}
         </div>
         <div class="text-end">
-          <div class="fw-black text-warning" style="font-size:18px">USD {{ "%.2f"|format(p.price_usd or 0) }}</div>
-          <div class="text-secondary small">/ {{ p.unit }}</div>
+          <div class="fw-black text-warning" style="font-size:18px">{{ currency }} {{ "%.2f"|format(p.price_in_currency or 0) }}</div>
+          <div class="text-secondary small">/ {{ p.unit }}{% if currency != 'USD' %} · ref USD {{ "%.2f"|format(p.price_usd or 0) }}{% endif %}</div>
         </div>
       </div>
       {% if p.spec %}

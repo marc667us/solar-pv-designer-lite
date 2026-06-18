@@ -11,18 +11,28 @@
 # estimator can call the supplier directly. BOM + BOQ reuse the existing
 # Slice 5+8 surfaces.
 
+def _fx_rate(code: str, default: float) -> float:
+    """Read an indicative FX rate from env FX_<CODE>_PER_USD; fall back
+    to the bundled default. Letting ops override via env means the rate
+    can be tuned without a code push."""
+    try:
+        return float(os.environ.get(f"FX_{code}_PER_USD", default))
+    except (TypeError, ValueError):
+        return float(default)
+
+
 _CURRENCY_RATES_FROM_USD = {
-    # Indicative rates — refreshed periodically. Customers see a disclaimer
-    # so they know to verify before quoting.
+    # Indicative rates — overridable via FX_<CODE>_PER_USD env vars.
+    # Customers see a disclaimer so they know to verify before quoting.
     "USD": 1.0,
-    "EUR": 0.93,
-    "GBP": 0.79,
-    "GHS": 14.5,
-    "NGN": 1550.0,
-    "KES": 130.0,
-    "ZAR": 18.5,
+    "EUR": _fx_rate("EUR", 0.93),
+    "GBP": _fx_rate("GBP", 0.79),
+    "GHS": _fx_rate("GHS", 14.5),
+    "NGN": _fx_rate("NGN", 1550.0),
+    "KES": _fx_rate("KES", 130.0),
+    "ZAR": _fx_rate("ZAR", 18.5),
 }
-_CURRENCY_RATES_AS_OF = "2026-06-18"
+_CURRENCY_RATES_AS_OF = os.environ.get("FX_RATES_AS_OF", "2026-06-18")
 
 
 def _convert_from_usd(price_usd: float, currency: str) -> float:
