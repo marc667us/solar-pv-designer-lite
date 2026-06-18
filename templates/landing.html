@@ -87,6 +87,32 @@
     ☀️ No sign-up needed · Enter your loads · Get instant sizing + cost estimate
   </div>
 
+  <!-- ════════════════════════════════════════════ FREE MARKETPLACE MAGNET ══════ -->
+  <div class="mb-4 mx-auto" style="max-width:780px">
+    <a href="{{ url_for('marketplace_public') }}" class="text-decoration-none">
+      <div class="rounded-3 p-3 d-flex align-items-center gap-3 flex-wrap justify-content-center"
+           style="background:linear-gradient(135deg,rgba(245,158,11,.10),rgba(34,197,94,.06));border:1px solid rgba(245,158,11,.35);transition:transform .15s,border-color .15s"
+           onmouseover="this.style.transform='translateY(-2px)';this.style.borderColor='rgba(245,158,11,.6)'"
+           onmouseout="this.style.transform='';this.style.borderColor='rgba(245,158,11,.35)'">
+        <div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));display:flex;align-items:center;justify-content:center;font-size:18px;color:#000;flex-shrink:0">
+          <i class="bi bi-lightning-charge-fill"></i>
+        </div>
+        <div class="text-start flex-grow-1" style="min-width:200px">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="fw-black text-warning" style="font-size:14px">Electrical Pricing Marketplace</span>
+            <span class="badge rounded-pill px-2" style="background:rgba(34,197,94,.20);color:#22c55e;font-size:9px;font-weight:700;letter-spacing:.4px">FREE TO BROWSE</span>
+          </div>
+          <div class="text-secondary" style="font-size:12px">
+            Live supplier prices across 20+ electrical categories — transformers, cables, panels, switchgear, sockets. Pull straight into your solar BOQ.
+          </div>
+        </div>
+        <span class="btn btn-outline-warning btn-sm fw-bold px-3">
+          Browse <i class="bi bi-arrow-right ms-1"></i>
+        </span>
+      </div>
+    </a>
+  </div>
+
   <!-- City coverage strip -->
   <div class="mb-4">
     <div class="text-secondary mb-2" style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">

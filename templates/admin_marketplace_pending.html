@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Pending verification — Marketplace Admin{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('admin_dashboard') }}" class="text-warning">Admin</a> /
+      <a href="{{ url_for('admin_marketplace_dashboard') }}" class="text-warning">Marketplace</a> / Pending
+    </div>
+    <h5 class="fw-black mb-0 mt-1">Pending verification queue</h5>
+  </div>
+  <a href="{{ url_for('admin_marketplace_dashboard') }}" class="btn btn-outline-light btn-sm">
+    <i class="bi bi-speedometer2 me-1"></i>Dashboard
+  </a>
+</div>
+
+<!-- Search + filter -->
+<div class="solar-card p-3 mb-4">
+  <form method="GET" action="{{ url_for('admin_marketplace_pending') }}" class="d-flex gap-2 flex-wrap">
+    <div class="flex-grow-1" style="min-width:220px">
+      <div class="input-group">
+        <span class="input-group-text" style="background:#0a0a14;border-color:#1e1e3a;color:#9090c0"><i class="bi bi-search"></i></span>
+        <input type="text" class="form-control" name="q" value="{{ q }}" placeholder="Search products by name, brand, model, supplier..." style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+      </div>
+    </div>
+    <select name="cat" class="form-select" style="max-width:240px;background:#0a0a14;border-color:#1e1e3a;color:#fff">
+      <option value="">All categories</option>
+      {% for c in categories %}
+      <option value="{{ c.id }}" {% if selected_cat == c.id %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-warning fw-bold px-4" type="submit"><i class="bi bi-funnel me-1"></i>Filter</button>
+    {% if q or selected_cat %}
+    <a href="{{ url_for('admin_marketplace_pending') }}" class="btn btn-outline-secondary"><i class="bi bi-x-circle me-1"></i>Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- Pending suppliers -->
+<div class="solar-card p-3 mb-4">
+  <h6 class="fw-bold mb-3"><i class="bi bi-building me-1 text-warning"></i>Pending suppliers <span class="text-secondary small">({{ suppliers|length }})</span></h6>
+  {% if suppliers %}
+  <form method="POST" action="{{ url_for('admin_marketplace_bulk') }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="approve_supplier" id="supplier_bulk_action">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle" style="color:#e0e0f0">
+        <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+          <tr>
+            <th style="width:30px"><input type="checkbox" onclick="document.querySelectorAll('.s-chk').forEach(e=>e.checked=this.checked)"></th>
+            <th>Company</th><th>Country</th><th>Owner account</th><th>Categories</th><th>Submitted</th><th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in suppliers %}
+          <tr>
+            <td><input class="s-chk" type="checkbox" name="supplier_ids" value="{{ s.id }}"></td>
+            <td><strong>{{ s.name }}</strong>{% if s.website %}<div class="text-secondary small">{{ s.website }}</div>{% endif %}</td>
+            <td class="small">{{ s.country or '—' }}</td>
+            <td class="small text-secondary">{{ s.owner_username or '—' }}{% if s.owner_email %}<div>{{ s.owner_email }}</div>{% endif %}</td>
+            <td class="small text-secondary">{{ s.categories or '—' }}</td>
+            <td class="small text-secondary">{{ s.created_at }}</td>
+            <td class="text-end">
+              <form method="POST" action="{{ url_for('admin_marketplace_approve_supplier', sid=s.id) }}" style="display:inline">
+                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                <button class="btn btn-success btn-sm"><i class="bi bi-check2"></i> Approve</button>
+              </form>
+              <form method="POST" action="{{ url_for('admin_marketplace_reject_supplier', sid=s.id) }}" style="display:inline">
+                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-danger btn-sm"><i class="bi bi-x"></i> Reject</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="d-flex gap-2 mt-2">
+      <button class="btn btn-success btn-sm" onclick="document.getElementById('supplier_bulk_action').value='approve_supplier'"><i class="bi bi-check2-all me-1"></i>Approve selected</button>
+      <button class="btn btn-outline-danger btn-sm" onclick="document.getElementById('supplier_bulk_action').value='reject_supplier'"><i class="bi bi-x-octagon me-1"></i>Reject selected</button>
+    </div>
+  </form>
+  {% else %}
+  <div class="text-center py-3 text-secondary">
+    <i class="bi bi-building-check" style="font-size:32px;color:#22c55e"></i>
+    <p class="mt-2 small mb-0">No pending suppliers — queue is clear.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Pending products -->
+<div class="solar-card p-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-box-seam me-1 text-warning"></i>Pending products <span class="text-secondary small">({{ products|length }})</span></h6>
+  {% if products %}
+  <form method="POST" action="{{ url_for('admin_marketplace_bulk') }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="approve_product" id="product_bulk_action">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle" style="color:#e0e0f0">
+        <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+          <tr>
+            <th style="width:30px"><input type="checkbox" onclick="document.querySelectorAll('.p-chk').forEach(e=>e.checked=this.checked)"></th>
+            <th>Product</th><th>Supplier</th><th>Category</th><th>Spec</th><th class="text-end">Price</th><th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in products %}
+          <tr>
+            <td><input class="p-chk" type="checkbox" name="product_ids" value="{{ p.id }}"></td>
+            <td><strong>{{ p.name }}</strong>{% if p.brand or p.model %}<div class="text-secondary small">{{ p.brand }}{% if p.model %} · {{ p.model }}{% endif %}</div>{% endif %}</td>
+            <td class="small">{{ p.supplier_name or '—' }}</td>
+            <td class="small text-secondary">{{ p.category_name or '—' }}{% if p.subcategory %}<div>{{ p.subcategory }}</div>{% endif %}</td>
+            <td class="small text-secondary" style="max-width:300px">{{ p.spec or '—' }}</td>
+            <td class="text-end fw-bold text-warning">${{ "%.2f"|format(p.price_usd or 0) }} <span class="text-secondary small">/ {{ p.unit }}</span></td>
+            <td class="text-end">
+              <form method="POST" action="{{ url_for('admin_marketplace_approve_product', pid=p.id) }}" style="display:inline">
+                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                <button class="btn btn-success btn-sm"><i class="bi bi-check2"></i> Approve</button>
+              </form>
+              <form method="POST" action="{{ url_for('admin_marketplace_reject_product', pid=p.id) }}" style="display:inline">
+                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                <button class="btn btn-outline-danger btn-sm"><i class="bi bi-x"></i> Reject</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="d-flex gap-2 mt-2">
+      <button class="btn btn-success btn-sm" onclick="document.getElementById('product_bulk_action').value='approve_product'"><i class="bi bi-check2-all me-1"></i>Approve selected</button>
+      <button class="btn btn-outline-danger btn-sm" onclick="document.getElementById('product_bulk_action').value='reject_product'"><i class="bi bi-x-octagon me-1"></i>Reject selected</button>
+    </div>
+  </form>
+  {% else %}
+  <div class="text-center py-3 text-secondary">
+    <i class="bi bi-check2-circle" style="font-size:32px;color:#22c55e"></i>
+    <p class="mt-2 small mb-0">No pending products — queue is clear.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Respond to RFQ — {{ rfq.title }}{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('supplier_dashboard') }}" class="text-warning">Dashboard</a> /
+      <a href="{{ url_for('supplier_rfqs_inbox') }}" class="text-warning">Inbox</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1">{{ rfq.title }}</h5>
+    <div class="text-secondary small">{{ rfq.delivery_country or 'Country tbd' }}{% if rfq.deadline_date %} · deadline {{ rfq.deadline_date }}{% endif %}</div>
+  </div>
+  {% if rfq.status == 'sent' and not existing %}<span class="badge" style="background:rgba(245,158,11,.20);color:var(--solar-gold);font-size:11px">Awaiting your response</span>
+  {% elif existing %}<span class="badge bg-success">Submitted {{ existing.created_at }}</span>
+  {% elif rfq.status == 'awarded' %}<span class="badge bg-success">Awarded</span>
+  {% elif rfq.status == 'cancelled' %}<span class="badge bg-danger">Cancelled</span>{% endif %}
+</div>
+
+{% if rfq.notes %}
+<div class="solar-card p-3 mb-3">
+  <h6 class="fw-bold mb-1"><i class="bi bi-card-text me-1 text-warning"></i>Buyer notes</h6>
+  <p class="text-secondary small mb-0">{{ rfq.notes }}</p>
+</div>
+{% endif %}
+
+<div class="solar-card p-3">
+<form method="POST" action="{{ url_for('supplier_rfqs_respond', rfq_id=rfq.id) }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+  <h6 class="fw-bold mb-3"><i class="bi bi-list-check me-1 text-warning"></i>Per-line prices</h6>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+        <tr><th>#</th><th>Item</th><th>Spec</th><th class="text-end">Qty</th><th class="text-end">Unit price</th><th class="text-center">Avail.</th></tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+        {% set prev = existing_items.get(it.id) %}
+        <tr>
+          <td class="text-secondary small">{{ loop.index }}</td>
+          <td><strong>{{ it.custom_name }}</strong></td>
+          <td class="small text-secondary" style="max-width:280px">{{ it.spec_notes or '—' }}</td>
+          <td class="text-end small">{{ "%.2f"|format(it.qty or 0) }} {{ it.unit }}</td>
+          <td class="text-end"><input type="number" step="0.01" min="0" class="form-control form-control-sm" name="unit_price_{{ it.id }}" value="{{ '%.2f'|format(prev.unit_price) if prev and prev.unit_price else '' }}" {% if rfq.status != 'sent' %}readonly{% endif %} placeholder="0.00" style="max-width:120px;margin-left:auto"></td>
+          <td class="text-center"><input type="checkbox" name="available_{{ it.id }}" {% if not prev or prev.available %}checked{% endif %} {% if rfq.status != 'sent' %}disabled{% endif %}></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="my-3" style="border-color:#1e1e3a">
+
+  <div class="row g-3">
+    <div class="col-md-3">
+      <label class="form-label small text-secondary">Currency</label>
+      <select class="form-select" name="currency" {% if rfq.status != 'sent' %}disabled{% endif %}>
+        {% for cur in ['USD','EUR','GBP','GHS','NGN','KES','ZAR'] %}
+        <option value="{{ cur }}" {% if existing and existing.currency == cur %}selected{% elif not existing and cur == 'USD' %}selected{% endif %}>{{ cur }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-secondary">Lead time (days)</label>
+      <input type="number" min="0" class="form-control" name="lead_time_days" value="{{ existing.lead_time_days if existing else 30 }}" {% if rfq.status != 'sent' %}readonly{% endif %}>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-secondary">Quote valid until</label>
+      <input type="date" class="form-control" name="valid_until" value="{{ existing.valid_until if existing else '' }}" {% if rfq.status != 'sent' %}readonly{% endif %}>
+    </div>
+    <div class="col-md-12">
+      <label class="form-label small text-secondary">Notes for buyer</label>
+      <textarea class="form-control" name="notes" rows="2" {% if rfq.status != 'sent' %}readonly{% endif %} placeholder="Delivery terms, alternatives offered, payment terms...">{{ existing.notes if existing else '' }}</textarea>
+    </div>
+  </div>
+
+  {% if rfq.status == 'sent' %}
+  <div class="d-flex gap-2 justify-content-end mt-3">
+    <a href="{{ url_for('supplier_rfqs_inbox') }}" class="btn btn-outline-secondary">Back to inbox</a>
+    <button class="btn btn-warning fw-bold px-4"><i class="bi bi-send-fill me-1"></i>{{ 'Update response' if existing else 'Submit response' }}</button>
+  </div>
+  {% else %}
+  <div class="text-end mt-3 text-secondary small">This RFQ is no longer accepting responses.</div>
+  {% endif %}
+</form>
+</div>
+
+{% endblock %}

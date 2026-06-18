@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}{{ rfq.title }} — RFQ — SolarPro{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small"><a href="{{ url_for('rfqs_list') }}" class="text-warning">My RFQs</a></div>
+    <h5 class="fw-black mb-0 mt-1">{{ rfq.title }}
+      {% if rfq.status == 'draft' %}<span class="badge bg-secondary ms-2">Draft</span>
+      {% elif rfq.status == 'sent' %}<span class="badge ms-2" style="background:rgba(245,158,11,.20);color:var(--solar-gold)">Sent</span>
+      {% elif rfq.status == 'awarded' %}<span class="badge bg-success ms-2">Awarded</span>
+      {% elif rfq.status == 'cancelled' %}<span class="badge bg-danger ms-2">Cancelled</span>{% endif %}
+    </h5>
+    <div class="text-secondary small">{{ rfq.delivery_country or 'Country tbd' }}{% if rfq.deadline_date %} · deadline {{ rfq.deadline_date }}{% endif %} · created {{ rfq.created_at }}</div>
+  </div>
+  {% if rfq.status not in ('awarded','cancelled') %}
+  <form method="POST" action="{{ url_for('rfqs_cancel', rfq_id=rfq.id) }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Cancel this RFQ?')"><i class="bi bi-x-octagon me-1"></i>Cancel RFQ</button>
+  </form>
+  {% endif %}
+</div>
+
+<!-- Items -->
+<div class="solar-card p-3 mb-4">
+  <h6 class="fw-bold mb-3"><i class="bi bi-box-seam me-1 text-warning"></i>Items <span class="text-secondary small">({{ items|length }})</span></h6>
+  {% if items %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+        <tr><th>#</th><th>Item</th><th>Spec / notes</th><th class="text-end">Qty</th><th class="text-center">Unit</th>{% if rfq.status == 'draft' %}<th></th>{% endif %}</tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+        <tr>
+          <td class="text-secondary small">{{ loop.index }}</td>
+          <td><strong>{{ it.custom_name }}</strong>{% if it.product_name and it.product_name != it.custom_name %}<div class="small text-secondary">{{ it.product_brand }} {{ it.product_name }}</div>{% endif %}</td>
+          <td class="small text-secondary">{{ it.spec_notes or '—' }}</td>
+          <td class="text-end">{{ "%.2f"|format(it.qty or 0) }}</td>
+          <td class="text-center small">{{ it.unit }}</td>
+          {% if rfq.status == 'draft' %}
+          <td class="text-end">
+            <form method="POST" action="{{ url_for('rfqs_delete_item', rfq_id=rfq.id, item_id=it.id) }}" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center text-secondary py-3"><i class="bi bi-box-seam" style="font-size:32px"></i><p class="mt-2 small mb-0">No items yet.</p></div>
+  {% endif %}
+
+  {% if rfq.status == 'draft' %}
+  <form method="POST" action="{{ url_for('rfqs_add_item', rfq_id=rfq.id) }}" class="row g-2 mt-2">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="col-md-5">
+      <input class="form-control form-control-sm" name="name" placeholder="Item name *" required>
+    </div>
+    <div class="col-md-2">
+      <input type="number" step="0.01" class="form-control form-control-sm" name="qty" value="1" min="0.01" placeholder="Qty">
+    </div>
+    <div class="col-md-2">
+      <input class="form-control form-control-sm" name="unit" value="No." placeholder="Unit">
+    </div>
+    <div class="col-md-3">
+      <input class="form-control form-control-sm" name="spec_notes" placeholder="Spec (optional)">
+    </div>
+    <div class="col-md-12">
+      <button class="btn btn-outline-warning btn-sm"><i class="bi bi-plus-circle me-1"></i>Add item</button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+
+<!-- Send / responses -->
+{% if rfq.status == 'draft' %}
+<div class="solar-card p-3 mb-4">
+  <h6 class="fw-bold mb-3"><i class="bi bi-send me-1 text-warning"></i>Send RFQ to suppliers</h6>
+  {% if suppliers %}
+  <form method="POST" action="{{ url_for('rfqs_send', rfq_id=rfq.id) }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="row g-2 mb-3">
+      {% for s in suppliers %}
+      <div class="col-md-4">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="supplier_ids" value="{{ s.id }}" id="s_{{ s.id }}">
+          <label class="form-check-label small" for="s_{{ s.id }}"><strong>{{ s.name }}</strong>{% if s.country %} <span class="text-secondary">· {{ s.country }}</span>{% endif %}</label>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <button class="btn btn-warning fw-bold"><i class="bi bi-send-fill me-1"></i>Send to selected suppliers</button>
+    <span class="text-secondary small ms-2">Add at least one item first.</span>
+  </form>
+  {% else %}
+  <p class="text-secondary small mb-0">No verified suppliers available yet.</p>
+  {% endif %}
+</div>
+{% elif rfq.status == 'sent' or rfq.status == 'awarded' %}
+<div class="solar-card p-3 mb-4">
+  <h6 class="fw-bold mb-3"><i class="bi bi-clipboard-data me-1 text-warning"></i>Supplier responses ({{ responses|length }} of {{ targets|length }})</h6>
+  {% if responses %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+        <tr><th>Supplier</th><th>Country</th><th class="text-end">Total</th><th class="text-center">Lead</th><th class="text-center">Valid</th><th>Notes</th><th class="text-end">Action</th></tr>
+      </thead>
+      <tbody>
+        {% for r in responses %}
+        <tr {% if rfq.awarded_supplier_id == r.supplier_id %}style="background:rgba(34,197,94,.10)"{% endif %}>
+          <td><strong>{{ r.supplier_name }}</strong>{% if r.supplier_verified %} <i class="bi bi-patch-check-fill text-success" title="Verified"></i>{% endif %}</td>
+          <td class="small text-secondary">{{ r.supplier_country or '—' }}</td>
+          <td class="text-end fw-bold text-warning">{{ r.currency }} {{ "%.2f"|format(r.total_price or 0) }}</td>
+          <td class="text-center small">{{ r.lead_time_days }}d</td>
+          <td class="text-center small text-secondary">{{ r.valid_until or '—' }}</td>
+          <td class="small text-secondary" style="max-width:260px">{{ r.notes or '—' }}</td>
+          <td class="text-end">
+            {% if rfq.status == 'sent' %}
+            <form method="POST" action="{{ url_for('rfqs_award', rfq_id=rfq.id, supplier_id=r.supplier_id) }}" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn btn-success btn-sm fw-bold"><i class="bi bi-check2-circle me-1"></i>Award</button>
+            </form>
+            {% elif rfq.awarded_supplier_id == r.supplier_id %}
+            <span class="badge bg-success"><i class="bi bi-trophy-fill me-1"></i>Awarded</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-secondary small mb-0">Waiting on supplier responses.</p>
+  {% endif %}
+
+  <div class="text-secondary small mt-3">
+    Sent to: {% for t in targets %}<span class="badge me-1" style="background:#1e1e3a;color:#c0c0d8">{{ t.supplier_name }} <span class="text-secondary">· {{ t.status }}</span></span>{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if rfq.notes %}
+<div class="solar-card p-3 mb-4">
+  <h6 class="fw-bold mb-2"><i class="bi bi-card-text me-1 text-warning"></i>Notes for suppliers</h6>
+  <p class="text-secondary small mb-0">{{ rfq.notes }}</p>
+</div>
+{% endif %}
+
+{% endblock %}

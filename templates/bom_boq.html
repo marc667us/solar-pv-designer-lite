@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}BOQ — {{ bom.title }}{% endblock %}
+{% block content %}
+
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    body { background: white !important; color: black !important; }
+    .solar-card { background: white !important; border-color: #ccc !important; color: black !important; }
+    table { color: black !important; }
+    thead { color: #444 !important; }
+  }
+</style>
+
+<div class="d-flex align-items-center justify-content-between mb-3 no-print">
+  <div class="text-secondary small"><a href="{{ url_for('boms_view', bom_id=bom.id) }}" class="text-warning">Back to BOM editor</a></div>
+  <div class="d-flex gap-2">
+    <button onclick="window.print()" class="btn btn-warning fw-bold"><i class="bi bi-printer-fill me-1"></i>Print / Save as PDF</button>
+  </div>
+</div>
+
+<div class="solar-card p-4">
+  <div class="text-center mb-3">
+    <div class="text-warning fw-bold small" style="letter-spacing:2px;text-transform:uppercase">Bill of Quantities (BOQ)</div>
+    <h4 class="fw-black mb-1">{{ bom.title }}</h4>
+    {% if bom.project_name %}<div>{{ bom.project_name }}</div>{% endif %}
+    {% if bom.client_name %}<div class="text-secondary small">Client: {{ bom.client_name }}</div>{% endif %}
+    <div class="text-secondary small mt-1">Generated: {{ bom.updated_at }}</div>
+  </div>
+
+  <table class="table align-middle" style="color:#e0e0f0;font-size:13px">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
+      <tr><th style="width:30px">#</th><th>Description</th><th>Category</th><th class="text-end">Qty</th><th class="text-end">Unit</th><th class="text-end">Rate (USD)</th><th class="text-end">Amount (USD)</th></tr>
+    </thead>
+    <tbody>
+      {% set ns = namespace(prev_cat=None) %}
+      {% for line in totals.lines %}
+      {% set it = line.item %}
+      {% if it.category_name != ns.prev_cat %}
+      <tr style="background:#0a0a14">
+        <td colspan="7" class="fw-bold text-warning" style="text-transform:uppercase;letter-spacing:.5px">{{ it.category_name or 'Uncategorised' }}</td>
+      </tr>
+      {% set ns.prev_cat = it.category_name %}
+      {% endif %}
+      <tr>
+        <td class="text-secondary small">{{ loop.index }}</td>
+        <td>
+          <strong>{{ it.custom_name }}</strong>
+          {% if it.catalog_brand or it.catalog_model %}<div class="small text-secondary">{{ it.catalog_brand }} {% if it.catalog_model %}· {{ it.catalog_model }}{% endif %}</div>{% endif %}
+          {% if it.catalog_spec %}<div class="small text-secondary">{{ it.catalog_spec }}</div>{% endif %}
+        </td>
+        <td class="small text-secondary">{{ it.category_name or '—' }}</td>
+        <td class="text-end">{{ "%.2f"|format(it.qty or 0) }}</td>
+        <td class="text-end small">{{ it.unit }}</td>
+        <td class="text-end">${{ "%.2f"|format(line.unit_price) }}</td>
+        <td class="text-end fw-bold">${{ "%.2f"|format(line.line_total) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      {% for cat, sub in totals.category_totals.items() %}
+      <tr><td colspan="6" class="text-end text-secondary">{{ cat }} subtotal</td><td class="text-end fw-bold">${{ "%.2f"|format(sub) }}</td></tr>
+      {% endfor %}
+      <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
+        <td colspan="6" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
+        <td class="text-end fw-black text-warning" style="font-size:18px">${{ "%.2f"|format(totals.grand_total) }}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="text-secondary small mt-4">
+    <strong>Notes:</strong>
+    Rates are indicative supplier-published prices in USD on {{ bom.updated_at }}.
+    Final delivered prices may vary by quantity, location, currency, and supplier lead-time.
+    Use the <strong>Clone to RFQ</strong> action on the BOM editor to chase live quotes from verified suppliers.
+  </div>
+</div>
+
+{% endblock %}

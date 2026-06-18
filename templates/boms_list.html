@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}My BOMs — SolarPro{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0"><i class="bi bi-list-check me-2 text-warning"></i>My BOMs</h5>
+    <div class="text-secondary small">Bills of Materials — pull marketplace products into procurement-ready BOQs</div>
+  </div>
+  <a href="{{ url_for('boms_new') }}" class="btn btn-warning fw-bold"><i class="bi bi-plus-circle me-1"></i>New BOM</a>
+</div>
+
+<div class="solar-card p-3">
+{% if boms %}
+<div class="table-responsive">
+  <table class="table table-sm align-middle" style="color:#e0e0f0">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+      <tr><th>Title</th><th>Project</th><th>Client</th><th class="text-center">Items</th><th>Status</th><th>Updated</th></tr>
+    </thead>
+    <tbody>
+      {% for b in boms %}
+      <tr>
+        <td><a href="{{ url_for('boms_view', bom_id=b.id) }}" class="text-warning text-decoration-none fw-bold">{{ b.title }}</a></td>
+        <td class="small text-secondary">{{ b.project_name or '—' }}</td>
+        <td class="small text-secondary">{{ b.client_name or '—' }}</td>
+        <td class="text-center">{{ b.item_count }}</td>
+        <td>
+          {% if b.status == 'draft' %}<span class="badge bg-secondary">Draft</span>
+          {% else %}<span class="badge bg-success">{{ b.status|title }}</span>{% endif %}
+        </td>
+        <td class="small text-secondary">{{ b.updated_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center py-5">
+  <i class="bi bi-list-check text-secondary" style="font-size:48px"></i>
+  <h6 class="mt-3 mb-2">No BOMs yet</h6>
+  <p class="text-secondary mb-3">Build a Bill of Materials from marketplace products. Export as a BOQ for proposals, or clone to an RFQ for live supplier prices.</p>
+  <a href="{{ url_for('boms_new') }}" class="btn btn-warning fw-bold"><i class="bi bi-plus-circle me-1"></i>Create BOM</a>
+  <a href="{{ url_for('marketplace_public') }}" class="btn btn-outline-light ms-2"><i class="bi bi-grid me-1"></i>Browse marketplace</a>
+</div>
+{% endif %}
+</div>
+{% endblock %}

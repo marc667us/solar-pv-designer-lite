@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}New RFQ — SolarPro{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="text-secondary small mb-1"><a href="{{ url_for('rfqs_list') }}" class="text-warning">My RFQs</a> / New</div>
+    <h5 class="fw-black mb-3">Start a request for quote</h5>
+
+    <div class="solar-card p-4">
+      <form method="POST" action="{{ url_for('rfqs_new') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-info-circle me-1"></i>Project</h6>
+        <div class="row g-3 mb-3">
+          <div class="col-md-12">
+            <label class="form-label small text-secondary">RFQ title *</label>
+            <input class="form-control" name="title" required placeholder="LV switchgear for Kumasi commercial fit-out">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Delivery country</label>
+            <select class="form-select" name="delivery_country">
+              <option value="">—</option>
+              {% for c in countries %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Quote deadline</label>
+            <input type="date" class="form-control" name="deadline_date">
+          </div>
+          <div class="col-md-12">
+            <label class="form-label small text-secondary">Notes for suppliers</label>
+            <textarea class="form-control" name="notes" rows="2" placeholder="Site address, payment terms, delivery window, anything suppliers should know."></textarea>
+          </div>
+        </div>
+
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-box-seam me-1"></i>First item</h6>
+        <div class="row g-3 mb-3">
+          {% if seed_product %}
+          <div class="col-md-12">
+            <div class="rounded-3 p-2 mb-2" style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3)">
+              <i class="bi bi-lightning-charge text-warning me-1"></i>
+              <span class="small">Seeded from marketplace product:</span> <strong>{{ seed_product.name }}</strong>
+              <input type="hidden" name="first_item_product_id" value="{{ seed_product.id }}">
+              <input type="hidden" name="first_item_name" value="{{ seed_product.name }}">
+              <input type="hidden" name="first_item_unit" value="{{ seed_product.unit }}">
+            </div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-secondary">Quantity</label>
+            <input type="number" step="0.01" class="form-control" name="first_item_qty" value="1" min="0.01">
+          </div>
+          <div class="col-md-8">
+            <label class="form-label small text-secondary">Spec notes (optional)</label>
+            <input class="form-control" name="first_item_spec" placeholder="Tolerance, finish, accessory pack...">
+          </div>
+          {% else %}
+          <div class="col-md-8">
+            <label class="form-label small text-secondary">Item name (you can add more after creating)</label>
+            <input class="form-control" name="first_item_name" placeholder="LV 4C 25mm² Cu XLPE/SWA/PVC cable">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small text-secondary">Qty</label>
+            <input type="number" step="0.01" class="form-control" name="first_item_qty" value="1" min="0.01">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small text-secondary">Unit</label>
+            <input class="form-control" name="first_item_unit" value="No.">
+          </div>
+          <div class="col-md-12">
+            <label class="form-label small text-secondary">Spec notes</label>
+            <input class="form-control" name="first_item_spec" placeholder="Brand preference, voltage rating, certifications...">
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="d-flex gap-2 justify-content-end">
+          <a href="{{ url_for('rfqs_list') }}" class="btn btn-outline-secondary">Cancel</a>
+          <button type="submit" class="btn btn-warning fw-bold px-4"><i class="bi bi-arrow-right-circle me-1"></i>Create draft</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

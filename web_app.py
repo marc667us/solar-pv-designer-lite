@@ -13597,6 +13597,1852 @@ def myproject_list():
                            bucket_choices=bucket_choices)
 
 
+# ─── Routes — Public Electrical Marketplace ───────────────────────────────────
+# Magnet feature: free public browse of electrical products + prices + suppliers.
+# Anonymous visitors see prices and supplier names; action buttons (RFQ, compare,
+# download) gate on /register so the marketplace funnels into solar signups.
+#
+# Reuses the existing `equipment_catalog` and `suppliers` tables (added via
+# ALTER TABLE ADD COLUMN below, with IF NOT EXISTS semantics). Existing solar
+# items keep working; new electrical items use the richer 18-category taxonomy.
+
+_MARKETPLACE_CATEGORIES = [
+    # (code, name, icon, display_order)
+    ("transformers",      "Transformers",                     "bi-lightning-charge",  10),
+    ("avr",               "Voltage Regulators / AVR",         "bi-arrow-up-down",     20),
+    ("hv_cables",         "HV Power Cables",                  "bi-plug",              30),
+    ("lv_cables",         "LV Power Cables",                  "bi-plug",              40),
+    ("wires",             "Electrical Wires",                 "bi-three-dots",        50),
+    ("panel_boards",      "Panel Boards",                     "bi-grid-3x3",          60),
+    ("distribution_boards", "Distribution Boards",            "bi-grid",              70),
+    ("isolators",         "Isolators",                        "bi-shield",            80),
+    ("fuse_switches",     "Fuse Switches",                    "bi-shield-exclamation", 90),
+    ("conduit",           "Conduit Pipes",                    "bi-record-circle",    100),
+    ("steel_boxes",       "Steel Square Boxes",               "bi-square",           110),
+    ("circular_boxes",    "Circular Boxes",                   "bi-circle",           120),
+    ("cable_trays",       "Cable Trays",                      "bi-bricks",           130),
+    ("trunking",          "Plastic Trunking",                 "bi-distribute-horizontal", 140),
+    ("earthing",          "Earthing Materials",               "bi-arrow-down",       150),
+    ("sockets",           "13A Socket Outlets",               "bi-outlet",           160),
+    ("dp_switches",       "20A DP Switches",                  "bi-toggle-on",        170),
+    ("light_switches",    "Light Switches",                   "bi-lightbulb",        180),
+    ("solar_equipment",   "Solar Equipment",                  "bi-sun",              190),
+    ("ict_elv",           "ICT / ELV Products",               "bi-router",           200),
+]
+
+
+def _ensure_marketplace_tables():
+    """Idempotent — runs on every marketplace route hit. Cheap (CREATE IF NOT EXISTS)."""
+    with get_db() as c:
+        c.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS product_categories (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                code          TEXT UNIQUE NOT NULL,
+                name          TEXT NOT NULL,
+                icon          TEXT DEFAULT 'bi-box',
+                display_order INTEGER DEFAULT 0,
+                is_active     INTEGER DEFAULT 1,
+                created_at    TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_product_categories_order
+                ON product_categories(display_order);
+            """
+        )
+        # Extend equipment_catalog with marketplace fields (idempotent — PRAGMA check first).
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(equipment_catalog)").fetchall()}
+        if "category_id" not in cols:
+            c.execute("ALTER TABLE equipment_catalog ADD COLUMN category_id INTEGER DEFAULT 0")
+        if "subcategory" not in cols:
+            c.execute("ALTER TABLE equipment_catalog ADD COLUMN subcategory TEXT DEFAULT ''")
+        if "image_url" not in cols:
+            c.execute("ALTER TABLE equipment_catalog ADD COLUMN image_url TEXT DEFAULT ''")
+        if "is_public_visible" not in cols:
+            c.execute("ALTER TABLE equipment_catalog ADD COLUMN is_public_visible INTEGER DEFAULT 1")
+        # Seed categories if empty.
+        if c.execute("SELECT COUNT(*) FROM product_categories").fetchone()[0] == 0:
+            c.executemany(
+                "INSERT INTO product_categories (code,name,icon,display_order) VALUES (?,?,?,?)",
+                _MARKETPLACE_CATEGORIES,
+            )
+        # Backfill: any equipment_catalog row with category_id=0 maps to Solar Equipment.
+        solar_cat = c.execute(
+            "SELECT id FROM product_categories WHERE code='solar_equipment'"
+        ).fetchone()
+        if solar_cat:
+            c.execute(
+                "UPDATE equipment_catalog SET category_id=? WHERE category_id=0 AND category_id IS NOT NULL",
+                (solar_cat["id"],),
+            )
+        # Seed a handful of electrical products so the marketplace isn't empty on first visit.
+        if c.execute(
+            "SELECT COUNT(*) FROM equipment_catalog WHERE category_id IN "
+            "(SELECT id FROM product_categories WHERE code != 'solar_equipment')"
+        ).fetchone()[0] == 0:
+            _seed_marketplace_samples(c)
+
+
+def _seed_marketplace_samples(c):
+    """Seed ~25 sample electrical products across non-solar categories so the
+    marketplace has content on first visit. Idempotent: only runs if no
+    non-solar products exist yet."""
+    cats = {r["code"]: r["id"] for r in c.execute(
+        "SELECT id, code FROM product_categories"
+    ).fetchall()}
+    sup = {r["name"]: r["id"] for r in c.execute(
+        "SELECT id, name FROM suppliers"
+    ).fetchall()}
+    schneider = sup.get("Schneider Electric", 0)
+    rs = sup.get("RS Components", 0)
+    # (category_code, name, brand, model, spec, unit, price_usd, supplier_id, lead_time, subcategory)
+    samples = [
+        ("transformers",       "ABB 500 kVA Distribution Transformer", "ABB",       "TRF-500-DT", "500 kVA, 11/0.433 kV, Dyn11, ONAN, IEC 60076",       "No.",  9800, schneider, 60, "Distribution"),
+        ("transformers",       "Schneider 250 kVA Oil Immersed",       "Schneider", "MT250-OIL",  "250 kVA, 11/0.4 kV, ONAN, hermetically sealed",      "No.",  6500, schneider, 60, "Oil Immersed"),
+        ("avr",                "Servo AVR 30 kVA 3-Phase",             "Generic",   "SAVR-30K",   "30 kVA, 3PH, Servo, ±15% input range",               "No.",  1450, rs,        21, "Three-phase"),
+        ("hv_cables",          "11 kV XLPE 3C 70mm² Cu Armoured",      "Nexans",    "HV-11-3C70", "11 kV, XLPE/SWA/PVC, Copper, 3 core, 70mm²",         "m",      52, rs,        45, "Armoured"),
+        ("lv_cables",          "LV 4C 16mm² Cu XLPE/SWA/PVC",          "Nexans",    "LV-4C-16",   "0.6/1 kV, 4 core, 16mm², Cu, XLPE/SWA/PVC",          "m",      14, rs,        21, "Armoured"),
+        ("lv_cables",          "LV 4C 25mm² Cu XLPE/SWA/PVC",          "Nexans",    "LV-4C-25",   "0.6/1 kV, 4 core, 25mm², Cu, XLPE/SWA/PVC",          "m",      22, rs,        21, "Armoured"),
+        ("wires",              "Single Core 2.5mm² PVC Red (100m)",    "Generic",   "SC-2.5-R",   "2.5mm² Cu, 450/750 V, PVC, red",                     "Roll",   28, rs,        7,  "Single Core PVC"),
+        ("wires",              "Single Core 4mm² PVC Blue (100m)",     "Generic",   "SC-4-B",     "4mm² Cu, 450/750 V, PVC, blue",                      "Roll",   42, rs,        7,  "Single Core PVC"),
+        ("panel_boards",       "Schneider 400A MCC Panel",             "Schneider", "MCC-400",    "400A TPN MCC, Form 3b, 50kA, IP54",                  "No.",  3800, schneider, 45, "MCC Panels"),
+        ("distribution_boards","18-way TPN Distribution Board",        "Schneider", "DB-18TPN",   "18-way TPN, 100A incomer, 10kA, IP43",               "No.",   285, schneider, 21, "TPN"),
+        ("distribution_boards","8-way SPN Consumer Unit",              "Schneider", "DB-8SPN",    "8-way SPN consumer unit, 63A RCD",                   "No.",   145, schneider, 14, "SPN"),
+        ("isolators",          "63A 4-Pole Isolator",                  "Schneider", "ISO-63-4P",  "63A 4P AC isolator, IP65",                           "No.",    58, schneider, 14, "Four-pole"),
+        ("fuse_switches",      "100A Switch Fuse with HRC Fuses",      "Schneider", "SF-100-HRC", "100A switch fuse, IP30, HRC fuses included",         "No.",   145, schneider, 21, "HRC"),
+        ("conduit",            "PVC Conduit 25mm Heavy Gauge (3m)",    "Generic",   "PVC-25-HG",  "25mm dia heavy-gauge PVC conduit, 3m length",        "m",       1, rs,        7,  "Heavy Gauge"),
+        ("steel_boxes",        "1 Gang Deep Steel Box",                "Generic",   "SB-1G-D",    "1 gang deep flush steel back box, 50mm deep",        "No.",     3, rs,        7,  "1 Gang"),
+        ("steel_boxes",        "2 Gang Deep Steel Box",                "Generic",   "SB-2G-D",    "2 gang deep flush steel back box, 50mm deep",        "No.",     4, rs,        7,  "2 Gang"),
+        ("circular_boxes",     "Ceiling Circular Box 65mm",            "Generic",   "CB-65",      "65mm dia ceiling box with knockouts",                "No.",     2, rs,        7,  "Ceiling"),
+        ("cable_trays",        "Perforated Cable Tray 300mm (3m)",     "Generic",   "CT-300P",    "300mm wide perforated cable tray, hot-dip galv, 3m", "m",      18, rs,        21, "Perforated"),
+        ("trunking",           "PVC Mini Trunking 38x16mm (2m)",       "Generic",   "MT-38-16",   "PVC mini trunking, 38x16mm, white, 2m",              "m",       4, rs,        7,  "Mini"),
+        ("earthing",           "Copper Earth Bar 600mm",               "Generic",   "EB-600",     "600mm Cu earth bar, 25mm x 6mm, 10 holes",           "No.",    52, rs,        14, "Earth Bars"),
+        ("earthing",           "Earth Inspection Pit",                 "Generic",   "EIP-1",      "Concrete earth inspection pit, 300x300mm with cover","No.",    38, rs,        14, "Inspection Pits"),
+        ("sockets",            "MK 13A Twin Switched Socket",          "MK",        "K2747WHI",   "13A twin switched socket, white, flush",             "No.",    14, rs,        7,  "Switched"),
+        ("sockets",            "MK 13A Twin USB Socket",               "MK",        "K2743WHI",   "13A twin socket with 2x USB-A, white, flush",        "No.",    22, rs,        14, "USB"),
+        ("dp_switches",        "20A DP Water Heater Switch",           "MK",        "K5403WHI",   "20A DP switch with neon, flush, white",              "No.",    11, rs,        7,  "Water Heater"),
+        ("light_switches",     "1 Gang 2 Way Switch",                  "MK",        "K4871WHI",   "1 gang 2 way switch, 10A, white",                    "No.",     6, rs,        7,  "1 Gang 2 Way"),
+        ("light_switches",     "2 Gang 2 Way Switch",                  "MK",        "K4872WHI",   "2 gang 2 way switch, 10A, white",                    "No.",     8, rs,        7,  "2 Gang 2 Way"),
+        ("light_switches",     "3 Gang 2 Way Switch",                  "MK",        "K4873WHI",   "3 gang 2 way switch, 10A, white",                    "No.",    11, rs,        7,  "3 Gang 2 Way"),
+    ]
+    # Build a code → display-name map from the seed list so the legacy
+    # free-text `category` column carries a human-readable label, matching
+    # how solar's existing rows ("PV Modules", "Inverters", ...) are stored.
+    code_to_label = {row[0]: row[1] for row in _MARKETPLACE_CATEGORIES}
+    for (code, name, brand, model, spec, unit, price, sup_id, lt, sub) in samples:
+        cat_id = cats.get(code, 0)
+        legacy_label = code_to_label.get(code, "")
+        c.execute(
+            "INSERT INTO equipment_catalog (category, name, brand, model, spec, unit, "
+            "price_usd, supplier_id, lead_time_days, category_id, subcategory, is_public_visible) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,1)",
+            (legacy_label, name, brand, model, spec, unit, price, sup_id, lt, cat_id, sub),
+        )
+
+
+def _safe_int(v, default=0):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
+@app.route("/marketplace")
+def marketplace_public():
+    """Public landing for the electrical pricing marketplace.
+
+    Anonymous visitors see categories, products, prices, supplier names.
+    Action buttons (request quote, send RFQ, download BOM) redirect to
+    /register?next=/marketplace so the magnet funnels into signups."""
+    _ensure_marketplace_tables()
+    q = (request.args.get("q") or "").strip()
+    cat_id = _safe_int(request.args.get("cat", 0))
+
+    with get_db() as c:
+        categories = c.execute(
+            "SELECT pc.id, pc.code, pc.name, pc.icon, "
+            "  (SELECT COUNT(*) FROM equipment_catalog ec "
+            "   WHERE ec.category_id=pc.id AND ec.is_active=1 "
+            "         AND ec.is_public_visible=1 AND ec.is_verified=1) AS product_count "
+            "FROM product_categories pc "
+            "WHERE pc.is_active=1 "
+            "ORDER BY pc.display_order"
+        ).fetchall()
+
+        sql = ("SELECT ec.id, ec.name, ec.brand, ec.model, ec.spec, ec.unit, "
+               "       ec.price_usd, ec.lead_time_days, ec.subcategory, "
+               "       ec.image_url, ec.category_id, "
+               "       s.name AS supplier_name, s.country AS supplier_country, "
+               "       s.rating AS supplier_rating, "
+               "       pc.name AS category_name, pc.icon AS category_icon "
+               "FROM equipment_catalog ec "
+               "LEFT JOIN suppliers s ON s.id=ec.supplier_id "
+               "LEFT JOIN product_categories pc ON pc.id=ec.category_id "
+               "WHERE ec.is_active=1 AND ec.is_public_visible=1 AND ec.is_verified=1 ")
+        args = []
+        if cat_id:
+            sql += "AND ec.category_id=? "
+            args.append(cat_id)
+        if q:
+            sql += ("AND (ec.name LIKE ? OR ec.brand LIKE ? OR ec.model LIKE ? "
+                    "     OR ec.spec LIKE ?) ")
+            like = f"%{q}%"
+            args.extend([like, like, like, like])
+        sql += "ORDER BY ec.created_at DESC LIMIT 200"
+        products = c.execute(sql, args).fetchall()
+
+        total_products = c.execute(
+            "SELECT COUNT(*) FROM equipment_catalog "
+            "WHERE is_active=1 AND is_public_visible=1 AND is_verified=1"
+        ).fetchone()[0]
+        total_suppliers = c.execute(
+            "SELECT COUNT(*) FROM suppliers WHERE is_active=1"
+        ).fetchone()[0]
+        countries = c.execute(
+            "SELECT COUNT(DISTINCT country) FROM suppliers "
+            "WHERE is_active=1 AND country!=''"
+        ).fetchone()[0]
+
+    selected_category = None
+    if cat_id:
+        for cat in categories:
+            if cat["id"] == cat_id:
+                selected_category = cat
+                break
+
+    return render_template(
+        "marketplace.html",
+        user=current_user(),
+        categories=categories,
+        products=products,
+        total_products=total_products,
+        total_suppliers=total_suppliers,
+        total_countries=countries,
+        selected_category=selected_category,
+        q=q,
+    )
+
+
+@app.route("/marketplace/action/<string:action>")
+def marketplace_action_gate(action):
+    """All action buttons (RFQ, BOM, contact, download) hit this gate.
+    Anonymous → /register?next=/marketplace. Logged-in → coming-soon notice
+    (Slice 2 will wire each action to its real implementation)."""
+    if not current_user():
+        return redirect(url_for("register") + "?next=" + url_for("marketplace_public"))
+    flash(f"'{action.replace('_', ' ').title()}' arrives in the next marketplace release. "
+          "Your interest is logged.", "info")
+    return redirect(url_for("marketplace_public"))
+
+
+# ─── Routes — Marketplace Supplier Self-Service ───────────────────────────────
+# Slice 2A: suppliers register themselves, manage their company profile, add
+# their own products to equipment_catalog. Products land with is_verified=0 so
+# an admin must approve before they show up on the public marketplace browse.
+#
+# Role model: users.role = 'supplier_admin' for supplier-owned accounts.
+# Existing solar users (role = '' or NULL) keep working unchanged.
+
+def _ensure_supplier_schema():
+    """Idempotent — extends users and suppliers tables with self-service fields."""
+    with get_db() as c:
+        # users: add 'role' column for supplier_admin scope
+        ucols = {r["name"] for r in c.execute("PRAGMA table_info(users)").fetchall()}
+        if "role" not in ucols:
+            c.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT ''")
+        # suppliers: link to the user who owns the record + verification flag
+        scols = {r["name"] for r in c.execute("PRAGMA table_info(suppliers)").fetchall()}
+        if "user_id" not in scols:
+            c.execute("ALTER TABLE suppliers ADD COLUMN user_id INTEGER DEFAULT 0")
+        if "is_verified" not in scols:
+            c.execute("ALTER TABLE suppliers ADD COLUMN is_verified INTEGER DEFAULT 0")
+        # Mark the seeded reference suppliers (JinkoSolar, LONGi, etc.) as verified
+        # so they continue to show up on the public marketplace.
+        c.execute("UPDATE suppliers SET is_verified=1 WHERE user_id=0 AND is_verified=0")
+        # equipment_catalog: marketplace approval flag
+        ecols = {r["name"] for r in c.execute("PRAGMA table_info(equipment_catalog)").fetchall()}
+        if "is_verified" not in ecols:
+            c.execute("ALTER TABLE equipment_catalog ADD COLUMN is_verified INTEGER DEFAULT 1")
+            # All pre-existing rows were admin-curated so treat them as verified.
+
+
+def supplier_required(f):
+    """Decorator: require an authenticated supplier_admin role."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        u = current_user()
+        if not u:
+            return redirect(url_for("login"))
+        if (u["role"] or "") != "supplier_admin":
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated
+
+
+def _current_supplier():
+    """Return the supplier row that belongs to the current supplier_admin user."""
+    u = current_user()
+    if not u:
+        return None
+    with get_db() as c:
+        return c.execute(
+            "SELECT * FROM suppliers WHERE user_id=? LIMIT 1", (u["id"],)
+        ).fetchone()
+
+
+@app.route("/supplier/register", methods=["GET", "POST"])
+@limiter.limit("10 per hour")
+def supplier_register():
+    """Self-service supplier signup. Creates a users row with role='supplier_admin'
+    and a paired suppliers row owned by that user."""
+    _ensure_supplier_schema()
+    _ensure_marketplace_tables()
+    if request.method == "GET":
+        return render_template(
+            "supplier_register.html", user=current_user(), countries=get_countries()
+        )
+    csrf_protect()
+    f = request.form
+    if not f.get("terms_agreed"):
+        flash("Please accept the Terms of Service and Privacy Policy.", "danger")
+        return render_template(
+            "supplier_register.html", user=current_user(), countries=get_countries()
+        )
+    # Minimal required fields
+    company = (f.get("company") or "").strip()
+    username = (f.get("username") or "").strip().lower()
+    email = (f.get("email") or "").strip().lower()
+    password = f.get("password") or ""
+    country = (f.get("country") or "").strip()
+    if not all([company, username, email, password]):
+        flash("Company name, username, email, and password are required.", "danger")
+        return render_template(
+            "supplier_register.html", user=current_user(), countries=get_countries()
+        )
+    if len(password) < 8:
+        flash("Password must be at least 8 characters.", "danger")
+        return render_template(
+            "supplier_register.html", user=current_user(), countries=get_countries()
+        )
+    ph = generate_password_hash(password)
+    try:
+        with get_db() as c:
+            c.execute(
+                "INSERT INTO users (username,email,password_hash,name,company,country,plan,role) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (username, email, ph, f.get("contact_name", ""), company,
+                 country, "free", "supplier_admin"),
+            )
+            uid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+            c.execute(
+                "INSERT INTO suppliers (name,country,contact_name,phone,email,website,"
+                "categories,lead_time_days,payment_terms,rating,user_id,is_verified,is_active) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)",
+                (company, country, f.get("contact_name", ""), f.get("phone", ""),
+                 email, f.get("website", ""), f.get("categories", ""),
+                 _safe_int(f.get("lead_time_days"), 30),
+                 f.get("payment_terms", "TT 30 days"), 5, uid, 0),
+            )
+    except sqlite3.IntegrityError as e:
+        msg = str(e).lower()
+        if "username" in msg:
+            flash("That username is already taken.", "danger")
+        elif "email" in msg:
+            flash("That email is already registered.", "danger")
+        else:
+            flash("Registration failed — please check your inputs.", "danger")
+        return render_template(
+            "supplier_register.html", user=current_user(), countries=get_countries()
+        )
+    # Auto-login the new supplier
+    session["user_id"] = uid
+    flash(
+        "Welcome to the SolarPro Marketplace. Your supplier account is pending "
+        "verification by our team — your products will appear publicly once approved.",
+        "success",
+    )
+    return redirect(url_for("supplier_dashboard"))
+
+
+@app.route("/supplier/dashboard")
+@supplier_required
+def supplier_dashboard():
+    s = _current_supplier()
+    if not s:
+        # Supplier row went missing — log them out, force re-registration.
+        session.pop("user_id", None)
+        flash("Your supplier profile could not be found. Please register again.", "danger")
+        return redirect(url_for("supplier_register"))
+    with get_db() as c:
+        product_count = c.execute(
+            "SELECT COUNT(*) FROM equipment_catalog WHERE supplier_id=?", (s["id"],)
+        ).fetchone()[0]
+        recent_products = c.execute(
+            "SELECT ec.*, pc.name AS category_name FROM equipment_catalog ec "
+            "LEFT JOIN product_categories pc ON pc.id=ec.category_id "
+            "WHERE ec.supplier_id=? ORDER BY ec.created_at DESC LIMIT 10",
+            (s["id"],),
+        ).fetchall()
+    return render_template(
+        "supplier_dashboard.html",
+        user=current_user(),
+        supplier=s,
+        product_count=product_count,
+        recent_products=recent_products,
+    )
+
+
+@app.route("/supplier/products")
+@supplier_required
+def supplier_products():
+    s = _current_supplier()
+    if not s:
+        return redirect(url_for("supplier_dashboard"))
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT ec.*, pc.name AS category_name "
+            "FROM equipment_catalog ec "
+            "LEFT JOIN product_categories pc ON pc.id=ec.category_id "
+            "WHERE ec.supplier_id=? ORDER BY ec.created_at DESC",
+            (s["id"],),
+        ).fetchall()
+    return render_template(
+        "supplier_products.html",
+        user=current_user(),
+        supplier=s,
+        products=rows,
+    )
+
+
+@app.route("/supplier/products/add", methods=["GET", "POST"])
+@supplier_required
+def supplier_product_add():
+    s = _current_supplier()
+    if not s:
+        return redirect(url_for("supplier_dashboard"))
+    with get_db() as c:
+        categories = c.execute(
+            "SELECT id, name FROM product_categories "
+            "WHERE is_active=1 ORDER BY display_order"
+        ).fetchall()
+    if request.method == "GET":
+        return render_template(
+            "supplier_product_add.html",
+            user=current_user(),
+            supplier=s,
+            categories=categories,
+        )
+    csrf_protect()
+    f = request.form
+    name = (f.get("name") or "").strip()
+    if not name:
+        flash("Product name is required.", "danger")
+        return redirect(url_for("supplier_product_add"))
+    cat_id = _safe_int(f.get("category_id"), 0)
+    # Look up the legacy free-text category label for backward compatibility
+    # with solar's BOQ generator (it queries equipment_catalog.category by string).
+    with get_db() as c:
+        cat_row = c.execute(
+            "SELECT name FROM product_categories WHERE id=?", (cat_id,)
+        ).fetchone()
+        cat_label = cat_row["name"] if cat_row else ""
+        c.execute(
+            "INSERT INTO equipment_catalog (category, name, brand, model, spec, unit, "
+            "price_usd, supplier_id, lead_time_days, category_id, subcategory, "
+            "is_public_visible, is_verified) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                cat_label,
+                name,
+                (f.get("brand") or "").strip(),
+                (f.get("model") or "").strip(),
+                (f.get("spec") or "").strip(),
+                (f.get("unit") or "No.").strip(),
+                _safe_int(f.get("price_usd"), 0),
+                s["id"],
+                _safe_int(f.get("lead_time_days"), 30),
+                cat_id,
+                (f.get("subcategory") or "").strip(),
+                1 if s["is_verified"] else 0,  # publicly visible only if supplier is verified
+                0,  # new products start unverified; admin or LLM agent approves
+            ),
+        )
+    flash(f"Added '{name}'. It will appear on the public marketplace after admin verification.", "success")
+    return redirect(url_for("supplier_products"))
+
+
+# ─── Routes — Marketplace Price-List Upload ───────────────────────────────────
+# Slice 2B: suppliers bulk-add products via CSV or XLSX upload.
+#
+# Phase 1 design — single-step upload with canonical column names. A 3-step
+# wizard (Upload → Map → Review) lands when real suppliers show up with
+# non-standard column headers. For now: download the template, fill in,
+# upload — done.
+#
+# Required columns: name, category, brand, model, spec, unit, price_usd,
+# lead_time_days, subcategory (subcategory optional, others required).
+# `category` is matched case-insensitively against product_categories.name
+# or product_categories.code.
+
+_UPLOAD_REQUIRED_COLS = ["name", "category", "price_usd"]
+_UPLOAD_OPTIONAL_COLS = ["brand", "model", "spec", "unit", "lead_time_days", "subcategory"]
+_UPLOAD_MAX_BYTES = 2 * 1024 * 1024   # 2 MB cap — Phase 1 keeps free-tier disk safe
+_UPLOAD_MAX_ROWS = 1000
+
+
+def _normalise_header(h: str) -> str:
+    return (h or "").strip().lower().replace(" ", "_").replace("-", "_")
+
+
+def _row_to_dict(headers: list, row: list) -> dict:
+    out = {}
+    for i, h in enumerate(headers):
+        out[h] = row[i] if i < len(row) else ""
+    return out
+
+
+def _parse_csv(stream) -> tuple[list, list]:
+    import csv as _csv
+    text = stream.read().decode("utf-8-sig", errors="replace")
+    reader = _csv.reader(text.splitlines())
+    rows = list(reader)
+    if not rows:
+        return [], []
+    headers = [_normalise_header(h) for h in rows[0]]
+    data_rows = [r for r in rows[1:] if any((cell or "").strip() for cell in r)]
+    return headers, data_rows
+
+
+def _parse_xlsx(stream) -> tuple[list, list]:
+    import openpyxl as _ox
+    wb = _ox.load_workbook(stream, data_only=True, read_only=True)
+    ws = wb.active
+    rows = []
+    for row in ws.iter_rows(values_only=True):
+        rows.append(["" if v is None else str(v) for v in row])
+    if not rows:
+        return [], []
+    headers = [_normalise_header(h) for h in rows[0]]
+    data_rows = [r for r in rows[1:] if any((cell or "").strip() for cell in r)]
+    return headers, data_rows
+
+
+@app.route("/supplier/upload/template")
+@supplier_required
+def supplier_upload_template():
+    """Download a starter CSV template with the canonical columns + one example row."""
+    import io as _io
+    buf = _io.StringIO()
+    buf.write(",".join(_UPLOAD_REQUIRED_COLS + _UPLOAD_OPTIONAL_COLS) + "\n")
+    buf.write(
+        '"ABB 500 kVA Distribution Transformer","Transformers",9800,'
+        '"ABB","TRF-500-DT","500 kVA, 11/0.433 kV, Dyn11","No.",60,"Distribution"\n'
+    )
+    return (
+        buf.getvalue(),
+        200,
+        {
+            "Content-Type": "text/csv",
+            "Content-Disposition": "attachment; filename=marketplace_template.csv",
+        },
+    )
+
+
+@app.route("/supplier/upload", methods=["GET", "POST"])
+@supplier_required
+def supplier_upload():
+    s = _current_supplier()
+    if not s:
+        return redirect(url_for("supplier_dashboard"))
+    if request.method == "GET":
+        return render_template(
+            "supplier_upload.html", user=current_user(), supplier=s
+        )
+    csrf_protect()
+
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("Please select a CSV or XLSX file to upload.", "danger")
+        return redirect(url_for("supplier_upload"))
+
+    # Size check before parsing (defence against oversize uploads on free tier).
+    f.stream.seek(0, 2)
+    size = f.stream.tell()
+    f.stream.seek(0)
+    if size > _UPLOAD_MAX_BYTES:
+        flash(f"File too large ({size//1024} KB). Limit is {_UPLOAD_MAX_BYTES//1024} KB.", "danger")
+        return redirect(url_for("supplier_upload"))
+
+    name_lower = (f.filename or "").lower()
+    try:
+        if name_lower.endswith(".csv"):
+            headers, data_rows = _parse_csv(f.stream)
+        elif name_lower.endswith(".xlsx"):
+            headers, data_rows = _parse_xlsx(f.stream)
+        else:
+            flash("Unsupported file type. Use .csv or .xlsx.", "danger")
+            return redirect(url_for("supplier_upload"))
+    except Exception as e:
+        app.logger.warning("supplier_upload parse failed: %s", e)
+        flash("The file could not be parsed. Check the format against the template.", "danger")
+        return redirect(url_for("supplier_upload"))
+
+    if not headers:
+        flash("The file appears empty.", "danger")
+        return redirect(url_for("supplier_upload"))
+
+    missing_required = [c for c in _UPLOAD_REQUIRED_COLS if c not in headers]
+    if missing_required:
+        flash(
+            f"Missing required columns: {', '.join(missing_required)}. "
+            "Download the template to see the expected layout.",
+            "danger",
+        )
+        return redirect(url_for("supplier_upload"))
+
+    if len(data_rows) > _UPLOAD_MAX_ROWS:
+        flash(
+            f"File has {len(data_rows)} rows — limit is {_UPLOAD_MAX_ROWS}. "
+            "Split into smaller batches.",
+            "danger",
+        )
+        return redirect(url_for("supplier_upload"))
+
+    # Build category lookup (case-insensitive on name OR code).
+    with get_db() as c:
+        cat_rows = c.execute(
+            "SELECT id, code, name FROM product_categories WHERE is_active=1"
+        ).fetchall()
+    cat_by_key = {}
+    for cr in cat_rows:
+        cat_by_key[(cr["name"] or "").lower()] = (cr["id"], cr["name"])
+        cat_by_key[(cr["code"] or "").lower()] = (cr["id"], cr["name"])
+
+    accepted = 0
+    rejected: list[dict] = []
+    with get_db() as c:
+        for idx, raw in enumerate(data_rows, start=2):  # row 1 was headers
+            d = _row_to_dict(headers, raw)
+            name = (d.get("name") or "").strip()
+            cat_text = (d.get("category") or "").strip().lower()
+            price_raw = (d.get("price_usd") or "").strip()
+            try:
+                price = float(price_raw) if price_raw else 0.0
+            except ValueError:
+                price = -1
+            if not name:
+                rejected.append({"row": idx, "reason": "name is blank"})
+                continue
+            if not cat_text or cat_text not in cat_by_key:
+                rejected.append({"row": idx, "reason": f"unknown category '{d.get('category', '')}'"})
+                continue
+            if price < 0:
+                rejected.append({"row": idx, "reason": f"invalid price '{price_raw}'"})
+                continue
+            cat_id, cat_label = cat_by_key[cat_text]
+            c.execute(
+                "INSERT INTO equipment_catalog (category, name, brand, model, spec, unit, "
+                "price_usd, supplier_id, lead_time_days, category_id, subcategory, "
+                "is_public_visible, is_verified) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    cat_label, name,
+                    (d.get("brand") or "").strip(),
+                    (d.get("model") or "").strip(),
+                    (d.get("spec") or "").strip(),
+                    (d.get("unit") or "No.").strip(),
+                    price,
+                    s["id"],
+                    _safe_int(d.get("lead_time_days"), 30),
+                    cat_id,
+                    (d.get("subcategory") or "").strip(),
+                    1 if s["is_verified"] else 0,
+                    0,  # uploaded items start pending verification
+                ),
+            )
+            accepted += 1
+
+    msg_parts = [f"Imported {accepted} product{'s' if accepted != 1 else ''}."]
+    if rejected:
+        first_few = "; ".join(f"row {r['row']}: {r['reason']}" for r in rejected[:5])
+        more = f" ... and {len(rejected) - 5} more" if len(rejected) > 5 else ""
+        msg_parts.append(f"Skipped {len(rejected)}: {first_few}{more}.")
+    flash(" ".join(msg_parts), "success" if accepted else "warning")
+    return redirect(url_for("supplier_products"))
+
+
+# ─── Routes — Marketplace Admin Verification ──────────────────────────────────
+# Slice 3: solar admin reviews supplier-uploaded products + new supplier
+# registrations, approves or rejects them. Approved items appear on the
+# public /marketplace and on the supplier's own dashboard as "Live".
+
+_MARKETPLACE_AUDIT_ACTIONS = {
+    "approve_product", "reject_product", "hide_product",
+    "approve_supplier", "reject_supplier",
+}
+
+
+def _log_marketplace_action(action: str, target_kind: str, target_id: int, notes: str = ""):
+    """Lightweight audit logger — writes one row to marketplace_audit_log.
+
+    Idempotent table creation so this works even on the very first action."""
+    with get_db() as c:
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS marketplace_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                action TEXT NOT NULL,
+                target_kind TEXT NOT NULL,
+                target_id INTEGER NOT NULL,
+                notes TEXT DEFAULT '',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        c.execute(
+            "INSERT INTO marketplace_audit_log "
+            "(user_id, action, target_kind, target_id, notes) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (session.get("user_id", 0), action, target_kind, target_id, notes),
+        )
+
+
+@app.route("/admin/marketplace")
+@admin_required
+def admin_marketplace_dashboard():
+    """Admin landing for the marketplace verification queue."""
+    _ensure_marketplace_tables()
+    _ensure_supplier_schema()
+    with get_db() as c:
+        pending_suppliers = c.execute(
+            "SELECT COUNT(*) FROM suppliers WHERE is_verified=0 AND is_active=1"
+        ).fetchone()[0]
+        verified_suppliers = c.execute(
+            "SELECT COUNT(*) FROM suppliers WHERE is_verified=1 AND is_active=1"
+        ).fetchone()[0]
+        pending_products = c.execute(
+            "SELECT COUNT(*) FROM equipment_catalog WHERE is_verified=0 AND is_active=1"
+        ).fetchone()[0]
+        verified_products = c.execute(
+            "SELECT COUNT(*) FROM equipment_catalog WHERE is_verified=1 AND is_active=1"
+        ).fetchone()[0]
+        recent_actions = c.execute(
+            "SELECT mal.*, u.username AS actor "
+            "FROM marketplace_audit_log mal "
+            "LEFT JOIN users u ON u.id=mal.user_id "
+            "ORDER BY mal.created_at DESC LIMIT 20"
+        ).fetchall() if c.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='marketplace_audit_log'"
+        ).fetchone() else []
+    return render_template(
+        "admin_marketplace.html",
+        user=current_user(),
+        pending_suppliers=pending_suppliers,
+        verified_suppliers=verified_suppliers,
+        pending_products=pending_products,
+        verified_products=verified_products,
+        recent_actions=recent_actions,
+    )
+
+
+@app.route("/admin/marketplace/pending")
+@admin_required
+def admin_marketplace_pending():
+    """Review queue: pending suppliers + pending products in one screen."""
+    _ensure_marketplace_tables()
+    _ensure_supplier_schema()
+    cat_id = _safe_int(request.args.get("cat"), 0)
+    q = (request.args.get("q") or "").strip()
+    with get_db() as c:
+        suppliers = c.execute(
+            "SELECT s.*, u.username AS owner_username, u.email AS owner_email "
+            "FROM suppliers s "
+            "LEFT JOIN users u ON u.id=s.user_id "
+            "WHERE s.is_verified=0 AND s.is_active=1 "
+            "ORDER BY s.created_at DESC LIMIT 100"
+        ).fetchall()
+        sql = (
+            "SELECT ec.*, s.name AS supplier_name, pc.name AS category_name "
+            "FROM equipment_catalog ec "
+            "LEFT JOIN suppliers s ON s.id=ec.supplier_id "
+            "LEFT JOIN product_categories pc ON pc.id=ec.category_id "
+            "WHERE ec.is_verified=0 AND ec.is_active=1 "
+        )
+        args = []
+        if cat_id:
+            sql += "AND ec.category_id=? "
+            args.append(cat_id)
+        if q:
+            sql += ("AND (ec.name LIKE ? OR ec.brand LIKE ? OR ec.model LIKE ? "
+                    "     OR s.name LIKE ?) ")
+            like = f"%{q}%"
+            args.extend([like, like, like, like])
+        sql += "ORDER BY ec.created_at DESC LIMIT 200"
+        products = c.execute(sql, args).fetchall()
+        categories = c.execute(
+            "SELECT id, name FROM product_categories WHERE is_active=1 "
+            "ORDER BY display_order"
+        ).fetchall()
+    return render_template(
+        "admin_marketplace_pending.html",
+        user=current_user(),
+        suppliers=suppliers,
+        products=products,
+        categories=categories,
+        selected_cat=cat_id,
+        q=q,
+    )
+
+
+@app.route("/admin/marketplace/supplier/<int:sid>/approve", methods=["POST"])
+@admin_required
+def admin_marketplace_approve_supplier(sid):
+    csrf_protect()
+    with get_db() as c:
+        row = c.execute(
+            "SELECT id, name FROM suppliers WHERE id=?", (sid,)
+        ).fetchone()
+        if not row:
+            abort(404)
+        c.execute("UPDATE suppliers SET is_verified=1 WHERE id=?", (sid,))
+        # Surface ONLY the supplier's already-verified products. Unverified
+        # products must continue to wait for product-level approval to avoid
+        # leaking unreviewed listings on supplier approval (Codex finding).
+        c.execute(
+            "UPDATE equipment_catalog SET is_public_visible=1 "
+            "WHERE supplier_id=? AND is_active=1 AND is_verified=1", (sid,),
+        )
+    _log_marketplace_action("approve_supplier", "supplier", sid, row["name"])
+    flash(f"Approved supplier '{row['name']}'.", "success")
+    return redirect(url_for("admin_marketplace_pending"))
+
+
+@app.route("/admin/marketplace/supplier/<int:sid>/reject", methods=["POST"])
+@admin_required
+def admin_marketplace_reject_supplier(sid):
+    csrf_protect()
+    with get_db() as c:
+        row = c.execute("SELECT id, name FROM suppliers WHERE id=?", (sid,)).fetchone()
+        if not row:
+            abort(404)
+        c.execute("UPDATE suppliers SET is_active=0 WHERE id=?", (sid,))
+        # Also hide their products from public.
+        c.execute(
+            "UPDATE equipment_catalog SET is_public_visible=0 WHERE supplier_id=?",
+            (sid,),
+        )
+    _log_marketplace_action("reject_supplier", "supplier", sid, row["name"])
+    flash(f"Rejected supplier '{row['name']}'.", "warning")
+    return redirect(url_for("admin_marketplace_pending"))
+
+
+@app.route("/admin/marketplace/product/<int:pid>/approve", methods=["POST"])
+@admin_required
+def admin_marketplace_approve_product(pid):
+    csrf_protect()
+    with get_db() as c:
+        row = c.execute(
+            "SELECT ec.id, ec.name, s.is_verified AS supplier_verified "
+            "FROM equipment_catalog ec "
+            "LEFT JOIN suppliers s ON s.id=ec.supplier_id "
+            "WHERE ec.id=?", (pid,),
+        ).fetchone()
+        if not row:
+            abort(404)
+        # Mark verified + visible only if owning supplier is also verified.
+        if row["supplier_verified"]:
+            c.execute(
+                "UPDATE equipment_catalog SET is_verified=1, is_public_visible=1 "
+                "WHERE id=?", (pid,),
+            )
+        else:
+            c.execute(
+                "UPDATE equipment_catalog SET is_verified=1 WHERE id=?", (pid,),
+            )
+    _log_marketplace_action("approve_product", "product", pid, row["name"])
+    flash(
+        f"Approved '{row['name']}'." if row["supplier_verified"]
+        else f"Approved '{row['name']}' (will go live once supplier is verified).",
+        "success",
+    )
+    return redirect(url_for("admin_marketplace_pending"))
+
+
+@app.route("/admin/marketplace/product/<int:pid>/reject", methods=["POST"])
+@admin_required
+def admin_marketplace_reject_product(pid):
+    csrf_protect()
+    with get_db() as c:
+        row = c.execute("SELECT id, name FROM equipment_catalog WHERE id=?", (pid,)).fetchone()
+        if not row:
+            abort(404)
+        c.execute(
+            "UPDATE equipment_catalog SET is_active=0, is_public_visible=0 WHERE id=?",
+            (pid,),
+        )
+    _log_marketplace_action("reject_product", "product", pid, row["name"])
+    flash(f"Rejected '{row['name']}'.", "warning")
+    return redirect(url_for("admin_marketplace_pending"))
+
+
+@app.route("/admin/marketplace/bulk", methods=["POST"])
+@admin_required
+def admin_marketplace_bulk():
+    """Batch action over a selection of products and/or suppliers.
+
+    Form fields:
+      - action: one of approve_product, reject_product, approve_supplier, reject_supplier
+      - product_ids[]: list of pids (string)
+      - supplier_ids[]: list of sids (string)
+    """
+    csrf_protect()
+    action = (request.form.get("action") or "").strip()
+    if action not in _MARKETPLACE_AUDIT_ACTIONS:
+        flash(f"Unknown action: {action}", "danger")
+        return redirect(url_for("admin_marketplace_pending"))
+
+    raw_pids = request.form.getlist("product_ids")
+    raw_sids = request.form.getlist("supplier_ids")
+    pids = [int(x) for x in raw_pids if x.isdigit()]
+    sids = [int(x) for x in raw_sids if x.isdigit()]
+    n = 0
+    with get_db() as c:
+        if action == "approve_product" and pids:
+            placeholders = ",".join(["?"] * len(pids))
+            cur = c.execute(
+                f"UPDATE equipment_catalog SET is_verified=1, is_public_visible=1 "
+                f"WHERE id IN ({placeholders}) "
+                f"  AND supplier_id IN (SELECT id FROM suppliers WHERE is_verified=1)",
+                pids,
+            )
+            n = cur.rowcount or 0
+            # Also flip the unverified-supplier rows so the verification flag is
+            # set even if visibility is gated on supplier review.
+            c.execute(
+                f"UPDATE equipment_catalog SET is_verified=1 "
+                f"WHERE id IN ({placeholders}) AND is_verified=0",
+                pids,
+            )
+        elif action == "reject_product" and pids:
+            placeholders = ",".join(["?"] * len(pids))
+            cur = c.execute(
+                f"UPDATE equipment_catalog SET is_active=0, is_public_visible=0 "
+                f"WHERE id IN ({placeholders})",
+                pids,
+            )
+            n = cur.rowcount or 0
+        elif action == "approve_supplier" and sids:
+            placeholders = ",".join(["?"] * len(sids))
+            cur = c.execute(
+                f"UPDATE suppliers SET is_verified=1 WHERE id IN ({placeholders})",
+                sids,
+            )
+            n = cur.rowcount or 0
+            # Only flip visibility for already-verified products of these
+            # suppliers — unverified products must continue to wait for their
+            # own approval (Codex finding).
+            c.execute(
+                f"UPDATE equipment_catalog SET is_public_visible=1 "
+                f"WHERE supplier_id IN ({placeholders}) AND is_active=1 AND is_verified=1",
+                sids,
+            )
+        elif action == "reject_supplier" and sids:
+            placeholders = ",".join(["?"] * len(sids))
+            cur = c.execute(
+                f"UPDATE suppliers SET is_active=0 WHERE id IN ({placeholders})",
+                sids,
+            )
+            n = cur.rowcount or 0
+            c.execute(
+                f"UPDATE equipment_catalog SET is_public_visible=0 "
+                f"WHERE supplier_id IN ({placeholders})",
+                sids,
+            )
+    # Log the batch as a single audit row with the count in notes.
+    if pids or sids:
+        kind = "product" if "product" in action else "supplier"
+        ids_csv = ",".join(str(x) for x in (pids if kind == "product" else sids))
+        _log_marketplace_action(action, kind, 0, f"bulk n={n}; ids={ids_csv}")
+    flash(f"{action.replace('_', ' ').title()}: applied to {n} row{'s' if n != 1 else ''}.",
+          "success" if n else "warning")
+    return redirect(url_for("admin_marketplace_pending"))
+
+
+# ─── Routes — Marketplace RFQ Workflow ────────────────────────────────────────
+# Slice 4: logged-in users build an RFQ from marketplace products, send it to
+# selected suppliers, suppliers respond with prices + lead-time, buyer compares
+# and awards. All four sides (buyer, supplier, marketplace, admin audit) ride
+# off the same RFQ tables defined here.
+
+_RFQ_STATUSES = {"draft", "sent", "awarded", "cancelled", "expired"}
+_RFQ_TARGET_STATUSES = {"pending", "responded", "declined"}
+
+
+def _ensure_rfq_tables():
+    """Idempotent — five tables for the RFQ workflow."""
+    with get_db() as c:
+        c.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS rfqs (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id             INTEGER NOT NULL,
+                title               TEXT NOT NULL,
+                delivery_country    TEXT DEFAULT '',
+                deadline_date       TEXT DEFAULT '',
+                notes               TEXT DEFAULT '',
+                status              TEXT DEFAULT 'draft',
+                awarded_supplier_id INTEGER DEFAULT 0,
+                created_at          TEXT DEFAULT CURRENT_TIMESTAMP,
+                sent_at             TEXT DEFAULT '',
+                updated_at          TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_rfqs_user ON rfqs(user_id);
+            CREATE INDEX IF NOT EXISTS idx_rfqs_status ON rfqs(status);
+
+            CREATE TABLE IF NOT EXISTS rfq_items (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                rfq_id       INTEGER NOT NULL,
+                product_id   INTEGER DEFAULT 0,
+                custom_name  TEXT NOT NULL,
+                qty          REAL DEFAULT 1,
+                unit         TEXT DEFAULT 'No.',
+                spec_notes   TEXT DEFAULT '',
+                created_at   TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_rfq_items_rfq ON rfq_items(rfq_id);
+
+            CREATE TABLE IF NOT EXISTS rfq_supplier_targets (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                rfq_id        INTEGER NOT NULL,
+                supplier_id   INTEGER NOT NULL,
+                status        TEXT DEFAULT 'pending',
+                sent_at       TEXT DEFAULT CURRENT_TIMESTAMP,
+                responded_at  TEXT DEFAULT '',
+                UNIQUE(rfq_id, supplier_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_rfq_targets_supplier ON rfq_supplier_targets(supplier_id);
+            CREATE INDEX IF NOT EXISTS idx_rfq_targets_rfq ON rfq_supplier_targets(rfq_id);
+
+            CREATE TABLE IF NOT EXISTS rfq_responses (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                rfq_id          INTEGER NOT NULL,
+                supplier_id     INTEGER NOT NULL,
+                total_price     REAL DEFAULT 0,
+                currency        TEXT DEFAULT 'USD',
+                lead_time_days  INTEGER DEFAULT 30,
+                notes           TEXT DEFAULT '',
+                valid_until     TEXT DEFAULT '',
+                created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(rfq_id, supplier_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_rfq_responses_rfq ON rfq_responses(rfq_id);
+
+            CREATE TABLE IF NOT EXISTS rfq_response_items (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                response_id    INTEGER NOT NULL,
+                rfq_item_id    INTEGER NOT NULL,
+                unit_price     REAL DEFAULT 0,
+                available      INTEGER DEFAULT 1,
+                notes          TEXT DEFAULT '',
+                UNIQUE(response_id, rfq_item_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_rfq_resp_items_resp ON rfq_response_items(response_id);
+            """
+        )
+
+
+def _rfq_owned_or_404(rfq_id: int, user_id: int):
+    """Fetch an RFQ row only if the current user owns it; otherwise abort 404
+    to avoid leaking RFQ existence."""
+    with get_db() as c:
+        row = c.execute(
+            "SELECT * FROM rfqs WHERE id=? AND user_id=?", (rfq_id, user_id)
+        ).fetchone()
+    if not row:
+        abort(404)
+    return row
+
+
+def _supplier_can_see_rfq(rfq_id: int, supplier_id: int) -> bool:
+    with get_db() as c:
+        row = c.execute(
+            "SELECT 1 FROM rfq_supplier_targets WHERE rfq_id=? AND supplier_id=?",
+            (rfq_id, supplier_id),
+        ).fetchone()
+    return bool(row)
+
+
+# ──────────────────────── BUYER side ──────────────────────────────────────
+
+
+@app.route("/rfqs")
+@login_required
+def rfqs_list():
+    """List the current user's RFQs (drafts + sent + awarded)."""
+    _ensure_rfq_tables()
+    uid = session["user_id"]
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT r.*, "
+            "  (SELECT COUNT(*) FROM rfq_items WHERE rfq_id=r.id) AS item_count, "
+            "  (SELECT COUNT(*) FROM rfq_supplier_targets WHERE rfq_id=r.id) AS sent_to, "
+            "  (SELECT COUNT(*) FROM rfq_responses WHERE rfq_id=r.id) AS responses "
+            "FROM rfqs r WHERE r.user_id=? ORDER BY r.updated_at DESC",
+            (uid,),
+        ).fetchall()
+    return render_template("rfqs_list.html", user=current_user(), rfqs=rows)
+
+
+@app.route("/rfqs/new", methods=["GET", "POST"])
+@login_required
+def rfqs_new():
+    _ensure_rfq_tables()
+    _ensure_marketplace_tables()
+    uid = session["user_id"]
+
+    if request.method == "GET":
+        # Optional ?product_id=X — pre-populate the first line from the
+        # marketplace card the buyer just clicked.
+        seed_pid = _safe_int(request.args.get("product_id"), 0)
+        seed_product = None
+        if seed_pid:
+            with get_db() as c:
+                seed_product = c.execute(
+                    "SELECT id, name, unit FROM equipment_catalog "
+                    "WHERE id=? AND is_active=1 AND is_public_visible=1 AND is_verified=1",
+                    (seed_pid,),
+                ).fetchone()
+        return render_template(
+            "rfq_new.html",
+            user=current_user(),
+            countries=get_countries(),
+            seed_product=seed_product,
+        )
+
+    csrf_protect()
+    f = request.form
+    title = (f.get("title") or "").strip()
+    if not title:
+        flash("Give your RFQ a title.", "danger")
+        return redirect(url_for("rfqs_new"))
+    with get_db() as c:
+        cur = c.execute(
+            "INSERT INTO rfqs (user_id, title, delivery_country, deadline_date, notes) "
+            "VALUES (?,?,?,?,?)",
+            (
+                uid, title,
+                (f.get("delivery_country") or "").strip(),
+                (f.get("deadline_date") or "").strip(),
+                (f.get("notes") or "").strip(),
+            ),
+        )
+        rfq_id = cur.lastrowid
+        # Optional first item from seed_product or the form.
+        first_name = (f.get("first_item_name") or "").strip()
+        first_pid = _safe_int(f.get("first_item_product_id"), 0)
+        if first_name:
+            c.execute(
+                "INSERT INTO rfq_items (rfq_id, product_id, custom_name, qty, unit, spec_notes) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    rfq_id, first_pid, first_name,
+                    float(f.get("first_item_qty") or 1),
+                    (f.get("first_item_unit") or "No.").strip(),
+                    (f.get("first_item_spec") or "").strip(),
+                ),
+            )
+    flash("RFQ draft created.", "success")
+    return redirect(url_for("rfqs_view", rfq_id=rfq_id))
+
+
+@app.route("/rfqs/<int:rfq_id>")
+@login_required
+def rfqs_view(rfq_id):
+    _ensure_rfq_tables()
+    uid = session["user_id"]
+    rfq = _rfq_owned_or_404(rfq_id, uid)
+    with get_db() as c:
+        items = c.execute(
+            "SELECT ri.*, ec.name AS product_name, ec.brand AS product_brand, "
+            "       ec.price_usd AS product_price "
+            "FROM rfq_items ri "
+            "LEFT JOIN equipment_catalog ec ON ec.id=ri.product_id "
+            "WHERE ri.rfq_id=? ORDER BY ri.id",
+            (rfq_id,),
+        ).fetchall()
+        targets = c.execute(
+            "SELECT rst.*, s.name AS supplier_name, s.country AS supplier_country "
+            "FROM rfq_supplier_targets rst "
+            "LEFT JOIN suppliers s ON s.id=rst.supplier_id "
+            "WHERE rst.rfq_id=? ORDER BY s.name",
+            (rfq_id,),
+        ).fetchall()
+        responses = c.execute(
+            "SELECT rr.*, s.name AS supplier_name, s.country AS supplier_country, "
+            "       s.is_verified AS supplier_verified "
+            "FROM rfq_responses rr "
+            "LEFT JOIN suppliers s ON s.id=rr.supplier_id "
+            "WHERE rr.rfq_id=? ORDER BY rr.total_price ASC",
+            (rfq_id,),
+        ).fetchall()
+        # Available suppliers for the "send" picker.
+        suppliers = c.execute(
+            "SELECT id, name, country FROM suppliers "
+            "WHERE is_active=1 AND is_verified=1 "
+            "ORDER BY name"
+        ).fetchall()
+    return render_template(
+        "rfq_view.html",
+        user=current_user(),
+        rfq=rfq,
+        items=items,
+        targets=targets,
+        responses=responses,
+        suppliers=suppliers,
+    )
+
+
+@app.route("/rfqs/<int:rfq_id>/items/add", methods=["POST"])
+@login_required
+def rfqs_add_item(rfq_id):
+    uid = session["user_id"]
+    rfq = _rfq_owned_or_404(rfq_id, uid)
+    if rfq["status"] != "draft":
+        abort(400)
+    csrf_protect()
+    f = request.form
+    name = (f.get("name") or "").strip()
+    if not name:
+        flash("Item name is required.", "danger")
+        return redirect(url_for("rfqs_view", rfq_id=rfq_id))
+    try:
+        qty = float(f.get("qty") or 1)
+    except ValueError:
+        qty = 1
+    pid = _safe_int(f.get("product_id"), 0)
+    # If the user passed product_id, validate it's a real public product.
+    if pid:
+        with get_db() as c:
+            ok = c.execute(
+                "SELECT 1 FROM equipment_catalog "
+                "WHERE id=? AND is_active=1 AND is_public_visible=1 AND is_verified=1",
+                (pid,),
+            ).fetchone()
+        if not ok:
+            pid = 0
+    with get_db() as c:
+        c.execute(
+            "INSERT INTO rfq_items (rfq_id, product_id, custom_name, qty, unit, spec_notes) "
+            "VALUES (?,?,?,?,?,?)",
+            (rfq_id, pid, name, qty,
+             (f.get("unit") or "No.").strip(),
+             (f.get("spec_notes") or "").strip()),
+        )
+        c.execute("UPDATE rfqs SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (rfq_id,))
+    return redirect(url_for("rfqs_view", rfq_id=rfq_id))
+
+
+@app.route("/rfqs/<int:rfq_id>/items/<int:item_id>/delete", methods=["POST"])
+@login_required
+def rfqs_delete_item(rfq_id, item_id):
+    uid = session["user_id"]
+    rfq = _rfq_owned_or_404(rfq_id, uid)
+    if rfq["status"] != "draft":
+        abort(400)
+    csrf_protect()
+    with get_db() as c:
+        c.execute(
+            "DELETE FROM rfq_items WHERE id=? AND rfq_id=?",
+            (item_id, rfq_id),
+        )
+        c.execute("UPDATE rfqs SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (rfq_id,))
+    return redirect(url_for("rfqs_view", rfq_id=rfq_id))
+
+
+@app.route("/rfqs/<int:rfq_id>/send", methods=["POST"])
+@login_required
+def rfqs_send(rfq_id):
+    uid = session["user_id"]
+    rfq = _rfq_owned_or_404(rfq_id, uid)
+    if rfq["status"] != "draft":
+        abort(400)
+    csrf_protect()
+    raw_sids = request.form.getlist("supplier_ids")
+    sids = [int(x) for x in raw_sids if x.isdigit()]
+    if not sids:
+        flash("Pick at least one supplier to send to.", "danger")
+        return redirect(url_for("rfqs_view", rfq_id=rfq_id))
+    with get_db() as c:
+        items_n = c.execute(
+            "SELECT COUNT(*) FROM rfq_items WHERE rfq_id=?", (rfq_id,)
+        ).fetchone()[0]
+        if not items_n:
+            flash("Add at least one item before sending.", "danger")
+            return redirect(url_for("rfqs_view", rfq_id=rfq_id))
+        targeted = 0
+        for sid in sids:
+            # Only target verified active suppliers; skip silently otherwise.
+            ok = c.execute(
+                "SELECT 1 FROM suppliers WHERE id=? AND is_active=1 AND is_verified=1",
+                (sid,),
+            ).fetchone()
+            if not ok:
+                continue
+            try:
+                c.execute(
+                    "INSERT INTO rfq_supplier_targets (rfq_id, supplier_id, status) "
+                    "VALUES (?, ?, 'pending')",
+                    (rfq_id, sid),
+                )
+                targeted += 1
+            except sqlite3.IntegrityError:
+                pass  # already targeted — idempotent
+        # If no submitted supplier survived the active+verified filter the
+        # RFQ stays in draft. Otherwise it would land in 'sent' status with
+        # zero targets and become permanently unanswerable (Codex finding).
+        if targeted == 0:
+            flash(
+                "None of the selected suppliers are currently verified — "
+                "the RFQ stays in draft. Pick at least one verified supplier.",
+                "danger",
+            )
+            return redirect(url_for("rfqs_view", rfq_id=rfq_id))
+        c.execute(
+            "UPDATE rfqs SET status='sent', sent_at=CURRENT_TIMESTAMP, "
+            "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (rfq_id,),
+        )
+    flash(f"RFQ sent to {targeted} supplier{'s' if targeted != 1 else ''}.", "success")
+    return redirect(url_for("rfqs_view", rfq_id=rfq_id))
+
+
+@app.route("/rfqs/<int:rfq_id>/award/<int:supplier_id>", methods=["POST"])
+@login_required
+def rfqs_award(rfq_id, supplier_id):
+    uid = session["user_id"]
+    rfq = _rfq_owned_or_404(rfq_id, uid)
+    if rfq["status"] not in ("sent",):
+        abort(400)
+    csrf_protect()
+    with get_db() as c:
+        ok = c.execute(
+            "SELECT 1 FROM rfq_responses WHERE rfq_id=? AND supplier_id=?",
+            (rfq_id, supplier_id),
+        ).fetchone()
+        if not ok:
+            flash("That supplier has not responded — cannot award.", "danger")
+            return redirect(url_for("rfqs_view", rfq_id=rfq_id))
+        c.execute(
+            "UPDATE rfqs SET status='awarded', awarded_supplier_id=?, "
+            "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (supplier_id, rfq_id),
+        )
+    flash("RFQ awarded.", "success")
+    return redirect(url_for("rfqs_view", rfq_id=rfq_id))
+
+
+@app.route("/rfqs/<int:rfq_id>/cancel", methods=["POST"])
+@login_required
+def rfqs_cancel(rfq_id):
+    uid = session["user_id"]
+    rfq = _rfq_owned_or_404(rfq_id, uid)
+    if rfq["status"] in ("awarded", "cancelled"):
+        abort(400)
+    csrf_protect()
+    with get_db() as c:
+        c.execute(
+            "UPDATE rfqs SET status='cancelled', updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (rfq_id,),
+        )
+    flash("RFQ cancelled.", "warning")
+    return redirect(url_for("rfqs_list"))
+
+
+# ──────────────────────── SUPPLIER side ──────────────────────────────────
+
+
+@app.route("/supplier/rfqs")
+@supplier_required
+def supplier_rfqs_inbox():
+    """List RFQs targeted at the current supplier."""
+    _ensure_rfq_tables()
+    s = _current_supplier()
+    if not s:
+        return redirect(url_for("supplier_dashboard"))
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT r.id, r.title, r.delivery_country, r.deadline_date, "
+            "       r.status AS rfq_status, r.created_at, r.sent_at, "
+            "       rst.status AS target_status, rst.responded_at, "
+            "       (SELECT COUNT(*) FROM rfq_items WHERE rfq_id=r.id) AS item_count, "
+            "       (SELECT 1 FROM rfq_responses WHERE rfq_id=r.id AND supplier_id=?) AS responded "
+            "FROM rfq_supplier_targets rst "
+            "JOIN rfqs r ON r.id=rst.rfq_id "
+            "WHERE rst.supplier_id=? "
+            "ORDER BY rst.sent_at DESC",
+            (s["id"], s["id"]),
+        ).fetchall()
+    return render_template(
+        "supplier_rfqs_inbox.html", user=current_user(), supplier=s, rfqs=rows
+    )
+
+
+@app.route("/supplier/rfqs/<int:rfq_id>", methods=["GET", "POST"])
+@supplier_required
+def supplier_rfqs_respond(rfq_id):
+    _ensure_rfq_tables()
+    s = _current_supplier()
+    if not s:
+        return redirect(url_for("supplier_dashboard"))
+    # Tenant scope: this supplier must be a target of this RFQ, else 404.
+    if not _supplier_can_see_rfq(rfq_id, s["id"]):
+        abort(404)
+    with get_db() as c:
+        rfq = c.execute("SELECT * FROM rfqs WHERE id=?", (rfq_id,)).fetchone()
+        if not rfq:
+            abort(404)
+        items = c.execute(
+            "SELECT * FROM rfq_items WHERE rfq_id=? ORDER BY id", (rfq_id,)
+        ).fetchall()
+        existing = c.execute(
+            "SELECT * FROM rfq_responses WHERE rfq_id=? AND supplier_id=?",
+            (rfq_id, s["id"]),
+        ).fetchone()
+        existing_items = {}
+        if existing:
+            for ri in c.execute(
+                "SELECT * FROM rfq_response_items WHERE response_id=?",
+                (existing["id"],),
+            ).fetchall():
+                existing_items[ri["rfq_item_id"]] = ri
+
+    if request.method == "GET":
+        return render_template(
+            "supplier_rfq_respond.html",
+            user=current_user(),
+            supplier=s,
+            rfq=rfq,
+            items=items,
+            existing=existing,
+            existing_items=existing_items,
+        )
+
+    csrf_protect()
+    if rfq["status"] != "sent":
+        flash("This RFQ is no longer accepting responses.", "warning")
+        return redirect(url_for("supplier_rfqs_inbox"))
+    f = request.form
+    try:
+        lead_time = int(f.get("lead_time_days") or 30)
+    except ValueError:
+        lead_time = 30
+    currency = (f.get("currency") or "USD").strip().upper()[:3]
+    notes = (f.get("notes") or "").strip()
+    valid_until = (f.get("valid_until") or "").strip()
+
+    # Compute total from per-line prices.
+    total = 0.0
+    line_prices: list[tuple[int, float, int]] = []
+    for it in items:
+        try:
+            unit_price = float(f.get(f"unit_price_{it['id']}") or 0)
+        except ValueError:
+            unit_price = 0
+        available = 1 if f.get(f"available_{it['id']}") else 0
+        qty = float(it["qty"] or 0)
+        if available and unit_price > 0:
+            total += unit_price * qty
+        line_prices.append((int(it["id"]), unit_price, available))
+
+    with get_db() as c:
+        if existing:
+            response_id = existing["id"]
+            c.execute(
+                "UPDATE rfq_responses "
+                "SET total_price=?, currency=?, lead_time_days=?, notes=?, "
+                "    valid_until=? "
+                "WHERE id=?",
+                (total, currency, lead_time, notes, valid_until, response_id),
+            )
+        else:
+            cur = c.execute(
+                "INSERT INTO rfq_responses (rfq_id, supplier_id, total_price, "
+                "currency, lead_time_days, notes, valid_until) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (rfq_id, s["id"], total, currency, lead_time, notes, valid_until),
+            )
+            response_id = cur.lastrowid
+        # Upsert per-line entries.
+        for (item_id, unit_price, available) in line_prices:
+            existing_line = c.execute(
+                "SELECT id FROM rfq_response_items WHERE response_id=? AND rfq_item_id=?",
+                (response_id, item_id),
+            ).fetchone()
+            if existing_line:
+                c.execute(
+                    "UPDATE rfq_response_items "
+                    "SET unit_price=?, available=? "
+                    "WHERE id=?",
+                    (unit_price, available, existing_line["id"]),
+                )
+            else:
+                c.execute(
+                    "INSERT INTO rfq_response_items "
+                    "(response_id, rfq_item_id, unit_price, available) "
+                    "VALUES (?,?,?,?)",
+                    (response_id, item_id, unit_price, available),
+                )
+        c.execute(
+            "UPDATE rfq_supplier_targets "
+            "SET status='responded', responded_at=CURRENT_TIMESTAMP "
+            "WHERE rfq_id=? AND supplier_id=?",
+            (rfq_id, s["id"]),
+        )
+
+    flash("Response submitted. The buyer can now see your price.", "success")
+    return redirect(url_for("supplier_rfqs_inbox"))
+
+
+# ─── Routes — Marketplace BOM / BOQ Builder ───────────────────────────────────
+# Slice 5: logged-in users build a Bill of Materials by adding marketplace
+# products, override per-line unit prices when needed, then export as a
+# printable BOQ or clone the whole BOM into an RFQ to chase live prices from
+# suppliers.
+
+def _ensure_bom_tables():
+    """Idempotent — two new tables for the BOM/BOQ builder."""
+    with get_db() as c:
+        c.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS marketplace_boms (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id       INTEGER NOT NULL,
+                title         TEXT NOT NULL,
+                project_name  TEXT DEFAULT '',
+                client_name   TEXT DEFAULT '',
+                notes         TEXT DEFAULT '',
+                status        TEXT DEFAULT 'draft',
+                created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at    TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_marketplace_boms_user
+                ON marketplace_boms(user_id);
+
+            CREATE TABLE IF NOT EXISTS marketplace_bom_items (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                bom_id              INTEGER NOT NULL,
+                product_id          INTEGER DEFAULT 0,
+                custom_name         TEXT NOT NULL,
+                qty                 REAL DEFAULT 1,
+                unit                TEXT DEFAULT 'No.',
+                unit_price_override REAL,
+                notes               TEXT DEFAULT '',
+                created_at          TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_marketplace_bom_items_bom
+                ON marketplace_bom_items(bom_id);
+            """
+        )
+
+
+def _bom_owned_or_404(bom_id: int, user_id: int):
+    """Tenant scope: a BOM is only visible to its owner."""
+    with get_db() as c:
+        row = c.execute(
+            "SELECT * FROM marketplace_boms WHERE id=? AND user_id=?",
+            (bom_id, user_id),
+        ).fetchone()
+    if not row:
+        abort(404)
+    return row
+
+
+def _bom_items_with_prices(bom_id: int):
+    """Fetch BOM items joined to the catalog so we have current prices
+    + category names ready for both the editor and the printable BOQ."""
+    with get_db() as c:
+        return c.execute(
+            "SELECT bi.*, "
+            "       ec.name        AS catalog_name, "
+            "       ec.brand       AS catalog_brand, "
+            "       ec.model       AS catalog_model, "
+            "       ec.spec        AS catalog_spec, "
+            "       ec.price_usd   AS catalog_price, "
+            "       ec.is_verified AS catalog_verified, "
+            "       s.name         AS supplier_name, "
+            "       s.country      AS supplier_country, "
+            "       pc.name        AS category_name "
+            "FROM marketplace_bom_items bi "
+            "LEFT JOIN equipment_catalog ec   ON ec.id=bi.product_id "
+            "LEFT JOIN suppliers s            ON s.id=ec.supplier_id "
+            "LEFT JOIN product_categories pc  ON pc.id=ec.category_id "
+            "WHERE bi.bom_id=? "
+            "ORDER BY pc.display_order, bi.id",
+            (bom_id,),
+        ).fetchall()
+
+
+def _bom_totals(items) -> dict:
+    """Roll up line totals + category subtotals."""
+    cat_totals: dict[str, float] = {}
+    grand = 0.0
+    lines = []
+    for it in items:
+        price = (
+            it["unit_price_override"]
+            if it["unit_price_override"] is not None
+            else (it["catalog_price"] or 0)
+        )
+        line_total = float(price or 0) * float(it["qty"] or 0)
+        cat = it["category_name"] or "Uncategorised"
+        cat_totals[cat] = cat_totals.get(cat, 0) + line_total
+        grand += line_total
+        lines.append({"item": it, "unit_price": float(price or 0),
+                      "line_total": line_total})
+    return {"lines": lines, "category_totals": cat_totals, "grand_total": grand}
+
+
+# ──────────────────────── BOM list / new ─────────────────────────────────
+
+
+@app.route("/boms")
+@login_required
+def boms_list():
+    _ensure_bom_tables()
+    uid = session["user_id"]
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT b.*, "
+            "  (SELECT COUNT(*) FROM marketplace_bom_items WHERE bom_id=b.id) AS item_count "
+            "FROM marketplace_boms b "
+            "WHERE b.user_id=? ORDER BY b.updated_at DESC",
+            (uid,),
+        ).fetchall()
+    return render_template("boms_list.html", user=current_user(), boms=rows)
+
+
+@app.route("/boms/new", methods=["GET", "POST"])
+@login_required
+def boms_new():
+    _ensure_bom_tables()
+    uid = session["user_id"]
+    if request.method == "GET":
+        return render_template("bom_new.html", user=current_user())
+    csrf_protect()
+    title = (request.form.get("title") or "").strip()
+    if not title:
+        flash("Give your BOM a title.", "danger")
+        return redirect(url_for("boms_new"))
+    with get_db() as c:
+        cur = c.execute(
+            "INSERT INTO marketplace_boms "
+            "(user_id, title, project_name, client_name, notes) "
+            "VALUES (?,?,?,?,?)",
+            (
+                uid, title,
+                (request.form.get("project_name") or "").strip(),
+                (request.form.get("client_name") or "").strip(),
+                (request.form.get("notes") or "").strip(),
+            ),
+        )
+        bom_id = cur.lastrowid
+    flash("BOM draft created.", "success")
+    return redirect(url_for("boms_view", bom_id=bom_id))
+
+
+@app.route("/boms/<int:bom_id>")
+@login_required
+def boms_view(bom_id):
+    _ensure_bom_tables()
+    uid = session["user_id"]
+    bom = _bom_owned_or_404(bom_id, uid)
+    items = _bom_items_with_prices(bom_id)
+    totals = _bom_totals(items)
+    return render_template(
+        "bom_view.html",
+        user=current_user(),
+        bom=bom, items=items, totals=totals,
+    )
+
+
+# ──────────────────────── BOM item add / update / delete ────────────────
+
+
+@app.route("/boms/<int:bom_id>/items/add", methods=["POST"])
+@login_required
+def boms_add_item(bom_id):
+    uid = session["user_id"]
+    bom = _bom_owned_or_404(bom_id, uid)
+    csrf_protect()
+    f = request.form
+    name = (f.get("name") or "").strip()
+    if not name:
+        flash("Item name is required.", "danger")
+        return redirect(url_for("boms_view", bom_id=bom_id))
+    try:
+        qty = float(f.get("qty") or 1)
+    except ValueError:
+        qty = 1
+    pid = _safe_int(f.get("product_id"), 0)
+    # Validate product_id against a real public verified product.
+    if pid:
+        with get_db() as c:
+            ok = c.execute(
+                "SELECT 1 FROM equipment_catalog "
+                "WHERE id=? AND is_active=1 AND is_public_visible=1 AND is_verified=1",
+                (pid,),
+            ).fetchone()
+        if not ok:
+            pid = 0
+    override_raw = (f.get("unit_price_override") or "").strip()
+    try:
+        override = float(override_raw) if override_raw else None
+    except ValueError:
+        override = None
+    with get_db() as c:
+        c.execute(
+            "INSERT INTO marketplace_bom_items "
+            "(bom_id, product_id, custom_name, qty, unit, unit_price_override, notes) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (bom_id, pid, name, qty,
+             (f.get("unit") or "No.").strip(),
+             override,
+             (f.get("notes") or "").strip()),
+        )
+        c.execute(
+            "UPDATE marketplace_boms SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (bom_id,),
+        )
+    return redirect(url_for("boms_view", bom_id=bom_id))
+
+
+@app.route("/boms/<int:bom_id>/items/<int:item_id>/delete", methods=["POST"])
+@login_required
+def boms_delete_item(bom_id, item_id):
+    uid = session["user_id"]
+    bom = _bom_owned_or_404(bom_id, uid)
+    csrf_protect()
+    with get_db() as c:
+        c.execute(
+            "DELETE FROM marketplace_bom_items WHERE id=? AND bom_id=?",
+            (item_id, bom_id),
+        )
+        c.execute(
+            "UPDATE marketplace_boms SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (bom_id,),
+        )
+    return redirect(url_for("boms_view", bom_id=bom_id))
+
+
+# ──────────────────────── Marketplace → BOM funnel ───────────────────────
+
+
+@app.route("/boms/add-product/<int:pid>", methods=["POST"])
+@login_required
+def boms_add_from_marketplace(pid):
+    """One-click "Add to BOM" from a marketplace product card.
+
+    POST-only with CSRF protection — a state-mutating endpoint must not be
+    a GET (Codex finding: a third-party page could trigger insertion via
+    <img src=...> on a logged-in user). The marketplace template renders
+    this as a tiny <form method="POST"> per card.
+
+    Picks the user's most-recently-updated draft BOM and appends the product;
+    if no draft exists, creates a fresh BOM titled with today's date. Then
+    redirects to /boms/<id>."""
+    csrf_protect()
+    _ensure_bom_tables()
+    _ensure_marketplace_tables()
+    uid = session["user_id"]
+    with get_db() as c:
+        product = c.execute(
+            "SELECT id, name, unit, brand FROM equipment_catalog "
+            "WHERE id=? AND is_active=1 AND is_public_visible=1 AND is_verified=1",
+            (pid,),
+        ).fetchone()
+    if not product:
+        flash("Product is no longer available.", "warning")
+        return redirect(url_for("marketplace_public"))
+    with get_db() as c:
+        draft = c.execute(
+            "SELECT id, title FROM marketplace_boms "
+            "WHERE user_id=? AND status='draft' "
+            "ORDER BY updated_at DESC LIMIT 1",
+            (uid,),
+        ).fetchone()
+        if draft:
+            bom_id = draft["id"]
+        else:
+            cur = c.execute(
+                "INSERT INTO marketplace_boms (user_id, title) VALUES (?,?)",
+                (uid, f"Quick BOM — {datetime.now().strftime('%Y-%m-%d %H:%M')}"),
+            )
+            bom_id = cur.lastrowid
+        c.execute(
+            "INSERT INTO marketplace_bom_items "
+            "(bom_id, product_id, custom_name, qty, unit) "
+            "VALUES (?,?,?,?,?)",
+            (bom_id, pid, product["name"], 1, product["unit"] or "No."),
+        )
+        c.execute(
+            "UPDATE marketplace_boms SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (bom_id,),
+        )
+    flash(f"Added '{product['name']}' to BOM.", "success")
+    return redirect(url_for("boms_view", bom_id=bom_id))
+
+
+# ──────────────────────── BOM → RFQ funnel ───────────────────────────────
+
+
+@app.route("/boms/<int:bom_id>/clone-to-rfq", methods=["POST"])
+@login_required
+def boms_clone_to_rfq(bom_id):
+    """Create a fresh RFQ pre-populated with every BOM item."""
+    uid = session["user_id"]
+    bom = _bom_owned_or_404(bom_id, uid)
+    csrf_protect()
+    _ensure_rfq_tables()
+    items = _bom_items_with_prices(bom_id)
+    if not items:
+        flash("Add items to the BOM before cloning to an RFQ.", "danger")
+        return redirect(url_for("boms_view", bom_id=bom_id))
+    with get_db() as c:
+        cur = c.execute(
+            "INSERT INTO rfqs (user_id, title, notes) VALUES (?,?,?)",
+            (uid, f"From BOM: {bom['title']}",
+             f"Cloned from BOM #{bom_id} on {datetime.now().strftime('%Y-%m-%d')}"),
+        )
+        rfq_id = cur.lastrowid
+        for it in items:
+            c.execute(
+                "INSERT INTO rfq_items "
+                "(rfq_id, product_id, custom_name, qty, unit, spec_notes) "
+                "VALUES (?,?,?,?,?,?)",
+                (rfq_id, it["product_id"], it["custom_name"], it["qty"],
+                 it["unit"], it["notes"] or ""),
+            )
+    flash(f"Created RFQ from BOM ({len(items)} items).", "success")
+    return redirect(url_for("rfqs_view", rfq_id=rfq_id))
+
+
+# ──────────────────────── BOQ printable + PDF ────────────────────────────
+
+
+@app.route("/boms/<int:bom_id>/boq")
+@login_required
+def boms_boq(bom_id):
+    uid = session["user_id"]
+    bom = _bom_owned_or_404(bom_id, uid)
+    items = _bom_items_with_prices(bom_id)
+    totals = _bom_totals(items)
+    return render_template(
+        "bom_boq.html",
+        user=current_user(),
+        bom=bom, items=items, totals=totals,
+    )
+
+
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=5000, debug=False)

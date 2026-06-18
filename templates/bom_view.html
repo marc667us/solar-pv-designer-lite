@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}{{ bom.title }} — BOM{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small"><a href="{{ url_for('boms_list') }}" class="text-warning">My BOMs</a></div>
+    <h5 class="fw-black mb-0 mt-1">{{ bom.title }}</h5>
+    <div class="text-secondary small">
+      {% if bom.project_name %}{{ bom.project_name }}{% endif %}
+      {% if bom.client_name %} · client: {{ bom.client_name }}{% endif %}
+      · created {{ bom.created_at }}
+    </div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('boms_boq', bom_id=bom.id) }}" class="btn btn-outline-light btn-sm" target="_blank"><i class="bi bi-file-text me-1"></i>View BOQ</a>
+    {% if items %}
+    <form method="POST" action="{{ url_for('boms_clone_to_rfq', bom_id=bom.id) }}" style="display:inline">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="btn btn-warning fw-bold btn-sm"><i class="bi bi-send me-1"></i>Clone to RFQ</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Grand total card -->
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-cash-stack me-1"></i>Grand total</div>
+      <div class="kpi-value">${{ "%.2f"|format(totals.grand_total or 0) }}</div>
+      <div class="kpi-unit">USD · all line items</div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-box-seam me-1"></i>Line items</div>
+      <div class="kpi-value">{{ items|length }}</div>
+      <div class="kpi-unit">across {{ totals.category_totals|length }} categor{{ 'y' if totals.category_totals|length == 1 else 'ies' }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Items table -->
+<div class="solar-card p-3 mb-4">
+  <h6 class="fw-bold mb-3"><i class="bi bi-list-ul me-1 text-warning"></i>Line items</h6>
+  {% if items %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+        <tr><th>#</th><th>Item</th><th>Category</th><th>Supplier</th><th class="text-end">Qty</th><th class="text-end">Unit price</th><th class="text-end">Total</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for line in totals.lines %}
+        {% set it = line.item %}
+        <tr>
+          <td class="text-secondary small">{{ loop.index }}</td>
+          <td>
+            <strong>{{ it.custom_name }}</strong>
+            {% if it.catalog_name and it.catalog_name != it.custom_name %}<div class="small text-secondary">{{ it.catalog_brand }} {{ it.catalog_model }}</div>{% endif %}
+            {% if it.notes %}<div class="small text-secondary"><i class="bi bi-card-text me-1"></i>{{ it.notes }}</div>{% endif %}
+          </td>
+          <td class="small text-secondary">{{ it.category_name or '—' }}</td>
+          <td class="small">{{ it.supplier_name or '—' }}{% if it.supplier_country %}<div class="small text-secondary">{{ it.supplier_country }}</div>{% endif %}</td>
+          <td class="text-end">{{ "%.2f"|format(it.qty or 0) }} <span class="text-secondary small">{{ it.unit }}</span></td>
+          <td class="text-end">${{ "%.2f"|format(line.unit_price) }}{% if it.unit_price_override is not none %}<div class="small text-warning">override</div>{% endif %}</td>
+          <td class="text-end fw-bold text-warning">${{ "%.2f"|format(line.line_total) }}</td>
+          <td class="text-end">
+            <form method="POST" action="{{ url_for('boms_delete_item', bom_id=bom.id, item_id=it.id) }}" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove this item?')"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        {% for cat, sub in totals.category_totals.items() %}
+        <tr style="background:#0a0a14">
+          <td colspan="6" class="text-end text-secondary small">{{ cat }} subtotal</td>
+          <td class="text-end fw-bold">${{ "%.2f"|format(sub) }}</td><td></td>
+        </tr>
+        {% endfor %}
+        <tr style="background:rgba(245,158,11,.10)">
+          <td colspan="6" class="text-end fw-bold">Grand total</td>
+          <td class="text-end fw-black text-warning" style="font-size:16px">${{ "%.2f"|format(totals.grand_total) }}</td><td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center text-secondary py-3"><i class="bi bi-box-seam" style="font-size:32px"></i><p class="mt-2 small mb-0">No items yet.</p></div>
+  {% endif %}
+
+  <hr class="my-3" style="border-color:#1e1e3a">
+
+  <h6 class="fw-bold mb-2"><i class="bi bi-plus-circle me-1 text-warning"></i>Add line item</h6>
+  <form method="POST" action="{{ url_for('boms_add_item', bom_id=bom.id) }}" class="row g-2">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="col-md-4">
+      <input class="form-control form-control-sm" name="name" placeholder="Item name *" required>
+    </div>
+    <div class="col-md-1">
+      <input type="number" step="0.01" class="form-control form-control-sm" name="qty" value="1" min="0.01" placeholder="Qty">
+    </div>
+    <div class="col-md-1">
+      <input class="form-control form-control-sm" name="unit" value="No." placeholder="Unit">
+    </div>
+    <div class="col-md-2">
+      <input type="number" step="0.01" class="form-control form-control-sm" name="unit_price_override" placeholder="Price override (opt.)">
+    </div>
+    <div class="col-md-2">
+      <input type="number" class="form-control form-control-sm" name="product_id" placeholder="Marketplace prod id (opt.)">
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-warning btn-sm fw-bold w-100"><i class="bi bi-plus-circle me-1"></i>Add</button>
+    </div>
+    <div class="col-md-12 text-secondary small">
+      Tip: pick a product on <a href="{{ url_for('marketplace_public') }}" class="text-warning">the marketplace</a> and click <strong>Add to BOM</strong> — it lands here automatically.
+    </div>
+  </form>
+</div>
+
+{% endblock %}

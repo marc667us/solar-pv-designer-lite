@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}List Your Products — SolarPro Marketplace{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+
+    <div class="rounded-3 p-4 mb-3" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1030 60%,#0f1a22 100%);border:1px solid #1e1e3a">
+      <div class="d-flex align-items-center gap-3 mb-2">
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));display:flex;align-items:center;justify-content:center;font-size:22px;color:#000">
+          <i class="bi bi-building-add"></i>
+        </div>
+        <div>
+          <h4 class="fw-black mb-0">List your products on SolarPro</h4>
+          <div class="text-secondary small">Free supplier account · Reach electrical estimators globally</div>
+        </div>
+      </div>
+      <div class="text-secondary small">
+        Build a verified profile, list products, upload price lists, and respond to RFQs.
+        New listings appear on the public marketplace after our team verifies your company.
+      </div>
+    </div>
+
+    <div class="solar-card p-4">
+      <form method="POST" action="{{ url_for('supplier_register') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-building me-1"></i>Company</h6>
+        <div class="row g-3 mb-3">
+          <div class="col-md-12">
+            <label class="form-label small text-secondary">Company name *</label>
+            <input class="form-control" name="company" required placeholder="Schneider Electric Ghana Ltd">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Country</label>
+            <select class="form-select" name="country">
+              <option value="">Select country</option>
+              {% for c in countries %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Website</label>
+            <input class="form-control" name="website" placeholder="https://...">
+          </div>
+          <div class="col-md-12">
+            <label class="form-label small text-secondary">Categories you supply (comma-separated)</label>
+            <input class="form-control" name="categories" placeholder="LV Cables, Distribution Boards, Switchgear">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-secondary">Typical lead time (days)</label>
+            <input type="number" class="form-control" name="lead_time_days" value="30" min="1">
+          </div>
+          <div class="col-md-8">
+            <label class="form-label small text-secondary">Payment terms</label>
+            <input class="form-control" name="payment_terms" value="TT 30 days">
+          </div>
+        </div>
+
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-person-circle me-1"></i>Account</h6>
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Contact name</label>
+            <input class="form-control" name="contact_name" placeholder="Marc Owusu">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Phone</label>
+            <input class="form-control" name="phone" placeholder="+233...">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Username *</label>
+            <input class="form-control" name="username" required pattern="[a-z0-9_\-]{3,32}" placeholder="schneider_gh">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Email *</label>
+            <input type="email" class="form-control" name="email" required placeholder="sales@example.com">
+          </div>
+          <div class="col-md-12">
+            <label class="form-label small text-secondary">Password * (min 8 chars)</label>
+            <input type="password" class="form-control" name="password" required minlength="8">
+          </div>
+        </div>
+
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" name="terms_agreed" id="terms_agreed" required>
+          <label class="form-check-label small text-secondary" for="terms_agreed">
+            I agree to the <a href="{{ url_for('terms') }}" class="text-warning">Terms of Service</a> and
+            <a href="{{ url_for('privacy') }}" class="text-warning">Privacy Policy</a>.
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-warning fw-bold w-100 py-2">
+          <i class="bi bi-rocket-takeoff me-1"></i>Create supplier account
+        </button>
+        <div class="text-center small text-secondary mt-3">
+          Already have an account? <a href="/login" class="text-warning">Sign in</a>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

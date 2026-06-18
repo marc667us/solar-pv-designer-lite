@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}New BOM — SolarPro{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="text-secondary small mb-1"><a href="{{ url_for('boms_list') }}" class="text-warning">My BOMs</a> / New</div>
+    <h5 class="fw-black mb-3">Start a Bill of Materials</h5>
+
+    <div class="solar-card p-4">
+      <form method="POST" action="{{ url_for('boms_new') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-12">
+            <label class="form-label small text-secondary">BOM title *</label>
+            <input class="form-control" name="title" required placeholder="LV switchgear — Kumasi Plaza fit-out">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Project name</label>
+            <input class="form-control" name="project_name" placeholder="Kumasi Plaza Phase 2">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Client</label>
+            <input class="form-control" name="client_name" placeholder="Plaza Developers Ltd">
+          </div>
+          <div class="col-md-12">
+            <label class="form-label small text-secondary">Notes (only visible to you)</label>
+            <textarea class="form-control" name="notes" rows="2" placeholder="Reference drawings, site contact, internal codes..."></textarea>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 justify-content-end">
+          <a href="{{ url_for('boms_list') }}" class="btn btn-outline-secondary">Cancel</a>
+          <button type="submit" class="btn btn-warning fw-bold px-4"><i class="bi bi-arrow-right-circle me-1"></i>Create &amp; add items</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

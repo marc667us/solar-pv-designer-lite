@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}RFQ Inbox — {{ supplier.name }}{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <div class="text-secondary small"><a href="{{ url_for('supplier_dashboard') }}" class="text-warning">Dashboard</a> / Inbox</div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-inbox-fill me-2 text-warning"></i>RFQ Inbox</h5>
+  </div>
+</div>
+
+<div class="solar-card p-3">
+{% if rfqs %}
+<div class="table-responsive">
+  <table class="table table-sm align-middle" style="color:#e0e0f0">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+      <tr><th>Title</th><th>Items</th><th>Country</th><th>Deadline</th><th>Received</th><th>Status</th><th class="text-end"></th></tr>
+    </thead>
+    <tbody>
+      {% for r in rfqs %}
+      <tr>
+        <td><a href="{{ url_for('supplier_rfqs_respond', rfq_id=r.id) }}" class="text-warning text-decoration-none fw-bold">{{ r.title }}</a></td>
+        <td class="text-center">{{ r.item_count }}</td>
+        <td class="small text-secondary">{{ r.delivery_country or '—' }}</td>
+        <td class="small text-secondary">{{ r.deadline_date or '—' }}</td>
+        <td class="small text-secondary">{{ r.sent_at }}</td>
+        <td>
+          {% if r.responded %}<span class="badge bg-success">Responded</span>
+          {% elif r.target_status == 'declined' %}<span class="badge bg-secondary">Declined</span>
+          {% elif r.rfq_status == 'awarded' %}<span class="badge bg-success">Awarded</span>
+          {% elif r.rfq_status == 'cancelled' %}<span class="badge bg-danger">Cancelled</span>
+          {% else %}<span class="badge" style="background:rgba(245,158,11,.20);color:var(--solar-gold)">Pending response</span>{% endif %}
+        </td>
+        <td class="text-end">
+          {% if not r.responded and r.rfq_status == 'sent' %}
+          <a href="{{ url_for('supplier_rfqs_respond', rfq_id=r.id) }}" class="btn btn-warning btn-sm fw-bold">Respond</a>
+          {% else %}
+          <a href="{{ url_for('supplier_rfqs_respond', rfq_id=r.id) }}" class="btn btn-outline-light btn-sm">View</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center py-5">
+  <i class="bi bi-inbox text-secondary" style="font-size:48px"></i>
+  <h6 class="mt-3 mb-1">No RFQs yet</h6>
+  <p class="text-secondary small mb-0">When buyers send you a quote request, it lands here.</p>
+</div>
+{% endif %}
+</div>
+
+{% endblock %}

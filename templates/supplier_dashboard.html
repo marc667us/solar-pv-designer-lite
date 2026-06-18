@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Supplier Dashboard — SolarPro Marketplace{% endblock %}
+
+{% block content %}
+
+<div class="rounded-3 p-4 mb-4" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1030 60%,#0f1a22 100%);border:1px solid #1e1e3a">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+    <div class="d-flex align-items-center gap-3">
+      <div style="width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));display:flex;align-items:center;justify-content:center;font-size:22px;color:#000">
+        <i class="bi bi-building"></i>
+      </div>
+      <div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <h4 class="fw-black mb-0">{{ supplier.name }}</h4>
+          {% if supplier.is_verified %}
+            <span class="badge rounded-pill px-2 py-1" style="background:rgba(34,197,94,.15);color:#22c55e;font-size:10px;font-weight:700">VERIFIED</span>
+          {% else %}
+            <span class="badge rounded-pill px-2 py-1" style="background:rgba(245,158,11,.15);color:var(--solar-gold);font-size:10px;font-weight:700">PENDING VERIFICATION</span>
+          {% endif %}
+        </div>
+        <div class="text-secondary small">{{ supplier.country or '—' }} · {{ supplier.email }}</div>
+      </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('supplier_product_add') }}" class="btn btn-warning fw-bold"><i class="bi bi-plus-circle me-1"></i>Add product</a>
+      <a href="{{ url_for('supplier_products') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-list-ul me-1"></i>All products</a>
+      <a href="{{ url_for('supplier_rfqs_inbox') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-inbox me-1"></i>RFQ inbox</a>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-box-seam me-1"></i>Products listed</div>
+      <div class="kpi-value">{{ product_count }}</div>
+      <div class="kpi-unit">in your catalog</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-shield-check me-1"></i>Verification</div>
+      <div class="kpi-value">{% if supplier.is_verified %}<i class="bi bi-check2-circle text-success"></i>{% else %}<i class="bi bi-hourglass-split" style="color:var(--solar-gold)"></i>{% endif %}</div>
+      <div class="kpi-unit">{% if supplier.is_verified %}live on marketplace{% else %}pending team review{% endif %}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-envelope me-1"></i>Open RFQs</div>
+      <div class="kpi-value">0</div>
+      <div class="kpi-unit">arrives next release</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-eye me-1"></i>Product views</div>
+      <div class="kpi-value">—</div>
+      <div class="kpi-unit">tracking arrives next release</div>
+    </div>
+  </div>
+</div>
+
+<div class="solar-card p-3">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h6 class="fw-bold mb-0">Recent products</h6>
+    <a href="{{ url_for('supplier_products') }}" class="btn btn-sm btn-outline-warning">View all</a>
+  </div>
+  {% if recent_products %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+        <tr><th>Name</th><th>Category</th><th>Brand</th><th class="text-end">Price</th><th class="text-center">Status</th></tr>
+      </thead>
+      <tbody>
+        {% for p in recent_products %}
+        <tr>
+          <td><strong>{{ p.name }}</strong>{% if p.model %} <span class="text-secondary small">· {{ p.model }}</span>{% endif %}</td>
+          <td class="small text-secondary">{{ p.category_name or '—' }}{% if p.subcategory %} · {{ p.subcategory }}{% endif %}</td>
+          <td class="small">{{ p.brand or '—' }}</td>
+          <td class="text-end fw-bold text-warning">${{ "%.2f"|format(p.price_usd or 0) }} <span class="text-secondary small">/ {{ p.unit }}</span></td>
+          <td class="text-center">
+            {% if p.is_verified %}<span class="badge bg-success">Approved</span>{% else %}<span class="badge bg-secondary">Pending</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center py-4">
+    <i class="bi bi-box-seam text-secondary" style="font-size:40px"></i>
+    <p class="text-secondary mb-3 mt-2">No products yet.</p>
+    <a href="{{ url_for('supplier_product_add') }}" class="btn btn-warning fw-bold"><i class="bi bi-plus-circle me-1"></i>Add your first product</a>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Upload price list — {{ supplier.name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="text-secondary small mb-1">
+      <a href="{{ url_for('supplier_dashboard') }}" class="text-warning">Dashboard</a> /
+      <a href="{{ url_for('supplier_products') }}" class="text-warning">Products</a> / Upload
+    </div>
+    <h5 class="fw-black mb-3">Upload price list</h5>
+
+    <div class="solar-card p-4 mb-3">
+      <form method="POST" action="{{ url_for('supplier_upload') }}" enctype="multipart/form-data">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+        <div class="rounded-3 text-center p-5 mb-3"
+             style="border:2px dashed rgba(245,158,11,.4);background:linear-gradient(135deg,rgba(245,158,11,.04),rgba(34,197,94,.02))">
+          <i class="bi bi-cloud-arrow-up" style="font-size:48px;color:var(--solar-gold)"></i>
+          <h6 class="mt-2 mb-1">Drop a CSV or XLSX file</h6>
+          <div class="text-secondary small mb-3">Max 2 MB · Max 1 000 rows · UTF-8 encoded</div>
+          <input class="form-control mx-auto" name="file" type="file" required
+                 accept=".csv,.xlsx" style="max-width:340px">
+        </div>
+
+        <button type="submit" class="btn btn-warning fw-bold w-100 py-2">
+          <i class="bi bi-cloud-arrow-up me-1"></i>Parse and import
+        </button>
+      </form>
+    </div>
+
+    <div class="solar-card p-4">
+      <h6 class="fw-bold mb-2"><i class="bi bi-info-circle text-warning me-1"></i>Tips for clean imports</h6>
+      <ul class="small text-secondary mb-3" style="line-height:1.7">
+        <li>One row per product variant.</li>
+        <li>Required columns: <code class="text-warning">name</code>, <code class="text-warning">category</code>, <code class="text-warning">price_usd</code>.</li>
+        <li>Optional: <code>brand</code>, <code>model</code>, <code>spec</code>, <code>unit</code>, <code>lead_time_days</code>, <code>subcategory</code>.</li>
+        <li>Category must match one of the 20 standard names (e.g. <em>Transformers</em>, <em>LV Power Cables</em>) — or use the short code (<code>lv_cables</code>).</li>
+        <li>Uploaded items appear in the public marketplace after admin verification.</li>
+      </ul>
+      <a href="{{ url_for('supplier_upload_template') }}" class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-download me-1"></i>Download CSV template
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
