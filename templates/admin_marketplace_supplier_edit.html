@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Edit supplier — {{ supplier.name }}{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="text-secondary small mb-1"><a href="{{ url_for('admin_marketplace_suppliers_list') }}" class="text-warning">Suppliers</a> / Edit</div>
+    <h5 class="fw-black mb-3">Edit supplier — {{ supplier.name }}</h5>
+
+    <div class="solar-card p-4">
+      <form method="POST">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="row g-3 mb-3">
+          <div class="col-md-12"><label class="form-label small text-secondary">Name *</label>
+            <input class="form-control" name="name" required value="{{ supplier.name }}"></div>
+          <div class="col-md-6"><label class="form-label small text-secondary">Country</label>
+            <select class="form-select" name="country">
+              <option value="">—</option>
+              {% for c in countries %}<option value="{{ c }}" {% if supplier.country == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+            </select></div>
+          <div class="col-md-6"><label class="form-label small text-secondary">Website</label>
+            <input class="form-control" name="website" value="{{ supplier.website or '' }}"></div>
+          <div class="col-md-6"><label class="form-label small text-secondary">Contact name</label>
+            <input class="form-control" name="contact_name" value="{{ supplier.contact_name or '' }}"></div>
+          <div class="col-md-6"><label class="form-label small text-secondary">Phone</label>
+            <input class="form-control" name="phone" value="{{ supplier.phone or '' }}"></div>
+          <div class="col-md-12"><label class="form-label small text-secondary">Email</label>
+            <input class="form-control" name="email" value="{{ supplier.email or '' }}"></div>
+          <div class="col-md-12"><label class="form-label small text-secondary">Categories (comma-sep)</label>
+            <input class="form-control" name="categories" value="{{ supplier.categories or '' }}"></div>
+          <div class="col-md-4"><label class="form-label small text-secondary">Lead time (days)</label>
+            <input type="number" class="form-control" name="lead_time_days" value="{{ supplier.lead_time_days or 30 }}"></div>
+          <div class="col-md-4"><label class="form-label small text-secondary">Payment terms</label>
+            <input class="form-control" name="payment_terms" value="{{ supplier.payment_terms or '' }}"></div>
+          <div class="col-md-4"><label class="form-label small text-secondary">Rating</label>
+            <input type="number" min="1" max="5" class="form-control" name="rating" value="{{ supplier.rating or 5 }}"></div>
+          <div class="col-md-6">
+            <div class="form-check"><input class="form-check-input" type="checkbox" name="is_verified" id="vf" {% if supplier.is_verified %}checked{% endif %}>
+              <label class="form-check-label" for="vf">Verified (visible on public marketplace)</label></div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-check"><input class="form-check-input" type="checkbox" name="is_active" id="ac" {% if supplier.is_active %}checked{% endif %}>
+              <label class="form-check-label" for="ac">Active (un-tick to soft-delete)</label></div>
+          </div>
+        </div>
+        <div class="d-flex gap-2 justify-content-end">
+          <a href="{{ url_for('admin_marketplace_suppliers_list') }}" class="btn btn-outline-secondary">Cancel</a>
+          <button class="btn btn-warning fw-bold px-4"><i class="bi bi-check2-circle me-1"></i>Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

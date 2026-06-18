@@ -13964,6 +13964,7 @@ def supplier_register():
         )
     # Auto-login the new supplier
     session["user_id"] = uid
+    _notify_admin_new_supplier(company, email, country)
     flash(
         "Welcome to the SolarPro Marketplace. Your supplier account is pending "
         "verification by our team — your products will appear publicly once approved.",
@@ -14424,6 +14425,13 @@ def admin_marketplace_approve_supplier(sid):
             "WHERE supplier_id=? AND is_active=1 AND is_verified=1", (sid,),
         )
     _log_marketplace_action("approve_supplier", "supplier", sid, row["name"])
+    try:
+        with get_db() as _c:
+            _r = _c.execute("SELECT email FROM suppliers WHERE id=?", (sid,)).fetchone()
+        if _r and _r["email"]:
+            _notify_supplier_verified(_r["email"], row["name"])
+    except Exception as _e:
+        app.logger.warning("approve supplier notify failed: %s", _e)
     flash(f"Approved supplier '{row['name']}'.", "success")
     return redirect(url_for("admin_marketplace_pending"))
 
@@ -14926,6 +14934,19 @@ def rfqs_send(rfq_id):
             "updated_at=CURRENT_TIMESTAMP WHERE id=?",
             (rfq_id,),
         )
+    try:
+        with get_db() as _c:
+            _rfq = _c.execute("SELECT title FROM rfqs WHERE id=?", (rfq_id,)).fetchone()
+            _rfq_title = _rfq["title"] if _rfq else "new RFQ"
+            _targets = _c.execute(
+                "SELECT s.name, s.email FROM rfq_supplier_targets rst "
+                "JOIN suppliers s ON s.id=rst.supplier_id "
+                "WHERE rst.rfq_id=? AND rst.status='pending'", (rfq_id,)
+            ).fetchall()
+        for _t in _targets:
+            _notify_rfq_sent_to_supplier(_t["email"], _t["name"], _rfq_title, rfq_id)
+    except Exception as _e:
+        app.logger.warning("rfq send notify failed: %s", _e)
     flash(f"RFQ sent to {targeted} supplier{'s' if targeted != 1 else ''}.", "success")
     return redirect(url_for("rfqs_view", rfq_id=rfq_id))
 
@@ -15113,6 +15134,19 @@ def supplier_rfqs_respond(rfq_id):
             (rfq_id, s["id"]),
         )
 
+    try:
+        with get_db() as _c:
+            _buyer = _c.execute(
+                "SELECT u.email, u.name FROM rfqs r JOIN users u ON u.id=r.user_id "
+                "WHERE r.id=?", (rfq_id,)
+            ).fetchone()
+        if _buyer and _buyer["email"]:
+            _notify_buyer_rfq_response(
+                _buyer["email"], _buyer["name"] or "there",
+                s["name"], rfq["title"], rfq_id
+            )
+    except Exception as _e:
+        app.logger.warning("rfq response notify failed: %s", _e)
     flash("Response submitted. The buyer can now see your price.", "success")
     return redirect(url_for("supplier_rfqs_inbox"))
 
@@ -15795,6 +15829,532 @@ def _seed_marketplace_postgres_samples():
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,1,1)",
                 (legacy_label, name, brand, model, spec, unit, price, sup_id, lt, cat_id, sub),
             )
+
+
+# ─── Routes — Marketplace Procurement Specialist + Staff Election + CRUD ──────
+# Slice 7: procurement_specialist is a new user role the admin can promote
+# any solar user into. Specialists get full CRUD on suppliers, products,
+# and prices — they can administer the marketplace without being a global
+# is_admin=1 user. Admin still owns the promote/demote action itself.
+
+def procurement_role_required(f):
+    """Decorator: allows is_admin=1 OR role='procurement_specialist'.
+    Anonymous → /login. Authenticated-but-wrong-role → 403."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if "user_id" not in session:
+            return redirect(url_for("login"))
+        u = current_user()
+        if not u:
+            return redirect(url_for("login"))
+        if u["is_admin"]:
+            return f(*args, **kwargs)
+        if (u["role"] or "") == "procurement_specialist":
+            return f(*args, **kwargs)
+        abort(403)
+    return decorated
+
+
+# ──────────────────────── 7B — Admin elects procurement specialists ─────
+
+
+@app.route("/admin/marketplace/staff")
+@admin_required
+def admin_marketplace_staff():
+    """Admin-only roster. Lists every user with a quick promote / demote
+    toggle. Currently elected procurement specialists are listed at the
+    top, then candidates ordered by created_at desc."""
+    _ensure_supplier_schema()
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT id, username, email, name, company, role, is_admin, created_at "
+            "FROM users ORDER BY "
+            "  CASE WHEN role='procurement_specialist' THEN 0 ELSE 1 END, "
+            "  created_at DESC LIMIT 500"
+        ).fetchall()
+    return render_template(
+        "admin_marketplace_staff.html", user=current_user(), users=rows
+    )
+
+
+@app.route("/admin/marketplace/staff/<int:uid>/promote", methods=["POST"])
+@admin_required
+def admin_marketplace_promote_specialist(uid):
+    csrf_protect()
+    with get_db() as c:
+        row = c.execute("SELECT id, username, role FROM users WHERE id=?", (uid,)).fetchone()
+        if not row:
+            abort(404)
+        if (row["role"] or "") == "supplier_admin":
+            flash("Cannot elect a supplier_admin to procurement_specialist — "
+                  "demote them from supplier_admin first.", "danger")
+            return redirect(url_for("admin_marketplace_staff"))
+        c.execute("UPDATE users SET role='procurement_specialist' WHERE id=?", (uid,))
+    _log_marketplace_action(
+        "promote_specialist", "user", uid, f"{row['username']} (was role='{row['role'] or ''}')"
+    )
+    flash(f"Elected '{row['username']}' as procurement specialist.", "success")
+    return redirect(url_for("admin_marketplace_staff"))
+
+
+@app.route("/admin/marketplace/staff/<int:uid>/demote", methods=["POST"])
+@admin_required
+def admin_marketplace_demote_specialist(uid):
+    csrf_protect()
+    with get_db() as c:
+        row = c.execute("SELECT id, username, role FROM users WHERE id=?", (uid,)).fetchone()
+        if not row:
+            abort(404)
+        if (row["role"] or "") != "procurement_specialist":
+            flash("User is not currently a procurement specialist.", "warning")
+            return redirect(url_for("admin_marketplace_staff"))
+        c.execute("UPDATE users SET role='' WHERE id=?", (uid,))
+    _log_marketplace_action("demote_specialist", "user", uid, row["username"])
+    flash(f"Removed procurement specialist role from '{row['username']}'.", "success")
+    return redirect(url_for("admin_marketplace_staff"))
+
+
+# ──────────────────────── 7C — Supplier CRUD ───────────────────────────
+
+
+@app.route("/admin/marketplace/suppliers")
+@procurement_role_required
+def admin_marketplace_suppliers_list():
+    """Single admin/specialist directory of every supplier — verified +
+    unverified + suspended — with quick edit/delete links."""
+    _ensure_supplier_schema()
+    q = (request.args.get("q") or "").strip()
+    with get_db() as c:
+        if q:
+            like = f"%{q.lower()}%"
+            rows = c.execute(
+                "SELECT s.*, u.username AS owner_username "
+                "FROM suppliers s LEFT JOIN users u ON u.id=s.user_id "
+                "WHERE LOWER(s.name) LIKE ? OR LOWER(s.country) LIKE ? "
+                "      OR LOWER(s.email) LIKE ? "
+                "ORDER BY s.created_at DESC LIMIT 200",
+                (like, like, like),
+            ).fetchall()
+        else:
+            rows = c.execute(
+                "SELECT s.*, u.username AS owner_username "
+                "FROM suppliers s LEFT JOIN users u ON u.id=s.user_id "
+                "ORDER BY s.created_at DESC LIMIT 200"
+            ).fetchall()
+    return render_template(
+        "admin_marketplace_suppliers.html", user=current_user(),
+        suppliers=rows, q=q,
+    )
+
+
+@app.route("/admin/marketplace/suppliers/<int:sid>/edit", methods=["GET", "POST"])
+@procurement_role_required
+def admin_marketplace_supplier_edit(sid):
+    with get_db() as c:
+        s = c.execute("SELECT * FROM suppliers WHERE id=?", (sid,)).fetchone()
+    if not s:
+        abort(404)
+    if request.method == "GET":
+        return render_template(
+            "admin_marketplace_supplier_edit.html",
+            user=current_user(), supplier=s, countries=get_countries(),
+        )
+    csrf_protect()
+    f = request.form
+    with get_db() as c:
+        c.execute(
+            "UPDATE suppliers SET name=?, country=?, contact_name=?, phone=?, "
+            "email=?, website=?, categories=?, lead_time_days=?, "
+            "payment_terms=?, rating=?, is_verified=?, is_active=? "
+            "WHERE id=?",
+            (
+                (f.get("name") or "").strip(),
+                (f.get("country") or "").strip(),
+                (f.get("contact_name") or "").strip(),
+                (f.get("phone") or "").strip(),
+                (f.get("email") or "").strip(),
+                (f.get("website") or "").strip(),
+                (f.get("categories") or "").strip(),
+                _safe_int(f.get("lead_time_days"), 30),
+                (f.get("payment_terms") or "").strip(),
+                _safe_int(f.get("rating"), 5),
+                1 if f.get("is_verified") else 0,
+                1 if f.get("is_active") else 0,
+                sid,
+            ),
+        )
+    _log_marketplace_action("edit_supplier", "supplier", sid, s["name"])
+    flash(f"Updated supplier '{s['name']}'.", "success")
+    return redirect(url_for("admin_marketplace_suppliers_list"))
+
+
+@app.route("/admin/marketplace/suppliers/<int:sid>/delete", methods=["POST"])
+@procurement_role_required
+def admin_marketplace_supplier_delete(sid):
+    csrf_protect()
+    with get_db() as c:
+        s = c.execute("SELECT id, name FROM suppliers WHERE id=?", (sid,)).fetchone()
+        if not s:
+            abort(404)
+        # Soft delete — flip flags so the supplier disappears from public +
+        # admin queues but the historical RFQ + product links stay intact.
+        c.execute(
+            "UPDATE suppliers SET is_active=0, is_verified=0 WHERE id=?", (sid,)
+        )
+        c.execute(
+            "UPDATE equipment_catalog SET is_public_visible=0 WHERE supplier_id=?",
+            (sid,),
+        )
+    _log_marketplace_action("delete_supplier", "supplier", sid, s["name"])
+    flash(f"Soft-deleted supplier '{s['name']}'.", "warning")
+    return redirect(url_for("admin_marketplace_suppliers_list"))
+
+
+# ──────────────────────── 7C — Product CRUD ────────────────────────────
+
+
+@app.route("/admin/marketplace/products")
+@procurement_role_required
+def admin_marketplace_products_list():
+    _ensure_marketplace_tables()
+    q = (request.args.get("q") or "").strip()
+    cat_id = _safe_int(request.args.get("cat"), 0)
+    with get_db() as c:
+        sql = (
+            "SELECT ec.*, s.name AS supplier_name, pc.name AS category_name "
+            "FROM equipment_catalog ec "
+            "LEFT JOIN suppliers s ON s.id=ec.supplier_id "
+            "LEFT JOIN product_categories pc ON pc.id=ec.category_id "
+            "WHERE 1=1 "
+        )
+        args = []
+        if cat_id:
+            sql += "AND ec.category_id=? "
+            args.append(cat_id)
+        if q:
+            like = f"%{q.lower()}%"
+            sql += ("AND (LOWER(ec.name) LIKE ? OR LOWER(ec.brand) LIKE ? "
+                    "     OR LOWER(ec.model) LIKE ?) ")
+            args.extend([like, like, like])
+        sql += "ORDER BY ec.created_at DESC LIMIT 200"
+        rows = c.execute(sql, args).fetchall()
+        categories = c.execute(
+            "SELECT id, name FROM product_categories "
+            "WHERE is_active=1 ORDER BY display_order"
+        ).fetchall()
+    return render_template(
+        "admin_marketplace_products.html", user=current_user(),
+        products=rows, categories=categories, selected_cat=cat_id, q=q,
+    )
+
+
+@app.route("/admin/marketplace/products/<int:pid>/edit", methods=["GET", "POST"])
+@procurement_role_required
+def admin_marketplace_product_edit(pid):
+    _ensure_marketplace_tables()
+    with get_db() as c:
+        p = c.execute(
+            "SELECT * FROM equipment_catalog WHERE id=?", (pid,)
+        ).fetchone()
+        if not p:
+            abort(404)
+        categories = c.execute(
+            "SELECT id, name FROM product_categories "
+            "WHERE is_active=1 ORDER BY display_order"
+        ).fetchall()
+        suppliers = c.execute(
+            "SELECT id, name FROM suppliers WHERE is_active=1 ORDER BY name"
+        ).fetchall()
+    if request.method == "GET":
+        return render_template(
+            "admin_marketplace_product_edit.html",
+            user=current_user(), product=p, categories=categories, suppliers=suppliers,
+        )
+    csrf_protect()
+    f = request.form
+    cat_id = _safe_int(f.get("category_id"), 0)
+    with get_db() as c:
+        cat_label = ""
+        if cat_id:
+            row = c.execute(
+                "SELECT name FROM product_categories WHERE id=?", (cat_id,)
+            ).fetchone()
+            if row:
+                cat_label = row["name"]
+        try:
+            price = float(f.get("price_usd") or 0)
+        except ValueError:
+            price = 0
+        c.execute(
+            "UPDATE equipment_catalog SET name=?, brand=?, model=?, spec=?, "
+            "unit=?, price_usd=?, supplier_id=?, lead_time_days=?, "
+            "category_id=?, category=?, subcategory=?, "
+            "is_verified=?, is_public_visible=?, is_active=? "
+            "WHERE id=?",
+            (
+                (f.get("name") or "").strip(),
+                (f.get("brand") or "").strip(),
+                (f.get("model") or "").strip(),
+                (f.get("spec") or "").strip(),
+                (f.get("unit") or "No.").strip(),
+                price,
+                _safe_int(f.get("supplier_id"), 0),
+                _safe_int(f.get("lead_time_days"), 30),
+                cat_id, cat_label,
+                (f.get("subcategory") or "").strip(),
+                1 if f.get("is_verified") else 0,
+                1 if f.get("is_public_visible") else 0,
+                1 if f.get("is_active") else 0,
+                pid,
+            ),
+        )
+    _log_marketplace_action("edit_product", "product", pid, p["name"])
+    flash(f"Updated product '{p['name']}'.", "success")
+    return redirect(url_for("admin_marketplace_products_list"))
+
+
+@app.route("/admin/marketplace/products/<int:pid>/delete", methods=["POST"])
+@procurement_role_required
+def admin_marketplace_product_delete(pid):
+    csrf_protect()
+    with get_db() as c:
+        p = c.execute(
+            "SELECT id, name FROM equipment_catalog WHERE id=?", (pid,)
+        ).fetchone()
+        if not p:
+            abort(404)
+        c.execute(
+            "UPDATE equipment_catalog SET is_active=0, is_public_visible=0 WHERE id=?",
+            (pid,),
+        )
+    _log_marketplace_action("delete_product", "product", pid, p["name"])
+    flash(f"Soft-deleted product '{p['name']}'.", "warning")
+    return redirect(url_for("admin_marketplace_products_list"))
+
+
+# ──────────────────────── 7D — User dashboard at /me ───────────────────
+
+
+@app.route("/me")
+@login_required
+def me_dashboard():
+    _ensure_rfq_tables()
+    _ensure_bom_tables()
+    uid = session["user_id"]
+    u = current_user()
+    with get_db() as c:
+        # Buyer-side counts
+        my_rfqs_draft = c.execute(
+            "SELECT COUNT(*) FROM rfqs WHERE user_id=? AND status='draft'", (uid,)
+        ).fetchone()[0]
+        my_rfqs_sent = c.execute(
+            "SELECT COUNT(*) FROM rfqs WHERE user_id=? AND status='sent'", (uid,)
+        ).fetchone()[0]
+        my_rfqs_awarded = c.execute(
+            "SELECT COUNT(*) FROM rfqs WHERE user_id=? AND status='awarded'", (uid,)
+        ).fetchone()[0]
+        my_boms = c.execute(
+            "SELECT COUNT(*) FROM marketplace_boms WHERE user_id=?", (uid,)
+        ).fetchone()[0]
+        recent_rfqs = c.execute(
+            "SELECT r.id, r.title, r.status, r.updated_at, "
+            "  (SELECT COUNT(*) FROM rfq_responses WHERE rfq_id=r.id) AS responses "
+            "FROM rfqs r WHERE r.user_id=? ORDER BY r.updated_at DESC LIMIT 5",
+            (uid,),
+        ).fetchall()
+        recent_boms = c.execute(
+            "SELECT b.id, b.title, b.updated_at, "
+            "  (SELECT COUNT(*) FROM marketplace_bom_items WHERE bom_id=b.id) AS items "
+            "FROM marketplace_boms b WHERE b.user_id=? "
+            "ORDER BY b.updated_at DESC LIMIT 5",
+            (uid,),
+        ).fetchall()
+        # Supplier-side counts (only if user is a supplier_admin)
+        supplier_row = None
+        inbox_open = 0
+        my_products = 0
+        if (u["role"] or "") == "supplier_admin":
+            supplier_row = c.execute(
+                "SELECT id, name, is_verified FROM suppliers WHERE user_id=? LIMIT 1",
+                (uid,),
+            ).fetchone()
+            if supplier_row:
+                inbox_open = c.execute(
+                    "SELECT COUNT(*) FROM rfq_supplier_targets rst "
+                    "JOIN rfqs r ON r.id=rst.rfq_id "
+                    "WHERE rst.supplier_id=? AND r.status='sent' "
+                    "AND NOT EXISTS (SELECT 1 FROM rfq_responses rr "
+                    "                WHERE rr.rfq_id=rst.rfq_id "
+                    "                AND rr.supplier_id=?)",
+                    (supplier_row["id"], supplier_row["id"]),
+                ).fetchone()[0]
+                my_products = c.execute(
+                    "SELECT COUNT(*) FROM equipment_catalog "
+                    "WHERE supplier_id=? AND is_active=1",
+                    (supplier_row["id"],),
+                ).fetchone()[0]
+    return render_template(
+        "me_dashboard.html",
+        user=u,
+        my_rfqs_draft=my_rfqs_draft, my_rfqs_sent=my_rfqs_sent,
+        my_rfqs_awarded=my_rfqs_awarded, my_boms=my_boms,
+        recent_rfqs=recent_rfqs, recent_boms=recent_boms,
+        supplier=supplier_row, inbox_open=inbox_open, my_products=my_products,
+    )
+
+
+# ─── Marketplace Email Notifications ──────────────────────────────────────────
+# Slice 7E: wires Brevo-backed transactional emails for the key marketplace
+# state transitions. Uses solar's existing _send_system_email pipeline
+# (Brevo -> Axigen -> Resend -> SMTP). Every send is wrapped in try/except
+# so a flaky email backend can never block the user-facing action.
+#
+# SECURITY (Codex Slice 7 finding): supplier-controlled strings (company name,
+# RFQ title, etc.) MUST NOT land raw in email subject or HTML body. Subjects
+# get stripped of CR/LF (header-injection defence) and bodies get escaped via
+# html.escape() before they reach _send_system_email — which itself wraps
+# body_text in <pre>{body}</pre> with no escaping of its own.
+
+import html as _mp_html
+
+
+def _safe_email_subject(s: str, limit: int = 160) -> str:
+    """Strip CR/LF (RFC 5322 header-injection defence) and clip length."""
+    if not s:
+        return ""
+    return s.replace("\r", " ").replace("\n", " ").strip()[:limit]
+
+
+def _safe_email_text(s: str) -> str:
+    """HTML-escape every <, >, & so user-controlled strings can't break out
+    of the <pre> wrapper that _send_system_email injects into the HTML body."""
+    if s is None:
+        return ""
+    return _mp_html.escape(str(s), quote=False)
+
+
+def _marketplace_admin_emails():
+    """List of admin email addresses to notify on new supplier registration."""
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT email FROM users WHERE is_admin=1 AND email != '' "
+            "ORDER BY id LIMIT 5"
+        ).fetchall()
+    return [r["email"] for r in rows if r["email"]]
+
+
+def _notify_admin_new_supplier(supplier_name, supplier_email, supplier_country):
+    """Email every admin when a supplier signs up via /supplier/register."""
+    try:
+        recipients = _marketplace_admin_emails()
+        if not recipients:
+            return
+        safe_name = _safe_email_text(supplier_name)
+        safe_email = _safe_email_text(supplier_email)
+        safe_country = _safe_email_text(supplier_country or "-")
+        body = (
+            f"A new supplier has registered on the SolarPro Marketplace:\n\n"
+            f"  Company : {safe_name}\n"
+            f"  Email   : {safe_email}\n"
+            f"  Country : {safe_country}\n\n"
+            "They are awaiting verification before their products appear on "
+            "the public marketplace.\n\n"
+            "Review the pending queue:\n"
+            "  https://solarpro.aiappinvent.com/admin/marketplace/pending\n\n"
+            "The SolarPro Marketplace Team"
+        )
+        subject = _safe_email_subject(
+            f"[Marketplace] New supplier awaiting verification: {supplier_name}"
+        )
+        for addr in recipients:
+            try:
+                _send_system_email(addr, subject, body)
+            except Exception as e:
+                app.logger.warning("admin notify failed (%s): %s", addr, e)
+    except Exception as e:
+        app.logger.warning("admin notify outer failed: %s", e)
+
+
+def _notify_supplier_verified(supplier_email, supplier_name):
+    """Email a supplier when admin approves their registration."""
+    if not supplier_email:
+        return
+    try:
+        safe_name = _safe_email_text(supplier_name)
+        body = (
+            f"Hello {safe_name},\n\n"
+            "Good news — your supplier account on the SolarPro Marketplace "
+            "has been verified by our team.\n\n"
+            "Your verified products are now visible on the public marketplace "
+            "at https://solarpro.aiappinvent.com/marketplace — and buyers can "
+            "send you RFQs directly.\n\n"
+            "Open your dashboard to add more products or manage prices:\n"
+            "  https://solarpro.aiappinvent.com/supplier/dashboard\n\n"
+            "Welcome aboard.\n\n"
+            "The SolarPro Marketplace Team"
+        )
+        _send_system_email(
+            supplier_email,
+            _safe_email_subject("[Marketplace] Your supplier account is verified"),
+            body,
+        )
+    except Exception as e:
+        app.logger.warning("supplier verify notify failed (%s): %s",
+                           supplier_email, e)
+
+
+def _notify_rfq_sent_to_supplier(supplier_email, supplier_name, rfq_title, rfq_id):
+    """Email a supplier when a buyer sends them a new RFQ."""
+    if not supplier_email:
+        return
+    try:
+        safe_name = _safe_email_text(supplier_name)
+        safe_title = _safe_email_text(rfq_title)
+        body = (
+            f"Hello {safe_name},\n\n"
+            f"You have received a new Request for Quote on the SolarPro "
+            f"Marketplace:\n\n"
+            f"  Title : {safe_title}\n\n"
+            "View the line items and submit your prices here:\n"
+            f"  https://solarpro.aiappinvent.com/supplier/rfqs/{int(rfq_id)}\n\n"
+            "Respond quickly to give yourself the best chance of winning the "
+            "award.\n\n"
+            "The SolarPro Marketplace Team"
+        )
+        _send_system_email(
+            supplier_email,
+            _safe_email_subject(f"[Marketplace] New RFQ for you: {rfq_title}"),
+            body,
+        )
+    except Exception as e:
+        app.logger.warning("rfq notify failed (%s): %s", supplier_email, e)
+
+
+def _notify_buyer_rfq_response(buyer_email, buyer_name, supplier_name, rfq_title, rfq_id):
+    """Email a buyer when a supplier responds to their RFQ."""
+    if not buyer_email:
+        return
+    try:
+        safe_buyer = _safe_email_text(buyer_name)
+        safe_supplier = _safe_email_text(supplier_name)
+        safe_title = _safe_email_text(rfq_title)
+        body = (
+            f"Hello {safe_buyer},\n\n"
+            f"A supplier has just responded to your RFQ on the SolarPro "
+            f"Marketplace:\n\n"
+            f"  RFQ      : {safe_title}\n"
+            f"  Supplier : {safe_supplier}\n\n"
+            "Compare the offers and award the contract here:\n"
+            f"  https://solarpro.aiappinvent.com/rfqs/{int(rfq_id)}\n\n"
+            "The SolarPro Marketplace Team"
+        )
+        _send_system_email(
+            buyer_email,
+            _safe_email_subject(f"[Marketplace] New response on your RFQ: {rfq_title}"),
+            body,
+        )
+    except Exception as e:
+        app.logger.warning("buyer notify failed (%s): %s", buyer_email, e)
 
 
 if __name__ == "__main__":

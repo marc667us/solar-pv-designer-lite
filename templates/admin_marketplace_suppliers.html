@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Suppliers — Marketplace Admin{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <div class="text-secondary small"><a href="{{ url_for('admin_marketplace_dashboard') }}" class="text-warning">Marketplace</a> / Suppliers</div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-building me-2 text-warning"></i>Suppliers</h5>
+  </div>
+  <a href="{{ url_for('admin_marketplace_pending') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-hourglass-split me-1"></i>Pending queue</a>
+</div>
+
+<div class="solar-card p-3 mb-3">
+  <form method="GET" action="{{ url_for('admin_marketplace_suppliers_list') }}" class="d-flex gap-2">
+    <div class="input-group flex-grow-1">
+      <span class="input-group-text" style="background:#0a0a14;border-color:#1e1e3a;color:#9090c0"><i class="bi bi-search"></i></span>
+      <input type="text" class="form-control" name="q" value="{{ q }}" placeholder="Name, country, email..." style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+    </div>
+    <button class="btn btn-warning fw-bold px-4" type="submit">Filter</button>
+    {% if q %}<a href="{{ url_for('admin_marketplace_suppliers_list') }}" class="btn btn-outline-secondary">Clear</a>{% endif %}
+  </form>
+</div>
+
+<div class="solar-card p-3">
+<div class="table-responsive">
+  <table class="table table-sm align-middle" style="color:#e0e0f0">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+      <tr><th>Name</th><th>Country</th><th>Email</th><th>Categories</th><th>Owner</th><th>Status</th><th class="text-end">Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for s in suppliers %}
+      <tr>
+        <td><strong>{{ s.name }}</strong>{% if s.website %}<div class="small text-secondary">{{ s.website }}</div>{% endif %}</td>
+        <td class="small">{{ s.country or '—' }}</td>
+        <td class="small text-secondary">{{ s.email or '—' }}</td>
+        <td class="small text-secondary">{{ s.categories or '—' }}</td>
+        <td class="small text-secondary">{{ s.owner_username or 'admin-seeded' }}</td>
+        <td>
+          {% if not s.is_active %}<span class="badge bg-danger">Deleted</span>
+          {% elif s.is_verified %}<span class="badge bg-success">Verified</span>
+          {% else %}<span class="badge" style="background:var(--solar-gold);color:#000">Pending</span>{% endif %}
+        </td>
+        <td class="text-end">
+          <a href="{{ url_for('admin_marketplace_supplier_edit', sid=s.id) }}" class="btn btn-outline-warning btn-sm"><i class="bi bi-pencil"></i></a>
+          <form method="POST" action="{{ url_for('admin_marketplace_supplier_delete', sid=s.id) }}" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Soft-delete {{ s.name }}? Their products will hide from public.')"><i class="bi bi-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
+{% endblock %}

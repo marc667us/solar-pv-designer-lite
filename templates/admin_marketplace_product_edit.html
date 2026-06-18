@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Edit product — {{ product.name }}{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="text-secondary small mb-1"><a href="{{ url_for('admin_marketplace_products_list') }}" class="text-warning">Products</a> / Edit</div>
+    <h5 class="fw-black mb-3">Edit product — {{ product.name }}</h5>
+
+    <div class="solar-card p-4">
+      <form method="POST">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="row g-3 mb-3">
+          <div class="col-md-12"><label class="form-label small text-secondary">Product name *</label>
+            <input class="form-control" name="name" required value="{{ product.name }}"></div>
+          <div class="col-md-6"><label class="form-label small text-secondary">Brand</label>
+            <input class="form-control" name="brand" value="{{ product.brand or '' }}"></div>
+          <div class="col-md-6"><label class="form-label small text-secondary">Model</label>
+            <input class="form-control" name="model" value="{{ product.model or '' }}"></div>
+          <div class="col-md-12"><label class="form-label small text-secondary">Specification</label>
+            <textarea class="form-control" name="spec" rows="2">{{ product.spec or '' }}</textarea></div>
+          <div class="col-md-6"><label class="form-label small text-secondary">Category</label>
+            <select class="form-select" name="category_id">
+              <option value="0">—</option>
+              {% for c in categories %}<option value="{{ c.id }}" {% if product.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+            </select></div>
+          <div class="col-md-6"><label class="form-label small text-secondary">Subcategory</label>
+            <input class="form-control" name="subcategory" value="{{ product.subcategory or '' }}"></div>
+          <div class="col-md-4"><label class="form-label small text-secondary">Unit</label>
+            <input class="form-control" name="unit" value="{{ product.unit }}"></div>
+          <div class="col-md-4"><label class="form-label small text-secondary">Price (USD)</label>
+            <input type="number" step="0.01" class="form-control" name="price_usd" value="{{ product.price_usd or 0 }}"></div>
+          <div class="col-md-4"><label class="form-label small text-secondary">Lead time (days)</label>
+            <input type="number" class="form-control" name="lead_time_days" value="{{ product.lead_time_days or 30 }}"></div>
+          <div class="col-md-12"><label class="form-label small text-secondary">Supplier</label>
+            <select class="form-select" name="supplier_id">
+              <option value="0">—</option>
+              {% for s in suppliers %}<option value="{{ s.id }}" {% if product.supplier_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+            </select></div>
+          <div class="col-md-4">
+            <div class="form-check"><input class="form-check-input" type="checkbox" name="is_verified" id="vf" {% if product.is_verified %}checked{% endif %}>
+              <label class="form-check-label" for="vf">Verified</label></div>
+          </div>
+          <div class="col-md-4">
+            <div class="form-check"><input class="form-check-input" type="checkbox" name="is_public_visible" id="pv" {% if product.is_public_visible %}checked{% endif %}>
+              <label class="form-check-label" for="pv">Public visible</label></div>
+          </div>
+          <div class="col-md-4">
+            <div class="form-check"><input class="form-check-input" type="checkbox" name="is_active" id="ac" {% if product.is_active %}checked{% endif %}>
+              <label class="form-check-label" for="ac">Active</label></div>
+          </div>
+        </div>
+        <div class="d-flex gap-2 justify-content-end">
+          <a href="{{ url_for('admin_marketplace_products_list') }}" class="btn btn-outline-secondary">Cancel</a>
+          <button class="btn btn-warning fw-bold px-4"><i class="bi bi-check2-circle me-1"></i>Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

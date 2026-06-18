@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Products — Marketplace Admin{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <div class="text-secondary small"><a href="{{ url_for('admin_marketplace_dashboard') }}" class="text-warning">Marketplace</a> / Products</div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-box-seam me-2 text-warning"></i>Products</h5>
+  </div>
+  <a href="{{ url_for('admin_marketplace_pending') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-hourglass-split me-1"></i>Pending queue</a>
+</div>
+
+<div class="solar-card p-3 mb-3">
+  <form method="GET" action="{{ url_for('admin_marketplace_products_list') }}" class="d-flex gap-2 flex-wrap">
+    <div class="input-group flex-grow-1" style="min-width:220px">
+      <span class="input-group-text" style="background:#0a0a14;border-color:#1e1e3a;color:#9090c0"><i class="bi bi-search"></i></span>
+      <input type="text" class="form-control" name="q" value="{{ q }}" placeholder="Name, brand, model..." style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+    </div>
+    <select name="cat" class="form-select" style="max-width:240px;background:#0a0a14;border-color:#1e1e3a;color:#fff">
+      <option value="">All categories</option>
+      {% for c in categories %}<option value="{{ c.id }}" {% if selected_cat == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-warning fw-bold px-4" type="submit">Filter</button>
+    {% if q or selected_cat %}<a href="{{ url_for('admin_marketplace_products_list') }}" class="btn btn-outline-secondary">Clear</a>{% endif %}
+  </form>
+</div>
+
+<div class="solar-card p-3">
+<div class="table-responsive">
+  <table class="table table-sm align-middle" style="color:#e0e0f0">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+      <tr><th>Product</th><th>Supplier</th><th>Category</th><th class="text-end">Price</th><th>Status</th><th class="text-end">Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for p in products %}
+      <tr>
+        <td><strong>{{ p.name }}</strong>{% if p.brand or p.model %}<div class="small text-secondary">{{ p.brand }}{% if p.model %} · {{ p.model }}{% endif %}</div>{% endif %}</td>
+        <td class="small">{{ p.supplier_name or '—' }}</td>
+        <td class="small text-secondary">{{ p.category_name or '—' }}{% if p.subcategory %}<div class="small text-secondary">{{ p.subcategory }}</div>{% endif %}</td>
+        <td class="text-end fw-bold text-warning">USD {{ "%.2f"|format(p.price_usd or 0) }} <span class="text-secondary small">/ {{ p.unit }}</span></td>
+        <td>
+          {% if not p.is_active %}<span class="badge bg-danger">Deleted</span>
+          {% elif p.is_verified and p.is_public_visible %}<span class="badge bg-success">Live</span>
+          {% elif p.is_verified %}<span class="badge bg-secondary">Hidden</span>
+          {% else %}<span class="badge" style="background:var(--solar-gold);color:#000">Pending</span>{% endif %}
+        </td>
+        <td class="text-end">
+          <a href="{{ url_for('admin_marketplace_product_edit', pid=p.id) }}" class="btn btn-outline-warning btn-sm"><i class="bi bi-pencil"></i></a>
+          <form method="POST" action="{{ url_for('admin_marketplace_product_delete', pid=p.id) }}" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Soft-delete {{ p.name }}?')"><i class="bi bi-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
+{% endblock %}

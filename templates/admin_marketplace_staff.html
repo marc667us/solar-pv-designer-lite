@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Procurement Specialists — Marketplace Admin{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('admin_dashboard') }}" class="text-warning">Admin</a> /
+      <a href="{{ url_for('admin_marketplace_dashboard') }}" class="text-warning">Marketplace</a> / Staff
+    </div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-people-fill me-2 text-warning"></i>Procurement specialists</h5>
+    <div class="text-secondary small">Elect users who can administer suppliers, products, and prices on the marketplace.</div>
+  </div>
+</div>
+
+<div class="solar-card p-3">
+{% if users %}
+<div class="table-responsive">
+  <table class="table table-sm align-middle" style="color:#e0e0f0">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+      <tr><th>User</th><th>Email</th><th>Company</th><th>Current role</th><th class="text-end">Action</th></tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr {% if u.role == 'procurement_specialist' %}style="background:rgba(245,158,11,.07)"{% endif %}>
+        <td>
+          <strong>{{ u.username }}</strong>{% if u.name %}<div class="small text-secondary">{{ u.name }}</div>{% endif %}
+        </td>
+        <td class="small text-secondary">{{ u.email }}</td>
+        <td class="small text-secondary">{{ u.company or '—' }}</td>
+        <td>
+          {% if u.is_admin %}<span class="badge bg-danger">Admin</span>
+          {% elif u.role == 'procurement_specialist' %}<span class="badge" style="background:var(--solar-gold);color:#000">Procurement Specialist</span>
+          {% elif u.role == 'supplier_admin' %}<span class="badge bg-info">Supplier Admin</span>
+          {% else %}<span class="badge bg-secondary">User</span>{% endif %}
+        </td>
+        <td class="text-end">
+          {% if u.is_admin %}
+            <span class="text-secondary small">already full admin</span>
+          {% elif u.role == 'procurement_specialist' %}
+            <form method="POST" action="{{ url_for('admin_marketplace_demote_specialist', uid=u.id) }}" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove procurement specialist role from {{ u.username }}?')">
+                <i class="bi bi-x-circle me-1"></i>Demote
+              </button>
+            </form>
+          {% elif u.role == 'supplier_admin' %}
+            <span class="text-secondary small">supplier — cannot elect</span>
+          {% else %}
+            <form method="POST" action="{{ url_for('admin_marketplace_promote_specialist', uid=u.id) }}" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn btn-warning btn-sm fw-bold"><i class="bi bi-plus-circle me-1"></i>Elect</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center py-3 text-secondary">No users to display.</div>
+{% endif %}
+</div>
+
+{% endblock %}
