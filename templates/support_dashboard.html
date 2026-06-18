@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Technical Support — Installation Dispatch{% endblock %}
+{% block content %}
+
+<div class="rounded-3 p-3 mb-3" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1030 60%,#0f1a22 100%);border:1px solid #1e1e3a">
+  <div class="d-flex align-items-center gap-3">
+    <div style="width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,#7c3aed,#a78bfa);display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff">
+      <i class="bi bi-headset"></i>
+    </div>
+    <div>
+      <h5 class="fw-black mb-0">Technical Support — Installation Dispatch</h5>
+      <div class="text-secondary small">Review approved installers and the queue of completed designs ready to assign for installation.</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-12 col-md-4">
+    <div class="solar-card p-3 text-center">
+      <div class="text-secondary small" style="text-transform:uppercase;letter-spacing:.5px">Approved installers</div>
+      <div class="fw-black text-warning" style="font-size:32px">{{ approved_installers|length }}</div>
+    </div>
+  </div>
+  <div class="col-12 col-md-4">
+    <div class="solar-card p-3 text-center">
+      <div class="text-secondary small" style="text-transform:uppercase;letter-spacing:.5px">Pending installer applications</div>
+      <div class="fw-black" style="font-size:32px;color:#a78bfa">{{ pending_installers }}</div>
+      {% if user and user.is_admin %}
+      <a href="{{ url_for('admin_installers') }}" class="small text-warning">Review queue</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-12 col-md-4">
+    <div class="solar-card p-3 text-center">
+      <div class="text-secondary small" style="text-transform:uppercase;letter-spacing:.5px">Designs ready for dispatch</div>
+      <div class="fw-black" style="font-size:32px;color:#22c55e">{{ ready_for_dispatch|length }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="solar-card p-3 mb-3">
+  <h6 class="fw-black mb-2"><i class="bi bi-building-check me-1 text-warning"></i>Approved installers</h6>
+  {% if approved_installers %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+        <tr><th>Company</th><th>Contact</th><th>Country / regions</th><th>Specialties</th><th class="text-end">Max kW</th><th class="text-end">Grade</th></tr>
+      </thead>
+      <tbody>
+        {% for i in approved_installers %}
+        <tr>
+          <td><strong>{{ i.company_name }}</strong><div class="small text-secondary">{{ i.years_exp }}y exp · {{ i.staff_count }} staff</div></td>
+          <td class="small">{{ i.contact_name }}<div class="text-secondary">{{ i.email }}{% if i.phone %} · {{ i.phone }}{% endif %}</div></td>
+          <td class="small text-secondary">{{ i.country }}{% if i.regions %} · {{ i.regions }}{% endif %}</td>
+          <td class="small text-secondary">{{ i.specialties or '—' }}</td>
+          <td class="text-end small">{{ "%.0f"|format(i.max_project_kw or 0) }}</td>
+          <td class="text-end">{% if i.ai_grade %}<span class="badge bg-warning text-dark">{{ i.ai_grade }}</span>{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-secondary small">No approved installers yet. {% if user and user.is_admin %}Review pending applications in <a class="text-warning" href="{{ url_for('admin_installers') }}">Admin → Installers</a>.{% endif %}</div>
+  {% endif %}
+</div>
+
+<div class="solar-card p-3">
+  <h6 class="fw-black mb-2"><i class="bi bi-clipboard2-check me-1 text-warning"></i>Designs ready for installer dispatch</h6>
+  {% if ready_for_dispatch %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+        <tr><th>Project</th><th>Owner</th><th class="text-end">Last updated</th><th class="text-end">Open</th></tr>
+      </thead>
+      <tbody>
+        {% for p in ready_for_dispatch %}
+        <tr>
+          <td><strong>{{ p.project_name }}</strong></td>
+          <td class="small text-secondary">{{ p.owner or '—' }}</td>
+          <td class="text-end small text-secondary">{{ p.updated_at }}</td>
+          <td class="text-end"><a class="btn btn-sm btn-outline-warning" href="{{ url_for('report_proposal', pid=p.id) }}"><i class="bi bi-box-arrow-up-right"></i></a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-secondary small">No designs in the dispatch queue right now.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

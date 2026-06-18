@@ -121,9 +121,9 @@ Procurement module bolted into `web_app.py` as the user-acquisition magnet for s
 |---|---|---|
 | `/marketplace`, `/marketplace/product/<id>` | 1 | Public catalog browse |
 | `/supplier/register`, `/supplier/dashboard`, `/supplier/products[/add]` | 2 | Supplier self-service portal (role `supplier_admin`) |
-| `/admin/marketplace/verify`, `/admin/marketplace/log` | 3 | Verification queue + audit log |
-| `/rfq/*` | 4 | RFQ workflow (10 routes) |
-| `/boms/*`, `/boqs/*` | 5 + 8 | BOM/BOQ builder + Excel/PDF export at `/boqs/<id>/export.{xlsx,pdf}` |
+| `/admin/marketplace`, `/admin/marketplace/pending` | 3 | Verification queue (audit log written to `logs/audit/audit.log` — no UI route) |
+| `/rfqs/*` | 4 | RFQ workflow (10 routes) |
+| `/boms/*` | 5 + 8 | BOM/BOQ builder; BOQ is nested at `/boms/<id>/boq` with Excel/PDF export at `/boms/<id>/boq.xlsx` and `/boms/<id>/boq.pdf` |
 | `engine/agents/marketplace/_llm.py` | 6 | Zero-cost LLM tie-break classifier (`:free` allowlist required) |
 | `/staff/*`, `/me/*` | 7 | Procurement-specialist role + CRUD + dashboards |
 | `/procurement-center`, `/procurement-center/add`, `/price-sheets/*` | 9 | Checkbox-grid product picker + Basic Price Sheet (qty=1; 10 cols: item#/desc/qty/unit/price/supplier/brand/phone/email/address) |

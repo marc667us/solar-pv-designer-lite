@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Procurement Specialists — Marketplace Admin{% endblock %}
+{% block title %}Marketplace + Support Staff — Admin{% endblock %}
 {% block content %}
 
 <div class="d-flex align-items-center justify-content-between mb-3">
@@ -8,8 +8,8 @@
       <a href="{{ url_for('admin_dashboard') }}" class="text-warning">Admin</a> /
       <a href="{{ url_for('admin_marketplace_dashboard') }}" class="text-warning">Marketplace</a> / Staff
     </div>
-    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-people-fill me-2 text-warning"></i>Procurement specialists</h5>
-    <div class="text-secondary small">Elect users who can administer suppliers, products, and prices on the marketplace.</div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-people-fill me-2 text-warning"></i>Marketplace + support staff</h5>
+    <div class="text-secondary small">Elect users as <strong class="text-warning">Procurement Specialist</strong> (admin suppliers / products / prices) or <strong style="color:#a78bfa">Technical Support</strong> (installation-staff assignments).</div>
   </div>
 </div>
 
@@ -22,7 +22,7 @@
     </thead>
     <tbody>
       {% for u in users %}
-      <tr {% if u.role == 'procurement_specialist' %}style="background:rgba(245,158,11,.07)"{% endif %}>
+      <tr {% if u.role == 'procurement_specialist' %}style="background:rgba(245,158,11,.07)"{% elif u.role == 'technical_support' %}style="background:rgba(124,58,237,.08)"{% endif %}>
         <td>
           <strong>{{ u.username }}</strong>{% if u.name %}<div class="small text-secondary">{{ u.name }}</div>{% endif %}
         </td>
@@ -31,6 +31,7 @@
         <td>
           {% if u.is_admin %}<span class="badge bg-danger">Admin</span>
           {% elif u.role == 'procurement_specialist' %}<span class="badge" style="background:var(--solar-gold);color:#000">Procurement Specialist</span>
+          {% elif u.role == 'technical_support' %}<span class="badge" style="background:#7c3aed;color:#fff">Technical Support</span>
           {% elif u.role == 'supplier_admin' %}<span class="badge bg-info">Supplier Admin</span>
           {% else %}<span class="badge bg-secondary">User</span>{% endif %}
         </td>
@@ -44,12 +45,23 @@
                 <i class="bi bi-x-circle me-1"></i>Demote
               </button>
             </form>
+          {% elif u.role == 'technical_support' %}
+            <form method="POST" action="{{ url_for('admin_marketplace_demote_tech_support', uid=u.id) }}" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove technical-support role from {{ u.username }}?')">
+                <i class="bi bi-x-circle me-1"></i>Demote
+              </button>
+            </form>
           {% elif u.role == 'supplier_admin' %}
             <span class="text-secondary small">supplier — cannot elect</span>
           {% else %}
             <form method="POST" action="{{ url_for('admin_marketplace_promote_specialist', uid=u.id) }}" style="display:inline">
               <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-              <button class="btn btn-warning btn-sm fw-bold"><i class="bi bi-plus-circle me-1"></i>Elect</button>
+              <button class="btn btn-warning btn-sm fw-bold"><i class="bi bi-plus-circle me-1"></i>Elect Procurement</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin_marketplace_promote_tech_support', uid=u.id) }}" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn btn-sm fw-bold" style="background:#7c3aed;color:#fff;border:none"><i class="bi bi-headset me-1"></i>Elect Tech Support</button>
             </form>
           {% endif %}
         </td>

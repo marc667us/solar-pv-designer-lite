@@ -41,7 +41,7 @@ def _ensure_price_sheet_tables():
                 id            SERIAL PRIMARY KEY,
                 user_id       INTEGER NOT NULL,
                 title         VARCHAR(300) NOT NULL,
-                currency      VARCHAR(3) DEFAULT 'USD',
+                currency      VARCHAR(3) DEFAULT 'GHS',
                 created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
@@ -74,7 +74,7 @@ def _ensure_price_sheet_tables():
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id       INTEGER NOT NULL,
                 title         TEXT NOT NULL,
-                currency      TEXT DEFAULT 'USD',
+                currency      TEXT DEFAULT 'GHS',
                 created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at    TEXT DEFAULT CURRENT_TIMESTAMP
             );
@@ -121,9 +121,9 @@ def procurement_center():
     _ensure_price_sheet_tables()
     q = (request.args.get("q") or "").strip()
     cat_id = _safe_int(request.args.get("cat"), 0)
-    currency = (request.args.get("currency") or "USD").strip().upper()
+    currency = (request.args.get("currency") or "GHS").strip().upper()
     if currency not in _CURRENCY_RATES_FROM_USD:
-        currency = "USD"
+        currency = "GHS"
 
     with get_db() as c:
         categories = c.execute(
@@ -195,9 +195,9 @@ def procurement_center_add():
     uid = session["user_id"]
 
     doc_type = (request.form.get("doc_type") or "").strip()
-    currency = (request.form.get("currency") or "USD").strip().upper()
+    currency = (request.form.get("currency") or "GHS").strip().upper()
     if currency not in _CURRENCY_RATES_FROM_USD:
-        currency = "USD"
+        currency = "GHS"
     if doc_type not in ("price_sheet", "bom", "boq"):
         flash("Choose a document type (Basic Price Sheet, BOM, or BOQ).", "danger")
         return redirect(url_for("procurement_center"))
