@@ -317,34 +317,11 @@
     </button>
 
     <div class="collapse navbar-collapse" id="nav">
-      <ul class="navbar-nav ms-auto align-items-center gap-1">
 
-        {% if user %}
-
-        {# Helper macro — marks nav-link active when on matching endpoint #}
+      {# ── LEFT-side nav — Marketplace is always visible (anon + logged-in) ── #}
+      <ul class="navbar-nav me-auto align-items-center gap-1">
         {% set ep = request.endpoint or '' %}
-
-        <li class="nav-item">
-          <a class="nav-link {% if ep == 'dashboard' %}active{% endif %}"
-             href="{{ url_for('dashboard') }}">
-            <i class="bi bi-grid-3x3-gap me-1"></i>Dashboard
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a class="nav-link {% if ep == 'project_new' %}active{% endif %}"
-             href="{{ url_for('project_new') }}">
-            <i class="bi bi-plus-circle me-1"></i>New Project
-          </a>
-        </li>
-
-        <li class="nav-item">
-          <a class="nav-link {% if ep in ('folders_index','folder_detail') %}active{% endif %}"
-             href="{{ url_for('folders_index') }}">
-            <i class="bi bi-folder2-open me-1"></i>Folders
-          </a>
-        </li>
-
+        {% if user %}
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle {% if ep in ('marketplace_public','procurement_center','procurement_center_add','price_sheets_list','price_sheet_view','boms_list','boms_view','rfqs_list','rfq_new','rfq_view','me_dashboard','supplier_dashboard','supplier_products','supplier_product_add','supplier_rfqs_inbox','supplier_rfqs_respond','admin_marketplace_dashboard','admin_marketplace_pending','admin_marketplace_staff','procurement','procurement_suppliers','procurement_catalog') %}active{% endif %}"
              href="#" data-bs-toggle="dropdown" aria-expanded="false">
@@ -377,6 +354,44 @@
             <li><hr class="dropdown-divider" style="border-color:#1e1e3a"></li>
             <li><a class="dropdown-item" href="{{ url_for('procurement') }}"><i class="bi bi-truck me-2 text-secondary"></i>Project Procurement <span class="text-secondary small">(per-project)</span></a></li>
           </ul>
+        </li>
+        {% else %}
+        {# Anonymous users — show Marketplace as a single link (no dropdown) #}
+        <li class="nav-item">
+          <a class="nav-link {% if ep == 'marketplace_public' %}active{% endif %}" href="{{ url_for('marketplace_public') }}">
+            <i class="bi bi-bag-check-fill me-1 text-warning"></i>Marketplace
+            <span class="badge ms-1" style="background:rgba(34,197,94,.18);color:#22c55e;font-size:9px;font-weight:700">FREE</span>
+          </a>
+        </li>
+        {% endif %}
+      </ul>
+
+      <ul class="navbar-nav ms-auto align-items-center gap-1">
+
+        {% if user %}
+
+        {# Helper macro — marks nav-link active when on matching endpoint #}
+        {% set ep = request.endpoint or '' %}
+
+        <li class="nav-item">
+          <a class="nav-link {% if ep == 'dashboard' %}active{% endif %}"
+             href="{{ url_for('dashboard') }}">
+            <i class="bi bi-grid-3x3-gap me-1"></i>Dashboard
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a class="nav-link {% if ep == 'project_new' %}active{% endif %}"
+             href="{{ url_for('project_new') }}">
+            <i class="bi bi-plus-circle me-1"></i>New Project
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a class="nav-link {% if ep in ('folders_index','folder_detail') %}active{% endif %}"
+             href="{{ url_for('folders_index') }}">
+            <i class="bi bi-folder2-open me-1"></i>Folders
+          </a>
         </li>
 
         <li class="nav-item dropdown">
