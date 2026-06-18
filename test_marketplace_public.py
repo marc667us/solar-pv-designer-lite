@@ -51,10 +51,14 @@ def test_marketplace_brand_and_magnet_copy(client) -> None:
 
 
 def test_marketplace_prices_visible_anonymous(client) -> None:
-    """The whole point of the magnet — visitors must see prices without login."""
+    """The whole point of the magnet — visitors must see prices without login.
+    Prices render with explicit ISO-4217 currency codes (USD) per owner
+    directive — '$' symbol was replaced with the 'USD' prefix."""
     body = client.get("/marketplace").get_data(as_text=True)
-    # Lots of $X.XX patterns from seed data.
-    assert body.count("$") > 10
+    # Lots of `USD X.XX` patterns from seed data.
+    assert body.count("USD ") > 10
+    # And no leftover dollar-sign price formatting from earlier templates.
+    assert "${" not in body or body.count("${") == 0
 
 
 def test_seed_products_render(client) -> None:

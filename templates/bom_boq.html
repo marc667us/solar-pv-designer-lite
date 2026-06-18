@@ -52,18 +52,18 @@
         <td class="small text-secondary">{{ it.category_name or '—' }}</td>
         <td class="text-end">{{ "%.2f"|format(it.qty or 0) }}</td>
         <td class="text-end small">{{ it.unit }}</td>
-        <td class="text-end">${{ "%.2f"|format(line.unit_price) }}</td>
-        <td class="text-end fw-bold">${{ "%.2f"|format(line.line_total) }}</td>
+        <td class="text-end">USD {{ "%.2f"|format(line.unit_price) }}</td>
+        <td class="text-end fw-bold">USD {{ "%.2f"|format(line.line_total) }}</td>
       </tr>
       {% endfor %}
     </tbody>
     <tfoot>
       {% for cat, sub in totals.category_totals.items() %}
-      <tr><td colspan="6" class="text-end text-secondary">{{ cat }} subtotal</td><td class="text-end fw-bold">${{ "%.2f"|format(sub) }}</td></tr>
+      <tr><td colspan="6" class="text-end text-secondary">{{ cat }} subtotal</td><td class="text-end fw-bold">USD {{ "%.2f"|format(sub) }}</td></tr>
       {% endfor %}
       <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
         <td colspan="6" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
-        <td class="text-end fw-black text-warning" style="font-size:18px">${{ "%.2f"|format(totals.grand_total) }}</td>
+        <td class="text-end fw-black text-warning" style="font-size:18px">USD {{ "%.2f"|format(totals.grand_total) }}</td>
       </tr>
     </tfoot>
   </table>

@@ -24,7 +24,7 @@
         <td>{{ p.brand or '—' }}</td>
         <td class="small text-secondary">{{ p.category_name or '—' }}{% if p.subcategory %}<div class="text-secondary small">{{ p.subcategory }}</div>{% endif %}</td>
         <td class="small text-secondary" style="max-width:280px">{{ p.spec or '' }}</td>
-        <td class="text-end fw-bold text-warning">${{ "%.2f"|format(p.price_usd or 0) }} <span class="text-secondary small">/ {{ p.unit }}</span></td>
+        <td class="text-end fw-bold text-warning">USD {{ "%.2f"|format(p.price_usd or 0) }} <span class="text-secondary small">/ {{ p.unit }}</span></td>
         <td class="text-center small">{{ p.lead_time_days or 0 }}d</td>
         <td class="text-center">
           {% if p.is_verified and p.is_public_visible %}<span class="badge bg-success">Live</span>
