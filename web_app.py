@@ -782,8 +782,22 @@ def _send_email(to_addr, subject, html_body, text_body=None, from_addr=None, res
                            resend_key_override=resend_key, attachments=attachments)
 
 
+_MARKETPLACE_PS = (
+    "\n\n--\n"
+    "PS - browse our free Electrical Pricing Marketplace: "
+    "https://solarpro.aiappinvent.com/marketplace"
+)
+
+
 def _send_system_email(to_addr, subject, body_text):
-    """Send a transactional system email (password reset, alerts)."""
+    """Send a transactional system email (password reset, alerts).
+
+    Appends a one-line marketplace PS to every transactional email
+    so the new Electrical Pricing Marketplace gets quiet passive
+    promotion across every solar touchpoint.
+    """
+    if _MARKETPLACE_PS not in body_text:
+        body_text = body_text + _MARKETPLACE_PS
     html = ("<div style='font-family:sans-serif;padding:24px;color:#1a1a2e'>"
             "<pre style='white-space:pre-wrap'>" + body_text + "</pre></div>")
     return _send_email(to_addr, subject, html, text_body=body_text)
