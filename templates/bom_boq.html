@@ -28,9 +28,17 @@
     <div class="text-secondary small mt-1">Generated: {{ bom.updated_at }}</div>
   </div>
 
+  {% if bom_rates is defined %}
+  <div class="text-secondary small mb-2" style="border-left:3px solid var(--solar-gold);padding-left:10px">
+    Markup rates applied: install labour <strong>{{ bom_rates.labour_pct }}%</strong>
+    · overhead <strong>{{ bom_rates.overhead_pct }}%</strong>
+    · profit <strong>{{ bom_rates.profit_pct }}%</strong>
+    · VAT <strong>{{ bom_rates.vat_pct }}%</strong>
+  </div>
+  {% endif %}
   <table class="table align-middle" style="color:#e0e0f0;font-size:13px">
     <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
-      <tr><th style="width:30px">#</th><th>Description</th><th>Category</th><th class="text-end">Qty</th><th class="text-end">Unit</th><th class="text-end">Rate (USD)</th><th class="text-end">Amount (USD)</th></tr>
+      <tr><th style="width:30px">#</th><th>Description</th><th>Category</th><th class="text-end">Qty</th><th class="text-end">Unit</th><th class="text-end">Basic Rate</th><th class="text-end">Total Rate</th><th class="text-end">Amount</th></tr>
     </thead>
     <tbody>
       {% set ns = namespace(prev_cat=None) %}
@@ -38,7 +46,7 @@
       {% set it = line.item %}
       {% if it.category_name != ns.prev_cat %}
       <tr style="background:#0a0a14">
-        <td colspan="7" class="fw-bold text-warning" style="text-transform:uppercase;letter-spacing:.5px">{{ it.category_name or 'Uncategorised' }}</td>
+        <td colspan="8" class="fw-bold text-warning" style="text-transform:uppercase;letter-spacing:.5px">{{ it.category_name or 'Uncategorised' }}</td>
       </tr>
       {% set ns.prev_cat = it.category_name %}
       {% endif %}
@@ -52,17 +60,18 @@
         <td class="small text-secondary">{{ it.category_name or '—' }}</td>
         <td class="text-end">{{ "%.2f"|format(it.qty or 0) }}</td>
         <td class="text-end small">{{ it.unit }}</td>
-        <td class="text-end">USD {{ "%.2f"|format(line.unit_price) }}</td>
+        <td class="text-end">USD {{ "%.2f"|format(line.basic_rate if line.basic_rate is defined else line.unit_price) }}</td>
+        <td class="text-end">USD {{ "%.2f"|format(line.total_rate if line.total_rate is defined else line.unit_price) }}</td>
         <td class="text-end fw-bold">USD {{ "%.2f"|format(line.line_total) }}</td>
       </tr>
       {% endfor %}
     </tbody>
     <tfoot>
       {% for cat, sub in totals.category_totals.items() %}
-      <tr><td colspan="6" class="text-end text-secondary">{{ cat }} subtotal</td><td class="text-end fw-bold">USD {{ "%.2f"|format(sub) }}</td></tr>
+      <tr><td colspan="7" class="text-end text-secondary">{{ cat }} subtotal</td><td class="text-end fw-bold">USD {{ "%.2f"|format(sub) }}</td></tr>
       {% endfor %}
       <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
-        <td colspan="6" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
+        <td colspan="7" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
         <td class="text-end fw-black text-warning" style="font-size:18px">USD {{ "%.2f"|format(totals.grand_total) }}</td>
       </tr>
     </tfoot>
