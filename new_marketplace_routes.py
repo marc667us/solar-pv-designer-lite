@@ -184,9 +184,12 @@ def marketplace_public():
             sql += "AND ec.category_id=? "
             args.append(cat_id)
         if q:
-            sql += ("AND (ec.name LIKE ? OR ec.brand LIKE ? OR ec.model LIKE ? "
-                    "     OR ec.spec LIKE ?) ")
-            like = f"%{q}%"
+            # LOWER() on both sides so search is case-insensitive on Postgres
+            # (LIKE is case-sensitive there; SQLite is case-insensitive for
+            # ASCII, so this keeps both backends behaving the same).
+            sql += ("AND (LOWER(ec.name) LIKE ? OR LOWER(ec.brand) LIKE ? "
+                    "     OR LOWER(ec.model) LIKE ? OR LOWER(ec.spec) LIKE ?) ")
+            like = f"%{q.lower()}%"
             args.extend([like, like, like, like])
         sql += "ORDER BY ec.created_at DESC LIMIT 200"
         products = c.execute(sql, args).fetchall()
