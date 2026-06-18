@@ -707,13 +707,30 @@
         {# ── Scale constants: 8 px per metre. viewBox is 1000x540. #}
         {% set _scale = 8 %}
         {% set _ground_y = 460 %}
-        {# House dimensions — defaults sensible if no data. #}
-        {% set _house_h_m = 5 %}
-        {% set _house_w_m = 14 %}
+        {# House dimensions — DRIVEN FROM PROJECT DATA so the silhouette
+           changes when the operator enters a different building height.
+           Width derived from height (2.8x) so taller buildings also read
+           proportionally wider; clamped 8m..25m to stay readable. The
+           upper clamp on height (45m) keeps tall blocks inside the
+           viewBox even at this 8-px-per-metre scale. #}
+        {% set _raw_house_h = (shading.roof_height_m if shading and shading.roof_height_m else 5)|float %}
+        {% if _raw_house_h < 2.5 %}{% set _raw_house_h = 5.0 %}{% endif %}
+        {% if _raw_house_h > 45 %}{% set _raw_house_h = 45.0 %}{% endif %}
+        {% set _house_h_m = _raw_house_h %}
+        {% set _house_w_m = (_house_h_m * 2.8) %}
+        {% if _house_w_m < 8 %}{% set _house_w_m = 8 %}{% endif %}
+        {% if _house_w_m > 25 %}{% set _house_w_m = 25 %}{% endif %}
         {% set _house_h_px = (_house_h_m * _scale)|int %}
         {% set _house_w_px = (_house_w_m * _scale)|int %}
         {% set _house_x = 440 %}
         {% set _house_y = _ground_y - _house_h_px %}
+        {# Mount-type branch — drives the building/rack render below.
+           Pulls from shading.mount_type (set by the inspection form's
+           roof_type) and falls back to the project-level mounting_type. #}
+        {% set _mt_raw = (shading.mount_type if shading and shading.mount_type else (project.data.get('mounting_type','rooftop_pitched') if project and project.data else 'rooftop_pitched')) %}
+        {% set _mt = (_mt_raw|string|lower) %}
+        {% set _is_ground = ('ground' in _mt) %}
+        {% set _is_flat   = (('flat' in _mt) or ('membrane' in _mt)) %}
         <svg id="shadingSvg" viewBox="0 0 1000 540" preserveAspectRatio="xMidYMid meet"
              style="width:100%;height:auto;max-height:60vh;border-radius:8px;
                     border:1px solid #1e1e3a;display:block">
@@ -788,11 +805,36 @@
               </text>
             {% endfor %}
           </g>
-          {# Sun position (default noon-ish) — read from engine if available #}
-          {% set _sun_x = 700 %}
-          {% set _sun_y = 70 %}
-          {% set _arr_cx = _house_x + _house_w_px // 2 %}
-          {% set _arr_cy = _house_y - 14 %}
+          {# Sun position — driven from shading.sim_time so the initial
+             paint matches the operator's chosen hour. Bezier path is
+             M 60 460 Q 500 -340 940 460; parameter t = (hour-6)/12,
+             clamped 0..1 for hours 06:00..18:00. The JS slider takes
+             over once the user drags it. #}
+          {% set _sim_time = (shading.sim_time if shading and shading.sim_time else '12:00') %}
+          {% set _sim_h_raw = (_sim_time.split(':')[0] if ':' in _sim_time else '12') %}
+          {% set _sim_m_raw = (_sim_time.split(':')[1] if ':' in _sim_time else '00') %}
+          {% set _sim_h = (_sim_h_raw|int) if _sim_h_raw and _sim_h_raw.isdigit() else 12 %}
+          {% set _sim_m = (_sim_m_raw|int) if _sim_m_raw and _sim_m_raw.isdigit() else 0 %}
+          {% set _sim_hour = _sim_h + (_sim_m / 60.0) %}
+          {% set _t = (_sim_hour - 6) / 12.0 %}
+          {% if _t < 0 %}{% set _t = 0 %}{% endif %}
+          {% if _t > 1 %}{% set _t = 1 %}{% endif %}
+          {% set _u = 1.0 - _t %}
+          {% set _sun_x = (_u*_u*60 + 2*_u*_t*500 + _t*_t*940)|round|int %}
+          {% set _sun_y = (_u*_u*460 + 2*_u*_t*-340 + _t*_t*460)|round|int %}
+          {# Array centre used by paintDirectedRays() — branched on mount
+             type so the sun-ray endpoint lines hit the *actual* PV face
+             (not a phantom roof position when the project is ground-mounted). #}
+          {% if _is_ground %}
+            {% set _arr_cx = _house_x + _house_w_px // 2 %}
+            {% set _arr_cy = _ground_y - (2.0 * _scale)|int - 13 %}
+          {% elif _is_flat %}
+            {% set _arr_cx = _house_x + _house_w_px // 2 %}
+            {% set _arr_cy = _house_y - 15 %}
+          {% else %}
+            {% set _arr_cx = _house_x + _house_w_px // 2 %}
+            {% set _arr_cy = _house_y - 14 %}
+          {% endif %}
           {# Directed rays group lives OUTSIDE the sun group so it doesn't
              translate with the disk. JS paintDirectedRays(p) clears and
              redraws this on each slider tick so the rays always span
@@ -1013,62 +1055,137 @@
               D={{ "%.0f"|format(_obs_d_m) }}m · {{ _dir }}
             </text>
           {% endfor %}
-          {# ── House (smaller than tall obstructions per real scale). #}
-          <rect x="{{ _house_x }}" y="{{ _house_y }}"
-                width="{{ _house_w_px }}" height="{{ _house_h_px }}"
-                fill="url(#houseGradN)" stroke="#6b5340" stroke-width="1.5"/>
-          {# Windows #}
-          <rect x="{{ _house_x + 12 }}" y="{{ _house_y + 10 }}"
-                width="22" height="16" fill="#88b3c5" stroke="#5a4a30" stroke-width="0.8"/>
-          <rect x="{{ _house_x + _house_w_px - 34 }}" y="{{ _house_y + 10 }}"
-                width="22" height="16" fill="#88b3c5" stroke="#5a4a30" stroke-width="0.8"/>
-          {# Door #}
-          <rect x="{{ _house_x + _house_w_px//2 - 7 }}"
-                y="{{ _house_y + _house_h_px - 26 }}"
-                width="14" height="26" fill="#5a3a20" stroke="#3a2010"/>
-          {# Hip roof — south face is the trapezoid; PV array sits on top. #}
-          {% set _roof_h_px = 22 %}
-          {% set _roof_peak_y = _house_y - _roof_h_px %}
-          <polygon points="{{ _house_x - 8 }},{{ _house_y }}
-                           {{ _house_x + _house_w_px + 8 }},{{ _house_y }}
-                           {{ _house_x + _house_w_px - 6 }},{{ _roof_peak_y }}
-                           {{ _house_x + 6 }},{{ _roof_peak_y }}"
-                   fill="url(#roofGradN)" stroke="#3a1d05" stroke-width="1.2"/>
-          <line x1="{{ _house_x + 6 }}" y1="{{ _roof_peak_y }}"
-                x2="{{ _house_x + _house_w_px - 6 }}" y2="{{ _roof_peak_y }}"
-                stroke="#2a1500" stroke-width="2"/>
-          {# House label #}
-          <text x="{{ _house_x + _house_w_px//2 }}" y="{{ _ground_y - 6 }}"
-                fill="#1a1a2e" font-size="9" font-weight="700" text-anchor="middle">
-            House · {{ "%.0f"|format(_house_h_m) }}m
-          </text>
-          {# ── PV array on south roof — TINY relative to tall obstructions. #}
-          {% set _arr_x = _house_x + 18 %}
-          {% set _arr_w_px = _house_w_px - 36 %}
-          {% set _arr_h_px = 24 %}
-          {% set _arr_top_y = _house_y - 8 %}
-          {# Tilted parallelogram representing the array on the roof slope. #}
-          <polygon points="{{ _arr_x }},{{ _arr_top_y }}
-                           {{ _arr_x + _arr_w_px }},{{ _arr_top_y }}
-                           {{ _arr_x + _arr_w_px - 4 }},{{ _arr_top_y - _arr_h_px }}
-                           {{ _arr_x + 4 }},{{ _arr_top_y - _arr_h_px }}"
-                   fill="url(#pvGradN)" stroke="#062c43" stroke-width="1"/>
-          {# Inner panel grid — 3 rows x 6 cols visual representation. #}
-          {% set _vrows = 3 %}{% set _vcols = 6 %}
-          {% for _r in range(_vrows) %}
-            {% for _c in range(_vcols) %}
-              {% set _px = _arr_x + 4 + _c * ((_arr_w_px - 8) // _vcols) %}
-              {% set _py = (_arr_top_y - _arr_h_px) + _r * (_arr_h_px // _vrows) %}
-              <rect x="{{ _px }}" y="{{ _py }}"
-                    width="{{ ((_arr_w_px - 8) // _vcols) - 1 }}"
-                    height="{{ (_arr_h_px // _vrows) - 1 }}"
-                    fill="#3b82f6" stroke="#0c2244" stroke-width="0.4"/>
+          {# ── Building / mount render — branches on _mt.                   #}
+          {#    GROUND  : skip the house entirely; draw a 4-post tilted     #}
+          {#              ground rack carrying the panel array. The PV    #}
+          {#              array seats ~2m above ground.                     #}
+          {#    FLAT    : box building with a tilted rack on the deck.     #}
+          {#    SLOPED  : pitched-hip silhouette with the array on slope.   #}
+          {% if _is_ground %}
+            {# Ground-mounted rack — no building. #}
+            {% set _rack_w_m = (_house_w_m) %}
+            {% set _rack_w_px = (_rack_w_m * _scale)|int %}
+            {% set _rack_x = _house_x %}
+            {% set _rack_top_y = _ground_y - (2.0 * _scale)|int %}  {# 2m clearance #}
+            {% set _rack_h_px = 26 %}
+            {# Panel face — tilted parallelogram resting on the rack rail. #}
+            {% set _arr_x = _rack_x + 6 %}
+            {% set _arr_w_px = _rack_w_px - 12 %}
+            <polygon points="{{ _arr_x }},{{ _rack_top_y }}
+                             {{ _arr_x + _arr_w_px }},{{ _rack_top_y }}
+                             {{ _arr_x + _arr_w_px - 6 }},{{ _rack_top_y - _rack_h_px }}
+                             {{ _arr_x + 6 }},{{ _rack_top_y - _rack_h_px }}"
+                     fill="url(#pvGradN)" stroke="#062c43" stroke-width="1"/>
+            {# Inner panel cells. #}
+            {% set _vrows = 3 %}{% set _vcols = 6 %}
+            {% for _r in range(_vrows) %}
+              {% for _c in range(_vcols) %}
+                {% set _px = _arr_x + 6 + _c * ((_arr_w_px - 12) // _vcols) %}
+                {% set _py = (_rack_top_y - _rack_h_px) + _r * (_rack_h_px // _vrows) %}
+                <rect x="{{ _px }}" y="{{ _py }}"
+                      width="{{ ((_arr_w_px - 12) // _vcols) - 1 }}"
+                      height="{{ (_rack_h_px // _vrows) - 1 }}"
+                      fill="#3b82f6" stroke="#0c2244" stroke-width="0.4"/>
+              {% endfor %}
             {% endfor %}
-          {% endfor %}
-          <text x="{{ _arr_x + _arr_w_px//2 }}" y="{{ _arr_top_y - _arr_h_px - 4 }}"
-                fill="#1a1a2e" font-size="9" font-weight="700" text-anchor="middle">
-            PV Array
-          </text>
+            {# 4 vertical posts from rack base to ground. #}
+            {% for _p in range(4) %}
+              {% set _post_x = _rack_x + 4 + _p * ((_rack_w_px - 8) // 3) %}
+              <line x1="{{ _post_x }}" y1="{{ _rack_top_y + 2 }}"
+                    x2="{{ _post_x }}" y2="{{ _ground_y }}"
+                    stroke="#5e5e66" stroke-width="3"/>
+            {% endfor %}
+            {# Horizontal cross rail just under the panel face. #}
+            <line x1="{{ _rack_x }}" y1="{{ _rack_top_y + 2 }}"
+                  x2="{{ _rack_x + _rack_w_px }}" y2="{{ _rack_top_y + 2 }}"
+                  stroke="#3a3a46" stroke-width="2"/>
+            {# Label so the operator can see the mount type chose. #}
+            <text x="{{ _rack_x + _rack_w_px//2 }}" y="{{ _rack_top_y - _rack_h_px - 6 }}"
+                  fill="#1a1a2e" font-size="9" font-weight="700" text-anchor="middle">
+              Ground-Mount Array
+            </text>
+            <text x="{{ _rack_x + _rack_w_px//2 }}" y="{{ _ground_y - 6 }}"
+                  fill="#1a1a2e" font-size="8" font-weight="600" text-anchor="middle"
+                  opacity="0.9">
+              {{ _mt_raw }} · clearance 2.0m
+            </text>
+          {% else %}
+            {# Roof-mount path (sloped or flat). #}
+            <rect x="{{ _house_x }}" y="{{ _house_y }}"
+                  width="{{ _house_w_px }}" height="{{ _house_h_px }}"
+                  fill="url(#houseGradN)" stroke="#6b5340" stroke-width="1.5"/>
+            {# Windows — render per visible floor so the silhouette reads
+               correctly for both bungalows and apartment blocks. #}
+            {% set _n_floors_h = (_house_h_m / 3.2)|int %}
+            {% if _n_floors_h < 1 %}{% set _n_floors_h = 1 %}{% endif %}
+            {% for _f in range(_n_floors_h) %}
+              {% set _wy = _ground_y - ((_f + 1) * 3.2 * _scale)|int + 6 %}
+              {% set _winw = (_house_w_px - 28) // 3 %}
+              {% for _wc in range(3) %}
+                {% set _wx = _house_x + 10 + _wc * ((_house_w_px - 20) // 3) %}
+                <rect x="{{ _wx }}" y="{{ _wy }}"
+                      width="{{ _winw }}" height="14"
+                      fill="#88b3c5" stroke="#5a4a30" stroke-width="0.5"/>
+              {% endfor %}
+            {% endfor %}
+            {# Door on the ground floor. #}
+            <rect x="{{ _house_x + _house_w_px//2 - 7 }}"
+                  y="{{ _ground_y - 26 }}"
+                  width="14" height="26" fill="#5a3a20" stroke="#3a2010"/>
+            {% if _is_flat %}
+              {# Flat-roof rack: skip the hip roof; place a tilted rack on the deck. #}
+              {% set _arr_x = _house_x + 12 %}
+              {% set _arr_w_px = _house_w_px - 24 %}
+              {% set _arr_h_px = 22 %}
+              {% set _arr_top_y = _house_y - 4 %}
+              <polygon points="{{ _arr_x }},{{ _arr_top_y }}
+                               {{ _arr_x + _arr_w_px }},{{ _arr_top_y }}
+                               {{ _arr_x + _arr_w_px - 4 }},{{ _arr_top_y - _arr_h_px }}
+                               {{ _arr_x + 4 }},{{ _arr_top_y - _arr_h_px }}"
+                       fill="url(#pvGradN)" stroke="#062c43" stroke-width="1"/>
+            {% else %}
+              {# Sloped roof — south-face trapezoid + PV array on slope. #}
+              {% set _roof_h_px = 22 %}
+              {% set _roof_peak_y = _house_y - _roof_h_px %}
+              <polygon points="{{ _house_x - 8 }},{{ _house_y }}
+                               {{ _house_x + _house_w_px + 8 }},{{ _house_y }}
+                               {{ _house_x + _house_w_px - 6 }},{{ _roof_peak_y }}
+                               {{ _house_x + 6 }},{{ _roof_peak_y }}"
+                       fill="url(#roofGradN)" stroke="#3a1d05" stroke-width="1.2"/>
+              <line x1="{{ _house_x + 6 }}" y1="{{ _roof_peak_y }}"
+                    x2="{{ _house_x + _house_w_px - 6 }}" y2="{{ _roof_peak_y }}"
+                    stroke="#2a1500" stroke-width="2"/>
+              {% set _arr_x = _house_x + 18 %}
+              {% set _arr_w_px = _house_w_px - 36 %}
+              {% set _arr_h_px = 24 %}
+              {% set _arr_top_y = _house_y - 8 %}
+              <polygon points="{{ _arr_x }},{{ _arr_top_y }}
+                               {{ _arr_x + _arr_w_px }},{{ _arr_top_y }}
+                               {{ _arr_x + _arr_w_px - 4 }},{{ _arr_top_y - _arr_h_px }}
+                               {{ _arr_x + 4 }},{{ _arr_top_y - _arr_h_px }}"
+                       fill="url(#pvGradN)" stroke="#062c43" stroke-width="1"/>
+            {% endif %}
+            {# Panel grid cells (sloped + flat both use this). #}
+            {% set _vrows = 3 %}{% set _vcols = 6 %}
+            {% for _r in range(_vrows) %}
+              {% for _c in range(_vcols) %}
+                {% set _px = _arr_x + 4 + _c * ((_arr_w_px - 8) // _vcols) %}
+                {% set _py = (_arr_top_y - _arr_h_px) + _r * (_arr_h_px // _vrows) %}
+                <rect x="{{ _px }}" y="{{ _py }}"
+                      width="{{ ((_arr_w_px - 8) // _vcols) - 1 }}"
+                      height="{{ (_arr_h_px // _vrows) - 1 }}"
+                      fill="#3b82f6" stroke="#0c2244" stroke-width="0.4"/>
+              {% endfor %}
+            {% endfor %}
+            <text x="{{ _arr_x + _arr_w_px//2 }}" y="{{ _arr_top_y - _arr_h_px - 4 }}"
+                  fill="#1a1a2e" font-size="9" font-weight="700" text-anchor="middle">
+              PV Array
+            </text>
+            <text x="{{ _house_x + _house_w_px//2 }}" y="{{ _ground_y - 6 }}"
+                  fill="#1a1a2e" font-size="9" font-weight="700" text-anchor="middle">
+              House · {{ "%.0f"|format(_house_h_m) }}m · {{ _mt_raw }}
+            </text>
+          {% endif %}
           {# ── Compass widget upper-right. #}
           <g transform="translate(920, 100)">
             <circle r="34" fill="rgba(10,10,20,0.85)" stroke="#fff" stroke-width="1.5"/>
@@ -1202,12 +1319,12 @@
           var group  = document.getElementById('svgSunGroup');
           var label  = document.getElementById('shadingTimeLabel');
           if (!slider || !disk || !group) return;
-          // The server-rendered sun-group children sit at (_sun_x, _sun_y)
-          // = (700, 70) — see the Jinja set block near L762. The translate
-          // we apply must use those EXACT coords; using the curve's noon
-          // peak (500, 60) here would offset every position by (-200, -10)
-          // and the disk would visibly miss the dashed sun-path arc.
-          var BASE_X = 700, BASE_Y = 70;  // matches _sun_x / _sun_y above
+          // The server-rendered sun-group children sit at whatever
+          // (_sun_x, _sun_y) the template computed from shading.sim_time
+          // — read those values directly off the disk's cx/cy so the
+          // translate baseline always matches the first paint.
+          var BASE_X = parseFloat(disk.getAttribute('cx')) || 700;
+          var BASE_Y = parseFloat(disk.getAttribute('cy')) || 70;
           // Sky colour palette stops by hour: top/mid/bottom of the gradient.
           // Tinted to match the time of day (deep blue noon, golden dawn/dusk,
           // pink/purple twilight, navy night).
