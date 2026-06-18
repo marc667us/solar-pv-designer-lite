@@ -9,7 +9,7 @@
     </div>
     <div>
       <h5 class="fw-black mb-0">Procurement Center</h5>
-      <div class="text-secondary small">Search products · tick the box on each one you want · pick a document type and currency · click Add</div>
+      <div class="text-secondary small">Search products · tick the box on each one you want · pick a document type and currency in the <span class="text-warning fw-bold">gold panel</span> · click Add</div>
     </div>
   </div>
 </div>
@@ -20,9 +20,12 @@
 <div class="row g-3">
 
   <!-- ── Left panel: doc type + currency + Add ──────────────────────────── -->
-  <div class="col-lg-3">
-    <div class="solar-card p-3" style="position:sticky;top:20px">
-      <h6 class="fw-bold mb-3"><i class="bi bi-file-earmark-text me-1 text-warning"></i>Build document</h6>
+  <div class="col-12 col-lg-3 order-lg-1">
+    <div class="solar-card p-3" style="position:sticky;top:20px;border:2px solid var(--solar-gold);box-shadow:0 0 24px rgba(245,158,11,.15)">
+      <div class="d-flex align-items-center gap-2 mb-3 pb-2" style="border-bottom:1px dashed #1e1e3a">
+        <span style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));display:flex;align-items:center;justify-content:center;font-size:14px;color:#000"><i class="bi bi-file-earmark-text"></i></span>
+        <h6 class="fw-black mb-0">Build document</h6>
+      </div>
 
       <div class="mb-3">
         <div class="text-secondary small mb-2" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Document type</div>
@@ -72,7 +75,7 @@
   </div>
 
   <!-- ── Right: search + filter + product grid with checkboxes ─────────── -->
-  <div class="col-lg-9">
+  <div class="col-12 col-lg-9 order-lg-2">
 
     <div class="solar-card p-3 mb-3">
       <div class="d-flex gap-2 flex-wrap">
