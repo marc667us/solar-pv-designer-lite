@@ -95,6 +95,40 @@
 {% set usage_pct  = ([projects|length / limit * 100, 100]|min)|int if limit < 9999 else 5 %}
 {% set first_name = (user.name or user.username).split()[0] %}
 
+<!-- ── Marketplace strip — placed BEFORE the welcome banner, at the same
+     level (sibling), so it's reachable without opening the navbar
+     dropdown which can overlap dashboard tiles when open. ─────────────── -->
+<div class="dash-header" style="background:linear-gradient(135deg,#1a1030 0%,#0f0f22 50%,#1a1030 100%);border-color:rgba(245,158,11,.35);padding:18px 24px;margin-bottom:18px">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      <div style="width:50px;height:50px;border-radius:14px;background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));display:flex;align-items:center;justify-content:center;font-size:22px;color:#000;flex-shrink:0">
+        <i class="bi bi-bag-check-fill"></i>
+      </div>
+      <div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <h5 class="fw-black mb-0">SolarPro Marketplace</h5>
+          <span class="badge rounded-pill px-2 py-1" style="background:rgba(34,197,94,.18);color:#22c55e;font-size:10px;font-weight:700;letter-spacing:.5px">LIVE</span>
+        </div>
+        <div class="text-secondary small mt-1">Browse live supplier prices · Build a Basic Price Sheet, BOM, or BOQ · Send RFQs</div>
+      </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('procurement_center') }}" class="btn btn-warning fw-bold">
+        <i class="bi bi-cart-plus-fill me-1"></i>Procurement Center
+      </a>
+      <a href="{{ url_for('marketplace_public') }}" class="btn btn-outline-warning">
+        <i class="bi bi-shop me-1"></i>Browse Marketplace
+      </a>
+      <a href="{{ url_for('rfqs_list') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-envelope-paper me-1"></i>RFQs
+      </a>
+      <a href="{{ url_for('me_dashboard') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-person-badge me-1"></i>My Procurement
+      </a>
+    </div>
+  </div>
+</div>
+
 <!-- ── Gradient header ────────────────────────────────────────────────── -->
 <div class="dash-header">
   <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
