@@ -113,6 +113,41 @@ Admin panel: `templates/admin.html`, `templates/admin_operations.html`, `templat
 
 ---
 
+## Marketplace / Procurement Center (added 2026-06-17→18)
+
+Procurement module bolted into `web_app.py` as the user-acquisition magnet for solar. Anyone can browse pricing at `/marketplace`; signup unlocks RFQ / BOM / BOQ / Procurement Center.
+
+| Namespace | Slice | What |
+|---|---|---|
+| `/marketplace`, `/marketplace/product/<id>` | 1 | Public catalog browse |
+| `/supplier/register`, `/supplier/dashboard`, `/supplier/products[/add]` | 2 | Supplier self-service portal (role `supplier_admin`) |
+| `/admin/marketplace/verify`, `/admin/marketplace/log` | 3 | Verification queue + audit log |
+| `/rfq/*` | 4 | RFQ workflow (10 routes) |
+| `/boms/*`, `/boqs/*` | 5 + 8 | BOM/BOQ builder + Excel/PDF export at `/boqs/<id>/export.{xlsx,pdf}` |
+| `engine/agents/marketplace/_llm.py` | 6 | Zero-cost LLM tie-break classifier (`:free` allowlist required) |
+| `/staff/*`, `/me/*` | 7 | Procurement-specialist role + CRUD + dashboards |
+| `/procurement-center`, `/procurement-center/add`, `/price-sheets/*` | 9 | Checkbox-grid product picker + Basic Price Sheet (qty=1; 10 cols: item#/desc/qty/unit/price/supplier/brand/phone/email/address) |
+
+**Where the routes live:**
+- 11 × `new_marketplace_*_routes.py` (Slice 1-9 + Postgres init + Procurement Center)
+- 14 × `patch_*.py` to splice them into `web_app.py` (byte-level, CRLF-aware)
+- 10 × `test_marketplace_*.py` (104+ tests)
+- 26 × `templates/` for marketplace/supplier/admin/rfq/bom/boq/me/procurement-center
+
+**Currency model:** ISO codes only (USD/EUR/GBP/GHS/NGN/KES/ZAR), never symbols. Static rates in `_CURRENCY_RATES_FROM_USD` inside `new_marketplace_procurement_center_routes.py`.
+
+**Zero-cost LLM guardrail:** `_is_free_openrouter_model()` rejects any model that doesn't end in `:free` or appear in the allowlist. Chain: OpenRouter free Nemotron → Ollama → None. NEVER paid Anthropic.
+
+**Email injection defence:** `_safe_email_text()` html.escape body; `_safe_email_subject()` strips CR/LF. Used for RFQ notify, procurement-specialist invite, verification approval.
+
+**Postgres parity:** `_ensure_marketplace_schema_postgres()` runs on cold start, translates `INTEGER PRIMARY KEY AUTOINCREMENT` → `SERIAL`, uses `ADD COLUMN IF NOT EXISTS` idempotently, backfills `category_id`. Case-insensitive search via `LOWER(ec.name) LIKE ?` since Postgres LIKE is case-sensitive but SQLite isn't.
+
+**Soft-launch artefacts (commit `e7c2d6a`):** `scripts/send_marketplace_launch.py` (Brevo, dry-run default, 33 invitees) + `scripts/build_marketplace_flyer.py` (Pillow 1080×1080 + 1200×628) + 4-channel copy + `patch_solar_email_marketplace_footer.py` (PS injected on all transactional emails).
+
+**Last shipped:** Slice 9 = `dd22a92` (Procurement Center + Basic Price Sheet). Slice 9 has NOT been through a Codex round-1 review yet — earlier slices had 8 rounds with 7 HIGH-SEV fixes (state-mutating GET, unverified product leak, paid LLM model, HTML/SMTP injection, zero-target RFQ, missing supplier.address column, supplier-schema not firing in procurement routes).
+
+---
+
 ## Health Check Endpoints
 
 All added in session 2026-06-02 (commit `598b071`):
