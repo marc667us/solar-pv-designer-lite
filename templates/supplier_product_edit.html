@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Edit product — {{ product.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('supplier_dashboard') }}" class="text-warning">Dashboard</a> /
+      <a href="{{ url_for('supplier_products') }}" class="text-warning">Products</a> /
+      Edit
+    </div>
+    <h5 class="fw-black mb-0 mt-1">Edit product</h5>
+  </div>
+  <a href="{{ url_for('supplier_products') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+</div>
+
+<div class="solar-card p-3">
+  <form method="POST" action="{{ url_for('supplier_product_edit', pid=product.id) }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+    <div class="row g-3">
+      <div class="col-md-8">
+        <label class="form-label small text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Product name *</label>
+        <input type="text" name="name" required value="{{ product.name }}" class="form-control" style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Brand</label>
+        <input type="text" name="brand" value="{{ product.brand or '' }}" class="form-control" style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Model</label>
+        <input type="text" name="model" value="{{ product.model or '' }}" class="form-control" style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Category</label>
+        <select name="category_id" class="form-select" style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+          <option value="0">— Uncategorised —</option>
+          {% for c in categories %}
+          <option value="{{ c.id }}" {% if product.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Subcategory</label>
+        <input type="text" name="subcategory" value="{{ product.subcategory or '' }}" class="form-control" style="background:#0a0a14;border-color:#1e1e3a;color:#fff" placeholder="e.g. Monocrystalline">
+      </div>
+      <div class="col-12">
+        <label class="form-label small text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Spec / description</label>
+        <textarea name="spec" rows="3" class="form-control" style="background:#0a0a14;border-color:#1e1e3a;color:#fff">{{ product.spec or '' }}</textarea>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Unit</label>
+        <input type="text" name="unit" value="{{ product.unit or 'No.' }}" class="form-control" style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+      </div>
+      <div class="col-md-5">
+        <label class="form-label small text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Price (USD)</label>
+        <input type="number" min="0" step="1" name="price_usd" value="{{ product.price_usd or 0 }}" class="form-control" style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Lead time (days)</label>
+        <input type="number" min="0" step="1" name="lead_time_days" value="{{ product.lead_time_days or 30 }}" class="form-control" style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+      </div>
+    </div>
+
+    <div class="alert mt-3" style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);color:#f0d28a">
+      <i class="bi bi-info-circle me-1"></i>
+      Edits drop your verification badge — an admin will re-approve before the new values appear publicly.
+    </div>
+
+    <div class="d-flex gap-2 mt-3">
+      <button type="submit" class="btn btn-warning fw-bold"><i class="bi bi-save me-1"></i>Save changes</button>
+      <a href="{{ url_for('supplier_products') }}" class="btn btn-outline-light">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

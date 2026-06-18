@@ -15,7 +15,7 @@
 <div class="table-responsive">
   <table class="table table-sm align-middle" style="color:#e0e0f0">
     <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
-      <tr><th>Name</th><th>Brand</th><th>Category</th><th>Spec</th><th class="text-end">Price</th><th class="text-center">Lead</th><th class="text-center">Status</th></tr>
+      <tr><th>Name</th><th>Brand</th><th>Category</th><th>Spec</th><th class="text-end">Price</th><th class="text-center">Lead</th><th class="text-center">Status</th><th class="text-end">Actions</th></tr>
     </thead>
     <tbody>
       {% for p in products %}
@@ -30,6 +30,13 @@
           {% if p.is_verified and p.is_public_visible %}<span class="badge bg-success">Live</span>
           {% elif p.is_verified %}<span class="badge bg-secondary">Hidden</span>
           {% else %}<span class="badge text-dark" style="background:var(--solar-gold)">Pending</span>{% endif %}
+        </td>
+        <td class="text-end" style="white-space:nowrap">
+          <a href="{{ url_for('supplier_product_edit', pid=p.id) }}" class="btn btn-outline-warning btn-sm" title="Edit"><i class="bi bi-pencil"></i></a>
+          <form method="POST" action="{{ url_for('supplier_product_delete', pid=p.id) }}" style="display:inline" onsubmit="return confirm('Remove {{ p.name|e }} from your catalog? Historical BOM/BOQ references stay intact.');">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-danger btn-sm" title="Delete"><i class="bi bi-trash"></i></button>
+          </form>
         </td>
       </tr>
       {% endfor %}
