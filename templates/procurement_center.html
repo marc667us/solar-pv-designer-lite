@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Procurement Center — SolarPro{% endblock %}
+{% block content %}
+
+<div class="rounded-3 p-3 mb-3" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1030 60%,#0f1a22 100%);border:1px solid #1e1e3a">
+  <div class="d-flex align-items-center gap-3">
+    <div style="width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));display:flex;align-items:center;justify-content:center;font-size:22px;color:#000">
+      <i class="bi bi-cart-plus-fill"></i>
+    </div>
+    <div>
+      <h5 class="fw-black mb-0">Procurement Center</h5>
+      <div class="text-secondary small">Search products · tick the box on each one you want · pick a document type and currency · click Add</div>
+    </div>
+  </div>
+</div>
+
+<form method="POST" action="{{ url_for('procurement_center_add') }}" id="procForm">
+<input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+<div class="row g-3">
+
+  <!-- ── Left panel: doc type + currency + Add ──────────────────────────── -->
+  <div class="col-lg-3">
+    <div class="solar-card p-3" style="position:sticky;top:20px">
+      <h6 class="fw-bold mb-3"><i class="bi bi-file-earmark-text me-1 text-warning"></i>Build document</h6>
+
+      <div class="mb-3">
+        <div class="text-secondary small mb-2" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Document type</div>
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="radio" name="doc_type" id="dt_ps" value="price_sheet" checked>
+          <label class="form-check-label" for="dt_ps">
+            <strong>Basic Price Sheet</strong>
+            <div class="small text-secondary">Qty = 1 per line · supplier contact details included</div>
+          </label>
+        </div>
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="radio" name="doc_type" id="dt_bom" value="bom">
+          <label class="form-check-label" for="dt_bom">
+            <strong>Bill of Materials</strong>
+            <div class="small text-secondary">Editable quantities · clone to RFQ</div>
+          </label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="doc_type" id="dt_boq" value="boq">
+          <label class="form-check-label" for="dt_boq">
+            <strong>Bill of Quantities</strong>
+            <div class="small text-secondary">Labour + profit + VAT rates · Excel + PDF export</div>
+          </label>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label small text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Currency</label>
+        <select name="currency" class="form-select" style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+          {% for code in currencies %}
+          <option value="{{ code }}" {% if currency == code %}selected{% endif %}>{{ code }}</option>
+          {% endfor %}
+        </select>
+        <div class="text-secondary small mt-1">
+          <i class="bi bi-info-circle me-1"></i>Indicative FX rates (as of {{ rates_as_of }}).
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-warning fw-bold w-100 py-2" id="addBtn" disabled>
+        <i class="bi bi-plus-circle me-1"></i>Add <span id="addCount">0</span> selected
+      </button>
+      <div class="text-secondary small mt-2 text-center">
+        Already have one? <a href="{{ url_for('price_sheets_list') }}" class="text-warning">My price sheets</a>
+        · <a href="{{ url_for('boms_list') }}" class="text-warning">My BOMs</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Right: search + filter + product grid with checkboxes ─────────── -->
+  <div class="col-lg-9">
+
+    <div class="solar-card p-3 mb-3">
+      <div class="d-flex gap-2 flex-wrap">
+        <div class="flex-grow-1" style="min-width:220px">
+          <div class="input-group">
+            <span class="input-group-text" style="background:#0a0a14;border-color:#1e1e3a;color:#9090c0"><i class="bi bi-search"></i></span>
+            <input type="text" name="q" form="filterForm" value="{{ q }}" class="form-control" placeholder="Search by name, brand, model, or spec..." style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+          </div>
+        </div>
+      </div>
+      <form id="filterForm" method="GET" action="{{ url_for('procurement_center') }}" class="d-flex flex-wrap gap-2 mt-3">
+        <input type="hidden" name="q" value="{{ q }}">
+        <input type="hidden" name="currency" value="{{ currency }}">
+        <a href="{{ url_for('procurement_center', q=q, currency=currency) }}"
+           class="badge text-decoration-none px-3 py-2 {% if not selected_cat %}bg-warning text-dark{% else %}bg-secondary text-white{% endif %}"
+           style="font-size:12px;font-weight:600;border-radius:999px">
+          <i class="bi bi-grid me-1"></i>All
+        </a>
+        {% for cat in categories %}
+        <a href="{{ url_for('procurement_center', cat=cat.id, q=q, currency=currency) }}"
+           class="badge text-decoration-none px-3 py-2 {% if selected_cat == cat.id %}bg-warning text-dark{% else %}bg-secondary text-white{% endif %}"
+           style="font-size:12px;font-weight:600;border-radius:999px">
+          <i class="{{ cat.icon }} me-1"></i>{{ cat.name }}
+          {% if cat.n %}<span class="ms-1 opacity-75">({{ cat.n }})</span>{% endif %}
+        </a>
+        {% endfor %}
+      </form>
+    </div>
+
+    {% if products %}
+    <div class="row g-3">
+      {% for p in products %}
+      <div class="col-12 col-md-6">
+        <label class="solar-card h-100 p-3 d-flex align-items-start gap-3" style="cursor:pointer;display:block !important">
+          <input type="checkbox" name="product_ids" value="{{ p.id }}" class="form-check-input mt-1 prod-chk" style="transform:scale(1.3)">
+          <div class="flex-grow-1">
+            <div class="text-warning small fw-bold" style="font-size:10px;letter-spacing:.5px;text-transform:uppercase">
+              <i class="{{ p.category_icon or 'bi-box' }} me-1"></i>{{ p.category_name or 'Uncategorised' }}
+            </div>
+            <h6 class="fw-black mb-1 mt-1" style="line-height:1.2">{{ p.name }}</h6>
+            {% if p.brand or p.model %}<div class="text-secondary small">{{ p.brand }}{% if p.model %} · {{ p.model }}{% endif %}</div>{% endif %}
+            {% if p.spec %}<div class="text-secondary small mb-2" style="font-size:11px;line-height:1.4">{{ p.spec[:120] }}{% if p.spec|length > 120 %}…{% endif %}</div>{% endif %}
+            <div class="d-flex align-items-center justify-content-between mt-2 pt-2" style="border-top:1px solid #1e1e3a">
+              <div>
+                <div class="fw-black text-warning" style="font-size:16px">{{ currency }} {{ "%.2f"|format(p.price_in_currency) }}</div>
+                <div class="text-secondary small">/ {{ p.unit }}</div>
+              </div>
+              <div class="text-end small text-secondary">
+                <i class="bi bi-building me-1"></i>{{ p.supplier_name or 'Direct' }}
+                {% if p.supplier_country %}<div>{{ p.supplier_country }}</div>{% endif %}
+              </div>
+            </div>
+          </div>
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="solar-card p-5 text-center">
+      <i class="bi bi-search text-secondary" style="font-size:48px"></i>
+      <h6 class="mt-3 mb-1">No products matched</h6>
+      <a href="{{ url_for('procurement_center', currency=currency) }}" class="btn btn-warning fw-bold">View all</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+</form>
+
+<script>
+(function(){
+  // Live counter on the Add button + enable/disable
+  function update(){
+    var n = document.querySelectorAll('.prod-chk:checked').length;
+    document.getElementById('addCount').textContent = n;
+    document.getElementById('addBtn').disabled = (n === 0);
+  }
+  document.querySelectorAll('.prod-chk').forEach(function(el){
+    el.addEventListener('change', update);
+  });
+  update();
+})();
+</script>
+
+{% endblock %}

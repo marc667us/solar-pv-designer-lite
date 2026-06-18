@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ sheet.title }} — Price Sheet{% endblock %}
+{% block content %}
+
+<style>
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; color: black !important; }
+  .solar-card { background: white !important; border-color: #ccc !important; color: black !important; }
+  table { color: black !important; }
+  thead { color: #444 !important; }
+}
+</style>
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 no-print">
+  <div>
+    <div class="text-secondary small"><a href="{{ url_for('price_sheets_list') }}" class="text-warning">My Price Sheets</a></div>
+    <h5 class="fw-black mb-0 mt-1">{{ sheet.title }}</h5>
+    <div class="text-secondary small">Currency: <strong>{{ sheet.currency }}</strong> · created {{ sheet.created_at }}</div>
+  </div>
+  <button onclick="window.print()" class="btn btn-warning fw-bold"><i class="bi bi-printer-fill me-1"></i>Print / Save as PDF</button>
+</div>
+
+<div class="solar-card p-3">
+  <div class="text-center mb-3">
+    <div class="text-warning fw-bold small" style="letter-spacing:2px;text-transform:uppercase">Basic Price Sheet</div>
+    <h5 class="fw-black mb-0 mt-1">{{ sheet.title }}</h5>
+    <div class="text-secondary small">Indicative supplier prices in {{ sheet.currency }} as of {{ rates_as_of }}.</div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0;font-size:12px">
+      <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
+        <tr>
+          <th style="width:38px">#</th>
+          <th>Equipment / item description</th>
+          <th class="text-center">Qty</th>
+          <th class="text-center">Unit</th>
+          <th class="text-end">Price ({{ sheet.currency }})</th>
+          <th>Supplier</th>
+          <th>Brand</th>
+          <th>Phone</th>
+          <th>Email</th>
+          <th>Address</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+        <tr>
+          <td class="text-secondary small">{{ loop.index }}</td>
+          <td><strong>{{ it.custom_name }}</strong></td>
+          <td class="text-center">1</td>
+          <td class="text-center small">{{ it.unit }}</td>
+          <td class="text-end fw-bold text-warning">{{ sheet.currency }} {{ "%.2f"|format(it.price_at_add or 0) }}</td>
+          <td class="small">{{ it.supplier_name or '—' }}</td>
+          <td class="small">{{ it.supplier_brand or '—' }}</td>
+          <td class="small text-secondary">{{ it.supplier_phone or '—' }}</td>
+          <td class="small text-secondary">{{ it.supplier_email or '—' }}</td>
+          <td class="small text-secondary" style="max-width:240px">{{ it.supplier_address or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="text-secondary small mt-3" style="border-top:1px solid #1e1e3a;padding-top:10px">
+    <strong>Notes:</strong> Quantities show as 1 because this is a reference price sheet, not a purchase order.
+    Prices were converted from USD at indicative FX rates valid {{ rates_as_of }}. Verify with the supplier before ordering.
+    For a full Bill of Materials with editable quantities and labour markups, build a BOM from the Procurement Center.
+  </div>
+</div>
+
+{% endblock %}

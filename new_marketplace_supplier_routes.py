@@ -19,6 +19,8 @@ def _ensure_supplier_schema():
             c.execute("ALTER TABLE suppliers ADD COLUMN user_id INTEGER DEFAULT 0")
         if "is_verified" not in scols:
             c.execute("ALTER TABLE suppliers ADD COLUMN is_verified INTEGER DEFAULT 0")
+        if "address" not in scols:
+            c.execute("ALTER TABLE suppliers ADD COLUMN address TEXT DEFAULT ''")
         # Mark the seeded reference suppliers (JinkoSolar, LONGi, etc.) as verified
         # so they continue to show up on the public marketplace.
         c.execute("UPDATE suppliers SET is_verified=1 WHERE user_id=0 AND is_verified=0")

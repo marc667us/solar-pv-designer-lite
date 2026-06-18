@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}My Price Sheets — SolarPro{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0"><i class="bi bi-list-stars me-2 text-warning"></i>My Basic Price Sheets</h5>
+    <div class="text-secondary small">Reference price + supplier contact lists. Qty always 1 per line.</div>
+  </div>
+  <a href="{{ url_for('procurement_center') }}" class="btn btn-warning fw-bold"><i class="bi bi-plus-circle me-1"></i>New from Procurement Center</a>
+</div>
+
+<div class="solar-card p-3">
+{% if sheets %}
+<div class="table-responsive">
+  <table class="table table-sm align-middle" style="color:#e0e0f0">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+      <tr><th>Title</th><th>Currency</th><th class="text-center">Items</th><th>Created</th></tr>
+    </thead>
+    <tbody>
+      {% for s in sheets %}
+      <tr>
+        <td><a href="{{ url_for('price_sheet_view', sheet_id=s.id) }}" class="text-warning text-decoration-none fw-bold">{{ s.title }}</a></td>
+        <td><span class="badge bg-secondary">{{ s.currency }}</span></td>
+        <td class="text-center">{{ s.item_count }}</td>
+        <td class="small text-secondary">{{ s.created_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center py-5">
+  <i class="bi bi-list-stars text-secondary" style="font-size:48px"></i>
+  <h6 class="mt-3 mb-2">No price sheets yet</h6>
+  <p class="text-secondary mb-3">Build one from the Procurement Center.</p>
+  <a href="{{ url_for('procurement_center') }}" class="btn btn-warning fw-bold"><i class="bi bi-cart-plus me-1"></i>Open Procurement Center</a>
+</div>
+{% endif %}
+</div>
+
+{% endblock %}
