@@ -155,6 +155,10 @@ def procurement_center():
             "LEFT JOIN suppliers s ON s.id=ec.supplier_id "
             "LEFT JOIN product_categories pc ON pc.id=ec.category_id "
             "WHERE ec.is_active=1 AND ec.is_public_visible=1 AND ec.is_verified=1 "
+            "  AND ec.name NOT LIKE 'BulkProd-%' "
+            "  AND ec.name NOT LIKE 'ProdB %' "
+            "  AND ec.name NOT LIKE 'TestProd%' "
+            "  AND ec.name NOT LIKE 'AUTOTEST%' "
         )
         args = []
         if cat_id:
