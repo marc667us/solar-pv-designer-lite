@@ -126,8 +126,12 @@ def test_buyer_creates_draft_bom_and_adds_item(client, app) -> None:
     assert r.status_code in (302, 303)
     page2 = client.get(f"/boms/{bom_id}").get_data(as_text=True)
     assert "MCB 32A" in page2
-    # 12 × 8.50 = 102.00 — must appear in the line total or grand total.
-    assert "102.00" in page2
+    # Slice 8 added default markup rates (15/8/12/0). Line math:
+    #   basic = 8.50 -> total_rate = 8.50 × 1.15 × 1.08 × 1.12 ≈ 11.824
+    #   amount = 12 × 11.824 ≈ 141.886 → displays as 141.89
+    # Basic rate (8.50) still appears in the Basic column.
+    assert "8.50" in page2          # basic rate column
+    assert "141.89" in page2        # rated line total
 
 
 def test_buyer_cannot_view_another_users_bom(client, app) -> None:
@@ -208,7 +212,10 @@ def test_boq_page_renders_with_totals(client, app) -> None:
     boq = client.get(f"/boms/{bom_id}/boq").get_data(as_text=True)
     assert "Bill of Quantities" in boq
     assert "DB 18-way TPN" in boq
-    assert "855" in boq  # 3 × 285 = 855
+    # Slice 8 default markup rates: 285 × 1.15 × 1.08 × 1.12 = 396.45 per unit
+    # × 3 = 1189.34 amount. Basic rate (285) still visible in Basic column.
+    assert "285.00" in boq or "USD 285" in boq    # basic rate
+    assert "1189.34" in boq or "1189.33" in boq   # rated amount
     assert "GRAND TOTAL" in boq
 
 
