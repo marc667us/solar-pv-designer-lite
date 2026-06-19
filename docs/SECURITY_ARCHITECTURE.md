@@ -32,8 +32,8 @@ Authoritative checklist lives in `SECURITY.md`. This file is the architectural s
 | 0.1 | Plaintext admin creds + git history | user-deferred this session |
 | 0.2 | `campaign_api.py` startup secrets default | file deleted in working tree; commit pending |
 | 0.3 | `/entities` + `/state` no auth | file deleted in working tree; commit pending |
-| 1.1 | Runtime on SQLite, RLS dormant | **in progress** — Phase 4 module + `migrations/003_rls_tenant.sql` ready (commit `653d569`+). Apply to live Postgres + rewrite tenant-owned queries in `web_app.py` → then close. |
-| 1.2 | Per-tx tenant context never set | **in progress** — `app/security/tenant_context.apply_tenant_guc()` sets `app.current_tenant` + `app.current_user` per request once `KEYCLOAK_ENABLED=true`. Closes after the query-layer rewrite calls it. |
+| 1.1 | Runtime on SQLite, RLS dormant | **in progress** — Phase 4 module + `migrations/003_rls_tenant.sql` ready; `web_app.py:get_db()` now calls `apply_tenant_guc(conn)` on every fresh connection (Phase 5 commit). Closes after `python scripts/apply_phase4_rls_migration.py` runs against live Postgres. |
+| 1.2 | Per-tx tenant context never set | **in progress** — `apply_tenant_guc()` fires on every `get_db()` once `KEYCLOAK_ENABLED=true`; the RLS policy reads `app.current_tenant` / `app.current_user` GUCs. Closes the same moment 1.1 does. |
 | 1.3 | RLS not FORCED | **closed (migration 003)** |
 | 1.4 | `assessment_requests` cross-tenant PII | **closed (migration 003)** |
 | 1.5 | `installers` cross-tenant PII | **closed (migration 003)** |

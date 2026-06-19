@@ -54,7 +54,7 @@ import logging
 import os
 from typing import Optional
 
-from flask import g, request, jsonify
+from flask import g, request, jsonify, has_request_context
 
 from .keycloak_middleware import RequestContext
 
@@ -75,7 +75,13 @@ def _keycloak_enabled() -> bool:
 
 def get_request_context() -> Optional[RequestContext]:
     """Return the RequestContext that the Phase 2 decorators stashed,
-    or None if the current request was not authenticated via Keycloak."""
+    or None if the current request was not authenticated via Keycloak.
+
+    Safe to call outside a Flask request context (returns None) -- so
+    background jobs and startup hooks that may use the same DB helpers
+    don't crash on `g` access."""
+    if not has_request_context():
+        return None
     return getattr(g, "kc_ctx", None)
 
 
@@ -168,6 +174,10 @@ def apply_tenant_guc(conn) -> bool:
     if not _keycloak_enabled():
         return False
     if not _is_postgres_connection(conn):
+        return False
+    if not has_request_context():
+        # init_db, background jobs, CLI scripts -- no request, no
+        # tenant. RLS policy's parallel-run NULL escape covers reads.
         return False
 
     tenant_id = current_tenant_id()

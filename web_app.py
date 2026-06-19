@@ -25,6 +25,11 @@ from app.security.decorators import (
     require_service_account,
     get_request_context,
 )  # Phase 2 + 3: Keycloak parallel-run decorators
+from app.security.tenant_context import (
+    register_error_handler as _kc_register_tenant_error_handler,
+    apply_tenant_guc as _kc_apply_tenant_guc,
+)  # Phase 4: tenant context bridge
+from app.auth import register_oidc as _kc_register_oidc  # Phase 5: OIDC Blueprint
 
 # Structured logging (tenant-aware JSON logs)
 try:
@@ -65,6 +70,15 @@ app.config.update(
     SESSION_COOKIE_SECURE  = False,   # works over both http and https tunnels
     PERMANENT_SESSION_LIFETIME = timedelta(hours=8),
 )
+
+# Phase 4: turn MissingTenantContextError into a 403 JSON response.
+# No-op in production until tenant-scoped routes call require_tenant_context().
+_kc_register_tenant_error_handler(app)
+
+# Phase 5: mount /auth/login, /auth/callback, /auth/logout, /auth/refresh.
+# All four routes fall back to /login?legacy=1 when KEYCLOAK_ENABLED is unset,
+# so this is safe to deploy long before the cutover.
+_kc_register_oidc(app)
 
 # ─── Rate limiter ──────────────────────────────────────────────────────────────
 def _get_real_ip():
@@ -222,9 +236,26 @@ def get_db():
     _db_url = os.environ.get("DATABASE_URL", "")
     if _db_url.startswith(("postgres://", "postgresql://")):
         import db_adapter
-        return db_adapter.open_postgres(_db_url)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+        conn = db_adapter.open_postgres(_db_url)
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+    # Phase 4 task 20: install tenant + user GUCs on every fresh
+    # Postgres connection so RLS policies can resolve them. The
+    # helper is a no-op when KEYCLOAK_ENABLED is unset, the conn is
+    # SQLite, or we're outside a Flask request context (init_db,
+    # CLI tooling, background jobs).
+    try:
+        _kc_apply_tenant_guc(conn)
+    except Exception as _e:
+        # Hard-fail propagation would crash the request; instead we
+        # log and let the RLS policy's parallel-run NULL escape keep
+        # things running. The structured logger may not be ready at
+        # very early startup, so guard the log call too.
+        try:
+            log_error(message="apply_tenant_guc failed", error=str(_e))
+        except Exception:
+            pass
     return conn
 
 

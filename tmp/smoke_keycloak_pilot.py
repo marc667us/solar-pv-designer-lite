@@ -1,4 +1,4 @@
-"""Phase 2 + 3 smoke test for the parallel-run Keycloak pilot.
+"""Phase 2 + 3 + 5 smoke test for the parallel-run Keycloak pilot.
 
 Phase 2 — pilot route /admin/marketplace
   A) KC off, anon -> 302 to /login  (admin_required still gates)
@@ -7,6 +7,11 @@ Phase 2 — pilot route /admin/marketplace
 Phase 3 — SA-only route /api/agents/internal/heartbeat
   C) KC off, anon POST -> 200 OK  (require_service_account is a no-op)
   D) KC on, no Bearer POST -> 401 MISSING_BEARER
+
+Phase 5 — OIDC routes
+  E) KC off, /auth/login -> 302 /login?legacy=1 (legacy fallback)
+  F) KC on,  /auth/login -> 302 to KEYCLOAK_ISSUER/protocol/openid-connect/auth
+  G) KC off, /auth/logout -> 302 redirect (session cleared)
 
 The 200-with-valid-SA-JWT and 403-with-human-JWT legs need a running
 Keycloak that can sign a real JWT for solarpro-catalogue-agent. Those
@@ -113,8 +118,49 @@ def main() -> int:
         else:
             print(f"      body: {body.strip()}")
 
+        # ── E) Phase 5 -- KC off, /auth/login -> /login?legacy=1 ───────
+        r = c.get("/auth/login", follow_redirects=False)
+        if not check("E) KC off, /auth/login -> 302 /login?legacy=1",
+                     r.status_code, 302):
+            failures += 1
+        else:
+            loc = r.headers.get("Location", "")
+            if "/login?legacy=1" not in loc:
+                print(f"      [FAIL] redirect was {loc!r}")
+                failures += 1
+            else:
+                print(f"      Location: {loc}")
+
+        # ── G) Phase 5 -- KC off, /auth/logout -> 302 ──────────────────
+        r = c.post("/auth/logout", follow_redirects=False)
+        if not check("G) KC off, /auth/logout -> 302",
+                     r.status_code, 302):
+            failures += 1
+        else:
+            print(f"      Location: {r.headers.get('Location', '')}")
+
+    # ── F) Phase 5 -- KC on, /auth/login -> KEYCLOAK_ISSUER auth URL ───
+    os.environ["KEYCLOAK_ISSUER"] = "http://kc.test/realms/solarpro"
+    app_f = _fresh_app(keycloak_enabled=True)
+    with app_f.test_client() as c:
+        r = c.get("/auth/login", follow_redirects=False)
+        if not check("F) KC on, /auth/login -> 302 to Keycloak",
+                     r.status_code, 302):
+            failures += 1
+        else:
+            loc = r.headers.get("Location", "")
+            if "kc.test/realms/solarpro/protocol/openid-connect/auth" not in loc:
+                print(f"      [FAIL] redirect was {loc!r}")
+                failures += 1
+            elif "code_challenge_method=S256" not in loc:
+                print(f"      [FAIL] PKCE S256 not in redirect: {loc!r}")
+                failures += 1
+            else:
+                print(f"      Location: {loc[:120]}...")
+
     # Restore env for any subsequent imports.
     os.environ.pop("KEYCLOAK_ENABLED", None)
+    os.environ.pop("KEYCLOAK_ISSUER", None)
 
     print(f"\n{'PASS' if failures == 0 else 'FAIL'}: {failures} failure(s)")
     return 0 if failures == 0 else 1
