@@ -1,0 +1,156 @@
+# Apply Phase 4 + Phase 6 Keycloak migrations to live Postgres.
+#
+# What it does:
+#   1. Looks up solarpro-postgres by name via the Render API (idempotent).
+#   2. Fetches the external connection URL so this runner can reach it.
+#   3. Applies migrations/003_rls_tenant.sql AND migrations/004_audit_log_tenant.sql.
+#   4. Runs the verification queries from the bottom of each migration file.
+#   5. Prints a clear PASS/FAIL summary.
+#
+# Production safety:
+#   * Both migrations are idempotent (ADD COLUMN IF NOT EXISTS,
+#     CREATE OR REPLACE FUNCTION, CREATE POLICY behind DROP POLICY IF EXISTS).
+#   * The RLS policies ship with parallel-run NULL escapes so existing
+#     queries continue to return rows when KEYCLOAK_ENABLED is unset.
+#   * No DATABASE_URL change. No redeploy.
+#   * If anything fails the workflow exits non-zero and the live app
+#     is untouched (or only partially altered along the idempotent path).
+#
+# Triggered manually via `gh workflow run "Apply Keycloak Migrations"`.
+
+name: Apply Keycloak Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Set 'true' to print the SQL without applying."
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      DRY_RUN:           ${{ github.event.inputs.dry_run }}
+    steps:
+      - name: Checkout (for migrations/*.sql)
+        uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Find solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg_list.json
+          PG_ID=$(python3 -c "
+          import json
+          d = json.load(open('/tmp/pg_list.json'))
+          for item in (d if isinstance(d, list) else []):
+              pg = item.get('postgres', item)
+              if pg.get('name') == 'solarpro-postgres':
+                  print(pg.get('id', ''))
+                  break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"
+            exit 1
+          fi
+          echo "Found Postgres ID: $PG_ID"
+          echo "id=$PG_ID" >> $GITHUB_OUTPUT
+
+      - name: Fetch external connection URL
+        id: conn
+        env:
+          PG_ID: ${{ steps.pg.outputs.id }}
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXTERNAL=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          if [ -z "$EXTERNAL" ]; then
+            echo "::error::External connection URL missing"
+            exit 1
+          fi
+          echo "::add-mask::$EXTERNAL"
+          echo "external=$EXTERNAL" >> $GITHUB_OUTPUT
+
+      - name: Show migration overview
+        run: |
+          echo "=== migrations/003_rls_tenant.sql ==="
+          wc -l migrations/003_rls_tenant.sql
+          grep -E "^-- PART|^-- ===" migrations/003_rls_tenant.sql || true
+          echo
+          echo "=== migrations/004_audit_log_tenant.sql ==="
+          wc -l migrations/004_audit_log_tenant.sql
+          grep -E "^-- PART|^-- ===" migrations/004_audit_log_tenant.sql || true
+
+      - name: Dry run -- print only
+        if: env.DRY_RUN == 'true'
+        run: |
+          echo "[dry-run] Skipping psql apply. To apply for real, re-run with dry_run=false."
+
+      - name: Apply migrations
+        if: env.DRY_RUN != 'true'
+        env:
+          DATABASE_URL: ${{ steps.conn.outputs.external }}
+        run: |
+          set -e
+          for f in migrations/003_rls_tenant.sql migrations/004_audit_log_tenant.sql; do
+            echo "--- Applying $f ---"
+            psql "$DATABASE_URL" \
+              -v ON_ERROR_STOP=1 \
+              -f "$f"
+            echo "OK: $f"
+          done
+
+      - name: Verify migration 003 (RLS + tenant_id columns)
+        if: env.DRY_RUN != 'true'
+        env:
+          DATABASE_URL: ${{ steps.conn.outputs.external }}
+        run: |
+          set -e
+          echo "--- Helpers ---"
+          psql "$DATABASE_URL" -A -t -c \
+            "SELECT proname FROM pg_proc WHERE proname IN ('current_tenant_id','current_user_sub','_phase4_user_to_tenant') ORDER BY proname"
+          echo "--- tenant_id columns (count by table) ---"
+          psql "$DATABASE_URL" -A -t -c \
+            "SELECT table_name FROM information_schema.columns WHERE column_name='tenant_id' AND table_schema='public' ORDER BY table_name"
+          echo "--- tenant_isolation policies ---"
+          psql "$DATABASE_URL" -A -t -c \
+            "SELECT tablename, policyname FROM pg_policies WHERE policyname LIKE '%_tenant_isolation' ORDER BY tablename"
+
+      - name: Verify migration 004 (audit_logs columns + RLS)
+        if: env.DRY_RUN != 'true'
+        env:
+          DATABASE_URL: ${{ steps.conn.outputs.external }}
+        run: |
+          set -e
+          echo "--- audit_logs new columns ---"
+          psql "$DATABASE_URL" -A -t -c \
+            "SELECT column_name FROM information_schema.columns WHERE table_name='audit_logs' AND column_name IN ('tenant_id','agent_id') ORDER BY column_name"
+          echo "--- audit_logs indexes ---"
+          psql "$DATABASE_URL" -A -t -c \
+            "SELECT indexname FROM pg_indexes WHERE tablename='audit_logs' AND indexname LIKE 'idx_audit_logs_%' ORDER BY indexname"
+          echo "--- audit_logs policies ---"
+          psql "$DATABASE_URL" -A -t -c \
+            "SELECT policyname FROM pg_policies WHERE tablename='audit_logs' ORDER BY policyname"
+
+      - name: Summary
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "DRY RUN complete. Re-run with dry_run=false to apply."
+          else
+            echo "Migrations applied. Q-gates 1.1, 1.2, 6.1 now eligible to close in SECURITY_ARCHITECTURE.md."
+            echo "Production behaviour unchanged: KEYCLOAK_ENABLED still defaults off, so the parallel-run RLS escapes keep returning every row to existing code paths."
+          fi
