@@ -1097,3 +1097,54 @@ Pick from the open-gap table above. Highest ROI: date/time picker (closes the al
 - Loss of marc667us session — owner-controlled recovery channel + pre-issued recovery codes.
 
 **Next Recommended Step:** Owner reviews `docs/SECURITY_MIGRATION_KEYCLOAK.md` and either approves Phase 0 to proceed, requests changes to the plan, or defers the migration until after the marketplace work stabilises.
+
+---
+
+# Implementation Log Entry — Phase 0 (Keycloak migration)
+
+**Date:** 2026-06-19 (post-spec)
+**Task:** Phase 0 of `docs/SECURITY_MIGRATION_KEYCLOAK.md` — Inventory + ADR sign-off.
+**Status:** Complete.
+
+**Objective:** Catalogue every authentication / authorization callsite in `web_app.py` so Phases 2, 4, 5, 7 have a closed working set, and formally accept ADR-0007.
+
+**Files Changed:**
+- `docs/auth_inventory.csv` — new, 517 rows, the working set for the remaining 7 phases.
+- `docs/ARCHITECTURE_DECISIONS.md` — ADR-0007 status flipped Proposed → Accepted; sign-off recorded with the owner's "lets finish the authentication, authorization and flows works" directive.
+- `docs/IMPLEMENTATION_LOG.md` — this entry.
+
+**Database Changes:** None.
+**API Changes:** None.
+**Frontend Changes:** None.
+**Security Changes:** None at runtime. Phase 0 is documentation-only.
+
+**Tests Added:** None. Phase 0 doesn't add code paths.
+
+**Documentation Updated:**
+- `auth_inventory.csv` is the now the source of truth for the per-route replacement plan.
+- ADR-0007 is Accepted.
+
+**Inventory summary (`docs/auth_inventory.csv`):**
+
+| Pattern | Count | Phase |
+|---|---|---|
+| `current_user()` | 110 | 2 |
+| `@login_required` | 99 | 2 |
+| `csrf_protect()` | 94 | 5 |
+| `@admin_required` | 85 | 2 |
+| `session["user_id"]` | 67 | 2 |
+| `is_admin` | 33 | 4 |
+| `@supplier_required` | 9 | 2 |
+| `users.role` | 9 | 7 |
+| `@procurement_role_required` | 6 | 2 |
+| `_seed_pwd` | 3 | 7 |
+| `SOLARPRO_ADMIN_PASSWORD` | 1 | 7 |
+| `SOLARPRO_OWNER_PASSWORD` | 1 | 7 |
+
+Phase 2 work (decorator + session migration) accounts for 376 / 517 = 73% of the callsites. Phase 4 (tenant filter + RLS) is 33. Phase 5 (frontend OIDC + CSRF audit) is 94. Phase 7 (cleanup) is 14.
+
+**What Was Completed:** Phase 0 inventory CSV + ADR sign-off recorded.
+
+**What Remains:** Phases 1–7 per plan §20 schedule.
+
+**Next Recommended Step:** Phase 1 — author `docs/keycloak/realm-export.json` (5 clients + 13 roles + group hierarchy + password policy + OTP policy + brute-force config) and `docker-compose.keycloak.yml`. ETA: 1 day.

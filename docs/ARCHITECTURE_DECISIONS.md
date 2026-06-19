@@ -278,7 +278,7 @@ Deferred from this iteration: hill `azimuthCoverage` cone (form doesn't collect 
 ## ADR-0007 — Adopt Keycloak as central identity provider (2026-06-19)
 
 **Date:** 2026-06-19
-**Status:** Proposed (awaiting owner sign-off; Phase 0 of `docs/SECURITY_MIGRATION_KEYCLOAK.md`)
+**Status:** Accepted 2026-06-19 (owner directive "let's finish the authentication, authorization and flows works"; Phase 0 inventory landed in same commit)
 
 **Context:** SolarPro currently manages identity in `web_app.py`: a `users` table seeded from `SOLARPRO_*_PASSWORD` envs, Flask session cookies, ad-hoc `@login_required` / `@admin_required` / `@supplier_required` / `@procurement_role_required` decorators, no MFA, stateless 30-day tokens with no real revocation (Q-gates 2.1, 2.2 in `SECURITY_ARCHITECTURE.md`), and an `is_admin` boolean as the only role distinction. The marketplace work in session 2026-06-19 added supplier and procurement-specialist roles but they are still free-text strings on `users.role`, not centrally managed. Multi-tenant isolation at runtime is non-existent on SQLite (Q-gates 1.1, 1.2). The brief at `C:\Users\USER\Documents\pvsolar1\kubernates\secmigrate.txt` requests a Keycloak-based migration with 13 realm roles, group-based tenant isolation, MFA, fine-grained ABAC, service accounts for AI agents, and unified audit logging.
 
@@ -308,6 +308,10 @@ Deferred from this iteration: hill `azimuthCoverage` cone (form doesn't collect 
 
 **Impact on Maintenance:** Higher than today's `web_app.py`-only setup. Keycloak needs version pinning, periodic upgrades, realm config kept in version control, backup + DR. The `docs/SECURITY_MIGRATION_KEYCLOAK.md` §5.5 spells the routine out.
 
-**Owner sign-off requirement:** This ADR moves to Accepted only after the owner reviews `docs/SECURITY_MIGRATION_KEYCLOAK.md` end-to-end and approves Phase 1.
+**Owner sign-off:** Granted 2026-06-19 via the directive "lets finish the authentication, authorization and flows works" (after the marketplace catalogue session closed at HEAD `e61fb23`). Marketplace carry-over items deferred to `[[project-solar-pv-deferred-marketplace-work]]` memory entry.
 
-**Cross-references:** `docs/SECURITY_MIGRATION_KEYCLOAK.md` (the full plan), `docs/SECURITY_ARCHITECTURE.md` (the Q-gate gap log this ADR closes), `docs/SECRETS_ENGINE_PROPOSAL_v3.md` (Vault carries Keycloak's master admin credential + service-account secrets).
+**Phase 0 deliverables landed in same commit as this flip:**
+- `docs/auth_inventory.csv` — 517 callsites across web_app.py covering `_seed_pwd` (3), `SOLARPRO_ADMIN_PASSWORD` (1), `SOLARPRO_OWNER_PASSWORD` (1), `@admin_required` (85), `@supplier_required` (9), `@procurement_role_required` (6), `@login_required` (99), `session["user_id"]` (67), `current_user()` (110), `is_admin` (33), `users.role` (9), `csrf_protect` (94). Per-row replacement plan keyed to the Keycloak role / scope / tenant model.
+- Phase column on each row maps to the 8-phase rollout (Phase 2 owns 376 rows = 73% of the work; Phase 4 owns 33; Phase 5 owns 94; Phase 7 owns 14).
+
+**Cross-references:** `docs/SECURITY_MIGRATION_KEYCLOAK.md` (the full plan), `docs/auth_inventory.csv` (Phase 0 deliverable), `docs/SECURITY_ARCHITECTURE.md` (the Q-gate gap log this ADR closes), `docs/SECRETS_ENGINE_PROPOSAL_v3.md` (Vault carries Keycloak's master admin credential + service-account secrets).
