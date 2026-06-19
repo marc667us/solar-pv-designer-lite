@@ -272,3 +272,42 @@ Deferred from this iteration: hill `azimuthCoverage` cone (form doesn't collect 
 **Impact on Cost / Performance / Security:** Neutral. Catalogue file is +6 KB; no new dependencies; no per-call API costs.
 
 **Impact on Maintenance:** New cluster-of-buildings render block in `makeObstructionMesh` (~50 lines). Catalogue entries are pure data; adding new scenes is a JSON edit.
+
+---
+
+## ADR-0007 — Adopt Keycloak as central identity provider (2026-06-19)
+
+**Date:** 2026-06-19
+**Status:** Proposed (awaiting owner sign-off; Phase 0 of `docs/SECURITY_MIGRATION_KEYCLOAK.md`)
+
+**Context:** SolarPro currently manages identity in `web_app.py`: a `users` table seeded from `SOLARPRO_*_PASSWORD` envs, Flask session cookies, ad-hoc `@login_required` / `@admin_required` / `@supplier_required` / `@procurement_role_required` decorators, no MFA, stateless 30-day tokens with no real revocation (Q-gates 2.1, 2.2 in `SECURITY_ARCHITECTURE.md`), and an `is_admin` boolean as the only role distinction. The marketplace work in session 2026-06-19 added supplier and procurement-specialist roles but they are still free-text strings on `users.role`, not centrally managed. Multi-tenant isolation at runtime is non-existent on SQLite (Q-gates 1.1, 1.2). The brief at `C:\Users\USER\Documents\pvsolar1\kubernates\secmigrate.txt` requests a Keycloak-based migration with 13 realm roles, group-based tenant isolation, MFA, fine-grained ABAC, service accounts for AI agents, and unified audit logging.
+
+**Decision:** Adopt Keycloak as the single OIDC identity provider for every SolarPro authentication and authorization decision. Keep SolarPro stateless w.r.t. identity — passwords, MFA, session lifecycle, lockout, and password reset are all delegated to Keycloak.
+
+**Alternatives considered:**
+- **Auth0 (paid SaaS).** Rich features, fast setup, but violates `CLAUDE.md` FOSS Stack Rule and creates vendor lock-in. Free tier caps at 7 000 active users — not enough for SolarPro's market.
+- **Auth.js / NextAuth as the only provider.** Frontend-focused; lacks a self-hostable admin surface, role management UI, MFA flows, and Authorization Services. Suitable for a frontend wrapper, not the central IdP.
+- **Logto, Ory Kratos.** Younger projects, smaller communities, fewer production references. Keycloak is the conservative pick.
+- **Build it ourselves.** Rejected. The brief's MFA, brute-force, token rotation, refresh-token family reuse detection, audit events, and Authorization Services would each be multi-week projects with subtle failure modes (see Q-gates 2.1, 2.2 — we have already shipped a broken "logout" once).
+
+**Reason for decision:** Keycloak is OIDC + OAuth 2.0 + SAML out of the box, Apache 2.0, production-grade for over a decade, runs on the FOSS stack the rest of SolarPro uses (Postgres, Docker, Kubernetes). It directly answers every requirement in the brief and closes Q-gates 0.1, 1.1, 1.2, 2.1, 2.2, 3.2, 6.1 in `SECURITY_ARCHITECTURE.md` with no licensing cost.
+
+**Consequences:**
+- Adds an infrastructure dependency (Keycloak server + dedicated Postgres) that must be provisioned, monitored, backed up.
+- Migration is non-trivial — 7 phases over ~5 weeks per `docs/SECURITY_MIGRATION_KEYCLOAK.md` §20.
+- Old auth code (`@login_required`, `_seed_pwd`, `users.password_hash`, Flask session-based `session["user_id"]`) is deprecated and removed in Phase 7.
+- Frontend cost: small, since the OIDC code-flow is well-supported by every framework.
+- Users are forced through a password-reset on first post-cutover login (acceptable; communicated 14 days in advance).
+- AI agents move from shared API keys to per-agent service-account JWTs — improves attribution, audit-ability, and rotation hygiene.
+
+**Impact on Security:** **Significantly positive.** MFA available for the four sensitive roles, real token revocation, refresh-token-family reuse detection, centralised audit log, tenant_id on every JWT closes the multi-tenant gap.
+
+**Impact on Performance:** Neutral. JWT verification is local (JWKS cached); no per-request round-trip to Keycloak. Login adds one redirect compared to today's form-post.
+
+**Impact on Cost:** Zero licensing; one extra Postgres instance + one extra container (or 2 K8s pods in production).
+
+**Impact on Maintenance:** Higher than today's `web_app.py`-only setup. Keycloak needs version pinning, periodic upgrades, realm config kept in version control, backup + DR. The `docs/SECURITY_MIGRATION_KEYCLOAK.md` §5.5 spells the routine out.
+
+**Owner sign-off requirement:** This ADR moves to Accepted only after the owner reviews `docs/SECURITY_MIGRATION_KEYCLOAK.md` end-to-end and approves Phase 1.
+
+**Cross-references:** `docs/SECURITY_MIGRATION_KEYCLOAK.md` (the full plan), `docs/SECURITY_ARCHITECTURE.md` (the Q-gate gap log this ADR closes), `docs/SECRETS_ENGINE_PROPOSAL_v3.md` (Vault carries Keycloak's master admin credential + service-account secrets).

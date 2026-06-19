@@ -1051,3 +1051,49 @@ Push + force redeploy + run live test suite to confirm no regressions. Then surv
 ## Next Recommended Step
 
 Pick from the open-gap table above. Highest ROI: date/time picker (closes the always-solstice gap). Second highest: 12-thumbnail timeline (visible dashboard alignment with reference image).
+
+---
+
+# Implementation Log Entry
+
+**Date:** 2026-06-19 (end of catalogue session)
+**Task:** Write the SolarPro Keycloak authentication + authorization migration plan.
+**Status:** Complete (spec only; no code shipped).
+
+**Objective:** Capture every section of `C:\Users\USER\Documents\pvsolar1\kubernates\secmigrate.txt` (18 sections + 11-section RBAC supplement + recommended 30–50 page expansion topics) in a single authoritative migration plan that the next session can hand off to engineering. Do not implement any code yet.
+
+**Files Changed:**
+- `docs/SECURITY_MIGRATION_KEYCLOAK.md` — new, ~1,800 lines, 23 sections + appendices.
+- `docs/ARCHITECTURE_DECISIONS.md` — new ADR-0007 "Adopt Keycloak as central identity provider" (status: Proposed).
+- `docs/SECURITY_ARCHITECTURE.md` — forward-pointer to the new plan + ADR-0007.
+- `docs/IMPLEMENTATION_LOG.md` — this entry.
+
+**Database Changes:** None at runtime. The plan describes future migrations (`migrations/003_rls_tenant.sql` apply in Phase 4; `ALTER TABLE users DROP COLUMN password_hash` in Phase 7) but does not apply them.
+
+**API Changes:** None. The plan describes the future `/auth/login`, `/auth/callback`, `/auth/logout`, `/api/keycloak/events` endpoints but does not add them.
+
+**Frontend Changes:** None. The plan describes the future redirect-to-Keycloak login flow but does not modify `templates/login.html`.
+
+**Security Changes:** None at runtime. **Major future change:** every `@login_required` / `@admin_required` / `@supplier_required` / `@procurement_role_required` decorator is replaced by JWT middleware reading 13 realm roles + 27 permission scopes + tenant_id claim. Passwords leave SolarPro entirely. MFA enforced for the four sensitive roles. Audit log unified across Keycloak admin events + SolarPro `audit_log` table.
+
+**Tests Added:** None yet. The plan enumerates the future test layout (`tests/security/*`, `tests/integration/*_flow.py`, `tests/load/locust_keycloak_login.py`) to be added per phase.
+
+**Documentation Updated:**
+- `SECURITY_MIGRATION_KEYCLOAK.md` is the source of truth for the migration.
+- `ARCHITECTURE_DECISIONS.md` ADR-0007 is the architectural decision record.
+- `SECURITY_ARCHITECTURE.md` points forward to the new plan.
+
+**What Was Completed:** End-to-end migration plan covering Keycloak deployment (Docker + Kubernetes), realm design (5 clients + 13 roles + group hierarchy + 9 user attributes), RBAC + ABAC + 27 permission scopes + matrix, token management, backend middleware (skeleton Flask code), frontend OIDC (Flask Jinja + Next.js patterns), AI agent service accounts (5 agents with per-agent scope), MFA + password policy, audit logging (Keycloak admin events + SolarPro `audit_log` table), user migration script, 7-phase rollout schedule (5-week estimate), security hardening checklist (3 layers), testing plan (14 categories), risks + mitigations table. Every section of the source brief reproduced — verbatim where exact, expanded where the brief is suggestive — so the next session can hand off directly to engineering without re-reading the brief.
+
+**What Remains:**
+- Phase 0: Owner sign-off on `docs/SECURITY_MIGRATION_KEYCLOAK.md` + ADR-0007.
+- Phase 0: Author `docs/auth_inventory.csv` by grepping `web_app.py`.
+- Phase 0: Draft `docs/keycloak/realm-design.md` derived from plan §6 + §7.
+- Phases 1–7: implementation per plan §19 + §20.
+
+**Known Risks:** Outlined in plan §22. Highest-priority watch items:
+- Cutover-day auth outage (mitigated by 7-day rollback window + `?legacy=1` emergency form).
+- Tenant-mismatch policy gap on cross-foreign-key reads.
+- Loss of marc667us session — owner-controlled recovery channel + pre-issued recovery codes.
+
+**Next Recommended Step:** Owner reviews `docs/SECURITY_MIGRATION_KEYCLOAK.md` and either approves Phase 0 to proceed, requests changes to the plan, or defers the migration until after the marketplace work stabilises.

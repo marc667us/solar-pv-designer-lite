@@ -2,6 +2,8 @@
 
 Authoritative checklist lives in `SECURITY.md`. This file is the architectural summary + the Q-gate gap log.
 
+**Forward-looking plan:** `docs/SECURITY_MIGRATION_KEYCLOAK.md` (2026-06-19) is the full plan to migrate SolarPro authentication + authorization to Keycloak. ADR-0007 in `docs/ARCHITECTURE_DECISIONS.md` is the decision record. The migration closes Q-gates **0.1, 1.1, 1.2, 2.1, 2.2, 3.2, 6.1** below. Awaiting owner sign-off on Phase 0 before any code lands.
+
 ---
 
 ## Layers
