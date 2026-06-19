@@ -32,8 +32,8 @@ Authoritative checklist lives in `SECURITY.md`. This file is the architectural s
 | 0.1 | Plaintext admin creds + git history | user-deferred this session |
 | 0.2 | `campaign_api.py` startup secrets default | file deleted in working tree; commit pending |
 | 0.3 | `/entities` + `/state` no auth | file deleted in working tree; commit pending |
-| 1.1 | Runtime on SQLite, RLS dormant | blocked on Postgres URL |
-| 1.2 | Per-tx tenant context never set | blocked on 1.1 |
+| 1.1 | Runtime on SQLite, RLS dormant | **in progress** — Phase 4 module + `migrations/003_rls_tenant.sql` ready (commit `653d569`+). Apply to live Postgres + rewrite tenant-owned queries in `web_app.py` → then close. |
+| 1.2 | Per-tx tenant context never set | **in progress** — `app/security/tenant_context.apply_tenant_guc()` sets `app.current_tenant` + `app.current_user` per request once `KEYCLOAK_ENABLED=true`. Closes after the query-layer rewrite calls it. |
 | 1.3 | RLS not FORCED | **closed (migration 003)** |
 | 1.4 | `assessment_requests` cross-tenant PII | **closed (migration 003)** |
 | 1.5 | `installers` cross-tenant PII | **closed (migration 003)** |

@@ -1374,3 +1374,75 @@ Target patch: add `@require_role("marketplace_admin")` ABOVE `@admin_required` (
 - The heartbeat route is reachable under `KEYCLOAK_ENABLED=false` (parallel-run) and returns 200 with null identity. That is intentional — it lets us deploy the route before flipping the flag — but it means the route must not be reused as a "real" agent endpoint until the flag is on. The audit row is written either way, so a sudden spike in `AGENT_HEARTBEAT` rows with null `agent_id` would flag the parallel-run state to anyone reading the log.
 
 **Next Recommended Step:** Phase 4 task 19 — implement `app/security/tenant_context.py` to extract `tenant_id` from the JWT and set the `app.current_tenant` Postgres GUC per request; rewrite the tenant-owned queries in `web_app.py` to drop the historical `_current_user_id()` filter and rely on RLS as the final defence-in-depth layer.
+
+---
+
+# Implementation Log Entry — Phase 4 foundation
+
+**Date:** 2026-06-20
+**Task:** Phase 4 of `docs/SECURITY_MIGRATION_KEYCLOAK.md` — tenant filter + RLS. Plan §19 tasks 19 (module), 21 (migration as SQL file ready to apply), 22 (tests).
+**Status:** Foundation shipped. Task 20 (query rewrite across ~17 tenant-owned tables in `web_app.py`) and task 21 live-apply intentionally deferred — both need owner sign-off per plan §20, and the query rewrite is its own pull-out because it touches the whole runtime.
+
+**Objective:** Stand up the tenant-context module + RLS migration + tests so the moment owner signs off, the rewrite + live apply are mechanical work, not design work. No production behaviour changes in this commit.
+
+**Files Changed:**
+- `app/security/tenant_context.py` (new, ~220 lines)
+  - `current_tenant_id()` / `current_user_sub()` / `current_user_is_service_account()` — read off `g.kc_ctx`.
+  - `require_tenant_context()` — raises `MissingTenantContextError` (→ 403) for routes that need a tenant; pass-through when `KEYCLOAK_ENABLED` unset.
+  - `apply_tenant_guc(conn)` — writes `app.current_tenant` + `app.current_user` via `SELECT set_config(..., true)` (transaction-local). No-op on SQLite and when KC disabled.
+  - `clear_tenant_guc(conn)` — forward-compat hook for pooled connections.
+  - `register_error_handler(app)` — wires `MissingTenantContextError` to a 403 JSON response (matches plan §8.4).
+  - Postgres detection via `type(conn).__name__ == "_PgConnAdapter"` (matches the existing db_adapter wrapper).
+- `migrations/003_rls_tenant.sql` (new, ~210 lines, NOT yet applied to live Postgres)
+  - PART 1: `current_tenant_id()` + `current_user_sub()` PL/pgSQL helpers reading the GUCs.
+  - PART 2: idempotent `ADD COLUMN IF NOT EXISTS tenant_id UUID` on 17 tenant-owned tables (`projects`, `tickets`, `ticket_replies`, `email_logs`, `password_reset_tokens`, `payments`, `suppliers`, `equipment_catalog`, `rfqs`, `rfq_items`, `marketplace_boms`, `marketplace_bom_items`, `marketplace_boqs`, `marketplace_boq_items`, `price_sheets`, `price_sheet_items`, `marketplace_audit`) + matching per-table index.
+  - PART 3: deterministic backfill via `_phase4_user_to_tenant(uid)` (`md5('solarpro-tenant-v1:' || uid)::uuid`) on the tables that carry `user_id`. Stable + re-runnable.
+  - PART 4: `ENABLE ROW LEVEL SECURITY` + per-table `<table>_tenant_isolation` policy with parallel-run-safe guards (`current_tenant_id() IS NULL OR tenant_id IS NULL OR tenant_id = current_tenant_id()`). Phase 7 cutover migration will drop the NULL escapes + add `FORCE`.
+- `tests/security/test_tenant_isolation.py` (new, 17 unit tests — see Test Results).
+- `docs/SECURITY_ARCHITECTURE.md` — Q-gates 1.1 + 1.2 moved from `blocked` to **in progress**; status notes call out exactly what closes each one.
+
+**Database Changes:** none yet applied. `migrations/003_rls_tenant.sql` is on disk, awaiting the Phase 4 sign-off + a manual `psql $DATABASE_URL -f migrations/003_rls_tenant.sql` run during the cutover window.
+
+**API Changes:** none — `MissingTenantContextError → 403` is wired only when a Flask app calls `register_error_handler(app)`. `web_app.py` does NOT call that yet; the wiring is the next pull-out.
+
+**Frontend Changes:** none.
+
+**Security Changes:**
+- New choke-points for tenant + user identity reads (`current_tenant_id()` etc.) so the eventual query rewrite has one place to change if the JWT claim name moves.
+- RLS policy file ready: parallel-run-safe at apply time, hard-tightening reserved for Phase 7.
+- Defence in depth per plan §8.3 is now wired in code (layer 1 = middleware extracts claim, layer 2 = `apply_tenant_guc` sets GUC, layer 3 = RLS policy). Layer 1 + 2 wait on `KEYCLOAK_ENABLED=true`; layer 3 waits on the migration being applied.
+
+**Tests Added:**
+- `test_tenant_isolation.py` — 17 tests:
+  - Read helpers under no-ctx / present-ctx / SA token.
+  - `require_tenant_context()` pass-through when KC off, returns id when present, raises `MissingTenantContextError` when KC on + missing.
+  - Flask error handler returns 403 with `{error: MISSING_TENANT_CONTEXT}` (matches §8.4).
+  - `apply_tenant_guc` writes two `set_config(..., true)` calls to a Postgres-shaped conn.
+  - `apply_tenant_guc` no-ops on SQLite-shaped conn + when KC disabled.
+  - `apply_tenant_guc` writes empty string GUC when tenant_id missing (SA path).
+  - `apply_tenant_guc` propagates DB errors instead of silently bypassing RLS.
+  - `clear_tenant_guc` resets both GUCs; no-op on SQLite.
+
+The four plan §8.4 full DB-RLS acceptance cases (cross-tenant 404, cross-FK 404, SA no-tenant 403, immutable-attribute 403) live in `test_tenant_isolation.py` as a documented runbook — they require a running Postgres with `003_rls_tenant.sql` applied and will land in `test_tenant_isolation_live.py` gated on a `PG_TEST_URL` env var once the migration is applied.
+
+**Test Results:**
+- `pytest tests/security/` — 79/79 PASS (33 Phase 2 + 29 Phase 3 + 17 Phase 4).
+- `python tmp/smoke_keycloak_pilot.py` — 4/4 PASS (unchanged).
+- `python -c "import py_compile; py_compile.compile('web_app.py', doraise=True)"` — clean.
+- Migration parsed for balanced `$$` markers + single BEGIN/COMMIT.
+
+**Documentation Updated:** this entry; `SECURITY_ARCHITECTURE.md` Q-gates 1.1 + 1.2; module + migration carry internal docstrings explaining the parallel-run model.
+
+**What Was Completed:** Plan §19 tasks 19 (module), 21 (migration written, awaiting apply), 22 (unit tests).
+
+**What Remains in Phase 4:**
+- **Task 20 — query rewrite in `web_app.py`.** Every tenant-owned `SELECT/UPDATE/DELETE` needs a `WHERE tenant_id = current_tenant_id()` companion to the existing `user_id` filter, and every INSERT needs `tenant_id` populated from `current_tenant_id()` (with fallback to `_phase4_user_to_tenant(user_id)` for parallel-run-from-legacy-rows). Survey before rewrite: ~17 tenant-owned tables × varying callsites = hundreds of byte-patches. Suggested approach: one commit per table family (projects, tickets, marketplace), each fronted by a small per-family smoke test. Defer until owner sign-off.
+- **Task 21 (live apply).** `psql $DATABASE_URL -f migrations/003_rls_tenant.sql`. Recommend doing this AFTER task 20 lands so the rewrite + RLS go live together — otherwise a half-applied state means the parallel-run policy hides nothing (which is fine, but it also means we get no proof RLS works until the rewrite catches up).
+- **Task 23 — close Q-gates 1.1, 1.2, 3.2** in `SECURITY_ARCHITECTURE.md` once the above two land. The current edit flips them to "in progress" so the gap log doesn't lie.
+
+**Known Risks:**
+- Backfill function `_phase4_user_to_tenant` is a deterministic hash; if two users are later merged into one tenant, the column needs an UPDATE to coalesce them. Not a today-problem.
+- The RLS policy's permissive `OR tenant_id IS NULL` escape is intentional for parallel-run but means an attacker who can insert a row with `tenant_id = NULL` could create a cross-tenant-visible row. Phase 7 closes this by switching the policy to `tenant_id = current_tenant_id()` only + `FORCE ROW LEVEL SECURITY`. Until then, every INSERT path the rewrite touches must set `tenant_id` non-null.
+- `app/security/tenant_context.py` is not yet imported by `web_app.py`. Until task 20 lands, the module has no production effect. That's intentional, but worth flagging.
+
+**Next Recommended Step:** Task 20 — start with the highest-traffic tenant-owned table family (`projects`) and rewrite its callsites in `web_app.py` via Pattern A byte-patches: add `WHERE tenant_id = ?` companions guarded by `KEYCLOAK_ENABLED` + add a thin `_apply_tenant_guc()` call at the top of each route. One file change per family + a per-family smoke test would land that section in ~2 hours; the rest follows the same template.
