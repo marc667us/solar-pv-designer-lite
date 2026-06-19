@@ -1,0 +1,574 @@
+{
+  "realm": "solarpro",
+  "displayName": "SolarPro Global",
+  "displayNameHtml": "<strong>SolarPro</strong> Global",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": false,
+  "rememberMe": true,
+  "verifyEmail": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+  "defaultSignatureAlgorithm": "RS256",
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "accessTokenLifespan": 600,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "ssoSessionIdleTimeoutRememberMe": 0,
+  "ssoSessionMaxLifespanRememberMe": 0,
+  "offlineSessionIdleTimeout": 2592000,
+  "offlineSessionMaxLifespanEnabled": true,
+  "offlineSessionMaxLifespan": 5184000,
+  "clientSessionIdleTimeout": 0,
+  "clientSessionMaxLifespan": 0,
+  "clientOfflineSessionIdleTimeout": 0,
+  "clientOfflineSessionMaxLifespan": 0,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanUserAction": 300,
+  "accessCodeLifespanLogin": 1800,
+  "actionTokenGeneratedByAdminLifespan": 43200,
+  "actionTokenGeneratedByUserLifespan": 300,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["en", "fr", "pt"],
+  "defaultLocale": "en",
+  "passwordPolicy": "length(12) and digits(1) and upperCase(1) and lowerCase(1) and specialChars(1) and notUsername(undefined) and notEmail(undefined) and hashIterations(210000) and passwordHistory(5) and forceExpiredPasswordChange(90)",
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyLookAheadWindow": 1,
+  "otpPolicyPeriod": 30,
+  "otpPolicyCodeReusable": false,
+  "otpSupportedApplications": ["FreeOTP", "Google Authenticator", "Microsoft Authenticator"],
+  "webAuthnPolicyRpEntityName": "SolarPro Global",
+  "webAuthnPolicyRpId": "auth.aiappinvent.com",
+  "webAuthnPolicySignatureAlgorithms": ["ES256", "RS256"],
+  "webAuthnPolicyAttestationConveyancePreference": "not specified",
+  "webAuthnPolicyAuthenticatorAttachment": "not specified",
+  "webAuthnPolicyRequireResidentKey": "not specified",
+  "webAuthnPolicyUserVerificationRequirement": "preferred",
+  "webAuthnPolicyCreateTimeout": 0,
+  "webAuthnPolicyAvoidSameAuthenticatorRegister": true,
+  "loginTheme": "keycloak.v2",
+  "accountTheme": "keycloak.v2",
+  "adminTheme": "keycloak.v2",
+  "emailTheme": "keycloak",
+  "eventsEnabled": true,
+  "eventsExpiration": 7776000,
+  "eventsListeners": ["jboss-logging", "email", "solarpro-event-bridge"],
+  "enabledEventTypes": [
+    "LOGIN", "LOGIN_ERROR", "LOGOUT", "LOGOUT_ERROR",
+    "REGISTER", "REGISTER_ERROR",
+    "CODE_TO_TOKEN", "CODE_TO_TOKEN_ERROR",
+    "REFRESH_TOKEN", "REFRESH_TOKEN_ERROR",
+    "UPDATE_PASSWORD", "UPDATE_PASSWORD_ERROR",
+    "UPDATE_TOTP", "UPDATE_TOTP_ERROR",
+    "REMOVE_TOTP", "REMOVE_TOTP_ERROR",
+    "VERIFY_EMAIL", "VERIFY_EMAIL_ERROR",
+    "SEND_RESET_PASSWORD", "SEND_VERIFY_EMAIL",
+    "RESET_PASSWORD", "RESET_PASSWORD_ERROR",
+    "EXECUTE_ACTIONS", "EXECUTE_ACTIONS_ERROR",
+    "GRANT_CONSENT", "REVOKE_GRANT",
+    "IDENTITY_PROVIDER_LINK_ACCOUNT", "IDENTITY_PROVIDER_FIRST_LOGIN",
+    "PERMISSION_TOKEN", "FEDERATED_IDENTITY_LINK"
+  ],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true,
+
+  "requiredActions": [
+    { "alias": "UPDATE_PASSWORD", "name": "Update Password", "enabled": true, "defaultAction": false, "priority": 30, "providerId": "UPDATE_PASSWORD" },
+    { "alias": "VERIFY_EMAIL",    "name": "Verify Email",    "enabled": true, "defaultAction": false, "priority": 50, "providerId": "VERIFY_EMAIL" },
+    { "alias": "CONFIGURE_TOTP",  "name": "Configure OTP",   "enabled": true, "defaultAction": false, "priority": 10, "providerId": "CONFIGURE_TOTP" },
+    { "alias": "webauthn-register","name": "Webauthn Register","enabled": true, "defaultAction": false, "priority": 70, "providerId": "webauthn-register" }
+  ],
+
+  "roles": {
+    "realm": [
+      { "name": "platform_super_admin",   "description": "Full platform access. Only the platform team.", "composite": false },
+      { "name": "marketplace_admin",      "description": "Approve suppliers + products, manage catalogue quality.", "composite": false },
+      { "name": "tenant_admin",           "description": "Manage one company / tenant. Owners and CXOs of customer tenants.", "composite": false },
+      { "name": "solar_engineer",         "description": "Designs solar systems, reviews technical outputs, prepares BOQ/BOM.", "composite": false },
+      { "name": "senior_engineer",        "description": "Approves designs, validates calculations, reviews reports.",
+        "composite": true,
+        "composites": { "realm": ["solar_engineer"] }
+      },
+      { "name": "electrician_installer",  "description": "Executes installation work, uploads site photos, updates progress.", "composite": false },
+      { "name": "supplier_admin",         "description": "Manages supplier profile, products, prices, stock, warranty.", "composite": false },
+      { "name": "supplier_user",          "description": "Updates assigned product and price records.", "composite": false },
+      { "name": "procurement_specialist", "description": "Requests quotations, compares prices, prepares recommendations.", "composite": false },
+      { "name": "catalogue_manager",      "description": "Manages product catalogue and supplier catalogue.", "composite": false },
+      { "name": "finance_officer",        "description": "Views pricing, invoices, payments, subscriptions.", "composite": false },
+      { "name": "support_agent",          "description": "Helpdesk read-only across assigned tenants.", "composite": false },
+      { "name": "customer",               "description": "View own designs, proposals, payments.", "composite": false },
+
+      { "name": "estimator",              "description": "Composite alias = solar_engineer with full BOQ/BOM scope.",
+        "composite": true,
+        "composites": { "realm": ["solar_engineer"] }
+      },
+      { "name": "sales_agent",            "description": "Composite alias = procurement_specialist with lead/trial scope.",
+        "composite": true,
+        "composites": { "realm": ["procurement_specialist"] }
+      },
+      { "name": "sales_manager",          "description": "Composite alias = tenant_admin scoped to sales.",
+        "composite": true,
+        "composites": { "realm": ["procurement_specialist", "tenant_admin"] }
+      },
+      { "name": "api_service_account",    "description": "Umbrella role for backend agents / jobs (client credentials only).", "composite": false }
+    ]
+  },
+
+  "groups": [
+    {
+      "name": "Platform Admins",
+      "path": "/Platform Admins",
+      "realmRoles": ["platform_super_admin"],
+      "attributes": { "tenant_id": ["00000000-0000-0000-0000-000000000001"], "tenant_name": ["AI App Invent (platform)"], "user_type": ["platform_admin"] }
+    },
+    {
+      "name": "Marketplace Admins",
+      "path": "/Marketplace Admins",
+      "realmRoles": ["marketplace_admin"],
+      "attributes": { "tenant_id": ["00000000-0000-0000-0000-000000000002"], "tenant_name": ["SolarPro Marketplace"], "user_type": ["marketplace_admin"] }
+    },
+    {
+      "name": "Engineering Firms",
+      "path": "/Engineering Firms",
+      "subGroups": [
+        {
+          "name": "Demo Firm",
+          "path": "/Engineering Firms/Demo Firm",
+          "attributes": { "engineering_company_id": ["00000000-0000-0000-0000-000000000010"], "tenant_id": ["00000000-0000-0000-0000-000000000010"], "tenant_name": ["Demo Engineering Firm"], "user_type": ["engineer"] },
+          "subGroups": [
+            { "name": "Engineers",         "path": "/Engineering Firms/Demo Firm/Engineers",         "realmRoles": ["solar_engineer"]          },
+            { "name": "Senior Engineers",  "path": "/Engineering Firms/Demo Firm/Senior Engineers",  "realmRoles": ["senior_engineer"]         },
+            { "name": "Electricians",      "path": "/Engineering Firms/Demo Firm/Electricians",      "realmRoles": ["electrician_installer"]   }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Suppliers",
+      "path": "/Suppliers",
+      "subGroups": [
+        {
+          "name": "Demo Supplier",
+          "path": "/Suppliers/Demo Supplier",
+          "attributes": { "supplier_id": ["00000000-0000-0000-0000-000000000020"], "tenant_id": ["00000000-0000-0000-0000-000000000020"], "tenant_name": ["Demo Supplier"], "user_type": ["supplier"] },
+          "subGroups": [
+            { "name": "Supplier Admins", "path": "/Suppliers/Demo Supplier/Supplier Admins", "realmRoles": ["supplier_admin"] },
+            { "name": "Supplier Users",  "path": "/Suppliers/Demo Supplier/Supplier Users",  "realmRoles": ["supplier_user"]  }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Procurement Teams",
+      "path": "/Procurement Teams",
+      "subGroups": [
+        {
+          "name": "Demo Buyer",
+          "path": "/Procurement Teams/Demo Buyer",
+          "attributes": { "tenant_id": ["00000000-0000-0000-0000-000000000030"], "tenant_name": ["Demo Buyer"], "user_type": ["procurement"] },
+          "subGroups": [
+            { "name": "Procurement Specialists", "path": "/Procurement Teams/Demo Buyer/Procurement Specialists", "realmRoles": ["procurement_specialist"] }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "path": "/Customers",
+      "realmRoles": ["customer"],
+      "attributes": { "user_type": ["customer"] }
+    },
+    {
+      "name": "AI Agents",
+      "path": "/AI Agents",
+      "realmRoles": ["api_service_account"],
+      "attributes": { "user_type": ["service_account"] }
+    }
+  ],
+
+  "users": [
+    {
+      "username": "engineer_test",
+      "email": "engineer@test.solarpro.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Engineer", "lastName": "Test",
+      "credentials": [{ "type": "password", "value": "Test1234!Test", "temporary": true }],
+      "requiredActions": ["UPDATE_PASSWORD"],
+      "realmRoles": ["solar_engineer"],
+      "groups": ["/Engineering Firms/Demo Firm/Engineers"]
+    },
+    {
+      "username": "senior_engineer_test",
+      "email": "senior@test.solarpro.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Senior", "lastName": "Engineer",
+      "credentials": [{ "type": "password", "value": "Test1234!Test", "temporary": true }],
+      "requiredActions": ["UPDATE_PASSWORD"],
+      "realmRoles": ["senior_engineer"],
+      "groups": ["/Engineering Firms/Demo Firm/Senior Engineers"]
+    },
+    {
+      "username": "electrician_test",
+      "email": "electrician@test.solarpro.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Electrician", "lastName": "Test",
+      "credentials": [{ "type": "password", "value": "Test1234!Test", "temporary": true }],
+      "requiredActions": ["UPDATE_PASSWORD"],
+      "realmRoles": ["electrician_installer"],
+      "groups": ["/Engineering Firms/Demo Firm/Electricians"]
+    },
+    {
+      "username": "supplier_admin_test",
+      "email": "supplier-admin@test.solarpro.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Supplier", "lastName": "Admin",
+      "credentials": [{ "type": "password", "value": "Test1234!Test", "temporary": true }],
+      "requiredActions": ["UPDATE_PASSWORD"],
+      "realmRoles": ["supplier_admin"],
+      "groups": ["/Suppliers/Demo Supplier/Supplier Admins"]
+    },
+    {
+      "username": "supplier_user_test",
+      "email": "supplier-user@test.solarpro.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Supplier", "lastName": "User",
+      "credentials": [{ "type": "password", "value": "Test1234!Test", "temporary": true }],
+      "requiredActions": ["UPDATE_PASSWORD"],
+      "realmRoles": ["supplier_user"],
+      "groups": ["/Suppliers/Demo Supplier/Supplier Users"]
+    },
+    {
+      "username": "procurement_test",
+      "email": "procurement@test.solarpro.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Procurement", "lastName": "Specialist",
+      "credentials": [{ "type": "password", "value": "Test1234!Test", "temporary": true }],
+      "requiredActions": ["UPDATE_PASSWORD"],
+      "realmRoles": ["procurement_specialist"],
+      "groups": ["/Procurement Teams/Demo Buyer/Procurement Specialists"]
+    },
+    {
+      "username": "marketplace_admin_test",
+      "email": "marketplace-admin@test.solarpro.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Marketplace", "lastName": "Admin",
+      "credentials": [{ "type": "password", "value": "Test1234!Test", "temporary": true }],
+      "requiredActions": ["UPDATE_PASSWORD", "CONFIGURE_TOTP"],
+      "realmRoles": ["marketplace_admin"],
+      "groups": ["/Marketplace Admins"]
+    },
+    {
+      "username": "catalogue_manager_test",
+      "email": "catalogue-manager@test.solarpro.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Catalogue", "lastName": "Manager",
+      "credentials": [{ "type": "password", "value": "Test1234!Test", "temporary": true }],
+      "requiredActions": ["UPDATE_PASSWORD"],
+      "realmRoles": ["catalogue_manager"]
+    },
+    {
+      "username": "finance_test",
+      "email": "finance@test.solarpro.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Finance", "lastName": "Officer",
+      "credentials": [{ "type": "password", "value": "Test1234!Test", "temporary": true }],
+      "requiredActions": ["UPDATE_PASSWORD", "CONFIGURE_TOTP"],
+      "realmRoles": ["finance_officer"]
+    },
+    {
+      "username": "support_test",
+      "email": "support@test.solarpro.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Support", "lastName": "Agent",
+      "credentials": [{ "type": "password", "value": "Test1234!Test", "temporary": true }],
+      "requiredActions": ["UPDATE_PASSWORD", "CONFIGURE_TOTP"],
+      "realmRoles": ["support_agent"]
+    },
+    {
+      "username": "customer_test",
+      "email": "customer@test.solarpro.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Customer", "lastName": "Test",
+      "credentials": [{ "type": "password", "value": "Test1234!Test", "temporary": true }],
+      "requiredActions": ["UPDATE_PASSWORD"],
+      "realmRoles": ["customer"],
+      "groups": ["/Customers"]
+    },
+    {
+      "username": "tenant_admin_test",
+      "email": "tenant-admin@test.solarpro.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Tenant", "lastName": "Admin",
+      "credentials": [{ "type": "password", "value": "Test1234!Test", "temporary": true }],
+      "requiredActions": ["UPDATE_PASSWORD", "CONFIGURE_TOTP"],
+      "realmRoles": ["tenant_admin"],
+      "attributes": {
+        "tenant_id": ["00000000-0000-0000-0000-000000000010"],
+        "tenant_name": ["Demo Engineering Firm"]
+      }
+    },
+    {
+      "username": "platform_admin_test",
+      "email": "platform-admin@test.solarpro.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Platform", "lastName": "Admin",
+      "credentials": [{ "type": "password", "value": "Test1234!Test", "temporary": true }],
+      "requiredActions": ["UPDATE_PASSWORD", "CONFIGURE_TOTP"],
+      "realmRoles": ["platform_super_admin"],
+      "groups": ["/Platform Admins"]
+    }
+  ],
+
+  "clients": [
+    {
+      "clientId": "solarpro-web",
+      "name": "SolarPro Web (Flask + Next.js)",
+      "description": "Public OIDC client for the SolarPro web frontend. PKCE enforced.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "https://solarpro.aiappinvent.com/auth/callback",
+        "https://staging.solarpro.aiappinvent.com/auth/callback",
+        "http://localhost:5000/auth/callback",
+        "http://localhost:3000/auth/callback"
+      ],
+      "webOrigins": [
+        "https://solarpro.aiappinvent.com",
+        "https://staging.solarpro.aiappinvent.com",
+        "http://localhost:5000",
+        "http://localhost:3000"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "access.token.lifespan": "600",
+        "post.logout.redirect.uris": "+"
+      },
+      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email", "solarpro-tenant"],
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+    },
+    {
+      "clientId": "solarpro-mobile",
+      "name": "SolarPro Mobile (React Native — future)",
+      "description": "Public OIDC client for the native mobile app. PKCE enforced. Deep-link callback.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["solarpro://auth/callback"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "access.token.lifespan": "600"
+      },
+      "defaultClientScopes": ["profile", "roles", "email", "solarpro-tenant"],
+      "optionalClientScopes": ["offline_access"]
+    },
+    {
+      "clientId": "solarpro-api",
+      "name": "SolarPro API (Flask backend audience)",
+      "description": "Bearer-only resource server. Accepts JWTs, does not issue.",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "solarpro-agent-service",
+      "name": "SolarPro AI Agent Service Account Umbrella",
+      "description": "Confidential client for backend AI agents and jobs. Client-credentials grant only.",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "secret": "REPLACE_AT_DEPLOY_TIME_FROM_VAULT",
+      "attributes": {
+        "access.token.lifespan": "600",
+        "use.refresh.tokens": "false",
+        "client_credentials.use_refresh_token": "false"
+      },
+      "defaultClientScopes": ["roles", "solarpro-tenant"]
+    },
+    {
+      "clientId": "solarpro-admin-console",
+      "name": "SolarPro Admin Console (Keycloak admin)",
+      "description": "Confidential client for the platform team's access to the Keycloak admin console.",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "secret": "REPLACE_AT_DEPLOY_TIME_FROM_VAULT",
+      "redirectUris": ["https://auth.aiappinvent.com/admin/master/console/*"],
+      "attributes": {
+        "access.token.lifespan": "600"
+      }
+    },
+
+    {
+      "clientId": "solarpro-catalogue-agent",
+      "name": "AI Agent — Catalogue",
+      "description": "Reads supplier catalogues, suggests product updates. Forbidden: approve final updates.",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "secret": "REPLACE_AT_DEPLOY_TIME_FROM_VAULT",
+      "defaultClientScopes": ["solarpro-tenant"],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "solarpro-tender-agent",
+      "name": "AI Agent — Tender",
+      "description": "Hunts tender opportunities, drafts RFQ replies. Forbidden: publish without human approval.",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "secret": "REPLACE_AT_DEPLOY_TIME_FROM_VAULT",
+      "defaultClientScopes": ["solarpro-tenant"]
+    },
+    {
+      "clientId": "solarpro-report-agent",
+      "name": "AI Agent — Report",
+      "description": "Generates PV / shading / proposal reports. Forbidden: modify design.",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "secret": "REPLACE_AT_DEPLOY_TIME_FROM_VAULT",
+      "defaultClientScopes": ["solarpro-tenant"]
+    },
+    {
+      "clientId": "solarpro-email-agent",
+      "name": "AI Agent — Email",
+      "description": "Sends transactional emails. Forbidden: attach PII without sanitisation.",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "secret": "REPLACE_AT_DEPLOY_TIME_FROM_VAULT",
+      "defaultClientScopes": ["solarpro-tenant"]
+    },
+    {
+      "clientId": "solarpro-payment-agent",
+      "name": "AI Agent — Payment",
+      "description": "Reconciles Paystack / Stripe webhooks. Forbidden: issue refunds without admin approval.",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "secret": "REPLACE_AT_DEPLOY_TIME_FROM_VAULT",
+      "defaultClientScopes": ["solarpro-tenant"]
+    }
+  ],
+
+  "clientScopes": [
+    {
+      "name": "solarpro-tenant",
+      "description": "Adds SolarPro-specific claims to access + ID tokens: tenant_id, tenant_name, user_type, country, region, subscription_plan, supplier_id, engineering_company_id, marketplace_scope.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        { "name": "tenant_id",              "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": { "user.attribute": "tenant_id", "claim.name": "tenant_id", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true" } },
+        { "name": "tenant_name",            "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": { "user.attribute": "tenant_name", "claim.name": "tenant_name", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true" } },
+        { "name": "user_type",              "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": { "user.attribute": "user_type", "claim.name": "user_type", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true" } },
+        { "name": "country",                "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": { "user.attribute": "country", "claim.name": "country", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true" } },
+        { "name": "region",                 "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": { "user.attribute": "region", "claim.name": "region", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true" } },
+        { "name": "subscription_plan",      "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": { "user.attribute": "subscription_plan", "claim.name": "subscription_plan", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true" } },
+        { "name": "supplier_id",            "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": { "user.attribute": "supplier_id", "claim.name": "supplier_id", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true" } },
+        { "name": "engineering_company_id", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": { "user.attribute": "engineering_company_id", "claim.name": "engineering_company_id", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true" } },
+        { "name": "marketplace_scope",      "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": { "user.attribute": "marketplace_scope", "claim.name": "marketplace_scope", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true" } },
+        { "name": "audience-solarpro-api",  "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
+          "config": { "included.client.audience": "solarpro-api", "access.token.claim": "true", "id.token.claim": "false" } }
+      ]
+    }
+  ],
+
+  "smtpServer": {
+    "host": "smtp.brevo.com",
+    "port": "587",
+    "from": "no-reply@aiappinvent.com",
+    "fromDisplayName": "SolarPro",
+    "replyTo": "support@aiappinvent.com",
+    "replyToDisplayName": "SolarPro Support",
+    "envelopeFrom": "",
+    "ssl": "false",
+    "starttls": "true",
+    "auth": "true",
+    "user": "REPLACE_AT_DEPLOY_TIME",
+    "password": "REPLACE_AT_DEPLOY_TIME_FROM_VAULT"
+  },
+
+  "browserSecurityHeaders": {
+    "contentSecurityPolicyReportOnly": "",
+    "xContentTypeOptions": "nosniff",
+    "xRobotsTag": "none",
+    "xFrameOptions": "SAMEORIGIN",
+    "contentSecurityPolicy": "frame-src 'self'; frame-ancestors 'self'; object-src 'none';",
+    "xXSSProtection": "1; mode=block",
+    "strictTransportSecurity": "max-age=31536000; includeSubDomains"
+  }
+}

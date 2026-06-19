@@ -1148,3 +1148,41 @@ Phase 2 work (decorator + session migration) accounts for 376 / 517 = 73% of the
 **What Remains:** Phases 1–7 per plan §20 schedule.
 
 **Next Recommended Step:** Phase 1 — author `docs/keycloak/realm-export.json` (5 clients + 13 roles + group hierarchy + password policy + OTP policy + brute-force config) and `docker-compose.keycloak.yml`. ETA: 1 day.
+
+---
+
+# Implementation Log Entry — Phase 1 (Keycloak local stack + realm)
+
+**Date:** 2026-06-19 (same session, post-Phase-0)
+**Task:** Phase 1 of `docs/SECURITY_MIGRATION_KEYCLOAK.md` — local Keycloak stack + importable realm export.
+**Status:** Complete (artifacts shipped; not yet started locally — that requires Docker on the operator's machine and is the next session's first step).
+
+**Files Changed:**
+- `docs/keycloak/realm-export.json` — new, ~500 lines. `solarpro` realm with 17 roles (13 SolarPro + 4 composite aliases — estimator / sales_agent / sales_manager / senior_engineer-composite), 10 clients (5 core: `solarpro-web` / `solarpro-mobile` / `solarpro-api` / `solarpro-agent-service` / `solarpro-admin-console`; plus 5 AI agent service-account clients per plan §12), 7 top-level groups (Platform Admins / Marketplace Admins / Engineering Firms/ / Suppliers/ / Procurement Teams/ / Customers / AI Agents), 13 test users covering every role with `Test1234!Test` credential + `requiredActions=["UPDATE_PASSWORD"]` (CONFIGURE_TOTP added for the four MFA-required roles per plan §14.2), 1 `solarpro-tenant` client scope with protocol mappers for the 9 tenant attributes from plan §8.2 + audience mapper for `solarpro-api`. Password policy + OTP policy + brute-force config matches plan §6.3. Browser security headers (CSP, HSTS, X-Frame-Options) included.
+- `docker-compose.keycloak.yml` — new, Keycloak 26.0 + Postgres 16-alpine. Reads realm-export.json on first boot via `--import-realm`. Healthchecks on both containers. Metrics + health endpoints enabled. Postgres exposed on host port 5433 (5432 reserved for SolarPro). Volume `solarpro-keycloak-db-data` persists realm state across container restarts.
+- `scripts/keycloak/bootstrap.sh` — new. `docker compose up -d`, waits for `/realms/solarpro/.well-known/openid-configuration` to respond (4-minute timeout for first boot), reports counts of roles / clients / users to confirm the import worked. Fetches a JWT for `engineer_test` via password grant if the client allows it, otherwise falls back to admin-cli to verify health.
+- `scripts/keycloak/teardown.sh` — new. `docker compose down`. Preserves Postgres volume by default; `--wipe` flag also removes the volume for a fresh realm import.
+- `docs/IMPLEMENTATION_LOG.md` — this entry.
+
+**Database Changes:** None on SolarPro. The Keycloak Postgres database is the new addition — runs in its own container.
+
+**API Changes:** None on SolarPro. The new Keycloak endpoints are at `http://localhost:8080/realms/solarpro/protocol/openid-connect/*` once the stack is up.
+
+**Frontend Changes:** None.
+**Security Changes:** None at runtime. Phase 1 is local-stack-only.
+
+**Tests Added:** None. The bootstrap script itself is the verification artifact.
+
+**Documentation Updated:**
+- The realm export is the source of truth for realm config; future changes go through this JSON, not the admin console.
+- Bootstrap script is the source of truth for "how do I run Keycloak locally".
+
+**What Was Completed:** All Phase 1 deliverables per plan §19 tasks 4–7. The next person can run `bash scripts/keycloak/bootstrap.sh` (assuming Docker is installed) and have a working local Keycloak with the SolarPro realm pre-imported within ~3 minutes.
+
+**What Remains:**
+- Run the stack locally to confirm the realm imports without warnings (5-minute task; requires Docker on the operator's machine).
+- Phase 2 — backend JWT middleware (`app/security/keycloak_middleware.py`, `app/security/decorators.py`, pilot route migration). ETA: 2 days.
+
+**Known Risks:** Bootstrap script's password-grant fallback may not work because `solarpro-web` correctly disables `directAccessGrantsEnabled` — the script handles this by falling back to admin-cli verification. The password-grant path is a CONVENIENCE test; the real auth flow uses authorization code + PKCE via the browser.
+
+**Next Recommended Step:** Phase 2 — write `app/security/keycloak_middleware.py` (JWT signature + JWKS cache + claims extraction) and `app/security/decorators.py` (`require_jwt`, `require_role`, `require_any_role`, `require_scope`, `require_tenant_match`). Apply the first decorator to the pilot route `GET /admin/marketplace`, keep `@admin_required` in parallel. No deploy yet — all changes behind a `KEYCLOAK_ENABLED=true` env flag.
