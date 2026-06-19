@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name }} — Marketplace · SolarPro{% endblock %}
+{% block content %}
+
+<div class="rounded-3 p-3 mb-3" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1030 60%,#0f1a22 100%);border:1px solid #1e1e3a">
+  <div class="text-secondary small mb-1">
+    <a href="{{ url_for('marketplace_public', currency=currency) }}" class="text-warning">Marketplace</a>
+    {% if product.category_name %} / {{ product.category_name }}{% endif %}
+  </div>
+  <h4 class="fw-black mb-0">{{ product.name }}</h4>
+  {% if product.brand or product.model %}
+  <div class="text-secondary small">{{ product.brand }}{% if product.model %} · {{ product.model }}{% endif %}</div>
+  {% endif %}
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-lg-8">
+    <div class="solar-card p-3 mb-3">
+      <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-2 mb-3">
+        <div>
+          <div class="text-secondary small" style="text-transform:uppercase;letter-spacing:.5px">Unit Price</div>
+          <div class="fw-black text-warning" style="font-size:32px">
+            {{ currency }} {{ "%.2f"|format(product.price_in_currency or 0) }}
+          </div>
+          <div class="text-secondary small">/ {{ product.unit or 'No.' }}{% if currency != 'USD' %} · ref USD {{ "%.2f"|format(product.price_usd or 0) }}{% endif %}</div>
+        </div>
+        <div class="text-end">
+          <div class="text-secondary small" style="text-transform:uppercase;letter-spacing:.5px">Lead time</div>
+          <div class="fw-bold" style="font-size:20px;color:#9bd1ff">
+            <i class="bi bi-truck me-1"></i>{{ product.lead_time_days or 0 }} days
+          </div>
+        </div>
+      </div>
+      {% if product.spec %}
+      <div class="mb-2 small text-secondary" style="text-transform:uppercase;letter-spacing:.5px">Specification</div>
+      <div class="mb-3" style="white-space:pre-wrap">{{ product.spec }}</div>
+      {% endif %}
+      {% if currency != 'USD' %}
+      <div class="rounded-3 px-3 py-2 mb-0" style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.30);font-size:12px;color:#e0e0f0">
+        <i class="bi bi-info-circle me-1 text-warning"></i>
+        <strong>Indicative pricing.</strong> Converted from supplier-listed USD at indicative FX valid {{ rates_as_of }}. Local market rates may differ — verify with supplier.
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="solar-card p-3 mb-3">
+      <h6 class="fw-black mb-3"><i class="bi bi-building me-2 text-warning"></i>Supplier</h6>
+      <div class="row g-2">
+        <div class="col-md-6">
+          <div class="text-secondary small" style="text-transform:uppercase;letter-spacing:.5px">Company</div>
+          <div class="fw-bold">
+            {{ product.supplier_name or 'Direct' }}
+            {% if product.supplier_verified %}
+            <i class="bi bi-patch-check-fill text-success ms-1" title="Verified supplier"></i>
+            {% endif %}
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="text-secondary small" style="text-transform:uppercase;letter-spacing:.5px">Country</div>
+          <div class="fw-bold">{{ product.supplier_country or '—' }}</div>
+        </div>
+        {% if product.supplier_phone %}
+        <div class="col-md-6">
+          <div class="text-secondary small" style="text-transform:uppercase;letter-spacing:.5px">Phone</div>
+          <div><a href="tel:{{ product.supplier_phone }}" class="text-warning">{{ product.supplier_phone }}</a></div>
+        </div>
+        {% endif %}
+        {% if product.supplier_email %}
+        <div class="col-md-6">
+          <div class="text-secondary small" style="text-transform:uppercase;letter-spacing:.5px">Email</div>
+          <div><a href="mailto:{{ product.supplier_email }}" class="text-warning">{{ product.supplier_email }}</a></div>
+        </div>
+        {% endif %}
+        {% if product.supplier_address %}
+        <div class="col-md-12">
+          <div class="text-secondary small" style="text-transform:uppercase;letter-spacing:.5px">Address</div>
+          <div>{{ product.supplier_address }}</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <div class="solar-card p-3 mb-3" style="position:sticky;top:20px">
+      <h6 class="fw-black mb-3"><i class="bi bi-arrow-right-circle me-2 text-warning"></i>Take action</h6>
+      {% if user %}
+      <a href="{{ url_for('rfqs_new', product_id=product.id) }}" class="btn btn-warning fw-bold w-100 mb-2">
+        <i class="bi bi-envelope-paper me-1"></i>Request quote from this supplier
+      </a>
+      <a href="{{ url_for('procurement_center', q=product.name, currency=currency) }}" class="btn btn-outline-light w-100 mb-2">
+        <i class="bi bi-cart-plus me-1"></i>Add to Procurement Center
+      </a>
+      <a href="{{ url_for('marketplace_public', currency=currency) }}" class="btn btn-outline-secondary w-100">
+        <i class="bi bi-arrow-left me-1"></i>Back to marketplace
+      </a>
+      {% else %}
+      <a href="{{ url_for('register') }}?next={{ url_for('marketplace_product_detail', pid=product.id) }}" class="btn btn-warning fw-bold w-100 mb-2">
+        <i class="bi bi-rocket-takeoff me-1"></i>Sign up to request a quote
+      </a>
+      <a href="{{ url_for('login') }}" class="btn btn-outline-light w-100 mb-2">
+        <i class="bi bi-box-arrow-in-right me-1"></i>Sign in
+      </a>
+      <a href="{{ url_for('marketplace_public', currency=currency) }}" class="btn btn-outline-secondary w-100">
+        <i class="bi bi-arrow-left me-1"></i>Back to marketplace
+      </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

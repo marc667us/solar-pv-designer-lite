@@ -128,7 +128,7 @@ def main():
                     record(f"POST /rfqs/{rfq_id}/send", 0, "no supplier checkboxes")
 
         print()
-        print("[C] POST: procurement-center add → Basic Price Sheet")
+        print("[C] POST: procurement-center add -> Basic Price Sheet")
         page.goto(BASE + "/procurement-center", wait_until="domcontentloaded", timeout=45000)
         boxes = page.query_selector_all("input.prod-chk")
         print(f"  catalog checkboxes: {len(boxes)}")

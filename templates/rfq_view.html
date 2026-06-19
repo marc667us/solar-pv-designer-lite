@@ -82,14 +82,26 @@
 <div class="solar-card p-3 mb-4">
   <h6 class="fw-bold mb-3"><i class="bi bi-send me-1 text-warning"></i>Send RFQ to suppliers</h6>
   {% if suppliers %}
+  {% if suggested_supplier_ids and suggested_supplier_ids|length %}
+  <div class="text-secondary small mb-2">
+    <i class="bi bi-magic me-1 text-warning"></i>
+    Suppliers behind your selected products are <strong class="text-warning">pre-ticked</strong>. Add or remove freely before sending.
+  </div>
+  {% endif %}
   <form method="POST" action="{{ url_for('rfqs_send', rfq_id=rfq.id) }}">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <div class="row g-2 mb-3">
       {% for s in suppliers %}
+      {% set _is_suggested = suggested_supplier_ids and s.id in suggested_supplier_ids %}
       <div class="col-md-4">
-        <div class="form-check">
-          <input class="form-check-input" type="checkbox" name="supplier_ids" value="{{ s.id }}" id="s_{{ s.id }}">
-          <label class="form-check-label small" for="s_{{ s.id }}"><strong>{{ s.name }}</strong>{% if s.country %} <span class="text-secondary">· {{ s.country }}</span>{% endif %}</label>
+        <div class="form-check {% if _is_suggested %}p-2 rounded-2{% endif %}"
+             {% if _is_suggested %}style="background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.30)"{% endif %}>
+          <input class="form-check-input" type="checkbox" name="supplier_ids" value="{{ s.id }}" id="s_{{ s.id }}"
+                 {% if _is_suggested %}checked{% endif %}>
+          <label class="form-check-label small" for="s_{{ s.id }}">
+            <strong>{{ s.name }}</strong>{% if s.country %} <span class="text-secondary">· {{ s.country }}</span>{% endif %}
+            {% if _is_suggested %}<span class="badge ms-1" style="background:rgba(245,158,11,.20);color:var(--solar-gold);font-size:9px">SUGGESTED</span>{% endif %}
+          </label>
         </div>
       </div>
       {% endfor %}

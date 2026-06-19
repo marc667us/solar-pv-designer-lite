@@ -149,6 +149,11 @@
           </div>
         </div>
         <div class="d-flex gap-1 flex-wrap">
+          <a href="{{ url_for('marketplace_product_detail', pid=p.id, currency=currency) }}"
+             class="btn btn-outline-light btn-sm flex-grow-1" style="font-size:11px"
+             title="View full specification + supplier contact">
+            <i class="bi bi-zoom-in me-1"></i>Details
+          </a>
           {% if user %}
           <a href="{{ url_for('rfqs_new') }}?product_id={{ p.id }}" class="btn btn-warning btn-sm flex-grow-1 fw-bold" style="font-size:11px">
             <i class="bi bi-envelope me-1"></i>Request Quote
