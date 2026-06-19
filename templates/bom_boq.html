@@ -36,6 +36,35 @@
     · VAT <strong>{{ bom_rates.vat_pct }}%</strong>
   </div>
   {% endif %}
+
+  {% if compliance_findings %}
+  <div class="rounded-3 p-3 mb-3 no-print" style="background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.30)">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h6 class="fw-black mb-0"><i class="bi bi-shield-exclamation text-danger me-1"></i>Compliance Review</h6>
+      <span class="text-secondary small">{{ compliance_findings|length }} finding{% if compliance_findings|length != 1 %}s{% endif %}</span>
+    </div>
+    <div class="text-secondary small mb-2">Issues that may need fixing before this BOQ ships -- driven by the marketplace product taxonomy (required spec fields, default units, supplier attachment).</div>
+    <ul class="mb-0 ps-3" style="font-size:12.5px;list-style:none;padding-left:0 !important">
+      {% for f in compliance_findings %}
+      <li class="mb-1">
+        {% if f.severity == 'high' %}
+          <span class="badge bg-danger" style="font-size:10px">HIGH</span>
+        {% elif f.severity == 'medium' %}
+          <span class="badge bg-warning text-dark" style="font-size:10px">MED</span>
+        {% else %}
+          <span class="badge bg-secondary" style="font-size:10px">LOW</span>
+        {% endif %}
+        {% if f.line_no %}<span class="text-secondary">Line {{ f.line_no }}:</span>{% endif %}
+        {{ f.message }}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% else %}
+  <div class="rounded-3 p-2 mb-3 no-print" style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.30);font-size:12px;color:#e0e0f0">
+    <i class="bi bi-shield-check text-success me-1"></i>Compliance Review: <strong>no issues</strong> -- every line has complete specs, a unit price, a supplier attached, and matches the category's default unit.
+  </div>
+  {% endif %}
   <table class="table align-middle" style="color:#e0e0f0;font-size:13px">
     <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
       <tr><th style="width:30px">#</th><th>Description</th><th>Category</th><th class="text-end">Qty</th><th class="text-end">Unit</th><th class="text-end">Basic Rate</th><th class="text-end">Total Rate</th><th class="text-end">Amount</th></tr>

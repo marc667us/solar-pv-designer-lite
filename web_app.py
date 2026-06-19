@@ -15657,7 +15657,9 @@ def _bom_owned_or_404(bom_id: int, user_id: int):
 
 def _bom_items_with_prices(bom_id: int):
     """Fetch BOM items joined to the catalog so we have current prices
-    + category names ready for both the editor and the printable BOQ."""
+    + category names ready for both the editor and the printable BOQ.
+    Also pulls `category_code` so the Compliance Review uses the right
+    `_MARKETPLACE_SPEC_FIELDS` registry entry per line."""
     with get_db() as c:
         return c.execute(
             "SELECT bi.*, "
@@ -15669,7 +15671,8 @@ def _bom_items_with_prices(bom_id: int):
             "       ec.is_verified AS catalog_verified, "
             "       s.name         AS supplier_name, "
             "       s.country      AS supplier_country, "
-            "       pc.name        AS category_name "
+            "       pc.name        AS category_name, "
+            "       pc.code        AS category_code "
             "FROM marketplace_bom_items bi "
             "LEFT JOIN equipment_catalog ec   ON ec.id=bi.product_id "
             "LEFT JOIN suppliers s            ON s.id=ec.supplier_id "
@@ -15701,6 +15704,80 @@ def _bom_totals(items) -> dict:
 
 
 # ──────────────────────── BOM list / new ─────────────────────────────────
+
+def _boq_compliance_check(items, lines):
+    """Compliance Review Agent (lite) -- maps BOQ items against the
+    taxonomy registries and surfaces issues the brief's Compliance
+    Review Agent calls out: missing specs, missing prices, missing
+    supplier, wrong units, duplicate items. Returns a list of findings
+    that bom_boq.html renders into a review panel.
+
+    Findings shape:  {severity: high|medium|low, line_no: int, message: str}
+    line_no is 1-based to match printable BOQ row numbers; 0 means
+    the finding spans multiple lines (e.g. a duplicate-item warning).
+    """
+    findings = []
+    # Duplicate detection across the BOM.
+    name_counts = {}
+    for line in lines:
+        it = line["item"]
+        name = (it["catalog_name"] or it["custom_name"] or "").strip().lower()
+        if name:
+            name_counts[name] = name_counts.get(name, 0) + 1
+    for n, c in name_counts.items():
+        if c > 1:
+            findings.append({
+                "severity": "medium",
+                "line_no": 0,
+                "message": f"Duplicate item: {n!r} appears {c} times -- consolidate or rename.",
+            })
+    for idx, line in enumerate(lines, start=1):
+        it = line["item"]
+        cat_code = it["category_code"] if "category_code" in it.keys() else ""
+        spec_text = (it["catalog_spec"] or "").lower()
+        required = _MARKETPLACE_SPEC_FIELDS.get(cat_code, [])
+        missing_fields = []
+        for fld in required:
+            # Substring match on the field's first word (lowercased) --
+            # supplier wrote free-text spec, so "Number of cores"
+            # checks for "number".
+            key = fld.split()[0].lower()
+            if key not in spec_text:
+                missing_fields.append(fld)
+        if missing_fields:
+            findings.append({
+                "severity": "high" if len(missing_fields) >= 3 else "medium",
+                "line_no": idx,
+                "message": ("Specification incomplete -- missing: "
+                            + ", ".join(missing_fields[:4])
+                            + ("..." if len(missing_fields) > 4 else "")),
+            })
+        if (line["unit_price"] or 0) <= 0:
+            findings.append({
+                "severity": "high",
+                "line_no": idx,
+                "message": "Missing unit price -- BOQ total will not be accurate.",
+            })
+        if not it["supplier_name"]:
+            findings.append({
+                "severity": "low",
+                "line_no": idx,
+                "message": "No supplier attached -- procurement will need to source.",
+            })
+        # Wrong-unit check against the category default UoM.
+        if cat_code in _MARKETPLACE_DEFAULT_UNIT:
+            expected = _MARKETPLACE_DEFAULT_UNIT[cat_code]
+            actual = (it["unit"] or "").strip()
+            if expected and actual and actual != expected:
+                findings.append({
+                    "severity": "low",
+                    "line_no": idx,
+                    "message": f"Unit {actual!r} differs from category default {expected!r}.",
+                })
+    severity_rank = {"high": 0, "medium": 1, "low": 2}
+    findings.sort(key=lambda f: (severity_rank.get(f["severity"], 99), f["line_no"]))
+    return findings
+
 
 
 @app.route("/boms")
@@ -15947,12 +16024,17 @@ def boms_boq(bom_id):
     _bcur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
     _brate = _CURRENCY_RATES_FROM_USD.get(_bcur, 1.0)
     totals = _bom_totals_with_rates(items, bom_rates, fx_rate=_brate)
+    # Compliance Review Agent (lite) -- driven off the same
+    # _MARKETPLACE_SPEC_FIELDS registry the supplier upload form uses,
+    # so both sides of the platform agree on what "complete" means.
+    compliance_findings = _boq_compliance_check(items, totals.get("lines", []))
     return render_template(
         "bom_boq.html",
         user=current_user(),
         bom=bom, items=items, totals=totals, bom_rates=bom_rates,
         currency=_bcur, fx_rate=_brate,
         rates_as_of=_CURRENCY_RATES_AS_OF,
+        compliance_findings=compliance_findings,
     )
 
 
