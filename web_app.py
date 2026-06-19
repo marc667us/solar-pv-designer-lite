@@ -14376,8 +14376,10 @@ def supplier_product_add():
     if not s:
         return redirect(url_for("supplier_dashboard"))
     with get_db() as c:
+        # Include `code` so the template can look up subcategories /
+        # default unit / required spec fields from the taxonomy registries.
         categories = c.execute(
-            "SELECT id, name FROM product_categories "
+            "SELECT id, code, name FROM product_categories "
             "WHERE is_active=1 ORDER BY display_order"
         ).fetchall()
     if request.method == "GET":
@@ -14386,6 +14388,9 @@ def supplier_product_add():
             user=current_user(),
             supplier=s,
             categories=categories,
+            subcategories_by_code=_MARKETPLACE_SUBCATEGORIES,
+            default_unit_by_code=_MARKETPLACE_DEFAULT_UNIT,
+            spec_fields_by_code=_MARKETPLACE_SPEC_FIELDS,
         )
     csrf_protect()
     f = request.form
@@ -14485,14 +14490,51 @@ def _parse_xlsx(stream) -> tuple[list, list]:
 @app.route("/supplier/upload/template")
 @supplier_required
 def supplier_upload_template():
-    """Download a starter CSV template with the canonical columns + one example row."""
+    """Download a starter CSV template -- header row + one example row
+    per category so suppliers see every valid category name + the
+    default unit + a representative subcategory in one file."""
     import io as _io
     buf = _io.StringIO()
     buf.write(",".join(_UPLOAD_REQUIRED_COLS + _UPLOAD_OPTIONAL_COLS) + "\n")
-    buf.write(
-        '"ABB 500 kVA Distribution Transformer","Transformers",9800,'
-        '"ABB","TRF-500-DT","500 kVA, 11/0.433 kV, Dyn11","No.",60,"Distribution"\n'
-    )
+    # One example row per category, drawn from the taxonomy registries.
+    # Format follows _UPLOAD_REQUIRED_COLS + _UPLOAD_OPTIONAL_COLS:
+    #   name, category, price_usd, brand, model, spec, unit, lead_time_days, subcategory
+    examples = {
+        "transformers":        ("ABB 500 kVA Distribution Transformer", 9800, "ABB",       "TRF-500-DT", "500 kVA, 11/0.433 kV, Dyn11, ONAN", 60),
+        "avr":                 ("Servo AVR 30 kVA 3-Phase",              1450, "Generic",   "SAVR-30K",   "30 kVA, 3PH, Servo, +/-15% input range", 21),
+        "hv_cables":           ("11 kV XLPE 3C 70mm2 Cu Armoured",         52, "Nexans",    "HV-11-3C70", "11 kV, Cu, XLPE/SWA/PVC, 3C, 70mm2", 45),
+        "lv_cables":           ("LV 4C 25mm2 Cu XLPE/SWA/PVC",             22, "Nexans",    "LV-4C-25",   "0.6/1 kV, Cu, 4C, 25mm2, XLPE/SWA/PVC", 21),
+        "wires":               ("Single Core 2.5mm2 PVC Red (100m)",       28, "Generic",   "SC-2.5-R",   "2.5mm2 Cu, 450/750 V, PVC, red", 7),
+        "panel_boards":        ("400A MCC Panel",                        3800, "Schneider", "MCC-400",    "400A TPN MCC, Form 3b, 50kA, IP54", 45),
+        "distribution_boards": ("18-way TPN Distribution Board",          285, "Schneider", "DB-18TPN",   "18-way TPN, 100A incomer, 10kA, IP43", 21),
+        "isolators":           ("63A 4-Pole Isolator",                     58, "Schneider", "ISO-63-4P",  "63A 4P AC isolator, IP65", 14),
+        "fuse_switches":       ("100A Switch Fuse with HRC Fuses",        145, "Schneider", "SF-100-HRC", "100A switch fuse, IP30, HRC fuses included", 21),
+        "conduit":             ("PVC Conduit 25mm Heavy Gauge (3m)",        1, "Generic",   "PVC-25-HG",  "25mm dia heavy-gauge PVC conduit, 3m", 7),
+        "steel_boxes":         ("1 Gang Deep Steel Box",                    3, "Generic",   "SB-1G-D",    "1 gang deep flush steel back box, 50mm deep", 7),
+        "circular_boxes":      ("Ceiling Circular Box 65mm",                2, "Generic",   "CB-65",      "65mm dia ceiling box with knockouts", 7),
+        "cable_trays":         ("Perforated Cable Tray 300mm (3m)",        18, "Generic",   "CT-300P",    "300mm perforated cable tray, HDG, 3m", 21),
+        "trunking":            ("PVC Mini Trunking 38x16mm (2m)",           4, "Generic",   "MT-38-16",   "PVC mini trunking, 38x16mm, white, 2m", 7),
+        "earthing":            ("Copper Earth Bar 600mm",                  52, "Generic",   "EB-600",     "600mm Cu earth bar, 25mm x 6mm, 10 holes", 14),
+        "sockets":             ("MK 13A Twin Switched Socket",             14, "MK",        "K2747WHI",   "13A twin switched socket, white, flush", 7),
+        "dp_switches":         ("20A DP Water Heater Switch",              11, "MK",        "K5403WHI",   "20A DP switch with neon, flush, white", 7),
+        "light_switches":      ("1 Gang 2 Way Switch",                      6, "MK",        "K4871WHI",   "1 gang 2 way switch, 10A, white", 7),
+        "solar_equipment":     ("JA Solar 550W Mono PV Module",           180, "JA Solar",  "JAM72S30-550", "550W, mono-PERC, 72-cell, 21.3% eff.", 21),
+        "power_system":        ("250 kVA Cummins Genset",               28500, "Cummins",   "C250D5",     "250 kVA, 3PH, diesel, open-set, 1500 rpm", 45),
+        "ict_elv":             ("24-port Gigabit PoE+ Switch",            620, "Cisco",     "CBS250-24P", "24-port Gigabit + 4 SFP, PoE+ 195W, managed", 21),
+    }
+    code_to_label = {row[0]: row[1] for row in _MARKETPLACE_CATEGORIES}
+    for code, _label, _icon, _order in _MARKETPLACE_CATEGORIES:
+        ex = examples.get(code)
+        if not ex:
+            continue
+        name, price, brand, model, spec, lead = ex
+        unit = _MARKETPLACE_DEFAULT_UNIT.get(code, "No.")
+        subcats = _MARKETPLACE_SUBCATEGORIES.get(code, [])
+        sub = subcats[0] if subcats else ""
+        buf.write(
+            f'"{name}","{code_to_label[code]}",{price},'
+            f'"{brand}","{model}","{spec}","{unit}",{lead},"{sub}"\n'
+        )
     return (
         buf.getvalue(),
         200,

@@ -26,22 +26,27 @@
           </div>
           <div class="col-md-6">
             <label class="form-label small text-secondary">Category *</label>
-            <select class="form-select" name="category_id" required>
-              <option value="">Select category</option>
-              {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+            <select class="form-select" name="category_id" id="cat_select" required>
+              <option value="" data-code="">Select category</option>
+              {% for c in categories %}<option value="{{ c.id }}" data-code="{{ c.code }}">{{ c.name }}</option>{% endfor %}
             </select>
           </div>
           <div class="col-md-6">
             <label class="form-label small text-secondary">Subcategory</label>
-            <input class="form-control" name="subcategory" placeholder="Distribution">
+            <select class="form-select" name="subcategory" id="subcat_select">
+              <option value="">-- pick a category first --</option>
+            </select>
           </div>
           <div class="col-md-12">
-            <label class="form-label small text-secondary">Specification</label>
+            <label class="form-label small text-secondary d-flex justify-content-between">
+              <span>Specification</span>
+              <span id="spec_hint" class="text-warning" style="font-size:0.8rem;"></span>
+            </label>
             <textarea class="form-control" name="spec" rows="3" placeholder="500 kVA, 11/0.433 kV, Dyn11, ONAN, IEC 60076"></textarea>
           </div>
           <div class="col-md-3">
             <label class="form-label small text-secondary">Unit</label>
-            <input class="form-control" name="unit" value="No." placeholder="No.">
+            <input class="form-control" name="unit" id="unit_input" value="No." placeholder="No.">
           </div>
           <div class="col-md-5">
             <label class="form-label small text-secondary">Unit price (USD) *</label>
@@ -65,4 +70,39 @@
     </div>
   </div>
 </div>
+
+<script>
+  // Taxonomy registries from web_app.py (_MARKETPLACE_SUBCATEGORIES /
+  // _MARKETPLACE_DEFAULT_UNIT / _MARKETPLACE_SPEC_FIELDS) flow in via Jinja
+  // |tojson and drive subcategory dropdown, unit default, and spec-field hint.
+  const SUBCATS    = {{ subcategories_by_code | tojson }};
+  const UNITS      = {{ default_unit_by_code | tojson }};
+  const SPEC_HINTS = {{ spec_fields_by_code | tojson }};
+
+  const catSel   = document.getElementById('cat_select');
+  const subSel   = document.getElementById('subcat_select');
+  const unitInp  = document.getElementById('unit_input');
+  const specHint = document.getElementById('spec_hint');
+
+  function refreshTaxonomy() {
+    const opt  = catSel.options[catSel.selectedIndex];
+    const code = opt ? opt.getAttribute('data-code') : '';
+    // Subcategory dropdown
+    subSel.innerHTML = '';
+    const subs = (code && SUBCATS[code]) ? SUBCATS[code] : [];
+    if (!subs.length) {
+      subSel.innerHTML = '<option value="">-- pick a category first --</option>';
+    } else {
+      subSel.appendChild(new Option('-- choose subcategory --', ''));
+      subs.forEach(s => subSel.appendChild(new Option(s, s)));
+    }
+    // Default unit
+    if (code && UNITS[code]) { unitInp.value = UNITS[code]; }
+    // Spec field hint
+    const hint = (code && SPEC_HINTS[code]) ? SPEC_HINTS[code] : [];
+    specHint.textContent = hint.length ? ('Required: ' + hint.join(', ')) : '';
+  }
+  catSel.addEventListener('change', refreshTaxonomy);
+  refreshTaxonomy();
+</script>
 {% endblock %}
