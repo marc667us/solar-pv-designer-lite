@@ -429,13 +429,61 @@ Ground mount shows STEEL POST / CONCRETE FOOTING / PURLIN BEAM / EARTH ROD hardw
 - CSRF on all POST forms (`_csrf` field)
 - Content Security Policy headers
 - Paystack webhook signature verification
-- Audit log table + structured JSON security log
+- Audit log table (`audit_logs`) + structured JSON security log — **unified** as of Phase 6 so JWT denials, OIDC events, and admin actions land in one table
 - `robots.txt` (blocks crawlers)
-- Zero Trust architecture, RBAC (9 roles) — documented in `SECURITY.md`
-- RLS on 18 tenant tables (PostgreSQL migrations ready)
+- Zero Trust architecture, RBAC documented in `SECURITY.md`
+- **RLS live on Postgres** (migration `003_rls_tenant.sql` applied 2026-06-20 — workflow `Apply Keycloak Migrations` run `27850826961`). 14 tenant_id columns + 13 `<table>_tenant_isolation` policies. Parallel-run NULL escapes keep legacy queries unchanged until KEYCLOAK_ENABLED=true.
+- **Keycloak migration shipped (code) — Phases 0-7 all in master.** See `docs/SECURITY_MIGRATION_KEYCLOAK.md`.
 
-**Pending:**
-- Admin 2FA (`pyotp` TOTP)
+### Keycloak authn/authz surface (post-Phase 7)
+
+When `KEYCLOAK_ENABLED=true` is set in Render env:
+
+| Surface | What it does |
+|---|---|
+| `app/security/keycloak_middleware.py` | JWKS-cached `verify_jwt()`, `RequestContext` dataclass |
+| `app/security/decorators.py` | `@require_jwt`, `@require_role(role)`, `@require_any_role(...)`, `@require_scope(scope)`, `@require_tenant_match(path_param)`, `@require_service_account(client_id=None)`. Each is a pass-through when KC is off. |
+| `app/security/tenant_context.py` | `current_tenant_id()`, `apply_tenant_guc(conn)` (sets `app.current_tenant` + `app.current_user` Postgres GUCs), `register_error_handler(app)` (turns `MissingTenantContextError` into 403). Wired into `get_db()`. |
+| `app/security/service_account_client.py` | `get_service_account_token(client_id)` — `client_credentials` grant with per-client cache + 30 s expiry leeway. 5 allowed SA client IDs: catalogue/tender/report/email/payment agents. |
+| `app/security/audit.py` | `write_audit_event(action, *, user_id, username, ip, details, tenant_id, agent_id)`. Non-raising. Auto-detects Phase 6 columns; merges into details on pre-migration schemas. |
+| `app/security/keycloak_events.py` | HMAC-SHA256 verify against `KEYCLOAK_WEBHOOK_SECRET` + per-process TTL dedupe + event-type normalisation. |
+| `app/auth/oidc_routes.py` | Blueprint mounting `GET /auth/login` (PKCE S256 + state + nonce → KC), `GET /auth/callback` (exchange + verify_jwt id_token + HttpOnly cookie `solarpro_rt`), `POST/GET /auth/logout` (end-session + wipe), `POST /auth/refresh`. KC-off → redirect to `/login?legacy=1`. |
+| `app/auth/internal_calls.py` | `agent_get/post/request(client_id, url)` — the ONLY supported channel for an agent to call SolarPro internally. Attaches SA JWT, propagates `ServiceAccountError`. |
+| `POST /api/keycloak/events` | Webhook receiver for the Keycloak event listener SPI. HMAC verify → dedupe → audit row. 202/401/400. |
+| `POST /api/agents/internal/heartbeat` | Pilot SA-only route. Writes `AGENT_HEARTBEAT` audit row with `agent_id=azp`. |
+
+### Required Render env vars when KEYCLOAK_ENABLED=true
+
+| Var | Source |
+|---|---|
+| `KEYCLOAK_ENABLED=true` | hardcoded by `cutover-to-keycloak.yml` |
+| `KEYCLOAK_ISSUER` | GH Secret, e.g. `https://auth.aiappinvent.com/realms/solarpro` |
+| `KEYCLOAK_CLIENT_ID` | GH Secret, default `solarpro-web` |
+| `KEYCLOAK_REDIRECT_URI` | GH Secret, e.g. `https://solarpro.aiappinvent.com/auth/callback` |
+| `KEYCLOAK_WEBHOOK_SECRET` | GH Secret (`openssl rand -hex 32`) — without this `/api/keycloak/events` returns 401 fail-loud |
+| `KC_SA_<NAME>_CLIENT_SECRET` per SA in use | provisioned alongside the realm; held in Vault per `[[project-solar-pv-secrets-engine-proposal-v3]]` |
+
+### Workflows (manual triggers via `gh workflow run`)
+
+| Workflow | When |
+|---|---|
+| `Apply Keycloak Migrations` | Apply 003 + 004 against live Postgres. **Already run 2026-06-20.** |
+| `Cut Over To Keycloak` | Flip KEYCLOAK_ENABLED=true; redeploy; smoke `/auth/login`. Requires `confirm=CUTOVER`. |
+| `Rollback From Keycloak` | Strip all KEYCLOAK_* env; redeploy; smoke `/auth/login → /login?legacy=1`. Requires `confirm=ROLLBACK`. |
+
+### Helper scripts
+
+| Script | Purpose |
+|---|---|
+| `scripts/broadcast_keycloak_migration_email.py` | Brevo bulk send — run 14 days before cutover. `--dry-run` previews cohort. |
+| `scripts/migrate_users_to_keycloak.py` | Build Keycloak partial-import payload from `users` table + POST it. Modes: `--dry-run` / `--export` / `--apply`. Maps `is_admin`+`role` → 13 realm roles. |
+| `scripts/poll_keycloak_events.py` | SPI-less fallback for env-listener delivery. Polls KC admin REST + writes to `audit_logs`. |
+| `scripts/apply_phase4_rls_migration.py` | Local-machine equivalent of the GH workflow (psql wrapper). |
+| `migrations/005_phase7_drop_password_hash.sql` | Day +14 cleanup — renames `password_hash` → `legacy_password_hash` + `is_admin` → `legacy_is_admin`. Idempotent. Run AFTER the 7-day rollback window closes clean. |
+
+**Pending (operator decisions, not code):**
+- Run `Cut Over To Keycloak` on the chosen cutover day (after 14-day Brevo lead time).
+- Run `psql -f migrations/005_phase7_drop_password_hash.sql` on day +14.
 - DMARC DNS: `_dmarc.aiappinvent.com TXT "v=DMARC1; p=none; rua=mailto:marc667us@yahoo.com"`
 
 ---

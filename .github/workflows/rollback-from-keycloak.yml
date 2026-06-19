@@ -1,0 +1,119 @@
+# Phase 7 rollback: revert the cutover by stripping KEYCLOAK_ENABLED
+# (and the rest of the KEYCLOAK_* env vars) from the Render web service
+# and redeploying. The parallel-run code paths fall back to the legacy
+# /login form for every user immediately.
+#
+# Run this anytime during the 7-day rollback window after cutover if a
+# blocking issue surfaces. After redeploy, audit_logs will receive a
+# `CUTOVER_ROLLBACK` row (the next worker boot logs it via init_db's
+# Phase 7 stub).
+
+name: Rollback From Keycloak
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type ROLLBACK to confirm. Anything else aborts."
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      CONFIRM:           ${{ github.event.inputs.confirm }}
+    steps:
+      - name: Verify confirmation
+        run: |
+          if [ "$CONFIRM" != "ROLLBACK" ]; then
+            echo "::error::confirm input must be exactly 'ROLLBACK' (case-sensitive)."
+            exit 1
+          fi
+          echo "Confirmation accepted."
+
+      - name: Fetch current Render env vars
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars?limit=100" \
+            -o /tmp/env_current.json
+          NCOUNT=$(jq 'length' /tmp/env_current.json)
+          echo "Render currently holds $NCOUNT env vars."
+
+      - name: Strip every KEYCLOAK_* entry
+        run: |
+          set -e
+          jq '
+            [.[] | .envVar | {key, value}]
+            | map(select(.key | startswith("KEYCLOAK_") | not))
+          ' /tmp/env_current.json > /tmp/env_stripped.json
+          NCOUNT=$(jq 'length' /tmp/env_stripped.json)
+          echo "Post-rollback set has $NCOUNT env vars."
+
+      - name: PUT stripped env-var set
+        run: |
+          set -e
+          curl -fsS -X PUT \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data-binary "@/tmp/env_stripped.json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars" \
+            | jq 'length as $n | "Render confirmed \($n) env vars set."'
+
+      - name: Trigger redeploy
+        id: deploy
+        run: |
+          set -e
+          DEPLOY=$(curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}' \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys")
+          DEPLOY_ID=$(echo "$DEPLOY" | jq -r '.id')
+          echo "Render deploy id: $DEPLOY_ID"
+          echo "id=$DEPLOY_ID" >> $GITHUB_OUTPUT
+
+      - name: Wait for deploy live
+        env:
+          DEPLOY_ID: ${{ steps.deploy.outputs.id }}
+        run: |
+          set -e
+          for i in $(seq 1 20); do
+            STATUS=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$DEPLOY_ID" \
+              | jq -r '.status')
+            echo "[$i/20] deploy status: $STATUS"
+            case "$STATUS" in
+              live)            exit 0 ;;
+              build_failed|deactivated|canceled|update_failed)
+                echo "::error::deploy failed: $STATUS"; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::warning::deploy did not reach 'live' in 5 minutes; verify manually."
+
+      - name: Smoke /auth/login expects legacy fallback
+        run: |
+          set -e
+          for i in $(seq 1 6); do
+            LOC=$(curl -sS -o /dev/null -w "%{redirect_url}" \
+              https://solarpro.aiappinvent.com/auth/login)
+            echo "[$i/6] /auth/login -> $LOC"
+            if echo "$LOC" | grep -q "/login?legacy=1"; then
+              echo "Rollback smoke PASS."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::/auth/login still pointing at Keycloak; rollback may not have applied."
+          exit 1
+
+      - name: Summary
+        run: |
+          echo "KEYCLOAK_ENABLED stripped from Render. Live site is back on the legacy login form."

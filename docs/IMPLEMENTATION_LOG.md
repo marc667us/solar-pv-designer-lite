@@ -1604,3 +1604,59 @@ The four plan §8.4 full DB-RLS acceptance cases (cross-tenant 404, cross-FK 404
 - `audit_logs` table has no partitioning; a chatty Keycloak realm could grow it fast. Phase 6's index set covers the common queries; rotate via the existing 1-year-hot retention rule documented in the migration plan §15.
 
 **Next Recommended Step:** Phase 7 — user migration + cutover. Plan §19 tasks 33-38. Build `scripts/migrate_users_to_keycloak.py` (partial-import via Keycloak admin REST); Brevo broadcast 14 days before; cutover day: flip `KEYCLOAK_ENABLED=true` + deploy + smoke; 7-day rollback window; day +14 drop `users.password_hash` + remove legacy form + final deploy.
+
+---
+
+# Implementation Log Entry — Phase 7 cutover toolkit + live migrations applied
+
+**Date:** 2026-06-20
+**Task:** Phase 7 of `docs/SECURITY_MIGRATION_KEYCLOAK.md`, plan §19 tasks 33-38.
+**Status:** Code-complete. Cutover is a single `gh workflow run "Cut Over To Keycloak" --field confirm=CUTOVER` after the Brevo 14-day window.
+
+**Objective:** Ship every script + workflow the cutover/rollback/day-+14 cleanup needs so the remaining steps are owner-timed button presses, not code work. Plus: apply migrations 003 + 004 to live Postgres to close Q-gates 1.1, 1.2, 6.1.
+
+**Files Changed:**
+- `.github/workflows/apply-keycloak-migrations.yml` — fetches Postgres URL via Render API, applies 003 + 004, verifies. **Already run 2026-06-20** (run `27850826961`).
+- `.github/workflows/cutover-to-keycloak.yml` — flips KEYCLOAK_ENABLED=true + 4 KEYCLOAK_* env vars from GH Secrets onto Render, redeploys, smokes `/auth/login` expecting redirect to Keycloak. Requires `confirm=CUTOVER`.
+- `.github/workflows/rollback-from-keycloak.yml` — strips every KEYCLOAK_* env var, redeploys, smokes `/auth/login` expecting `/login?legacy=1`. Requires `confirm=ROLLBACK`.
+- `scripts/migrate_users_to_keycloak.py` (~325 lines) — three modes (`--dry-run` / `--export` / `--apply`). Reads `users` from Postgres or SQLite, maps `is_admin` + `role` → 13 Keycloak realm roles (legacy default → `solar_engineer`, unknown → `customer` as least-privilege), splits `name` → first/last, copies country/company/plan/trial_end_date/referral_code into Keycloak attributes, attaches `requiredActions=["UPDATE_PASSWORD"]` — legacy bcrypt hashes are NOT carried across. Idempotent via `ifResourceExists=SKIP` (override with `--overwrite`).
+- `scripts/broadcast_keycloak_migration_email.py` (~165 lines) — Brevo bulk send. `--dry-run` previews cohort + body. `--send` actually mails (default `--limit 5` safety cap; `--include-username` allowlist for staged rollouts). Default cutover date = today + 14 days.
+- `migrations/005_phase7_drop_password_hash.sql` (idempotent, NOT yet applied) — Day-+14 cleanup. RENAMEs `users.password_hash` → `legacy_password_hash` + `users.is_admin` → `legacy_is_admin` (so forensic SELECTs survive 30 days). Truncates `login_failures` older than 90 days.
+- `tests/security/test_user_migration.py` — 33 tests.
+- `CLAUDE.md` — `## Security` section rewritten with the post-Keycloak surface: per-module responsibilities, required Render env vars, manual workflow triggers, helper-script index, operator-decision pending list.
+- `docs/SECURITY_ARCHITECTURE.md` — Q-gates 1.1 + 1.2 + 6.1 marked **closed (2026-06-20)** with the workflow run id.
+
+**Database Changes:** Migrations 003 + 004 APPLIED to live Postgres. Verification all green: 3 SQL helpers, 14 tenant_id columns, 13 tenant_isolation policies, audit_logs surface complete, 3 indexes + 2 policies on audit_logs. No DDL failures.
+
+**API Changes:** none (OIDC routes already shipped in Phase 5).
+
+**Frontend Changes:** none yet — `templates/login.html` keeps its existing form. Day +14 cleanup will land the "Sign in with Keycloak" button + `?legacy=1` gate.
+
+**Security Changes:**
+- Live Postgres now carries Phase 4 RLS. Parallel-run NULL escapes mean no behaviour change today; the moment `KEYCLOAK_ENABLED=true` lands, RLS enforces tenant isolation per row.
+- Cutover/rollback workflows refuse to run without literal `confirm=` value — prevents accidental clicks.
+- Migration script does NOT carry password hashes across. Aligns with plan §4.8 + FOSS rule + brief §14.
+
+**Tests Added:** 33 — role mapping (15 cases inc. case-insensitive), name split (5), UserRepresentation build (3), admin token + realm resolution + push_partial_import (10 cases inc. happy + sad paths).
+
+**Test Results:** `pytest tests/security/` — **179/179 PASS**. Smoke 7/7. py_compile clean. Live verification queries green.
+
+**Documentation Updated:** this entry + project CLAUDE.md `## Security` + SECURITY_ARCHITECTURE.md Q-gates.
+
+**What Was Completed:** §19 task 33 (migration script), task 34 (broadcast script), task 35 (cutover workflow), task 36 (rollback workflow + 005 cleanup migration), task 37 (CLAUDE.md update), task 38 (this log entry).
+
+**What Remains:** ONLY owner-timed actions.
+
+| When | Action | Command |
+|---|---|---|
+| 14 days before cutover | Brevo broadcast | `python scripts/broadcast_keycloak_migration_email.py --send --limit <cohort>` |
+| Cutover day | Flip + deploy | `gh workflow run "Cut Over To Keycloak" --field confirm=CUTOVER` |
+| Anytime in 7-day rollback window | Rollback if blocked | `gh workflow run "Rollback From Keycloak" --field confirm=ROLLBACK` |
+| Day +14 after clean rollback window | Drop password_hash | `psql $DATABASE_URL -v ON_ERROR_STOP=1 -f migrations/005_phase7_drop_password_hash.sql` |
+
+**Known Risks:**
+- Cutover workflow requires KEYCLOAK_ISSUER + KEYCLOAK_CLIENT_ID + KEYCLOAK_REDIRECT_URI + KEYCLOAK_WEBHOOK_SECRET as GH Secrets. Workflow validates them and fails loud if missing.
+- Migration `--apply` needs `KC_SA_ADMIN_CONSOLE_CLIENT_SECRET` in env (the realm's `solarpro-admin-console` confidential client secret).
+- A migration run while new accounts are being created could create dupes; `ifResourceExists=SKIP` default sidesteps that.
+
+**Next Recommended Step:** Owner picks the cutover date, runs the Brevo broadcast 14 days prior. Everything after is button presses.
