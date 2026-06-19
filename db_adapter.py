@@ -139,6 +139,82 @@ def _translate_sqlite_to_postgres(sql: str) -> str:
     return sql
 
 
+class _PgCursorWrap:
+    """Proxy around a psycopg2 DictCursor that adds a sqlite3-style
+    `lastrowid` attribute. psycopg2 doesn't populate cursor.lastrowid for
+    plain INSERTs -- only RETURNING-style inserts. SolarPro has 9 call
+    sites that do `cur = c.execute("INSERT ..."); pid = cur.lastrowid`,
+    so without this proxy they all see None on Postgres and the next
+    redirect or join blows up (e.g. /boms/None -> 404, /rfqs/None -> 404).
+
+    Behaviour:
+      - Every cursor attribute / method (`fetchone`, `fetchall`, `rowcount`,
+        iteration, ...) proxies to the underlying psycopg2 cursor.
+      - `lastrowid` is computed lazily on first read:
+          * If the last statement was an INSERT, run `SELECT lastval()` in
+            the same connection (cheap, current-session sequence value).
+          * Otherwise return None (matches sqlite3 semantics for non-insert
+            statements).
+      - The connection adapter sets `_was_insert` after each execute so the
+        proxy knows whether lastval() is meaningful.
+    """
+
+    __slots__ = ("_cur", "_conn", "_was_insert", "_lastrowid_cache")
+
+    def __init__(self, raw_cursor, conn, was_insert):
+        object.__setattr__(self, "_cur", raw_cursor)
+        object.__setattr__(self, "_conn", conn)
+        object.__setattr__(self, "_was_insert", was_insert)
+        object.__setattr__(self, "_lastrowid_cache", None)
+
+    @property
+    def lastrowid(self):
+        if not self._was_insert:
+            return None
+        if self._lastrowid_cache is not None:
+            return self._lastrowid_cache
+        # Use a throwaway cursor so we don't disturb the wrapped cursor's
+        # rowset (some callers run `cur = c.execute(INSERT); cur.fetchone()`
+        # after INSERT ... RETURNING, although SolarPro doesn't today).
+        side = self._conn.cursor()
+        try:
+            side.execute("SELECT lastval()")
+            row = side.fetchone()
+            val = row[0] if row else None
+        except Exception:
+            # lastval() raises if no sequence has been called in this session
+            # -- happens when INSERT was into a table with no SERIAL column.
+            # Match sqlite3 behaviour: return None silently.
+            val = None
+        finally:
+            side.close()
+        object.__setattr__(self, "_lastrowid_cache", val)
+        return val
+
+    def __getattr__(self, name):
+        # Anything not handled above (fetchone, fetchall, rowcount, close,
+        # description, ...) goes straight to the wrapped cursor.
+        return getattr(self._cur, name)
+
+    def __iter__(self):
+        return iter(self._cur)
+
+
+def _is_insert(sql: str) -> bool:
+    """Cheap check for whether a translated SQL statement is an INSERT.
+    Used by the cursor wrapper to know if lastval() is meaningful."""
+    s = sql.lstrip()
+    if not s:
+        return False
+    # Skip leading comment lines.
+    while s.startswith("--"):
+        nl = s.find("\n")
+        if nl == -1:
+            return False
+        s = s[nl + 1:].lstrip()
+    return s[:6].upper() == "INSERT"
+
+
 class _PgConnAdapter:
     """Wraps a psycopg2 connection so it works in the same idioms the
     SolarPro codebase uses against sqlite3. See module docstring for the
@@ -168,7 +244,7 @@ class _PgConnAdapter:
             translated = translated.replace("?", "%s")
         cur = self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         cur.execute(translated, params if params else None)
-        return cur
+        return _PgCursorWrap(cur, self._conn, _is_insert(translated))
 
     def executemany(self, sql, seq_of_params):
         """Run the same statement for each row of params. Mirrors
@@ -187,7 +263,7 @@ class _PgConnAdapter:
         # psycopg2 expects a list of tuples / mappings; coerce generic
         # iterables to a list so cursor.executemany can iterate it.
         cur.executemany(translated, list(seq_of_params))
-        return cur
+        return _PgCursorWrap(cur, self._conn, _is_insert(translated))
 
     def executescript(self, sql_text):
         """Run a multi-statement SQL string. Postgres doesn't have
