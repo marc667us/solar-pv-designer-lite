@@ -146,6 +146,36 @@ Procurement module bolted into `web_app.py` as the user-acquisition magnet for s
 
 **Last shipped:** Slice 9 = `dd22a92` (Procurement Center + Basic Price Sheet). Slice 9 has NOT been through a Codex round-1 review yet — earlier slices had 8 rounds with 7 HIGH-SEV fixes (state-mutating GET, unverified product leak, paid LLM model, HTML/SMTP injection, zero-target RFQ, missing supplier.address column, supplier-schema not firing in procurement routes).
 
+### Marketplace catalogue rebuild — 2026-06-19 (`8261289`..`86130a5` live; tip `a1732a4`)
+
+Drove `pvsolar1/price master/price prompt.txt` (Electrical Costing, BOM, BOQ & Supplier Marketplace brief).
+
+**21-category taxonomy in `_MARKETPLACE_CATEGORIES`** (was 20; added `power_system` for RMU/Generators/UPS/Switchgear/...). Three central registries co-located with it:
+
+- `_MARKETPLACE_SUBCATEGORIES`   — code → list of subcategory display names (~140 entries across 21 categories). Drives the supplier upload form's subcategory dropdown + the public `/marketplace?cat=&sub=` drilldown chips.
+- `_MARKETPLACE_DEFAULT_UNIT`    — code → UoM (m / Roll / No.). Auto-fills the supplier form's unit field on category change.
+- `_MARKETPLACE_SPEC_FIELDS`     — code → list of required technical spec fields. Shows as "Required: …" hint on the supplier form AND drives the BOQ Compliance Review.
+
+**Seed discipline:** category seed is `INSERT OR IGNORE` (SQLite) / `ON CONFLICT (code) DO NOTHING` (Postgres) so adding a new entry to `_MARKETPLACE_CATEGORIES` lands in existing DBs. Sample seed expanded 27→77 rows; new categories get topped up via `_backfill_marketplace_samples_for_empty_categories` (SQLite) and the Postgres twin. Both helpers use a `_FilteredConn` proxy that filters by `cat_id` (param tuple index 9) so existing populated categories are never disturbed.
+
+**BOQ Compliance Review** at `/boms/<id>/boq` — `_boq_compliance_check(items, lines)` returns severity-ranked findings: missing spec fields (substring-match against `ec.spec`), missing unit price (high), no supplier (low), wrong unit vs category default (low), duplicate item names (medium). No-print red panel on screen, hidden on the printed client deliverable.
+
+**Public subcategory drilldown:** `/marketplace?cat=<id>&sub=<name>` filters via `LOWER(ec.subcategory)=?`; subcategory chips render below the category chip row.
+
+**Category-grouped grid:** both `/marketplace` and `/procurement-center` render `products_by_category` (list of {category, products}) ordered by display_order; each category gets a gold uppercase section header (icon + name + count badge) above its card / checkbox grid. Uncategorised fallback so nothing is silently dropped.
+
+**Product Catalogue rename** (owner directive): 10 user-visible "Equipment Catalog"/"Add Equipment" strings → "Product Catalogue"/"Add Product" across nav menu, `/procurement/catalog`, `/procurement`, `/upgrade`, `price_sheet_view.html`, web_app.py admin help. British "Catalogue" spelling. `equipment_catalog` table identifier untouched.
+
+**Three Postgres-specific live fixes** uncovered by the smoke test:
+
+1. **`db_adapter.py` lastrowid proxy.** psycopg2 does NOT populate `cursor.lastrowid` for plain INSERTs. Nine `cur = c.execute("INSERT …"); pid = cur.lastrowid` callsites silently redirected to `/boms/None` → 404. New `_PgCursorWrap` proxy class wraps the psycopg2 cursor and computes `lastrowid` lazily via `SELECT lastval()` on first access (cached). All cursor methods (fetchone/fetchall/rowcount/iter/...) delegate to the underlying cursor.
+2. **`db_adapter.py` literal `%` escape.** SolarPro's marketplace SQL has `NOT LIKE 'BulkProd-%'` etc. psycopg2 read those `%` chars as format-string specs whenever params were supplied → `IndexError: list index out of range` on every `/marketplace?cat=<n>`. Fixed by doubling `%`→`%%` BEFORE substituting `?`→`%s`.
+3. **Postgres init missing `marketplace_boms.currency`.** Previous session added the column via SQLite ALTER in `_ensure_bom_tables` but `_ensure_bom_tables` short-circuits to `_ensure_marketplace_schema_postgres` BEFORE the ALTER runs. Added the idempotent `ALTER TABLE marketplace_boms ADD COLUMN IF NOT EXISTS currency VARCHAR(3) DEFAULT 'GHS'` to the Postgres init list.
+
+**Re-runnable live smoke test** at `tmp/live_smoke_test_2026-06-19.py` (25 checks across 4 sections: anonymous public, logged-in nav, marketplace→BOM/RFQ/procurement flows, taxonomy verification). Update the `startswith` commit-hash check before re-running.
+
+**Render auto-deploy gotcha:** Render does NOT auto-deploy on `git push` for this repo. Use `gh workflow run "Force Render Deploy"` after each push. The "Deploy to Railway" workflows on every push are for the legacy Railway host (decommissioned) — they pass but don't touch Render.
+
 ---
 
 ## Health Check Endpoints

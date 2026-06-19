@@ -1,7 +1,63 @@
 # SolarPro Global — Session Context
 
-**Last updated:** 2026-06-08 (Phase 0 emergency-security: credential rotation + staleness sweep)
+**Last updated:** 2026-06-19 (Marketplace catalogue rebuild + Postgres bug fixes + Product Catalogue rename — live deploy verified 25/25)
 **Purpose:** capture in-flight state so any session can resume mid-task without re-discovery.
+
+## 2026-06-19 (catalogue session — 11 commits, live verified)
+
+**Source prompt:** `pvsolar1/price master/price prompt.txt` (Electrical Costing, BOM, BOQ & Supplier Marketplace brief).
+
+**Final live state** (HEAD `86130a5` on `solarpro.aiappinvent.com`, repo tip `a1732a4`):
+
+- **21-category product taxonomy** in `_MARKETPLACE_CATEGORIES`. New 21st category `power_system` (RMU, Generators, UPS, Switchgear, etc.) closed the prompt's "Power System Equipment" gap.
+- **Three central registries** sitting next to `_MARKETPLACE_CATEGORIES`:
+  - `_MARKETPLACE_SUBCATEGORIES` (~140 entries) — drives the supplier upload form's subcategory dropdown + the `/marketplace?sub=` drilldown chips.
+  - `_MARKETPLACE_DEFAULT_UNIT` — auto-fills the unit field on category change.
+  - `_MARKETPLACE_SPEC_FIELDS` — surfaces as "Required: …" hint on the supplier form AND drives the BOQ Compliance Review.
+- **Seed discipline:** category seed converted to `INSERT OR IGNORE` (SQLite) / `ON CONFLICT (code) DO NOTHING` (Postgres) so new categories actually land in existing DBs. Sample seed expanded 27→77 rows. New helpers `_backfill_marketplace_samples_for_empty_categories` (SQLite) + Postgres twin top up empty categories without touching populated ones.
+- **14 new brand suppliers** added to the Postgres seed: Eaton, Hager, Legrand, Siemens, Polycab, RR Kabel, JA Solar, Victron, Pylontech, Cummins, APC, Cisco, Hikvision, Honeywell.
+- **Forms wired to registries:** supplier add form, admin product-edit form, and CSV upload template (22 example rows, one per category). Admin form preserves legacy free-text values as "(legacy)" options.
+- **Public subcategory drilldown:** `/marketplace?cat=&sub=` filters via LOWER() exact match.
+- **Category-grouped grid** on both `/marketplace` and `/procurement-center` — gold section headers with icon + count badge above each category's card / checkbox grid.
+- **BOQ Compliance Review panel** at `/boms/<id>/boq` — HIGH/MED/LOW findings driven off `_MARKETPLACE_SPEC_FIELDS` + `_MARKETPLACE_DEFAULT_UNIT`. No-print so it stays off the client PDF.
+- **"Equipment Catalog" → "Product Catalogue" UI rename** (10 strings across 7 templates + web_app.py admin help) after the owner flagged the first equipment→product pass had missed the literal phrase. British spelling.
+
+**Three live Postgres-only bug fixes uncovered by today's smoke test:**
+
+| Commit | Bug | Fix |
+|---|---|---|
+| `ad5261f` | `cur.lastrowid` is `None` on psycopg2 INSERTs → 9 callsites redirect to `/boms/None` → 404 | `_PgCursorWrap` proxy in db_adapter.py adds lazy `SELECT lastval()` |
+| `acbbc03` | Literal `%` in SQL (`NOT LIKE 'BulkProd-%'`) → `IndexError` when params supplied | Double `%`→`%%` before `?`→`%s` translation |
+| `859f6af` | `marketplace_boms.currency` column never added on Postgres → `/procurement-center/add doc_type=bom` 500'd with UndefinedColumn | Add idempotent ALTER + Postgres per-category backfill helper |
+
+**Live verification:** `tmp/live_smoke_test_2026-06-19.py` re-runnable. 25/25 PASS. Update the `startswith` commit-hash check at the top before re-running after future changes.
+
+**Render deploy gotcha:** Render auto-deploy does NOT fire on `git push` for this repo. Use `gh workflow run "Force Render Deploy"` after each push. The "Deploy to Railway" workflow on every push is for the decommissioned legacy host.
+
+**Commit list:**
+
+```
+a1732a4 test(live): add re-runnable live smoke test for the 2026-06-19 catalogue work
+86130a5 feat(marketplace): rename Equipment Catalog -> Product Catalogue in UI
+859f6af fix(pg): add marketplace_boms.currency + per-category sample backfill
+acbbc03 fix(db): escape literal % in SQL before psycopg2 parameter binding
+e7a469e feat(boq): Compliance Review panel driven by marketplace spec registry
+14e33d6 feat(marketplace): group products by category + rename equipment->product
+ad5261f fix(db): expose lastrowid on Postgres -- /boms/None + /rfqs/None bug
+ab01e38 feat(marketplace): public subcategory drilldown -- ?sub=<name> filter
+cb0bedc feat(marketplace): wire admin product-edit form to taxonomy registries
+9a8540a feat(marketplace): wire supplier form + CSV template to new taxonomy
+8261289 feat(marketplace): expand product taxonomy per electrical marketplace brief
+```
+
+### Carry-over for next session
+
+- BOQ generator section mapping not yet using `_MARKETPLACE_SPEC_FIELDS` for the printable client PDF (compliance is in the no-print review only).
+- CSV upload parser doesn't yet enforce required spec fields on import.
+- Procurement Center subcategory drilldown not yet wired — only `/marketplace` got the `?sub=` chips this session.
+- Slice 9 + 9b still have not been through a Codex round-1 review (now further extended by this session's catalogue work). Run `./scripts/quality-gate.sh` before declaring this work formally complete.
+
+---
 
 ## 2026-06-08 (this session)
 
