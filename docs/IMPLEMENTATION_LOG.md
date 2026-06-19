@@ -1232,3 +1232,35 @@ Phase 2 work (decorator + session migration) accounts for 376 / 517 = 73% of the
 **Known Risks:** Feature flag is a *strict* off-by-default. If a future session enables it without first updating the pilot route, every protected route falls through to the old auth stack — still safe, but the new decorators won't do anything. The pilot-route migration is the gate that activates the new stack.
 
 **Next Recommended Step:** Stand up the local Keycloak stack (`bash scripts/keycloak/bootstrap.sh` from Phase 1) and migrate `GET /admin/marketplace` as the pilot route. Both `@admin_required` and `@require_role("marketplace_admin")` decorate the route; with `KEYCLOAK_ENABLED=true` set in env, requests with a `marketplace_admin` JWT pass; without the env set, the old admin auth handles it as before.
+
+---
+
+# Session Close — 2026-06-19 evening
+
+**HEAD:** `6ded729` (live `86130a5`).
+
+**Session summary (catalogue + Keycloak combined):**
+- 11 marketplace catalogue commits (`8261289`..`86130a5`) — live verified 25/25 smoke test.
+- 4 Keycloak migration commits (`e61fb23`..`6ded729`) — spec + Phases 0-2 of `docs/SECURITY_MIGRATION_KEYCLOAK.md`.
+- 2 docs commits (`9ad083f` + `a1732a4`) capturing the catalogue work in CLAUDE.md/context.MD + landing the live smoke test.
+
+**Exact Keycloak resume point:** I was about to byte-patch `web_app.py:14746-14748`:
+```
+@app.route("/admin/marketplace")
+@admin_required
+def admin_marketplace_dashboard():
+```
+Target patch: add `@require_role("marketplace_admin")` ABOVE `@admin_required` (so it runs first when enabled) plus `from app.security.decorators import require_role` in the imports section near line 6-15. **No bytes written yet** — owner called save-and-close mid-flight.
+
+**Where to resume next session:**
+
+1. Re-read `docs/SECURITY_MIGRATION_KEYCLOAK.md` §19 starting at task 11.
+2. Re-read `memory/project_solar_pv_keycloak_migration_plan.md` "Cold-start handoff" section.
+3. Run `bash scripts/keycloak/bootstrap.sh` (Docker required on the operator's machine).
+4. Byte-patch `web_app.py` per the resume point above (Pattern A from CLAUDE.md — NEVER use the Edit tool on web_app.py).
+5. Smoke-test the pilot route with both `KEYCLOAK_ENABLED=true` and unset.
+6. Continue with Phases 3-7 per plan §20.
+
+**Marketplace deferred work:** captured in memory at `project_solar_pv_deferred_marketplace_work` (six carry-over items: BOQ printable PDF compliance, CSV parser spec validation, Procurement Center subcategory drilldown, Codex round-1 on Slice 9, smoke-test extension, Render auto-deploy hook). Owner directive: do AFTER Keycloak Phases 0-2 land. Phases 0-2 are now done; the deferred items become available.
+
+**What's safe in production right now:** Everything. `app/security/` is a new package, not imported by `web_app.py` yet. `KEYCLOAK_ENABLED` env defaults off. Live HEAD is `86130a5` (the catalogue + rename + Postgres bug fixes from earlier in the session); the Keycloak commits are docs + new modules only — no runtime path changed.

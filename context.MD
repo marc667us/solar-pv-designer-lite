@@ -3,6 +3,21 @@
 **Last updated:** 2026-06-19 (Marketplace catalogue rebuild + Postgres bug fixes + Product Catalogue rename — live deploy verified 25/25)
 **Purpose:** capture in-flight state so any session can resume mid-task without re-discovery.
 
+## Session close — 2026-06-19 evening
+
+Repo HEAD: `6ded729`. Live HEAD: `86130a5` (catalogue + UI rename; Keycloak commits are docs + new modules, no runtime change).
+
+This session shipped two distinct workstreams:
+
+1. **Marketplace catalogue rebuild** (11 commits `8261289`..`86130a5`) — live verified 25/25 smoke test. Detail below.
+2. **Keycloak migration plan + Phases 0-2** (4 commits `e61fb23`..`6ded729`) — spec + auth inventory + local Keycloak stack + Flask middleware + 33 passing unit tests. `web_app.py` NOT modified; `KEYCLOAK_ENABLED` defaults off so production is unaffected. Full plan at `docs/SECURITY_MIGRATION_KEYCLOAK.md`.
+
+Marketplace carry-over items (BOQ printable PDF compliance, CSV parser spec validation, Procurement Center subcategory drilldown, Codex round-1 on Slice 9, smoke-test extension, Render auto-deploy hook) deferred to memory `project_solar_pv_deferred_marketplace_work` — pick up AFTER Keycloak Phase 2 task 11 lands.
+
+**Resume next session at:** Phase 2 task 11 — byte-patch `web_app.py:14746` to add `@require_role("marketplace_admin")` above the existing `@admin_required` on `admin_marketplace_dashboard`. See `docs/IMPLEMENTATION_LOG.md` "Session Close" marker for the exact resume point + steps.
+
+---
+
 ## 2026-06-19 (catalogue session — 11 commits, live verified)
 
 **Source prompt:** `pvsolar1/price master/price prompt.txt` (Electrical Costing, BOM, BOQ & Supplier Marketplace brief).
