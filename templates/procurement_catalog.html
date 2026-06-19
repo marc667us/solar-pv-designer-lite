@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Equipment Catalog{% endblock %}
+{% block title %}Product Catalogue{% endblock %}
 {% block content %}
 <div class="container-xl py-4">
 <div class="d-flex align-items-center gap-3 mb-4">
   <div style="font-size:32px;color:var(--solar-gold)"><i class="bi bi-box-seam-fill"></i></div>
   <div>
-    <h4 class="fw-black mb-0">Equipment Catalog</h4>
+    <h4 class="fw-black mb-0">Product Catalogue</h4>
     <div class="text-secondary small">Price library for BOQ and procurement planning</div>
   </div>
   <div class="ms-auto">
     <button class="btn btn-solar btn-sm" data-bs-toggle="modal" data-bs-target="#addItemModal">
-      <i class="bi bi-plus-circle me-1"></i>Add Equipment
+      <i class="bi bi-plus-circle me-1"></i>Add Product
     </button>
   </div>
 </div>
@@ -20,7 +20,7 @@
   <div class="modal-dialog modal-lg">
     <div class="modal-content bg-dark border-secondary">
       <div class="modal-header border-secondary">
-        <h6 class="modal-title">Add Equipment</h6>
+        <h6 class="modal-title">Add Product</h6>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST">
@@ -57,7 +57,7 @@
             <input type="number" name="lead_time_days" value="30" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
         </div>
         <div class="modal-footer border-secondary">
-          <button type="submit" class="btn btn-solar btn-sm">Add Equipment</button>
+          <button type="submit" class="btn btn-solar btn-sm">Add Product</button>
         </div>
       </form>
     </div>

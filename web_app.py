@@ -2476,7 +2476,7 @@ projects and premium features.
   use **Off-grid** only for sites with no grid connection at all.
 - Always run **Test Connection** after saving SMTP settings before trying to send
   your first report.
-- For the most accurate BOQ pricing, use **Settings â†' Equipment Catalog** (admin)
+- For the most accurate BOQ pricing, use **Settings â†' Product Catalogue** (admin)
   to set current local market prices.
 
 ---
