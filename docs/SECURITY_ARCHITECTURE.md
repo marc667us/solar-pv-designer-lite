@@ -32,8 +32,8 @@ Authoritative checklist lives in `SECURITY.md`. This file is the architectural s
 | 0.1 | Plaintext admin creds + git history | user-deferred this session |
 | 0.2 | `campaign_api.py` startup secrets default | file deleted in working tree; commit pending |
 | 0.3 | `/entities` + `/state` no auth | file deleted in working tree; commit pending |
-| 1.1 | Runtime on SQLite, RLS dormant | **in progress** — Phase 4 module + `migrations/003_rls_tenant.sql` ready; `web_app.py:get_db()` now calls `apply_tenant_guc(conn)` on every fresh connection (Phase 5 commit). Closes after `python scripts/apply_phase4_rls_migration.py` runs against live Postgres. |
-| 1.2 | Per-tx tenant context never set | **in progress** — `apply_tenant_guc()` fires on every `get_db()` once `KEYCLOAK_ENABLED=true`; the RLS policy reads `app.current_tenant` / `app.current_user` GUCs. Closes the same moment 1.1 does. |
+| 1.1 | Runtime on SQLite, RLS dormant | **closed (2026-06-20)** — `migrations/003_rls_tenant.sql` applied to live Postgres via workflow `Apply Keycloak Migrations` run `27850826961`. Verification: 3 SQL helpers, 14 tenant_id columns, 13 tenant_isolation policies present. Parallel-run NULL escapes keep legacy code unchanged until `KEYCLOAK_ENABLED=true` flips. |
+| 1.2 | Per-tx tenant context never set | **closed (2026-06-20)** — `apply_tenant_guc()` fires on every `get_db()` call (commit `cb07797`) AND the RLS policies are live on Postgres. The moment `KEYCLOAK_ENABLED=true` is set, `app.current_tenant` + `app.current_user` GUCs drive RLS for every request. |
 | 1.3 | RLS not FORCED | **closed (migration 003)** |
 | 1.4 | `assessment_requests` cross-tenant PII | **closed (migration 003)** |
 | 1.5 | `installers` cross-tenant PII | **closed (migration 003)** |
@@ -45,7 +45,7 @@ Authoritative checklist lives in `SECURITY.md`. This file is the architectural s
 | 2.2 | `revoke-all-sessions` lies | blocked on `web_app.py` edit consent |
 | 2.3 | No object-level auth on campaign writes | moot if portal deleted |
 | 3.3–3.7 | Test coverage matrix | multi-session work |
-| 6.1 | Audit log writes missing | **in progress** — Phase 6 `app/security/audit.py` writes to `audit_logs` via `_audit_denial` + every Keycloak event (webhook or poller); `migrations/004_audit_log_tenant.sql` adds `tenant_id` + `agent_id` columns + append-only RLS. Closes after `psql -f migrations/004_audit_log_tenant.sql` runs on live Postgres. |
+| 6.1 | Audit log writes missing | **closed (2026-06-20)** — `migrations/004_audit_log_tenant.sql` applied (same workflow run). Verification: `tenant_id` + `agent_id` columns on `audit_logs`, 3 indexes (action+time, agent+time, tenant+time), 2 policies (`audit_logs_tenant_isolation` SELECT, `audit_logs_append_only` INSERT). Append-only contract enforced. |
 
 ## Threat model summary
 
