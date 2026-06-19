@@ -1311,3 +1311,66 @@ Target patch: add `@require_role("marketplace_admin")` ABOVE `@admin_required` (
 - If Phase 3 introduces a new realm role that the marketplace dashboard should also accept, swap to `@require_any_role(("marketplace_admin", "platform_super_admin"))`.
 
 **Next Recommended Step:** Phase 3 task 14 — define the five AI service-account clients in `docs/keycloak/realm-export.json` and add `app/security/service_account_client.py`. Plan §19 tasks 14–18.
+
+---
+
+# Implementation Log Entry — Phase 3 service-account broker
+
+**Date:** 2026-06-20
+**Task:** Phase 3 of `docs/SECURITY_MIGRATION_KEYCLOAK.md` — service-account JWTs for SolarPro AI agents. Plan §19 tasks 14, 15, 17 (acceptance), 18.
+**Status:** Done (broker + pilot route + tests). §19 task 16 (agent loader rewrite) deferred-by-design — see "Known Risks" below.
+
+**Objective:** Give every AI agent a way to obtain a Keycloak-signed JWT via `client_credentials` so internal calls can be attributed to the agent's identity (not a shared API key). Land the broker, a re-runnable test suite, and one pilot SA-only route to anchor the acceptance criterion.
+
+**Files Changed:**
+- `app/security/service_account_client.py` (new, ~250 lines)
+  - `get_service_account_token(client_id, *, timeout, _now)` — token fetch with per-client cache, refresh inside a 30 s expiry leeway, parallel-run short-circuit when `KEYCLOAK_ENABLED` is unset.
+  - `authorization_header(client_id)` — convenience wrapper returning `{"Authorization": "Bearer <token>"}` or None.
+  - `clear_cache()` — for tests.
+  - `ServiceAccountError` — single exception type for hard failures.
+  - `ALLOWED_CLIENT_IDS` — frozenset of the 5 SA clients matching `docs/keycloak/realm-export.json`. Typos fail loud.
+  - Env vars: `KEYCLOAK_TOKEN_ENDPOINT` (explicit) or `KEYCLOAK_ISSUER` (derived) + `KC_SA_<NAME>_CLIENT_SECRET` per agent.
+  - Thread safety: `threading.Lock` around cache reads/writes.
+- `tests/security/test_service_account_client.py` (new, 29 tests).
+- `web_app.py` (+2 byte-level edits via `patch_keycloak_agent_internal_route.py`):
+  - L23–27: widened the Phase 2 import to bring in `require_service_account` + `get_request_context` alongside `require_role`.
+  - L18050: new route `POST /api/agents/internal/heartbeat` decorated `@require_service_account()`, emits an `AGENT_HEARTBEAT` audit-log row carrying the JWT's `azp` claim (the agent identity).
+- `new_keycloak_agent_internal_route.py` (new, reproducible route source for Pattern B).
+- `patch_keycloak_agent_internal_route.py` (new, idempotent splice).
+- `tmp/smoke_keycloak_pilot.py` extended with Phase 3 legs C/D.
+
+**Database Changes:** none.
+
+**API Changes:** new `POST /api/agents/internal/heartbeat` — returns `{ok, agent_id, service_account_user}`. Gated by `@require_service_account` (no `client_id` filter so all 5 SAs can heartbeat); with `KEYCLOAK_ENABLED` unset it is a pass-through `200 OK`.
+
+**Frontend Changes:** none — internal-only route.
+
+**Security Changes:**
+- Service-account tokens replace any future "shared API key for inter-service auth" pattern. Acceptance criterion satisfied:
+  - Unauthenticated POST under `KEYCLOAK_ENABLED=true` → `401 MISSING_BEARER` (smoke leg D, plus middleware audit log fires).
+  - Human user JWT under `KEYCLOAK_ENABLED=true` → `403 NOT_SERVICE_ACCOUNT` (covered by `test_human_denied_on_service_account_route` from Phase 2).
+  - Valid SA JWT → `200 OK`, response echoes `azp`, audit log records `AGENT_HEARTBEAT` with `agent_id=<azp>` (covered by `test_correct_service_account_allowed` from Phase 2; the heartbeat handler then writes the audit line explicitly).
+- The broker raises on unknown `client_id` even when `KEYCLOAK_ENABLED` is off — typos in agent code can't degrade silently into "no token".
+
+**Tests Added:**
+- `test_service_account_client.py` — 29 tests covering env validation, parallel-run short-circuit, happy-path fetch, cache hit / leeway refresh / explicit-expiry refresh, per-client isolation, 4xx mapping, network failure, non-JSON response, missing-access-token, endpoint resolution from issuer / explicit override, `expires_in` fallback (missing/zero → 60 s), env-key derivation for all 5 SA clients, `authorization_header` convenience, allowlist parity with realm-export.
+
+**Test Results:**
+- `pytest tests/security/` — 62/62 PASS (33 Phase 2 + 29 Phase 3).
+- `python tmp/smoke_keycloak_pilot.py` — 4/4 PASS (A) anon → 302 /login under KC off; B) no-Bearer → 401 MISSING_BEARER under KC on; C) anon POST → 200 OK on heartbeat under KC off; D) no-Bearer POST → 401 MISSING_BEARER on heartbeat under KC on).
+- `python -c "import py_compile; py_compile.compile('web_app.py', doraise=True)"` — clean.
+
+**Documentation Updated:** this entry. The Phase 3 module docstring documents env-var convention (`KC_SA_<NAME>_CLIENT_SECRET`) so agent authors don't have to re-discover it.
+
+**What Was Completed:** Plan §19 tasks 14 (already shipped in Phase 1's realm export), 15 (broker), 18 (tests), plus the acceptance scaffold (heartbeat route).
+
+**What Remains:**
+- §19 task 16 — rewrite agent loaders in `engine/agents/marketplace/_llm.py` etc. to attach SA tokens to outbound calls. Today those modules **only** talk to external LLM providers (OpenRouter + Ollama); there is no inter-SolarPro call to retrofit yet. Land this when Phase 5 makes agents call back into the SolarPro API. The broker exists and is ready to use; nothing to rewrite that exists today.
+- §19 task 17 — "remove the shared OpenRouter / SMTP API-key path from agent code". The OpenRouter key is the external LLM provider's key (billing/routing); it is not an inter-service auth artifact. The brief's intent reads as proxying LLM calls through a SolarPro-owned gateway authenticated by SA JWT — that is a Phase 5/6 architectural piece, not Phase 3 plumbing. Leaving the existing OpenRouter path intact preserves zero-cost behaviour per `[[feedback-zero-cost-apis]]`.
+- Phase 4 (tenant filter + RLS), Phase 5 (frontend OIDC), Phase 6 (MFA + audit unification), Phase 7 (user migration + cutover).
+
+**Known Risks:**
+- Until Vault rotation lands, secrets sit in env. Document the rotation procedure when Phase 6 wires the audit unification.
+- The heartbeat route is reachable under `KEYCLOAK_ENABLED=false` (parallel-run) and returns 200 with null identity. That is intentional — it lets us deploy the route before flipping the flag — but it means the route must not be reused as a "real" agent endpoint until the flag is on. The audit row is written either way, so a sudden spike in `AGENT_HEARTBEAT` rows with null `agent_id` would flag the parallel-run state to anyone reading the log.
+
+**Next Recommended Step:** Phase 4 task 19 — implement `app/security/tenant_context.py` to extract `tenant_id` from the JWT and set the `app.current_tenant` Postgres GUC per request; rewrite the tenant-owned queries in `web_app.py` to drop the historical `_current_user_id()` filter and rely on RLS as the final defence-in-depth layer.

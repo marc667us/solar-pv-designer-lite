@@ -1,13 +1,19 @@
-"""Phase 2 task 11 smoke test: verify both legs of the parallel-run pilot.
+"""Phase 2 + 3 smoke test for the parallel-run Keycloak pilot.
 
-A) KEYCLOAK_ENABLED unset
-   -> @require_role is a pass-through.
-   -> @admin_required handles the request.
-   -> Anonymous caller is redirected to /login (302).
+Phase 2 — pilot route /admin/marketplace
+  A) KC off, anon -> 302 to /login  (admin_required still gates)
+  B) KC on, no Bearer -> 401 MISSING_BEARER  (require_role short-circuits)
 
-B) KEYCLOAK_ENABLED=true, no Bearer header
-   -> @require_role short-circuits with 401 MISSING_BEARER.
-   -> @admin_required never runs.
+Phase 3 — SA-only route /api/agents/internal/heartbeat
+  C) KC off, anon POST -> 200 OK  (require_service_account is a no-op)
+  D) KC on, no Bearer POST -> 401 MISSING_BEARER
+
+The 200-with-valid-SA-JWT and 403-with-human-JWT legs need a running
+Keycloak that can sign a real JWT for solarpro-catalogue-agent. Those
+are exercised by the unit tests in tests/security/test_decorators.py
+(test_correct_service_account_allowed / test_human_denied_on_service_account_route)
+against synthetic JWTs, and by tests/security/test_service_account_client.py
+against a mocked token endpoint.
 
 We import the Flask app via importlib so we can flip the env var before
 import (`_keycloak_enabled()` re-reads os.environ on every call, but
@@ -68,7 +74,7 @@ def main() -> int:
             else:
                 print(f"      Location: {loc}")
 
-    # ── B) KEYCLOAK_ENABLED=true, no Bearer ─────────────────────────────
+    # ── B) KEYCLOAK_ENABLED=true, no Bearer (Phase 2 pilot) ─────────────
     app_b = _fresh_app(keycloak_enabled=True)
     with app_b.test_client() as c:
         r = c.get("/admin/marketplace", follow_redirects=False)
@@ -79,6 +85,30 @@ def main() -> int:
             failures += 1
         elif "MISSING_BEARER" not in body:
             print(f"      [FAIL] body did not contain MISSING_BEARER: {body[:200]!r}")
+            failures += 1
+        else:
+            print(f"      body: {body.strip()}")
+
+        # ── D) Phase 3 -- KC on, no Bearer on /api/agents/internal/heartbeat ──
+        r = c.post("/api/agents/internal/heartbeat")
+        body = r.get_data(as_text=True)
+        if not check("D) KC on, no Bearer -> 401 MISSING_BEARER (heartbeat)",
+                     r.status_code, 401, body=body):
+            failures += 1
+        elif "MISSING_BEARER" not in body:
+            print(f"      [FAIL] body did not contain MISSING_BEARER: {body[:200]!r}")
+            failures += 1
+        else:
+            print(f"      body: {body.strip()}")
+
+    # ── C) Phase 3 -- KC off, anon POST -> 200 (pass-through) ───────────
+    # Done after B so we don't pollute the previous fresh-app session.
+    app_c = _fresh_app(keycloak_enabled=False)
+    with app_c.test_client() as c:
+        r = c.post("/api/agents/internal/heartbeat")
+        body = r.get_data(as_text=True)
+        if not check("C) KC off, anon -> 200 OK (heartbeat pass-through)",
+                     r.status_code, 200, body=body):
             failures += 1
         else:
             print(f"      body: {body.strip()}")
