@@ -1264,3 +1264,50 @@ Target patch: add `@require_role("marketplace_admin")` ABOVE `@admin_required` (
 **Marketplace deferred work:** captured in memory at `project_solar_pv_deferred_marketplace_work` (six carry-over items: BOQ printable PDF compliance, CSV parser spec validation, Procurement Center subcategory drilldown, Codex round-1 on Slice 9, smoke-test extension, Render auto-deploy hook). Owner directive: do AFTER Keycloak Phases 0-2 land. Phases 0-2 are now done; the deferred items become available.
 
 **What's safe in production right now:** Everything. `app/security/` is a new package, not imported by `web_app.py` yet. `KEYCLOAK_ENABLED` env defaults off. Live HEAD is `86130a5` (the catalogue + rename + Postgres bug fixes from earlier in the session); the Keycloak commits are docs + new modules only — no runtime path changed.
+
+---
+
+# Implementation Log Entry — Phase 2 task 11 closed
+
+**Date:** 2026-06-20
+**Task:** Phase 2 task 11 of `docs/SECURITY_MIGRATION_KEYCLOAK.md` — pilot route migration.
+**Status:** Done.
+
+**Objective:** Wire `@require_role("marketplace_admin")` onto `GET /admin/marketplace` as the first live route covered by the Phase 2 decorators. Parallel-run safe: `KEYCLOAK_ENABLED` env defaults off, so the decorator is a no-op pass-through and the existing `@admin_required` keeps approving exactly as before.
+
+**Files Changed:**
+- `web_app.py` (+2 lines via byte-level patch — CRLF preserved):
+  - L23: new import `from app.security.decorators import require_role`
+  - L14748: new decorator `@require_role("marketplace_admin")` between `@app.route("/admin/marketplace")` and `@admin_required`.
+- `patch_keycloak_pilot_route.py` — reproducible Pattern-A byte patch (idempotent; safe to re-run).
+- `tmp/smoke_keycloak_pilot.py` — re-runnable two-leg smoke test using Flask's test client.
+
+**Database Changes:** none.
+
+**API Changes:** none — `/admin/marketplace` keeps its old contract until `KEYCLOAK_ENABLED=true` is set.
+
+**Frontend Changes:** none.
+
+**Security Changes:**
+- New decorator now sits in front of `@admin_required` on the pilot route.
+- With `KEYCLOAK_ENABLED` unset: pass-through (verified — anon caller still 302 → `/login`).
+- With `KEYCLOAK_ENABLED=true`: short-circuits with `401 MISSING_BEARER` when no Bearer token (verified — audit log fires `PERMISSION_DENIED reason=missing_bearer`).
+
+**Tests Added:** none new — the 33 existing tests under `tests/security/` already cover require_role's 200/403 JWT paths. Added the dual-leg smoke test under `tmp/` instead, to mirror the catalogue-session live smoke test.
+
+**Test Results:**
+- `pytest tests/security/` — 33/33 PASS.
+- `python tmp/smoke_keycloak_pilot.py` — 2/2 PASS (A) anon → 302 /login under KC off; B) no-Bearer → 401 MISSING_BEARER under KC on).
+- `python -c "import py_compile; py_compile.compile('web_app.py', doraise=True)"` — clean.
+
+**Documentation Updated:** this entry; the earlier "Session Close — 2026-06-19 evening" entry already documented the resume point and now resolves cleanly.
+
+**What Was Completed:** Phase 2 in full (tasks 8–12 of plan §19). Pilot route is live in code; the new decorator activates the moment `KEYCLOAK_ENABLED=true` is exported.
+
+**What Remains:** Phase 3 (service-account clients + `app/security/service_account_client.py`) → Phase 4 (`tenant_context.py` + RLS migration) → Phase 5 (frontend OIDC routes) → Phase 6 (MFA + audit unification) → Phase 7 (user migration + cutover). Per plan §19 + §20, ~6 engineer-days.
+
+**Known Risks:**
+- The 200-with-valid-JWT and 403-with-wrong-role paths against the **live** pilot route are not exercised here — those require `bash scripts/keycloak/bootstrap.sh` to stand up local Keycloak. The 33 unit tests cover the decorator behaviour against synthetic JWTs, so the gap is "did Flask wire the decorator correctly?", which the smoke test answers (it did).
+- If Phase 3 introduces a new realm role that the marketplace dashboard should also accept, swap to `@require_any_role(("marketplace_admin", "platform_super_admin"))`.
+
+**Next Recommended Step:** Phase 3 task 14 — define the five AI service-account clients in `docs/keycloak/realm-export.json` and add `app/security/service_account_client.py`. Plan §19 tasks 14–18.

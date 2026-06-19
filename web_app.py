@@ -20,6 +20,7 @@ from config.global_solar_data import (GLOBAL_DATA, get_countries, get_regions,
 from calculation.ac_cable_sizing import size_all_cables
 from api_manager import api as _api
 import secrets_broker as _sb  # Phase 1: audit + tier + Vault-ready secret reads
+from app.security.decorators import require_role  # Phase 2: Keycloak parallel-run decorators
 
 # Structured logging (tenant-aware JSON logs)
 try:
@@ -14744,6 +14745,7 @@ def _log_marketplace_action(action: str, target_kind: str, target_id: int, notes
 
 
 @app.route("/admin/marketplace")
+@require_role("marketplace_admin")  # Phase 2 pilot: enforced only when KEYCLOAK_ENABLED=true
 @admin_required
 def admin_marketplace_dashboard():
     """Admin landing for the marketplace verification queue."""
