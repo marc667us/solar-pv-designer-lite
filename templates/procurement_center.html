@@ -105,9 +105,16 @@
       </form>
     </div>
 
-    {% if products %}
-    <div class="row g-3">
-      {% for p in products %}
+    {% if products_by_category %}
+    {% for group in products_by_category %}
+    <div class="d-flex align-items-center mb-2 mt-3" style="border-bottom:1px solid #1e1e3a;padding-bottom:6px">
+      <h6 class="fw-black mb-0 me-2 text-warning" style="text-transform:uppercase;letter-spacing:.5px;font-size:13px">
+        <i class="{{ group.category.icon or 'bi-box' }} me-1"></i>{{ group.category.name }}
+      </h6>
+      <span class="badge bg-dark text-white" style="font-size:11px">{{ group.products|length }}</span>
+    </div>
+    <div class="row g-3 mb-2">
+      {% for p in group.products %}
       <div class="col-12 col-md-6">
         <label class="solar-card h-100 p-3 d-flex align-items-start gap-3" style="cursor:pointer;display:block !important">
           <input type="checkbox" name="product_ids" value="{{ p.id }}" class="form-check-input mt-1 prod-chk" style="transform:scale(1.3)">
@@ -133,6 +140,7 @@
       </div>
       {% endfor %}
     </div>
+    {% endfor %}
     {% else %}
     <div class="solar-card p-5 text-center">
       <i class="bi bi-search text-secondary" style="font-size:48px"></i>

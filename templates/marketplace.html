@@ -127,10 +127,19 @@
   {% endif %}
 </div>
 
-<!-- Product grid -->
-{% if products %}
-<div class="row g-3 mb-4">
-  {% for p in products %}
+<!-- Product grid -- grouped by category. Each category renders as its own
+     titled section so visitors see "Transformers", "LV Power Cables", etc.
+     as labels rather than a flat sea of cards. -->
+{% if products_by_category %}
+{% for group in products_by_category %}
+<div class="d-flex align-items-center mb-2 mt-3" style="border-bottom:1px solid #1e1e3a;padding-bottom:6px">
+  <h6 class="fw-black mb-0 me-2 text-warning" style="text-transform:uppercase;letter-spacing:.5px;font-size:13px">
+    <i class="{{ group.category.icon or 'bi-box' }} me-1"></i>{{ group.category.name }}
+  </h6>
+  <span class="badge bg-dark text-white" style="font-size:11px">{{ group.products|length }}</span>
+</div>
+<div class="row g-3 mb-3">
+  {% for p in group.products %}
   <div class="col-12 col-md-6 col-lg-4">
     <div class="solar-card h-100 p-3 d-flex flex-column">
       <div class="d-flex align-items-start justify-content-between mb-2">
@@ -195,6 +204,7 @@
   </div>
   {% endfor %}
 </div>
+{% endfor %}
 {% else %}
 <div class="solar-card p-5 text-center">
   <i class="bi bi-search" style="font-size:48px;color:#9090c0"></i>

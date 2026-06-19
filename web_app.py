@@ -14167,12 +14167,36 @@ def marketplace_public():
         d = dict(p)
         d["price_in_currency"] = float(d.get("price_usd") or 0) * float(rate)
         products_view.append(d)
+    # Group products by category for the category-sectioned grid view.
+    # Preserves the display_order from the categories list (set above)
+    # so sections render in the same order as the chip row.
+    products_by_category = []
+    _seen_cat_ids = set()
+    for cat in categories:
+        prods = [pv for pv in products_view if pv.get("category_id") == cat["id"]]
+        if prods:
+            products_by_category.append({
+                "category": cat,
+                "products": prods,
+            })
+            _seen_cat_ids.add(cat["id"])
+    # Catch any products whose category_id no longer points at an
+    # active category row (legacy rows with category_id=0, etc.).
+    orphans = [pv for pv in products_view
+               if pv.get("category_id") not in _seen_cat_ids]
+    if orphans:
+        products_by_category.append({
+            "category": {"id": 0, "code": "uncategorised",
+                          "name": "Uncategorised", "icon": "bi-box"},
+            "products": orphans,
+        })
 
     return render_template(
         "marketplace.html",
         user=current_user(),
         categories=categories,
         products=products_view,
+        products_by_category=products_by_category,
         subcategories_for_selected=subcategories_for_selected,
         selected_subcategory=sub,
         total_products=total_products,
@@ -17365,7 +17389,7 @@ def procurement_center():
 
         sql = (
             "SELECT ec.id, ec.name, ec.brand, ec.model, ec.spec, ec.unit, "
-            "       ec.price_usd, ec.lead_time_days, "
+            "       ec.price_usd, ec.lead_time_days, ec.category_id, "
             "       s.name AS supplier_name, s.country AS supplier_country, "
             "       s.phone AS supplier_phone, s.email AS supplier_email, "
             "       pc.name AS category_name, pc.icon AS category_icon "
@@ -17393,12 +17417,31 @@ def procurement_center():
         d = dict(p)
         d["price_in_currency"] = float(d["price_usd"] or 0) * rate
         products_view.append(d)
+    # Group products by category -- matches the marketplace_public layout.
+    products_by_category = []
+    _seen_cat_ids = set()
+    for cat in categories:
+        prods = [pv for pv in products_view if pv.get("category_id") == cat["id"]]
+        if prods:
+            products_by_category.append({
+                "category": cat,
+                "products": prods,
+            })
+            _seen_cat_ids.add(cat["id"])
+    orphans = [pv for pv in products_view
+               if pv.get("category_id") not in _seen_cat_ids]
+    if orphans:
+        products_by_category.append({
+            "category": {"id": 0, "name": "Uncategorised", "icon": "bi-box"},
+            "products": orphans,
+        })
 
     return render_template(
         "procurement_center.html",
         user=current_user(),
         categories=categories,
         products=products_view,
+        products_by_category=products_by_category,
         selected_cat=cat_id,
         q=q,
         currency=currency,
