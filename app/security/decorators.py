@@ -67,20 +67,29 @@ def get_request_context() -> RequestContext | None:
 
 
 def _audit_denial(reason: str, **extra) -> None:
-    """Best-effort audit log of a permission denial. Falls back to the
-    structured logger if available; otherwise app.logger.warning."""
+    """Best-effort audit log of a permission denial.
+
+    Phase 6 wires this into TWO sinks:
+      1) structured logger (file + Loki) -- for live ops dashboards.
+      2) audit_logs table via app.security.audit.write_audit_event --
+         so the long-tail review surface (admin UI + compliance reports)
+         sees denials alongside everything else.
+
+    Either sink can fail without raising; the request is not blocked.
+    """
+    ctx = getattr(g, "kc_ctx", None)
     payload = {
         "action": "PERMISSION_DENIED",
         "reason": reason,
         "path": request.path,
         "method": request.method,
         "ip": request.remote_addr,
-        "user_id": getattr(g, "kc_ctx", None) and g.kc_ctx.user_id,
-        "tenant_id": getattr(g, "kc_ctx", None) and g.kc_ctx.tenant_id,
+        "user_id": ctx and ctx.user_id,
+        "tenant_id": ctx and ctx.tenant_id,
+        "agent_id": ctx and ctx.azp,
         **extra,
     }
     try:
-        # Prefer the existing structured logger when available.
         from logging_config.structured_logger import audit  # type: ignore
         audit(**payload)
     except Exception:
@@ -88,6 +97,24 @@ def _audit_denial(reason: str, **extra) -> None:
             current_app.logger.warning("PERMISSION_DENIED %s", payload)
         except Exception:
             pass
+
+    # Phase 6 audit unification -- write the denial to audit_logs so
+    # it shows up alongside admin actions in the live ops dashboard.
+    try:
+        from app.security.audit import audit_permission_denied
+        audit_permission_denied(
+            payload["path"],
+            reason=reason,
+            user_id=None,  # JWT sub is a UUID, not the int user_id
+            ip=payload["ip"] or "",
+            tenant_id=payload["tenant_id"] or None,
+            agent_id=payload["agent_id"] or None,
+            extra={k: v for k, v in extra.items() if k != "path"} or None,
+        )
+    except Exception:
+        # Audit writer is itself non-raising, but just in case import
+        # ordering during very early startup throws.
+        pass
 
 
 def _extract_bearer(header_value: str) -> str | None:

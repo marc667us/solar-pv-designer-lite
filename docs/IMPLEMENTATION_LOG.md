@@ -1529,3 +1529,78 @@ The four plan §8.4 full DB-RLS acceptance cases (cross-tenant 404, cross-FK 404
 - `apply_tenant_guc` inside `get_db()` swallows errors after logging; a chronic GUC failure would mean RLS never enforces. The structured-log sink should catch this, but Phase 6's audit-unification will also add an alert hook.
 
 **Next Recommended Step:** Owner runs `DATABASE_URL=postgres://... python scripts/apply_phase4_rls_migration.py` against staging (then prod). Once verification prints all-green, the parallel-run model is fully live and the Phase 7 cutover becomes a single env-var flip + template swap.
+
+---
+
+# Implementation Log Entry — Phase 6 MFA + audit unification
+
+**Date:** 2026-06-20
+**Task:** Phase 6 of `docs/SECURITY_MIGRATION_KEYCLOAK.md`, plan §19 tasks 28-32.
+**Status:** Done. Task 28 was already covered by the Phase 1 realm export (test_mfa.py is the regression guardrail). Tasks 29-32 ship the receiver + writer + poller fallback + 38 new tests.
+
+**Objective:** Get Keycloak's user + admin events into SolarPro's `audit_logs` table — via webhook in prod, via poller for environments where installing the SPI JAR isn't possible — and write every JWT denial to the same table so the long-tail review surface (admin UI + compliance) sees everything.
+
+**Files Changed:**
+- `app/security/audit.py` (new, ~210 lines)
+  - `write_audit_event(action, *, user_id, username, ip, details, tenant_id, agent_id)` — non-raising writer for the existing `audit_logs` table. Auto-detects whether the Phase 6 `tenant_id` + `agent_id` columns exist (probe runs once per process, cache reset via `reset_schema_probe()`) and falls back to merging them into `details` JSON on pre-migration schemas.
+  - `audit_login_success` / `audit_login_failed` / `audit_logout` / `audit_permission_denied` — convenience wrappers.
+  - `set_test_sink(list)` — test hook that bypasses the DB layer.
+- `app/security/keycloak_events.py` (new, ~190 lines)
+  - `verify_signature(raw, header_value)` — constant-time HMAC-SHA256 against `KEYCLOAK_WEBHOOK_SECRET`. Accepts `sha256=<hex>` or bare hex.
+  - `process_event(payload, *, now=None)` — normalises raw Keycloak events (`LOGIN`→`LOGIN_SUCCESS`, `LOGIN_ERROR`→`LOGIN_FAILED`, ~13 mappings + `KC_*` fallback for unknowns + `KC_ADMIN_*` for admin events). Per-process dedupe cache, TTL = `KEYCLOAK_EVENT_DEDUPE_TTL` (default 300 s).
+- `app/security/decorators.py` — `_audit_denial` extended with a second sink: calls `app.security.audit.audit_permission_denied(...)` after the structured-log call, capturing path + reason + tenant_id + agent_id. Both sinks fail-silent.
+- `web_app.py` (+1 byte-level edit via inline patch) — new route `POST /api/keycloak/events` (L18124). Reads raw body, verifies HMAC, supports single-event + batched-event payloads, returns `202` on success, `401` on bad signature, `400` on invalid JSON. The handler does its imports lazily to avoid a circular dep with `app.security.audit`.
+- `migrations/004_audit_log_tenant.sql` (new, ~80 lines, idempotent, NOT yet applied)
+  - PART 1: `ADD COLUMN IF NOT EXISTS tenant_id UUID` + `agent_id TEXT` on `audit_logs`; 3 indexes (`(tenant_id, created_at)`, `(agent_id, created_at)`, `(action, created_at)`).
+  - PART 2: `ENABLE ROW LEVEL SECURITY` + two policies — SELECT gated on tenant match with parallel-run NULL escapes, INSERT-with-check `true` (so any actor can record their own action), no UPDATE/DELETE policy → rows are append-only.
+- `scripts/poll_keycloak_events.py` (new, ~190 lines)
+  - SPI-less fallback: polls `/admin/realms/<realm>/events` + `/admin-events` using a service-account JWT (default client `solarpro-admin-console`, overridable via `KEYCLOAK_POLLER_CLIENT_ID`).
+  - Resumable via `tmp/keycloak_event_checkpoint.json`. Initial window default = 30 min so first run doesn't flood the table.
+  - Modes: `--once` (cron), continuous loop with `--interval`, `--dry-run`.
+  - Exit codes 0/1/2/3 keyed to success/config-error/Keycloak-unreachable/half-or-more-events-dropped.
+- `tests/security/test_audit_log.py` (new, 11 tests) — writer contract, convenience wrappers, failure semantics (returns False instead of raising).
+- `tests/security/test_keycloak_events.py` (new, 19 tests) — HMAC accept/reject paths, event normalisation (5 mapping cases + admin-prefix + KC-prefix fallback + invalid payload), dedupe within/outside TTL, no-id pass-through, writer-failure → "dropped", webhook route integration via slim Flask wrapper.
+- `tests/security/test_mfa.py` (new, 8 tests) — guardrail asserting realm-export.json carries `CONFIGURE_TOTP` on every MFA-required role from plan §14.2 (platform_super_admin, tenant_admin, marketplace_admin, finance_officer, support_agent) + realm-level OTP policy + password policy clauses.
+- `docs/SECURITY_ARCHITECTURE.md` — Q-gate 6.1 moved from `partial` to **in progress** with the close condition.
+
+**Database Changes:** none applied automatically. `migrations/004_audit_log_tenant.sql` is idempotent and meant to run RIGHT AFTER `003_rls_tenant.sql`. Operator command: `psql $DATABASE_URL -v ON_ERROR_STOP=1 -f migrations/004_audit_log_tenant.sql`. The Phase 4 apply script's three verify queries pick up the new `audit_logs` policy too if extended.
+
+**API Changes:** `POST /api/keycloak/events` is new. Webhook-only — Keycloak SPI signs requests with HMAC. Validation order: HMAC → JSON parse → dedupe → normalise → audit write. Single events get `{result: stored|duplicate|invalid|dropped}`; batched get `{processed: n, results: [...]}`.
+
+**Frontend Changes:** none. The admin-ops dashboard already reads from `audit_logs` so the new rows surface there automatically.
+
+**Security Changes:**
+- Every JWT denial (no Bearer, wrong role, wrong scope, tenant mismatch, wrong SA) now lands in `audit_logs` AND the structured log.
+- Keycloak events arrive into the same table — one query gives the full security timeline.
+- HMAC SHA-256 + constant-time compare prevents downgrade / timing attacks on the webhook.
+- Dedupe cache prevents Keycloak's default retry-on-5xx from doubling events when the SolarPro backend has a hiccup.
+- The migration's append-only RLS means nobody — including the table owner — can mutate audit history. `FORCE ROW LEVEL SECURITY` is the Phase 7 tightening.
+
+**Tests Added:** 38 (11 + 19 + 8).
+
+**Test Results:**
+- `pytest tests/security/` — **146/146 PASS** (33 + 29 + 17 + 22 + 7 + 11 + 19 + 8).
+- `python tmp/smoke_keycloak_pilot.py` — 7/7 PASS (unchanged).
+- `python -c "import py_compile; py_compile.compile('web_app.py', doraise=True)"` — clean.
+- `python scripts/poll_keycloak_events.py --once --dry-run` (no env) → returns 1, error printed (expected).
+
+**Documentation Updated:** this entry; `SECURITY_ARCHITECTURE.md` Q-gate 6.1; module docstrings cover env vars + both delivery paths (webhook + poller).
+
+**What Was Completed:**
+- §19 task 28 — already shipped in Phase 1 realm export; covered by `test_mfa.py` regression guardrail (CONFIGURE_TOTP on the 5 MFA-required roles).
+- §19 task 29 — SPI-installation path documented at module docstring of `keycloak_events.py`; poller covers the no-SPI environments.
+- §19 task 30 — `POST /api/keycloak/events` webhook receiver wired in `web_app.py`.
+- §19 task 31 — `_audit_denial` writes to `audit_logs`.
+- §19 task 32 — 38 tests across the three new files.
+
+**What Remains in Phase 6:**
+- The actual `psql -f migrations/004_audit_log_tenant.sql` run against live Postgres (single owner command, same window as the Phase 4 apply).
+- Build + install the Keycloak event-listener SPI JAR on environments that can host one (write-up TBD in `docs/keycloak/event-listener-deploy.md` when Phase 7 dates land); poller is the fallback meanwhile.
+- Set `KEYCLOAK_WEBHOOK_SECRET` in env on cutover (otherwise the webhook returns 401 for everything — fail-loud is the right default).
+
+**Known Risks:**
+- Dedupe cache is per-process; behind a multi-worker WSGI server (Render + Waitress) each worker has its own cache. Within the TTL window a duplicate could still slip through if Keycloak routes the retry to a different worker. Acceptable today (audit duplicates are noisy, not dangerous); Phase 7 could swap to a Redis-backed cache.
+- The poller defaults to using the `solarpro-admin-console` SA client. That client is `confidential` per the realm export; production needs the client secret in env as `KC_SA_ADMIN_CONSOLE_CLIENT_SECRET`. The Phase 3 broker's allowlist would need to expand to include it before the poller can mint a token — add `solarpro-admin-console` to `ALLOWED_CLIENT_IDS` when the poller is first deployed, OR provision a dedicated `solarpro-event-poller` client with the view-events scope. The poller honours `KEYCLOAK_POLLER_CLIENT_ID` env to override.
+- `audit_logs` table has no partitioning; a chatty Keycloak realm could grow it fast. Phase 6's index set covers the common queries; rotate via the existing 1-year-hot retention rule documented in the migration plan §15.
+
+**Next Recommended Step:** Phase 7 — user migration + cutover. Plan §19 tasks 33-38. Build `scripts/migrate_users_to_keycloak.py` (partial-import via Keycloak admin REST); Brevo broadcast 14 days before; cutover day: flip `KEYCLOAK_ENABLED=true` + deploy + smoke; 7-day rollback window; day +14 drop `users.password_hash` + remove legacy form + final deploy.

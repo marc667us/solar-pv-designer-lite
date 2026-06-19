@@ -45,7 +45,7 @@ Authoritative checklist lives in `SECURITY.md`. This file is the architectural s
 | 2.2 | `revoke-all-sessions` lies | blocked on `web_app.py` edit consent |
 | 2.3 | No object-level auth on campaign writes | moot if portal deleted |
 | 3.3–3.7 | Test coverage matrix | multi-session work |
-| 6.1 | Audit log writes missing | partial — campaign deletion removes some |
+| 6.1 | Audit log writes missing | **in progress** — Phase 6 `app/security/audit.py` writes to `audit_logs` via `_audit_denial` + every Keycloak event (webhook or poller); `migrations/004_audit_log_tenant.sql` adds `tenant_id` + `agent_id` columns + append-only RLS. Closes after `psql -f migrations/004_audit_log_tenant.sql` runs on live Postgres. |
 
 ## Threat model summary
 
