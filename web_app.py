@@ -16546,7 +16546,7 @@ def admin_marketplace_product_edit(pid):
         if not p:
             abort(404)
         categories = c.execute(
-            "SELECT id, name FROM product_categories "
+            "SELECT id, code, name FROM product_categories "
             "WHERE is_active=1 ORDER BY display_order"
         ).fetchall()
         suppliers = c.execute(
@@ -16556,6 +16556,9 @@ def admin_marketplace_product_edit(pid):
         return render_template(
             "admin_marketplace_product_edit.html",
             user=current_user(), product=p, categories=categories, suppliers=suppliers,
+            subcategories_by_code=_MARKETPLACE_SUBCATEGORIES,
+            default_unit_by_code=_MARKETPLACE_DEFAULT_UNIT,
+            spec_fields_by_code=_MARKETPLACE_SPEC_FIELDS,
         )
     csrf_protect()
     f = request.form

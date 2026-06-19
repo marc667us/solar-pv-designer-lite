@@ -17,17 +17,22 @@
             <input class="form-control" name="brand" value="{{ product.brand or '' }}"></div>
           <div class="col-md-6"><label class="form-label small text-secondary">Model</label>
             <input class="form-control" name="model" value="{{ product.model or '' }}"></div>
-          <div class="col-md-12"><label class="form-label small text-secondary">Specification</label>
+          <div class="col-md-12"><label class="form-label small text-secondary d-flex justify-content-between">
+              <span>Specification</span>
+              <span id="spec_hint" class="text-warning" style="font-size:0.8rem;"></span>
+            </label>
             <textarea class="form-control" name="spec" rows="2">{{ product.spec or '' }}</textarea></div>
           <div class="col-md-6"><label class="form-label small text-secondary">Category</label>
-            <select class="form-select" name="category_id">
-              <option value="0">—</option>
-              {% for c in categories %}<option value="{{ c.id }}" {% if product.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+            <select class="form-select" name="category_id" id="cat_select">
+              <option value="0" data-code="">—</option>
+              {% for c in categories %}<option value="{{ c.id }}" data-code="{{ c.code }}" {% if product.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
             </select></div>
           <div class="col-md-6"><label class="form-label small text-secondary">Subcategory</label>
-            <input class="form-control" name="subcategory" value="{{ product.subcategory or '' }}"></div>
+            <select class="form-select" name="subcategory" id="subcat_select">
+              <option value="{{ product.subcategory or '' }}" selected>{{ product.subcategory or '-- choose --' }}</option>
+            </select></div>
           <div class="col-md-4"><label class="form-label small text-secondary">Unit</label>
-            <input class="form-control" name="unit" value="{{ product.unit }}"></div>
+            <input class="form-control" name="unit" id="unit_input" value="{{ product.unit }}"></div>
           <div class="col-md-4"><label class="form-label small text-secondary">Price (USD)</label>
             <input type="number" step="0.01" class="form-control" name="price_usd" value="{{ product.price_usd or 0 }}"></div>
           <div class="col-md-4"><label class="form-label small text-secondary">Lead time (days)</label>
@@ -58,4 +63,40 @@
     </div>
   </div>
 </div>
+
+<script>
+  // Same taxonomy wiring as the supplier add form -- subcategory dropdown,
+  // unit auto-fill, spec-field hint. Preserves the existing subcategory
+  // value if it isn't in the registry (legacy free-text rows stay editable).
+  const SUBCATS    = {{ subcategories_by_code | tojson }};
+  const UNITS      = {{ default_unit_by_code | tojson }};
+  const SPEC_HINTS = {{ spec_fields_by_code | tojson }};
+  const CURRENT_SUB = {{ (product.subcategory or '') | tojson }};
+
+  const catSel   = document.getElementById('cat_select');
+  const subSel   = document.getElementById('subcat_select');
+  const unitInp  = document.getElementById('unit_input');
+  const specHint = document.getElementById('spec_hint');
+
+  function refreshTaxonomy(preserveSub) {
+    const opt  = catSel.options[catSel.selectedIndex];
+    const code = opt ? opt.getAttribute('data-code') : '';
+    subSel.innerHTML = '';
+    const subs = (code && SUBCATS[code]) ? SUBCATS[code] : [];
+    subSel.appendChild(new Option('-- choose subcategory --', ''));
+    subs.forEach(s => subSel.appendChild(new Option(s, s)));
+    // Preserve current subcategory if it isn't in the new category's list
+    // (legacy free-text values shouldn't get silently wiped).
+    if (preserveSub && CURRENT_SUB && !subs.includes(CURRENT_SUB)) {
+      subSel.appendChild(new Option(CURRENT_SUB + ' (legacy)', CURRENT_SUB));
+    }
+    if (preserveSub && CURRENT_SUB) { subSel.value = CURRENT_SUB; }
+    // Default unit -- DO NOT overwrite an existing value on initial load.
+    if (!preserveSub && code && UNITS[code]) { unitInp.value = UNITS[code]; }
+    const hint = (code && SPEC_HINTS[code]) ? SPEC_HINTS[code] : [];
+    specHint.textContent = hint.length ? ('Required: ' + hint.join(', ')) : '';
+  }
+  catSel.addEventListener('change', () => refreshTaxonomy(false));
+  refreshTaxonomy(true);  // initial render: preserve existing subcategory/unit
+</script>
 {% endblock %}
