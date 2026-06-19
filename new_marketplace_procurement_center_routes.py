@@ -279,8 +279,8 @@ def procurement_center_add():
     if doc_type == "bom":
         with get_db() as c:
             cur = c.execute(
-                "INSERT INTO marketplace_boms (user_id, title) VALUES (?, ?)",
-                (uid, f"BOM — {today}"),
+                "INSERT INTO marketplace_boms (user_id, title, currency) VALUES (?, ?, ?)",
+                (uid, f"BOM — {today}", currency),
             )
             bom_id = cur.lastrowid
             for r in rows:
@@ -298,8 +298,8 @@ def procurement_center_add():
     # / Excel / PDF from there.
     with get_db() as c:
         cur = c.execute(
-            "INSERT INTO marketplace_boms (user_id, title) VALUES (?, ?)",
-            (uid, f"BOQ — {today}"),
+            "INSERT INTO marketplace_boms (user_id, title, currency) VALUES (?, ?, ?)",
+            (uid, f"BOQ — {today}", currency),
         )
         bom_id = cur.lastrowid
         for r in rows:

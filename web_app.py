@@ -15224,6 +15224,13 @@ def _ensure_bom_tables():
                 ON marketplace_bom_items(bom_id);
             """
         )
+        # Idempotent ALTER to add currency column on pre-existing DBs.
+        # SQLite + Postgres both reject duplicate ADD COLUMN, so wrap.
+        try:
+            with get_db() as _c:
+                _c.execute("ALTER TABLE marketplace_boms ADD COLUMN currency TEXT DEFAULT 'GHS'")
+        except Exception:
+            pass
 
 
 def _bom_owned_or_404(bom_id: int, user_id: int):
@@ -15315,15 +15322,19 @@ def boms_new():
         flash("Give your BOM a title.", "danger")
         return redirect(url_for("boms_new"))
     with get_db() as c:
+        _bcur = (request.form.get("currency") or "GHS").strip().upper()
+        if _bcur not in _CURRENCY_RATES_FROM_USD:
+            _bcur = "GHS"
         cur = c.execute(
             "INSERT INTO marketplace_boms "
-            "(user_id, title, project_name, client_name, notes) "
-            "VALUES (?,?,?,?,?)",
+            "(user_id, title, project_name, client_name, notes, currency) "
+            "VALUES (?,?,?,?,?,?)",
             (
                 uid, title,
                 (request.form.get("project_name") or "").strip(),
                 (request.form.get("client_name") or "").strip(),
                 (request.form.get("notes") or "").strip(),
+                _bcur,
             ),
         )
         bom_id = cur.lastrowid
@@ -15339,11 +15350,16 @@ def boms_view(bom_id):
     bom = _bom_owned_or_404(bom_id, uid)
     items = _bom_items_with_prices(bom_id)
     bom_rates = _bom_rates_for(bom_id)
-    totals = _bom_totals_with_rates(items, bom_rates)
+    _bcur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
+    _brate = _CURRENCY_RATES_FROM_USD.get(_bcur, 1.0)
+    totals = _bom_totals_with_rates(items, bom_rates, fx_rate=_brate)
     return render_template(
         "bom_view.html",
         user=current_user(),
         bom=bom, items=items, totals=totals, bom_rates=bom_rates,
+        currency=_bcur, fx_rate=_brate,
+        currencies=list(_CURRENCY_RATES_FROM_USD.keys()),
+        rates_as_of=_CURRENCY_RATES_AS_OF,
     )
 
 
@@ -15518,11 +15534,15 @@ def boms_boq(bom_id):
     bom = _bom_owned_or_404(bom_id, uid)
     items = _bom_items_with_prices(bom_id)
     bom_rates = _bom_rates_for(bom_id)
-    totals = _bom_totals_with_rates(items, bom_rates)
+    _bcur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
+    _brate = _CURRENCY_RATES_FROM_USD.get(_bcur, 1.0)
+    totals = _bom_totals_with_rates(items, bom_rates, fx_rate=_brate)
     return render_template(
         "bom_boq.html",
         user=current_user(),
         bom=bom, items=items, totals=totals, bom_rates=bom_rates,
+        currency=_bcur, fx_rate=_brate,
+        rates_as_of=_CURRENCY_RATES_AS_OF,
     )
 
 
@@ -16462,7 +16482,7 @@ def _bom_rates_for(bom_id: int) -> dict:
     return dict(_BOM_DEFAULT_RATES)
 
 
-def _bom_totals_with_rates(items, rates: dict) -> dict:
+def _bom_totals_with_rates(items, rates: dict, fx_rate: float = 1.0) -> dict:
     """Compute per-line basic / install / overhead / profit / VAT / total
     rate / amount columns + grand total + per-category subtotals.
 
@@ -16478,10 +16498,14 @@ def _bom_totals_with_rates(items, rates: dict) -> dict:
     cat_totals: dict = {}
     grand = 0.0
     for it in items:
-        basic_rate = float(
+        basic_rate_usd = float(
             (it["unit_price_override"] if it["unit_price_override"] is not None
              else (it["catalog_price"] or 0)) or 0
         )
+        # Convert source USD to target currency at the rate the route
+        # looked up from _CURRENCY_RATES_FROM_USD. All downstream rates
+        # (labour, overhead, profit, VAT) inherit the currency.
+        basic_rate = basic_rate_usd * float(fx_rate or 1.0)
         install_labour = basic_rate * lab_pct / 100.0
         supply_install = basic_rate + install_labour
         overhead       = supply_install * ovh_pct / 100.0
@@ -17018,8 +17042,8 @@ def procurement_center_add():
     if doc_type == "bom":
         with get_db() as c:
             cur = c.execute(
-                "INSERT INTO marketplace_boms (user_id, title) VALUES (?, ?)",
-                (uid, f"BOM — {today}"),
+                "INSERT INTO marketplace_boms (user_id, title, currency) VALUES (?, ?, ?)",
+                (uid, f"BOM — {today}", currency),
             )
             bom_id = cur.lastrowid
             for r in rows:
@@ -17037,8 +17061,8 @@ def procurement_center_add():
     # / Excel / PDF from there.
     with get_db() as c:
         cur = c.execute(
-            "INSERT INTO marketplace_boms (user_id, title) VALUES (?, ?)",
-            (uid, f"BOQ — {today}"),
+            "INSERT INTO marketplace_boms (user_id, title, currency) VALUES (?, ?, ?)",
+            (uid, f"BOQ — {today}", currency),
         )
         bom_id = cur.lastrowid
         for r in rows:

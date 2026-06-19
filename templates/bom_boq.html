@@ -60,26 +60,26 @@
         <td class="small text-secondary">{{ it.category_name or '—' }}</td>
         <td class="text-end">{{ "%.2f"|format(it.qty or 0) }}</td>
         <td class="text-end small">{{ it.unit }}</td>
-        <td class="text-end">USD {{ "%.2f"|format(line.basic_rate if line.basic_rate is defined else line.unit_price) }}</td>
-        <td class="text-end">USD {{ "%.2f"|format(line.total_rate if line.total_rate is defined else line.unit_price) }}</td>
-        <td class="text-end fw-bold">USD {{ "%.2f"|format(line.line_total) }}</td>
+        <td class="text-end">{{ currency or 'USD' }} {{ "%.2f"|format(line.basic_rate if line.basic_rate is defined else line.unit_price) }}</td>
+        <td class="text-end">{{ currency or 'USD' }} {{ "%.2f"|format(line.total_rate if line.total_rate is defined else line.unit_price) }}</td>
+        <td class="text-end fw-bold">{{ currency or 'USD' }} {{ "%.2f"|format(line.line_total) }}</td>
       </tr>
       {% endfor %}
     </tbody>
     <tfoot>
       {% for cat, sub in totals.category_totals.items() %}
-      <tr><td colspan="7" class="text-end text-secondary">{{ cat }} subtotal</td><td class="text-end fw-bold">USD {{ "%.2f"|format(sub) }}</td></tr>
+      <tr><td colspan="7" class="text-end text-secondary">{{ cat }} subtotal</td><td class="text-end fw-bold">{{ currency or 'USD' }} {{ "%.2f"|format(sub) }}</td></tr>
       {% endfor %}
       <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
         <td colspan="7" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
-        <td class="text-end fw-black text-warning" style="font-size:18px">USD {{ "%.2f"|format(totals.grand_total) }}</td>
+        <td class="text-end fw-black text-warning" style="font-size:18px">{{ currency or 'USD' }} {{ "%.2f"|format(totals.grand_total) }}</td>
       </tr>
     </tfoot>
   </table>
 
   <div class="text-secondary small mt-4">
     <strong>Notes:</strong>
-    Rates are indicative supplier-published prices in USD on {{ bom.updated_at }}.
+    Rates are indicative supplier-published prices in {{ currency or 'USD' }}{% if currency and currency != 'USD' %} (converted from supplier-listed USD at indicative FX valid {{ rates_as_of }}){% endif %}, as of {{ bom.updated_at }}.
     Final delivered prices may vary by quantity, location, currency, and supplier lead-time.
     Use the <strong>Clone to RFQ</strong> action on the BOM editor to chase live quotes from verified suppliers.
   </div>
