@@ -14022,7 +14022,7 @@ def _seed_marketplace_samples(c):
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,1)",
             (legacy_label, name, brand, model, spec, unit, price, sup_id, lt, cat_id, sub),
         )
-
+
 def _backfill_marketplace_samples_for_empty_categories(c):
     """Insert starter rows from _seed_marketplace_samples ONLY into
     categories that currently have zero products in equipment_catalog.
@@ -15704,7 +15704,7 @@ def _bom_totals(items) -> dict:
 
 
 # ──────────────────────── BOM list / new ─────────────────────────────────
-
+
 def _boq_compliance_check(items, lines):
     """Compliance Review Agent (lite) -- maps BOQ items against the
     taxonomy registries and surfaces issues the brief's Compliance
@@ -16104,6 +16104,11 @@ def _ensure_marketplace_schema_postgres():
         "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS is_verified INTEGER DEFAULT 0",
         "ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS address TEXT DEFAULT ''",
 
+        # Slice 5b -- BOM currency column (was added via SQLite ALTER in
+        # _ensure_bom_tables; Postgres init never picked it up so
+        # /procurement-center/add doc_type=bom 500'd in prod). Idempotent.
+        "ALTER TABLE marketplace_boms ADD COLUMN IF NOT EXISTS currency VARCHAR(3) DEFAULT 'GHS'",
+
         # Slice 3 — audit log
         """CREATE TABLE IF NOT EXISTS marketplace_audit_log (
             id          SERIAL PRIMARY KEY,
@@ -16274,6 +16279,12 @@ def _ensure_marketplace_schema_postgres():
             n_non_solar = row[0] if hasattr(row, '__getitem__') else row["n"]
         if n_non_solar == 0:
             _seed_marketplace_postgres_samples()
+        else:
+            # Per-category backfill -- inserts rows ONLY for categories
+            # that have zero products today. Same shape as the SQLite
+            # helper so adding a new category (e.g. power_system) lands
+            # its starter samples in pre-existing Postgres deployments.
+            _backfill_marketplace_postgres_samples_for_empty_categories()
     except Exception as e:
         try:
             app.logger.warning("marketplace pg sample seed: %s", e)
@@ -16443,6 +16454,71 @@ def _seed_marketplace_postgres_samples():
 # any solar user into. Specialists get full CRUD on suppliers, products,
 # and prices — they can administer the marketplace without being a global
 # is_admin=1 user. Admin still owns the promote/demote action itself.
+def _backfill_marketplace_postgres_samples_for_empty_categories():
+    """Postgres twin of _backfill_marketplace_samples_for_empty_categories.
+    Calls the existing _seed_marketplace_postgres_samples but filters its
+    INSERTs to categories that currently have zero products. Safe to call
+    on a populated database -- skips already-populated categories so
+    existing supplier rows are never disturbed."""
+    global get_db
+    with get_db() as c:
+        cats_lookup = {}
+        for r in c.execute(
+            "SELECT id, code FROM product_categories"
+        ).fetchall():
+            cid = r[0] if hasattr(r, "__getitem__") else r["id"]
+            code = r[1] if hasattr(r, "__getitem__") else r["code"]
+            cats_lookup[code] = cid
+        empty_codes = set()
+        for code, cid in cats_lookup.items():
+            row = c.execute(
+                "SELECT COUNT(*) AS n FROM equipment_catalog WHERE category_id=?",
+                (cid,),
+            ).fetchone()
+            n = row[0] if hasattr(row, "__getitem__") else row["n"]
+            if n == 0:
+                empty_codes.add(code)
+    if not empty_codes:
+        return
+    # Filtered execute proxy: drops INSERTs whose category_id (at index
+    # 9 of the parameter tuple) does not belong to a category we marked
+    # as empty. _seed_marketplace_postgres_samples runs against this.
+    real_get_db = get_db
+    class _FilteredConn:
+        def __init__(self, real):
+            self._real = real
+        def __enter__(self):
+            self._cm = self._real()
+            self._inner = self._cm.__enter__()
+            return self
+        def __exit__(self, *a, **kw):
+            return self._cm.__exit__(*a, **kw)
+        def execute(self, sql, params=()):
+            try:
+                cat_id = params[9]
+            except (IndexError, TypeError):
+                return self._inner.execute(sql, params)
+            code = next(
+                (k for k, v in cats_lookup.items() if v == cat_id), None
+            )
+            if code in empty_codes:
+                return self._inner.execute(sql, params)
+            class _Dummy:
+                lastrowid = 0
+                def fetchone(self_inner): return None
+                def fetchall(self_inner): return []
+            return _Dummy()
+    # Re-run the existing Postgres seeder with the filtered connection
+    # in scope. The seeder calls get_db() internally; we swap the global
+    # for the duration of the call so its INSERTs route through the
+    # filter. Restored in finally to avoid any leak.
+    get_db = lambda: _FilteredConn(real_get_db)
+    try:
+        _seed_marketplace_postgres_samples()
+    finally:
+        get_db = real_get_db
+
+
 
 def procurement_role_required(f):
     """Decorator: allows is_admin=1 OR role='procurement_specialist'.
