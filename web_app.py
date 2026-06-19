@@ -13642,7 +13642,214 @@ _MARKETPLACE_CATEGORIES = [
     ("light_switches",    "Light Switches",                   "bi-lightbulb",        180),
     ("solar_equipment",   "Solar Equipment",                  "bi-sun",              190),
     ("ict_elv",           "ICT / ELV Products",               "bi-router",           200),
+    ("power_system",      "Power System Equipment",           "bi-cpu",              210),
 ]
+
+# Subcategory taxonomy -- source of truth for the supplier product upload form's
+# subcategory dropdown and the BOQ generator's section mapping. Keep aligned
+# with pvsolar1/price master/price prompt.txt sections 1-18 + Power System.
+_MARKETPLACE_SUBCATEGORIES = {
+    "transformers": [
+        "Oil Immersed", "Dry Type", "Distribution", "Step-up", "Step-down",
+        "Package Substation",
+    ],
+    "avr": [
+        "Single-phase", "Three-phase", "Servo", "Static", "Industrial",
+    ],
+    "hv_cables": [
+        "1C HV Armoured", "3C HV Armoured", "XLPE Insulated",
+        "Copper HV", "Aluminium HV",
+    ],
+    "lv_cables": [
+        "1C Armoured", "2C Armoured", "3C Armoured", "4C Armoured", "5C Armoured",
+        "XLPE/SWA/PVC", "PVC/SWA/PVC", "Flexible Power",
+    ],
+    "wires": [
+        "Single Core PVC", "Flexible", "Fire-resistant", "Earth Wire",
+        "Control Wire", "Lighting Circuit", "Socket Circuit",
+    ],
+    "panel_boards": [
+        "Main Panel", "Sub-main Panel", "Meter Panel", "ATS Panel",
+        "Synchronising", "MCC Panel", "PFC Panel", "Custom Control",
+    ],
+    "distribution_boards": [
+        "SPN", "TPN", "Surface Mounted", "Flush Mounted", "Metal Clad",
+        "Consumer Unit", "Final Circuit",
+    ],
+    "isolators": [
+        "Single-pole", "Double-pole", "Three-pole", "Four-pole",
+        "AC", "DC", "Weatherproof",
+    ],
+    "fuse_switches": [
+        "Switch Fuse Unit", "Fuse Switch Disconnector", "HRC",
+        "LV Fuse Switch", "Changeover",
+    ],
+    "conduit": [
+        "PVC", "Heavy Gauge PVC", "Flexible", "GI", "Steel", "Corrugated",
+    ],
+    "steel_boxes": [
+        "1 Gang", "2 Gang", "3 Gang", "4 Gang",
+        "Deep", "Surface", "Flush",
+    ],
+    "circular_boxes": [
+        "PVC Circular", "Steel Circular", "Ceiling", "Junction",
+    ],
+    "cable_trays": [
+        "Perforated", "Ladder", "Wire Mesh", "Heavy Duty",
+        "Galvanised", "Stainless Steel",
+    ],
+    "trunking": [
+        "Mini", "PVC", "Cable Management", "Dado", "Skirting", "Compartment",
+    ],
+    "earthing": [
+        "Earth Rods", "Earth Bars", "Earth Clamps", "Copper Tape",
+        "Inspection Pits", "Earth Cables", "Chemical Earthing",
+        "Exothermic Kits",
+    ],
+    "sockets": [
+        "Switched", "Unswitched", "USB", "Weatherproof",
+        "Metal Clad", "Flush", "Surface",
+    ],
+    "dp_switches": [
+        "Water Heater", "Air Conditioner", "Appliance",
+        "Neon Indicator", "Metal Clad",
+    ],
+    "light_switches": [
+        "1 Gang 1 Way", "1 Gang 2 Way", "2 Gang 1 Way", "2 Gang 2 Way",
+        "3 Gang 1 Way", "3 Gang 2 Way", "4 Gang",
+        "Intermediate", "Dimmer", "Key Switch",
+    ],
+    "solar_equipment": [
+        "PV Modules", "Hybrid Inverters", "String Inverters", "Micro Inverters",
+        "Batteries", "Charge Controllers", "DC Isolators", "DC SPD",
+        "MC4 Connectors", "Solar Cables", "Mounting Systems",
+        "Combiner Boxes", "Monitoring Systems",
+    ],
+    "power_system": [
+        "RMU", "Generators", "UPS", "Static Transfer Switches",
+        "Capacitor Banks", "Busduct Systems", "Switchgear",
+        "Protection Relays",
+    ],
+    "ict_elv": [
+        "Data Outlets", "Network Switches", "Access Points", "CCTV",
+        "Fire Alarm", "Access Control", "Nurse Call",
+        "Structured Cabling", "Telephones",
+    ],
+}
+
+# Default unit of measure per category -- picked from the prompt's
+# "Default units" block. Used to pre-fill the supplier upload form.
+_MARKETPLACE_DEFAULT_UNIT = {
+    "transformers":        "No.",
+    "avr":                 "No.",
+    "hv_cables":           "m",
+    "lv_cables":           "m",
+    "wires":               "Roll",
+    "panel_boards":        "No.",
+    "distribution_boards": "No.",
+    "isolators":           "No.",
+    "fuse_switches":       "No.",
+    "conduit":             "m",
+    "steel_boxes":         "No.",
+    "circular_boxes":      "No.",
+    "cable_trays":         "m",
+    "trunking":            "m",
+    "earthing":            "No.",
+    "sockets":             "No.",
+    "dp_switches":         "No.",
+    "light_switches":      "No.",
+    "solar_equipment":     "No.",
+    "power_system":        "No.",
+    "ict_elv":             "No.",
+}
+
+# Required spec fields per category -- surfaces in the supplier upload form
+# so suppliers know what the Specification Validation Agent will check for.
+# Drawn straight from price prompt.txt sections 1-18.
+_MARKETPLACE_SPEC_FIELDS = {
+    "transformers": [
+        "kVA rating", "Voltage ratio", "Phase", "Frequency",
+        "Cooling type", "Impedance", "Vector group",
+        "Protection class", "Enclosure type",
+    ],
+    "avr": [
+        "kVA rating", "Input voltage range", "Output voltage",
+        "Phase", "Regulation accuracy", "Response time", "Bypass arrangement",
+    ],
+    "hv_cables": [
+        "Voltage rating", "Conductor material", "Number of cores",
+        "Conductor size", "Insulation type", "Armour type", "Sheath type",
+        "Fire rating",
+    ],
+    "lv_cables": [
+        "Conductor material", "Number of cores", "Cable size",
+        "Insulation", "Armour", "Sheath", "Voltage rating",
+    ],
+    "wires": [
+        "Conductor material", "Wire size", "Insulation type",
+        "Colour", "Voltage rating", "Roll length",
+    ],
+    "panel_boards": [
+        "Current rating", "Short circuit rating", "Number of ways",
+        "Enclosure type", "IP rating", "Busbar rating",
+        "Incomer type", "Outgoing protection", "Form of separation",
+    ],
+    "distribution_boards": [
+        "Number of ways", "Phase", "Incomer rating", "Busbar rating",
+        "Enclosure material", "Mounting type", "Protection type",
+    ],
+    "isolators": [
+        "Current rating", "Voltage rating", "Number of poles",
+        "IP rating", "Mounting type", "Application",
+    ],
+    "fuse_switches": [
+        "Current rating", "Voltage rating", "Number of poles",
+        "Fuse type", "Breaking capacity", "Enclosure type", "Mounting type",
+    ],
+    "conduit": [
+        "Diameter", "Material", "Length", "Gauge", "Colour",
+    ],
+    "steel_boxes": [
+        "Size", "Gang", "Depth", "Material", "Finish", "Mounting type",
+    ],
+    "circular_boxes": [
+        "Diameter", "Depth", "Material", "Number of knockouts", "Mounting type",
+    ],
+    "cable_trays": [
+        "Width", "Depth", "Thickness", "Material", "Finish", "Length",
+    ],
+    "trunking": [
+        "Width", "Height", "Length", "Material", "Colour", "Compartments",
+    ],
+    "earthing": [
+        "Material", "Size", "Length", "Cross-sectional area",
+        "Coating", "Application",
+    ],
+    "sockets": [
+        "Current rating", "Voltage rating", "Number of gangs",
+        "Switched/unswitched", "Finish", "Mounting type", "IP rating",
+    ],
+    "dp_switches": [
+        "Current rating", "Voltage rating", "Pole type",
+        "Neon indicator", "Mounting type", "Finish",
+    ],
+    "light_switches": [
+        "Gang", "Way", "Current rating", "Voltage rating",
+        "Finish", "Mounting type",
+    ],
+    "solar_equipment": [
+        "Rated power / capacity", "Voltage", "Efficiency",
+        "Warranty period", "Certifications", "IP rating",
+    ],
+    "power_system": [
+        "Rated power", "Voltage", "Current rating", "Phase",
+        "Frequency", "Protection class", "Cooling / fuel type",
+    ],
+    "ict_elv": [
+        "Standard / category", "Ports / channels", "Power source",
+        "Mounting type", "Compliance",
+    ],
+}
 
 
 def _ensure_marketplace_tables():
@@ -13676,11 +13883,14 @@ def _ensure_marketplace_tables():
             c.execute("ALTER TABLE equipment_catalog ADD COLUMN image_url TEXT DEFAULT ''")
         if "is_public_visible" not in cols:
             c.execute("ALTER TABLE equipment_catalog ADD COLUMN is_public_visible INTEGER DEFAULT 1")
-        # Seed categories if empty.
-        if c.execute("SELECT COUNT(*) FROM product_categories").fetchone()[0] == 0:
-            c.executemany(
-                "INSERT INTO product_categories (code,name,icon,display_order) VALUES (?,?,?,?)",
-                _MARKETPLACE_CATEGORIES,
+        # Upsert categories -- INSERT OR IGNORE so adding a new entry to
+        # _MARKETPLACE_CATEGORIES lands in pre-existing databases too.
+        # Original seed-once-when-empty pattern silently skipped new entries.
+        for _row in _MARKETPLACE_CATEGORIES:
+            c.execute(
+                "INSERT OR IGNORE INTO product_categories "
+                "(code,name,icon,display_order) VALUES (?,?,?,?)",
+                _row,
             )
         # Backfill: any equipment_catalog row with category_id=0 maps to Solar Equipment.
         solar_cat = c.execute(
@@ -13697,6 +13907,11 @@ def _ensure_marketplace_tables():
             "(SELECT id FROM product_categories WHERE code != 'solar_equipment')"
         ).fetchone()[0] == 0:
             _seed_marketplace_samples(c)
+        else:
+            # Per-category top-up: when _MARKETPLACE_CATEGORIES gains a new
+            # entry that ships with starter samples (e.g. power_system),
+            # populate ONLY those empty categories without re-seeding others.
+            _backfill_marketplace_samples_for_empty_categories(c)
 
 
 def _seed_marketplace_samples(c):
@@ -13711,6 +13926,8 @@ def _seed_marketplace_samples(c):
     ).fetchall()}
     schneider = sup.get("Schneider Electric", 0)
     rs = sup.get("RS Components", 0)
+    # MK referenced by some socket/switch/dp_switch samples; falls back to rs.
+    mk = sup.get("MK", rs)
     # (category_code, name, brand, model, spec, unit, price_usd, supplier_id, lead_time, subcategory)
     samples = [
         ("transformers",       "ABB 500 kVA Distribution Transformer", "ABB",       "TRF-500-DT", "500 kVA, 11/0.433 kV, Dyn11, ONAN, IEC 60076",       "No.",  9800, schneider, 60, "Distribution"),
@@ -13740,6 +13957,57 @@ def _seed_marketplace_samples(c):
         ("light_switches",     "1 Gang 2 Way Switch",                  "MK",        "K4871WHI",   "1 gang 2 way switch, 10A, white",                    "No.",     6, rs,        7,  "1 Gang 2 Way"),
         ("light_switches",     "2 Gang 2 Way Switch",                  "MK",        "K4872WHI",   "2 gang 2 way switch, 10A, white",                    "No.",     8, rs,        7,  "2 Gang 2 Way"),
         ("light_switches",     "3 Gang 2 Way Switch",                  "MK",        "K4873WHI",   "3 gang 2 way switch, 10A, white",                    "No.",    11, rs,        7,  "3 Gang 2 Way"),
+        # - Extra coverage so every category has ≥3 starter rows --------------
+        ("transformers",       "Schneider 100 kVA Dry Type",           "Schneider", "DT100",      "100 kVA, 11/0.4 kV, AN, IP00, IEC 60076-11",         "No.",  4200, schneider, 60, "Dry Type"),
+        ("transformers",       "ABB 1000 kVA Package Substation",      "ABB",       "PSS-1000",   "1000 kVA, 11/0.4 kV, ONAN, Dyn11, packaged unit",    "No.", 18500, schneider, 75, "Package Substation"),
+        ("avr",                "Static AVR 10 kVA 1-Phase",            "Generic",   "SAVR-10K-1P", "10 kVA, 1PH, Static IGBT, ±3% accuracy",             "No.",   620, rs,        14, "Single-phase"),
+        ("hv_cables",          "33 kV XLPE 1C 240mm² Cu Armoured",     "Nexans",    "HV-33-1C240","33 kV, XLPE/CWS/PVC, Copper, 1 core, 240mm²",       "m",     145, rs,        45, "1C HV Armoured"),
+        ("hv_cables",          "11 kV 3C 95mm² Al Armoured",            "Nexans",    "HV-11-3C95A","11 kV, XLPE/SWA/PVC, Aluminium, 3 core, 95mm²",     "m",      38, rs,        45, "Aluminium HV"),
+        ("lv_cables",          "LV 2C 4mm² Cu PVC/SWA/PVC",            "Nexans",    "LV-2C-4P",   "0.6/1 kV, 2 core, 4mm², Cu, PVC/SWA/PVC",          "m",       6, rs,        14, "PVC/SWA/PVC"),
+        ("lv_cables",          "LV 3C 6mm² Cu Flex H07RN-F",           "Nexans",    "FLX-3C-6",   "450/750 V, 3 core, 6mm², Cu, rubber-sheathed",     "m",       8, rs,        14, "Flexible Power"),
+        ("wires",              "Earth Wire 6mm² Green/Yellow (100m)",  "Polycab",   "EW-6-GY",    "6mm² Cu, 450/750 V, PVC, green/yellow",            "Roll",   48, rs,        7,  "Earth Wire"),
+        ("wires",              "Fire-resistant 1.5mm² (100m)",         "RR Kabel",  "FR-1.5",     "1.5mm² Cu, FR-LSZH, 450/750 V, red",               "Roll",   58, rs,        14, "Fire-resistant"),
+        ("panel_boards",       "1000A ATS Panel",                      "Schneider", "ATS-1000",   "1000A 3PH ATS, AMF + utility/genset, IP54",          "No.", 14500, schneider, 60, "ATS Panel"),
+        ("panel_boards",       "200kVAr PFC Panel",                    "Schneider", "PFC-200",    "200 kVAr, 10 stages, contactor-switched, IP42",      "No.",  6200, schneider, 45, "PFC Panel"),
+        ("distribution_boards","12-way Metal Clad TPN DB",             "Hager",     "DB-12MCTPN", "12-way TPN MC, 125A incomer, 10kA, IP54",            "No.",   320, schneider, 21, "Metal Clad"),
+        ("distribution_boards","6-way Flush Consumer Unit",            "Hager",     "DB-6FCU",    "6-way SPN flush, 63A RCD + 6 MCBs",                  "No.",   135, schneider, 14, "Flush Mounted"),
+        ("isolators",          "32A 2-Pole AC Isolator IP65",          "Schneider", "ISO-32-2P",  "32A 2P AC isolator, IP65, weatherproof",             "No.",    24, schneider, 14, "Double-pole"),
+        ("isolators",          "16A 4-Pole DC Isolator (Solar)",       "Schneider", "ISO-16-DC",  "16A 4P DC isolator, 1000 VDC, IP65, lockable",       "No.",    42, schneider, 21, "DC"),
+        ("fuse_switches",      "200A Fuse Switch Disconnector",        "ABB",       "FSD-200",    "200A 4P FSD, 50kA, HRC fuses, IP30",                 "No.",   245, schneider, 21, "Fuse Switch Disconnector"),
+        ("fuse_switches",      "400A Changeover Fuse Switch",          "ABB",       "CFS-400",    "400A 4P changeover, manual, IP31",                   "No.",   485, schneider, 30, "Changeover"),
+        ("conduit",            "GI Conduit 20mm (3m)",                 "Generic",   "GI-20",      "20mm dia hot-dip galv steel conduit, 3m, class 4",   "m",       2, rs,        7,  "GI"),
+        ("conduit",            "Flexible Metallic 25mm (per m)",       "Generic",   "FLX-25M",    "25mm dia flexible metallic conduit, PVC-coated",     "m",       3, rs,        7,  "Flexible"),
+        ("steel_boxes",        "3 Gang Surface Steel Box",             "Generic",   "SB-3G-S",    "3 gang surface flush steel back box, 35mm deep",     "No.",     5, rs,        7,  "3 Gang"),
+        ("steel_boxes",        "4 Gang Deep Steel Box",                "Generic",   "SB-4G-D",    "4 gang deep flush steel back box, 50mm deep",        "No.",     6, rs,        7,  "4 Gang"),
+        ("circular_boxes",     "PVC Junction Box 80mm IP65",           "Generic",   "JB-PVC-80",  "80mm PVC junction box, 4 knockouts, IP65",           "No.",     3, rs,        7,  "Junction"),
+        ("cable_trays",        "Ladder Tray 450mm (3m) HDG",           "Generic",   "LT-450",     "450mm wide ladder cable tray, HDG, 3m length",       "m",      32, rs,        21, "Ladder"),
+        ("cable_trays",        "Wire Mesh Tray 200mm (3m)",            "Generic",   "WMT-200",    "200mm wide wire-mesh basket tray, EZ, 3m",           "m",      14, rs,        14, "Wire Mesh"),
+        ("trunking",           "Dado Trunking 100x50mm (2m)",          "Generic",   "DT-100-50",  "100x50mm dado trunking, 2 compartments, white",      "m",      18, rs,        14, "Dado"),
+        ("trunking",           "Skirting Trunking 75x18mm (2m)",       "Generic",   "ST-75-18",   "75x18mm skirting trunking, white",                   "m",       8, rs,        7,  "Skirting"),
+        ("earthing",           "Earth Rod 16mm x 1.2m Cu-bonded",      "Generic",   "ER-16-1.2",  "16mm x 1.2m Cu-bonded steel earth rod with clamp",   "No.",    18, rs,        7,  "Earth Rods"),
+        ("earthing",           "Copper Tape 25x3mm (10m roll)",        "Generic",   "CT-25-3",    "25x3mm bare Cu tape, 10m roll, lightning protection","Roll",   95, rs,        14, "Copper Tape"),
+        ("earthing",           "Exothermic Weld Kit (Cu/Cu Tee)",      "Generic",   "EXO-CC-T",   "Exothermic weld kit, Cu/Cu tee, 95mm²",              "No.",    32, rs,        14, "Exothermic Kits"),
+        ("sockets",            "13A IP66 Weatherproof Twin Socket",    "MK",        "K56480WHI",  "13A twin switched, IP66, surface, grey",             "No.",    28, mk,        14, "Weatherproof"),
+        ("sockets",            "13A Metal Clad Twin Socket",           "MK",        "K2747ALM",   "13A twin switched, metal-clad, surface",             "No.",    22, mk,        14, "Metal Clad"),
+        ("dp_switches",        "20A DP AC Switch with Neon",           "MK",        "K5423WHI",   "20A DP switch with neon, flush, for AC, white",      "No.",    13, mk,        7,  "Air Conditioner"),
+        ("dp_switches",        "20A Metal Clad DP Switch",             "MK",        "K5403ALM",   "20A DP switch, metal-clad surface, IP2X",            "No.",    16, mk,        14, "Metal Clad"),
+        ("light_switches",     "1 Gang 1 Way Switch",                  "MK",        "K4870WHI",   "1 gang 1 way switch, 10A, white",                    "No.",     5, mk,        7,  "1 Gang 1 Way"),
+        ("light_switches",     "4 Gang 2 Way Switch",                  "MK",        "K4874WHI",   "4 gang 2 way switch, 10A, white",                    "No.",    14, mk,        7,  "4 Gang"),
+        ("light_switches",     "Intermediate Switch 1G",               "MK",        "K4875WHI",   "1 gang intermediate switch, 10A, white",             "No.",     9, mk,        7,  "Intermediate"),
+        ("light_switches",     "Dimmer Switch 1G 400W",                "MK",        "K1500WHI",   "1 gang push-rotary dimmer, 60-400W, white",          "No.",    18, mk,        7,  "Dimmer"),
+        ("solar_equipment",    "JA Solar 550W Mono PV Module",         "JA Solar",  "JAM72S30-550","550W, mono-PERC, 72-cell, 21.3% eff., 12-yr product","No.",   180, rs,        21, "PV Modules"),
+        ("solar_equipment",    "Victron MultiPlus-II 5kVA Inverter",   "Victron",   "PMP482505010","5 kVA hybrid, 48V, 70A charger, parallel-stackable",  "No.",  1480, rs,        14, "Hybrid Inverters"),
+        ("solar_equipment",    "Pylontech US5000 4.8kWh LFP Battery",  "Pylontech", "US5000",     "4.8 kWh, 48V, LFP, 6000 cycles @ 80% DoD",           "No.",  1380, rs,        21, "Batteries"),
+        ("solar_equipment",    "MC4 Connector Pair (TUV)",             "Generic",   "MC4-PAIR",   "MC4 male+female connector pair, TUV, 1500 VDC",      "No.",     2, rs,        7,  "MC4 Connectors"),
+        ("solar_equipment",    "DC Combiner Box 4-in/1-out 1000V",     "Generic",   "DCB-4-1",    "4-in/1-out DC combiner, 1000 VDC, SPD + fuses, IP65","No.",   145, rs,        14, "Combiner Boxes"),
+        ("power_system",       "11 kV RMU 2-Way Compact",              "ABB",       "SafeRing-2W","11 kV, 2-way ring main unit, SF6, 630A, 21kA",       "No.", 11500, schneider, 75, "RMU"),
+        ("power_system",       "250 kVA Cummins Genset",               "Cummins",   "C250D5",     "250 kVA, 3PH, diesel, open-set, 1500 rpm",           "No.", 28500, rs,        45, "Generators"),
+        ("power_system",       "10 kVA Online UPS Tower",              "APC",       "SRT10KXLI",  "10 kVA / 10 kW, online double-conversion, tower",    "No.",  4600, rs,        21, "UPS"),
+        ("power_system",       "MCCB 400A 4P 50kA",                    "Schneider", "MCCB-400-4P","400A 4P MCCB, 50kA breaking capacity",               "No.",   520, schneider, 21, "Switchgear"),
+        ("ict_elv",            "Cat6 UTP Data Outlet (RJ45)",          "Legrand",   "RJ45-C6",    "Cat6 UTP RJ45 data outlet, flush, white",            "No.",     8, rs,        7,  "Data Outlets"),
+        ("ict_elv",            "24-port Gigabit PoE+ Switch",          "Cisco",     "CBS250-24P", "24-port Gigabit + 4 SFP, PoE+ 195W, managed",        "No.",   620, rs,        21, "Network Switches"),
+        ("ict_elv",            "4MP IP Bullet CCTV Camera",            "Hikvision", "DS-2CD2043", "4MP IR fixed bullet, IP67, PoE, 2.8mm lens",         "No.",    95, rs,        14, "CCTV"),
+        ("ict_elv",            "Addressable Smoke Detector",           "Honeywell", "SD-ADR-100", "Photoelectric addressable smoke detector, EN54-7",   "No.",    52, rs,        14, "Fire Alarm"),
     ]
     # Build a code → display-name map from the seed list so the legacy
     # free-text `category` column carries a human-readable label, matching
@@ -13754,6 +14022,54 @@ def _seed_marketplace_samples(c):
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,1)",
             (legacy_label, name, brand, model, spec, unit, price, sup_id, lt, cat_id, sub),
         )
+
+def _backfill_marketplace_samples_for_empty_categories(c):
+    """Insert starter rows from _seed_marketplace_samples ONLY into
+    categories that currently have zero products in equipment_catalog.
+    Safe to call on a populated database -- skips already-populated
+    categories so existing supplier rows are never disturbed."""
+    cats_lookup = {r["code"]: r["id"] for r in c.execute(
+        "SELECT id, code FROM product_categories"
+    ).fetchall()}
+    empty_codes = set()
+    for code, cat_id in cats_lookup.items():
+        n = c.execute(
+            "SELECT COUNT(*) AS n FROM equipment_catalog WHERE category_id=?",
+            (cat_id,),
+        ).fetchone()[0]
+        if n == 0:
+            empty_codes.add(code)
+    if not empty_codes:
+        return
+    # Re-derive the sample list by introspecting _seed_marketplace_samples.
+    # We avoid copy-pasting it -- instead we replay the same dispatch but
+    # filter rows by `code in empty_codes`. The cheapest way is to run
+    # the existing seeder against a sentinel connection that only inserts
+    # filtered rows. Simpler: capture INSERTs by monkey-patching execute.
+    class _FilteredConn:
+        def __init__(self, real, codes):
+            self._real = real
+            self._codes = codes
+        def execute(self, sql, params=()):
+            # First positional in the inserted tuple is the legacy category
+            # label, not the code -- so filter by category_id lookup instead.
+            # _seed_marketplace_samples already resolves code -> cat_id and
+            # passes cat_id at index 9. Use that for the filter.
+            try:
+                cat_id = params[9]
+            except (IndexError, TypeError):
+                return self._real.execute(sql, params)
+            # Reverse-lookup code from cat_id; allow if code in empty_codes.
+            code = next((k for k, v in cats_lookup.items() if v == cat_id), None)
+            if code in self._codes:
+                return self._real.execute(sql, params)
+            # silently drop the insert for categories already populated
+            class _Dummy:
+                lastrowid = 0
+                def fetchone(self_inner): return None
+                def fetchall(self_inner): return []
+            return _Dummy()
+    _seed_marketplace_samples(_FilteredConn(c, empty_codes))
 
 
 def _safe_int(v, default=0):
@@ -15737,21 +16053,18 @@ def _ensure_marketplace_schema_postgres():
     # UNIQUE(code) constraint plus ON CONFLICT DO NOTHING — works on both
     # backends because the existing db_adapter rewrites it for SQLite if
     # needed; here we're already on Postgres.
+    # Upsert categories unconditionally -- ON CONFLICT (code) DO NOTHING
+    # makes this safe to run every startup, and ensures that adding a
+    # new entry to _MARKETPLACE_CATEGORIES lands in pre-existing databases.
     try:
         with get_db() as c:
-            cur_n = c.execute(
-                "SELECT COUNT(*) AS n FROM product_categories"
-            ).fetchone()
-            n = cur_n[0] if hasattr(cur_n, "__getitem__") else cur_n["n"]
-        if n == 0:
-            with get_db() as c:
-                for code, name, icon, order in _MARKETPLACE_CATEGORIES:
-                    c.execute(
-                        "INSERT INTO product_categories (code, name, icon, display_order) "
-                        "VALUES (?, ?, ?, ?) "
-                        "ON CONFLICT (code) DO NOTHING",
-                        (code, name, icon, order),
-                    )
+            for code, name, icon, order in _MARKETPLACE_CATEGORIES:
+                c.execute(
+                    "INSERT INTO product_categories (code, name, icon, display_order) "
+                    "VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT (code) DO NOTHING",
+                    (code, name, icon, order),
+                )
     except Exception as e:
         try:
             app.logger.warning("marketplace pg seed: %s", e)
@@ -15824,6 +16137,20 @@ def _seed_marketplace_postgres_samples():
             ("Generic", "Various", "contact@example.com", "Conduit,Boxes,Wires"),
             ("MK",      "UK",      "sales@mkelectric.com", "Sockets,Switches"),
             ("ABB",     "Sweden",  "sales@abb.com",      "Transformers,Switchgear"),
+            ("Eaton",   "USA",     "sales@eaton.com",    "Switchgear,UPS,Panels"),
+            ("Hager",   "Germany", "sales@hager.com",    "DBs,Consumer Units"),
+            ("Legrand", "France",  "sales@legrand.com",  "Sockets,Switches,ICT"),
+            ("Siemens", "Germany", "sales@siemens.com",  "Switchgear,Drives,Transformers"),
+            ("Polycab", "India",   "sales@polycab.com",  "Cables,Wires"),
+            ("RR Kabel","India",   "sales@rrkabel.com",  "Wires,Fire-resistant"),
+            ("JA Solar","China",   "sales@jasolar.com",  "PV Modules"),
+            ("Victron", "Netherlands","sales@victronenergy.com","Inverters,Solar"),
+            ("Pylontech","China",  "sales@pylontech.com","Batteries"),
+            ("Cummins", "USA",     "sales@cummins.com",  "Generators"),
+            ("APC",     "USA",     "sales@apc.com",      "UPS"),
+            ("Cisco",   "USA",     "sales@cisco.com",    "Network,ICT"),
+            ("Hikvision","China",  "sales@hikvision.com","CCTV,Security"),
+            ("Honeywell","USA",    "sales@honeywell.com","Fire Alarm,BMS"),
         ]:
             try:
                 c.execute(
@@ -15883,6 +16210,57 @@ def _seed_marketplace_postgres_samples():
         ("light_switches",     "1 Gang 2 Way Switch",                  "MK",        "K4871WHI",   "1 gang 2 way switch, 10A, white",                    "No.",     6, mk,        7,  "1 Gang 2 Way"),
         ("light_switches",     "2 Gang 2 Way Switch",                  "MK",        "K4872WHI",   "2 gang 2 way switch, 10A, white",                    "No.",     8, mk,        7,  "2 Gang 2 Way"),
         ("light_switches",     "3 Gang 2 Way Switch",                  "MK",        "K4873WHI",   "3 gang 2 way switch, 10A, white",                    "No.",    11, mk,        7,  "3 Gang 2 Way"),
+        # - Extra coverage (ASCII-only spec text for safe Postgres write) -----
+        ("transformers",       "Schneider 100 kVA Dry Type",           "Schneider", "DT100",      "100 kVA, 11/0.4 kV, AN, IP00, IEC 60076-11",         "No.",  4200, schneider, 60, "Dry Type"),
+        ("transformers",       "ABB 1000 kVA Package Substation",      "ABB",       "PSS-1000",   "1000 kVA, 11/0.4 kV, ONAN, Dyn11, packaged unit",    "No.", 18500, abb,       75, "Package Substation"),
+        ("avr",                "Static AVR 10 kVA 1-Phase",            "Generic",   "SAVR-10K-1P", "10 kVA, 1PH, Static IGBT, +/-3% accuracy",          "No.",   620, generic,   14, "Single-phase"),
+        ("hv_cables",          "33 kV XLPE 1C 240mm2 Cu Armoured",     "Nexans",    "HV-33-1C240","33 kV, XLPE/CWS/PVC, Copper, 1 core, 240mm2",        "m",     145, nexans,    45, "1C HV Armoured"),
+        ("hv_cables",          "11 kV 3C 95mm2 Al Armoured",           "Nexans",    "HV-11-3C95A","11 kV, XLPE/SWA/PVC, Aluminium, 3 core, 95mm2",      "m",      38, nexans,    45, "Aluminium HV"),
+        ("lv_cables",          "LV 2C 4mm2 Cu PVC/SWA/PVC",            "Nexans",    "LV-2C-4P",   "0.6/1 kV, 2 core, 4mm2, Cu, PVC/SWA/PVC",            "m",       6, nexans,    14, "PVC/SWA/PVC"),
+        ("lv_cables",          "LV 3C 6mm2 Cu Flex H07RN-F",           "Nexans",    "FLX-3C-6",   "450/750 V, 3 core, 6mm2, Cu, rubber-sheathed",       "m",       8, nexans,    14, "Flexible Power"),
+        ("wires",              "Earth Wire 6mm2 Green/Yellow (100m)",  "Polycab",   "EW-6-GY",    "6mm2 Cu, 450/750 V, PVC, green/yellow",              "Roll",   48, generic,   7,  "Earth Wire"),
+        ("wires",              "Fire-resistant 1.5mm2 (100m)",         "RR Kabel",  "FR-1.5",     "1.5mm2 Cu, FR-LSZH, 450/750 V, red",                 "Roll",   58, generic,   14, "Fire-resistant"),
+        ("panel_boards",       "1000A ATS Panel",                      "Schneider", "ATS-1000",   "1000A 3PH ATS, AMF + utility/genset, IP54",          "No.", 14500, schneider, 60, "ATS Panel"),
+        ("panel_boards",       "200kVAr PFC Panel",                    "Schneider", "PFC-200",    "200 kVAr, 10 stages, contactor-switched, IP42",      "No.",  6200, schneider, 45, "PFC Panel"),
+        ("distribution_boards","12-way Metal Clad TPN DB",             "Hager",     "DB-12MCTPN", "12-way TPN MC, 125A incomer, 10kA, IP54",            "No.",   320, schneider, 21, "Metal Clad"),
+        ("distribution_boards","6-way Flush Consumer Unit",            "Hager",     "DB-6FCU",    "6-way SPN flush, 63A RCD + 6 MCBs",                  "No.",   135, schneider, 14, "Flush Mounted"),
+        ("isolators",          "32A 2-Pole AC Isolator IP65",          "Schneider", "ISO-32-2P",  "32A 2P AC isolator, IP65, weatherproof",             "No.",    24, schneider, 14, "Double-pole"),
+        ("isolators",          "16A 4-Pole DC Isolator (Solar)",       "Schneider", "ISO-16-DC",  "16A 4P DC isolator, 1000 VDC, IP65, lockable",       "No.",    42, schneider, 21, "DC"),
+        ("fuse_switches",      "200A Fuse Switch Disconnector",        "ABB",       "FSD-200",    "200A 4P FSD, 50kA, HRC fuses, IP30",                 "No.",   245, abb,       21, "Fuse Switch Disconnector"),
+        ("fuse_switches",      "400A Changeover Fuse Switch",          "ABB",       "CFS-400",    "400A 4P changeover, manual, IP31",                   "No.",   485, abb,       30, "Changeover"),
+        ("conduit",            "GI Conduit 20mm (3m)",                 "Generic",   "GI-20",      "20mm dia hot-dip galv steel conduit, 3m, class 4",   "m",       2, generic,   7,  "GI"),
+        ("conduit",            "Flexible Metallic 25mm (per m)",       "Generic",   "FLX-25M",    "25mm dia flexible metallic conduit, PVC-coated",     "m",       3, generic,   7,  "Flexible"),
+        ("steel_boxes",        "3 Gang Surface Steel Box",             "Generic",   "SB-3G-S",    "3 gang surface flush steel back box, 35mm deep",     "No.",     5, generic,   7,  "3 Gang"),
+        ("steel_boxes",        "4 Gang Deep Steel Box",                "Generic",   "SB-4G-D",    "4 gang deep flush steel back box, 50mm deep",        "No.",     6, generic,   7,  "4 Gang"),
+        ("circular_boxes",     "PVC Junction Box 80mm IP65",           "Generic",   "JB-PVC-80",  "80mm PVC junction box, 4 knockouts, IP65",           "No.",     3, generic,   7,  "Junction"),
+        ("cable_trays",        "Ladder Tray 450mm (3m) HDG",           "Generic",   "LT-450",     "450mm wide ladder cable tray, HDG, 3m length",       "m",      32, generic,   21, "Ladder"),
+        ("cable_trays",        "Wire Mesh Tray 200mm (3m)",            "Generic",   "WMT-200",    "200mm wide wire-mesh basket tray, EZ, 3m",           "m",      14, generic,   14, "Wire Mesh"),
+        ("trunking",           "Dado Trunking 100x50mm (2m)",          "Generic",   "DT-100-50",  "100x50mm dado trunking, 2 compartments, white",      "m",      18, generic,   14, "Dado"),
+        ("trunking",           "Skirting Trunking 75x18mm (2m)",       "Generic",   "ST-75-18",   "75x18mm skirting trunking, white",                   "m",       8, generic,   7,  "Skirting"),
+        ("earthing",           "Earth Rod 16mm x 1.2m Cu-bonded",      "Generic",   "ER-16-1.2",  "16mm x 1.2m Cu-bonded steel earth rod with clamp",   "No.",    18, generic,   7,  "Earth Rods"),
+        ("earthing",           "Copper Tape 25x3mm (10m roll)",        "Generic",   "CT-25-3",    "25x3mm bare Cu tape, 10m roll, lightning protection","Roll",   95, generic,   14, "Copper Tape"),
+        ("earthing",           "Exothermic Weld Kit (Cu/Cu Tee)",      "Generic",   "EXO-CC-T",   "Exothermic weld kit, Cu/Cu tee, 95mm2",              "No.",    32, generic,   14, "Exothermic Kits"),
+        ("sockets",            "13A IP66 Weatherproof Twin Socket",    "MK",        "K56480WHI",  "13A twin switched, IP66, surface, grey",             "No.",    28, mk,        14, "Weatherproof"),
+        ("sockets",            "13A Metal Clad Twin Socket",           "MK",        "K2747ALM",   "13A twin switched, metal-clad, surface",             "No.",    22, mk,        14, "Metal Clad"),
+        ("dp_switches",        "20A DP AC Switch with Neon",           "MK",        "K5423WHI",   "20A DP switch with neon, flush, for AC, white",      "No.",    13, mk,        7,  "Air Conditioner"),
+        ("dp_switches",        "20A Metal Clad DP Switch",             "MK",        "K5403ALM",   "20A DP switch, metal-clad surface, IP2X",            "No.",    16, mk,        14, "Metal Clad"),
+        ("light_switches",     "1 Gang 1 Way Switch",                  "MK",        "K4870WHI",   "1 gang 1 way switch, 10A, white",                    "No.",     5, mk,        7,  "1 Gang 1 Way"),
+        ("light_switches",     "4 Gang 2 Way Switch",                  "MK",        "K4874WHI",   "4 gang 2 way switch, 10A, white",                    "No.",    14, mk,        7,  "4 Gang"),
+        ("light_switches",     "Intermediate Switch 1G",               "MK",        "K4875WHI",   "1 gang intermediate switch, 10A, white",             "No.",     9, mk,        7,  "Intermediate"),
+        ("light_switches",     "Dimmer Switch 1G 400W",                "MK",        "K1500WHI",   "1 gang push-rotary dimmer, 60-400W, white",          "No.",    18, mk,        7,  "Dimmer"),
+        ("solar_equipment",    "JA Solar 550W Mono PV Module",         "JA Solar",  "JAM72S30-550","550W, mono-PERC, 72-cell, 21.3% eff., 12-yr product","No.",   180, sup.get("JA Solar", generic), 21, "PV Modules"),
+        ("solar_equipment",    "Victron MultiPlus-II 5kVA Inverter",   "Victron",   "PMP482505010","5 kVA hybrid, 48V, 70A charger, parallel-stackable",  "No.",  1480, sup.get("Victron", generic), 14, "Hybrid Inverters"),
+        ("solar_equipment",    "Pylontech US5000 4.8kWh LFP Battery",  "Pylontech", "US5000",     "4.8 kWh, 48V, LFP, 6000 cycles @ 80% DoD",           "No.",  1380, sup.get("Pylontech", generic), 21, "Batteries"),
+        ("solar_equipment",    "MC4 Connector Pair (TUV)",             "Generic",   "MC4-PAIR",   "MC4 male+female connector pair, TUV, 1500 VDC",      "No.",     2, generic,   7,  "MC4 Connectors"),
+        ("solar_equipment",    "DC Combiner Box 4-in/1-out 1000V",     "Generic",   "DCB-4-1",    "4-in/1-out DC combiner, 1000 VDC, SPD + fuses, IP65","No.",   145, generic,   14, "Combiner Boxes"),
+        ("power_system",       "11 kV RMU 2-Way Compact",              "ABB",       "SafeRing-2W","11 kV, 2-way ring main unit, SF6, 630A, 21kA",       "No.", 11500, abb,       75, "RMU"),
+        ("power_system",       "250 kVA Cummins Genset",               "Cummins",   "C250D5",     "250 kVA, 3PH, diesel, open-set, 1500 rpm",           "No.", 28500, sup.get("Cummins", generic), 45, "Generators"),
+        ("power_system",       "10 kVA Online UPS Tower",              "APC",       "SRT10KXLI",  "10 kVA / 10 kW, online double-conversion, tower",    "No.",  4600, sup.get("APC", generic), 21, "UPS"),
+        ("power_system",       "MCCB 400A 4P 50kA",                    "Schneider", "MCCB-400-4P","400A 4P MCCB, 50kA breaking capacity",               "No.",   520, schneider, 21, "Switchgear"),
+        ("ict_elv",            "Cat6 UTP Data Outlet (RJ45)",          "Legrand",   "RJ45-C6",    "Cat6 UTP RJ45 data outlet, flush, white",            "No.",     8, sup.get("Legrand", generic), 7,  "Data Outlets"),
+        ("ict_elv",            "24-port Gigabit PoE+ Switch",          "Cisco",     "CBS250-24P", "24-port Gigabit + 4 SFP, PoE+ 195W, managed",        "No.",   620, sup.get("Cisco", generic), 21, "Network Switches"),
+        ("ict_elv",            "4MP IP Bullet CCTV Camera",            "Hikvision", "DS-2CD2043", "4MP IR fixed bullet, IP67, PoE, 2.8mm lens",         "No.",    95, sup.get("Hikvision", generic), 14, "CCTV"),
+        ("ict_elv",            "Addressable Smoke Detector",           "Honeywell", "SD-ADR-100", "Photoelectric addressable smoke detector, EN54-7",   "No.",    52, sup.get("Honeywell", generic), 14, "Fire Alarm"),
     ]
     code_to_label = {row[0]: row[1] for row in _MARKETPLACE_CATEGORIES}
     with get_db() as c:
