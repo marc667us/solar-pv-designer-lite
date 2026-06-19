@@ -233,13 +233,23 @@ class _PgConnAdapter:
         subclasses with dict-like access — they pass both subscript paths
         the codebase uses. RealDictCursor returns dict-only rows which
         would break any caller that does row[0].
+
+        Why %-escaping: psycopg2 uses `%s` for placeholders, so any
+        literal `%` in the SQL (e.g. `LIKE 'BulkProd-%'`) collides with
+        Python's format-string syntax when params are supplied -- raises
+        IndexError: list index out of range. We double `%` -> `%%` BEFORE
+        injecting `%s` placeholders so SolarPro's NOT LIKE clauses and
+        the like-pattern `%foo%` parameters both keep working.
         """
         import psycopg2.extras
-        # Two-step translation: SQLite idiom rewrites first, then ?->%s.
-        # Idiom translation runs unconditionally so the ?-translation in
-        # rewritten fragments (e.g. PRAGMA's WHERE table_name=?) catches
-        # placeholders the rewrite introduced.
+        # Three-step translation:
+        #   1. SQLite idiom rewrites (PRAGMA, datetime, etc.).
+        #   2. Escape literal `%` -> `%%` so psycopg2's parameter binding
+        #      doesn't mis-read SQL-LIKE wildcards as format specs.
+        #   3. Substitute `?` placeholders with `%s`.
         translated = _translate_sqlite_to_postgres(sql)
+        if params:
+            translated = translated.replace("%", "%%")
         if "?" in translated:
             translated = translated.replace("?", "%s")
         cur = self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
@@ -257,6 +267,10 @@ class _PgConnAdapter:
         compat shim."""
         import psycopg2.extras
         translated = _translate_sqlite_to_postgres(sql)
+        # executemany ALWAYS supplies params -- escape literal `%` so
+        # any wildcards inside the SQL don't collide with psycopg2's
+        # %s format spec. See execute() docstring for full reasoning.
+        translated = translated.replace("%", "%%")
         if "?" in translated:
             translated = translated.replace("?", "%s")
         cur = self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
