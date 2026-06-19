@@ -3,7 +3,7 @@
   "first_baseline_utc": "2026-06-11T00:37:45.141754+00:00",
   "initialized": true,
   "last_feedback_id": 1,
-  "last_run_utc": "2026-06-19T12:20:55.897913+00:00",
+  "last_run_utc": "2026-06-19T15:45:12.563445+00:00",
   "last_signup_id": 0,
   "last_ticket_id": 0,
   "note": "Agent-triage state. Re-written every hour by .github/workflows/agent-triage.yml. last_*_id values track the highest id seen per channel so the next run only processes truly-new items. initialized=false on the very first run; the workflow seeds the baseline to the current max id without processing the backlog to avoid spam-ACKing existing rows."
