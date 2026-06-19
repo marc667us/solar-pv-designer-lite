@@ -14,3 +14,10 @@ celery==5.4.0
 redis==5.0.7
 hvac>=2.0.0
 psycopg2-binary>=2.9.9
+
+# Keycloak JWT verification (Phase 2 of SECURITY_MIGRATION_KEYCLOAK.md).
+# python-jose is FOSS-compatible (MIT) -- chosen over python-keycloak to
+# avoid a heavy dependency tree. The [cryptography] extra pulls in PyCA
+# cryptography for RS256 verification.
+python-jose[cryptography]>=3.3.0
+

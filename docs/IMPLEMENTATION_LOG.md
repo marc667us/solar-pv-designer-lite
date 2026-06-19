@@ -1186,3 +1186,49 @@ Phase 2 work (decorator + session migration) accounts for 376 / 517 = 73% of the
 **Known Risks:** Bootstrap script's password-grant fallback may not work because `solarpro-web` correctly disables `directAccessGrantsEnabled` — the script handles this by falling back to admin-cli verification. The password-grant path is a CONVENIENCE test; the real auth flow uses authorization code + PKCE via the browser.
 
 **Next Recommended Step:** Phase 2 — write `app/security/keycloak_middleware.py` (JWT signature + JWKS cache + claims extraction) and `app/security/decorators.py` (`require_jwt`, `require_role`, `require_any_role`, `require_scope`, `require_tenant_match`). Apply the first decorator to the pilot route `GET /admin/marketplace`, keep `@admin_required` in parallel. No deploy yet — all changes behind a `KEYCLOAK_ENABLED=true` env flag.
+
+---
+
+# Implementation Log Entry — Phase 2 (Keycloak middleware + decorators)
+
+**Date:** 2026-06-19 (same session, post-Phase-1)
+**Task:** Phase 2 of `docs/SECURITY_MIGRATION_KEYCLOAK.md` — backend JWT middleware + Flask decorators, with parallel-run feature flag.
+**Status:** Complete except for the pilot route migration on `web_app.py` (task 11), which is deliberately deferred — the next session does it after standing up Keycloak locally.
+
+**Files Changed:**
+- `app/__init__.py` — new, marks `app/` as the package for modular code (the legacy single-file `web_app.py` is grandfathered per ADR-0001).
+- `app/security/__init__.py` — new, re-exports the public API.
+- `app/security/keycloak_middleware.py` — new, ~280 lines. JWT verification + JWKS cache + `RequestContext` dataclass + `extract_request_context(claims)` helper. Cache TTL configurable via `KEYCLOAK_JWKS_TTL` env (default 300s). Rotation handled by `kid`-mismatch refetch. `verify_jwt()` validates signature + issuer + audience + expiry + not-before + sub required. Hard-fails when `KEYCLOAK_ISSUER` is unset (prevents accidental bypass when env wasn't configured).
+- `app/security/decorators.py` — new, ~260 lines. Seven Flask decorators: `require_jwt`, `require_role`, `require_any_role`, `require_all_roles`, `require_scope`, `require_tenant_match`, `require_service_account`. All implicitly chain `require_jwt`. All stash `g.kc_ctx = RequestContext` so route handlers can call `get_request_context()`. **All gated behind a `KEYCLOAK_ENABLED` env flag** — when unset (default), every decorator is a no-op pass-through so the old `@login_required` / `@admin_required` stack keeps working unchanged. This is the parallel-run model from plan §4.3.
+- `requirements.txt` — added `python-jose[cryptography]>=3.3.0` (MIT licence; matches FOSS Stack Rule).
+- `tests/security/__init__.py` — new (empty package marker).
+- `tests/security/test_keycloak_middleware.py` — new, ~250 lines, 11 tests. RSA-2048 key fixture; module-level config + JWKS cache seeded for each test. Covers happy path, expired token, wrong issuer, wrong audience, missing kid, unknown kid, missing sub, unconfigured issuer, RequestContext extraction, role/scope helpers, service-account detection, marketplace_scope parsing.
+- `tests/security/test_decorators.py` — new, ~270 lines, 22 tests. Minimal Flask app per test; mocks `verify_jwt`. Covers feature-flag pass-through, all four `require_jwt` paths, role / any-role / all-roles allow + deny, scope allow + deny, tenant match + mismatch + platform-super-admin bypass + missing-tenant-claim, service-account human-deny + correct-allow + wrong-deny.
+
+**Test result:** `33/33 pass` (9.42s).
+
+**Database Changes:** None.
+**API Changes:** None at runtime. New decorators ready for use; `web_app.py` not modified.
+**Frontend Changes:** None.
+**Security Changes:** None at runtime (parallel-run feature flag off by default). When enabled (Phase 5/7), every route that adopts `@require_role(...)` gains:
+- JWT signature + issuer + audience + expiry validation.
+- Per-role + per-scope + per-tenant authorization.
+- Audit-trail on every denial via the existing `logging_config.structured_logger.audit` writer (fallback to `current_app.logger.warning`).
+
+**Tests Added:** 33 unit tests covering both middleware and decorators.
+
+**Documentation Updated:**
+- Module docstrings spell out every env var, every error code, every parallel-run rule.
+- `app/__init__.py` documents the new modular package model.
+
+**What Was Completed:** Tasks 8 (deps) + 9 (middleware) + 10 (decorators) + 12 (tests) of plan §19. All four pass `pytest tests/security/` with 33/33.
+
+**What Remains:**
+- Task 11 — apply `@require_role("marketplace_admin")` to `GET /admin/marketplace` in `web_app.py`. Deliberately deferred: web_app.py edits are byte-level + CRLF-sensitive (per CLAUDE.md "NEVER use the Edit tool directly on web_app.py"). Should land alongside the local Keycloak bootstrap (so it can be tested end-to-end with a real token).
+- Phase 3 — service-account clients in realm export + `app/security/service_account_client.py` token fetch helper + rewrite agent loaders.
+- Phase 4 — `app/security/tenant_context.py` + RLS migration.
+- Phases 5–7 per plan §20.
+
+**Known Risks:** Feature flag is a *strict* off-by-default. If a future session enables it without first updating the pilot route, every protected route falls through to the old auth stack — still safe, but the new decorators won't do anything. The pilot-route migration is the gate that activates the new stack.
+
+**Next Recommended Step:** Stand up the local Keycloak stack (`bash scripts/keycloak/bootstrap.sh` from Phase 1) and migrate `GET /admin/marketplace` as the pilot route. Both `@admin_required` and `@require_role("marketplace_admin")` decorate the route; with `KEYCLOAK_ENABLED=true` set in env, requests with a `marketplace_admin` JWT pass; without the env set, the old admin auth handles it as before.
