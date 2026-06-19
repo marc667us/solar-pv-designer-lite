@@ -14089,6 +14089,7 @@ def marketplace_public():
     _ensure_marketplace_tables()
     q = (request.args.get("q") or "").strip()
     cat_id = _safe_int(request.args.get("cat", 0))
+    sub = (request.args.get("sub") or "").strip()
 
     with get_db() as c:
         categories = c.execute(
@@ -14123,6 +14124,12 @@ def marketplace_public():
                     "     OR LOWER(ec.model) LIKE ? OR LOWER(ec.spec) LIKE ?) ")
             like = f"%{q.lower()}%"
             args.extend([like, like, like, like])
+        if sub:
+            # Subcategory is free-text in equipment_catalog so do a
+            # case-insensitive exact match (LOWER on both sides for
+            # cross-backend consistency, same trick as the `q` filter).
+            sql += "AND LOWER(ec.subcategory)=? "
+            args.append(sub.lower())
         sql += "ORDER BY ec.created_at DESC LIMIT 200"
         products = c.execute(sql, args).fetchall()
 
@@ -14144,6 +14151,11 @@ def marketplace_public():
             if cat["id"] == cat_id:
                 selected_category = cat
                 break
+    subcategories_for_selected = []
+    if selected_category:
+        subcategories_for_selected = _MARKETPLACE_SUBCATEGORIES.get(
+            selected_category["code"], []
+        )
 
     # Currency selection — same indicative FX rates as the procurement center.
     currency = (request.args.get("currency") or "GHS").strip().upper()
@@ -14161,6 +14173,8 @@ def marketplace_public():
         user=current_user(),
         categories=categories,
         products=products_view,
+        subcategories_for_selected=subcategories_for_selected,
+        selected_subcategory=sub,
         total_products=total_products,
         total_suppliers=total_suppliers,
         total_countries=countries,
