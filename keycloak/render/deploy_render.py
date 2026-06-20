@@ -131,10 +131,19 @@ def env_block() -> list:
          "value": os.environ.get("KC_BOOTSTRAP_ADMIN_PASSWORD")
                   or secrets.token_urlsafe(32)},
         # ── Hostname / proxy (Render terminates TLS) ──
-        {"key": "KC_HOSTNAME", "value": "auth.aiappinvent.com"},
+        # KC_HOSTNAME accepts a full URL in KC 26; passing the scheme
+        # forces issuer URLs to be https:// even though the container
+        # itself speaks HTTP (Render's load balancer terminates TLS).
+        # When DNS for auth.aiappinvent.com is set up, swap this URL to
+        # the custom domain and re-run the deploy workflow.
+        {"key": "KC_HOSTNAME",
+         "value": os.environ.get("KC_HOSTNAME_URL",
+                                 "https://solarpro-keycloak.onrender.com")},
         {"key": "KC_HOSTNAME_STRICT", "value": "false"},
-        {"key": "KC_HOSTNAME_STRICT_HTTPS", "value": "false"},
-        {"key": "KC_PROXY", "value": "edge"},
+        # KC_PROXY=edge is the legacy flag; KC_PROXY_HEADERS=xforwarded
+        # is the KC 26 way of telling KC to trust X-Forwarded-* from the
+        # Render load balancer.
+        {"key": "KC_PROXY_HEADERS", "value": "xforwarded"},
         # ── Observability ──
         {"key": "KC_METRICS_ENABLED", "value": "true"},
         {"key": "KC_HEALTH_ENABLED", "value": "true"},
