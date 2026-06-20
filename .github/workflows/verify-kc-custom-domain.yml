@@ -1,0 +1,61 @@
+# Nudge Render to re-check verification + TLS provisioning for the KC
+# custom domain. Useful after the CNAME is added to Namecheap so we
+# don't wait for Render's scheduled verification poll.
+
+name: Verify KC Custom Domain
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      DOMAIN_ID: cdm-d8rfoosm0tmc73c4ndq0
+      SERVICE_NAME: solarpro-keycloak
+    steps:
+      - name: Find service id
+        id: svc
+        run: |
+          set -e
+          SVC=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services?name=${SERVICE_NAME}" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['service']['id'])")
+          echo "id=$SVC" >> $GITHUB_OUTPUT
+
+      - name: Trigger verification
+        env:
+          SVC_ID: ${{ steps.svc.outputs.id }}
+        run: |
+          set -e
+          # Render's verify endpoint: POST /v1/services/{svc}/custom-domains/{cd}/verify
+          HTTP=$(curl -sS -o /tmp/verify.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$SVC_ID/custom-domains/$DOMAIN_ID/verify")
+          echo "HTTP $HTTP"
+          cat /tmp/verify.json
+          echo
+
+      - name: Wait for verification status = verified
+        env:
+          SVC_ID: ${{ steps.svc.outputs.id }}
+        run: |
+          set -e
+          for i in $(seq 1 20); do
+            STATUS=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$SVC_ID/custom-domains/$DOMAIN_ID" \
+              | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('verificationStatus', d.get('customDomain',{}).get('verificationStatus','?')))")
+            echo "[$i] verificationStatus=$STATUS"
+            if [ "$STATUS" = "verified" ]; then
+              echo "OK -- verified"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::warning::not verified after 5 min; Render's background verify will keep retrying"
