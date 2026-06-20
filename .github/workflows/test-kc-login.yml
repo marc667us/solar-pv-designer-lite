@@ -144,12 +144,27 @@ jobs:
               assert "auth.aiappinvent.com" in page.url, \
                   f"expected KC, got {page.url}"
 
-              # KC standard login form: input#username + input#password + button#kc-login
-              page.fill("input#username", USER)
-              page.fill("input#password", PWD)
-              print("  submitting credentials")
-              page.click("input#kc-login")
-              page.wait_for_load_state("domcontentloaded", timeout=60000)
+              # KC standard login form: input#username + input#password
+              # Submit button selector varies by KC version/theme:
+              #   KC <= 24: input#kc-login (input element)
+              #   KC 25-26 (PatternFly): button[type=submit] inside form#kc-form-login
+              # Try the modern selector first, fall back to legacy.
+              try:
+                  page.fill("input#username", USER)
+                  page.fill("input#password", PWD)
+                  print("  submitting credentials")
+                  submit = page.locator("form#kc-form-login button[type=submit], input#kc-login").first
+                  submit.wait_for(timeout=15000)
+                  submit.click()
+                  page.wait_for_load_state("domcontentloaded", timeout=60000)
+              except Exception as e:
+                  print(f"  FAIL during submit: {e}")
+                  print("  dumping form HTML for diagnosis:")
+                  try:
+                      print(page.locator("form").first.inner_html()[:1500])
+                  except Exception:
+                      print(page.content()[:2000])
+                  raise
               print(f"  post-login: {page.url}")
 
               # Expect we're back on solar's dashboard (or /).
