@@ -181,11 +181,22 @@ def update_env_vars(service_id: str) -> None:
 
 def trigger_deploy(service_id: str) -> dict:
     """POST a fresh deploy. clearCache=do_not_clear so the realm import
-    is preserved; we want incremental KC restarts."""
+    is preserved; we want incremental KC restarts.
+
+    Render's POST /deploys sometimes returns 202 with an empty body
+    (e.g. when a deploy is already in progress from the create call).
+    We tolerate empty bodies and return {} so the caller can keep going."""
     print("triggering deploy ...")
     r = _post(f"/services/{service_id}/deploys",
               {"clearCache": "do_not_clear"})
-    return r.json()
+    if not r.text.strip():
+        print("  (empty 2xx body -- treating as queued)")
+        return {"id": None, "status": "queued"}
+    try:
+        return r.json()
+    except ValueError:
+        print(f"  (non-JSON 2xx body: {r.text[:120]!r}) -- treating as queued")
+        return {"id": None, "status": "queued"}
 
 
 def main() -> int:
