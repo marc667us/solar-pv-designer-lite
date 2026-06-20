@@ -102,6 +102,13 @@ def _authorize_url() -> str:
     return f"{_issuer()}/protocol/openid-connect/auth"
 
 
+def _registrations_url() -> str:
+    """KC's registration endpoint -- takes the same OIDC params as /auth
+    but renders the registration form first (then the auth flow continues
+    after the user creates an account)."""
+    return f"{_issuer()}/protocol/openid-connect/registrations"
+
+
 def _token_endpoint() -> str:
     return f"{_issuer()}/protocol/openid-connect/token"
 
