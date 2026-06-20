@@ -91,20 +91,26 @@ jobs:
             -d '{"requiredActions":[]}'
 
       - name: Set temporary password
+        id: pwd
         env:
           TOKEN: ${{ steps.tok.outputs.value }}
           BASE: ${{ steps.tok.outputs.base }}
           USER_ID: ${{ steps.user.outputs.id }}
         run: |
           set -e
-          # Use a fixed temp pw so the playwright step can read it.
-          # We rotate to random + re-add UPDATE_PASSWORD in cleanup.
-          # Drop -f so curl prints the response body on HTTP 4xx for diag.
-          HTTP=$(curl -sS -o /tmp/pwd.json -w "%{http_code}" -X PUT \
+          # Generate a fresh password each run -- realm's history(5) policy
+          # rejects any of the last 5 passwords for the user. 24 urlsafe
+          # chars + sentinel suffix satisfies length(12), digits, upper,
+          # lower, special policies.
+          PWD="$(python3 -c "import secrets;print(secrets.token_urlsafe(20))")Aa1!"
+          echo "::add-mask::$PWD"
+          PAYLOAD=$(python3 -c "import os,json;print(json.dumps({'type':'password','value':os.environ['PWD'],'temporary':False}))" PWD="$PWD")
+          # Pipe payload via stdin to avoid leaking via process args.
+          HTTP=$(echo "$PAYLOAD" | curl -sS -o /tmp/pwd.json -w "%{http_code}" -X PUT \
             "$BASE/admin/realms/solarpro/users/$USER_ID/reset-password" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"type":"password","value":"SmokeTest!123ABC","temporary":false}')
+            --data-binary @-)
           echo "HTTP $HTTP"
           cat /tmp/pwd.json
           echo
@@ -112,9 +118,12 @@ jobs:
             echo "::error::reset-password returned $HTTP"; exit 1
           fi
           echo "temp password set on $TEST_USERNAME"
+          echo "value=$PWD" >> $GITHUB_OUTPUT
 
       - name: Run Playwright login flow
         id: play
+        env:
+          TEST_PWD: ${{ steps.pwd.outputs.value }}
         run: |
           cat > /tmp/login_test.py << 'PY'
           import os, sys
@@ -122,7 +131,7 @@ jobs:
 
           SOLAR = os.environ['SOLAR_BASE']
           USER  = os.environ['TEST_USERNAME']
-          PWD   = "SmokeTest!123ABC"
+          PWD   = os.environ['TEST_PWD']
 
           with sync_playwright() as p:
               browser = p.chromium.launch(headless=True)
