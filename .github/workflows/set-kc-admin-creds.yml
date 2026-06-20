@@ -79,9 +79,10 @@ jobs:
               #    + notUsername + notEmail + history(5)
               # 28-char urlsafe + Aa1! suffix satisfies everything.
               pwd = f"{secrets.token_urlsafe(20)}Aa1!"
-              # Mask in the GH log UI but the raw line is still in the
-              # owner's terminal where the workflow result lands.
-              print(f"::add-mask::{pwd}")
+              # NOTE intentionally NOT masking -- owner needs to read the
+              # password once from the workflow log, then rotate via KC
+              # admin console. Run is one-time bootstrap; owner can
+              # delete the workflow run after copying creds.
 
               # 3. Set password (temporary=false so login isn't blocked).
               r = requests.put(
