@@ -99,11 +99,18 @@ jobs:
           set -e
           # Use a fixed temp pw so the playwright step can read it.
           # We rotate to random + re-add UPDATE_PASSWORD in cleanup.
-          curl -fsS -X PUT \
+          # Drop -f so curl prints the response body on HTTP 4xx for diag.
+          HTTP=$(curl -sS -o /tmp/pwd.json -w "%{http_code}" -X PUT \
             "$BASE/admin/realms/solarpro/users/$USER_ID/reset-password" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"type":"password","value":"SmokeTest!123ABC","temporary":false}'
+            -d '{"type":"password","value":"SmokeTest!123ABC","temporary":false}')
+          echo "HTTP $HTTP"
+          cat /tmp/pwd.json
+          echo
+          if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then
+            echo "::error::reset-password returned $HTTP"; exit 1
+          fi
           echo "temp password set on $TEST_USERNAME"
 
       - name: Run Playwright login flow
