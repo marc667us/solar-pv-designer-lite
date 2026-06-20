@@ -3222,14 +3222,24 @@ def report_pv(pid):
 @app.route("/project/<int:pid>/report/boq")
 @login_required
 def report_boq(pid):
+    # client-clean toggle for solar engineering BOQ (master prompt s11).
     gate = _paid_only(pid)
     if gate: return gate
     project = get_project(pid)
     if not project or "results" not in project["data"]:
         return redirect(url_for("project_results", pid=pid))
+    internal_view = bool(request.args.get("view") == "internal")
+    if internal_view:
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(get_db, session["user_id"], "boq_buildup_viewed", "solar_project", pid)
+        except Exception:
+            pass
     return render_template("report_boq.html", user=current_user(),
                            project=project, d=project["data"],
-                           r=project["data"]["results"])
+                           r=project["data"]["results"],
+                           internal_view=internal_view,
+                           can_view_buildup=True)
 
 
 @app.route("/project/<int:pid>/report/cable")
@@ -16076,6 +16086,11 @@ def boms_clone_to_rfq(bom_id):
 @app.route("/boms/<int:bom_id>/boq")
 @login_required
 def boms_boq(bom_id):
+    """Marketplace BOQ view. Defaults to the client-clean column set
+    (#/Description/Unit/Qty/Rate/Amount/Remarks) per master prompt s11.
+    Pass ?view=internal to expose the full rate build-up; the BOM owner
+    can always view their own internal build-up (anyone else 404'd at
+    _bom_owned_or_404)."""
     uid = session["user_id"]
     bom = _bom_owned_or_404(bom_id, uid)
     items = _bom_items_with_prices(bom_id)
@@ -16083,10 +16098,15 @@ def boms_boq(bom_id):
     _bcur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
     _brate = _CURRENCY_RATES_FROM_USD.get(_bcur, 1.0)
     totals = _bom_totals_with_rates(items, bom_rates, fx_rate=_brate)
-    # Compliance Review Agent (lite) -- driven off the same
-    # _MARKETPLACE_SPEC_FIELDS registry the supplier upload form uses,
-    # so both sides of the platform agree on what "complete" means.
     compliance_findings = _boq_compliance_check(items, totals.get("lines", []))
+    can_view_buildup = True
+    internal_view = bool(request.args.get("view") == "internal" and can_view_buildup)
+    if internal_view:
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(get_db, uid, "boq_buildup_viewed", "marketplace_bom", bom_id)
+        except Exception:
+            pass
     return render_template(
         "bom_boq.html",
         user=current_user(),
@@ -16094,6 +16114,40 @@ def boms_boq(bom_id):
         currency=_bcur, fx_rate=_brate,
         rates_as_of=_CURRENCY_RATES_AS_OF,
         compliance_findings=compliance_findings,
+        internal_view=internal_view,
+        can_view_buildup=can_view_buildup,
+    )
+
+
+# alias for the internal rate-buildup view (master prompt s12)
+@app.route("/boms/<int:bom_id>/rate-buildup")
+@login_required
+def boms_rate_buildup(bom_id):
+    """Internal Project Rate Build-Up page. Same template as the BOQ,
+    forced internal_view=True. Role-gated implicitly through
+    _bom_owned_or_404."""
+    uid = session["user_id"]
+    bom = _bom_owned_or_404(bom_id, uid)
+    items = _bom_items_with_prices(bom_id)
+    bom_rates = _bom_rates_for(bom_id)
+    _bcur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
+    _brate = _CURRENCY_RATES_FROM_USD.get(_bcur, 1.0)
+    totals = _bom_totals_with_rates(items, bom_rates, fx_rate=_brate)
+    compliance_findings = _boq_compliance_check(items, totals.get("lines", []))
+    try:
+        from new_boq_hierarchy_schema import boq_audit
+        boq_audit(get_db, uid, "boq_buildup_viewed", "marketplace_bom", bom_id)
+    except Exception:
+        pass
+    return render_template(
+        "bom_boq.html",
+        user=current_user(),
+        bom=bom, items=items, totals=totals, bom_rates=bom_rates,
+        currency=_bcur, fx_rate=_brate,
+        rates_as_of=_CURRENCY_RATES_AS_OF,
+        compliance_findings=compliance_findings,
+        internal_view=True,
+        can_view_buildup=True,
     )
 
 
@@ -17300,29 +17354,41 @@ def boms_boq_xlsx(bom_id):
     thin = Side(border_style="thin", color="D1D5DB")
     box = Border(left=thin, right=thin, top=thin, bottom=thin)
 
+    # Phase 1 xlsx client-clean: default columns per master prompt s11.
+    # Add ?include_buildup=1 to also emit a "Project Rate Build-Up" sheet.
+    include_buildup = bool(request.args.get("include_buildup") == "1")
+    if include_buildup:
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(get_db, uid, "boq_exported_internal", "marketplace_bom", bom_id, "xlsx")
+        except Exception:
+            pass
+    cur_code = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
+
     # Title + meta
     ws["A1"] = f"Bill of Quantities — {bom['title']}"
     ws["A1"].font = title_font
-    ws.merge_cells("A1:I1")
+    ws.merge_cells("A1:G1")
     ws["A2"] = f"Project: {bom['project_name'] or '-'}"
     ws["A3"] = f"Client : {bom['client_name'] or '-'}"
     ws["A4"] = f"Date   : {bom['updated_at']}"
-    ws["A6"] = (
-        f"Rates applied: labour {rates['labour_pct']}% · overhead {rates['overhead_pct']}% "
-        f"· profit {rates['profit_pct']}% · VAT {rates['vat_pct']}%"
-    )
-    ws.merge_cells("A6:I6")
 
-    # Header row
-    headers = ["#", "Description", "Category", "Qty", "Unit", "Basic (USD)",
-               "Install (USD)", "Total Rate (USD)", "Amount (USD)"]
-    HROW = 8
+    # Client-clean BOQ sheet: # / Description / Unit / Qty / Rate / Amount / Remarks
+    headers = ["#", "Description", "Unit", "Qty",
+               f"Rate ({cur_code})", f"Amount ({cur_code})", "Remarks"]
+    HROW = 6
     for col, h in enumerate(headers, 1):
         cell = ws.cell(row=HROW, column=col, value=h)
         cell.font = header_font
         cell.fill = header_fill
         cell.border = box
         cell.alignment = Alignment(horizontal="center")
+
+    # Excel cell-content safety: prefix any leading '=' with apostrophe
+    # so Excel doesn't try to evaluate user-supplied text as a formula.
+    def _sanitize(v):
+        s = str(v or "")
+        return "'" + s if s and s[0] in ("=", "+", "-", "@") else s
 
     row = HROW + 1
     prev_cat = None
@@ -17335,21 +17401,14 @@ def boms_boq_xlsx(bom_id):
             ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=len(headers))
             row += 1
             prev_cat = cat
-        # Excel cell-content safety: prefix any leading '=' with apostrophe
-        # so Excel doesn't try to evaluate user-supplied text as a formula
-        # (CSV/XLSX formula-injection defence).
-        def _sanitize(v: str) -> str:
-            s = str(v or "")
-            return "'" + s if s and s[0] in ("=", "+", "-", "@") else s
+        remarks = (it["remarks"] if "remarks" in it.keys() else None) or it["notes"] or ""
         ws.cell(row=row, column=1, value=idx)
         ws.cell(row=row, column=2, value=_sanitize(it["custom_name"]))
-        ws.cell(row=row, column=3, value=_sanitize(cat))
+        ws.cell(row=row, column=3, value=_sanitize(it["unit"]))
         ws.cell(row=row, column=4, value=float(it["qty"] or 0))
-        ws.cell(row=row, column=5, value=_sanitize(it["unit"]))
-        ws.cell(row=row, column=6, value=round(line["basic_rate"], 2))
-        ws.cell(row=row, column=7, value=round(line["install_labour"], 2))
-        ws.cell(row=row, column=8, value=round(line["total_rate"], 2))
-        ws.cell(row=row, column=9, value=round(line["line_total"], 2))
+        ws.cell(row=row, column=5, value=round(line["total_rate"], 2))
+        ws.cell(row=row, column=6, value=round(line["line_total"], 2))
+        ws.cell(row=row, column=7, value=_sanitize(remarks))
         for col in range(1, len(headers) + 1):
             ws.cell(row=row, column=col).border = box
         row += 1
@@ -17358,15 +17417,59 @@ def boms_boq_xlsx(bom_id):
     row += 1
     for cat, sub in totals["category_totals"].items():
         ws.cell(row=row, column=2, value=f"{cat} subtotal").font = bold
-        ws.cell(row=row, column=9, value=round(sub, 2)).font = bold
+        ws.cell(row=row, column=6, value=round(sub, 2)).font = bold
         row += 1
     row += 1
     ws.cell(row=row, column=2, value="GRAND TOTAL").font = title_font
-    ws.cell(row=row, column=9, value=round(totals["grand_total"], 2)).font = title_font
+    ws.cell(row=row, column=6, value=round(totals["grand_total"], 2)).font = title_font
 
-    # Column widths
-    for col, w in enumerate([5, 40, 24, 8, 8, 14, 14, 14, 14], 1):
+    for col, w in enumerate([5, 40, 8, 8, 14, 14, 30], 1):
         ws.column_dimensions[get_column_letter(col)].width = w
+
+    if include_buildup:
+        # Project Rate Build-Up sheet (master prompt s12). Stored
+        # separate from the BOQ; client-facing export omits it.
+        ws3 = wb.create_sheet("Project Rate Build-Up")
+        ws3["A1"] = f"Project Rate Build-Up — {bom['title']}"
+        ws3["A1"].font = title_font
+        ws3.merge_cells("A1:L1")
+        ws3["A2"] = "INTERNAL ONLY — do not share with client/tender."
+        ws3["A2"].font = Font(bold=True, color="DC2626")
+        ws3["A4"] = (
+            f"Rates: labour {rates['labour_pct']}% · overhead {rates['overhead_pct']}% "
+            f"· profit {rates['profit_pct']}% · VAT {rates['vat_pct']}%"
+        )
+        bu_headers = ["#", "Description", "Category", "Qty", "Unit",
+                      f"Basic ({cur_code})", f"Supply ({cur_code})", f"Install ({cur_code})",
+                      f"+OH ({cur_code})", f"+Profit ({cur_code})", f"+VAT ({cur_code})",
+                      f"Final Rate ({cur_code})", f"Amount ({cur_code})"]
+        HROW3 = 6
+        for col, h in enumerate(bu_headers, 1):
+            cell = ws3.cell(row=HROW3, column=col, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.border = box
+            cell.alignment = Alignment(horizontal="center")
+        r3 = HROW3 + 1
+        for idx, line in enumerate(totals["lines"], 1):
+            it = line["item"]
+            cat = it["category_name"] or "Uncategorised"
+            ws3.cell(row=r3, column=1, value=idx)
+            ws3.cell(row=r3, column=2, value=_sanitize(it["custom_name"]))
+            ws3.cell(row=r3, column=3, value=_sanitize(cat))
+            ws3.cell(row=r3, column=4, value=float(it["qty"] or 0))
+            ws3.cell(row=r3, column=5, value=_sanitize(it["unit"]))
+            ws3.cell(row=r3, column=6, value=round(line["basic_rate"], 2))
+            ws3.cell(row=r3, column=7, value=round(line["basic_rate"], 2))
+            ws3.cell(row=r3, column=8, value=round(line["install_labour"], 2))
+            ws3.cell(row=r3, column=9, value=round(line["overhead"], 2))
+            ws3.cell(row=r3, column=10, value=round(line["profit"], 2))
+            ws3.cell(row=r3, column=11, value=round(line["vat"], 2))
+            ws3.cell(row=r3, column=12, value=round(line["total_rate"], 2))
+            ws3.cell(row=r3, column=13, value=round(line["line_total"], 2))
+            r3 += 1
+        for col, w in enumerate([5, 36, 18, 7, 7, 12, 12, 12, 10, 10, 10, 14, 14], 1):
+            ws3.column_dimensions[get_column_letter(col)].width = w
 
     # Summary sheet
     ws2 = wb.create_sheet("Summary")
@@ -17404,51 +17507,71 @@ def boms_boq_pdf(bom_id):
     rates = _bom_rates_for(bom_id)
     totals = _bom_totals_with_rates(items, rates)
 
+    include_buildup = bool(request.args.get("include_buildup") == "1")
+    if include_buildup:
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(get_db, uid, "boq_exported_internal", "marketplace_bom", bom_id, "pdf")
+        except Exception:
+            pass
+    cur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
     md = []
-    md.append(f"# Bill of Quantities — {bom['title']}")
+    md.append(f"# Bill of Quantities — {bom['title']}" + (" (Internal Build-Up)" if include_buildup else ""))
     if bom["project_name"]:
         md.append(f"**Project:** {bom['project_name']}  ")
     if bom["client_name"]:
         md.append(f"**Client:** {bom['client_name']}  ")
     md.append(f"**Generated:** {bom['updated_at']}")
     md.append("")
-    md.append("")
-    md.append("## Rates applied")
-    md.append("")
-    md.append(
-        f"- Install labour: **{rates['labour_pct']}%** of basic supply\n"
-        f"- Overhead: **{rates['overhead_pct']}%**\n"
-        f"- Profit: **{rates['profit_pct']}%**\n"
-        f"- VAT: **{rates['vat_pct']}%**\n"
-    )
-    md.append("")
+    if include_buildup:
+        md.append("## Rates applied (internal only)")
+        md.append("")
+        md.append(
+            f"- Install labour: **{rates['labour_pct']}%** of basic supply\n"
+            f"- Overhead: **{rates['overhead_pct']}%**\n"
+            f"- Profit: **{rates['profit_pct']}%**\n"
+            f"- VAT: **{rates['vat_pct']}%**\n"
+        )
+        md.append("")
     md.append("## Line items")
     md.append("")
-    md.append("| # | Description | Category | Qty | Unit | Basic Rate (USD) | Total Rate (USD) | Amount (USD) |")
-    md.append("|---|---|---|---|---|---|---|---|")
+    if include_buildup:
+        md.append(f"| # | Description | Qty | Unit | Basic ({cur}) | Supply ({cur}) | Install ({cur}) | OH ({cur}) | Profit ({cur}) | VAT ({cur}) | Final Rate ({cur}) | Amount ({cur}) |")
+        md.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
+    else:
+        md.append(f"| # | Description | Unit | Qty | Rate ({cur}) | Amount ({cur}) | Remarks |")
+        md.append("|---|---|---|---|---|---|---|")
     prev_cat = None
     for idx, line in enumerate(totals["lines"], 1):
         it = line["item"]
         cat = it["category_name"] or "Uncategorised"
         if cat != prev_cat:
-            md.append(f"| | **{cat}** | | | | | | |")
+            blank = " | " * (11 if include_buildup else 6)
+            md.append(f"| | **{cat}** {blank}|")
             prev_cat = cat
-        md.append(
-            f"| {idx} | {it['custom_name']} | {cat} | "
-            f"{it['qty']:.2f} | {it['unit']} | "
-            f"{line['basic_rate']:.2f} | "
-            f"{line['total_rate']:.2f} | "
-            f"{line['line_total']:.2f} |"
-        )
+        if include_buildup:
+            md.append(
+                f"| {idx} | {it['custom_name']} | {it['qty']:.2f} | {it['unit']} | "
+                f"{line['basic_rate']:.2f} | {line['basic_rate']:.2f} | "
+                f"{line['install_labour']:.2f} | {line['overhead']:.2f} | "
+                f"{line['profit']:.2f} | {line['vat']:.2f} | "
+                f"{line['total_rate']:.2f} | {line['line_total']:.2f} |"
+            )
+        else:
+            remarks = (it["remarks"] if "remarks" in it.keys() else None) or it["notes"] or ""
+            md.append(
+                f"| {idx} | {it['custom_name']} | {it['unit']} | {it['qty']:.2f} | "
+                f"{line['total_rate']:.2f} | {line['line_total']:.2f} | {remarks} |"
+            )
     md.append("")
     md.append("## Category subtotals")
     md.append("")
-    md.append("| Category | Subtotal (USD) |")
+    md.append(f"| Category | Subtotal ({cur}) |")
     md.append("|---|---|")
     for cat, sub in totals["category_totals"].items():
         md.append(f"| {cat} | {sub:.2f} |")
     md.append("")
-    md.append(f"## Grand total\n\n**USD {totals['grand_total']:.2f}**\n")
+    md.append(f"## Grand total\n\n**{cur} {totals['grand_total']:.2f}**\n")
 
     safe_title = re.sub(r"[^A-Za-z0-9_.-]+", "_", bom["title"])[:60]
     return _render_pdf(
@@ -18165,6 +18288,797 @@ def kc_event_webhook():
         return jsonify(error="INVALID_PAYLOAD"), 400
     return jsonify(result=result), 202
 
+
+
+# new_boq_add_library_item_route.py
+# Phase 2 — POST /boms/<bom_id>/add-library-item.
+#
+# Master prompt sections 9-13: when the user can't find an item in the
+# library, this route accepts the modal payload, builds the rate per the
+# spec formula, optionally writes a new catalogue row (project library /
+# master library submission), and adds the line to the current BOM with
+# its full build-up stored as per-item overrides.
+#
+# Rate formula (spec s13):
+#     supply  = basic_price if supply_rate empty else supply_rate
+#     install = 0 if install_rate empty else install_rate
+#     prelim  = supply + install
+#     final   = prelim * (1 + oh% + profit% + contingency% + vat%)
+#     total   = qty * final
+#
+# Save options:
+#     current_boq_only          -> no catalogue row written
+#     save_to_project_library   -> catalogue row, approval_status='project_only'
+#     submit_to_master_library  -> catalogue row, approval_status='pending_library_review'
+
+
+@app.route("/boms/<int:bom_id>/add-library-item", methods=["POST"])
+@login_required
+def boms_add_library_item(bom_id):
+    """Phase 2: add a new BOQ library item with full rate build-up, optionally
+    promoting it to the project or master catalogue."""
+    uid = session["user_id"]
+    bom = _bom_owned_or_404(bom_id, uid)
+    csrf_protect()
+
+    # Make sure the per-item override columns are in place (idempotent).
+    try:
+        from new_boq_hierarchy_schema import ensure_boq_hierarchy_schema, boq_audit
+        ensure_boq_hierarchy_schema(get_db)
+    except Exception:
+        boq_audit = None  # type: ignore
+
+    f = request.form
+
+    def _num(name, default=0.0):
+        try:
+            v = f.get(name, "")
+            return float(v) if v not in (None, "",) else float(default)
+        except (TypeError, ValueError):
+            return float(default)
+
+    def _pct(name):
+        v = _num(name, 0.0)
+        return max(0.0, min(100.0, v))
+
+    desc        = (f.get("description") or "").strip()[:500]
+    section     = (f.get("section") or "preliminaries").strip()[:80]
+    spec        = (f.get("specification") or "").strip()
+    unit        = (f.get("unit") or "No.").strip()[:20]
+    qty         = max(0.0, _num("qty", 1.0))
+    brand       = (f.get("brand") or "").strip()[:120]
+    supplier_nm = (f.get("supplier_name") or "").strip()[:200]
+    remarks     = (f.get("remarks") or "").strip()[:500]
+    save_option = (f.get("save_option") or "current_boq_only").strip()
+
+    if not desc:
+        flash("Description is required.", "warning")
+        return redirect(url_for("boms_view", bom_id=bom_id))
+
+    basic   = max(0.0, _num("basic_price", 0.0))
+    supply  = _num("supply_rate", -1.0)
+    install = _num("install_rate", -1.0)
+    oh_pct  = _pct("overhead_pct")
+    prf_pct = _pct("profit_pct")
+    cnt_pct = _pct("contingency_pct")
+    vat_pct = _pct("vat_pct")
+
+    # Spec s13: supply defaults to basic, install defaults to 0.
+    if supply < 0:
+        supply = basic
+    if install < 0:
+        install = 0.0
+    prelim = supply + install
+    final_rate = prelim * (1.0 + (oh_pct + prf_pct + cnt_pct + vat_pct) / 100.0)
+    total_amount = qty * final_rate
+
+    if final_rate <= 0:
+        flash("Item rate must be > 0. Enter a basic price or supply rate.", "warning")
+        return redirect(url_for("boms_view", bom_id=bom_id))
+
+    # Optional catalogue row (Save to Project Library / Submit to Master).
+    catalogue_id = 0
+    if save_option in ("save_to_project_library", "submit_to_master_library"):
+        approval = ("pending_library_review"
+                    if save_option == "submit_to_master_library"
+                    else "project_only")
+        source_type = ("custom_current_boq"
+                       if save_option == "save_to_project_library"
+                       else "project_library")
+        try:
+            with get_db() as c:
+                cur = c.execute(
+                    "INSERT INTO equipment_catalog "
+                    "(category, name, brand, model, spec, unit, price_usd, "
+                    " is_active, is_verified, is_public_visible, "
+                    " source_type, approval_status, submitted_by_user_id) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (section, desc, brand, "", spec, unit, basic,
+                     1, 0, 0,  # not public, not verified -- pending review
+                     source_type, approval,
+                     uid),
+                )
+                catalogue_id = int(cur.lastrowid or 0)
+        except Exception:
+            catalogue_id = 0  # non-fatal -- still add the line
+
+    # Insert the BOM line with the full per-item build-up stored as overrides.
+    try:
+        with get_db() as c:
+            c.execute(
+                "INSERT INTO marketplace_bom_items "
+                "(bom_id, product_id, custom_name, qty, unit, unit_price_override, notes, "
+                " basic_price, supply_rate, install_rate, overhead_pct, profit_pct, "
+                " contingency_pct, vat_pct, final_built_up_rate, remarks, "
+                " source_type, approval_status) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (bom_id, catalogue_id, desc, qty, unit, final_rate, spec[:500],
+                 basic, supply, install, oh_pct, prf_pct,
+                 cnt_pct, vat_pct, final_rate, remarks,
+                 ("project_library" if save_option == "save_to_project_library"
+                  else "custom_current_boq" if save_option == "current_boq_only"
+                  else "pending_library_review"),
+                 ("pending_library_review"
+                  if save_option == "submit_to_master_library"
+                  else ("project_only" if save_option == "save_to_project_library"
+                        else "draft"))),
+            )
+            c.execute(
+                "UPDATE marketplace_boms SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (bom_id,),
+            )
+    except Exception as e:
+        try:
+            app.logger.warning("add_library_item failed: %s", e)
+        except Exception:
+            pass
+        flash("Could not add the item — please try again.", "danger")
+        return redirect(url_for("boms_view", bom_id=bom_id))
+
+    # Audit log (best-effort).
+    if boq_audit:
+        try:
+            boq_audit(get_db, uid, "library_item_added",
+                      "marketplace_bom", bom_id,
+                      f"save={save_option} catalogue_id={catalogue_id} rate={final_rate:.2f}")
+        except Exception:
+            pass
+
+    msg = {
+        "current_boq_only":         "Item added to this BOQ only.",
+        "save_to_project_library":  "Item added and saved to project library.",
+        "submit_to_master_library": "Item added — submitted to master library for review.",
+    }.get(save_option, "Item added.")
+    flash(msg, "success")
+    return redirect(url_for("boms_view", bom_id=bom_id))
+
+
+@app.route("/admin/library/pending")
+@login_required
+def admin_library_pending():
+    """Admin: list catalogue items pending review (Submit to Master Library)."""
+    u = current_user()
+    if not (u and u["is_admin"]):
+        abort(403)
+    try:
+        from new_boq_hierarchy_schema import ensure_boq_hierarchy_schema
+        ensure_boq_hierarchy_schema(get_db)
+    except Exception:
+        pass
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT id, name, brand, spec, unit, price_usd, category, "
+            "       source_type, approval_status, submitted_by_user_id, created_at "
+            "FROM equipment_catalog "
+            "WHERE approval_status='pending_library_review' "
+            "ORDER BY id DESC LIMIT 200"
+        ).fetchall()
+    return render_template("admin_library_pending.html", user=u, rows=rows)
+
+
+@app.route("/admin/library/<int:item_id>/approve", methods=["POST"])
+@login_required
+def admin_library_approve(item_id):
+    u = current_user()
+    if not (u and u["is_admin"]):
+        abort(403)
+    csrf_protect()
+    with get_db() as c:
+        c.execute(
+            "UPDATE equipment_catalog "
+            "SET approval_status='approved_library_item', "
+            "    is_verified=1, is_public_visible=1 "
+            "WHERE id=? AND approval_status='pending_library_review'",
+            (item_id,),
+        )
+    try:
+        from new_boq_hierarchy_schema import boq_audit
+        boq_audit(get_db, session["user_id"], "library_item_approved",
+                  "equipment_catalog", item_id)
+    except Exception:
+        pass
+    flash(f"Library item #{item_id} approved.", "success")
+    return redirect(url_for("admin_library_pending"))
+
+
+@app.route("/admin/library/<int:item_id>/reject", methods=["POST"])
+@login_required
+def admin_library_reject(item_id):
+    u = current_user()
+    if not (u and u["is_admin"]):
+        abort(403)
+    csrf_protect()
+    with get_db() as c:
+        c.execute(
+            "UPDATE equipment_catalog SET approval_status='rejected' WHERE id=?",
+            (item_id,),
+        )
+    try:
+        from new_boq_hierarchy_schema import boq_audit
+        boq_audit(get_db, session["user_id"], "library_item_rejected",
+                  "equipment_catalog", item_id)
+    except Exception:
+        pass
+    flash(f"Library item #{item_id} rejected.", "warning")
+    return redirect(url_for("admin_library_pending"))
+
+
+# new_boq_hierarchy_routes.py
+# Phase 3 -- Dynamic BOQ Library Builder with the full
+# Project -> Building -> Floor -> Item hierarchy from the master prompt
+# (sections 1-21).
+#
+# Topology mirrored 1:1 with the relations declared in
+# new_boq_hierarchy_schema.py:
+#
+#   boq_projects (1)
+#     -> boq_buildings (N)
+#         -> boq_floors (N)
+#             -> boq_floor_items (N)
+#                 -> boq_floor_rate_buildup (1:1, internal-only)
+#                 -> equipment_catalog.id   (library_item_id, nullable)
+#                 -> suppliers.id           (supplier_id, nullable)
+#
+# Spec rate formula (s13):
+#   supply  = basic if blank ; install = 0 if blank
+#   prelim  = supply + install
+#   final   = prelim * (1 + OH% + Profit% + Cont% + VAT%) /100  (each as %)
+#   total   = qty * final
+#
+# Client BOQ columns (spec s11): No / Description / Unit / Qty / Rate / Amount / Remarks.
+# Internal Rate Build-Up adds Basic / Supply / Install / OH / Profit / Cont / VAT
+# / Final Rate columns. Same view-toggle pattern as the marketplace BOQ.
+
+
+# ---------------- helpers ---------------------------------------------------
+
+_BOQ_PRIMARY_PURPOSES = ["residential", "commercial", "industrial"]
+_BOQ_PURPOSE_SUBTYPES = {
+    "residential": [
+        "Single Family House", "Apartment Block", "Hostel",
+        "Staff Housing", "Gated Estate", "Boys Quarters", "Other",
+    ],
+    "commercial": [
+        "Office", "Hospital", "Retail / Shopping Centre", "Hotel",
+        "School / Educational Facility", "Auditorium",
+        "Church / Worship Facility", "Data Centre", "Laboratory",
+        "Restaurant", "Bank", "Mixed-Use Commercial", "Other",
+    ],
+    "industrial": [
+        "Factory", "Warehouse", "Workshop", "Processing Plant",
+        "Cold Store", "Manufacturing Facility", "Power Plant", "Other",
+    ],
+}
+
+_BOQ_SECTIONS = [
+    ("preliminaries",    "Preliminaries"),
+    ("switchboards",     "Switch Boards & DBs"),
+    ("sub_feeders",      "Sub-feeder Cables"),
+    ("wiring",           "Wiring of Points"),
+    ("luminaires",       "Luminaires"),
+    ("accessories",      "Accessories"),
+    ("earthing",         "Bonding & Earthing"),
+    ("fire_alarm",       "Fire Detection & Alarm"),
+    ("data_voice",       "Data & Voice"),
+    ("lightning",        "Lightning Protection"),
+    ("external_lighting","External Lighting"),
+    ("solar_pv",         "Solar PV System"),
+    ("generator_ups",    "Generator & UPS"),
+    ("testing",          "Testing & Commissioning"),
+    ("documentation",    "Documentation & Handover"),
+    ("other",            "Other"),
+]
+
+
+def _boq_ensure_schema():
+    """Lazy bootstrap of the BOQ hierarchy tables. Idempotent."""
+    try:
+        from new_boq_hierarchy_schema import ensure_boq_hierarchy_schema
+        ensure_boq_hierarchy_schema(get_db)
+    except Exception as e:
+        try:
+            app.logger.warning("boq schema bootstrap: %s", e)
+        except Exception:
+            pass
+
+
+def _boq_project_owned_or_404(pid: int, uid: int):
+    _boq_ensure_schema()
+    with get_db() as c:
+        row = c.execute(
+            "SELECT * FROM boq_projects WHERE id=? AND user_id=?",
+            (pid, uid),
+        ).fetchone()
+    if not row:
+        abort(404)
+    return row
+
+
+def _boq_building_owned_or_404(bid: int, pid: int):
+    with get_db() as c:
+        row = c.execute(
+            "SELECT * FROM boq_buildings WHERE id=? AND project_id=?",
+            (bid, pid),
+        ).fetchone()
+    if not row:
+        abort(404)
+    return row
+
+
+def _boq_floor_owned_or_404(fid: int, bid: int):
+    with get_db() as c:
+        row = c.execute(
+            "SELECT * FROM boq_floors WHERE id=? AND building_id=?",
+            (fid, bid),
+        ).fetchone()
+    if not row:
+        abort(404)
+    return row
+
+
+def _boq_compute_rate(basic, supply, install, oh_pct, prf_pct, cnt_pct, vat_pct):
+    """Spec s13: supply defaults to basic, install defaults to 0,
+    final = (supply+install) * (1 + sum(pct)/100)."""
+    if supply is None or supply < 0:
+        supply = basic
+    if install is None or install < 0:
+        install = 0.0
+    prelim = float(supply) + float(install)
+    total_pct = float(oh_pct or 0) + float(prf_pct or 0) + float(cnt_pct or 0) + float(vat_pct or 0)
+    return prelim * (1.0 + total_pct / 100.0)
+
+
+def _boq_make_floors(project_id: int, building_id: int,
+                     n_floors: int, basement: bool, roof: bool):
+    """Spec s5: auto-create Ground/First/Second... + optional Basement + Roof."""
+    floors = []
+    if basement:
+        floors.append(("Basement", -1, "basement"))
+    # Ground + upper floors
+    n = max(1, int(n_floors or 1))
+    floors.append(("Ground Floor", 0, "ground"))
+    NAMES = ["First Floor", "Second Floor", "Third Floor", "Fourth Floor",
+             "Fifth Floor", "Sixth Floor", "Seventh Floor", "Eighth Floor",
+             "Ninth Floor", "Tenth Floor"]
+    for i in range(1, n):
+        nm = NAMES[i - 1] if i - 1 < len(NAMES) else f"Floor {i}"
+        floors.append((nm, i, "upper"))
+    if roof:
+        floors.append(("Roof Level", 99, "roof"))
+
+    with get_db() as c:
+        for name, level, ftype in floors:
+            c.execute(
+                "INSERT INTO boq_floors (building_id, project_id, floor_name, "
+                "floor_level, floor_type) VALUES (?,?,?,?,?)",
+                (building_id, project_id, name, level, ftype),
+            )
+
+
+# ---------------- routes ----------------------------------------------------
+
+@app.route("/boq-projects")
+@login_required
+def boq_projects_list():
+    uid = session["user_id"]
+    _boq_ensure_schema()
+    with get_db() as c:
+        projects = c.execute(
+            "SELECT p.*, "
+            "  (SELECT COUNT(*) FROM boq_buildings b WHERE b.project_id=p.id) AS n_buildings, "
+            "  (SELECT COUNT(*) FROM boq_floor_items i WHERE i.project_id=p.id) AS n_items, "
+            "  (SELECT COALESCE(SUM(total_amount),0) FROM boq_floor_items i WHERE i.project_id=p.id) AS grand_total "
+            "FROM boq_projects p "
+            "WHERE p.user_id=? "
+            "ORDER BY p.updated_at DESC, p.id DESC",
+            (uid,),
+        ).fetchall()
+    return render_template("boq_projects_list.html", user=current_user(), projects=projects)
+
+
+@app.route("/boq-projects/new", methods=["GET", "POST"])
+@login_required
+def boq_projects_new():
+    uid = session["user_id"]
+    _boq_ensure_schema()
+    if request.method == "POST":
+        csrf_protect()
+        f = request.form
+        name = (f.get("project_name") or "").strip()[:300]
+        client = (f.get("client_name") or "").strip()[:300]
+        location = (f.get("location") or "").strip()[:300]
+        ptype = (f.get("project_type") or "single_building").strip()
+        ext_works = 1 if f.get("external_works_included") else 0
+        infra = 1 if f.get("infrastructure_included") else 0
+        if not name:
+            flash("Project name is required.", "warning")
+            return redirect(url_for("boq_projects_new"))
+        with get_db() as c:
+            cur = c.execute(
+                "INSERT INTO boq_projects (user_id, project_name, client_name, "
+                "location, project_type, external_works_included, infrastructure_included) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (uid, name, client, location, ptype, ext_works, infra),
+            )
+            pid = int(cur.lastrowid or 0)
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(get_db, uid, "boq_project_created", "boq_project", pid)
+        except Exception:
+            pass
+        return redirect(url_for("boq_building_new", pid=pid))
+    return render_template("boq_project_new.html", user=current_user())
+
+
+@app.route("/boq-projects/<int:pid>")
+@login_required
+def boq_project_overview(pid):
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    with get_db() as c:
+        buildings = c.execute(
+            "SELECT b.*, "
+            "  (SELECT COUNT(*) FROM boq_floors f WHERE f.building_id=b.id) AS n_floors, "
+            "  (SELECT COALESCE(SUM(total_amount),0) FROM boq_floor_items i WHERE i.building_id=b.id) AS subtotal "
+            "FROM boq_buildings b "
+            "WHERE b.project_id=? ORDER BY b.id",
+            (pid,),
+        ).fetchall()
+        grand = c.execute(
+            "SELECT COALESCE(SUM(total_amount),0) AS g FROM boq_floor_items WHERE project_id=?",
+            (pid,),
+        ).fetchone()
+    grand_total = float(grand["g"] or 0) if grand else 0.0
+    return render_template("boq_project_overview.html",
+                           user=current_user(),
+                           project=project, buildings=buildings,
+                           grand_total=grand_total,
+                           sections=_BOQ_SECTIONS)
+
+
+@app.route("/boq-projects/<int:pid>/buildings/new", methods=["GET", "POST"])
+@login_required
+def boq_building_new(pid):
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    if request.method == "POST":
+        csrf_protect()
+        f = request.form
+        name = (f.get("building_name") or "").strip()[:300]
+        code = (f.get("building_code") or "").strip()[:80]
+        primary = (f.get("primary_purpose") or "").strip().lower()
+        subtype = (f.get("purpose_subtype") or "").strip()[:80]
+        other_desc = (f.get("other_purpose_description") or "").strip()[:300]
+        try:
+            area = float(f.get("building_area") or 0)
+        except ValueError:
+            area = 0.0
+        try:
+            n_floors = max(1, int(f.get("number_of_floors") or 1))
+        except ValueError:
+            n_floors = 1
+        basement = 1 if f.get("basement_included") else 0
+        roof     = 1 if f.get("roof_level_included") else 0
+        ext_area = 1 if f.get("external_area_included") else 0
+
+        # Spec s22 validation: purpose required; subtype required; Other
+        # requires the free-text description.
+        if not name:
+            flash("Building name is required.", "warning"); return redirect(url_for("boq_building_new", pid=pid))
+        if primary not in _BOQ_PRIMARY_PURPOSES:
+            flash("Select a building purpose (Residential / Commercial / Industrial).", "warning")
+            return redirect(url_for("boq_building_new", pid=pid))
+        if not subtype:
+            flash("Select a subtype for the chosen purpose.", "warning")
+            return redirect(url_for("boq_building_new", pid=pid))
+        if subtype == "Other" and not other_desc:
+            flash("Enter a description for 'Other' purpose.", "warning")
+            return redirect(url_for("boq_building_new", pid=pid))
+
+        with get_db() as c:
+            cur = c.execute(
+                "INSERT INTO boq_buildings (project_id, building_name, building_code, "
+                "primary_purpose, purpose_subtype, other_purpose_description, "
+                "building_area, number_of_floors, basement_included, roof_level_included, "
+                "external_area_included) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (pid, name, code, primary, subtype, other_desc,
+                 area, n_floors, basement, roof, ext_area),
+            )
+            bid = int(cur.lastrowid or 0)
+        _boq_make_floors(pid, bid, n_floors, bool(basement), bool(roof))
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(get_db, uid, "boq_building_created", "boq_building", bid,
+                      f"purpose={primary}/{subtype}")
+        except Exception:
+            pass
+        flash(f"Building '{name}' created with {n_floors} floor(s).", "success")
+        return redirect(url_for("boq_building_view", pid=pid, bid=bid))
+    return render_template("boq_building_new.html",
+                           user=current_user(), project=project,
+                           subtypes=_BOQ_PURPOSE_SUBTYPES)
+
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>")
+@login_required
+def boq_building_view(pid, bid):
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    building = _boq_building_owned_or_404(bid, pid)
+    with get_db() as c:
+        floors = c.execute(
+            "SELECT f.*, "
+            "  (SELECT COUNT(*) FROM boq_floor_items i WHERE i.floor_id=f.id) AS n_items, "
+            "  (SELECT COALESCE(SUM(total_amount),0) FROM boq_floor_items i WHERE i.floor_id=f.id) AS subtotal "
+            "FROM boq_floors f "
+            "WHERE f.building_id=? ORDER BY f.floor_level",
+            (bid,),
+        ).fetchall()
+        subtotal = c.execute(
+            "SELECT COALESCE(SUM(total_amount),0) AS g FROM boq_floor_items WHERE building_id=?",
+            (bid,),
+        ).fetchone()
+    return render_template("boq_building_view.html",
+                           user=current_user(),
+                           project=project, building=building, floors=floors,
+                           building_subtotal=float(subtotal["g"] or 0) if subtotal else 0.0)
+
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>")
+@login_required
+def boq_floor_view(pid, bid, fid):
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    building = _boq_building_owned_or_404(bid, pid)
+    floor = _boq_floor_owned_or_404(fid, bid)
+    with get_db() as c:
+        items = c.execute(
+            "SELECT i.*, b.final_built_up_rate AS bu_final, "
+            "       b.basic_price AS bu_basic, b.supply_rate AS bu_supply, "
+            "       b.install_rate AS bu_install, b.overhead_pct AS bu_oh, "
+            "       b.profit_pct AS bu_profit, b.contingency_pct AS bu_cont, "
+            "       b.vat_pct AS bu_vat "
+            "FROM boq_floor_items i "
+            "LEFT JOIN boq_floor_rate_buildup b ON b.floor_item_id=i.id "
+            "WHERE i.floor_id=? ORDER BY i.section, i.id",
+            (fid,),
+        ).fetchall()
+        subtotal_row = c.execute(
+            "SELECT COALESCE(SUM(total_amount),0) AS g FROM boq_floor_items WHERE floor_id=?",
+            (fid,),
+        ).fetchone()
+    return render_template("boq_floor_view.html",
+                           user=current_user(),
+                           project=project, building=building, floor=floor,
+                           items=items,
+                           floor_subtotal=float(subtotal_row["g"] or 0) if subtotal_row else 0.0,
+                           sections=_BOQ_SECTIONS)
+
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/items", methods=["POST"])
+@login_required
+def boq_floor_add_item(pid, bid, fid):
+    uid = session["user_id"]
+    _boq_project_owned_or_404(pid, uid)
+    _boq_building_owned_or_404(bid, pid)
+    _boq_floor_owned_or_404(fid, bid)
+    csrf_protect()
+    f = request.form
+
+    def _num(name, default=0.0):
+        try:
+            v = f.get(name, "")
+            return float(v) if v not in (None, "",) else float(default)
+        except (TypeError, ValueError):
+            return float(default)
+
+    def _pct(name):
+        return max(0.0, min(100.0, _num(name, 0.0)))
+
+    desc = (f.get("description") or "").strip()[:500]
+    if not desc:
+        flash("Description is required.", "warning"); return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
+    section = (f.get("section") or "preliminaries").strip()[:80]
+    spec    = (f.get("specification") or "").strip()
+    unit    = (f.get("unit") or "No.").strip()[:20]
+    qty     = max(0.0, _num("qty", 1.0))
+    library_id = 0
+    try:
+        library_id = int(f.get("library_item_id") or 0)
+    except ValueError:
+        library_id = 0
+    remarks = (f.get("remarks") or "").strip()[:500]
+    save_option = (f.get("save_option") or "current_boq_only").strip()
+
+    basic   = max(0.0, _num("basic_price", 0.0))
+    supply_raw  = (f.get("supply_rate") or "").strip()
+    install_raw = (f.get("install_rate") or "").strip()
+    supply  = max(0.0, _num("supply_rate", basic))  if supply_raw  else basic
+    install = max(0.0, _num("install_rate", 0.0))   if install_raw else 0.0
+    oh, prf, cnt, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
+    final_rate = _boq_compute_rate(basic, supply, install, oh, prf, cnt, vat)
+    total = qty * final_rate
+    if final_rate <= 0:
+        flash("Rate must be > 0. Enter a basic price or supply rate.", "warning")
+        return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
+
+    # Optional: copy item to catalogue if save_option promotes it.
+    catalogue_id = library_id if library_id > 0 else 0
+    if save_option in ("save_to_project_library", "submit_to_master_library") and not catalogue_id:
+        approval = ("pending_library_review"
+                    if save_option == "submit_to_master_library"
+                    else "project_only")
+        source_type = ("project_library"
+                       if save_option == "save_to_project_library"
+                       else "custom_current_boq")
+        try:
+            with get_db() as c:
+                cur = c.execute(
+                    "INSERT INTO equipment_catalog "
+                    "(category, name, brand, model, spec, unit, price_usd, "
+                    " is_active, is_verified, is_public_visible, "
+                    " source_type, approval_status, submitted_by_user_id) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (section, desc, "", "", spec, unit, basic,
+                     1, 0, 0, source_type, approval, uid),
+                )
+                catalogue_id = int(cur.lastrowid or 0)
+        except Exception:
+            catalogue_id = 0
+
+    src = ("master_library" if library_id > 0
+           else ("project_library" if save_option == "save_to_project_library"
+                 else ("pending_library_review" if save_option == "submit_to_master_library"
+                       else "custom_current_boq")))
+    approval = ("pending_library_review" if save_option == "submit_to_master_library"
+                else ("project_only" if save_option == "save_to_project_library"
+                      else "draft"))
+
+    with get_db() as c:
+        cur = c.execute(
+            "INSERT INTO boq_floor_items "
+            "(floor_id, building_id, project_id, user_id, section, subsection, "
+            " library_item_id, supplier_id, item_no, description, specification, "
+            " unit, qty, final_built_up_rate, total_amount, remarks, "
+            " source_type, approval_status) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (fid, bid, pid, uid, section, "",
+             catalogue_id or None, None, "",
+             desc, spec, unit, qty, final_rate, total, remarks,
+             src, approval),
+        )
+        item_id = int(cur.lastrowid or 0)
+        c.execute(
+            "INSERT INTO boq_floor_rate_buildup "
+            "(floor_item_id, project_id, user_id, basic_price, supply_rate, "
+            " install_rate, overhead_pct, profit_pct, contingency_pct, vat_pct, "
+            " final_built_up_rate, total_amount) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (item_id, pid, uid, basic, supply, install,
+             oh, prf, cnt, vat, final_rate, total),
+        )
+        c.execute("UPDATE boq_projects  SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (pid,))
+        c.execute("UPDATE boq_buildings SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (bid,))
+        c.execute("UPDATE boq_floors    SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (fid,))
+    try:
+        from new_boq_hierarchy_schema import boq_audit
+        boq_audit(get_db, uid, "boq_floor_item_added", "boq_floor_item", item_id,
+                  f"section={section} rate={final_rate:.2f}")
+    except Exception:
+        pass
+    flash("Line item added.", "success")
+    return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
+
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/items/<int:iid>/delete", methods=["POST"])
+@login_required
+def boq_floor_delete_item(pid, bid, fid, iid):
+    uid = session["user_id"]
+    _boq_project_owned_or_404(pid, uid)
+    _boq_building_owned_or_404(bid, pid)
+    _boq_floor_owned_or_404(fid, bid)
+    csrf_protect()
+    with get_db() as c:
+        c.execute("DELETE FROM boq_floor_rate_buildup WHERE floor_item_id=?", (iid,))
+        c.execute("DELETE FROM boq_floor_items WHERE id=? AND floor_id=?", (iid, fid))
+    try:
+        from new_boq_hierarchy_schema import boq_audit
+        boq_audit(get_db, uid, "boq_floor_item_deleted", "boq_floor_item", iid)
+    except Exception:
+        pass
+    return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
+
+
+@app.route("/boq-projects/<int:pid>/boq")
+@login_required
+def boq_project_boq(pid):
+    """Client-clean combined BOQ. ?view=internal exposes rate build-up."""
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    internal_view = bool(request.args.get("view") == "internal")
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT i.*, b.building_name, b.building_code, b.primary_purpose, "
+            "       b.purpose_subtype, f.floor_name, f.floor_level, "
+            "       rb.basic_price, rb.supply_rate, rb.install_rate, "
+            "       rb.overhead_pct, rb.profit_pct, rb.contingency_pct, rb.vat_pct "
+            "FROM boq_floor_items i "
+            "JOIN boq_buildings b ON b.id=i.building_id "
+            "JOIN boq_floors    f ON f.id=i.floor_id "
+            "LEFT JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
+            "WHERE i.project_id=? "
+            "ORDER BY b.id, f.floor_level, i.section, i.id",
+            (pid,),
+        ).fetchall()
+    if internal_view:
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(get_db, uid, "boq_buildup_viewed", "boq_project", pid)
+        except Exception:
+            pass
+    return render_template("boq_project_boq.html",
+                           user=current_user(),
+                           project=project, rows=rows,
+                           internal_view=internal_view,
+                           can_view_buildup=True,
+                           sections_lookup=dict(_BOQ_SECTIONS))
+
+
+@app.route("/boq-projects/<int:pid>/summary")
+@login_required
+def boq_project_summary(pid):
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    with get_db() as c:
+        per_building = c.execute(
+            "SELECT b.id, b.building_name, b.primary_purpose, b.purpose_subtype, "
+            "       COALESCE(SUM(i.total_amount),0) AS subtotal "
+            "FROM boq_buildings b "
+            "LEFT JOIN boq_floor_items i ON i.building_id=b.id "
+            "WHERE b.project_id=? GROUP BY b.id ORDER BY b.id",
+            (pid,),
+        ).fetchall()
+        per_floor = c.execute(
+            "SELECT b.id AS bid, b.building_name, f.id AS fid, f.floor_name, "
+            "       f.floor_level, COALESCE(SUM(i.total_amount),0) AS subtotal "
+            "FROM boq_floors f "
+            "JOIN boq_buildings b ON b.id=f.building_id "
+            "LEFT JOIN boq_floor_items i ON i.floor_id=f.id "
+            "WHERE f.project_id=? GROUP BY b.id, f.id "
+            "ORDER BY b.id, f.floor_level",
+            (pid,),
+        ).fetchall()
+        grand_row = c.execute(
+            "SELECT COALESCE(SUM(total_amount),0) AS g FROM boq_floor_items WHERE project_id=?",
+            (pid,),
+        ).fetchone()
+    grand_total = float(grand_row["g"] or 0) if grand_row else 0.0
+    return render_template("boq_project_summary.html",
+                           user=current_user(),
+                           project=project,
+                           per_building=per_building,
+                           per_floor=per_floor,
+                           grand_total=grand_total)
 
 
 if __name__ == "__main__":

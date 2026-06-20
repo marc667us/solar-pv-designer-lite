@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ building.building_name }} — BOQ{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('boq_projects_list') }}" class="text-warning">BOQ Projects</a> ·
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="text-warning">{{ project.project_name }}</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1">
+      <i class="bi bi-building text-warning me-1"></i>{{ building.building_name }}
+      {% if building.building_code %}<span class="text-secondary small ms-2">({{ building.building_code }})</span>{% endif %}
+    </h5>
+    <div class="text-secondary small">
+      Purpose: <strong>{{ building.primary_purpose|title }}</strong> — {{ building.purpose_subtype }}
+      {% if building.purpose_subtype == 'Other' and building.other_purpose_description %} — {{ building.other_purpose_description }}{% endif %}
+    </div>
+  </div>
+  <div class="kpi-card" style="min-width:200px">
+    <div class="kpi-label">Building subtotal</div>
+    <div class="kpi-value">{{ "%.2f"|format(building_subtotal) }}</div>
+  </div>
+</div>
+
+{% if floors %}
+<div class="solar-card p-0">
+  <table class="table table-hover mb-0" style="color:#e0e0f0;font-size:13px">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+      <tr><th>Floor</th><th>Level</th><th>Type</th><th class="text-end">Items</th><th class="text-end">Subtotal</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for f in floors %}
+      <tr>
+        <td><strong>{{ f.floor_name }}</strong></td>
+        <td class="small text-secondary">{{ f.floor_level }}</td>
+        <td class="small text-secondary">{{ f.floor_type }}</td>
+        <td class="text-end">{{ f.n_items }}</td>
+        <td class="text-end fw-bold text-warning">{{ "%.2f"|format(f.subtotal or 0) }}</td>
+        <td class="text-end">
+          <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=f.id) }}" class="btn btn-outline-warning btn-sm">Open BOQ</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="solar-card p-4 text-center text-secondary">
+  <p class="mb-0">No floors registered. (Should auto-create on building save.)</p>
+</div>
+{% endif %}
+{% endblock %}

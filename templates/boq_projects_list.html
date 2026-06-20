@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}BOQ Projects{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h5 class="fw-black mb-0"><i class="bi bi-diagram-3 text-warning me-1"></i>BOQ Projects</h5>
+  <a href="{{ url_for('boq_projects_new') }}" class="btn btn-warning btn-sm fw-bold">
+    <i class="bi bi-plus-circle me-1"></i>New BOQ Project
+  </a>
+</div>
+
+<div class="text-secondary small mb-3">
+  Hierarchy: <strong>Project</strong> → <strong>Buildings</strong> → <strong>Floors</strong> → <strong>BOQ Items</strong>.
+  Client BOQ shows # / Description / Unit / Qty / Rate / Amount / Remarks; internal rate build-up stays separate (master prompt §11–12).
+</div>
+
+{% if projects %}
+<div class="solar-card p-0">
+  <table class="table table-hover mb-0" style="color:#e0e0f0;font-size:13px">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+      <tr><th>Project</th><th>Client</th><th>Buildings</th><th class="text-end">Lines</th><th class="text-end">Grand total</th><th>Updated</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for p in projects %}
+      <tr>
+        <td>
+          <strong>{{ p.project_name }}</strong>
+          {% if p.location %}<div class="small text-secondary">{{ p.location }}</div>{% endif %}
+        </td>
+        <td class="small">{{ p.client_name or '—' }}</td>
+        <td class="small">{{ p.n_buildings }}</td>
+        <td class="text-end small">{{ p.n_items }}</td>
+        <td class="text-end fw-bold text-warning">{{ "%.2f"|format(p.grand_total or 0) }}</td>
+        <td class="small text-secondary">{{ p.updated_at }}</td>
+        <td class="text-end">
+          <a href="{{ url_for('boq_project_overview', pid=p.id) }}" class="btn btn-outline-warning btn-sm">Open</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="solar-card p-4 text-center text-secondary">
+  <i class="bi bi-diagram-3" style="font-size:36px"></i>
+  <p class="mt-2 mb-1">No BOQ projects yet.</p>
+  <a href="{{ url_for('boq_projects_new') }}" class="btn btn-warning btn-sm fw-bold mt-2">
+    <i class="bi bi-plus-circle me-1"></i>Create your first BOQ project
+  </a>
+</div>
+{% endif %}
+{% endblock %}

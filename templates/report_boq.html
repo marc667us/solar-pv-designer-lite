@@ -1,9 +1,21 @@
 {% extends "base.html" %}
 {% block title %}BOQ — {{ project.name }}{% endblock %}
 {% block content %}
+{# Master prompt s11: client BOQ shows # / Description / Unit / Qty / Rate / Amount / Remarks.
+   ?view=internal exposes Basic Rate + Total Rate (internal markup) for the owner only. #}
+{% set internal = internal_view|default(false) %}
 <div class="no-print mb-3 d-flex gap-3 align-items-center flex-wrap">
   <a href="{{ url_for('project_results', pid=project.id) }}" class="text-secondary small"><i class="bi bi-arrow-left me-1"></i>Results</a>
-  <div class="ms-auto d-flex gap-2">
+  <div class="ms-auto d-flex gap-2 flex-wrap">
+    {% if internal %}
+      <a href="{{ url_for('report_boq', pid=project.id) }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-eye me-1"></i>Client view
+      </a>
+    {% elif can_view_buildup %}
+      <a href="{{ url_for('report_boq', pid=project.id, view='internal') }}" class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-lock-fill me-1"></i>Internal build-up
+      </a>
+    {% endif %}
     <a href="{{ url_for('export_pdf_boq', pid=project.id) }}" class="btn btn-danger btn-sm">
       <i class="bi bi-file-earmark-pdf me-1"></i>PDF
     </a>
@@ -14,7 +26,7 @@
 </div>
 
 <div class="report-header">
-  <div class="report-title"><i class="bi bi-list-check me-2"></i>Bill of Quantities (BOQ) &amp; CAPEX</div>
+  <div class="report-title"><i class="bi bi-list-check me-2"></i>Bill of Quantities (BOQ) &amp; CAPEX{% if internal %} — Internal Build-Up{% endif %}</div>
   <div class="text-secondary small mt-2">
     {{ project.name }} &nbsp;|&nbsp; {{ d.region }}, {{ d.country }} &nbsp;|&nbsp;
     {{ r.pv_kw|fmt(2) }} kWp · {{ r.bat_kwh|fmt(2) }} kWh · {{ r.inv_kw|fmt(1) }} kW &nbsp;|&nbsp;
@@ -26,16 +38,29 @@
   <div class="table-responsive">
     <table class="table table-hover mb-0">
       <thead>
+        {% if internal %}
         <tr>
           <th>No.</th><th>Description</th><th>Specification</th>
           <th>Qty</th><th>Unit</th>
           <th class="text-end">Basic Rate ({{ d.symbol }})</th>
-          <th class="text-end">Total Rate ({{ d.symbol }})</th>
+          <th class="text-end">Final Rate ({{ d.symbol }})</th>
           <th class="text-end">Amount ({{ d.symbol }})</th>
         </tr>
+        {% else %}
+        <tr>
+          <th>No.</th>
+          <th>Description</th>
+          <th>Unit</th>
+          <th class="text-end">Qty</th>
+          <th class="text-end">Rate ({{ d.symbol }})</th>
+          <th class="text-end">Amount ({{ d.symbol }})</th>
+          <th>Remarks</th>
+        </tr>
+        {% endif %}
       </thead>
       <tbody>
         {% for row in r.boq_rows %}
+        {% if internal %}
         <tr>
           <td class="text-secondary">{{ row.no }}</td>
           <td class="fw-semibold">{{ row.desc }}</td>
@@ -46,16 +71,41 @@
           <td class="text-end">{{ row.total_r|fmt(2) }}</td>
           <td class="text-end fw-bold text-warning">{{ row.amount|fmt(2) }}</td>
         </tr>
+        {% else %}
+        <tr>
+          <td class="text-secondary">{{ row.no }}</td>
+          <td class="fw-semibold">{{ row.desc }}</td>
+          <td class="text-secondary">{{ row.unit }}</td>
+          <td class="text-end">{{ row.qty }}</td>
+          <td class="text-end">{{ row.total_r|fmt(2) }}</td>
+          <td class="text-end fw-bold text-warning">{{ row.amount|fmt(2) }}</td>
+          <td class="text-secondary small">{{ row.spec or '' }}</td>
+        </tr>
+        {% endif %}
         {% endfor %}
       </tbody>
       <tfoot>
+        {% if internal %}
         <tr class="fw-black" style="background:rgba(245,158,11,.07)">
           <td colspan="7" class="text-end text-warning">GRAND TOTAL ({{ d.symbol }})</td>
           <td class="text-end text-warning fs-5">{{ r.boq_grand|fmt(2) }}</td>
         </tr>
+        {% else %}
+        <tr class="fw-black" style="background:rgba(245,158,11,.07)">
+          <td colspan="5" class="text-end text-warning">GRAND TOTAL ({{ d.symbol }})</td>
+          <td class="text-end text-warning fs-5">{{ r.boq_grand|fmt(2) }}</td>
+          <td></td>
+        </tr>
+        {% endif %}
       </tfoot>
     </table>
   </div>
+  {% if internal %}
+  <div class="text-secondary small p-3 no-print" style="border-left:3px solid #dc2626">
+    <i class="bi bi-shield-lock-fill text-danger me-1"></i>
+    <strong>Internal document.</strong> Rate build-up is for internal estimating only — never share this view with clients or tenders.
+  </div>
+  {% endif %}
 </div>
 
 <div class="row g-3 mb-4">

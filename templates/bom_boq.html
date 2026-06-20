@@ -2,6 +2,16 @@
 {% block title %}BOQ — {{ bom.title }}{% endblock %}
 {% block content %}
 
+{# ------------------------------------------------------------------
+   BOQ display rule (master prompt §11 "Rate Build-Up Rule"):
+     Client view  = # · Description · Unit · Qty · Rate · Amount · Remarks
+     Internal view= adds Basic Price / Supply / Install / OH / Profit /
+                    Contingency / VAT / Final Rate / Amount
+   `internal` is True iff ?view=internal and user has the right role
+   (decided in the route, never in the template).
+------------------------------------------------------------------ #}
+{% set internal = internal_view|default(false) %}
+
 <style>
   @media print {
     .no-print { display: none !important; }
@@ -12,27 +22,44 @@
   }
 </style>
 
-<div class="d-flex align-items-center justify-content-between mb-3 no-print">
-  <div class="text-secondary small"><a href="{{ url_for('boms_view', bom_id=bom.id) }}" class="text-warning">Back to BOM editor</a></div>
-  <div class="d-flex gap-2">
-    <button onclick="window.print()" class="btn btn-warning fw-bold"><i class="bi bi-printer-fill me-1"></i>Print / Save as PDF</button>
+<div class="d-flex align-items-center justify-content-between mb-3 no-print flex-wrap gap-2">
+  <div class="text-secondary small">
+    <a href="{{ url_for('boms_view', bom_id=bom.id) }}" class="text-warning">Back to BOM editor</a>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if internal %}
+      <a href="{{ url_for('boms_boq', bom_id=bom.id) }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-eye me-1"></i>Client view
+      </a>
+    {% elif can_view_buildup %}
+      <a href="{{ url_for('boms_rate_buildup', bom_id=bom.id) }}" class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-lock-fill me-1"></i>Internal rate build-up
+      </a>
+    {% endif %}
+    <button onclick="window.print()" class="btn btn-warning fw-bold btn-sm">
+      <i class="bi bi-printer-fill me-1"></i>Print / Save as PDF
+    </button>
   </div>
 </div>
 
 <div class="solar-card p-4">
   <div class="text-center mb-3">
-    <div class="text-warning fw-bold small" style="letter-spacing:2px;text-transform:uppercase">Bill of Quantities (BOQ)</div>
+    <div class="text-warning fw-bold small" style="letter-spacing:2px;text-transform:uppercase">
+      Bill of Quantities (BOQ){% if internal %} — Internal (Rate Build-Up){% endif %}
+    </div>
     <h4 class="fw-black mb-1">{{ bom.title }}</h4>
     {% if bom.project_name %}<div>{{ bom.project_name }}</div>{% endif %}
     {% if bom.client_name %}<div class="text-secondary small">Client: {{ bom.client_name }}</div>{% endif %}
     <div class="text-secondary small mt-1">Generated: {{ bom.updated_at }}</div>
   </div>
 
-  {% if bom_rates is defined %}
-  <div class="text-secondary small mb-2" style="border-left:3px solid var(--solar-gold);padding-left:10px">
-    Markup rates applied: install labour <strong>{{ bom_rates.labour_pct }}%</strong>
+  {% if internal and bom_rates is defined %}
+  <div class="text-secondary small mb-2 no-print" style="border-left:3px solid var(--solar-gold);padding-left:10px">
+    Markup rates applied (internal only):
+    install labour <strong>{{ bom_rates.labour_pct }}%</strong>
     · overhead <strong>{{ bom_rates.overhead_pct }}%</strong>
     · profit <strong>{{ bom_rates.profit_pct }}%</strong>
+    · contingency <strong>{{ bom_rates.contingency_pct|default(0) }}%</strong>
     · VAT <strong>{{ bom_rates.vat_pct }}%</strong>
   </div>
   {% endif %}
@@ -43,17 +70,13 @@
       <h6 class="fw-black mb-0"><i class="bi bi-shield-exclamation text-danger me-1"></i>Compliance Review</h6>
       <span class="text-secondary small">{{ compliance_findings|length }} finding{% if compliance_findings|length != 1 %}s{% endif %}</span>
     </div>
-    <div class="text-secondary small mb-2">Issues that may need fixing before this BOQ ships -- driven by the marketplace product taxonomy (required spec fields, default units, supplier attachment).</div>
+    <div class="text-secondary small mb-2">Issues that may need fixing before this BOQ ships — driven by the marketplace product taxonomy (required spec fields, default units, supplier attachment).</div>
     <ul class="mb-0 ps-3" style="font-size:12.5px;list-style:none;padding-left:0 !important">
       {% for f in compliance_findings %}
       <li class="mb-1">
-        {% if f.severity == 'high' %}
-          <span class="badge bg-danger" style="font-size:10px">HIGH</span>
-        {% elif f.severity == 'medium' %}
-          <span class="badge bg-warning text-dark" style="font-size:10px">MED</span>
-        {% else %}
-          <span class="badge bg-secondary" style="font-size:10px">LOW</span>
-        {% endif %}
+        {% if f.severity == 'high' %}<span class="badge bg-danger" style="font-size:10px">HIGH</span>
+        {% elif f.severity == 'medium' %}<span class="badge bg-warning text-dark" style="font-size:10px">MED</span>
+        {% else %}<span class="badge bg-secondary" style="font-size:10px">LOW</span>{% endif %}
         {% if f.line_no %}<span class="text-secondary">Line {{ f.line_no }}:</span>{% endif %}
         {{ f.message }}
       </li>
@@ -62,12 +85,28 @@
   </div>
   {% else %}
   <div class="rounded-3 p-2 mb-3 no-print" style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.30);font-size:12px;color:#e0e0f0">
-    <i class="bi bi-shield-check text-success me-1"></i>Compliance Review: <strong>no issues</strong> -- every line has complete specs, a unit price, a supplier attached, and matches the category's default unit.
+    <i class="bi bi-shield-check text-success me-1"></i>Compliance Review: <strong>no issues</strong> — every line has complete specs, a unit price, a supplier attached, and matches the category's default unit.
   </div>
   {% endif %}
-  <table class="table align-middle" style="color:#e0e0f0;font-size:13px">
-    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
-      <tr><th style="width:30px">#</th><th>Description</th><th>Category</th><th class="text-end">Qty</th><th class="text-end">Unit</th><th class="text-end">Basic Rate</th><th class="text-end">Total Rate</th><th class="text-end">Amount</th></tr>
+
+  {% if internal %}
+  {# ============= INTERNAL VIEW — full rate build-up ================= #}
+  <table class="table align-middle" style="color:#e0e0f0;font-size:12px">
+    <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
+      <tr>
+        <th style="width:30px">#</th>
+        <th>Description</th>
+        <th class="text-end">Qty</th>
+        <th>Unit</th>
+        <th class="text-end">Basic Price</th>
+        <th class="text-end">Supply</th>
+        <th class="text-end">Install</th>
+        <th class="text-end">+OH</th>
+        <th class="text-end">+Profit</th>
+        <th class="text-end">+VAT</th>
+        <th class="text-end">Final Rate</th>
+        <th class="text-end">Amount</th>
+      </tr>
     </thead>
     <tbody>
       {% set ns = namespace(prev_cat=None) %}
@@ -75,7 +114,7 @@
       {% set it = line.item %}
       {% if it.category_name != ns.prev_cat %}
       <tr style="background:#0a0a14">
-        <td colspan="8" class="fw-bold text-warning" style="text-transform:uppercase;letter-spacing:.5px">{{ it.category_name or 'Uncategorised' }}</td>
+        <td colspan="12" class="fw-bold text-warning" style="text-transform:uppercase;letter-spacing:.5px">{{ it.category_name or 'Uncategorised' }}</td>
       </tr>
       {% set ns.prev_cat = it.category_name %}
       {% endif %}
@@ -83,34 +122,91 @@
         <td class="text-secondary small">{{ loop.index }}</td>
         <td>
           <strong>{{ it.custom_name }}</strong>
-          {% if it.catalog_brand or it.catalog_model %}<div class="small text-secondary">{{ it.catalog_brand }} {% if it.catalog_model %}· {{ it.catalog_model }}{% endif %}</div>{% endif %}
+          {% if it.catalog_brand or it.catalog_model %}<div class="small text-secondary">{{ it.catalog_brand }}{% if it.catalog_model %} · {{ it.catalog_model }}{% endif %}</div>{% endif %}
           {% if it.catalog_spec %}<div class="small text-secondary">{{ it.catalog_spec }}</div>{% endif %}
         </td>
-        <td class="small text-secondary">{{ it.category_name or '—' }}</td>
         <td class="text-end">{{ "%.2f"|format(it.qty or 0) }}</td>
-        <td class="text-end small">{{ it.unit }}</td>
-        <td class="text-end">{{ currency or 'USD' }} {{ "%.2f"|format(line.basic_rate if line.basic_rate is defined else line.unit_price) }}</td>
-        <td class="text-end">{{ currency or 'USD' }} {{ "%.2f"|format(line.total_rate if line.total_rate is defined else line.unit_price) }}</td>
-        <td class="text-end fw-bold">{{ currency or 'USD' }} {{ "%.2f"|format(line.line_total) }}</td>
+        <td class="small text-secondary">{{ it.unit }}</td>
+        <td class="text-end">{{ "%.2f"|format(line.basic_rate or 0) }}</td>
+        <td class="text-end">{{ "%.2f"|format(line.basic_rate or 0) }}</td>
+        <td class="text-end">{{ "%.2f"|format(line.install_labour or 0) }}</td>
+        <td class="text-end">{{ "%.2f"|format(line.overhead or 0) }}</td>
+        <td class="text-end">{{ "%.2f"|format(line.profit or 0) }}</td>
+        <td class="text-end">{{ "%.2f"|format(line.vat or 0) }}</td>
+        <td class="text-end fw-bold text-warning">{{ "%.2f"|format(line.total_rate or 0) }}</td>
+        <td class="text-end fw-bold">{{ "%.2f"|format(line.line_total or 0) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
+        <td colspan="11" class="text-end fw-black" style="font-size:13px">GRAND TOTAL ({{ currency or 'USD' }})</td>
+        <td class="text-end fw-black text-warning" style="font-size:16px">{{ "%.2f"|format(totals.grand_total) }}</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="text-secondary small mt-3 no-print" style="border-left:3px solid #dc2626;padding-left:10px">
+    <i class="bi bi-shield-lock-fill text-danger me-1"></i>
+    <strong>Internal document.</strong> Rate build-up is for internal estimating only — never share this view with clients or tenders. Use the client view for client deliverables.
+  </div>
+
+  {% else %}
+  {# ============= CLIENT-CLEAN VIEW — spec §11 columns =============== #}
+  <table class="table align-middle" style="color:#e0e0f0;font-size:13px">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
+      <tr>
+        <th style="width:30px">#</th>
+        <th>Description</th>
+        <th>Unit</th>
+        <th class="text-end">Qty</th>
+        <th class="text-end">Rate ({{ currency or 'USD' }})</th>
+        <th class="text-end">Amount ({{ currency or 'USD' }})</th>
+        <th>Remarks</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set ns = namespace(prev_cat=None) %}
+      {% for line in totals.lines %}
+      {% set it = line.item %}
+      {% if it.category_name != ns.prev_cat %}
+      <tr style="background:#0a0a14">
+        <td colspan="7" class="fw-bold text-warning" style="text-transform:uppercase;letter-spacing:.5px">{{ it.category_name or 'Uncategorised' }}</td>
+      </tr>
+      {% set ns.prev_cat = it.category_name %}
+      {% endif %}
+      <tr>
+        <td class="text-secondary small">{{ loop.index }}</td>
+        <td>
+          <strong>{{ it.custom_name }}</strong>
+          {% if it.catalog_brand or it.catalog_model %}<div class="small text-secondary">{{ it.catalog_brand }}{% if it.catalog_model %} · {{ it.catalog_model }}{% endif %}</div>{% endif %}
+          {% if it.catalog_spec %}<div class="small text-secondary">{{ it.catalog_spec }}</div>{% endif %}
+        </td>
+        <td class="small text-secondary">{{ it.unit }}</td>
+        <td class="text-end">{{ "%.2f"|format(it.qty or 0) }}</td>
+        <td class="text-end">{{ "%.2f"|format(line.total_rate if line.total_rate is defined else line.unit_price) }}</td>
+        <td class="text-end fw-bold">{{ "%.2f"|format(line.line_total) }}</td>
+        <td class="text-secondary small">{{ it.remarks or it.notes or '' }}</td>
       </tr>
       {% endfor %}
     </tbody>
     <tfoot>
       {% for cat, sub in totals.category_totals.items() %}
-      <tr><td colspan="7" class="text-end text-secondary">{{ cat }} subtotal</td><td class="text-end fw-bold">{{ currency or 'USD' }} {{ "%.2f"|format(sub) }}</td></tr>
+      <tr><td colspan="5" class="text-end text-secondary">{{ cat }} subtotal</td><td class="text-end fw-bold">{{ "%.2f"|format(sub) }}</td><td></td></tr>
       {% endfor %}
       <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
-        <td colspan="7" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
-        <td class="text-end fw-black text-warning" style="font-size:18px">{{ currency or 'USD' }} {{ "%.2f"|format(totals.grand_total) }}</td>
+        <td colspan="5" class="text-end fw-black" style="font-size:14px">GRAND TOTAL ({{ currency or 'USD' }})</td>
+        <td class="text-end fw-black text-warning" style="font-size:18px">{{ "%.2f"|format(totals.grand_total) }}</td>
+        <td></td>
       </tr>
     </tfoot>
   </table>
+  {% endif %}
 
   <div class="text-secondary small mt-4">
     <strong>Notes:</strong>
     Rates are indicative supplier-published prices in {{ currency or 'USD' }}{% if currency and currency != 'USD' %} (converted from supplier-listed USD at indicative FX valid {{ rates_as_of }}){% endif %}, as of {{ bom.updated_at }}.
     Final delivered prices may vary by quantity, location, currency, and supplier lead-time.
-    Use the <strong>Clone to RFQ</strong> action on the BOM editor to chase live quotes from verified suppliers.
+    {% if not internal %}Use the <strong>Clone to RFQ</strong> action on the BOM editor to chase live quotes from verified suppliers.{% endif %}
   </div>
 </div>
 

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ project.project_name }} — BOQ{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small"><a href="{{ url_for('boq_projects_list') }}" class="text-warning">BOQ Projects</a></div>
+    <h5 class="fw-black mb-0 mt-1">{{ project.project_name }}</h5>
+    <div class="text-secondary small">
+      {% if project.client_name %}{{ project.client_name }} · {% endif %}
+      {% if project.location %}{{ project.location }} · {% endif %}
+      {{ project.project_type|replace('_',' ')|title }}
+    </div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('boq_building_new', pid=project.id) }}" class="btn btn-outline-warning btn-sm">
+      <i class="bi bi-plus-circle me-1"></i>Add building
+    </a>
+    <a href="{{ url_for('boq_project_boq', pid=project.id) }}" class="btn btn-outline-light btn-sm">
+      <i class="bi bi-file-text me-1"></i>View BOQ
+    </a>
+    <a href="{{ url_for('boq_project_summary', pid=project.id) }}" class="btn btn-outline-info btn-sm">
+      <i class="bi bi-stack me-1"></i>Summary
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-6">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-cash-stack me-1"></i>Project grand total</div>
+      <div class="kpi-value">{{ "%.2f"|format(grand_total) }}</div>
+      <div class="kpi-unit">sum of all floor items</div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-building me-1"></i>Buildings</div>
+      <div class="kpi-value">{{ buildings|length }}</div>
+      <div class="kpi-unit">in this project</div>
+    </div>
+  </div>
+</div>
+
+{% if buildings %}
+<div class="solar-card p-0">
+  <table class="table table-hover mb-0" style="color:#e0e0f0;font-size:13px">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+      <tr><th>Building</th><th>Purpose</th><th>Subtype</th><th class="text-end">Floors</th><th class="text-end">Subtotal</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for b in buildings %}
+      <tr>
+        <td>
+          <strong>{{ b.building_name }}</strong>
+          {% if b.building_code %}<div class="small text-secondary">code: {{ b.building_code }}</div>{% endif %}
+        </td>
+        <td class="small">{{ b.primary_purpose|title }}</td>
+        <td class="small text-secondary">{{ b.purpose_subtype }}{% if b.purpose_subtype == 'Other' and b.other_purpose_description %} — {{ b.other_purpose_description }}{% endif %}</td>
+        <td class="text-end">{{ b.n_floors }}</td>
+        <td class="text-end fw-bold text-warning">{{ "%.2f"|format(b.subtotal or 0) }}</td>
+        <td class="text-end">
+          <a href="{{ url_for('boq_building_view', pid=project.id, bid=b.id) }}" class="btn btn-outline-warning btn-sm">Open</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="solar-card p-4 text-center text-secondary">
+  <i class="bi bi-building" style="font-size:36px"></i>
+  <p class="mt-2 mb-2">No buildings yet — start by adding one.</p>
+  <a href="{{ url_for('boq_building_new', pid=project.id) }}" class="btn btn-warning btn-sm fw-bold">
+    <i class="bi bi-plus-circle me-1"></i>Add first building
+  </a>
+</div>
+{% endif %}
+{% endblock %}

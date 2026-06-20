@@ -129,7 +129,12 @@
 
   <hr class="my-3" style="border-color:#1e1e3a">
 
-  <h6 class="fw-bold mb-2"><i class="bi bi-plus-circle me-1 text-warning"></i>Add line item</h6>
+  <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+    <h6 class="fw-bold mb-0"><i class="bi bi-plus-circle me-1 text-warning"></i>Add line item</h6>
+    <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#addLibraryItemModal">
+      <i class="bi bi-plus-square me-1"></i>+ Add Library Item
+    </button>
+  </div>
   <form method="POST" action="{{ url_for('boms_add_item', bom_id=bom.id) }}" class="row g-2">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <div class="col-md-4">
@@ -151,9 +156,131 @@
       <button class="btn btn-warning btn-sm fw-bold w-100"><i class="bi bi-plus-circle me-1"></i>Add</button>
     </div>
     <div class="col-md-12 text-secondary small">
-      Tip: pick a product on <a href="{{ url_for('marketplace_public') }}" class="text-warning">the marketplace</a> and click <strong>Add to BOM</strong> — it lands here automatically.
+      Tip: pick a product on <a href="{{ url_for('marketplace_public') }}" class="text-warning">the marketplace</a> and click <strong>Add to BOM</strong> — it lands here automatically. Use <strong>+ Add Library Item</strong> when the item isn't in the catalogue yet.
     </div>
   </form>
+</div>
+
+{# ─── + Add Library Item modal (master prompt s10 + s13) ──────────────── #}
+<div class="modal fade" id="addLibraryItemModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content" style="background:#13132a;color:#e0e0f0;border:1px solid #1e1e3a">
+      <form method="POST" action="{{ url_for('boms_add_library_item', bom_id=bom.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="modal-header" style="border-bottom:1px solid #1e1e3a">
+          <h6 class="modal-title fw-bold"><i class="bi bi-plus-square text-warning me-1"></i>Add new BOQ library item</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-secondary small mb-3">
+            Use when the item you need isn't in the catalogue. The clean rate (final built-up) appears in the BOQ;
+            the basic-price / supply / install / overhead / profit / contingency / VAT breakdown stays internal
+            on the Rate Build-Up page.
+          </p>
+          <div class="row g-2">
+            <div class="col-md-8">
+              <label class="form-label small text-secondary">Item description *</label>
+              <input class="form-control form-control-sm" name="description" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small text-secondary">BOQ section</label>
+              <select class="form-select form-select-sm" name="section">
+                <option value="preliminaries">Preliminaries</option>
+                <option value="switchboards">Switch Boards & DBs</option>
+                <option value="sub_feeders">Sub-feeder Cables</option>
+                <option value="wiring">Wiring of Points</option>
+                <option value="luminaires">Luminaires</option>
+                <option value="accessories">Accessories</option>
+                <option value="earthing">Bonding & Earthing</option>
+                <option value="fire_alarm">Fire Detection & Alarm</option>
+                <option value="data_voice">Data & Voice</option>
+                <option value="lightning">Lightning Protection</option>
+                <option value="external_lighting">External Lighting</option>
+                <option value="solar_pv">Solar PV System</option>
+                <option value="generator_ups">Generator & UPS</option>
+                <option value="testing">Testing & Commissioning</option>
+                <option value="documentation">Documentation & Handover</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="col-md-12">
+              <label class="form-label small text-secondary">Specification</label>
+              <textarea class="form-control form-control-sm" name="specification" rows="2" placeholder="Rating, size, type, installation standard…"></textarea>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small text-secondary">Unit *</label>
+              <input class="form-control form-control-sm" name="unit" value="No." required>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small text-secondary">Qty *</label>
+              <input type="number" step="0.01" min="0.01" class="form-control form-control-sm" name="qty" value="1" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small text-secondary">Brand</label>
+              <input class="form-control form-control-sm" name="brand">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small text-secondary">Supplier (optional)</label>
+              <input class="form-control form-control-sm" name="supplier_name" placeholder="Supplier name">
+            </div>
+
+            <div class="col-md-12 mt-3">
+              <div class="text-warning small fw-bold"><i class="bi bi-lock-fill me-1"></i>Rate build-up (internal — never shown on BOQ)</div>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small text-secondary">Basic price</label>
+              <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="basic_price" placeholder="0.00">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small text-secondary">Supply rate <span class="text-secondary">(defaults to basic)</span></label>
+              <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="supply_rate" placeholder="0.00">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small text-secondary">Install rate <span class="text-secondary">(0 if blank)</span></label>
+              <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="install_rate" placeholder="0.00">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small text-secondary">Overheads %</label>
+              <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="overhead_pct" placeholder="0">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small text-secondary">Profit %</label>
+              <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="profit_pct" placeholder="0">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small text-secondary">Contingency %</label>
+              <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="contingency_pct" placeholder="0">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small text-secondary">VAT %</label>
+              <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="vat_pct" placeholder="0">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small text-secondary">Final rate <span class="text-secondary">(auto)</span></label>
+              <input class="form-control form-control-sm" readonly placeholder="Computed on save" style="background:#0a0a14">
+            </div>
+
+            <div class="col-md-12">
+              <label class="form-label small text-secondary">Notes / remarks (shown on BOQ)</label>
+              <input class="form-control form-control-sm" name="remarks" placeholder="Optional remark printed in the client BOQ">
+            </div>
+            <div class="col-md-12 mt-2">
+              <label class="form-label small text-secondary">Save option</label>
+              <select class="form-select form-select-sm" name="save_option">
+                <option value="current_boq_only" selected>Use in current BOQ only</option>
+                <option value="save_to_project_library">Save to project library</option>
+                <option value="submit_to_master_library">Submit to master BOQ library (needs review)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="border-top:1px solid #1e1e3a">
+          <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning btn-sm fw-bold"><i class="bi bi-save me-1"></i>Save &amp; Add to BOQ</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 
 {% endblock %}

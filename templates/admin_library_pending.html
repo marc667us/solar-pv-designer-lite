@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Library — Pending Review{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h5 class="fw-black mb-0"><i class="bi bi-shield-check text-warning me-1"></i>Library — Pending Review</h5>
+  <a href="{{ url_for('admin') }}" class="text-secondary small">Back to admin</a>
+</div>
+
+{% if rows %}
+<div class="solar-card p-3">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0;font-size:13px">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+        <tr>
+          <th>ID</th><th>Description</th><th>Category</th><th>Brand</th>
+          <th>Unit</th><th class="text-end">Basic price (USD)</th><th>Submitted by</th><th>Submitted</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td class="text-secondary small">#{{ r.id }}</td>
+          <td>
+            <strong>{{ r.name }}</strong>
+            {% if r.spec %}<div class="small text-secondary">{{ r.spec }}</div>{% endif %}
+          </td>
+          <td class="small text-secondary">{{ r.category }}</td>
+          <td class="small">{{ r.brand or '—' }}</td>
+          <td class="small">{{ r.unit }}</td>
+          <td class="text-end">{{ "%.2f"|format(r.price_usd or 0) }}</td>
+          <td class="small text-secondary">user #{{ r.submitted_by_user_id or '—' }}</td>
+          <td class="small text-secondary">{{ r.created_at }}</td>
+          <td class="text-end">
+            <form method="POST" action="{{ url_for('admin_library_approve', item_id=r.id) }}" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn btn-success btn-sm"><i class="bi bi-check2"></i> Approve</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin_library_reject', item_id=r.id) }}" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Reject this library submission?')"><i class="bi bi-x"></i> Reject</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="solar-card p-4 text-center text-secondary">
+  <i class="bi bi-inbox" style="font-size:32px"></i>
+  <p class="mt-2 mb-0">No pending library submissions.</p>
+</div>
+{% endif %}
+{% endblock %}

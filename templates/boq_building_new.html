@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}New Building — {{ project.project_name }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <div class="text-secondary small"><a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="text-warning">{{ project.project_name }}</a></div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-building text-warning me-1"></i>New Building</h5>
+  </div>
+</div>
+
+<div class="solar-card p-4">
+  <div class="text-secondary small mb-3" style="border-left:3px solid var(--solar-gold);padding-left:10px">
+    <strong>Master prompt §3:</strong> Building purpose is mandatory before floors can be configured. Pick a primary purpose, then a subtype — purpose drives the BOQ section recommendations.
+  </div>
+
+  <form method="POST">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="row g-3">
+      <div class="col-md-8">
+        <label class="form-label small text-secondary">Building name *</label>
+        <input class="form-control" name="building_name" required maxlength="300" placeholder="e.g. Block A">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Building code</label>
+        <input class="form-control" name="building_code" maxlength="80" placeholder="e.g. BLK-A">
+      </div>
+
+      <div class="col-md-12 mt-4">
+        <label class="form-label small text-secondary"><strong>Primary purpose *</strong></label>
+        <div class="d-flex gap-3 flex-wrap">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="primary_purpose" id="r1" value="residential" required onclick="window._boqSetSubs('residential')">
+            <label class="form-check-label" for="r1">Residential</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="primary_purpose" id="r2" value="commercial" required onclick="window._boqSetSubs('commercial')">
+            <label class="form-check-label" for="r2">Commercial</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="primary_purpose" id="r3" value="industrial" required onclick="window._boqSetSubs('industrial')">
+            <label class="form-check-label" for="r3">Industrial</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Subtype *</label>
+        <select class="form-select" name="purpose_subtype" id="purpose_subtype" required>
+          <option value="">— pick a primary purpose first —</option>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Other purpose description <span class="text-secondary">(only if subtype = Other)</span></label>
+        <input class="form-control" name="other_purpose_description" maxlength="300">
+      </div>
+
+      <div class="col-md-4 mt-4">
+        <label class="form-label small text-secondary">Building area (m²)</label>
+        <input type="number" min="0" step="0.01" class="form-control" name="building_area" value="0">
+      </div>
+      <div class="col-md-4 mt-4">
+        <label class="form-label small text-secondary">Number of floors *</label>
+        <input type="number" min="1" max="50" step="1" class="form-control" name="number_of_floors" value="1" required>
+        <div class="text-secondary small mt-1">One-floor → Ground Floor auto-created (spec §5).</div>
+      </div>
+      <div class="col-md-4 mt-4">
+        <label class="form-label small text-secondary">Optional levels</label>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="basement_included" id="b1"><label class="form-check-label small" for="b1">Basement</label></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="roof_level_included" id="b2"><label class="form-check-label small" for="b2">Roof level</label></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="external_area_included" id="b3"><label class="form-check-label small" for="b3">External area</label></div>
+      </div>
+    </div>
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+    <button class="btn btn-warning fw-bold"><i class="bi bi-check2-circle me-1"></i>Create building &amp; auto-generate floors</button>
+  </form>
+</div>
+
+<script>
+  // Master prompt §4: subtype dropdown is filtered by chosen primary purpose.
+  window._boqSubtypes = {{ subtypes|tojson }};
+  window._boqSetSubs = function(primary) {
+    var sel = document.getElementById("purpose_subtype");
+    sel.innerHTML = "";
+    (window._boqSubtypes[primary] || []).forEach(function(s){
+      var opt = document.createElement("option");
+      opt.value = s; opt.textContent = s;
+      sel.appendChild(opt);
+    });
+  };
+</script>
+{% endblock %}

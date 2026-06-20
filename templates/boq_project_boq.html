@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}BOQ — {{ project.project_name }}{% endblock %}
+{% block content %}
+{# Combined project BOQ, grouped by Building → Floor → Section.
+   Default = client-clean per master prompt §11.
+   ?view=internal exposes rate build-up. #}
+{% set internal = internal_view|default(false) %}
+
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    body { background: white !important; color: black !important; }
+    .solar-card { background: white !important; border-color: #ccc !important; color: black !important; }
+    table { color: black !important; }
+    thead { color: #444 !important; }
+  }
+</style>
+
+<div class="d-flex align-items-center justify-content-between mb-3 no-print flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('boq_projects_list') }}" class="text-warning">BOQ Projects</a> ·
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="text-warning">{{ project.project_name }}</a>
+    </div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if internal %}
+      <a href="{{ url_for('boq_project_boq', pid=project.id) }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-eye me-1"></i>Client view
+      </a>
+    {% elif can_view_buildup %}
+      <a href="{{ url_for('boq_project_boq', pid=project.id, view='internal') }}" class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-lock-fill me-1"></i>Internal rate build-up
+      </a>
+    {% endif %}
+    <button onclick="window.print()" class="btn btn-warning fw-bold btn-sm">
+      <i class="bi bi-printer-fill me-1"></i>Print / Save as PDF
+    </button>
+  </div>
+</div>
+
+<div class="solar-card p-4">
+  <div class="text-center mb-3">
+    <div class="text-warning fw-bold small" style="letter-spacing:2px;text-transform:uppercase">
+      Bill of Quantities (BOQ){% if internal %} — Internal Build-Up{% endif %}
+    </div>
+    <h4 class="fw-black mb-1">{{ project.project_name }}</h4>
+    {% if project.client_name %}<div class="text-secondary small">Client: {{ project.client_name }}</div>{% endif %}
+    {% if project.location %}<div class="text-secondary small">Location: {{ project.location }}</div>{% endif %}
+  </div>
+
+  {% set grand = namespace(v=0.0) %}
+  {% if rows %}
+    {# Group rows by building, then by floor #}
+    {% set ns = namespace(prev_bid=None, prev_fid=None) %}
+    <table class="table align-middle" style="color:#e0e0f0;font-size:13px">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
+        {% if internal %}
+        <tr>
+          <th style="width:30px">#</th><th>Description</th>
+          <th class="text-end">Qty</th><th>Unit</th>
+          <th class="text-end">Basic</th><th class="text-end">Supply</th><th class="text-end">Install</th>
+          <th class="text-end">+OH</th><th class="text-end">+Profit</th><th class="text-end">+Cont</th><th class="text-end">+VAT</th>
+          <th class="text-end">Final Rate</th><th class="text-end">Amount</th>
+        </tr>
+        {% else %}
+        <tr>
+          <th style="width:30px">#</th>
+          <th>Description</th>
+          <th>Unit</th>
+          <th class="text-end">Qty</th>
+          <th class="text-end">Rate</th>
+          <th class="text-end">Amount</th>
+          <th>Remarks</th>
+        </tr>
+        {% endif %}
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          {% if r.building_id != ns.prev_bid %}
+          <tr style="background:#0a0a14"><td colspan="{% if internal %}13{% else %}7{% endif %}" class="fw-bold text-warning" style="text-transform:uppercase">
+            🏢 {{ r.building_name }}{% if r.building_code %} ({{ r.building_code }}){% endif %} — {{ r.primary_purpose|title }} / {{ r.purpose_subtype }}
+          </td></tr>
+          {% set ns.prev_bid = r.building_id %}
+          {% set ns.prev_fid = None %}
+          {% endif %}
+          {% if r.floor_id != ns.prev_fid %}
+          <tr style="background:#10102a"><td colspan="{% if internal %}13{% else %}7{% endif %}" class="text-warning" style="text-transform:uppercase;font-size:11px;letter-spacing:.5px">
+            📐 {{ r.floor_name }}
+          </td></tr>
+          {% set ns.prev_fid = r.floor_id %}
+          {% endif %}
+          {% set grand.v = grand.v + (r.total_amount or 0) %}
+          {% if internal %}
+          <tr>
+            <td class="small text-secondary">{{ loop.index }}</td>
+            <td>
+              <strong>{{ r.description }}</strong>
+              {% if r.specification %}<div class="small text-secondary">{{ r.specification }}</div>{% endif %}
+            </td>
+            <td class="text-end">{{ "%.2f"|format(r.qty or 0) }}</td>
+            <td class="small">{{ r.unit }}</td>
+            <td class="text-end">{{ "%.2f"|format(r.basic_price or 0) }}</td>
+            <td class="text-end">{{ "%.2f"|format(r.supply_rate or 0) }}</td>
+            <td class="text-end">{{ "%.2f"|format(r.install_rate or 0) }}</td>
+            <td class="text-end">{{ "%.2f"|format(r.overhead_pct or 0) }}%</td>
+            <td class="text-end">{{ "%.2f"|format(r.profit_pct or 0) }}%</td>
+            <td class="text-end">{{ "%.2f"|format(r.contingency_pct or 0) }}%</td>
+            <td class="text-end">{{ "%.2f"|format(r.vat_pct or 0) }}%</td>
+            <td class="text-end fw-bold text-warning">{{ "%.2f"|format(r.final_built_up_rate or 0) }}</td>
+            <td class="text-end fw-bold">{{ "%.2f"|format(r.total_amount or 0) }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td class="small text-secondary">{{ loop.index }}</td>
+            <td>
+              <strong>{{ r.description }}</strong>
+              {% if r.specification %}<div class="small text-secondary">{{ r.specification }}</div>{% endif %}
+            </td>
+            <td class="small">{{ r.unit }}</td>
+            <td class="text-end">{{ "%.2f"|format(r.qty or 0) }}</td>
+            <td class="text-end">{{ "%.2f"|format(r.final_built_up_rate or 0) }}</td>
+            <td class="text-end fw-bold">{{ "%.2f"|format(r.total_amount or 0) }}</td>
+            <td class="small text-secondary">{{ r.remarks or '' }}</td>
+          </tr>
+          {% endif %}
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
+          {% if internal %}
+          <td colspan="12" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
+          <td class="text-end fw-black text-warning" style="font-size:16px">{{ "%.2f"|format(grand.v) }}</td>
+          {% else %}
+          <td colspan="5" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
+          <td class="text-end fw-black text-warning" style="font-size:18px">{{ "%.2f"|format(grand.v) }}</td>
+          <td></td>
+          {% endif %}
+        </tr>
+      </tfoot>
+    </table>
+  {% else %}
+    <div class="text-center text-secondary py-3">
+      <i class="bi bi-inbox" style="font-size:32px"></i>
+      <p class="mt-2 mb-0">No items in this project yet.</p>
+    </div>
+  {% endif %}
+
+  {% if internal %}
+  <div class="text-secondary small mt-3 no-print" style="border-left:3px solid #dc2626;padding-left:10px">
+    <i class="bi bi-shield-lock-fill text-danger me-1"></i>
+    <strong>Internal document.</strong> Rate build-up is for internal estimating only — never share this view with clients or tenders.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
