@@ -1,0 +1,172 @@
+# URGENT: live KC logins broke after cutover because the solarpro realm
+# import (realm-export.json) declared clientScopes=[solarpro-tenant] which
+# replaced KC's auto-created default scopes. Any OIDC request asking for
+# scope=openid profile email returns invalid_scope.
+#
+# This workflow heals the live realm by copying the standard client
+# scopes (profile, email, roles, web-origins, acr, address, phone,
+# offline_access, microprofile-jwt) from KC's master realm (where they
+# always exist by default) into the solarpro realm. Then it adds them
+# to the realm's default-default + default-optional lists so new
+# clients pick them up automatically.
+#
+# Idempotent: scopes that already exist by name are skipped (KC returns
+# 409 which we treat as success).
+#
+# Out of scope: backfilling realm-export.json so fresh deployments
+# don't hit this bug -- separate commit after this lands.
+
+name: Fix KC Realm Scopes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER }}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.KC_BOOTSTRAP_ADMIN_PASSWORD }}
+    steps:
+      - name: Setup Python + deps
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet requests
+
+      - name: Copy default scopes master -> solarpro
+        run: |
+          python3 << 'PY'
+          import os, sys, json, requests
+
+          BASE = os.environ['KEYCLOAK_ISSUER'].rsplit('/realms/', 1)[0]
+          ADM_PWD = os.environ['KC_BOOTSTRAP_ADMIN_PASSWORD']
+
+          # 1. Master-realm admin token via admin-cli password grant.
+          r = requests.post(
+              f"{BASE}/realms/master/protocol/openid-connect/token",
+              data={
+                  "client_id": "admin-cli",
+                  "grant_type": "password",
+                  "username": "admin",
+                  "password": ADM_PWD,
+              }, timeout=10)
+          r.raise_for_status()
+          tok = r.json()["access_token"]
+          H = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}
+
+          # 2. Read master-realm scopes (templates we want).
+          master_scopes = requests.get(
+              f"{BASE}/admin/realms/master/client-scopes", headers=H, timeout=10
+          ).json()
+          NEEDED = {"profile", "email", "roles", "web-origins", "acr",
+                    "address", "phone", "offline_access", "microprofile-jwt",
+                    "basic"}
+          to_copy = {s["name"]: s for s in master_scopes if s.get("name") in NEEDED}
+          print(f"scopes to copy: {sorted(to_copy.keys())}")
+
+          # 3. Read solarpro-realm existing scopes so we don't duplicate.
+          existing = {s["name"] for s in requests.get(
+              f"{BASE}/admin/realms/solarpro/client-scopes", headers=H, timeout=10
+          ).json()}
+          print(f"solarpro already has: {sorted(existing)}")
+
+          # 4. POST each missing scope. Strip id+containerId so KC assigns fresh.
+          created = []
+          skipped = []
+          for name, scope in to_copy.items():
+              if name in existing:
+                  skipped.append(name)
+                  continue
+              payload = dict(scope)
+              payload.pop("id", None)
+              for m in (payload.get("protocolMappers") or []):
+                  m.pop("id", None)
+              resp = requests.post(
+                  f"{BASE}/admin/realms/solarpro/client-scopes",
+                  headers=H, json=payload, timeout=15)
+              if resp.status_code in (201, 200):
+                  created.append(name)
+              elif resp.status_code == 409:
+                  skipped.append(name)
+              else:
+                  print(f"  FAIL {name}: HTTP {resp.status_code}: {resp.text[:200]}")
+                  sys.exit(1)
+          print(f"created: {created}")
+          print(f"skipped (already present): {skipped}")
+
+          # 5. Wire each scope into the realm-level default-default and
+          # default-optional lists so new clients inherit them. Re-read
+          # solarpro scopes to get fresh ids.
+          fresh = {s["name"]: s["id"] for s in requests.get(
+              f"{BASE}/admin/realms/solarpro/client-scopes", headers=H, timeout=10
+          ).json()}
+
+          DEFAULTS = ["profile", "email", "roles", "web-origins", "acr", "basic"]
+          OPTIONALS = ["address", "phone", "offline_access", "microprofile-jwt"]
+
+          for name in DEFAULTS:
+              sid = fresh.get(name)
+              if not sid: continue
+              r = requests.put(
+                  f"{BASE}/admin/realms/solarpro/default-default-client-scopes/{sid}",
+                  headers=H, timeout=10)
+              print(f"  realm default-default += {name}: HTTP {r.status_code}")
+          for name in OPTIONALS:
+              sid = fresh.get(name)
+              if not sid: continue
+              r = requests.put(
+                  f"{BASE}/admin/realms/solarpro/default-optional-client-scopes/{sid}",
+                  headers=H, timeout=10)
+              print(f"  realm default-optional += {name}: HTTP {r.status_code}")
+
+          # 6. Wire each scope into solarpro-web's client-level
+          # defaultClientScopes (so existing clients also pick them up).
+          # The client was created by the realm import; find its id.
+          clients = requests.get(
+              f"{BASE}/admin/realms/solarpro/clients?clientId=solarpro-web",
+              headers=H, timeout=10).json()
+          if not clients:
+              print("FAIL: solarpro-web client not found")
+              sys.exit(1)
+          cid = clients[0]["id"]
+
+          for name in DEFAULTS:
+              sid = fresh.get(name)
+              if not sid: continue
+              r = requests.put(
+                  f"{BASE}/admin/realms/solarpro/clients/{cid}/default-client-scopes/{sid}",
+                  headers=H, timeout=10)
+              print(f"  solarpro-web default += {name}: HTTP {r.status_code}")
+          for name in OPTIONALS:
+              sid = fresh.get(name)
+              if not sid: continue
+              r = requests.put(
+                  f"{BASE}/admin/realms/solarpro/clients/{cid}/optional-client-scopes/{sid}",
+                  headers=H, timeout=10)
+              print(f"  solarpro-web optional += {name}: HTTP {r.status_code}")
+
+          print("DONE")
+          PY
+
+      - name: Sanity -- list solarpro realm scopes
+        run: |
+          python3 << 'PY'
+          import os, requests
+          BASE = os.environ['KEYCLOAK_ISSUER'].rsplit('/realms/', 1)[0]
+          ADM_PWD = os.environ['KC_BOOTSTRAP_ADMIN_PASSWORD']
+          tok = requests.post(
+              f"{BASE}/realms/master/protocol/openid-connect/token",
+              data={"client_id": "admin-cli", "grant_type": "password",
+                    "username": "admin", "password": ADM_PWD},
+              timeout=10).json()["access_token"]
+          H = {"Authorization": f"Bearer {tok}"}
+          scopes = requests.get(f"{BASE}/admin/realms/solarpro/client-scopes", headers=H).json()
+          print(f"solarpro realm now has {len(scopes)} client scopes:")
+          for s in scopes:
+              print(f"  - {s['name']:30s} ({s.get('protocol','?')})")
+          PY
