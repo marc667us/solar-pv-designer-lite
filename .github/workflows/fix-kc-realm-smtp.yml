@@ -1,0 +1,157 @@
+# Wire SMTP into the solarpro KC realm so verification + reset-password
+# emails actually leave the building. Reuses the SMTP_* GH secrets the
+# solar app already authenticates with (Brevo at the moment).
+#
+# What it does:
+#   1. Reads SMTP_HOST/PORT/USER/PASS/FROM/TLS from GH secrets.
+#   2. PUTs the solarpro realm with a fully-populated smtpServer block.
+#   3. Triggers a no-op test email so we get an actionable error in the
+#      workflow log if the credentials are wrong, before a real user
+#      hits a broken verify-email flow.
+#
+# Re-runnable: each invocation overwrites the smtpServer block, which
+# is the easiest way to rotate the SMTP password after a Brevo key
+# rotation.
+#
+# realm-export.json intentionally does NOT carry smtpServer -- keeping
+# the password out of git. This workflow is the only source.
+
+name: Fix KC Realm SMTP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER }}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.KC_BOOTSTRAP_ADMIN_PASSWORD }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASS: ${{ secrets.SMTP_PASS }}
+      SMTP_FROM: ${{ secrets.SMTP_FROM }}
+      SMTP_TLS:  ${{ secrets.SMTP_TLS }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install --quiet requests
+
+      - name: Validate SMTP_* secrets are present
+        run: |
+          set -e
+          for v in SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS SMTP_FROM; do
+              if [ -z "${!v}" ]; then
+                  echo "::error::$v GH secret is empty"
+                  exit 1
+              fi
+              echo "OK -- $v is set"
+          done
+
+      - name: PUT smtpServer on solarpro realm
+        run: |
+          python3 << 'PY'
+          import os, sys, json, requests
+
+          BASE = os.environ['KEYCLOAK_ISSUER'].rsplit('/realms/', 1)[0]
+          ADM = os.environ['KC_BOOTSTRAP_ADMIN_PASSWORD']
+
+          tok = requests.post(
+              f"{BASE}/realms/master/protocol/openid-connect/token",
+              data={"client_id":"admin-cli","grant_type":"password",
+                    "username":"admin","password":ADM},
+              timeout=10).json()["access_token"]
+          H = {"Authorization": f"Bearer {tok}", "Content-Type":"application/json"}
+
+          # KC's smtpServer schema -- all values are strings (KC parses).
+          # `starttls` enables STARTTLS upgrade on port 587 (Brevo default).
+          # `ssl` enables straight TLS on port 465. SMTP_TLS env tells us
+          # which one to use: empty/false -> STARTTLS, "true" / "1" -> SSL.
+          # auth=true means username+password auth, which is what Brevo wants.
+          use_ssl = (os.environ.get('SMTP_TLS','').lower()
+                     in ('true','1','yes','on','ssl'))
+          smtp = {
+              "host":            os.environ['SMTP_HOST'],
+              "port":            os.environ['SMTP_PORT'],
+              "from":            os.environ['SMTP_FROM'],
+              "fromDisplayName": "SolarPro Global",
+              "replyTo":         os.environ['SMTP_FROM'],
+              "envelopeFrom":    "",
+              "auth":            "true",
+              "user":            os.environ['SMTP_USER'],
+              "password":        os.environ['SMTP_PASS'],
+              "starttls":        "false" if use_ssl else "true",
+              "ssl":             "true"  if use_ssl else "false",
+          }
+
+          # Print the safe subset for diag (no creds).
+          print("smtp config (password redacted):")
+          for k, v in smtp.items():
+              if k in ("password",):
+                  print(f"  {k:18s} = <{len(v)} chars>")
+              else:
+                  print(f"  {k:18s} = {v}")
+
+          r = requests.put(
+              f"{BASE}/admin/realms/solarpro",
+              headers=H,
+              json={"smtpServer": smtp},
+              timeout=10,
+          )
+          if r.status_code not in (204, 200):
+              sys.stderr.write(f"PUT failed: {r.status_code}: {r.text[:500]}\n")
+              sys.exit(1)
+          print("PUT smtpServer -> 204")
+
+          # Verify by reading it back.
+          after = requests.get(f"{BASE}/admin/realms/solarpro", headers=H).json()
+          stored = after.get("smtpServer", {})
+          print("realm smtpServer after PUT:")
+          for k in ("host","port","from","fromDisplayName","user","auth","starttls","ssl"):
+              print(f"  {k:18s} = {stored.get(k)}")
+          PY
+
+      - name: Send a KC-side test email (admin -> admin)
+        run: |
+          python3 << 'PY'
+          import os, sys, json, requests
+          BASE = os.environ['KEYCLOAK_ISSUER'].rsplit('/realms/', 1)[0]
+          ADM = os.environ['KC_BOOTSTRAP_ADMIN_PASSWORD']
+          tok = requests.post(
+              f"{BASE}/realms/master/protocol/openid-connect/token",
+              data={"client_id":"admin-cli","grant_type":"password",
+                    "username":"admin","password":ADM},
+              timeout=10).json()["access_token"]
+          H = {"Authorization": f"Bearer {tok}", "Content-Type":"application/json"}
+
+          # Send to the master admin's configured email (the smtpServer
+          # block also carries `from` so KC has a recipient). KC's
+          # /admin/realms/{realm}/testSMTPConnection takes the same
+          # smtp config and triggers a delivery attempt.
+          smtp_test = requests.post(
+              f"{BASE}/admin/realms/solarpro/testSMTPConnection",
+              headers=H,
+              data={
+                  "host":       os.environ['SMTP_HOST'],
+                  "port":       os.environ['SMTP_PORT'],
+                  "from":       os.environ['SMTP_FROM'],
+                  "user":       os.environ['SMTP_USER'],
+                  "password":   os.environ['SMTP_PASS'],
+                  "auth":       "true",
+                  "starttls":   "true" if os.environ.get('SMTP_TLS','').lower() not in ('true','1','yes','on','ssl') else "false",
+                  "ssl":        "true" if os.environ.get('SMTP_TLS','').lower() in ('true','1','yes','on','ssl') else "false",
+                  "fromDisplayName": "SolarPro Global",
+              },
+              timeout=30)
+          print(f"testSMTPConnection -> HTTP {smtp_test.status_code}")
+          print(f"body (first 500 chars): {smtp_test.text[:500]}")
+          if smtp_test.status_code not in (200, 204):
+              sys.stderr.write("test email failed -- check SMTP creds + provider\n")
+              sys.exit(1)
+          print("OK -- KC reports SMTP test succeeded")
+          PY
