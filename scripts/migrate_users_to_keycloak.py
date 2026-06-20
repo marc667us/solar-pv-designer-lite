@@ -165,7 +165,12 @@ def map_realm_roles(row: dict) -> list[str]:
     is_admin = bool(row.get("is_admin"))
     legacy_role = (row.get("role") or "").strip().lower()
 
-    if is_admin and legacy_role in ("", "admin", "platform_admin"):
+    # is_admin=1 is the canonical "this user has full admin powers" flag
+    # in the legacy schema. It must always promote to platform_super_admin
+    # regardless of the role column, otherwise live super-admins whose
+    # role was incidentally set to "customer" (admin + marc667us today)
+    # would lose all privileges at cutover.
+    if is_admin:
         return ["platform_super_admin"]
     if legacy_role == "platform_super_admin":
         return ["platform_super_admin"]
