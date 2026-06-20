@@ -187,6 +187,41 @@ jobs:
           print(f"set master admin email -> {ADMIN_EMAIL} HTTP {r.status_code}")
           PY
 
+      - name: Fetch KC service logs (last 60 lines) for diag context
+        if: always()
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -e
+          # We need the KC service id; the env block doesn't carry it
+          # because the deploy workflow normally resolves it at runtime.
+          SVC=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services?name=solarpro-keycloak" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['service']['id'])")
+          OWNER=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/owners?limit=5" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['owner']['id'])")
+          # Render's logs endpoint takes a JSON-array param for resource.
+          # We fetch the last 60 lines, filter to SMTP-related.
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            -G "https://api.render.com/v1/logs" \
+            --data-urlencode "ownerId=$OWNER" \
+            --data-urlencode "resource=$SVC" \
+            --data-urlencode "limit=60" \
+            --data-urlencode "direction=backward" \
+            -o /tmp/kclogs.json || true
+          echo "--- last 60 KC log lines (most recent) ---"
+          python3 -c "
+          import json
+          try:
+              d = json.load(open('/tmp/kclogs.json'))
+              for entry in (d.get('logs') or []):
+                  msg = entry.get('message','')
+                  print(msg[:300])
+          except Exception as e:
+              print(f'(could not parse logs: {e})')
+          " | head -60
+
       - name: Send a KC-side test email (admin -> admin)
         run: |
           python3 << 'PY'
