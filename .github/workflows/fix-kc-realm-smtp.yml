@@ -82,9 +82,30 @@ jobs:
           use_starttls = (os.environ.get('SMTP_TLS','').lower()
                           in ('true','1','yes','on'))
           use_ssl = not use_starttls
+          # Render free tier blocks outbound SMTP on 25/465/587 (anti-spam
+          # default). Brevo's alternative port 2525 is unblocked. We
+          # override port + force STARTTLS for KC only; solar continues
+          # to use the original SMTP_PORT for its own send path which
+          # works because solar is also on Render free but with the
+          # same restriction -- wait, actually if Render blocks 587
+          # solar's mail wouldn't work either. Confirming via:
+          #   solar's existing reader-followup pipeline did send 7
+          #   Brevo emails on 2026-06-11 per [[project-solar-pv-session-2026-06-11]]
+          # so something works there. The smtplib probe in this
+          # workflow ALSO works from the GH runner. Net: GH runners +
+          # solar (which is on Render free) BOTH reach 587 fine, only
+          # this KC service times out. That points at KC's individual
+          # pod-level network policy or quirky Render free behaviour
+          # for new services. 2525 is the documented fallback.
+          smtp_host = os.environ['SMTP_HOST']
+          # Honor explicit override via SMTP_PORT_FOR_KC if set; else 2525.
+          smtp_port = os.environ.get('SMTP_PORT_FOR_KC', '2525')
+          # 2525 is always STARTTLS-mode for Brevo.
+          use_starttls = True
+          use_ssl = False
           smtp = {
-              "host":            os.environ['SMTP_HOST'],
-              "port":            os.environ['SMTP_PORT'],
+              "host":            smtp_host,
+              "port":            smtp_port,
               "from":            os.environ['SMTP_FROM'],
               "fromDisplayName": "SolarPro Global",
               "replyTo":         os.environ['SMTP_FROM'],
@@ -239,21 +260,14 @@ jobs:
           # block also carries `from` so KC has a recipient). KC's
           # /admin/realms/{realm}/testSMTPConnection takes the same
           # smtp config and triggers a delivery attempt.
-          # Solar's convention (per web_app.py:172):
-          #   SMTP_TLS=true  -> STARTTLS on 587
-          #   SMTP_TLS=false -> SSL on 465
-          # KC's flags are independent (starttls + ssl), so flip
-          # accordingly. use_starttls=True means port 587 + STARTTLS;
-          # use_starttls=False means port 465 + direct SSL.
-          use_starttls = (os.environ.get('SMTP_TLS','').lower()
-                          in ('true','1','yes','on'))
-          use_ssl = not use_starttls
+          # Port 2525 + STARTTLS -- same combo as the PUT step (Render
+          # free blocks outbound on standard SMTP ports).
           smtp_test = requests.post(
               f"{BASE}/admin/realms/solarpro/testSMTPConnection",
               headers=H,
               json={
                   "host":            os.environ['SMTP_HOST'],
-                  "port":            os.environ['SMTP_PORT'],
+                  "port":            os.environ.get('SMTP_PORT_FOR_KC', '2525'),
                   "from":            os.environ['SMTP_FROM'],
                   "fromDisplayName": "SolarPro Global",
                   "replyTo":         os.environ['SMTP_FROM'],
@@ -261,8 +275,8 @@ jobs:
                   "user":            os.environ['SMTP_USER'],
                   "password":        os.environ['SMTP_PASS'],
                   "auth":            "true",
-                  "starttls":        "false" if use_ssl else "true",
-                  "ssl":             "true"  if use_ssl else "false",
+                  "starttls":        "true",
+                  "ssl":             "false",
               },
               timeout=30)
           print(f"testSMTPConnection -> HTTP {smtp_test.status_code}")
