@@ -105,33 +105,51 @@ def _connect():
 
 
 def _fetch_users(conn, is_postgres: bool) -> list[dict]:
+    # Build the SELECT defensively: introspect the live users table and
+    # only ask for columns that actually exist. SolarPro's schema drifts
+    # between SQLite (dev) and Postgres (Render); the optional set varies
+    # by vintage. id/username/email are required; everything else falls
+    # back to NULL when absent.
+    REQUIRED = ("id", "username", "email")
+    OPTIONAL = ("name", "company", "country", "plan", "is_admin", "role",
+                "created_at", "email_verified", "trial_end_date",
+                "referral_code")
+
     cur = conn.cursor()
-    # Use a defensive column list -- some columns were added via ALTER
-    # so older sqlite copies may not have them. We coalesce-on-read so
-    # the migration works against any vintage of the schema.
+    if is_postgres:
+        cur.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema='public' AND table_name='users'"
+        )
+        present = {row[0] for row in cur.fetchall()}
+    else:
+        cur.execute("PRAGMA table_info(users)")
+        present = {row[1] for row in cur.fetchall()}
+
+    missing_required = [c for c in REQUIRED if c not in present]
+    if missing_required:
+        raise RuntimeError(
+            f"users table missing required column(s): {missing_required}"
+        )
+
+    cols = list(REQUIRED) + [c for c in OPTIONAL if c in present]
     cur.execute(
-        "SELECT id, username, email, name, company, country, plan, "
-        "       is_admin, role, created_at, email_verified, "
-        "       trial_end_date, referral_code "
-        "FROM users "
-        "WHERE username <> ''  AND email <> ''  "
-        "ORDER BY id"
+        f"SELECT {', '.join(cols)} FROM users "
+        "WHERE username <> '' AND email <> '' ORDER BY id"
     )
     rows = cur.fetchall()
     cur.close()
+
     out = []
     for r in rows:
         if is_postgres:
-            # psycopg2 default cursor returns tuples; map back to keys
-            # via the cursor description order above.
-            d = dict(zip(
-                ["id", "username", "email", "name", "company", "country",
-                 "plan", "is_admin", "role", "created_at", "email_verified",
-                 "trial_end_date", "referral_code"],
-                r,
-            ))
+            d = dict(zip(cols, r))
         else:
             d = {k: r[k] for k in r.keys()}
+        # Fill OPTIONAL columns absent from the live schema with None so
+        # downstream build_user_representation can call .get() uniformly.
+        for c in OPTIONAL:
+            d.setdefault(c, None)
         out.append(d)
     return out
 
