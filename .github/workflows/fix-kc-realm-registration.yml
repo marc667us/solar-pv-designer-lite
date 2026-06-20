@@ -1,12 +1,13 @@
-# Enable user-self-registration on the solarpro realm.
+# Enable user-self-registration on the solarpro realm + use email as
+# username so new sign-ups don't have to pick a separate username.
 #
-# realm-export.json shipped with registrationAllowed=false (designed
-# for a controlled-rollout phase). After cutover the KC login page is
-# the canonical sign-up surface and needs to show "Register" alongside
-# "Sign in". This workflow PATCHes the live realm; persists in Postgres.
+# realm-export.json shipped with both flags false. After cutover the KC
+# login page IS the canonical sign-up surface and needs:
+#   - registrationAllowed=true        -> show the "Register" link
+#   - registrationEmailAsUsername=true -> email IS the username on signup
 #
-# realm-export.json should be updated separately so future fresh
-# deployments don't regress this.
+# Both PATCHes are permanent (persist in Postgres). realm-export.json
+# was updated in the same commit so fresh deployments stay consistent.
 
 name: Fix KC Realm Registration
 
@@ -51,7 +52,10 @@ jobs:
           # PATCH (PUT in KC; partial body works because KC merges).
           r = requests.put(f"{BASE}/admin/realms/solarpro",
                            headers=H,
-                           json={"registrationAllowed": True},
+                           json={
+                               "registrationAllowed": True,
+                               "registrationEmailAsUsername": True,
+                           },
                            timeout=10)
           if r.status_code not in (204, 200):
               sys.stderr.write(f"PUT failed: {r.status_code}: {r.text[:300]}\n")
