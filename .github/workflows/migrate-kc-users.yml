@@ -1,0 +1,172 @@
+# One-shot: push live solarpro-postgres users into the Keycloak
+# `solarpro` realm via partialImport.
+#
+# Why this is a separate workflow (vs running migrate_users_to_keycloak.py
+# --apply directly):
+#   The Phase 7 plan assumes a pre-configured service-account client with
+#   client_credentials grant (KC_SA_ADMIN_CONSOLE_CLIENT_SECRET). We
+#   haven't stood that up -- the solarpro-agent-service client in
+#   realm-export.json carries a placeholder secret. Rather than
+#   bootstrapping a service account today, this workflow uses the
+#   master-realm root admin (we have the password in GH secrets from
+#   the deploy) and posts partialImport directly. Idempotent because
+#   ifResourceExists=SKIP: users already in KC are left untouched.
+#
+# Behaviour:
+#   1. Runs the existing --export path to produce a fresh JSON from
+#      live Postgres. Reuses the schema-introspection + role-mapping
+#      fix that landed in 869e833 (is_admin -> platform_super_admin).
+#   2. Fetches a master-realm admin token via password grant against
+#      admin-cli (built-in KC client, no setup required).
+#   3. POSTs the JSON to /admin/realms/solarpro/partialImport.
+#   4. Counts users in the realm afterwards as a smoke check.
+#
+# Triggered manually:
+#   gh workflow run "Migrate Users To Keycloak"
+
+name: Migrate Users To Keycloak
+
+on:
+  workflow_dispatch:
+    inputs:
+      if_exists:
+        description: "ifResourceExists strategy: SKIP keeps existing KC users untouched (recommended); OVERWRITE replaces; FAIL aborts on any conflict."
+        required: false
+        default: "SKIP"
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER }}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.KC_BOOTSTRAP_ADMIN_PASSWORD }}
+      IF_EXISTS: ${{ github.event.inputs.if_exists }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install runtime deps
+        run: |
+          python -m pip install --quiet --upgrade pip
+          pip install --quiet requests psycopg2-binary
+
+      - name: Find solarpro-postgres + fetch URL
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg_list.json
+          PG_ID=$(python3 -c "
+          import json
+          d = json.load(open('/tmp/pg_list.json'))
+          for item in (d if isinstance(d, list) else []):
+              pg = item.get('postgres', item)
+              if pg.get('name') == 'solarpro-postgres':
+                  print(pg.get('id', ''))
+                  break
+          ")
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXTERNAL=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXTERNAL"
+          echo "external=$EXTERNAL" >> $GITHUB_OUTPUT
+
+      - name: Export partial-import JSON from live users
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          mkdir -p tmp
+          python scripts/migrate_users_to_keycloak.py \
+            --export \
+            --out tmp/partial_import.json
+          python3 -c "
+          import json
+          d = json.load(open('tmp/partial_import.json'))
+          users = d.get('users', [])
+          print(f'users to push: {len(users)}')
+          roles = {}
+          for u in users:
+              for r in u.get('realmRoles') or []:
+                  roles[r] = roles.get(r, 0) + 1
+          for r, n in sorted(roles.items(), key=lambda x: -x[1]):
+              print(f'  {r:30s} {n}')
+          "
+
+      - name: Fetch master-realm admin token
+        id: token
+        run: |
+          set -e
+          # admin-cli is the built-in KC client; password grant works for
+          # the master realm root admin (kc-bootstrap-admin set on first boot).
+          BASE=$(echo "$KEYCLOAK_ISSUER" | sed 's|/realms/.*||')
+          TOKEN=$(curl -fsS -X POST \
+            "${BASE}/realms/master/protocol/openid-connect/token" \
+            -d "client_id=admin-cli" \
+            -d "grant_type=password" \
+            -d "username=admin" \
+            --data-urlencode "password=${KC_BOOTSTRAP_ADMIN_PASSWORD}" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+          if [ -z "$TOKEN" ]; then
+            echo "::error::admin token fetch returned empty"; exit 1
+          fi
+          echo "::add-mask::$TOKEN"
+          echo "value=$TOKEN" >> $GITHUB_OUTPUT
+          echo "base=$BASE" >> $GITHUB_OUTPUT
+
+      - name: POST partialImport to solarpro realm
+        env:
+          TOKEN: ${{ steps.token.outputs.value }}
+          BASE: ${{ steps.token.outputs.base }}
+        run: |
+          set -e
+          # Inject ifResourceExists from input (SKIP is the safe default).
+          python3 -c "
+          import json, os
+          d = json.load(open('tmp/partial_import.json'))
+          d['ifResourceExists'] = os.environ.get('IF_EXISTS', 'SKIP').upper()
+          json.dump(d, open('tmp/partial_import.json', 'w'))
+          "
+          HTTP=$(curl -sS -o /tmp/result.json -w "%{http_code}" \
+            -X POST "${BASE}/admin/realms/solarpro/partialImport" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data @tmp/partial_import.json)
+          echo "HTTP $HTTP"
+          cat /tmp/result.json
+          echo
+          if [ "$HTTP" != "200" ] && [ "$HTTP" != "201" ]; then
+            echo "::error::partialImport returned $HTTP"; exit 1
+          fi
+
+      - name: Smoke check -- count users in realm
+        env:
+          TOKEN: ${{ steps.token.outputs.value }}
+          BASE: ${{ steps.token.outputs.base }}
+        run: |
+          set -e
+          COUNT=$(curl -fsS \
+            -H "Authorization: Bearer ${TOKEN}" \
+            "${BASE}/admin/realms/solarpro/users/count")
+          echo "users now in solarpro realm: $COUNT"
+          echo
+          echo "first 5 usernames:"
+          curl -fsS \
+            -H "Authorization: Bearer ${TOKEN}" \
+            "${BASE}/admin/realms/solarpro/users?max=5" \
+            | python3 -c "
+          import json, sys
+          for u in json.load(sys.stdin):
+              roles = u.get('realmRoles') or []
+              print(f\"  {u.get('username','?'):35s} email={u.get('email','-'):35s} requiredActions={u.get('requiredActions') or []}\")
+          "
