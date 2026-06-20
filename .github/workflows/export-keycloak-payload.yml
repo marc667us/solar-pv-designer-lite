@@ -1,0 +1,122 @@
+# Export the Keycloak partial-import JSON from live Postgres.
+#
+# What it does:
+#   1. Looks up solarpro-postgres by name via the Render API.
+#   2. Fetches the external connection URL.
+#   3. Runs scripts/migrate_users_to_keycloak.py --export to build the
+#      partial-import payload from the live users table.
+#   4. Uploads the JSON as a workflow artifact so the owner can review
+#      cohort + name split + role mapping before any --apply call.
+#
+# Production safety:
+#   * Read-only: no INSERT/UPDATE/DELETE against Postgres.
+#   * No POST to Keycloak (no KEYCLOAK_ISSUER required).
+#   * No environment variables changed on Render. No redeploy.
+#
+# Triggered manually via `gh workflow run "Export Keycloak Payload"`.
+
+name: Export Keycloak Payload
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install psycopg2-binary
+        run: |
+          python -m pip install --quiet --upgrade pip
+          pip install --quiet psycopg2-binary
+
+      - name: Find solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg_list.json
+          PG_ID=$(python3 -c "
+          import json
+          d = json.load(open('/tmp/pg_list.json'))
+          for item in (d if isinstance(d, list) else []):
+              pg = item.get('postgres', item)
+              if pg.get('name') == 'solarpro-postgres':
+                  print(pg.get('id', ''))
+                  break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"
+            exit 1
+          fi
+          echo "Found Postgres ID: $PG_ID"
+          echo "id=$PG_ID" >> $GITHUB_OUTPUT
+
+      - name: Fetch external connection URL
+        id: conn
+        env:
+          PG_ID: ${{ steps.pg.outputs.id }}
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXTERNAL=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          if [ -z "$EXTERNAL" ]; then
+            echo "::error::External connection URL missing"
+            exit 1
+          fi
+          echo "::add-mask::$EXTERNAL"
+          echo "external=$EXTERNAL" >> $GITHUB_OUTPUT
+
+      - name: Run --export
+        env:
+          DATABASE_URL: ${{ steps.conn.outputs.external }}
+        run: |
+          set -e
+          mkdir -p tmp
+          python scripts/migrate_users_to_keycloak.py \
+            --export \
+            --out tmp/keycloak_partial_import.json
+          echo "--- Output overview ---"
+          ls -lh tmp/keycloak_partial_import.json
+          python3 -c "
+          import json
+          d = json.load(open('tmp/keycloak_partial_import.json'))
+          users = d.get('users', [])
+          print(f'users in payload: {len(users)}')
+          roles = {}
+          for u in users:
+              for r in u.get('realmRoles', []) or []:
+                  roles[r] = roles.get(r, 0) + 1
+          print('role counts:')
+          for r, n in sorted(roles.items(), key=lambda x: -x[1]):
+              print(f'  {r:30s} {n}')
+          if users:
+              sample = dict(users[0])
+              if 'credentials' in sample:
+                  sample['credentials'] = '[REDACTED]'
+              if 'attributes' in sample and isinstance(sample['attributes'], dict):
+                  sample['attributes'] = {k: ('[REDACTED]' if 'pass' in k.lower() else v) for k,v in sample['attributes'].items()}
+              print('sample user (first row, secrets stripped):')
+              print(json.dumps(sample, indent=2)[:1200])
+          "
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: keycloak_partial_import
+          path: tmp/keycloak_partial_import.json
+          retention-days: 7

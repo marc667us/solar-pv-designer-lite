@@ -1864,6 +1864,17 @@ def verify_email(token):
 @app.route("/login", methods=["GET", "POST"])
 @limiter.limit("20 per hour")
 def login():
+    # Phase 7 Keycloak guard: when KEYCLOAK_ENABLED is truthy and the
+    # marc667us escape hatch (?legacy=1) is absent, bounce GET /login
+    # to the OIDC blueprint so users land on the Keycloak login page.
+    # POST handling is untouched so the legacy form keeps working.
+    if request.method == "GET" \
+        and os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
+        and request.args.get("legacy") != "1":
+        _kc_next = request.args.get("next")
+        if _kc_next:
+            return redirect(url_for("oidc.auth_login", next=_kc_next))
+        return redirect(url_for("oidc.auth_login"))
     if request.method == "POST":
         csrf_protect()
         username = request.form.get("username", "").strip()
