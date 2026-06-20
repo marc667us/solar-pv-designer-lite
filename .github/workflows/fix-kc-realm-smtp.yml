@@ -73,8 +73,15 @@ jobs:
           # `ssl` enables straight TLS on port 465. SMTP_TLS env tells us
           # which one to use: empty/false -> STARTTLS, "true" / "1" -> SSL.
           # auth=true means username+password auth, which is what Brevo wants.
-          use_ssl = (os.environ.get('SMTP_TLS','').lower()
-                     in ('true','1','yes','on','ssl'))
+          # Solar's convention (per web_app.py:172):
+          #   SMTP_TLS=true  -> STARTTLS on 587
+          #   SMTP_TLS=false -> SSL on 465
+          # KC's flags are independent (starttls + ssl), so flip
+          # accordingly. use_starttls=True means port 587 + STARTTLS;
+          # use_starttls=False means port 465 + direct SSL.
+          use_starttls = (os.environ.get('SMTP_TLS','').lower()
+                          in ('true','1','yes','on'))
+          use_ssl = not use_starttls
           smtp = {
               "host":            os.environ['SMTP_HOST'],
               "port":            os.environ['SMTP_PORT'],
@@ -85,8 +92,8 @@ jobs:
               "auth":            "true",
               "user":            os.environ['SMTP_USER'],
               "password":        os.environ['SMTP_PASS'],
-              "starttls":        "false" if use_ssl else "true",
-              "ssl":             "true"  if use_ssl else "false",
+              "starttls":        "true"  if use_starttls else "false",
+              "ssl":             "false" if use_starttls else "true",
           }
 
           # Print the safe subset for diag (no creds).
@@ -133,8 +140,15 @@ jobs:
           # block also carries `from` so KC has a recipient). KC's
           # /admin/realms/{realm}/testSMTPConnection takes the same
           # smtp config and triggers a delivery attempt.
-          use_ssl = (os.environ.get('SMTP_TLS','').lower()
-                     in ('true','1','yes','on','ssl'))
+          # Solar's convention (per web_app.py:172):
+          #   SMTP_TLS=true  -> STARTTLS on 587
+          #   SMTP_TLS=false -> SSL on 465
+          # KC's flags are independent (starttls + ssl), so flip
+          # accordingly. use_starttls=True means port 587 + STARTTLS;
+          # use_starttls=False means port 465 + direct SSL.
+          use_starttls = (os.environ.get('SMTP_TLS','').lower()
+                          in ('true','1','yes','on'))
+          use_ssl = not use_starttls
           smtp_test = requests.post(
               f"{BASE}/admin/realms/solarpro/testSMTPConnection",
               headers=H,
