@@ -123,6 +123,68 @@ jobs:
               print(f"  {k:18s} = {stored.get(k)}")
           PY
 
+      - name: Smtplib probe (verify creds independent of KC)
+        run: |
+          python3 << 'PY'
+          import os, smtplib, ssl, sys
+          h = os.environ['SMTP_HOST']
+          p = int(os.environ['SMTP_PORT'])
+          u = os.environ['SMTP_USER']
+          pw = os.environ['SMTP_PASS']
+          tls_flag = os.environ.get('SMTP_TLS','').lower()
+          use_starttls = tls_flag in ('true','1','yes','on')
+          print(f"connecting {h}:{p} use_starttls={use_starttls}")
+          try:
+              if use_starttls:
+                  s = smtplib.SMTP(h, p, timeout=15)
+                  s.ehlo()
+                  s.starttls(context=ssl.create_default_context())
+                  s.ehlo()
+              else:
+                  s = smtplib.SMTP_SSL(h, p, timeout=15, context=ssl.create_default_context())
+              code, msg = s.login(u, pw)
+              print(f"login -> {code} {msg.decode() if isinstance(msg,bytes) else msg}")
+              s.quit()
+              print("OK -- smtplib login succeeded; creds valid + network reachable from runner")
+          except Exception as e:
+              print(f"FAIL smtplib: {type(e).__name__}: {e}")
+              sys.exit(1)
+          PY
+
+      - name: Ensure master admin user has email + first/last name
+        run: |
+          python3 << 'PY'
+          import os, requests
+          BASE = os.environ['KEYCLOAK_ISSUER'].rsplit('/realms/', 1)[0]
+          ADM = os.environ['KC_BOOTSTRAP_ADMIN_PASSWORD']
+          tok = requests.post(
+              f"{BASE}/realms/master/protocol/openid-connect/token",
+              data={"client_id":"admin-cli","grant_type":"password",
+                    "username":"admin","password":ADM},
+              timeout=10).json()["access_token"]
+          H = {"Authorization": f"Bearer {tok}", "Content-Type":"application/json"}
+          # KC's testSMTPConnection sends to the *master* admin's email.
+          # Without one, send fails. Set it idempotently.
+          users = requests.get(
+              f"{BASE}/admin/realms/master/users?username=admin&exact=true",
+              headers=H, timeout=10).json()
+          if not users:
+              print("FAIL: master admin not found"); raise SystemExit(1)
+          uid = users[0]['id']
+          existing_email = users[0].get('email') or ''
+          if not existing_email:
+              r = requests.put(
+                  f"{BASE}/admin/realms/master/users/{uid}",
+                  headers=H,
+                  json={"email": os.environ['SMTP_FROM'],
+                        "firstName": "SolarPro", "lastName": "Admin",
+                        "emailVerified": True},
+                  timeout=10)
+              print(f"set master admin email -> HTTP {r.status_code}")
+          else:
+              print(f"master admin already has email ({existing_email[:3]}***)")
+          PY
+
       - name: Send a KC-side test email (admin -> admin)
         run: |
           python3 << 'PY'
