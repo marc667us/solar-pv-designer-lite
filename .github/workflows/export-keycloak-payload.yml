@@ -38,10 +38,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install psycopg2-binary
+      - name: Install runtime deps
         run: |
           python -m pip install --quiet --upgrade pip
-          pip install --quiet psycopg2-binary
+          pip install --quiet psycopg2-binary requests
 
       - name: Find solarpro-postgres
         id: pg
