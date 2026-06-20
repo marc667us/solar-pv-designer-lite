@@ -41,7 +41,9 @@ jobs:
       KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER }}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.KC_BOOTSTRAP_ADMIN_PASSWORD }}
       SOLAR_BASE: https://solarpro.aiappinvent.com
-      TEST_USERNAME: marc667us
+      # After registrationEmailAsUsername=true was flipped on the realm,
+      # KC migrated existing usernames to their email values.
+      TEST_USERNAME: marc667us@yahoo.com
     steps:
       - name: Setup Python
         uses: actions/setup-python@v5
