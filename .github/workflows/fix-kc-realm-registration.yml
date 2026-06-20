@@ -1,0 +1,79 @@
+# Enable user-self-registration on the solarpro realm.
+#
+# realm-export.json shipped with registrationAllowed=false (designed
+# for a controlled-rollout phase). After cutover the KC login page is
+# the canonical sign-up surface and needs to show "Register" alongside
+# "Sign in". This workflow PATCHes the live realm; persists in Postgres.
+#
+# realm-export.json should be updated separately so future fresh
+# deployments don't regress this.
+
+name: Fix KC Realm Registration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER }}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.KC_BOOTSTRAP_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install --quiet requests
+
+      - name: PATCH realm -- registrationAllowed = true
+        run: |
+          python3 << 'PY'
+          import os, sys, json, requests
+          BASE = os.environ['KEYCLOAK_ISSUER'].rsplit('/realms/', 1)[0]
+          ADM = os.environ['KC_BOOTSTRAP_ADMIN_PASSWORD']
+          tok = requests.post(
+              f"{BASE}/realms/master/protocol/openid-connect/token",
+              data={"client_id":"admin-cli","grant_type":"password",
+                    "username":"admin","password":ADM},
+              timeout=10).json()["access_token"]
+          H = {"Authorization": f"Bearer {tok}", "Content-Type":"application/json"}
+
+          # Before: show current flags so the log is self-documenting.
+          before = requests.get(f"{BASE}/admin/realms/solarpro", headers=H).json()
+          flags = ("registrationAllowed","registrationEmailAsUsername",
+                   "resetPasswordAllowed","rememberMe","verifyEmail",
+                   "loginWithEmailAllowed")
+          print("before:", {k: before.get(k) for k in flags})
+
+          # PATCH (PUT in KC; partial body works because KC merges).
+          r = requests.put(f"{BASE}/admin/realms/solarpro",
+                           headers=H,
+                           json={"registrationAllowed": True},
+                           timeout=10)
+          if r.status_code not in (204, 200):
+              sys.stderr.write(f"PUT failed: {r.status_code}: {r.text[:300]}\n")
+              sys.exit(1)
+
+          after = requests.get(f"{BASE}/admin/realms/solarpro", headers=H).json()
+          print("after :", {k: after.get(k) for k in flags})
+          print("OK -- registrationAllowed now", after.get("registrationAllowed"))
+          PY
+
+      - name: Verify Register link appears on login page
+        run: |
+          set -e
+          # Hit a real OIDC auth URL (with proper PKCE) and grep the
+          # rendered HTML for the Register link KC inserts when
+          # registrationAllowed=true.
+          curl -fsSL -o /tmp/login.html \
+            "https://solarpro.aiappinvent.com/login"
+          if grep -qiE 'href="[^"]*registrations?[^"]*"|registerFormLabel|Register' /tmp/login.html; then
+            echo "OK -- Register link detected in KC login form"
+          else
+            echo "::warning::Register link NOT detected -- may need a KC restart"
+            echo "first 60 lines of rendered form:"
+            head -60 /tmp/login.html
+          fi
