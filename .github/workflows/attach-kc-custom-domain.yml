@@ -1,0 +1,113 @@
+# Attach auth.aiappinvent.com to the solarpro-keycloak Render service.
+#
+# What it does:
+#   1. Finds the solarpro-keycloak service via Render API.
+#   2. POST /v1/services/{id}/custom-domains with {"name": "auth.aiappinvent.com"}.
+#      If the domain is already attached, the API returns 409 which we
+#      treat as a no-op success.
+#   3. Lists current custom domains so the workflow log shows the
+#      verification status + the exact CNAME target the registrar needs.
+#
+# Production safety:
+#   * Read-then-attach is idempotent; existing domain is skipped.
+#   * Does not touch DNS. Render only WAITS for the CNAME to exist
+#     externally; it never changes the registrar.
+#   * Until DNS resolves the domain to Render's edge, the custom domain
+#     is in "verification pending" state. KC keeps serving on
+#     solarpro-keycloak.onrender.com unaffected.
+#
+# Triggered manually:
+#   gh workflow run "Attach KC Custom Domain"
+
+name: Attach KC Custom Domain
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      DOMAIN: auth.aiappinvent.com
+      SERVICE_NAME: solarpro-keycloak
+    steps:
+      - name: Find service
+        id: svc
+        run: |
+          set -e
+          SVC=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services?name=${SERVICE_NAME}" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['service']['id'])")
+          echo "service id: $SVC"
+          echo "id=$SVC" >> $GITHUB_OUTPUT
+
+      - name: Attach custom domain (idempotent)
+        env:
+          SVC_ID: ${{ steps.svc.outputs.id }}
+        run: |
+          set -e
+          BODY=$(printf '{"name":"%s"}' "$DOMAIN")
+          # Hit the endpoint; capture status separately so 409 (already
+          # attached) becomes a no-op success instead of a CI failure.
+          HTTP=$(curl -sS -o /tmp/attach.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$BODY" \
+            "https://api.render.com/v1/services/$SVC_ID/custom-domains")
+          echo "HTTP $HTTP"
+          if [ "$HTTP" = "201" ] || [ "$HTTP" = "200" ]; then
+            echo "attached -- response:"
+            cat /tmp/attach.json
+          elif [ "$HTTP" = "409" ] || [ "$HTTP" = "422" ]; then
+            echo "already attached (HTTP $HTTP) -- continuing"
+            cat /tmp/attach.json
+          else
+            echo "::error::unexpected HTTP $HTTP"
+            cat /tmp/attach.json
+            exit 1
+          fi
+
+      - name: List current custom domains
+        env:
+          SVC_ID: ${{ steps.svc.outputs.id }}
+        run: |
+          set -e
+          echo "--- custom domains on $SERVICE_NAME ---"
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$SVC_ID/custom-domains?limit=20" \
+            | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          if not d:
+              print('  (none)')
+          for item in d:
+              cd = item.get('customDomain', item)
+              name = cd.get('name', '?')
+              status = cd.get('verificationStatus', cd.get('status', '?'))
+              # Render exposes the expected DNS target for verification.
+              dns_targets = []
+              if 'domainType' in cd: dns_targets.append(cd['domainType'])
+              if 'verificationCnameTarget' in cd: dns_targets.append('CNAME -> ' + cd['verificationCnameTarget'])
+              if 'serverIPs' in cd:
+                  for ip in (cd.get('serverIPs') or []):
+                      dns_targets.append('A     -> ' + ip)
+              print(f'  {name:35s} {status:20s} {\"  \".join(dns_targets)}')
+              # Print the FULL dict so we can see whatever shape Render returns.
+              print('    full:', json.dumps(cd, indent=2)[:600])
+          "
+          echo
+          echo "--- what owner needs to add at Namecheap ---"
+          echo "Record type: CNAME"
+          echo "Host:        auth"
+          echo "Value:       solarpro-keycloak.onrender.com"
+          echo "TTL:         Automatic (or 300 seconds)"
+          echo
+          echo "Once the CNAME resolves, Render auto-verifies + issues Let's Encrypt."
+          echo "After verification, re-run Deploy Keycloak with:"
+          echo "  gh workflow run \"Deploy Keycloak\" --field kc_hostname_url=https://auth.aiappinvent.com"
