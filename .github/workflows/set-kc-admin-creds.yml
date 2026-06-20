@@ -1,0 +1,121 @@
+# Owner-on-demand: set known temporary passwords for the two privileged
+# KC users (admin + marc667us) so the owner can actually log in without
+# going through the "forgot password" email flow.
+#
+# What it does:
+#   1. Fetches master-realm admin token (uses KC_BOOTSTRAP_ADMIN_PASSWORD
+#      from GH secrets via admin-cli password grant).
+#   2. For each user (admin, marc667us):
+#      * Generates a fresh random password per run (realm history(5)
+#        policy rejects reuse).
+#      * Looks up the user id.
+#      * PUT /users/{id}/reset-password with type=password,
+#        temporary=false (so KC does NOT immediately force a re-set --
+#        owner can change it later via the admin console).
+#      * PUT /users/{id} with requiredActions=[] so the login flow
+#        skips the UPDATE_PASSWORD wizard.
+#   3. Prints both passwords to the workflow log (masked from the GH UI
+#      via ::add-mask:: so they only appear in the owner's local
+#      terminal output, not in the shared GH log viewer).
+#
+# Production note:
+#   These passwords are temporary in spirit -- owner should change them
+#   via the KC admin console (https://auth.aiappinvent.com/admin/) after
+#   first login. We set temporary=false so the login itself is not
+#   blocked, but the owner is on the hook to rotate.
+
+name: Set KC Admin Creds
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER }}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.KC_BOOTSTRAP_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install --quiet requests
+
+      - name: Set creds for admin + marc667us
+        run: |
+          python3 << 'PY'
+          import os, sys, json, secrets, requests
+
+          BASE = os.environ['KEYCLOAK_ISSUER'].rsplit('/realms/', 1)[0]
+          ADM = os.environ['KC_BOOTSTRAP_ADMIN_PASSWORD']
+
+          tok = requests.post(
+              f"{BASE}/realms/master/protocol/openid-connect/token",
+              data={"client_id":"admin-cli","grant_type":"password",
+                    "username":"admin","password":ADM},
+              timeout=10).json()["access_token"]
+          H = {"Authorization": f"Bearer {tok}", "Content-Type":"application/json"}
+
+          TARGETS = ["admin", "marc667us"]
+          results = []
+
+          for uname in TARGETS:
+              # 1. Find user id (exact match on username field).
+              r = requests.get(
+                  f"{BASE}/admin/realms/solarpro/users?username={uname}&exact=true",
+                  headers=H, timeout=10)
+              r.raise_for_status()
+              users = r.json()
+              if not users:
+                  print(f"FAIL: {uname} not found in solarpro realm")
+                  sys.exit(1)
+              uid = users[0]["id"]
+
+              # 2. Generate password that meets policy:
+              #    length(12) + digits(1) + upper(1) + lower(1) + special(1)
+              #    + notUsername + notEmail + history(5)
+              # 28-char urlsafe + Aa1! suffix satisfies everything.
+              pwd = f"{secrets.token_urlsafe(20)}Aa1!"
+              # Mask in the GH log UI but the raw line is still in the
+              # owner's terminal where the workflow result lands.
+              print(f"::add-mask::{pwd}")
+
+              # 3. Set password (temporary=false so login isn't blocked).
+              r = requests.put(
+                  f"{BASE}/admin/realms/solarpro/users/{uid}/reset-password",
+                  headers=H,
+                  json={"type":"password","value":pwd,"temporary":False},
+                  timeout=10)
+              if r.status_code not in (204, 200):
+                  print(f"FAIL {uname} reset-password: {r.status_code}: {r.text[:200]}")
+                  sys.exit(1)
+
+              # 4. Clear requiredActions so first login isn't blocked
+              # by the UPDATE_PASSWORD wizard.
+              r = requests.put(
+                  f"{BASE}/admin/realms/solarpro/users/{uid}",
+                  headers=H,
+                  json={"requiredActions":[]},
+                  timeout=10)
+              if r.status_code not in (204, 200):
+                  print(f"FAIL {uname} clear requiredActions: {r.status_code}: {r.text[:200]}")
+                  sys.exit(1)
+
+              results.append((uname, pwd))
+              print(f"OK -- {uname} (id={uid}) password set + requiredActions cleared")
+
+          # Final summary block -- print last so owner sees the creds easily.
+          print()
+          print("=" * 60)
+          print("CREDENTIALS (rotate via KC admin console after first login):")
+          print("=" * 60)
+          for uname, pwd in results:
+              print(f"  username: {uname}")
+              print(f"  password: {pwd}")
+              print()
+          print("Login URL: https://solarpro.aiappinvent.com/login")
+          print("KC admin:  https://auth.aiappinvent.com/admin/")
+          PY
