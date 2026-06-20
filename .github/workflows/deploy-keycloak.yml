@@ -37,6 +37,10 @@ on:
         description: "Generate a fresh KC_DB_PASSWORD GH secret (yes/no)"
         required: false
         default: "no"
+      kc_hostname_url:
+        description: "Full URL KC should advertise as itself (issuer base). Empty = keep default (https://solarpro-keycloak.onrender.com). Use https://auth.aiappinvent.com once DNS + Render custom domain are wired."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -204,6 +208,11 @@ jobs:
           KC_DB_URL: ${{ steps.kcurl.outputs.value }}
           KC_DB_PASSWORD: ${{ steps.kcpwd.outputs.value }}
           KC_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.KC_BOOTSTRAP_ADMIN_PASSWORD }}
+          # Optional override -- if empty, deploy_render.py falls back to
+          # https://solarpro-keycloak.onrender.com. Set this input to the
+          # custom domain (https://auth.aiappinvent.com) once DNS resolves
+          # so KC's issuer URL switches over without a code change.
+          KC_HOSTNAME_URL: ${{ github.event.inputs.kc_hostname_url }}
         run: |
           set -e
           python keycloak/render/deploy_render.py
@@ -238,10 +247,16 @@ jobs:
       - name: Persist KEYCLOAK_ISSUER (best-effort)
         env:
           SERVICE_URL: ${{ steps.svc.outputs.service_url }}
+          KC_HOSTNAME_URL: ${{ github.event.inputs.kc_hostname_url }}
           KC_DEPLOY_PAT: ${{ secrets.KC_DEPLOY_PAT }}
         run: |
           set -e
-          ISSUER="${SERVICE_URL}/realms/solarpro"
+          # KEYCLOAK_ISSUER must match the issuer field KC's discovery
+          # doc returns (OIDC spec). When KC_HOSTNAME_URL is overridden
+          # (custom domain), use that as the base; otherwise fall back to
+          # the Render-assigned URL.
+          BASE="${KC_HOSTNAME_URL:-$SERVICE_URL}"
+          ISSUER="${BASE}/realms/solarpro"
           echo "live KEYCLOAK_ISSUER: $ISSUER"
           if [ -n "$KC_DEPLOY_PAT" ]; then
             # PAT must have repo scope. Auth gh CLI with the PAT for this
