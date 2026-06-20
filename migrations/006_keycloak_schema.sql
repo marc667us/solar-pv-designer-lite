@@ -28,11 +28,16 @@
 -- the password is ALTERed on every run so workflow re-runs effectively
 -- rotate the password if a new value is supplied.
 --
--- Apply:
---   psql "$DATABASE_URL" \
---     -v kc_db_password="$KC_DB_PASSWORD" \
---     -v ON_ERROR_STOP=1 \
---     -f migrations/006_keycloak_schema.sql
+-- Apply (psql `:'var'` does NOT substitute inside dollar-quoted blocks,
+-- so the workflow preprocesses the placeholder __KC_DB_PASSWORD__ via
+-- Python before piping to psql):
+--   python3 -c "
+--   import os, sys
+--   sql = open('migrations/006_keycloak_schema.sql').read()
+--   pwd = os.environ['KC_DB_PASSWORD'].replace(chr(39), chr(39)*2)
+--   sql = sql.replace('__KC_DB_PASSWORD__', pwd)
+--   sys.stdout.write(sql)
+--   " | psql "$DATABASE_URL" -v ON_ERROR_STOP=1
 --
 -- Verify:
 --   psql "$DATABASE_URL" -A -t -c \
@@ -49,9 +54,9 @@ CREATE SCHEMA IF NOT EXISTS keycloak;
 DO $do$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'keycloak_app') THEN
-    EXECUTE format('CREATE ROLE keycloak_app WITH LOGIN PASSWORD %L', :'kc_db_password');
+    EXECUTE format('CREATE ROLE keycloak_app WITH LOGIN PASSWORD %L', '__KC_DB_PASSWORD__');
   ELSE
-    EXECUTE format('ALTER ROLE keycloak_app WITH LOGIN PASSWORD %L', :'kc_db_password');
+    EXECUTE format('ALTER ROLE keycloak_app WITH LOGIN PASSWORD %L', '__KC_DB_PASSWORD__');
   END IF;
 END
 $do$;

@@ -163,10 +163,15 @@ jobs:
           KC_DB_PASSWORD: ${{ steps.kcpwd.outputs.value }}
         run: |
           set -e
-          psql "$DATABASE_URL" \
-            -v kc_db_password="$KC_DB_PASSWORD" \
-            -v ON_ERROR_STOP=1 \
-            -f migrations/006_keycloak_schema.sql
+          # psql's :'var' substitution does NOT work inside dollar-quoted
+          # PL/pgSQL blocks, so preprocess the placeholder via Python and
+          # pipe to psql. Doubling single quotes is the SQL-standard escape.
+          python3 -c "
+          import os, sys
+          sql = open('migrations/006_keycloak_schema.sql').read()
+          pwd = os.environ['KC_DB_PASSWORD'].replace(chr(39), chr(39)*2)
+          sys.stdout.write(sql.replace('__KC_DB_PASSWORD__', pwd))
+          " | psql "$DATABASE_URL" -v ON_ERROR_STOP=1
 
       - name: Derive KC_DB_URL (JDBC) for keycloak schema
         id: kcurl
