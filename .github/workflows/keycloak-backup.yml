@@ -1,0 +1,97 @@
+# Daily logical backup of the keycloak schema in solarpro-postgres.
+#
+# What it does:
+#   1. Fetches solarpro-postgres connection URL from Render API.
+#   2. Runs pg_dump --schema=keycloak --no-owner --no-privileges to
+#      capture the realm + users + sessions + every KC-managed table.
+#   3. Uploads the resulting .sql file as a 30-day-retention artifact.
+#
+# Why not a Render snapshot:
+#   Render free Postgres does not include automated snapshots; the
+#   logical dump is the cheapest way to bound data-loss risk to one
+#   day. The artifact is downloadable via gh run download for restore.
+#
+# Restore:
+#   gh run download <run-id> -n keycloak-schema-backup
+#   psql "$DATABASE_URL" -f keycloak-schema-<date>.sql
+#
+# Cost:
+#   * pg_dump for a small realm runs ~2-5s. 1 run/day = ~150 min/mo
+#     well within the GH free cap.
+
+name: Keycloak Backup
+
+on:
+  schedule:
+    # 03:17 UTC daily -- avoids collision with the existing 5-cron stack.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Install psql/pg_dump client (matches server major)
+        run: |
+          # Server is Postgres 16; install matching client to avoid
+          # version-mismatch warnings (and ensure newer features dump).
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-16 || \
+            sudo apt-get install -y -qq postgresql-client
+
+      - name: Find solarpro-postgres + fetch URL
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg_list.json
+          PG_ID=$(python3 -c "
+          import json
+          d = json.load(open('/tmp/pg_list.json'))
+          for item in (d if isinstance(d, list) else []):
+              pg = item.get('postgres', item)
+              if pg.get('name') == 'solarpro-postgres':
+                  print(pg.get('id', ''))
+                  break
+          ")
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXTERNAL=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXTERNAL"
+          echo "external=$EXTERNAL" >> $GITHUB_OUTPUT
+
+      - name: Dump keycloak schema
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          DATE=$(date -u +%Y-%m-%d)
+          OUT="keycloak-schema-${DATE}.sql"
+          pg_dump "$DATABASE_URL" \
+            --schema=keycloak \
+            --no-owner \
+            --no-privileges \
+            --clean \
+            --if-exists \
+            > "$OUT"
+          # Sanity: at least the schema-creation statement should be present.
+          if ! grep -q "CREATE SCHEMA" "$OUT"; then
+            echo "::error::dump missing CREATE SCHEMA -- empty or failed"
+            head -50 "$OUT"
+            exit 1
+          fi
+          ls -lh "$OUT"
+          echo "out=$OUT" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: keycloak-schema-backup
+          path: keycloak-schema-*.sql
+          retention-days: 30

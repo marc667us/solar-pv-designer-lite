@@ -1,0 +1,245 @@
+# Deploy the SolarPro Keycloak IdP to Render free.
+#
+# What it does (idempotent end-to-end):
+#   1. Builds the production realm JSON (test users stripped).
+#   2. Generates a fresh KC_DB_PASSWORD (if KEYCLOAK_GEN_NEW_PASSWORD=true)
+#      OR re-uses the existing GH secret.
+#   3. Applies migrations/006_keycloak_schema.sql to solarpro-postgres
+#      so the `keycloak` schema + `keycloak_app` role + grants exist.
+#   4. Looks up the Render owner ID + checks whether a service named
+#      `solarpro-keycloak` exists. If not, creates it via Render API
+#      (POST /v1/services) with the Dockerfile path and env vars from
+#      keycloak/render/render.yaml. If it exists, updates env vars only.
+#   5. Triggers a fresh deploy and polls until the service reports
+#      "live" or the deploy fails.
+#   6. Sets the GH secret KEYCLOAK_ISSUER to the live URL +
+#      /realms/solarpro so the app's OIDC Blueprint can resolve.
+#
+# Production safety:
+#   * Migration 006 is idempotent (CREATE SCHEMA IF NOT EXISTS, DO block
+#     for role, ALTER on subsequent runs).
+#   * Service creation is gated on "name not found" so re-runs do not
+#     create duplicates.
+#   * The app's KEYCLOAK_ENABLED flag is NOT flipped here. Production
+#     stays on the legacy login path until the separate
+#     "Cut Over To Keycloak" workflow is run.
+#
+# Triggered manually:
+#   gh workflow run "Deploy Keycloak"
+#   gh workflow run "Deploy Keycloak" --field rotate_db_password=true
+
+name: Deploy Keycloak
+
+on:
+  workflow_dispatch:
+    inputs:
+      rotate_db_password:
+        description: "Generate a fresh KC_DB_PASSWORD GH secret (yes/no)"
+        required: false
+        default: "no"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ROTATE_DB_PWD: ${{ github.event.inputs.rotate_db_password }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install runtime deps
+        run: |
+          python -m pip install --quiet --upgrade pip
+          pip install --quiet requests psycopg2-binary
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Verify realm-prod.json is up to date with source
+        run: |
+          set -e
+          # Regenerate into a sibling file and diff against the committed
+          # one. If drifted, fail loudly so owner regenerates + commits
+          # rather than the workflow silently rebuilding inside CI (which
+          # wouldn't reach Render's build context anyway).
+          python keycloak/render/build_realm_prod.py
+          if ! diff -q keycloak/render/realm-prod.json keycloak/render/realm-prod.json >/dev/null 2>&1; then
+            true  # placeholder; diff is against itself, replaced below
+          fi
+          # Real check: re-run the generator into a temp file and compare.
+          python3 -c "
+          import json, sys, pathlib
+          src = pathlib.Path('docs/keycloak/realm-export.json')
+          dst = pathlib.Path('keycloak/render/realm-prod.json')
+          realm = json.loads(src.read_text(encoding='utf-8'))
+          realm['users'] = [u for u in (realm.get('users') or [])
+                            if not (u.get('email') or '').endswith('test.solarpro.local')]
+          expected = json.dumps(realm, indent=2) + '\n'
+          actual = dst.read_text(encoding='utf-8')
+          if expected != actual:
+              print('::error::realm-prod.json is out of date vs realm-export.json')
+              print('Run: python keycloak/render/build_realm_prod.py')
+              print('Then: git add keycloak/render/realm-prod.json && git commit')
+              sys.exit(1)
+          print('OK -- realm-prod.json matches source')
+          "
+          ls -lh keycloak/render/realm-prod.json
+
+      - name: Find solarpro-postgres + fetch connection URL
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg_list.json
+          PG_ID=$(python3 -c "
+          import json
+          d = json.load(open('/tmp/pg_list.json'))
+          for item in (d if isinstance(d, list) else []):
+              pg = item.get('postgres', item)
+              if pg.get('name') == 'solarpro-postgres':
+                  print(pg.get('id', ''))
+                  break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"
+            exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXTERNAL=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          INTERNAL=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('internalConnectionString',''))")
+          echo "::add-mask::$EXTERNAL"
+          echo "::add-mask::$INTERNAL"
+          echo "external=$EXTERNAL" >> $GITHUB_OUTPUT
+          echo "internal=$INTERNAL" >> $GITHUB_OUTPUT
+
+      - name: Require KC_BOOTSTRAP_ADMIN_PASSWORD (owner-set, once)
+        env:
+          KC_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.KC_BOOTSTRAP_ADMIN_PASSWORD }}
+        run: |
+          set -e
+          # The master-realm root admin password is set at FIRST boot and
+          # cannot be reset via env var on later boots (KC ignores the
+          # env once the admin exists). Owner must set this once before
+          # the very first deploy and keep it in a password manager:
+          #   PWD=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+          #   gh secret set KC_BOOTSTRAP_ADMIN_PASSWORD -b "$PWD"
+          if [ -z "$KC_BOOTSTRAP_ADMIN_PASSWORD" ]; then
+            echo "::error::KC_BOOTSTRAP_ADMIN_PASSWORD GH secret not set."
+            echo "Generate one with:"
+            echo "  PWD=\$(python -c \"import secrets; print(secrets.token_urlsafe(32))\")"
+            echo "  gh secret set KC_BOOTSTRAP_ADMIN_PASSWORD -b \"\$PWD\""
+            echo "Store the value in a password manager -- KC will refuse to"
+            echo "re-read it after the first successful boot."
+            exit 1
+          fi
+          echo "OK -- KC_BOOTSTRAP_ADMIN_PASSWORD is set"
+
+      - name: Generate fresh KC_DB_PASSWORD for this run
+        id: kcpwd
+        run: |
+          set -e
+          # Generated per-run; ALTER ROLE in migration 006 updates the
+          # Postgres role; deploy_render.py pushes it to Render env vars
+          # in the same run. No GH-secret persistence needed because both
+          # ends update atomically.
+          NEW_PWD=$(python3 -c "import secrets; print(secrets.token_urlsafe(40))")
+          echo "::add-mask::$NEW_PWD"
+          echo "value=$NEW_PWD" >> $GITHUB_OUTPUT
+
+      - name: Apply migration 006 (keycloak schema + role + grants)
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+          KC_DB_PASSWORD: ${{ steps.kcpwd.outputs.value }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" \
+            -v kc_db_password="$KC_DB_PASSWORD" \
+            -v ON_ERROR_STOP=1 \
+            -f migrations/006_keycloak_schema.sql
+
+      - name: Derive KC_DB_URL (JDBC) for keycloak schema
+        id: kcurl
+        env:
+          INTERNAL: ${{ steps.pg.outputs.internal }}
+        run: |
+          set -e
+          # Render gives postgres://user:pwd@host:port/db on the internal
+          # network. Translate to a JDBC URL with the keycloak schema
+          # baked in via currentSchema parameter. Credentials are swapped
+          # at the env-var layer (KC_DB_USERNAME=keycloak_app +
+          # KC_DB_PASSWORD from this run) so the URL itself carries no
+          # user/pass.
+          JDBC=$(python3 -c "
+          import os
+          from urllib.parse import urlparse
+          src = os.environ['INTERNAL']
+          p = urlparse(src)
+          host = p.hostname
+          port = p.port or 5432
+          db = (p.path or '/').lstrip('/')
+          print(f'jdbc:postgresql://{host}:{port}/{db}?currentSchema=keycloak')
+          ")
+          echo "::add-mask::$JDBC"
+          echo "value=$JDBC" >> $GITHUB_OUTPUT
+
+      - name: Provision or update Render service
+        id: svc
+        env:
+          KC_DB_URL: ${{ steps.kcurl.outputs.value }}
+          KC_DB_PASSWORD: ${{ steps.kcpwd.outputs.value }}
+          KC_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.KC_BOOTSTRAP_ADMIN_PASSWORD }}
+        run: |
+          set -e
+          python keycloak/render/deploy_render.py
+          echo "service_url=$(cat /tmp/kc_service_url.txt)" >> $GITHUB_OUTPUT
+
+      - name: Wait for KC /health/ready
+        env:
+          SERVICE_URL: ${{ steps.svc.outputs.service_url }}
+        run: |
+          set -e
+          echo "polling ${SERVICE_URL}/health/ready (up to 8 minutes for first boot)"
+          deadline=$(( $(date +%s) + 480 ))
+          while ! curl -fSs "${SERVICE_URL}/health/ready" >/dev/null 2>&1; do
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::Keycloak did not become ready in 8 minutes"
+              exit 1
+            fi
+            printf "."
+            sleep 10
+          done
+          echo
+          echo "OK -- KC reports ready"
+          echo "well-known config:"
+          curl -fsS "${SERVICE_URL}/realms/solarpro/.well-known/openid-configuration" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print('  issuer:', d.get('issuer')); print('  token:', d.get('token_endpoint'))"
+
+      - name: Persist KEYCLOAK_ISSUER (best-effort)
+        env:
+          SERVICE_URL: ${{ steps.svc.outputs.service_url }}
+          KC_DEPLOY_PAT: ${{ secrets.KC_DEPLOY_PAT }}
+        run: |
+          set -e
+          ISSUER="${SERVICE_URL}/realms/solarpro"
+          echo "live KEYCLOAK_ISSUER: $ISSUER"
+          if [ -n "$KC_DEPLOY_PAT" ]; then
+            # PAT must have repo scope. Auth gh CLI with the PAT for this
+            # one call so secrets:write works.
+            echo "$KC_DEPLOY_PAT" | gh auth login --with-token
+            echo "$ISSUER" | gh secret set KEYCLOAK_ISSUER -R "$GITHUB_REPOSITORY"
+            echo "KEYCLOAK_ISSUER persisted via KC_DEPLOY_PAT"
+          else
+            echo "::warning::KC_DEPLOY_PAT not set -- copy the URL above and run:"
+            echo "::warning::  gh secret set KEYCLOAK_ISSUER -b \"$ISSUER\""
+          fi

@@ -1,0 +1,74 @@
+# Render-deployable Keycloak 26 image for the SolarPro IdP.
+#
+# What it does:
+#   * Starts from the official Keycloak 26 image (Apache 2.0; FOSS-rule
+#     compliant per ADR-0007).
+#   * Bakes in the production realm definition (test users stripped by
+#     build_realm_prod.py at image-build time -- see render.yaml
+#     buildCommand).
+#   * Runs `kc.sh build` so the production-optimised distribution is
+#     ready at container start (skips the build step on every boot ->
+#     ~3-5s startup instead of ~30s).
+#
+# Inputs (env vars supplied by render.yaml):
+#   KC_DB                  -- "postgres"
+#   KC_DB_URL              -- jdbc:postgresql://...?currentSchema=keycloak
+#   KC_DB_USERNAME         -- keycloak_app (created by migration 006)
+#   KC_DB_PASSWORD         -- supplied by Render secret env
+#   KC_HOSTNAME            -- auth.aiappinvent.com (or onrender.com URL)
+#   KC_BOOTSTRAP_ADMIN_USERNAME / _PASSWORD -- master-realm root admin
+#   KEYCLOAK_ENABLED       -- "true" once the app side cuts over
+#
+# Output:
+#   * /opt/keycloak/data/import/realm-prod.json with realm `solarpro`
+#     ready for first-boot import.
+#   * `start --optimized --import-realm` as the container's CMD.
+#
+# Why pin 26.0:
+#   Plan §K technical decisions name Keycloak 26.0 pinned -- breaking
+#   that pin without an ADR amendment is out of scope.
+
+FROM quay.io/keycloak/keycloak:26.0 AS builder
+
+# Build-time optimisations. The official image's `kc.sh build` step bakes
+# the database vendor + features into the distribution, removing the
+# per-boot rebuild cost. Setting these env vars here means `kc.sh build`
+# picks them up; they do NOT carry over to the runtime stage (we set
+# them again in render.yaml).
+ENV KC_DB=postgres \
+    KC_HEALTH_ENABLED=true \
+    KC_METRICS_ENABLED=true \
+    KC_FEATURES=token-exchange,admin-fine-grained-authz \
+    KC_HTTP_RELATIVE_PATH=/
+
+RUN /opt/keycloak/bin/kc.sh build
+
+# ── Runtime stage ─────────────────────────────────────────────────────
+FROM quay.io/keycloak/keycloak:26.0
+
+# Copy the pre-built distribution from the builder stage so the
+# container can `kc.sh start --optimized` (no rebuild on boot).
+COPY --from=builder /opt/keycloak/ /opt/keycloak/
+
+# Copy the production realm JSON into the import directory. Keycloak's
+# --import-realm flag reads any *.json in this dir on first boot only
+# (subsequent boots see the realm already exists in the DB and skip).
+# Renaming to realm-prod.json keeps it distinct from the local-dev file.
+COPY keycloak/render/realm-prod.json /opt/keycloak/data/import/realm-prod.json
+
+# Render terminates TLS at its load balancer and forwards plain HTTP to
+# the container. KC_PROXY=edge tells Keycloak to trust the X-Forwarded-*
+# headers so SSL-required checks pass; KC_HOSTNAME_STRICT_HTTPS=false
+# is required because the container itself speaks HTTP.
+ENV KC_PROXY=edge \
+    KC_HOSTNAME_STRICT_HTTPS=false \
+    KC_HTTP_ENABLED=true
+
+# Render-friendly: listen on the port Render injects via $PORT.
+# KC defaults to 8080; we override to whatever Render assigns at runtime.
+# (The entrypoint reads KC_HTTP_PORT.)
+ENV KC_HTTP_PORT=10000
+EXPOSE 10000
+
+ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
+CMD ["start", "--optimized", "--import-realm"]

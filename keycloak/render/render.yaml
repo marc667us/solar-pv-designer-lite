@@ -1,0 +1,76 @@
+# Render Blueprint for the SolarPro Keycloak IdP.
+#
+# Why a separate render.yaml in keycloak/render/ (not repo root):
+#   The solar app has its own service config; Render reads `render.yaml`
+#   from the repo root for the solar app. To avoid coupling the two
+#   services in one Blueprint, this file lives in keycloak/render/ and
+#   is applied via the dedicated deploy workflow
+#   (.github/workflows/deploy-keycloak.yml) which POSTs to the Render
+#   API directly instead of relying on Render's auto-Blueprint sync.
+#
+# Why these envFromSecret values:
+#   KEYCLOAK_ADMIN / _PASSWORD : master-realm root admin creds (rotated
+#     via gh secret set KC_BOOTSTRAP_ADMIN_PASSWORD)
+#   KC_DB_PASSWORD             : password for the keycloak_app role
+#     created by migration 006
+#   KC_DB_URL                  : JDBC URL pointing at solarpro-postgres
+#     with currentSchema=keycloak in the query string so the connection
+#     defaults to the cohabited schema
+#
+# What Render plan this requires:
+#   plan: free  -- 512 MB RAM, 0.1 CPU shared, sleep after 15 min idle.
+#   The keep-alive workflow (.github/workflows/keycloak-keepalive.yml)
+#   pings every 10 min to prevent sleep.
+#
+# Re-applying:
+#   Render reads this file when the Blueprint is applied or re-synced.
+#   Plan changes (e.g. moving from `free` to `starter`) require a manual
+#   plan upgrade in the Render dashboard.
+
+services:
+  - type: web
+    name: solarpro-keycloak
+    runtime: docker
+    plan: free
+    region: oregon            # match solar app region for lowest hop
+    branch: master
+    autoDeploy: false         # deploys via the workflow, not push
+    dockerfilePath: ./keycloak/render/Dockerfile
+    dockerContext: .          # build context = repo root (needs the realm-prod.json path)
+    healthCheckPath: /health/ready
+    envVars:
+      # ── Database (cohabit keycloak schema on solarpro-postgres) ──
+      - key: KC_DB
+        value: postgres
+      - key: KC_DB_URL
+        sync: false           # set via GH secret KC_DB_URL after migration 006
+      - key: KC_DB_USERNAME
+        value: keycloak_app
+      - key: KC_DB_PASSWORD
+        sync: false           # set via GH secret KC_DB_PASSWORD
+
+      # ── Master-realm bootstrap admin (rotated by GH secret) ──
+      - key: KC_BOOTSTRAP_ADMIN_USERNAME
+        value: admin
+      - key: KC_BOOTSTRAP_ADMIN_PASSWORD
+        sync: false           # set via GH secret KC_BOOTSTRAP_ADMIN_PASSWORD
+
+      # ── Hostname / proxy ──
+      - key: KC_HOSTNAME
+        value: auth.aiappinvent.com
+      - key: KC_HOSTNAME_STRICT
+        value: "false"        # Render's CDN URL also serves this app
+      - key: KC_HOSTNAME_STRICT_HTTPS
+        value: "false"        # container speaks HTTP; Render terminates TLS
+      - key: KC_PROXY
+        value: edge
+
+      # ── Observability ──
+      - key: KC_METRICS_ENABLED
+        value: "true"
+      - key: KC_HEALTH_ENABLED
+        value: "true"
+      - key: KC_LOG
+        value: console
+      - key: KC_LOG_LEVEL
+        value: INFO

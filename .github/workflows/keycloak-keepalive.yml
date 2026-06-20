@@ -1,0 +1,60 @@
+# Keep the SolarPro Keycloak service awake on Render free tier.
+#
+# What it does:
+#   Hits the master-realm well-known endpoint every 10 minutes. Any 2xx
+#   response resets Render free's 15-min idle timer so the container
+#   does not get shut down between user logins. Failures are surfaced
+#   in the workflow run summary (non-2xx -> step exits non-zero ->
+#   GitHub email alert fires).
+#
+# Why well-known and not /health/ready:
+#   * /health/ready is on a separate management port (9000) inside the
+#     container; on Render free the public URL only forwards the HTTP
+#     port. Hitting /realms/master/.well-known/openid-configuration is
+#     a real OIDC discovery call that exercises the JVM + DB.
+#   * The well-known doc is cached by KC for a short period, so the
+#     load on Postgres is negligible.
+#
+# Cost:
+#   * GH Actions free tier: 2000 min/mo. This workflow uses ~5s per
+#     run, 6 runs/hour, 24x7 -> ~720 min/mo. Well within the cap.
+#
+# Failure handling:
+#   If KEYCLOAK_ISSUER is unset (i.e. Deploy Keycloak workflow has not
+#   succeeded yet) the workflow exits cleanly with a no-op so it does
+#   not spam alerts before the first deploy.
+
+name: Keycloak Keep-Alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER }}
+    steps:
+      - name: Ping well-known
+        run: |
+          set -e
+          if [ -z "$KEYCLOAK_ISSUER" ]; then
+            echo "KEYCLOAK_ISSUER not set yet -- skip"
+            exit 0
+          fi
+          # KEYCLOAK_ISSUER ends in /realms/solarpro; strip and hit master.
+          BASE=$(echo "$KEYCLOAK_ISSUER" | sed 's|/realms/.*||')
+          URL="${BASE}/realms/master/.well-known/openid-configuration"
+          echo "ping: $URL"
+          STATUS=$(curl -fSso /dev/null -w "%{http_code}" --max-time 30 "$URL" || true)
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::keepalive ping failed: HTTP $STATUS"
+            exit 1
+          fi
+          echo "OK ($STATUS)"
