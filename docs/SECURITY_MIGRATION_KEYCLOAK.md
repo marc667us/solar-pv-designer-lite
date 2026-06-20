@@ -339,7 +339,98 @@ Same compose layout but with:
 - LE certificate for `keycloak-staging.aiappinvent.com`.
 - Master-realm admin credentials moved out of compose env into a Docker secret.
 
-### 5.3 Production environment
+### 5.3 Production environment — Render free path (ACTUAL, beta tier)
+
+This is what landed 2026-06-20. The K8s spec in §5.4 stays as the
+end-state target once paying users arrive. Until then, beta runs on
+Render free to honour `[[feedback-zero-cost-apis]]`.
+
+| Concern | Choice (beta) | End-state (post-revenue) |
+|---|---|---|
+| Container image | `quay.io/keycloak/keycloak:26.0` (pinned, quarkus-native `kc.sh build` at image-build time) | same |
+| Hosting | Render free Web Service (Docker), region oregon | Render Starter $7/mo OR K8s (§5.4) |
+| Database | **Schema cohabit** on `solarpro-postgres`: `keycloak` schema + dedicated `keycloak_app` role + `REVOKE ALL ON SCHEMA keycloak FROM PUBLIC` (migration 006) | Dedicated Postgres (Render Basic-256MB $6/mo OR Neon) |
+| TLS | Render auto-issued Let's Encrypt at the LB | same |
+| Hostname | `auth.aiappinvent.com` (Namecheap CNAME → `solarpro-keycloak.onrender.com`) | same |
+| Sleep mitigation | `.github/workflows/keycloak-keepalive.yml` cron every 10 min | not needed on paid plans |
+| Backup | `.github/workflows/keycloak-backup.yml` daily `pg_dump --schema=keycloak` to GH artifact, 30-day retention | + S3 / R2 offsite |
+| Admin access | Restricted by per-role TOTP at KC level (no network-level isolation on Render free) | + Cloudflare Zero Trust on `auth.aiappinvent.com/admin` |
+| Monitoring | KC `/metrics` on management port 9000 (internal-only); not yet scraped | Prometheus + Loki per K8s spec |
+| Secrets | `KC_BOOTSTRAP_ADMIN_PASSWORD` + `KC_DB_PASSWORD` as Render env vars (set via `.github/workflows/deploy-keycloak.yml`); `KC_DB_PASSWORD` rotated per deploy run | Vault per `[[project-solar-pv-secrets-engine-proposal-v3]]` |
+| HA | Single Render free instance (no replicas) | 2-replica K8s + JGroups |
+
+**Render configuration quirks worth remembering:**
+
+1. **Bind main listener to `$PORT`.** KC 26 splits HTTP into a main port
+   (admin + realms) and a management port (health + metrics, default 9000).
+   Render only routes external traffic to `$PORT` (10000 by default), so
+   the Dockerfile MUST pass `--http-port=$PORT` to kc.sh start, otherwise
+   Render auto-routes to whichever port replies and you end up serving
+   `/metrics` externally and 404 on `/realms/*`. The shell-form CMD in
+   `keycloak/render/Dockerfile` handles this.
+
+2. **`healthCheckPath` must be a main-port endpoint.** `/health/ready` is
+   on the management port and is unreachable through Render. The deploy
+   workflow uses `/realms/master/.well-known/openid-configuration`
+   (created by KC on first boot) so Render's verifier hits a real
+   main-port endpoint.
+
+3. **`KC_HOSTNAME` accepts a full URL in KC 26.** Set to
+   `https://auth.aiappinvent.com` so the discovery doc returns HTTPS
+   issuer URLs even though the container itself speaks HTTP (Render's
+   LB terminates TLS). Use `KC_PROXY_HEADERS=xforwarded` (not the
+   legacy `KC_PROXY=edge`) to trust Render's `X-Forwarded-Proto`.
+
+4. **Render-managed Postgres rejects `ALTER DEFAULT PRIVILEGES FOR
+   ROLE`** for any role other than the connected one or a superuser.
+   Migration 006 sidesteps this — the `keycloak_app` role owns
+   everything it creates via Liquibase on first boot, so creator-owns
+   semantics make explicit default-priv grants redundant.
+
+5. **psql `:'var'` substitution does NOT work inside dollar-quoted
+   PL/pgSQL blocks.** Migration 006 uses a `__KC_DB_PASSWORD__`
+   placeholder and the deploy workflow's "Apply migration 006" step
+   preprocesses it via Python before piping to psql.
+
+6. **Render API: `PUT /env-vars` race with `POST /deploys`.** Render
+   may queue an env-triggered deploy before the explicit one lands,
+   leaving an `update_failed` entry adjacent to the new build. Symptom:
+   the "live" deploy ran with old env vars. Fix: re-trigger the
+   workflow; eventually a clean deploy wins.
+
+**Files involved in the Render-free deployment:**
+
+```
+keycloak/render/
+  Dockerfile               # KC 26 quarkus-native, $PORT-aware shell CMD
+  build_realm_prod.py      # strips test users from realm-export.json
+  realm-prod.json          # generated artefact, committed
+  render.yaml              # Blueprint reference; deploy uses API directly
+  deploy_render.py         # Render API create-or-update + PATCH service config
+
+migrations/
+  006_keycloak_schema.sql  # keycloak schema + keycloak_app role + REVOKE PUBLIC
+
+.github/workflows/
+  deploy-keycloak.yml          # orchestration; --field kc_hostname_url for custom domain
+  attach-kc-custom-domain.yml  # adds auth.aiappinvent.com to Render service
+  verify-kc-custom-domain.yml  # nudges Render to verify DNS + provision TLS
+  keycloak-keepalive.yml       # 10-min cron to defeat Render free 15-min idle sleep
+  keycloak-backup.yml          # daily pg_dump --schema=keycloak artifact
+  cutover-to-keycloak.yml      # flips KEYCLOAK_ENABLED=true on solar app Render env
+  rollback-from-keycloak.yml   # the reverse: KEYCLOAK_ENABLED unset
+```
+
+**Upgrade trigger (out of beta):** when paying users arrive OR
+> 100 active users, split to dedicated Render Postgres + Render
+Starter ($13/mo total) before traffic exposes blast-radius or
+RAM-ceiling risk. K8s manifests in §5.4 are the longer-term target.
+
+### 5.3 Legacy K8s production target (deferred until revenue)
+
+Below: the original production target before the Render-free beta
+deployment took precedence. K8s deploy is parked until traffic warrants
+the operational investment.
 
 | Concern | Choice |
 |---|---|
