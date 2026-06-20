@@ -64,15 +64,12 @@ $do$;
 -- 3. Grants -------------------------------------------------------------
 --    keycloak_app is the only role allowed inside the keycloak schema.
 --    USAGE lets it resolve schema; CREATE lets Liquibase build tables.
+--    Tables/sequences that Liquibase creates are owned by keycloak_app
+--    automatically (the creator owns the object), so we do NOT need
+--    ALTER DEFAULT PRIVILEGES FOR ROLE keycloak_app here -- managed
+--    Postgres rejects that unless we are keycloak_app or a superuser.
+--    Keycloak's own connection has full rights to its own tables.
 GRANT USAGE, CREATE ON SCHEMA keycloak TO keycloak_app;
-
---    Default privileges so every table/sequence Liquibase creates is
---    automatically owned and grant-flagged for keycloak_app without
---    needing follow-up grants.
-ALTER DEFAULT PRIVILEGES FOR ROLE keycloak_app IN SCHEMA keycloak
-  GRANT ALL ON TABLES TO keycloak_app;
-ALTER DEFAULT PRIVILEGES FOR ROLE keycloak_app IN SCHEMA keycloak
-  GRANT ALL ON SEQUENCES TO keycloak_app;
 
 -- 4. Search path --------------------------------------------------------
 --    KC's JDBC connections use SET SEARCH_PATH? No -- KC's Liquibase
