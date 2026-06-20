@@ -133,19 +133,23 @@ jobs:
           # block also carries `from` so KC has a recipient). KC's
           # /admin/realms/{realm}/testSMTPConnection takes the same
           # smtp config and triggers a delivery attempt.
+          use_ssl = (os.environ.get('SMTP_TLS','').lower()
+                     in ('true','1','yes','on','ssl'))
           smtp_test = requests.post(
               f"{BASE}/admin/realms/solarpro/testSMTPConnection",
               headers=H,
-              data={
-                  "host":       os.environ['SMTP_HOST'],
-                  "port":       os.environ['SMTP_PORT'],
-                  "from":       os.environ['SMTP_FROM'],
-                  "user":       os.environ['SMTP_USER'],
-                  "password":   os.environ['SMTP_PASS'],
-                  "auth":       "true",
-                  "starttls":   "true" if os.environ.get('SMTP_TLS','').lower() not in ('true','1','yes','on','ssl') else "false",
-                  "ssl":        "true" if os.environ.get('SMTP_TLS','').lower() in ('true','1','yes','on','ssl') else "false",
+              json={
+                  "host":            os.environ['SMTP_HOST'],
+                  "port":            os.environ['SMTP_PORT'],
+                  "from":            os.environ['SMTP_FROM'],
                   "fromDisplayName": "SolarPro Global",
+                  "replyTo":         os.environ['SMTP_FROM'],
+                  "envelopeFrom":    "",
+                  "user":            os.environ['SMTP_USER'],
+                  "password":        os.environ['SMTP_PASS'],
+                  "auth":            "true",
+                  "starttls":        "false" if use_ssl else "true",
+                  "ssl":             "true"  if use_ssl else "false",
               },
               timeout=30)
           print(f"testSMTPConnection -> HTTP {smtp_test.status_code}")
