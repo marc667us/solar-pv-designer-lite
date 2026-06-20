@@ -50,11 +50,16 @@ jobs:
           print("before:", {k: before.get(k) for k in flags})
 
           # PATCH (PUT in KC; partial body works because KC merges).
+          # verifyEmail=false until SMTP can leave the Render pod
+          # (Render free blocks outbound to Brevo; see SECURITY doc).
+          # Beta runs without email verification; flip back to true
+          # after Render Starter upgrade + paid SMTP path.
           r = requests.put(f"{BASE}/admin/realms/solarpro",
                            headers=H,
                            json={
                                "registrationAllowed": True,
                                "registrationEmailAsUsername": True,
+                               "verifyEmail": False,
                            },
                            timeout=10)
           if r.status_code not in (204, 200):
