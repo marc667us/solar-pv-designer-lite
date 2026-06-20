@@ -1,0 +1,204 @@
+# End-to-end smoke test of the post-cutover /register flow.
+#
+# Flow:
+#   1. Playwright launches headless chromium, hits
+#      https://solarpro.aiappinvent.com/register
+#   2. Follows the 302 chain to KC's /registrations endpoint
+#   3. Fills the KC registration form (email/firstName/lastName/password
+#      with registrationEmailAsUsername=true so email IS the username)
+#   4. Submits
+#   5. Asserts: a new user exists in the solarpro realm matching the
+#      throwaway email we used.
+#   6. Cleanup: delete the test user via admin API so the realm stays
+#      tidy (always runs, even on test failure, via if: always()).
+#
+# Note: verifyEmail=true on the realm means the new user will land on
+# KC's "verify your email" interstitial after signup, NOT immediately
+# on /dashboard. We assert the realm-side user creation, not the
+# logged-in solar session, because no SMTP is wired to KC and the
+# verification email goes nowhere.
+
+name: Test KC Register
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER }}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.KC_BOOTSTRAP_ADMIN_PASSWORD }}
+      SOLAR_BASE: https://solarpro.aiappinvent.com
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: |
+          python -m pip install --quiet --upgrade pip
+          pip install --quiet requests playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Generate throwaway test identity
+        id: id
+        run: |
+          set -e
+          # Unique per-run to avoid collisions with prior runs that
+          # didn't clean up properly. .invalid TLD is reserved (RFC 2606)
+          # so even if SMTP somehow fired, the email goes nowhere real.
+          STAMP=$(date -u +%Y%m%d%H%M%S)
+          EMAIL="signup-smoke-${STAMP}@test.invalid"
+          PWD="$(python3 -c 'import secrets;print(secrets.token_urlsafe(20))')Aa1!"
+          echo "email=$EMAIL" >> $GITHUB_OUTPUT
+          echo "::add-mask::$PWD"
+          echo "pwd=$PWD" >> $GITHUB_OUTPUT
+          echo "test email: $EMAIL"
+
+      - name: Fetch master-realm admin token
+        id: tok
+        run: |
+          set -e
+          BASE=$(echo "$KEYCLOAK_ISSUER" | sed 's|/realms/.*||')
+          TOKEN=$(curl -fsS -X POST \
+            "${BASE}/realms/master/protocol/openid-connect/token" \
+            -d "client_id=admin-cli" -d "grant_type=password" \
+            -d "username=admin" \
+            --data-urlencode "password=${KC_BOOTSTRAP_ADMIN_PASSWORD}" \
+            | python3 -c "import json,sys;print(json.load(sys.stdin)['access_token'])")
+          echo "::add-mask::$TOKEN"
+          echo "value=$TOKEN" >> $GITHUB_OUTPUT
+          echo "base=$BASE" >> $GITHUB_OUTPUT
+
+      - name: Run Playwright register flow
+        env:
+          TEST_EMAIL: ${{ steps.id.outputs.email }}
+          TEST_PWD: ${{ steps.id.outputs.pwd }}
+        run: |
+          cat > /tmp/register_test.py << 'PY'
+          import os, sys
+          from playwright.sync_api import sync_playwright
+
+          SOLAR = os.environ['SOLAR_BASE']
+          EMAIL = os.environ['TEST_EMAIL']
+          PWD   = os.environ['TEST_PWD']
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              context = browser.new_context()
+              page = context.new_page()
+
+              print(f"GET {SOLAR}/register")
+              page.goto(f"{SOLAR}/register",
+                        wait_until="domcontentloaded", timeout=60000)
+              print(f"  landed: {page.url}")
+              assert "auth.aiappinvent.com" in page.url \
+                  and "registrations" in page.url, \
+                  f"expected KC /registrations, got {page.url}"
+
+              # KC 26 registration form fields. With
+              # registrationEmailAsUsername=true the username field
+              # is hidden -- only email is shown.
+              try:
+                  page.fill("input#email", EMAIL)
+                  page.fill("input#firstName", "Smoke")
+                  page.fill("input#lastName", "Test")
+                  page.fill("input#password", PWD)
+                  page.fill("input#password-confirm", PWD)
+                  print("  filled form")
+                  submit = page.locator(
+                      "form button[type=submit], input[type=submit]"
+                  ).first
+                  submit.wait_for(timeout=15000)
+                  submit.click()
+                  # Either lands on "verify email" page OR /dashboard
+                  # OR re-displays the form with an error.
+                  page.wait_for_load_state("domcontentloaded", timeout=60000)
+              except Exception as e:
+                  print(f"  FAIL during register submit: {e}")
+                  print(page.content()[:2500])
+                  raise
+              print(f"  post-submit URL: {page.url}")
+
+              # The user may now be on KC's "you need to verify email"
+              # page, on solar's /dashboard (if verifyEmail somehow
+              # skipped), or back on the registration form with an
+              # error. We accept any of the first two as success and
+              # validate the realm-side state in the next step.
+              body = page.content()
+              if "verify" in body.lower() or "dashboard" in page.url.lower():
+                  print("OK -- got past KC registration submit")
+              elif "error" in body.lower():
+                  # Maybe policy rejected the password / email already
+                  # exists / etc. Dump for diagnosis.
+                  print("WARN -- error markers in post-submit page:")
+                  for line in body.splitlines():
+                      if "error" in line.lower():
+                          print(f"    {line.strip()[:200]}")
+                  print(body[:1500])
+                  sys.exit(1)
+              else:
+                  print(f"WARN -- ambiguous post-submit state, content head:")
+                  print(body[:800])
+              browser.close()
+          PY
+          python /tmp/register_test.py
+
+      - name: Verify user landed in KC realm
+        env:
+          TOKEN: ${{ steps.tok.outputs.value }}
+          BASE: ${{ steps.tok.outputs.base }}
+          EMAIL: ${{ steps.id.outputs.email }}
+        run: |
+          set -e
+          # Look up by email field (exact match). With
+          # registrationEmailAsUsername=true the username field also
+          # equals the email.
+          USERS=$(curl -fsS -H "Authorization: Bearer $TOKEN" \
+            "$BASE/admin/realms/solarpro/users?email=$EMAIL&exact=true")
+          COUNT=$(echo "$USERS" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+          if [ "$COUNT" = "0" ]; then
+            echo "::error::user not found in realm after signup"
+            exit 1
+          fi
+          echo "OK -- user is in solarpro realm"
+          echo "$USERS" | python3 -c "
+          import json,sys
+          for u in json.load(sys.stdin):
+              print(f\"  username       : {u.get('username')}\")
+              print(f\"  email          : {u.get('email')}\")
+              print(f\"  emailVerified  : {u.get('emailVerified')}\")
+              print(f\"  enabled        : {u.get('enabled')}\")
+              print(f\"  firstName      : {u.get('firstName')}\")
+              print(f\"  lastName       : {u.get('lastName')}\")
+              print(f\"  requiredActions: {u.get('requiredActions')}\")
+              print(f\"  realmRoles     : {u.get('realmRoles')}\")
+          "
+
+      - name: Cleanup -- delete test user
+        if: always()
+        env:
+          TOKEN: ${{ steps.tok.outputs.value }}
+          BASE: ${{ steps.tok.outputs.base }}
+          EMAIL: ${{ steps.id.outputs.email }}
+        run: |
+          set -e
+          USERS=$(curl -sS -H "Authorization: Bearer $TOKEN" \
+            "$BASE/admin/realms/solarpro/users?email=$EMAIL&exact=true" || true)
+          USER_ID=$(echo "$USERS" | python3 -c "
+          import json,sys
+          try:
+              d = json.load(sys.stdin)
+              if d: print(d[0].get('id',''))
+          except Exception: pass
+          " 2>/dev/null || true)
+          if [ -z "$USER_ID" ]; then
+            echo "no test user to clean up"
+            exit 0
+          fi
+          HTTP=$(curl -sS -o /dev/null -w "%{http_code}" -X DELETE \
+            -H "Authorization: Bearer $TOKEN" \
+            "$BASE/admin/realms/solarpro/users/$USER_ID")
+          echo "DELETE /users/$USER_ID -> HTTP $HTTP"
