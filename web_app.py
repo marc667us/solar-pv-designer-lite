@@ -1749,6 +1749,17 @@ def landing_page2():
 @app.route("/register", methods=["GET", "POST"])
 @limiter.limit("10 per hour")
 def register():
+    # Phase 7 Keycloak guard: when KEYCLOAK_ENABLED is truthy and the
+    # marc667us escape hatch (?legacy=1) is absent, bounce GET /register
+    # to the OIDC blueprint so users land on the Keycloak registration
+    # page. POST handling is untouched so the legacy form keeps working.
+    if request.method == "GET" \
+        and os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
+        and request.args.get("legacy") != "1":
+        _kc_next = request.args.get("next")
+        if _kc_next:
+            return redirect(url_for("oidc.auth_register", next=_kc_next))
+        return redirect(url_for("oidc.auth_register"))
     if request.method == "POST":
         csrf_protect()
         f = request.form

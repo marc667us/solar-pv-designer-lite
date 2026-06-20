@@ -174,6 +174,12 @@ def _legacy_login_redirect():
     return redirect("/login?legacy=1")
 
 
+def _legacy_register_redirect():
+    """Mirror of _legacy_login_redirect for the signup flow -- when
+    KC is off, /auth/register falls back to the solar-side form."""
+    return redirect("/register?legacy=1")
+
+
 # ── Route handlers ──────────────────────────────────────────────────────
 
 @oidc_bp.route("/login", methods=["GET"])
@@ -210,6 +216,42 @@ def auth_login():
         "code_challenge_method": "S256",
     }
     return redirect(f"{_authorize_url()}?{urlencode(params)}")
+
+
+@oidc_bp.route("/register", methods=["GET"])
+def auth_register():
+    """Begin the Authorization Code + PKCE flow on KC's registration
+    endpoint. Same PKCE/state/nonce stashing as auth_login so the
+    callback handler can validate either flow uniformly."""
+    if not _keycloak_enabled():
+        return _legacy_register_redirect()
+
+    issuer = _issuer()
+    if not issuer:
+        log.error("KEYCLOAK_ISSUER not set; cannot start OIDC registration flow.")
+        return jsonify(error="OIDC_NOT_CONFIGURED"), 503
+
+    verifier, challenge = _make_pkce_pair()
+    state = _make_state()
+    nonce = _make_state()
+    next_url = request.args.get("next") or "/dashboard"
+
+    session["_kc_state"] = state
+    session["_kc_nonce"] = nonce
+    session["_kc_verifier"] = verifier
+    session["_kc_next"] = next_url
+
+    params = {
+        "response_type": "code",
+        "client_id": _client_id(),
+        "redirect_uri": _redirect_uri(),
+        "scope": "openid profile email",
+        "state": state,
+        "nonce": nonce,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+    }
+    return redirect(f"{_registrations_url()}?{urlencode(params)}")
 
 
 @oidc_bp.route("/callback", methods=["GET"])
