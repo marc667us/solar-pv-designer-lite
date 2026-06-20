@@ -1,0 +1,66 @@
+# One-off read-only diagnostic: dump live users.is_admin / role / plan
+# so we can see why the Keycloak export maps admin + marc667us to
+# `customer` instead of `platform_super_admin`. No writes, no redeploy,
+# no Keycloak calls. Delete this workflow once the mapping is fixed.
+
+name: Diag Users Role Mapping
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Install psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Find solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg_list.json
+          PG_ID=$(python3 -c "
+          import json
+          d = json.load(open('/tmp/pg_list.json'))
+          for item in (d if isinstance(d, list) else []):
+              pg = item.get('postgres', item)
+              if pg.get('name') == 'solarpro-postgres':
+                  print(pg.get('id', ''))
+                  break
+          ")
+          echo "id=$PG_ID" >> $GITHUB_OUTPUT
+
+      - name: Fetch external connection URL
+        id: conn
+        env:
+          PG_ID: ${{ steps.pg.outputs.id }}
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXTERNAL=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXTERNAL"
+          echo "external=$EXTERNAL" >> $GITHUB_OUTPUT
+
+      - name: Dump role + is_admin columns
+        env:
+          DATABASE_URL: ${{ steps.conn.outputs.external }}
+        run: |
+          set -e
+          echo "--- users table columns ---"
+          psql "$DATABASE_URL" -A -c \
+            "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='public' AND table_name='users' ORDER BY ordinal_position"
+          echo
+          echo "--- role + is_admin for every user ---"
+          psql "$DATABASE_URL" -A -c \
+            "SELECT id, username, email, COALESCE(role,'') AS role, is_admin, plan FROM users ORDER BY id"
