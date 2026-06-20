@@ -209,24 +209,29 @@ jobs:
           python keycloak/render/deploy_render.py
           echo "service_url=$(cat /tmp/kc_service_url.txt)" >> $GITHUB_OUTPUT
 
-      - name: Wait for KC /health/ready
+      - name: Wait for KC to serve master realm on main port
         env:
           SERVICE_URL: ${{ steps.svc.outputs.service_url }}
         run: |
           set -e
-          echo "polling ${SERVICE_URL}/health/ready (up to 8 minutes for first boot)"
+          # We poll master realm's well-known doc (created by KC at first
+          # boot) on the externally-routed main HTTP port. Hitting this
+          # endpoint proves both that KC is up AND that Render is routing
+          # to the main port (not the management port at 9000).
+          PROBE="${SERVICE_URL}/realms/master/.well-known/openid-configuration"
+          echo "polling $PROBE (up to 8 minutes for first boot)"
           deadline=$(( $(date +%s) + 480 ))
-          while ! curl -fSs "${SERVICE_URL}/health/ready" >/dev/null 2>&1; do
+          while ! curl -fSs "$PROBE" >/dev/null 2>&1; do
             if [ "$(date +%s)" -ge "$deadline" ]; then
-              echo "::error::Keycloak did not become ready in 8 minutes"
+              echo "::error::KC main port not reachable in 8 minutes"
               exit 1
             fi
             printf "."
             sleep 10
           done
           echo
-          echo "OK -- KC reports ready"
-          echo "well-known config:"
+          echo "OK -- KC main port reachable"
+          echo "solarpro realm well-known:"
           curl -fsS "${SERVICE_URL}/realms/solarpro/.well-known/openid-configuration" \
             | python3 -c "import json,sys; d=json.load(sys.stdin); print('  issuer:', d.get('issuer')); print('  token:', d.get('token_endpoint'))"
 

@@ -43,7 +43,12 @@ SERVICE_NAME = "solarpro-keycloak"
 DOCKERFILE_PATH = "./keycloak/render/Dockerfile"
 DOCKER_CONTEXT = "."
 BRANCH = "master"
-HEALTH_PATH = "/health/ready"
+# Render checks healthCheckPath against the routed port (=main HTTP).
+# /health and /metrics live on the management port (9000) which Render
+# does NOT expose externally, so we use a main-port endpoint that exists
+# from boot: master realm's OIDC discovery doc (created automatically by
+# KC's first-boot bootstrap).
+HEALTH_PATH = "/realms/master/.well-known/openid-configuration"
 
 
 def _hdrs() -> dict:
@@ -179,6 +184,28 @@ def update_env_vars(service_id: str) -> None:
     _put(f"/services/{service_id}/env-vars", env_block())
 
 
+def update_service_config(service_id: str) -> None:
+    """PATCH service-level config (healthCheckPath etc.). Needed when
+    the initial service create used a stale value; subsequent runs
+    bring the service back into sync without re-creating."""
+    print("updating service config (PATCH /services/{id}) ...")
+    body = {
+        "serviceDetails": {
+            "healthCheckPath": HEALTH_PATH,
+        }
+    }
+    r = requests.patch(f"{API}/services/{service_id}",
+                       headers=_hdrs(),
+                       data=json.dumps(body), timeout=60)
+    if r.status_code >= 400:
+        # PATCH may 422 if the body shape is wrong; surface but don't
+        # block deploy since healthCheckPath is non-critical.
+        sys.stderr.write(f"PATCH /services/{service_id} -> "
+                         f"{r.status_code}: {r.text[:500]}\n")
+        print("  (continuing despite PATCH failure -- healthCheckPath"
+              " stays at previous value)")
+
+
 def trigger_deploy(service_id: str) -> dict:
     """POST a fresh deploy. clearCache=do_not_clear so the realm import
     is preserved; we want incremental KC restarts.
@@ -207,6 +234,7 @@ def main() -> int:
     else:
         print(f"existing service id: {svc.get('id')}")
         update_env_vars(svc["id"])
+        update_service_config(svc["id"])
 
     deploy = trigger_deploy(svc["id"])
     print(f"deploy queued: {deploy.get('id') or deploy}")

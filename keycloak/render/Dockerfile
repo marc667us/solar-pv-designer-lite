@@ -64,11 +64,18 @@ ENV KC_PROXY=edge \
     KC_HOSTNAME_STRICT_HTTPS=false \
     KC_HTTP_ENABLED=true
 
-# Render-friendly: listen on the port Render injects via $PORT.
-# KC defaults to 8080; we override to whatever Render assigns at runtime.
-# (The entrypoint reads KC_HTTP_PORT.)
-ENV KC_HTTP_PORT=10000
+# Render-friendly: bind KC's MAIN HTTP listener to Render's $PORT (10000
+# by default). The management interface stays on a separate port (9000)
+# but is NOT externally reachable through Render -- Render only routes
+# external traffic to the $PORT binding. That means /realms/* + /admin
+# work externally, and /health + /metrics stay internal (we don't need
+# them externally because Render's healthCheckPath uses /realms/master).
+#
+# Why a shell-form CMD: Docker's JSON-form CMD doesn't expand $PORT, so
+# we wrap with sh -c to do the substitution at container start. The
+# trailing exec replaces the shell with the kc.sh process so signals
+# (SIGTERM on redeploy) propagate correctly.
 EXPOSE 10000
 
-ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
-CMD ["start", "--optimized", "--import-realm"]
+ENTRYPOINT []
+CMD ["sh", "-c", "exec /opt/keycloak/bin/kc.sh start --optimized --import-realm --http-port=${PORT:-10000}"]
