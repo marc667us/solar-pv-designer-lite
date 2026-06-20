@@ -1,0 +1,37 @@
+# One-off: dump current users + realm flags so we can see what changed.
+name: Diag KC Realm State
+on: { workflow_dispatch: {} }
+permissions: { contents: read }
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    env:
+      KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER }}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.KC_BOOTSTRAP_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install --quiet requests
+      - run: |
+          python3 << 'PY'
+          import os, requests
+          BASE = os.environ['KEYCLOAK_ISSUER'].rsplit('/realms/', 1)[0]
+          tok = requests.post(f"{BASE}/realms/master/protocol/openid-connect/token",
+              data={"client_id":"admin-cli","grant_type":"password",
+                    "username":"admin","password":os.environ['KC_BOOTSTRAP_ADMIN_PASSWORD']},
+              timeout=10).json()["access_token"]
+          H = {"Authorization": f"Bearer {tok}"}
+          realm = requests.get(f"{BASE}/admin/realms/solarpro", headers=H).json()
+          flags = ("registrationAllowed","registrationEmailAsUsername",
+                   "resetPasswordAllowed","rememberMe","verifyEmail",
+                   "loginWithEmailAllowed","editUsernameAllowed",
+                   "duplicateEmailsAllowed")
+          print("flags:")
+          for k in flags:
+              print(f"  {k:30s} = {realm.get(k)}")
+          print()
+          users = requests.get(f"{BASE}/admin/realms/solarpro/users?max=20", headers=H).json()
+          print(f"users ({len(users)}):")
+          for u in users:
+              print(f"  id={u.get('id')[:8]}.. username={u.get('username'):40s} email={u.get('email'):40s} requiredActions={u.get('requiredActions') or []}")
+          PY
