@@ -77,15 +77,15 @@ jobs:
           BASE: ${{ steps.tok.outputs.base }}
         run: |
           set -e
-          UID=$(curl -fsS -H "Authorization: Bearer $TOKEN" \
+          USER_ID=$(curl -fsS -H "Authorization: Bearer $TOKEN" \
             "$BASE/admin/realms/solarpro/users?username=$TEST_USERNAME&exact=true" \
             | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
-          echo "user id: $UID"
-          echo "id=$UID" >> $GITHUB_OUTPUT
+          echo "user id: $USER_ID"
+          echo "id=$USER_ID" >> $GITHUB_OUTPUT
           # PUT the user with requiredActions=[] so the login flow skips
           # the "update password" wizard during this smoke.
           curl -fsS -X PUT \
-            "$BASE/admin/realms/solarpro/users/$UID" \
+            "$BASE/admin/realms/solarpro/users/$USER_ID" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"requiredActions":[]}'
@@ -94,13 +94,13 @@ jobs:
         env:
           TOKEN: ${{ steps.tok.outputs.value }}
           BASE: ${{ steps.tok.outputs.base }}
-          UID: ${{ steps.user.outputs.id }}
+          USER_ID: ${{ steps.user.outputs.id }}
         run: |
           set -e
           # Use a fixed temp pw so the playwright step can read it.
           # We rotate to random + re-add UPDATE_PASSWORD in cleanup.
           curl -fsS -X PUT \
-            "$BASE/admin/realms/solarpro/users/$UID/reset-password" \
+            "$BASE/admin/realms/solarpro/users/$USER_ID/reset-password" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"type":"password","value":"SmokeTest!123ABC","temporary":false}'
@@ -169,18 +169,18 @@ jobs:
         env:
           TOKEN: ${{ steps.tok.outputs.value }}
           BASE: ${{ steps.tok.outputs.base }}
-          UID: ${{ steps.user.outputs.id }}
+          USER_ID: ${{ steps.user.outputs.id }}
         run: |
           set -e
           NEW=$(python3 -c "import secrets;print(secrets.token_urlsafe(32))")
           echo "::add-mask::$NEW"
           curl -fsS -X PUT \
-            "$BASE/admin/realms/solarpro/users/$UID/reset-password" \
+            "$BASE/admin/realms/solarpro/users/$USER_ID/reset-password" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "$(printf '{"type":"password","value":"%s","temporary":true}' "$NEW")"
           curl -fsS -X PUT \
-            "$BASE/admin/realms/solarpro/users/$UID" \
+            "$BASE/admin/realms/solarpro/users/$USER_ID" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"requiredActions":["UPDATE_PASSWORD"]}'
