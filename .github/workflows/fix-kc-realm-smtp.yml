@@ -165,24 +165,26 @@ jobs:
           H = {"Authorization": f"Bearer {tok}", "Content-Type":"application/json"}
           # KC's testSMTPConnection sends to the *master* admin's email.
           # Without one, send fails. Set it idempotently.
+          # support@aiappinvent.com is a real Google Workspace mailbox
+          # the owner can open + read (per CLAUDE.md project_aiapinvent.md).
+          # KC's testSMTPConnection sends TO this address, so it must be
+          # a real deliverable inbox.
+          ADMIN_EMAIL = "support@aiappinvent.com"
           users = requests.get(
               f"{BASE}/admin/realms/master/users?username=admin&exact=true",
               headers=H, timeout=10).json()
           if not users:
               print("FAIL: master admin not found"); raise SystemExit(1)
           uid = users[0]['id']
-          existing_email = users[0].get('email') or ''
-          if not existing_email:
-              r = requests.put(
-                  f"{BASE}/admin/realms/master/users/{uid}",
-                  headers=H,
-                  json={"email": os.environ['SMTP_FROM'],
-                        "firstName": "SolarPro", "lastName": "Admin",
-                        "emailVerified": True},
-                  timeout=10)
-              print(f"set master admin email -> HTTP {r.status_code}")
-          else:
-              print(f"master admin already has email ({existing_email[:3]}***)")
+          # Idempotent: always PUT so we overwrite any prior placeholder.
+          r = requests.put(
+              f"{BASE}/admin/realms/master/users/{uid}",
+              headers=H,
+              json={"email": ADMIN_EMAIL,
+                    "firstName": "SolarPro", "lastName": "Admin",
+                    "emailVerified": True},
+              timeout=10)
+          print(f"set master admin email -> {ADMIN_EMAIL} HTTP {r.status_code}")
           PY
 
       - name: Send a KC-side test email (admin -> admin)
