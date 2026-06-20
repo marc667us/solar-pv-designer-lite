@@ -319,10 +319,12 @@ def auth_callback():
 
     # Verify id_token signature + nonce. Use the existing middleware
     # so JWKS caching + issuer/audience checks are consistent across
-    # the codebase.
+    # the codebase. access_token forwarded so python-jose can validate
+    # the at_hash claim KC includes.
     try:
         # id_token's audience is the client_id, not solarpro-api.
-        claims = verify_jwt(id_token, audience=_client_id())
+        claims = verify_jwt(id_token, audience=_client_id(),
+                            access_token=access_token)
     except JWTError as e:
         log.warning("OIDC id_token failed verification: %s", e)
         return jsonify(error="OIDC_ID_TOKEN_INVALID", reason=str(e)), 400

@@ -150,7 +150,8 @@ def reset_jwks_cache() -> None:
 
 # ── Verification ─────────────────────────────────────────────────────────
 
-def verify_jwt(token: str, audience: str | None = None) -> dict:
+def verify_jwt(token: str, audience: str | None = None,
+               access_token: str | None = None) -> dict:
     """Validate a Keycloak-issued JWT.
 
     Returns the claims dict on success. Raises JWTError on any failure:
@@ -188,12 +189,19 @@ def verify_jwt(token: str, audience: str | None = None) -> dict:
         raise JWTError(f"JWKS fetch failed: {e}") from e
 
     try:
+        # access_token is forwarded so python-jose can validate the
+        # `at_hash` claim that KC includes in id_tokens by default.
+        # Without it, jwt.decode raises JWTClaimsError("No access_token
+        # provided to compare against at_hash claim.") and OIDC callback
+        # rejects perfectly valid sign-ins (regression caught after
+        # Phase 7 cutover with KC 26).
         claims = jwt.decode(
             token,
             key,
             algorithms=[key.get("alg", "RS256")],
             audience=audience or config.audience,
             issuer=config.issuer,
+            access_token=access_token,
             options={
                 "verify_signature": True,
                 "verify_aud": True,
