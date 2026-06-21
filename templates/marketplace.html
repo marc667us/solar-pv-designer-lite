@@ -164,7 +164,7 @@
       {# Product literature + datasheet links (auto-found by web-crawl agent) #}
       <div class="mb-2 d-flex flex-wrap gap-2 align-items-center" style="font-size:11.5px;padding:6px 8px;background:rgba(255,255,255,.03);border-radius:6px">
         {% if p.literature_url %}
-        <a href="{{ p.literature_url }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none">
+        <a href="{{ url_for('marketplace_product_doc_redirect', pid=p.id, kind='literature') }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" title="Opens via SolarPro reachability check">
           <i class="bi bi-file-earmark-text me-1"></i>Literature
         </a>
         {% else %}
@@ -172,7 +172,7 @@
         {% endif %}
         <span class="text-secondary">·</span>
         {% if p.datasheet_url %}
-        <a href="{{ p.datasheet_url }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none">
+        <a href="{{ url_for('marketplace_product_doc_redirect', pid=p.id, kind='datasheet') }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" title="Opens via SolarPro reachability check">
           <i class="bi bi-file-earmark-pdf me-1"></i>Datasheet
         </a>
         {% else %}

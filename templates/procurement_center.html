@@ -127,14 +127,14 @@
             {% if p.spec %}<div class="text-secondary small mb-2" style="font-size:11px;line-height:1.4">{{ p.spec[:120] }}{% if p.spec|length > 120 %}…{% endif %}</div>{% endif %}
             <div class="mb-1 d-flex flex-wrap gap-2 align-items-center" style="font-size:10.5px;padding:4px 6px;background:rgba(255,255,255,.03);border-radius:5px">
               {% if p.literature_url %}
-              <a href="{{ p.literature_url }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" onclick="event.stopPropagation();">
+              <a href="{{ url_for('marketplace_product_doc_redirect', pid=p.id, kind='literature') }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" onclick="event.stopPropagation();" title="Opens via SolarPro reachability check">
                 <i class="bi bi-file-earmark-text me-1"></i>Literature
               </a>
               {% else %}
               <span class="text-warning" style="opacity:.85"><i class="bi bi-file-earmark-text me-1"></i>Literature: —</span>
               {% endif %}
               {% if p.datasheet_url %}
-              <a href="{{ p.datasheet_url }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" onclick="event.stopPropagation();">
+              <a href="{{ url_for('marketplace_product_doc_redirect', pid=p.id, kind='datasheet') }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" onclick="event.stopPropagation();" title="Opens via SolarPro reachability check">
                 <i class="bi bi-file-earmark-pdf me-1"></i>Datasheet
               </a>
               {% else %}
