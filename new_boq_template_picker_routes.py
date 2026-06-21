@@ -218,7 +218,9 @@ def boq_template_save(pid, bid, fid, slug):
     except Exception:
         pass
     flash(f"Generated {saved} line(s) from template '{slug}'. ({skipped} skipped.)", "success")
-    return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
+    # "Generate BOQ" lands the user on the project BOQ view so they can
+    # immediately see the document they just generated.
+    return redirect(url_for("boq_project_boq", pid=pid))
 
 
 # ---- Whole-project Excel / PDF / Email exports ---------------------------
