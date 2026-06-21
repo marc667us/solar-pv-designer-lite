@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Start from template — {{ floor.floor_name }}{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('boq_projects_list') }}" class="text-warning">BOQ Projects</a> ·
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="text-warning">{{ project.project_name }}</a> ·
+      <a href="{{ url_for('boq_building_view', pid=project.id, bid=building.id) }}" class="text-warning">{{ building.building_name }}</a> ·
+      <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=floor.id) }}" class="text-warning">{{ floor.floor_name }}</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-collection text-warning me-1"></i>Start from a template</h5>
+    <div class="text-secondary small">Pick a starter BOQ that matches your building. Every line will render with a checkbox -- tick what you need, untick what you don't, edit qtys, then Generate.</div>
+  </div>
+</div>
+
+{% if matched %}
+<div class="text-warning fw-bold small mb-2" style="text-transform:uppercase;letter-spacing:1px">
+  <i class="bi bi-bullseye me-1"></i>Matched for {{ purpose|title }} buildings
+</div>
+<div class="row g-3 mb-4">
+  {% for t in matched %}
+  <div class="col-md-6">
+    <div class="solar-card p-3 h-100" style="border-left:3px solid var(--solar-gold)">
+      <h6 class="fw-bold mb-1">{{ t.name }}</h6>
+      <div class="text-secondary small mb-2">{{ t.purpose|title }} / {{ t.subtype }}</div>
+      <p class="small mb-3">{{ t.description }}</p>
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="text-secondary small">{{ t.n_bills }} bill(s) · {{ t.n_lines }} line(s)</div>
+        <a href="{{ url_for('boq_template_view', pid=project.id, bid=building.id, fid=floor.id, slug=t.slug) }}" class="btn btn-warning fw-bold btn-sm">
+          <i class="bi bi-arrow-right-circle me-1"></i>Use template
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if others %}
+<div class="text-secondary small mb-2" style="text-transform:uppercase;letter-spacing:1px">
+  <i class="bi bi-collection me-1"></i>Other templates
+</div>
+<div class="row g-3 mb-4">
+  {% for t in others %}
+  <div class="col-md-6">
+    <div class="solar-card p-3 h-100">
+      <h6 class="fw-bold mb-1">{{ t.name }}</h6>
+      <div class="text-secondary small mb-2">{{ t.purpose|title }} / {{ t.subtype }}</div>
+      <p class="small mb-3">{{ t.description }}</p>
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="text-secondary small">{{ t.n_bills }} bill(s) · {{ t.n_lines }} line(s)</div>
+        <a href="{{ url_for('boq_template_view', pid=project.id, bid=building.id, fid=floor.id, slug=t.slug) }}" class="btn btn-outline-warning btn-sm">
+          <i class="bi bi-arrow-right-circle me-1"></i>Use template
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="solar-card p-3 text-center text-secondary mt-3">
+  None of these fit? <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="text-warning">Start from scratch with an empty section</a>.
+</div>
+{% endblock %}

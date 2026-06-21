@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}{{ template.name }} — Tick and Generate{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('boq_projects_list') }}" class="text-warning">BOQ Projects</a> ·
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="text-warning">{{ project.project_name }}</a> ·
+      <a href="{{ url_for('boq_building_view', pid=project.id, bid=building.id) }}" class="text-warning">{{ building.building_name }}</a> ·
+      <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=floor.id) }}" class="text-warning">{{ floor.floor_name }}</a> ·
+      <a href="{{ url_for('boq_template_picker', pid=project.id, bid=building.id, fid=floor.id) }}" class="text-warning">templates</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-card-checklist text-warning me-1"></i>{{ template.name }}</h5>
+    <div class="text-secondary small">{{ template.description }}</div>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <button type="button" class="btn btn-outline-light btn-sm" onclick="window._boqTickAll(true);">
+      <i class="bi bi-check-all me-1"></i>Tick all
+    </button>
+    <button type="button" class="btn btn-outline-light btn-sm" onclick="window._boqTickAll(false);">
+      <i class="bi bi-x-square me-1"></i>Untick all
+    </button>
+  </div>
+</div>
+
+<form method="POST" action="{{ url_for('boq_template_save', pid=project.id, bid=building.id, fid=floor.id, slug=slug) }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+  <div class="solar-card p-3 mb-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3 text-warning fw-bold" style="text-transform:uppercase;font-size:12px;letter-spacing:.5px">
+        <i class="bi bi-percent me-1"></i>Section-wide markup
+      </div>
+      <div class="col-md-2"><label class="form-label small text-secondary mb-1">Overhead %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="overhead_pct" value="30"></div>
+      <div class="col-md-2"><label class="form-label small text-secondary mb-1">Profit %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="profit_pct" value="0"></div>
+      <div class="col-md-2"><label class="form-label small text-secondary mb-1">Contingency %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="contingency_pct" value="0"></div>
+      <div class="col-md-3"><label class="form-label small text-secondary mb-1">VAT %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="vat_pct" value="0"></div>
+    </div>
+  </div>
+
+  {% set ns = namespace(line_idx_g=0) %}
+  {% for bill in template.bills %}
+    <div class="solar-card p-3 mb-3">
+      <h6 class="fw-bold text-warning mb-2" style="text-transform:uppercase;letter-spacing:.5px">
+        <i class="bi bi-bookmark me-1"></i>BILL No. {{ bill.no }} — {{ bill.name }}
+      </h6>
+
+      {% for section in bill.sections %}
+      <div class="mb-3" style="border-left:3px solid #1e1e3a;padding-left:12px">
+        <div class="fw-bold mb-2" style="text-transform:uppercase;letter-spacing:.5px;font-size:13px">
+          <span class="text-warning me-2">{{ section.letter }}.</span>{{ section.title }}
+          {% if section.subsection %}<span class="text-secondary small ms-2">{{ section.subsection }}</span>{% endif %}
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:12.5px">
+            <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px">
+              <tr>
+                <th style="width:30px"><i class="bi bi-check-square"></i></th>
+                <th>Description</th>
+                <th style="width:60px">Unit</th>
+                <th class="text-end" style="width:80px">Qty</th>
+                <th class="text-end" style="width:100px">Basic</th>
+                <th class="text-end" style="width:110px">Rate (auto)</th>
+                <th class="text-end" style="width:130px">Amount (auto)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in section["items"] %}
+              <tr class="boq-tpl-row">
+                <td><input type="checkbox" class="form-check-input boq-tick" name="tick" value="{{ ns.line_idx_g }}" checked></td>
+                <td>
+                  <input class="form-control form-control-sm" name="desc[{{ ns.line_idx_g }}]" value="{{ item.desc }}">
+                  {% if item.spec %}<div class="small text-secondary mt-1">{{ item.spec }}</div>{% endif %}
+                </td>
+                <td><input class="form-control form-control-sm" name="unit[{{ ns.line_idx_g }}]" value="{{ item.unit }}"></td>
+                <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end boq-qty" name="qty[{{ ns.line_idx_g }}]" value="{{ item.qty }}" onchange="window._boqTplRow(this);"></td>
+                <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end boq-basic" name="basic[{{ ns.line_idx_g }}]" value="{{ '%.2f'|format(item.basic) }}" onchange="window._boqTplRow(this);"></td>
+                <td class="text-end boq-rate text-warning fw-bold">0.00</td>
+                <td class="text-end boq-amount fw-bold">0.00</td>
+              </tr>
+              {% set ns.line_idx_g = ns.line_idx_g + 1 %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endfor %}
+
+      {# Custom-item row at the bottom of each Bill #}
+      <details class="mt-2">
+        <summary class="text-secondary small" style="cursor:pointer">
+          <i class="bi bi-plus-circle me-1 text-warning"></i>Add a custom item to BILL No. {{ bill.no }}
+        </summary>
+        <div class="row g-2 mt-2">
+          <input type="hidden" name="custom_bill[]" value="{{ bill.no }}">
+          <input type="hidden" name="custom_section[]" value="Z">
+          <input type="hidden" name="custom_title[]" value="CUSTOM ITEMS">
+          <div class="col-md-5"><input class="form-control form-control-sm" name="custom_desc[]" placeholder="Description"></div>
+          <div class="col-md-1"><input class="form-control form-control-sm" name="custom_unit[]" placeholder="Unit" value="No."></div>
+          <div class="col-md-2"><input type="number" step="0.01" min="0" class="form-control form-control-sm" name="custom_qty[]" placeholder="Qty"></div>
+          <div class="col-md-2"><input type="number" step="0.01" min="0" class="form-control form-control-sm" name="custom_basic[]" placeholder="Basic"></div>
+        </div>
+      </details>
+
+    </div>
+  {% endfor %}
+
+  <div class="solar-card p-3 mb-3 text-center" style="background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.30)">
+    <div class="fw-bold mb-2" style="font-size:14px"><i class="bi bi-calculator-fill text-warning me-1"></i>Project subtotal (live) — <span id="grid_subtotal" class="text-warning">0.00</span></div>
+    <div class="d-flex justify-content-center gap-2 flex-wrap">
+      <button type="submit" class="btn btn-warning fw-bold">
+        <i class="bi bi-check2-circle me-1"></i>Generate BOQ
+      </button>
+      <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-light">Cancel</a>
+    </div>
+  </div>
+</form>
+
+<script>
+  // Live recompute per row + section markup; tick-all / untick-all helpers.
+  (function(){
+    function rates() {
+      var oh  = parseFloat(document.querySelector('[name=overhead_pct]').value || 0);
+      var prf = parseFloat(document.querySelector('[name=profit_pct]').value || 0);
+      var cnt = parseFloat(document.querySelector('[name=contingency_pct]').value || 0);
+      var vat = parseFloat(document.querySelector('[name=vat_pct]').value || 0);
+      return 1 + (oh + prf + cnt + vat) / 100;
+    }
+    window._boqTplRow = function(el) {
+      var tr = el.closest('tr.boq-tpl-row'); if (!tr) return;
+      var tick = tr.querySelector('.boq-tick');
+      var basic = tr.querySelector('.boq-basic');
+      var qty = tr.querySelector('.boq-qty');
+      var rate = tr.querySelector('.boq-rate');
+      var amount = tr.querySelector('.boq-amount');
+      var b = parseFloat(basic.value || 0);
+      var q = parseFloat(qty.value || 0);
+      var r = b * rates();
+      var a = q * r;
+      rate.textContent = r.toFixed(2);
+      amount.textContent = tick.checked ? a.toFixed(2) : '—';
+      window._boqRecalc();
+    };
+    window._boqRecalc = function() {
+      var sum = 0;
+      document.querySelectorAll('tr.boq-tpl-row').forEach(function(tr){
+        if (!tr.querySelector('.boq-tick').checked) return;
+        sum += parseFloat(tr.querySelector('.boq-amount').textContent || 0);
+      });
+      document.getElementById('grid_subtotal').textContent = sum.toFixed(2);
+    };
+    window._boqTickAll = function(state) {
+      document.querySelectorAll('.boq-tick').forEach(function(c){ c.checked = state; });
+      // recompute amounts (some show '—' when unticked).
+      document.querySelectorAll('tr.boq-tpl-row .boq-basic').forEach(function(b){ window._boqTplRow(b); });
+    };
+    // initial compute
+    document.querySelectorAll('tr.boq-tpl-row .boq-basic').forEach(function(b){ window._boqTplRow(b); });
+    // tick toggle reflects in amount too
+    document.querySelectorAll('.boq-tick').forEach(function(c){
+      c.addEventListener('change', function(){
+        var tr = c.closest('tr.boq-tpl-row');
+        window._boqTplRow(tr.querySelector('.boq-basic'));
+      });
+    });
+    // section markup change -> recompute all
+    ['overhead_pct','profit_pct','contingency_pct','vat_pct'].forEach(function(n){
+      var el = document.querySelector('[name=' + n + ']');
+      if (el) el.addEventListener('input', function(){
+        document.querySelectorAll('tr.boq-tpl-row .boq-basic').forEach(function(b){ window._boqTplRow(b); });
+      });
+    });
+  })();
+</script>
+{% endblock %}

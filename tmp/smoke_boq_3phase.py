@@ -367,6 +367,84 @@ with app.test_client() as c:
     check("summary shows CONTINGENCIES", "CONTINGENCIES" in body)
     check("summary shows Total carried to General Summary", "Total carried to General Summary" in body)
 
+    # ── PHASE 5 — Template picker + checkbox + exports ──────────────────
+    # GET picker page
+    r = c.get(f"/boq-projects/{pid}/buildings/{bid}/floors/{fid}/from-template")
+    body = r.data.decode("utf-8", "replace")
+    check("template picker renders", r.status_code == 200)
+    check("picker lists Auditorium template", "Auditorium" in body or "auditorium-1ugls" in body)
+    check("picker shows Office (commercial purpose)", "Office" in body)
+
+    # GET auditorium checkbox view
+    r = c.get(f"/boq-projects/{pid}/buildings/{bid}/floors/{fid}/from-template/auditorium-1ugls")
+    body = r.data.decode("utf-8", "replace")
+    check("template checkbox view renders", r.status_code == 200)
+    check("checkbox view shows Memshield items", "Memshield" in body)
+    check("checkbox view shows BILL No. 1", "BILL No. 1" in body)
+    check("checkbox view shows BILL No. 6", "BILL No. 6" in body)
+    check("checkbox view has tick checkboxes", 'name="tick"' in body)
+
+    # POST template save with first 5 lines ticked
+    csrf = get_csrf(c, f"/boq-projects/{pid}/buildings/{bid}/floors/{fid}/from-template/auditorium-1ugls")
+    save_data = [
+        ("_csrf", csrf),
+        ("overhead_pct", "30"),
+        ("profit_pct", "0"),
+        ("contingency_pct", "0"),
+        ("vat_pct", "0"),
+        # Tick 5 lines (indices 0-4, the Preliminaries section)
+        ("tick", "0"),
+        ("tick", "1"),
+        ("tick", "2"),
+        ("tick", "3"),
+        ("tick", "4"),
+    ]
+    from werkzeug.datastructures import MultiDict
+    r = c.post(f"/boq-projects/{pid}/buildings/{bid}/floors/{fid}/from-template/auditorium-1ugls/save",
+               data=MultiDict(save_data), follow_redirects=False)
+    check("template save 302", r.status_code in (302, 303))
+
+    # 5 new items should be added under Bill 1 / Section A.
+    with get_db() as cur:
+        rows = cur.execute(
+            "SELECT description, qty, total_amount FROM boq_floor_items "
+            "WHERE floor_id=? AND bill_no=1 AND section_letter='A' "
+            "ORDER BY id", (fid,)
+        ).fetchall()
+    check("5 template lines saved under Bill 1 / Section A", len(rows) == 5, f"got {len(rows)}")
+    if rows:
+        check("first saved line is Site mobilisation",
+              "mobilisation" in (rows[0]["description"] or "").lower(),
+              f"got {rows[0]['description']}")
+
+    # Excel export
+    r = c.get(f"/boq-projects/{pid}/boq.xlsx")
+    check("project Excel export 200", r.status_code == 200)
+    check("Excel mimetype is xlsx", "spreadsheetml" in (r.mimetype or ""))
+    import io as _io, openpyxl as _xl
+    try:
+        wb = _xl.load_workbook(_io.BytesIO(r.data), read_only=True)
+        sheets = wb.sheetnames
+    except Exception:
+        sheets = []
+    check("Excel has BOQ + Bills Summary sheets",
+          "BOQ" in sheets and "Bills Summary" in sheets, f"sheets={sheets}")
+
+    # PDF export
+    r = c.get(f"/boq-projects/{pid}/boq.pdf")
+    check("project PDF export 200", r.status_code == 200)
+    check("PDF mimetype is pdf", "pdf" in (r.mimetype or "").lower())
+
+    # Email export (no backend in smoke test — should still return 302 with a flash)
+    csrf = get_csrf(c, f"/boq-projects/{pid}")
+    r = c.post(f"/boq-projects/{pid}/email", data={
+        "_csrf": csrf,
+        "to_email": "smoke@example.com",
+        "subject": "Smoke email",
+        "body": "Smoke test",
+    }, follow_redirects=False)
+    check("email POST returns 302", r.status_code in (302, 303))
+
 print()
 print(f"PASS: {len(OK)}  FAIL: {len(FAIL)}")
 for label, hint in FAIL:

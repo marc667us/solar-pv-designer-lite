@@ -18,7 +18,10 @@
     <a href="{{ url_for('boq_floor_summary', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-info btn-sm">
       <i class="bi bi-stack me-1"></i>Bills Summary
     </a>
-    <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-warning fw-bold btn-sm">
+    <a href="{{ url_for('boq_template_picker', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-warning fw-bold btn-sm">
+      <i class="bi bi-card-checklist me-1"></i>Start from template
+    </a>
+    <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-warning btn-sm">
       <i class="bi bi-folder-plus me-1"></i>Open new section
     </a>
   </div>
@@ -106,10 +109,15 @@
 {% else %}
 <div class="solar-card p-4 text-center text-secondary mb-3">
   <i class="bi bi-folder2-open" style="font-size:36px"></i>
-  <p class="mt-2 mb-2">No items on this floor yet — open the first section to start adding lines.</p>
-  <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-warning fw-bold btn-sm">
-    <i class="bi bi-folder-plus me-1"></i>Open first section
-  </a>
+  <p class="mt-2 mb-2">No items on this floor yet — start fast from a template or open a single section.</p>
+  <div class="d-flex gap-2 justify-content-center flex-wrap">
+    <a href="{{ url_for('boq_template_picker', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-warning fw-bold btn-sm">
+      <i class="bi bi-card-checklist me-1"></i>Start from template
+    </a>
+    <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-warning btn-sm">
+      <i class="bi bi-folder-plus me-1"></i>Open one section
+    </a>
+  </div>
 </div>
 {% endif %}
 {% endblock %}
