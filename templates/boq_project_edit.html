@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Edit project — {{ project.project_name }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('boq_projects_list') }}" class="text-warning">BOQ Projects</a> ·
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="text-warning">{{ project.project_name }}</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-pencil-square text-warning me-1"></i>Edit project #{{ project.id }}</h5>
+  </div>
+</div>
+
+<div class="solar-card p-4">
+  <form method="POST">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Project name *</label>
+        <input class="form-control" name="project_name" required maxlength="300" value="{{ project.project_name }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Client name</label>
+        <input class="form-control" name="client_name" maxlength="300" value="{{ project.client_name or '' }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Project location</label>
+        <input class="form-control" name="location" placeholder="City, region, country" maxlength="300" value="{{ project.location or '' }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Project type</label>
+        <select class="form-select" name="project_type">
+          {% for v, lbl in [('single_building','Single building'),('multiple_buildings','Multiple buildings'),('campus','Campus'),('estate','Estate')] %}
+          <option value="{{ v }}" {% if project.project_type == v %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <div class="form-check mt-3">
+          <input class="form-check-input" type="checkbox" name="external_works_included" id="ew" {% if project.external_works_included %}checked{% endif %}>
+          <label class="form-check-label small" for="ew">External works included</label>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="form-check mt-3">
+          <input class="form-check-input" type="checkbox" name="infrastructure_included" id="inf" {% if project.infrastructure_included %}checked{% endif %}>
+          <label class="form-check-label small" for="inf">Infrastructure included</label>
+        </div>
+      </div>
+    </div>
+    <hr class="my-4" style="border-color:#1e1e3a">
+    <div class="d-flex justify-content-between">
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="btn btn-outline-light">Cancel</a>
+      <button class="btn btn-warning fw-bold"><i class="bi bi-save me-1"></i>Save changes</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -30,6 +30,15 @@
     <button type="button" class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#emailBoqModal">
       <i class="bi bi-envelope me-1"></i>Email
     </button>
+    <a href="{{ url_for('boq_project_edit', pid=project.id) }}" class="btn btn-outline-warning btn-sm" title="Edit project details">
+      <i class="bi bi-pencil me-1"></i>Edit
+    </a>
+    <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#resetBoqModal" title="Clear all line items but keep buildings + floors">
+      <i class="bi bi-arrow-counterclockwise me-1"></i>Start all over
+    </button>
+    <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteBoqModal" title="Delete this project + everything in it">
+      <i class="bi bi-trash me-1"></i>Delete project
+    </button>
   </div>
 </div>
 
@@ -84,6 +93,53 @@
   </a>
 </div>
 {% endif %}
+
+<div class="modal fade" id="resetBoqModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:#13132a;color:#e0e0f0;border:1px solid #1e1e3a">
+      <form method="POST" action="{{ url_for('boq_project_reset', pid=project.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="modal-header" style="border-bottom:1px solid #1e1e3a">
+          <h6 class="modal-title fw-bold text-warning"><i class="bi bi-arrow-counterclockwise me-1"></i>Start all over — {{ project.project_name }} (#{{ project.id }})</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>This will permanently clear <strong>every line item and rate build-up row</strong> in this project.</p>
+          <p class="text-secondary small">Buildings and floors are kept. You can then re-pick templates or open sections to start adding fresh lines.</p>
+          <label class="form-label small text-secondary">Type <code>RESET</code> to confirm:</label>
+          <input class="form-control" name="confirm" placeholder="RESET" required>
+        </div>
+        <div class="modal-footer" style="border-top:1px solid #1e1e3a">
+          <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning btn-sm fw-bold"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset line items</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="deleteBoqModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:#13132a;color:#e0e0f0;border:1px solid #1e1e3a">
+      <form method="POST" action="{{ url_for('boq_project_delete', pid=project.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="modal-header" style="border-bottom:1px solid #1e1e3a">
+          <h6 class="modal-title fw-bold text-danger"><i class="bi bi-trash me-1"></i>Delete project — {{ project.project_name }} (#{{ project.id }})</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-danger"><strong>Permanent deletion.</strong> Everything goes — buildings, floors, line items, rate build-up. This cannot be undone.</p>
+          <label class="form-label small text-secondary">Type <code>DELETE</code> to confirm:</label>
+          <input class="form-control" name="confirm" placeholder="DELETE" required>
+        </div>
+        <div class="modal-footer" style="border-top:1px solid #1e1e3a">
+          <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger btn-sm fw-bold"><i class="bi bi-trash me-1"></i>Delete project</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
 <div class="modal fade" id="emailBoqModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
