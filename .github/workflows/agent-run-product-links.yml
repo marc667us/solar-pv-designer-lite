@@ -1,0 +1,40 @@
+name: Agent — Run Product Link Finder
+on: { workflow_dispatch: {} }
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run the web-crawl agent against live (5 bulk batches)
+        env: { OWNER_PW: "${{ secrets.SOLARPRO_OWNER_PASSWORD }}" }
+        run: |
+          set +e
+          BASE="https://solarpro.aiappinvent.com"
+          COOKIE=$(mktemp)
+          BODY=$(curl -sS -c "$COOKIE" -b "$COOKIE" "$BASE/login?legacy=1")
+          CSRF=$(echo "$BODY" | grep -oE 'name="_csrf"[^>]+value="[^"]+"' | head -1 | sed -E 's/.*value="([^"]+)".*/\1/')
+          curl -sS -o /dev/null -b "$COOKIE" -c "$COOKIE" -X POST \
+            -d "username=marc667us&password=${OWNER_PW}&_csrf=${CSRF}" \
+            "$BASE/login?legacy=1"
+          # Run bulk crawl 5 times -> processes 5 * 20 = 100 products
+          for ROUND in 1 2 3 4 5; do
+            echo "==== Round $ROUND ===="
+            START=$(date +%s)
+            # Need a CSRF from admin-products page
+            PG=$(curl -sS -b "$COOKIE" "$BASE/admin/marketplace/products")
+            CSRF=$(echo "$PG" | grep -oE 'name="_csrf"[^>]+value="[^"]+"' | head -1 | sed -E 's/.*value="([^"]+)".*/\1/')
+            STATUS=$(curl -sS -b "$COOKIE" --max-time 240 -X POST \
+              -d "_csrf=${CSRF}" \
+              -o /dev/null -w "%{http_code}" \
+              "$BASE/admin/agent/find-product-links")
+            END=$(date +%s)
+            ELAPSED=$((END - START))
+            printf "  status=%s elapsed=%ss\n" "$STATUS" "$ELAPSED"
+            sleep 10
+          done
+          echo ""
+          echo "==== verify on marketplace ===="
+          MARKET=$(curl -sS -b "$COOKIE" "$BASE/marketplace")
+          LIT_COUNT=$(echo "$MARKET" | grep -oE 'Literature</a>' | wc -l)
+          DS_COUNT=$(echo "$MARKET" | grep -oE 'Datasheet</a>' | wc -l)
+          echo "Marketplace literature links found: $LIT_COUNT"
+          echo "Marketplace datasheet links found:  $DS_COUNT"
