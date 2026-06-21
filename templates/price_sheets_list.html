@@ -15,7 +15,7 @@
 <div class="table-responsive">
   <table class="table table-sm align-middle" style="color:#e0e0f0">
     <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
-      <tr><th>Title</th><th>Currency</th><th class="text-center">Items</th><th>Created</th></tr>
+      <tr><th>Title</th><th>Currency</th><th class="text-center">Items</th><th>Created</th><th></th></tr>
     </thead>
     <tbody>
       {% for s in sheets %}
@@ -24,6 +24,12 @@
         <td><span class="badge bg-secondary">{{ s.currency }}</span></td>
         <td class="text-center">{{ s.item_count }}</td>
         <td class="small text-secondary">{{ s.created_at }}</td>
+        <td class="text-end">
+          <form method="POST" action="{{ url_for('price_sheets_delete', sheet_id=s.id) }}" style="display:inline" onsubmit="return confirm('Delete Basic Price Sheet \'{{ s.title|escape }}\' and all its rows?\nThis cannot be undone.');">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-danger btn-sm" title="Delete this Basic Price Sheet"><i class="bi bi-trash"></i></button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>

@@ -162,20 +162,27 @@
       <div class="text-secondary small mb-2" style="font-size:12px;line-height:1.4">{{ p.spec }}</div>
       {% endif %}
       {# Product literature + datasheet links (auto-found by web-crawl agent) #}
-      <div class="mb-2" style="font-size:11px">
+      <div class="mb-2 d-flex flex-wrap gap-2 align-items-center" style="font-size:11.5px;padding:6px 8px;background:rgba(255,255,255,.03);border-radius:6px">
         {% if p.literature_url %}
-        <a href="{{ p.literature_url }}" target="_blank" rel="noopener" class="text-info text-decoration-none me-2">
-          <i class="bi bi-file-earmark-text me-1"></i>Product literature
+        <a href="{{ p.literature_url }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none">
+          <i class="bi bi-file-earmark-text me-1"></i>Literature
         </a>
         {% else %}
-        <span class="text-secondary me-2"><i class="bi bi-file-earmark-text me-1"></i>Literature: —</span>
+        <span class="text-warning" style="opacity:.85"><i class="bi bi-file-earmark-text me-1"></i>Literature: not found yet</span>
         {% endif %}
+        <span class="text-secondary">·</span>
         {% if p.datasheet_url %}
-        <a href="{{ p.datasheet_url }}" target="_blank" rel="noopener" class="text-info text-decoration-none">
+        <a href="{{ p.datasheet_url }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none">
           <i class="bi bi-file-earmark-pdf me-1"></i>Datasheet
         </a>
         {% else %}
-        <span class="text-secondary"><i class="bi bi-file-earmark-pdf me-1"></i>Datasheet: —</span>
+        <span class="text-warning" style="opacity:.85"><i class="bi bi-file-earmark-pdf me-1"></i>Datasheet: not found yet</span>
+        {% endif %}
+        {% if user and user.is_admin and (not p.literature_url or not p.datasheet_url) %}
+        <form method="POST" action="{{ url_for('admin_find_product_links_one', pid=p.id) }}" style="display:inline;margin-left:auto" onsubmit="return confirm('Run web-crawl agent for this product? Takes ~5 seconds.');">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-info" style="padding:.05rem .35rem;font-size:10.5px" title="Find links via smart web search agent"><i class="bi bi-search"></i> find</button>
+        </form>
         {% endif %}
       </div>
       <div class="mt-auto pt-2" style="border-top:1px solid #1e1e3a">

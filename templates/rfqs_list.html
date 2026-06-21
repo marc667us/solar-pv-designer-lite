@@ -15,7 +15,7 @@
 <div class="table-responsive">
   <table class="table table-sm align-middle" style="color:#e0e0f0">
     <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
-      <tr><th>Title</th><th>Items</th><th>Sent to</th><th>Responses</th><th>Status</th><th>Updated</th></tr>
+      <tr><th>Title</th><th>Items</th><th>Sent to</th><th>Responses</th><th>Status</th><th>Updated</th><th></th></tr>
     </thead>
     <tbody>
       {% for r in rfqs %}
@@ -32,6 +32,12 @@
           {% else %}<span class="badge bg-secondary">{{ r.status }}</span>{% endif %}
         </td>
         <td class="small text-secondary">{{ r.updated_at }}</td>
+        <td class="text-end">
+          <form method="POST" action="{{ url_for('rfqs_delete', rfq_id=r.id) }}" style="display:inline" onsubmit="return confirm('Delete RFQ \'{{ r.title|escape }}\' and all its items + supplier targets + responses?\nThis cannot be undone.');">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-danger btn-sm" title="Delete this RFQ"><i class="bi bi-trash"></i></button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>

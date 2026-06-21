@@ -31,13 +31,18 @@
         <td class="text-end small">{{ p.n_items }}</td>
         <td class="text-end fw-bold text-warning">{{ "%.2f"|format(p.grand_total or 0) }}</td>
         <td class="small text-secondary">{{ p.updated_at }}</td>
-        <td class="text-end">
+        <td class="text-end" style="white-space:nowrap">
           <a href="{{ url_for('boq_project_overview', pid=p.id) }}" class="btn btn-warning fw-bold btn-sm" title="Open this project">
             <i class="bi bi-box-arrow-up-right me-1"></i>Open
           </a>
           <a href="{{ url_for('boq_project_edit', pid=p.id) }}" class="btn btn-outline-warning btn-sm" title="Edit project details">
             <i class="bi bi-pencil"></i>
           </a>
+          <form method="POST" action="{{ url_for('boq_project_delete', pid=p.id) }}" style="display:inline" onsubmit="var c=prompt('Type DELETE to permanently remove project &quot;{{ p.project_name|escape }}&quot; and all buildings + floors + items.','');if(c!=='DELETE'){alert('Cancelled');return false;}this.querySelector('input[name=confirm]').value=c;return true;">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="confirm" value="">
+            <button class="btn btn-outline-danger btn-sm" title="Delete this project"><i class="bi bi-trash"></i></button>
+          </form>
         </td>
       </tr>
       {% endfor %}
