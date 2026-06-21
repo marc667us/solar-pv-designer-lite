@@ -1,0 +1,56 @@
+name: Diag PC BOQ 500
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login + procurement-center BOQ creation + dump 500
+        env:
+          OWNER_PW: ${{ secrets.SOLARPRO_OWNER_PASSWORD }}
+        run: |
+          set +e
+          BASE="https://solarpro.aiappinvent.com"
+          COOKIE=$(mktemp)
+          BODY=$(curl -sS -c "$COOKIE" -b "$COOKIE" "$BASE/login?legacy=1")
+          CSRF=$(echo "$BODY" | grep -oE 'name="_csrf"[^>]+value="[^"]+"' | head -1 | sed -E 's/.*value="([^"]+)".*/\1/')
+          curl -sS -o /dev/null -b "$COOKIE" -c "$COOKIE" -X POST \
+            -d "username=marc667us&password=${OWNER_PW}&_csrf=${CSRF}" \
+            "$BASE/login?legacy=1"
+
+          # GET /procurement-center, harvest product ids + CSRF
+          BODY=$(curl -sS -b "$COOKIE" "$BASE/procurement-center")
+          CSRF=$(echo "$BODY" | grep -oE 'name="_csrf"[^>]+value="[^"]+"' | head -1 | sed -E 's/.*value="([^"]+)".*/\1/')
+          # Extract first 3 product ids from value="N" inside checkboxes
+          IDS=$(echo "$BODY" | grep -oE 'name="product_ids" value="[0-9]+"' | grep -oE '[0-9]+' | head -3 | tr '\n' ' ')
+          echo "csrf_len=${#CSRF}  product_ids=$IDS"
+
+          # Build POST data
+          DATA="_csrf=${CSRF}&doc_type=boq&currency=USD&title="
+          for ID in $IDS; do
+            DATA="${DATA}&product_ids=${ID}"
+          done
+          echo "---- POST /procurement-center/add doc_type=boq ----"
+          OUT=$(curl -sS -b "$COOKIE" -X POST \
+            -d "$DATA" \
+            -w "\nHTTP=%{http_code}\nLOC=%{redirect_url}" \
+            "$BASE/procurement-center/add")
+          STATUS=$(echo "$OUT" | grep '^HTTP=' | sed 's/HTTP=//')
+          LOC=$(echo "$OUT" | grep '^LOC=' | sed 's/LOC=//')
+          echo "  status=$STATUS"
+          echo "  redirect=$LOC"
+          if [ "$STATUS" = "500" ]; then
+            echo "---- 500 BODY ----"
+            echo "$OUT" | head -c -200 | tail -c 5000
+          fi
+          if [ -n "$LOC" ]; then
+            echo "---- GET redirect target ----"
+            OUT=$(curl -sS -b "$COOKIE" -w "\nHTTP=%{http_code}" "$LOC")
+            STATUS=$(echo "$OUT" | tail -1 | sed 's/HTTP=//')
+            echo "  status=$STATUS"
+            if [ "$STATUS" = "500" ]; then
+              echo "---- redirect target 500 BODY ----"
+              echo "$OUT" | head -c -8 | tail -c 5000
+            fi
+          fi
