@@ -17362,7 +17362,9 @@ def boms_boq_xlsx(bom_id):
     bom = _bom_owned_or_404(bom_id, uid)
     items = _bom_items_with_prices(bom_id)
     rates = _bom_rates_for(bom_id)
-    totals = _bom_totals_with_rates(items, rates)
+    _bcur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
+    _brate = _CURRENCY_RATES_FROM_USD.get(_bcur, 1.0)
+    totals = _bom_totals_with_rates(items, rates, fx_rate=_brate)
 
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -17392,7 +17394,7 @@ def boms_boq_xlsx(bom_id):
     cur_code = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
 
     # Title + meta
-    ws["A1"] = f"Bill of Quantities — {bom['title']}"
+    ws["A1"] = f"Quick Cost Estimate (for Electricians) — {bom['title']}"
     ws["A1"].font = title_font
     ws.merge_cells("A1:G1")
     ws["A2"] = f"Project: {bom['project_name'] or '-'}"
@@ -17517,7 +17519,7 @@ def boms_boq_xlsx(bom_id):
         buf,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         as_attachment=True,
-        download_name=f"BOQ_{safe_title}.xlsx",
+        download_name=f"CostEstimate_{safe_title}.xlsx",
     )
 
 
@@ -17531,7 +17533,9 @@ def boms_boq_pdf(bom_id):
     bom = _bom_owned_or_404(bom_id, uid)
     items = _bom_items_with_prices(bom_id)
     rates = _bom_rates_for(bom_id)
-    totals = _bom_totals_with_rates(items, rates)
+    _bcur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
+    _brate = _CURRENCY_RATES_FROM_USD.get(_bcur, 1.0)
+    totals = _bom_totals_with_rates(items, rates, fx_rate=_brate)
 
     include_buildup = bool(request.args.get("include_buildup") == "1")
     if include_buildup:
@@ -17542,7 +17546,7 @@ def boms_boq_pdf(bom_id):
             pass
     cur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
     md = []
-    md.append(f"# Bill of Quantities — {bom['title']}" + (" (Internal Build-Up)" if include_buildup else ""))
+    md.append(f"# Quick Cost Estimate (for Electricians) — {bom['title']}" + (" (Internal Build-Up)" if include_buildup else ""))
     if bom["project_name"]:
         md.append(f"**Project:** {bom['project_name']}  ")
     if bom["client_name"]:
@@ -17601,9 +17605,9 @@ def boms_boq_pdf(bom_id):
 
     safe_title = re.sub(r"[^A-Za-z0-9_.-]+", "_", bom["title"])[:60]
     return _render_pdf(
-        f"BOQ — {bom['title']}",
+        f"Quick Cost Estimate — {bom['title']}",
         "\n".join(md),
-        f"BOQ_{safe_title}.pdf",
+        f"CostEstimate_{safe_title}.pdf",
     )
 
 
