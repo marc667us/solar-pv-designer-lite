@@ -7,7 +7,15 @@
     <div class="text-secondary small"><a href="{{ url_for('admin_marketplace_dashboard') }}" class="text-warning">Marketplace</a> / Products</div>
     <h5 class="fw-black mb-0 mt-1"><i class="bi bi-box-seam me-2 text-warning"></i>Products</h5>
   </div>
-  <a href="{{ url_for('admin_marketplace_pending') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-hourglass-split me-1"></i>Pending queue</a>
+  <div class="d-flex gap-2 flex-wrap">
+    <form method="POST" action="{{ url_for('admin_find_product_links_bulk') }}" style="display:inline" onsubmit="return confirm('Run the smart web-crawl agent for up to 20 products missing literature/datasheet links?\n\nThe agent hits DuckDuckGo + Bing with brand-domain scoping and may take ~1-2 minutes.');">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-info btn-sm" title="Crawl the web for missing literature + datasheet PDFs">
+        <i class="bi bi-globe me-1"></i>Find product links (web-crawl agent)
+      </button>
+    </form>
+    <a href="{{ url_for('admin_marketplace_pending') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-hourglass-split me-1"></i>Pending queue</a>
+  </div>
 </div>
 
 <div class="solar-card p-3 mb-3">

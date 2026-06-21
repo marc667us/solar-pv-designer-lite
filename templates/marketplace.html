@@ -161,6 +161,23 @@
       {% if p.spec %}
       <div class="text-secondary small mb-2" style="font-size:12px;line-height:1.4">{{ p.spec }}</div>
       {% endif %}
+      {# Product literature + datasheet links (auto-found by web-crawl agent) #}
+      <div class="mb-2" style="font-size:11px">
+        {% if p.literature_url %}
+        <a href="{{ p.literature_url }}" target="_blank" rel="noopener" class="text-info text-decoration-none me-2">
+          <i class="bi bi-file-earmark-text me-1"></i>Product literature
+        </a>
+        {% else %}
+        <span class="text-secondary me-2"><i class="bi bi-file-earmark-text me-1"></i>Literature: —</span>
+        {% endif %}
+        {% if p.datasheet_url %}
+        <a href="{{ p.datasheet_url }}" target="_blank" rel="noopener" class="text-info text-decoration-none">
+          <i class="bi bi-file-earmark-pdf me-1"></i>Datasheet
+        </a>
+        {% else %}
+        <span class="text-secondary"><i class="bi bi-file-earmark-pdf me-1"></i>Datasheet: —</span>
+        {% endif %}
+      </div>
       <div class="mt-auto pt-2" style="border-top:1px solid #1e1e3a">
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
           <div class="text-secondary" style="font-size:11px">
