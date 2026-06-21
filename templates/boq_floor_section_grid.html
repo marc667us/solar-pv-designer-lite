@@ -37,7 +37,7 @@
   <div class="table-responsive">
     <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:12px">
       <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px">
-        <tr><th style="width:40px">Item</th><th>Description</th><th class="text-end">Qty</th><th>Unit</th><th class="text-end">Rate</th><th class="text-end">Amount</th></tr>
+        <tr><th style="width:40px">Item</th><th>Description</th><th class="text-end">Qty</th><th>Unit</th><th class="text-end">Total Rate</th><th class="text-end">Amount</th></tr>
       </thead>
       <tbody>
         {% for it in existing %}
@@ -81,6 +81,7 @@
       <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:12.5px">
         <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
           <tr>
+            <th style="width:34px"><span title="Tick to include this row when saving"><i class="bi bi-check-square"></i></span></th>
             <th style="width:30px">#</th>
             <th>Description <span class="text-secondary">(pick from dropdown)</span></th>
             <th style="width:70px">Unit</th>
@@ -88,7 +89,7 @@
             <th class="text-end" style="width:90px">Basic</th>
             <th class="text-end" style="width:90px">Supply</th>
             <th class="text-end" style="width:90px">Install</th>
-            <th class="text-end" style="width:100px">Rate (auto)</th>
+            <th class="text-end" style="width:110px">Total Rate (auto)</th>
             <th class="text-end" style="width:120px">Amount (auto)</th>
             <th style="width:120px">Remarks</th>
           </tr>
@@ -96,6 +97,10 @@
         <tbody id="grid_body">
           {% for desc, unit, basic in rows %}
           <tr class="boq-row">
+            <td class="text-center">
+              <input type="checkbox" class="form-check-input boq-tick" name="tick[]" value="{{ loop.index0 }}" {% if desc %}checked{% endif %}>
+              <input type="hidden" name="row_id[]" value="{{ loop.index0 }}">
+            </td>
             <td class="text-secondary small text-end">{{ loop.index }}</td>
             <td>
               <select class="form-select form-select-sm boq-desc" name="description[]" onchange="window._boqRow(this);">
@@ -119,7 +124,7 @@
         </tbody>
         <tfoot>
           <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
-            <td colspan="8" class="text-end fw-black">SECTION SUBTOTAL (live)</td>
+            <td colspan="9" class="text-end fw-black">SECTION SUBTOTAL (ticked rows, live)</td>
             <td class="text-end fw-black text-warning" id="grid_subtotal">0.00</td>
             <td></td>
           </tr>
@@ -128,9 +133,17 @@
     </div>
 
     <div class="p-3 d-flex justify-content-between flex-wrap gap-2" style="border-top:1px solid #1e1e3a">
-      <button type="button" class="btn btn-outline-light btn-sm" onclick="window._boqAddRow();">
-        <i class="bi bi-plus-circle me-1"></i>Add blank row
-      </button>
+      <div class="d-flex gap-2 flex-wrap">
+        <button type="button" class="btn btn-warning fw-bold btn-sm" onclick="window._boqAddRow();">
+          <i class="bi bi-plus-circle me-1"></i>Add row
+        </button>
+        <button type="button" class="btn btn-outline-light btn-sm" onclick="window._boqTickAll(true);">
+          <i class="bi bi-check-all me-1"></i>Tick all
+        </button>
+        <button type="button" class="btn btn-outline-light btn-sm" onclick="window._boqTickAll(false);">
+          <i class="bi bi-x-square me-1"></i>Untick all
+        </button>
+      </div>
       <div class="d-flex gap-2 flex-wrap">
         <button type="submit" name="next_action" value="stay" class="btn btn-outline-info">
           <i class="bi bi-save me-1"></i>Save &amp; stay
@@ -139,7 +152,10 @@
           <i class="bi bi-arrow-right-circle me-1"></i>Save &amp; open next section
         </button>
         <button type="submit" name="next_action" value="back" class="btn btn-warning fw-bold">
-          <i class="bi bi-check2-circle me-1"></i>Save all &amp; back to floor
+          <i class="bi bi-check2-circle me-1"></i>Save &amp; back to floor
+        </button>
+        <button type="submit" name="next_action" value="generate" class="btn btn-success fw-bold">
+          <i class="bi bi-file-earmark-check me-1"></i>Generate BOQ
         </button>
       </div>
     </div>
@@ -160,6 +176,7 @@
     window._boqRow = function(el) {
       var tr = el.closest('tr.boq-row');
       if (!tr) return;
+      var tick = tr.querySelector('.boq-tick');
       var desc = tr.querySelector('.boq-desc');
       var unit = tr.querySelector('.boq-unit');
       var basic = tr.querySelector('.boq-basic');
@@ -173,6 +190,8 @@
         var opt = desc.options[desc.selectedIndex];
         if (opt && opt.dataset.unit && !unit.value) unit.value = opt.dataset.unit;
         if (opt && opt.dataset.basic && !basic.value) basic.value = parseFloat(opt.dataset.basic).toFixed(2);
+        // Auto-tick when a description is picked
+        if (tick) tick.checked = true;
       }
       var b = parseFloat(basic.value || 0);
       // Supply defaults to basic if left blank; install defaults to 0.
@@ -182,31 +201,47 @@
       var r = (s + i) * rates();
       var a = q * r;
       rate.textContent = r.toFixed(2);
-      amount.textContent = a.toFixed(2);
+      amount.textContent = (tick && tick.checked) ? a.toFixed(2) : '—';
       window._boqRecalc();
     };
     window._boqRecalc = function() {
       var sum = 0;
       document.querySelectorAll('tr.boq-row').forEach(function(tr){
+        var tick = tr.querySelector('.boq-tick');
+        if (tick && !tick.checked) return;
         sum += parseFloat(tr.querySelector('.boq-amount').textContent || 0);
       });
       document.getElementById('grid_subtotal').textContent = sum.toFixed(2);
     };
+    window._boqTickAll = function(state) {
+      document.querySelectorAll('.boq-tick').forEach(function(c){ c.checked = state; });
+      document.querySelectorAll('tr.boq-row .boq-basic').forEach(function(b){ window._boqRow(b); });
+    };
+    // Recompute when tick toggles
+    document.addEventListener('change', function(e){
+      if (e.target && e.target.classList && e.target.classList.contains('boq-tick')) {
+        var tr = e.target.closest('tr.boq-row');
+        if (tr) window._boqRow(tr.querySelector('.boq-basic'));
+      }
+    });
     window._boqAddRow = function() {
       var tbody = document.getElementById('grid_body');
       var first = tbody.querySelector('tr.boq-row');
       if (!first) return;
       var clone = first.cloneNode(true);
-      // Reset values in the clone.
-      clone.querySelectorAll('input').forEach(function(i){ i.value = ''; });
+      // Reset values in the clone (except tick which defaults unticked for blank rows).
+      clone.querySelectorAll('input').forEach(function(i){
+        if (i.type === 'checkbox') { i.checked = false; }
+        else { i.value = ''; }
+      });
       var sel = clone.querySelector('select');
       if (sel) sel.selectedIndex = 0;
       clone.querySelector('.boq-rate').textContent = '0.00';
-      clone.querySelector('.boq-amount').textContent = '0.00';
+      clone.querySelector('.boq-amount').textContent = '—';
       tbody.appendChild(clone);
-      // Renumber.
+      // Renumber row index column (column 2 after the tick column).
       tbody.querySelectorAll('tr.boq-row').forEach(function(tr, idx){
-        tr.children[0].textContent = (idx + 1);
+        tr.children[1].textContent = (idx + 1);
       });
     };
     // Initial recompute (in case rows were pre-filled with values).

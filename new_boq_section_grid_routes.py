@@ -341,6 +341,17 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
     installs     = f.getlist("install_rate[]")
     specs        = f.getlist("specification[]")
     remarks_l    = f.getlist("remarks[]")
+    # tick[] contains the row indices the owner checked. row_id[] is the
+    # parallel array of indices for each rendered row so we can map ticks
+    # back to row positions. If neither is present, fall back to saving
+    # any non-empty row (legacy behaviour, pre-checkbox grid).
+    row_ids      = f.getlist("row_id[]")
+    ticked_raw   = f.getlist("tick[]")
+    ticked = set()
+    legacy_mode = not row_ids
+    for v in ticked_raw:
+        try: ticked.add(int(v))
+        except (TypeError, ValueError): pass
 
     def _row_float(arr, i):
         try:
@@ -362,6 +373,16 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
             unit = (units[i] if i < len(units) else "No.").strip() or "No."
             spec_t = (specs[i] if i < len(specs) else "").strip()
             remark = (remarks_l[i] if i < len(remarks_l) else "").strip()[:500]
+
+            # Skip unticked rows when the grid posts a tick[] array.
+            if not legacy_mode:
+                try:
+                    rid = int(row_ids[i]) if i < len(row_ids) else i
+                except (TypeError, ValueError):
+                    rid = i
+                if rid not in ticked:
+                    skipped += 1
+                    continue
 
             # Skip rows the owner left empty.
             if not desc or qty <= 0 or basic <= 0:
@@ -424,4 +445,6 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
             pid=pid, bid=bid, fid=fid, bill_no=bill_no, letter=letter,
             title=title, bill_name=bill_name, sub=subsec,
         ))
+    if nxt == "generate":
+        return redirect(url_for("boq_project_boq", pid=pid))
     return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))

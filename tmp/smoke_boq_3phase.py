@@ -429,11 +429,23 @@ with app.test_client() as c:
         sheets = []
     check("Excel has BOQ + Bills Summary sheets",
           "BOQ" in sheets and "Bills Summary" in sheets, f"sheets={sheets}")
+    # Verify the column headers say "Total Rate" (matches sample)
+    try:
+        wb_check = _xl.load_workbook(_io.BytesIO(r.data))
+        sh = wb_check["BOQ"]
+        # Header row is 5 in the export builder; scan row 5 cells.
+        header_cells = [sh.cell(row=5, column=cc).value for cc in range(1, 8)]
+    except Exception:
+        header_cells = []
+    check("Excel BOQ header includes 'Total Rate'", "Total Rate" in (header_cells or []),
+          f"got headers={header_cells}")
 
     # PDF export
     r = c.get(f"/boq-projects/{pid}/boq.pdf")
     check("project PDF export 200", r.status_code == 200)
     check("PDF mimetype is pdf", "pdf" in (r.mimetype or "").lower())
+    check("PDF starts with %PDF magic bytes", r.data[:4] == b"%PDF",
+          f"got={r.data[:16]!r}")
 
     # Email export (no backend in smoke test — should still return 302 with a flash)
     csrf = get_csrf(c, f"/boq-projects/{pid}")

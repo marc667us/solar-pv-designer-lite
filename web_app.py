@@ -19924,6 +19924,17 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
     installs     = f.getlist("install_rate[]")
     specs        = f.getlist("specification[]")
     remarks_l    = f.getlist("remarks[]")
+    # tick[] contains the row indices the owner checked. row_id[] is the
+    # parallel array of indices for each rendered row so we can map ticks
+    # back to row positions. If neither is present, fall back to saving
+    # any non-empty row (legacy behaviour, pre-checkbox grid).
+    row_ids      = f.getlist("row_id[]")
+    ticked_raw   = f.getlist("tick[]")
+    ticked = set()
+    legacy_mode = not row_ids
+    for v in ticked_raw:
+        try: ticked.add(int(v))
+        except (TypeError, ValueError): pass
 
     def _row_float(arr, i):
         try:
@@ -19945,6 +19956,16 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
             unit = (units[i] if i < len(units) else "No.").strip() or "No."
             spec_t = (specs[i] if i < len(specs) else "").strip()
             remark = (remarks_l[i] if i < len(remarks_l) else "").strip()[:500]
+
+            # Skip unticked rows when the grid posts a tick[] array.
+            if not legacy_mode:
+                try:
+                    rid = int(row_ids[i]) if i < len(row_ids) else i
+                except (TypeError, ValueError):
+                    rid = i
+                if rid not in ticked:
+                    skipped += 1
+                    continue
 
             # Skip rows the owner left empty.
             if not desc or qty <= 0 or basic <= 0:
@@ -20007,6 +20028,8 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
             pid=pid, bid=bid, fid=fid, bill_no=bill_no, letter=letter,
             title=title, bill_name=bill_name, sub=subsec,
         ))
+    if nxt == "generate":
+        return redirect(url_for("boq_project_boq", pid=pid))
     return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
 
 
@@ -20325,7 +20348,7 @@ def boq_project_xlsx(pid):
     ws["A2"] = f"Client : {project['client_name'] or '-'}"
     ws["A3"] = f"Location: {project['location'] or '-'}"
 
-    headers = ["Item", "Description", "Qty", "Unit", "Basic Rate", "Rate", "Amount"]
+    headers = ["Item", "Description", "Qty", "Unit", "Basic Rate", "Total Rate", "Amount"]
     HROW = 5
     for col, h in enumerate(headers, 1):
         c_ = ws.cell(row=HROW, column=col, value=h)
@@ -20454,7 +20477,7 @@ def _boq_project_markdown(pid: int) -> str:
             md.append("")
             md.append(f"#### BILL No. {r['bill_no'] or 0} -- {r['bill_name'] or 'OTHER'}")
             md.append("")
-            md.append("| Item | Description | Qty | Unit | Basic Rate | Rate | Amount |")
+            md.append("| Item | Description | Qty | Unit | Basic Rate | Total Rate | Amount |")
             md.append("|---|---|---|---|---|---|---|")
             prev.update({"bill": r["bill_no"] or 0, "sec": None, "sub": None})
         if (r["section_letter"] or "") != prev["sec"]:
