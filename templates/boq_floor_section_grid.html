@@ -44,10 +44,10 @@
         <tr>
           <td class="text-warning fw-bold">{{ it.item_no_display or it.item_no }}</td>
           <td>{{ it.description }}</td>
-          <td class="text-end">{{ "%.2f"|format(it.qty or 0) }}</td>
+          <td class="text-end">{{ (it.qty or 0)|fmt }}</td>
           <td>{{ it.unit }}</td>
-          <td class="text-end">{{ "%.2f"|format(it.final_built_up_rate or 0) }}</td>
-          <td class="text-end fw-bold">{{ "%.2f"|format(it.total_amount or 0) }}</td>
+          <td class="text-end">{{ (it.final_built_up_rate or 0)|fmt }}</td>
+          <td class="text-end fw-bold">{{ (it.total_amount or 0)|fmt }}</td>
         </tr>
         {% endfor %}
       </tbody>

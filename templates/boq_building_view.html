@@ -18,7 +18,7 @@
   </div>
   <div class="kpi-card" style="min-width:200px">
     <div class="kpi-label">Building subtotal</div>
-    <div class="kpi-value">{{ "%.2f"|format(building_subtotal) }}</div>
+    <div class="kpi-value">{{ (building_subtotal)|fmt }}</div>
   </div>
 </div>
 
@@ -35,7 +35,7 @@
         <td class="small text-secondary">{{ f.floor_level }}</td>
         <td class="small text-secondary">{{ f.floor_type }}</td>
         <td class="text-end">{{ f.n_items }}</td>
-        <td class="text-end fw-bold text-warning">{{ "%.2f"|format(f.subtotal or 0) }}</td>
+        <td class="text-end fw-bold text-warning">{{ (f.subtotal or 0)|fmt }}</td>
         <td class="text-end">
           <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=f.id) }}" class="btn btn-outline-warning btn-sm">Open BOQ</a>
         </td>

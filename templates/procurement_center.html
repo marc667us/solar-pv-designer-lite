@@ -143,7 +143,7 @@
             </div>
             <div class="d-flex align-items-center justify-content-between mt-2 pt-2" style="border-top:1px solid #1e1e3a">
               <div>
-                <div class="fw-black text-warning" style="font-size:16px">{{ currency }} {{ "%.2f"|format(p.price_in_currency) }}</div>
+                <div class="fw-black text-warning" style="font-size:16px">{{ currency }} {{ (p.price_in_currency)|fmt }}</div>
                 <div class="text-secondary small">/ {{ p.unit }}</div>
               </div>
               <div class="text-end small text-secondary">

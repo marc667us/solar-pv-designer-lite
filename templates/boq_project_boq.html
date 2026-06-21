@@ -139,17 +139,17 @@
               <strong>{{ r.description }}</strong>
               {% if r.specification %}<div class="small text-secondary">{{ r.specification }}</div>{% endif %}
             </td>
-            <td class="text-end">{{ "%.2f"|format(r.qty or 0) }}</td>
+            <td class="text-end">{{ (r.qty or 0)|fmt }}</td>
             <td class="small">{{ r.unit }}</td>
-            <td class="text-end">{{ "%.2f"|format(r.basic_price or 0) }}</td>
-            <td class="text-end">{{ "%.2f"|format(r.supply_rate or 0) }}</td>
-            <td class="text-end">{{ "%.2f"|format(r.install_rate or 0) }}</td>
-            <td class="text-end">{{ "%.2f"|format(r.overhead_pct or 0) }}%</td>
-            <td class="text-end">{{ "%.2f"|format(r.profit_pct or 0) }}%</td>
-            <td class="text-end">{{ "%.2f"|format(r.contingency_pct or 0) }}%</td>
-            <td class="text-end">{{ "%.2f"|format(r.vat_pct or 0) }}%</td>
-            <td class="text-end fw-bold text-warning">{{ "%.2f"|format(r.final_built_up_rate or 0) }}</td>
-            <td class="text-end fw-bold">{{ "%.2f"|format(r.total_amount or 0) }}</td>
+            <td class="text-end">{{ (r.basic_price or 0)|fmt }}</td>
+            <td class="text-end">{{ (r.supply_rate or 0)|fmt }}</td>
+            <td class="text-end">{{ (r.install_rate or 0)|fmt }}</td>
+            <td class="text-end">{{ (r.overhead_pct or 0)|fmt }}%</td>
+            <td class="text-end">{{ (r.profit_pct or 0)|fmt }}%</td>
+            <td class="text-end">{{ (r.contingency_pct or 0)|fmt }}%</td>
+            <td class="text-end">{{ (r.vat_pct or 0)|fmt }}%</td>
+            <td class="text-end fw-bold text-warning">{{ (r.final_built_up_rate or 0)|fmt }}</td>
+            <td class="text-end fw-bold">{{ (r.total_amount or 0)|fmt }}</td>
           </tr>
           {% else %}
           <tr>
@@ -158,13 +158,13 @@
               <strong>{{ r.description }}</strong>
               {% if r.specification %}<div class="small text-secondary">{{ r.specification }}</div>{% endif %}
             </td>
-            <td class="text-end">{{ "%.2f"|format(r.qty or 0) }}</td>
+            <td class="text-end">{{ (r.qty or 0)|fmt }}</td>
             <td class="small">{{ r.unit }}</td>
-            <td class="text-end">{{ "%.2f"|format(r.basic_price or 0) }}</td>
-            <td class="text-end">{{ "%.2f"|format(r.supply_rate or r.basic_price or 0) }}</td>
-            <td class="text-end">{{ "%.2f"|format(r.install_rate or 0) }}</td>
-            <td class="text-end">{{ "%.2f"|format(r.final_built_up_rate or 0) }}</td>
-            <td class="text-end fw-bold text-warning">{{ "%.2f"|format(r.total_amount or 0) }}</td>
+            <td class="text-end">{{ (r.basic_price or 0)|fmt }}</td>
+            <td class="text-end">{{ (r.supply_rate or r.basic_price or 0)|fmt }}</td>
+            <td class="text-end">{{ (r.install_rate or 0)|fmt }}</td>
+            <td class="text-end">{{ (r.final_built_up_rate or 0)|fmt }}</td>
+            <td class="text-end fw-bold text-warning">{{ (r.total_amount or 0)|fmt }}</td>
           </tr>
           {% endif %}
         {% endfor %}
@@ -173,10 +173,10 @@
         <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
           {% if internal %}
           <td colspan="12" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
-          <td class="text-end fw-black text-warning" style="font-size:16px">{{ "%.2f"|format(grand.v) }}</td>
+          <td class="text-end fw-black text-warning" style="font-size:16px">{{ (grand.v)|fmt }}</td>
           {% else %}
           <td colspan="8" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
-          <td class="text-end fw-black text-warning" style="font-size:18px">{{ "%.2f"|format(grand.v) }}</td>
+          <td class="text-end fw-black text-warning" style="font-size:18px">{{ (grand.v)|fmt }}</td>
           {% endif %}
         </tr>
       </tfoot>

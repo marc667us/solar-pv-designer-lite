@@ -20,9 +20,9 @@
         <div>
           <div class="text-secondary small" style="text-transform:uppercase;letter-spacing:.5px">Unit Price</div>
           <div class="fw-black text-warning" style="font-size:32px">
-            {{ currency }} {{ "%.2f"|format(product.price_in_currency or 0) }}
+            {{ currency }} {{ (product.price_in_currency or 0)|fmt }}
           </div>
-          <div class="text-secondary small">/ {{ product.unit or 'No.' }}{% if currency != 'USD' %} · ref USD {{ "%.2f"|format(product.price_usd or 0) }}{% endif %}</div>
+          <div class="text-secondary small">/ {{ product.unit or 'No.' }}{% if currency != 'USD' %} · ref USD {{ (product.price_usd or 0)|fmt }}{% endif %}</div>
         </div>
         <div class="text-end">
           <div class="text-secondary small" style="text-transform:uppercase;letter-spacing:.5px">Lead time</div>

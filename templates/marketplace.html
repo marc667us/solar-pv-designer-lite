@@ -154,8 +154,8 @@
           {% endif %}
         </div>
         <div class="text-end">
-          <div class="fw-black text-warning" style="font-size:18px">{{ currency }} {{ "%.2f"|format(p.price_in_currency or 0) }}</div>
-          <div class="text-secondary small">/ {{ p.unit }}{% if currency != 'USD' %} · ref USD {{ "%.2f"|format(p.price_usd or 0) }}{% endif %}</div>
+          <div class="fw-black text-warning" style="font-size:18px">{{ currency }} {{ (p.price_in_currency or 0)|fmt }}</div>
+          <div class="text-secondary small">/ {{ p.unit }}{% if currency != 'USD' %} · ref USD {{ (p.price_usd or 0)|fmt }}{% endif %}</div>
         </div>
       </div>
       {% if p.spec %}

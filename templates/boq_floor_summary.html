@@ -40,23 +40,23 @@
       <tr>
         <td class="text-secondary">{{ loop.index }}</td>
         <td><strong>BILL No. {{ b.bill_no }} — {{ b.bill_name }}</strong></td>
-        <td class="text-end">{{ "%.2f"|format(b.subtotal) }}</td>
+        <td class="text-end">{{ (b.subtotal)|fmt }}</td>
       </tr>
       {% endfor %}
       <tr>
         <td></td>
         <td class="fw-bold" style="border-top:1px solid #1e1e3a">SUB TOTAL</td>
-        <td class="text-end fw-bold" style="border-top:1px solid #1e1e3a">{{ "%.2f"|format(subtotal) }}</td>
+        <td class="text-end fw-bold" style="border-top:1px solid #1e1e3a">{{ (subtotal)|fmt }}</td>
       </tr>
       <tr>
         <td></td>
-        <td>CONTINGENCIES ({{ "%.2f"|format(contingency_pct) }}%)</td>
-        <td class="text-end">{{ "%.2f"|format(contingency) }}</td>
+        <td>CONTINGENCIES ({{ (contingency_pct)|fmt }}%)</td>
+        <td class="text-end">{{ (contingency)|fmt }}</td>
       </tr>
       <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
         <td></td>
         <td class="fw-black" style="font-size:15px">Total carried to General Summary</td>
-        <td class="text-end fw-black text-warning" style="font-size:17px">{{ "%.2f"|format(carried) }}</td>
+        <td class="text-end fw-black text-warning" style="font-size:17px">{{ (carried)|fmt }}</td>
       </tr>
     </tbody>
   </table>

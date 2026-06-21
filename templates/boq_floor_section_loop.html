@@ -40,11 +40,11 @@
         <tr>
           <td class="text-warning fw-bold">{{ it.item_no_display or it.item_no }}</td>
           <td>{{ it.description }}{% if it.specification %}<div class="small text-secondary">{{ it.specification }}</div>{% endif %}</td>
-          <td class="text-end">{{ "%.2f"|format(it.qty or 0) }}</td>
+          <td class="text-end">{{ (it.qty or 0)|fmt }}</td>
           <td class="small">{{ it.unit }}</td>
           <td class="text-end">{# basic rate captured in rate-buildup, displayed approximately as final/markup #}—</td>
-          <td class="text-end">{{ "%.2f"|format(it.final_built_up_rate or 0) }}</td>
-          <td class="text-end fw-bold">{{ "%.2f"|format(it.total_amount or 0) }}</td>
+          <td class="text-end">{{ (it.final_built_up_rate or 0)|fmt }}</td>
+          <td class="text-end fw-bold">{{ (it.total_amount or 0)|fmt }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -76,7 +76,7 @@
                   data-spec="{{ c.spec or '' }}"
                   data-unit="{{ c.unit or 'No.' }}"
                   data-price="{{ c.price_usd or 0 }}">
-            {{ c.name }}{% if c.brand %} · {{ c.brand }}{% endif %}{% if c.model %} {{ c.model }}{% endif %} ({{ c.unit or 'No.' }}, basic {{ "%.2f"|format(c.price_usd or 0) }})
+            {{ c.name }}{% if c.brand %} · {{ c.brand }}{% endif %}{% if c.model %} {{ c.model }}{% endif %} ({{ c.unit or 'No.' }}, basic {{ (c.price_usd or 0)|fmt }})
           </option>
           {% endfor %}
         </select>

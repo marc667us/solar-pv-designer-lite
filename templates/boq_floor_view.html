@@ -29,7 +29,7 @@
 
 <div class="kpi-card mb-3" style="max-width:300px">
   <div class="kpi-label">Floor subtotal (before contingency)</div>
-  <div class="kpi-value">{{ "%.2f"|format(floor_subtotal) }}</div>
+  <div class="kpi-value">{{ (floor_subtotal)|fmt }}</div>
 </div>
 
 {# ─── BOQ items grouped by Bill -> Section -> Sub-section ───────── #}
@@ -98,11 +98,11 @@
           {{ it.description }}
           {% if it.specification %}<div class="small text-secondary">{{ it.specification }}</div>{% endif %}
         </td>
-        <td class="text-end">{{ "%.2f"|format(it.qty or 0) }}</td>
+        <td class="text-end">{{ (it.qty or 0)|fmt }}</td>
         <td class="small">{{ it.unit }}</td>
-        <td class="text-end">{{ "%.2f"|format(it.bu_basic or 0) }}</td>
-        <td class="text-end">{{ "%.2f"|format(it.final_built_up_rate or 0) }}</td>
-        <td class="text-end fw-bold text-warning">{{ "%.2f"|format(it.total_amount or 0) }}</td>
+        <td class="text-end">{{ (it.bu_basic or 0)|fmt }}</td>
+        <td class="text-end">{{ (it.final_built_up_rate or 0)|fmt }}</td>
+        <td class="text-end fw-bold text-warning">{{ (it.total_amount or 0)|fmt }}</td>
         <td class="text-end" style="white-space:nowrap">
           <form method="POST" action="{{ url_for('boq_floor_move_item', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" style="display:inline">
             <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
