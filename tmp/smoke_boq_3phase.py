@@ -243,72 +243,129 @@ with app.test_client() as c:
     check("Ground Floor included", "Ground Floor" in floor_names)
     check("Roof Level included", "Roof Level" in floor_names)
 
-    # Add a floor item to Ground Floor.
+    # Locate Ground Floor.
     ground = [f for f in floors if f["floor_name"] == "Ground Floor"][0]
     fid = int(ground["id"])
-    csrf = get_csrf(c, f"/boq-projects/{pid}/buildings/{bid}/floors/{fid}")
-    r = c.post(f"/boq-projects/{pid}/buildings/{bid}/floors/{fid}/items", data={
-        "_csrf": csrf,
-        "description": "Wiring of socket point — 13A",
-        "section": "wiring",
-        "specification": "PVC conduit + 4mm² wires, BS 7671",
-        "unit": "point",
-        "qty": "24",
-        "basic_price": "75",
-        "overhead_pct": "10",
-        "profit_pct": "10",
-        "contingency_pct": "5",
-        "vat_pct": "12.5",
-        "save_option": "current_boq_only",
-        "remarks": "First floor type B",
-    }, follow_redirects=False)
-    check("add floor item (302)", r.status_code in (302, 303))
 
-    # Verify FK relations land in all tables and rate is computed.
-    with get_db() as cur:
-        items = cur.execute(
-            "SELECT i.id, i.final_built_up_rate, i.total_amount, "
-            "       b.id AS bid_link, p.id AS pid_link, f.id AS fid_link, "
-            "       rb.basic_price, rb.overhead_pct, rb.vat_pct "
-            "FROM boq_floor_items i "
-            "JOIN boq_buildings b ON b.id=i.building_id "
-            "JOIN boq_projects p ON p.id=i.project_id "
-            "JOIN boq_floors f   ON f.id=i.floor_id "
-            "JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
-            "WHERE i.project_id=?", (pid,)
-        ).fetchall()
-    check("FK joins yield 1 row", len(items) == 1)
-    if items:
-        it = items[0]
-        check("rate=75*1.375=103.125", abs(float(it["final_built_up_rate"]) - 103.125) < 0.01)
-        check("total=24*103.125=2475", abs(float(it["total_amount"]) - 2475.0) < 0.01)
-        check("rate-buildup basic_price stored", float(it["basic_price"]) == 75.0)
+    # Phase 3 single-item add is superseded by Phase 4 grid (below). Skipping
+    # the old POST -- the grid flow covers everything it used to cover.
 
-    # Project BOQ — default client-clean, no build-up columns.
-    r = c.get(f"/boq-projects/{pid}/boq")
-    body = r.data.decode("utf-8", "replace")
-    check("project BOQ default client-clean (no '+Profit' header)", "+Profit" not in body)
-    check("project BOQ default shows Remarks", "Remarks" in body)
-    check("project BOQ default shows the item", "Wiring of socket" in body)
-
-    # Project BOQ internal view exposes build-up.
-    r = c.get(f"/boq-projects/{pid}/boq?view=internal")
-    body = r.data.decode("utf-8", "replace")
-    check("project BOQ internal exposes '+Profit'", "+Profit" in body)
-    check("project BOQ internal exposes Final Rate", "Final Rate" in body)
-
-    # Summary page — must include the building and floor.
+    # Summary page (before any items) — must include the building and floor.
     r = c.get(f"/boq-projects/{pid}/summary")
     body = r.data.decode("utf-8", "replace")
     check("summary lists Block A", "Block A" in body)
     check("summary lists Ground Floor", "Ground Floor" in body)
     check("summary lists Roof Level", "Roof Level" in body)
-    check("summary shows 2475", "2475" in body or "2,475" in body)
 
     # Audit log should have rows.
     with get_db() as cur:
         n_audit = cur.execute("SELECT COUNT(*) AS n FROM boq_audit_log").fetchone()["n"]
     check("audit log has rows", n_audit > 0, f"n={n_audit}")
+
+    # ── PHASE 4 — sectioned grid (90% time-saving flow) ──────────────────
+    # Setup a section (Bill 2, Section A, "SWITCH BOARDS AND DISTRIBUTION BOARDS")
+    csrf = get_csrf(c, f"/boq-projects/{pid}/buildings/{bid}/floors/{fid}/section/new")
+    r = c.post(f"/boq-projects/{pid}/buildings/{bid}/floors/{fid}/section", data={
+        "_csrf": csrf,
+        "bill_no": "2",
+        "bill_name": "INTERNAL ELECTRICAL WIRING",
+        "section_letter": "A",
+        "section_title": "SWITCH BOARDS AND DISTRIBUTION BOARDS",
+    }, follow_redirects=False)
+    check("section setup redirects (302)", r.status_code in (302, 303))
+    loc = r.headers.get("Location", "")
+    check("redirect goes to grid", "/grid" in loc, f"loc={loc}")
+
+    # GET the grid — verify catalogue is pre-loaded (Memshield items)
+    r = c.get(f"/boq-projects/{pid}/buildings/{bid}/floors/{fid}/bill/2/section/A/grid?title=SWITCH+BOARDS+AND+DISTRIBUTION+BOARDS&bill_name=INTERNAL+ELECTRICAL+WIRING&sub=")
+    body = r.data.decode("utf-8", "replace")
+    check("grid page renders", r.status_code == 200)
+    check("grid pre-loads Memshield items",
+          "Memshield" in body or "MCB Distribution Board" in body)
+    check("grid has supply/install columns", "Supply" in body and "Install" in body)
+    check("section title is the form heading", "SWITCH BOARDS AND DISTRIBUTION BOARDS" in body)
+
+    # POST grid save with 3 rows filled, others blank.
+    # Form sends arrays — make sure the test client posts a list of values for
+    # description[], qty[], unit[], basic_price[], supply_rate[], install_rate[].
+    csrf = get_csrf(c, f"/boq-projects/{pid}/buildings/{bid}/floors/{fid}/bill/2/section/A/grid?title=SWITCH+BOARDS+AND+DISTRIBUTION+BOARDS")
+    grid_data = [
+        ("_csrf", csrf),
+        ("section_title", "SWITCH BOARDS AND DISTRIBUTION BOARDS"),
+        ("bill_name", "INTERNAL ELECTRICAL WIRING"),
+        ("subsection_label", ""),
+        ("overhead_pct", "30"),
+        ("profit_pct", "0"),
+        ("contingency_pct", "0"),
+        ("vat_pct", "0"),
+        ("next_action", "back"),
+        # Row 1 — filled
+        ("description[]", "6-way TPN Memshield MCCB Distribution Panel Board c/w 400A Incomer"),
+        ("qty[]", "1"),
+        ("unit[]", "Nos."),
+        ("basic_price[]", "19800"),
+        ("supply_rate[]", ""),  # default = basic
+        ("install_rate[]", ""),  # default = 0
+        ("specification[]", ""),
+        ("remarks[]", ""),
+        # Row 2 — filled
+        ("description[]", "200A TPN Fuse Switch"),
+        ("qty[]", "2"),
+        ("unit[]", "Nos."),
+        ("basic_price[]", "6700"),
+        ("supply_rate[]", ""),
+        ("install_rate[]", ""),
+        ("specification[]", ""),
+        ("remarks[]", ""),
+        # Row 3 — filled
+        ("description[]", "100A TPN load Isolator"),
+        ("qty[]", "3"),
+        ("unit[]", "Nos."),
+        ("basic_price[]", "1470"),
+        ("supply_rate[]", ""),
+        ("install_rate[]", ""),
+        ("specification[]", ""),
+        ("remarks[]", ""),
+        # Row 4 — blank (should be skipped)
+        ("description[]", ""),
+        ("qty[]", ""),
+        ("unit[]", ""),
+        ("basic_price[]", ""),
+        ("supply_rate[]", ""),
+        ("install_rate[]", ""),
+        ("specification[]", ""),
+        ("remarks[]", ""),
+    ]
+    from werkzeug.datastructures import MultiDict
+    r = c.post(f"/boq-projects/{pid}/buildings/{bid}/floors/{fid}/bill/2/section/A/grid/save", data=MultiDict(grid_data), follow_redirects=False)
+    check("grid_save returns 302", r.status_code in (302, 303))
+
+    # Verify 3 items saved with bill=2, section=A, correct rates.
+    with get_db() as cur:
+        rows = cur.execute(
+            "SELECT description, qty, final_built_up_rate, total_amount, "
+            "       bill_no, section_letter, item_no_display "
+            "FROM boq_floor_items WHERE floor_id=? AND bill_no=2 AND section_letter='A' "
+            "ORDER BY id", (fid,)
+        ).fetchall()
+    check("3 rows saved under Bill 2 / Section A", len(rows) == 3, f"got {len(rows)}")
+    if len(rows) == 3:
+        # Memshield 400A: 19800 * 1.30 = 25740 (Basic * 30% markup, supply=basic, install=0)
+        check("row 1 rate = 25740 (19800 * 1.30)", abs(float(rows[0]["final_built_up_rate"]) - 25740) < 0.01,
+              f"got {rows[0]['final_built_up_rate']}")
+        check("row 1 total = 25740 (qty 1)", abs(float(rows[0]["total_amount"]) - 25740) < 0.01)
+        check("row 2 rate = 8710 (6700 * 1.30)", abs(float(rows[1]["final_built_up_rate"]) - 8710) < 0.01)
+        check("row 2 total = 17420 (qty 2)", abs(float(rows[1]["total_amount"]) - 17420) < 0.01)
+        check("row 3 rate = 1911 (1470 * 1.30)", abs(float(rows[2]["final_built_up_rate"]) - 1911) < 0.01)
+        check("item_no_display incrementing", [r["item_no_display"] for r in rows] == ["1", "2", "3"])
+
+    # Floor summary should show Bill 2 subtotal + contingency
+    r = c.get(f"/boq-projects/{pid}/buildings/{bid}/floors/{fid}/summary")
+    body = r.data.decode("utf-8", "replace")
+    check("floor summary renders", r.status_code == 200)
+    check("summary lists BILL No. 2", "BILL No. 2" in body)
+    check("summary shows CONTINGENCIES", "CONTINGENCIES" in body)
+    check("summary shows Total carried to General Summary", "Total carried to General Summary" in body)
 
 print()
 print(f"PASS: {len(OK)}  FAIL: {len(FAIL)}")

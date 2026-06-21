@@ -10,7 +10,7 @@
 
 <div class="solar-card p-4">
   <div class="text-secondary small mb-3" style="border-left:3px solid var(--solar-gold);padding-left:10px">
-    <strong>Master prompt §3:</strong> Building purpose is mandatory before floors can be configured. Pick a primary purpose, then a subtype — purpose drives the BOQ section recommendations.
+    <strong>Building purpose</strong> is mandatory before floors can be configured. Pick a primary purpose, then a subtype — purpose drives the BOQ section recommendations.
   </div>
 
   <form method="POST">
@@ -61,7 +61,7 @@
       <div class="col-md-4 mt-4">
         <label class="form-label small text-secondary">Number of floors *</label>
         <input type="number" min="1" max="50" step="1" class="form-control" name="number_of_floors" value="1" required>
-        <div class="text-secondary small mt-1">One-floor → Ground Floor auto-created (spec §5).</div>
+        <div class="text-secondary small mt-1">One-floor → Ground Floor auto-created.</div>
       </div>
       <div class="col-md-4 mt-4">
         <label class="form-label small text-secondary">Optional levels</label>
@@ -77,7 +77,7 @@
 </div>
 
 <script>
-  // Master prompt §4: subtype dropdown is filtered by chosen primary purpose.
+  // subtype dropdown is filtered by chosen primary purpose.
   window._boqSubtypes = {{ subtypes|tojson }};
   window._boqSetSubs = function(primary) {
     var sel = document.getElementById("purpose_subtype");

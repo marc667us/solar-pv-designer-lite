@@ -18860,7 +18860,9 @@ def boq_floor_view(pid, bid, fid):
             "       b.vat_pct AS bu_vat "
             "FROM boq_floor_items i "
             "LEFT JOIN boq_floor_rate_buildup b ON b.floor_item_id=i.id "
-            "WHERE i.floor_id=? ORDER BY i.section, i.id",
+            "WHERE i.floor_id=? "
+            "ORDER BY COALESCE(i.bill_no,0), COALESCE(i.section_letter,''), "
+            "         COALESCE(NULLIF(i.item_no_display,''),'0'), i.id",
             (fid,),
         ).fetchall()
         subtotal_row = c.execute(
@@ -19027,7 +19029,9 @@ def boq_project_boq(pid):
             "JOIN boq_floors    f ON f.id=i.floor_id "
             "LEFT JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
             "WHERE i.project_id=? "
-            "ORDER BY b.id, f.floor_level, i.section, i.id",
+            "ORDER BY b.id, f.floor_level, COALESCE(i.bill_no,0), "
+            "         COALESCE(i.section_letter,''), "
+            "         COALESCE(NULLIF(i.item_no_display,''),'0'), i.id",
             (pid,),
         ).fetchall()
     if internal_view:
@@ -19079,6 +19083,931 @@ def boq_project_summary(pid):
                            per_building=per_building,
                            per_floor=per_floor,
                            grand_total=grand_total)
+
+
+# new_boq_section_loop_routes.py
+# 2026-06-21 -- Sectioned BOQ workflow patterned after the
+# 1UGLS Auditorium sample.
+#
+# Real BOQ shape:
+#   Floor -> BILL No. N (Preliminaries / Internal Wiring / Bonding & Earthing /
+#            Fire Alarm / Data & Voice / Signal Comms / ...)
+#     -> Section letter (A / B / C / ...) with section title
+#       -> Optional sub-section label (I / II / III, e.g.
+#          "I. Light and fan points")
+#         -> Items 1, 2, 3, ... with Item No / Description / Qty /
+#            Unit / Basic Rate / Rate / Amount
+#
+# Workflow:
+#   1. From the floor page, "Open new section" -> section setup form
+#      (picks Bill No, Section letter, Section name from a dropdown of
+#      the standard 16 sections, optional sub-section label).
+#   2. Section setup posts and redirects into the item-add LOOP page
+#      whose heading is the section title. The user adds items in a
+#      tight loop: pick from the catalogue dropdown or type a custom
+#      line, set qty + basic rate, hit "Add & continue".
+#   3. When the section is done, click "End section" -> back to the
+#      floor view with the new section rendered.
+#   4. Repeat for the next section in the same Bill, then move to the
+#      next Bill, then the next floor.
+#
+# Floor Bills Summary (page accessible from floor view):
+#   - Per-bill subtotals (BILL No. 1 PRELIMINARIES -> total, ...)
+#   - SUBTOTAL across bills
+#   - CONTINGENCIES at the floor contingency_pct (default 10)
+#   - Total carried to General Summary  (per the sample wording)
+
+# ----- Standard taxonomy ---------------------------------------------------
+
+# Standard Bills used in electrical installation BOQs.
+_BOQ_BILLS = [
+    (1,  "PRELIMINARIES"),
+    (2,  "INTERNAL ELECTRICAL WIRING"),
+    (3,  "BONDING AND EARTHING"),
+    (4,  "FIRE ALARM SYSTEM"),
+    (5,  "DATA AND VOICE COMMUNICATIONS"),
+    (6,  "SIGNAL COMMUNICATION SYSTEMS"),
+    (7,  "LIGHTNING PROTECTION"),
+    (8,  "EXTERNAL LIGHTING"),
+    (9,  "SOLAR PV SYSTEM"),
+    (10, "GENERATOR AND UPS"),
+    (11, "TESTING AND COMMISSIONING"),
+    (12, "DOCUMENTATION AND HANDOVER"),
+]
+
+# Common Section titles per Bill -- shown as a dropdown when opening a
+# new section. The user can still override with a free-text title.
+_BOQ_SECTION_TITLES = {
+    1: [
+        "Preliminary Items",
+        "Site Establishment",
+        "Insurance and Indemnities",
+        "Mobilisation and Demobilisation",
+    ],
+    2: [
+        "SWITCH BOARDS AND DISTRIBUTION BOARDS",
+        "SUBFEEDER CABLES AND EARTHLEADS",
+        "WIRING OF POINTS",
+        "LUMINAIRES",
+        "ACCESSORIES",
+    ],
+    3: [
+        "BONDING AND EARTHING",
+        "EARTH ELECTRODE NETWORK",
+        "EQUIPOTENTIAL BONDING",
+    ],
+    4: [
+        "WIRING OF FIRE POINTS",
+        "FIRE PANEL AND ACCESSORIES",
+        "EMERGENCY LIGHTING",
+    ],
+    5: [
+        "WIRING OF POINTS",
+        "DATA EQUIPMENT AND ACCESSORIES",
+        "VOICE EQUIPMENT AND ACCESSORIES",
+        "STRUCTURED CABLING",
+    ],
+    6: [
+        "SMALL SIGNAL IP NETWORK",
+        "EQUIPMENT AND ACCESSORIES",
+        "CCTV SYSTEM",
+        "ACCESS CONTROL",
+        "PUBLIC ADDRESS SYSTEM",
+    ],
+    7: [
+        "AIR TERMINATION NETWORK",
+        "DOWN CONDUCTORS",
+        "EARTH TERMINATION",
+    ],
+    8: [
+        "POLES AND FITTINGS",
+        "STREET LIGHTING LUMINAIRES",
+        "EXTERNAL CABLES",
+    ],
+    9: [
+        "PV MODULES AND MOUNTING",
+        "INVERTERS",
+        "BATTERIES AND CHARGE CONTROL",
+        "DC AND AC PROTECTION",
+        "STRING CABLING",
+    ],
+    10: [
+        "GENERATOR SET",
+        "AUTOMATIC TRANSFER SWITCH",
+        "UPS UNIT",
+        "FUEL AND EXHAUST",
+    ],
+    11: [
+        "MAIN INSTALLATION TESTING",
+        "EARTHING SYSTEM TESTING",
+        "INSULATION TESTING",
+        "FUNCTIONAL COMMISSIONING",
+    ],
+    12: [
+        "AS-BUILT DRAWINGS",
+        "TEST CERTIFICATES",
+        "OPERATION AND MAINTENANCE MANUAL",
+        "TRAINING",
+    ],
+}
+
+
+def _boq_bills_dropdown():
+    return [{"no": n, "name": name} for n, name in _BOQ_BILLS]
+
+
+def _boq_lookup_bill_name(bill_no: int) -> str:
+    for n, name in _BOQ_BILLS:
+        if n == bill_no:
+            return name
+    return ""
+
+
+def _boq_section_titles_for_bill(bill_no: int) -> list:
+    return list(_BOQ_SECTION_TITLES.get(bill_no, []))
+
+
+def _boq_next_section_letter(floor_id: int, bill_no: int) -> str:
+    """Return the next available letter (A, B, C, ...) for the given
+    floor + bill. Letters are scoped per Bill within a Floor so each
+    Bill restarts at A."""
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT DISTINCT section_letter FROM boq_floor_items "
+            "WHERE floor_id=? AND bill_no=? AND section_letter != '' "
+            "ORDER BY section_letter",
+            (floor_id, bill_no),
+        ).fetchall()
+    used = {(r["section_letter"] or "").strip().upper() for r in rows}
+    for ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+        if ch not in used:
+            return ch
+    return "Z"
+
+
+def _boq_next_item_no(floor_id: int, bill_no: int, section_letter: str) -> str:
+    """Return next item number ('1', '2', ...) within the section."""
+    with get_db() as c:
+        row = c.execute(
+            "SELECT COALESCE(MAX(CAST(item_no_display AS INTEGER)),0) AS n "
+            "FROM boq_floor_items "
+            "WHERE floor_id=? AND bill_no=? AND section_letter=?",
+            (floor_id, bill_no, section_letter),
+        ).fetchone()
+    return str(int((row["n"] if row else 0) or 0) + 1)
+
+
+def _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat):
+    """Spec rate build-up: final = (supply + install) * (1 + sum_pct/100).
+    Supply defaults to basic; install defaults to 0."""
+    b = max(0.0, float(basic or 0))
+    s = max(0.0, float(supply if supply not in (None, "") else b))
+    i = max(0.0, float(install if install not in (None, "") else 0))
+    tot = (float(oh or 0) + float(prf or 0) + float(cnt or 0) + float(vat or 0))
+    return (s + i) * (1.0 + tot / 100.0)
+
+
+# ----- Routes --------------------------------------------------------------
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/section/new", methods=["GET"])
+@login_required
+def boq_section_setup(pid, bid, fid):
+    """Section setup form. Owner picks Bill, Section letter (default
+    next free), Section title (dropdown of standards filtered by bill,
+    plus 'Other' free text), and optional sub-section label."""
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    building = _boq_building_owned_or_404(bid, pid)
+    floor = _boq_floor_owned_or_404(fid, bid)
+
+    # Default Bill 2 (Internal Electrical Wiring) -- most common starting point.
+    bill_no = request.args.get("bill_no", type=int) or 2
+    bill_name = _boq_lookup_bill_name(bill_no)
+    next_letter = _boq_next_section_letter(fid, bill_no)
+    return render_template(
+        "boq_floor_section_setup.html",
+        user=current_user(),
+        project=project, building=building, floor=floor,
+        bills=_boq_bills_dropdown(),
+        bill_no=bill_no, bill_name=bill_name,
+        next_letter=next_letter,
+        section_titles=_boq_section_titles_for_bill(bill_no),
+    )
+
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/section", methods=["POST"])
+@login_required
+def boq_section_open(pid, bid, fid):
+    """Accept the section setup form, then redirect into the item-loop
+    page. We don't persist a 'section' record on its own -- the (bill_no,
+    section_letter, section_title) tuple lives on each item row. That
+    keeps the schema simple: a section 'exists' iff at least one item
+    has been added under it."""
+    uid = session["user_id"]
+    _boq_project_owned_or_404(pid, uid)
+    _boq_building_owned_or_404(bid, pid)
+    _boq_floor_owned_or_404(fid, bid)
+    csrf_protect()
+    f = request.form
+    try:
+        bill_no = int(f.get("bill_no") or 0)
+    except ValueError:
+        bill_no = 0
+    if bill_no < 1:
+        flash("Pick a Bill No. for this section.", "warning")
+        return redirect(url_for("boq_section_setup", pid=pid, bid=bid, fid=fid))
+    bill_name = (f.get("bill_name") or _boq_lookup_bill_name(bill_no)).strip()[:120]
+    letter = (f.get("section_letter") or _boq_next_section_letter(fid, bill_no)).strip().upper()[:8]
+    title  = (f.get("section_title") or "").strip()[:160]
+    if not title:
+        flash("Pick or enter a section title.", "warning")
+        return redirect(url_for("boq_section_setup", pid=pid, bid=bid, fid=fid, bill_no=bill_no))
+    subsec = (f.get("subsection_label") or "").strip()[:20]
+    # Default flow = grid (bulk auto-populated from section catalogue, 90% faster).
+    return redirect(url_for(
+        "boq_section_grid",
+        pid=pid, bid=bid, fid=fid,
+        bill_no=bill_no, letter=letter,
+        title=title, bill_name=bill_name, sub=subsec,
+    ))
+
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/bill/<int:bill_no>/section/<letter>", methods=["GET"])
+@login_required
+def boq_section_loop(pid, bid, fid, bill_no, letter):
+    """Item-add LOOP for a section. The page heading is the section
+    title. The user adds items one after the other; each Add posts to
+    boq_section_add_item and redirects back here so the loop continues
+    without leaving the URL. 'End section' returns to the floor view."""
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    building = _boq_building_owned_or_404(bid, pid)
+    floor = _boq_floor_owned_or_404(fid, bid)
+    letter = (letter or "").upper()[:8]
+    title = (request.args.get("title") or "").strip()[:160]
+    bill_name = (request.args.get("bill_name") or _boq_lookup_bill_name(bill_no)).strip()[:120]
+    subsec = (request.args.get("sub") or "").strip()[:20]
+    if not title:
+        # If user landed here without a title, fall back to the bill name.
+        title = bill_name
+
+    # Existing items in this section -- show them on top so the user
+    # can see what's been added in the loop so far.
+    with get_db() as c:
+        items = c.execute(
+            "SELECT * FROM boq_floor_items "
+            "WHERE floor_id=? AND bill_no=? AND section_letter=? "
+            "ORDER BY id",
+            (fid, bill_no, letter),
+        ).fetchall()
+
+    # Catalogue dropdown -- restrict to active, public-visible products.
+    # User can still type a custom item if none match.
+    with get_db() as c:
+        catalogue = c.execute(
+            "SELECT id, name, brand, model, spec, unit, price_usd "
+            "FROM equipment_catalog "
+            "WHERE COALESCE(is_active,1)=1 "
+            "  AND COALESCE(is_public_visible,1)=1 "
+            "ORDER BY name LIMIT 400"
+        ).fetchall()
+
+    next_item_no = _boq_next_item_no(fid, bill_no, letter)
+
+    return render_template(
+        "boq_floor_section_loop.html",
+        user=current_user(),
+        project=project, building=building, floor=floor,
+        bill_no=bill_no, bill_name=bill_name,
+        section_letter=letter, section_title=title,
+        subsection_label=subsec,
+        items=items,
+        catalogue=catalogue,
+        next_item_no=next_item_no,
+    )
+
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/bill/<int:bill_no>/section/<letter>/items", methods=["POST"])
+@login_required
+def boq_section_add_item(pid, bid, fid, bill_no, letter):
+    """Append one item to the open section, redirect back to the loop
+    URL so the user can keep adding."""
+    uid = session["user_id"]
+    _boq_project_owned_or_404(pid, uid)
+    _boq_building_owned_or_404(bid, pid)
+    _boq_floor_owned_or_404(fid, bid)
+    csrf_protect()
+    f = request.form
+    letter = (letter or "").upper()[:8]
+    title    = (f.get("section_title") or "").strip()[:160]
+    bill_name= (f.get("bill_name")     or _boq_lookup_bill_name(bill_no)).strip()[:120]
+    subsec   = (f.get("subsection_label") or "").strip()[:20]
+
+    def _num(name, default=0.0):
+        try:
+            v = f.get(name, "")
+            return float(v) if v not in (None, "",) else float(default)
+        except (TypeError, ValueError):
+            return float(default)
+
+    def _pct(name):
+        return max(0.0, min(100.0, _num(name, 0.0)))
+
+    # Catalogue pick OR free text. catalogue_id=0 means free text.
+    try:
+        catalogue_id = int(f.get("catalogue_id") or 0)
+    except ValueError:
+        catalogue_id = 0
+    desc_override = (f.get("description") or "").strip()[:500]
+    unit          = (f.get("unit") or "").strip()[:20]
+    spec_override = (f.get("specification") or "").strip()
+    basic         = max(0.0, _num("basic_price", 0.0))
+    qty           = max(0.0, _num("qty", 1.0))
+
+    # If catalogue line was picked, fill in description / unit / basic
+    # from the catalogue when those fields were left blank.
+    if catalogue_id > 0:
+        with get_db() as c:
+            row = c.execute(
+                "SELECT name, spec, unit, price_usd FROM equipment_catalog WHERE id=?",
+                (catalogue_id,),
+            ).fetchone()
+        if row:
+            desc_override = desc_override or (row["name"] or "")
+            spec_override = spec_override or (row["spec"] or "")
+            unit          = unit or (row["unit"] or "No.")
+            if not basic:
+                basic = float(row["price_usd"] or 0)
+
+    if not desc_override:
+        flash("Description is required.", "warning")
+        return redirect(_section_loop_url(pid, bid, fid, bill_no, letter, title, bill_name, subsec))
+    if not unit:
+        unit = "No."
+
+    oh, prf, cnt, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
+    supply_raw  = (f.get("supply_rate") or "").strip()
+    install_raw = (f.get("install_rate") or "").strip()
+    supply  = _num("supply_rate", basic)   if supply_raw  else basic
+    install = _num("install_rate", 0.0)    if install_raw else 0.0
+    final_rate = _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat)
+    total = qty * final_rate
+    if final_rate <= 0:
+        flash("Rate must be > 0. Enter a basic price.", "warning")
+        return redirect(_section_loop_url(pid, bid, fid, bill_no, letter, title, bill_name, subsec))
+
+    item_no_disp = _boq_next_item_no(fid, bill_no, letter)
+    remarks = (f.get("remarks") or "").strip()[:500]
+
+    with get_db() as c:
+        cur = c.execute(
+            "INSERT INTO boq_floor_items "
+            "(floor_id, building_id, project_id, user_id, section, subsection, "
+            " library_item_id, supplier_id, item_no, description, specification, "
+            " unit, qty, final_built_up_rate, total_amount, remarks, "
+            " source_type, approval_status, "
+            " bill_no, bill_name, section_letter, subsection_label, item_no_display) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (fid, bid, pid, uid, title.lower()[:80], "",
+             catalogue_id or None, None, item_no_disp,
+             desc_override, spec_override, unit, qty, final_rate, total, remarks,
+             ("master_library" if catalogue_id > 0 else "custom_current_boq"),
+             "project_only",
+             bill_no, bill_name, letter, subsec, item_no_disp),
+        )
+        item_id = int(cur.lastrowid or 0)
+        c.execute(
+            "INSERT INTO boq_floor_rate_buildup "
+            "(floor_item_id, project_id, user_id, basic_price, supply_rate, "
+            " install_rate, overhead_pct, profit_pct, contingency_pct, vat_pct, "
+            " final_built_up_rate, total_amount) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (item_id, pid, uid, basic, supply, install,
+             oh, prf, cnt, vat, final_rate, total),
+        )
+        c.execute("UPDATE boq_projects  SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (pid,))
+        c.execute("UPDATE boq_buildings SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (bid,))
+        c.execute("UPDATE boq_floors    SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (fid,))
+    try:
+        from new_boq_hierarchy_schema import boq_audit
+        boq_audit(get_db, uid, "boq_section_item_added", "boq_floor_item", item_id,
+                  f"bill={bill_no} sec={letter} item={item_no_disp} rate={final_rate:.2f}")
+    except Exception:
+        pass
+
+    # Decide where to go next: "Add & continue" stays in the loop;
+    # "End section" returns to the floor; "End section & open next"
+    # opens a new section under the same bill.
+    nxt = (f.get("next_action") or "continue").strip()
+    if nxt == "end":
+        flash(f"Section {letter}. {title} closed -- item {item_no_disp} added.", "success")
+        return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
+    if nxt == "end_open_next":
+        return redirect(url_for("boq_section_setup", pid=pid, bid=bid, fid=fid, bill_no=bill_no))
+    return redirect(_section_loop_url(pid, bid, fid, bill_no, letter, title, bill_name, subsec))
+
+
+def _section_loop_url(pid, bid, fid, bill_no, letter, title, bill_name, sub):
+    return url_for(
+        "boq_section_loop",
+        pid=pid, bid=bid, fid=fid,
+        bill_no=bill_no, letter=letter,
+        title=title, bill_name=bill_name, sub=sub,
+    )
+
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/summary")
+@login_required
+def boq_floor_summary(pid, bid, fid):
+    """Per-floor Bills Summary -- matches the auditorium sample's
+    'GROUND FLOOR' summary table. Lists each Bill's subtotal, adds
+    Contingencies at the floor's contingency_pct (default 10), and
+    yields 'Total carried to General Summary'."""
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    building = _boq_building_owned_or_404(bid, pid)
+    floor = _boq_floor_owned_or_404(fid, bid)
+
+    with get_db() as c:
+        per_bill = c.execute(
+            "SELECT COALESCE(bill_no,0) AS bill_no, "
+            "       COALESCE(bill_name,'') AS bill_name, "
+            "       COALESCE(SUM(total_amount),0) AS subtotal "
+            "FROM boq_floor_items "
+            "WHERE floor_id=? "
+            "GROUP BY bill_no, bill_name "
+            "ORDER BY bill_no",
+            (fid,),
+        ).fetchall()
+
+    bills = [
+        {
+            "bill_no":   int(r["bill_no"]   or 0),
+            "bill_name": (r["bill_name"]    or _boq_lookup_bill_name(int(r["bill_no"] or 0)) or "OTHER"),
+            "subtotal":  float(r["subtotal"] or 0),
+        }
+        for r in per_bill
+    ]
+    subtotal = sum(b["subtotal"] for b in bills)
+    cont_pct = float((floor["contingency_pct"] if "contingency_pct" in floor.keys() else 10) or 10)
+    contingency = subtotal * cont_pct / 100.0
+    carried = subtotal + contingency
+    return render_template(
+        "boq_floor_summary.html",
+        user=current_user(),
+        project=project, building=building, floor=floor,
+        bills=bills, subtotal=subtotal,
+        contingency_pct=cont_pct, contingency=contingency,
+        carried=carried,
+    )
+
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/contingency", methods=["POST"])
+@login_required
+def boq_floor_set_contingency(pid, bid, fid):
+    uid = session["user_id"]
+    _boq_project_owned_or_404(pid, uid)
+    _boq_building_owned_or_404(bid, pid)
+    _boq_floor_owned_or_404(fid, bid)
+    csrf_protect()
+    try:
+        pct = float(request.form.get("contingency_pct", 10))
+    except (TypeError, ValueError):
+        pct = 10.0
+    pct = max(0.0, min(100.0, pct))
+    with get_db() as c:
+        c.execute("UPDATE boq_floors SET contingency_pct=? WHERE id=?", (pct, fid))
+    flash(f"Contingency set to {pct}%.", "success")
+    return redirect(url_for("boq_floor_summary", pid=pid, bid=bid, fid=fid))
+
+
+# new_boq_section_grid_routes.py
+# 2026-06-21 -- Section GRID editor for fast BOQ data entry.
+#
+# Goal (owner directive): cut the time to write a BOQ like the auditorium
+# sample by 90%. The form heading IS the section heading; each line's
+# Description field is a DROPDOWN scoped to that section's item catalogue.
+# Picking a description auto-fills Unit + Basic Rate -- owner just types
+# the Qty.
+#
+# Workflow:
+#   1. From the floor view, "Open new section" -> section setup form.
+#   2. Section setup posts and redirects into the GRID editor.
+#   3. The GRID page is titled with the Section heading. It shows the
+#      catalogue of typical items for that section as a dropdown on every
+#      row; picking auto-fills unit + basic. The owner enters Qty for
+#      each line, leaves blank rows blank, and clicks "Save all".
+#   4. POST bulk-inserts every non-empty row in one transaction.
+#
+# The catalogue mirrors the 1UGLS Auditorium sample so all the typical
+# Bill 2 (Internal Electrical Wiring), Bill 3 (Bonding & Earthing),
+# Bill 4 (Fire Alarm), Bill 5 (Data & Voice) and Bill 6 (Signal Comms)
+# items are one click away.
+
+
+# ----- Section item catalogue ---------------------------------------------
+
+# Schema for each entry:
+#   ("Description", "Unit", basic_price)
+#
+# Section keys must match exactly (case-insensitive) what the section
+# setup form posts as "section_title". The lookup also tries the upper
+# case form so the owner can pick either casing.
+
+_BOQ_SECTION_ITEM_CATALOG = {
+
+    # ===== Bill 2 -- INTERNAL ELECTRICAL WIRING =========================
+    "SWITCH BOARDS AND DISTRIBUTION BOARDS": [
+        ("6-way TPN Memshield MCCB Distribution Panel Board c/w 400A Incomer", "Nos.", 19800),
+        ("6-way TPN Memshield MCB Distribution Board c/w 200A INT. switch",    "Nos.", 15500),
+        ("6-way TPN Memshield MCB Distribution Board c/w 125A INT. switch",    "Nos.",  8500),
+        ("6-way TPN Memshield MCB Distribution Board c/w 100A INT. switch",    "Nos.",  6800),
+        ("6-way TPN Memshield MCB Distribution Board c/w 63A INT. switch",     "Nos.",  3308.81),
+        ("6-way TPN Memshield MCB Distribution Board c/w 32A INT. switch",     "Nos.",  3309.81),
+        ("4-way TPN Memshield MCB Distribution Board c/w 32A INT. switch",     "Nos.",  3200),
+        ("8-way SPN Memshield MCB Distribution Board c/w 63A INT. switch",     "Nos.",  2800),
+        ("12-way SPN Memshield MCB Distribution Board c/w 100A INT. switch",   "Nos.",  4200),
+        ("400A TPN Fuse Switch",                                                "Nos.", 12160),
+        ("200A TPN Fuse Switch",                                                "Nos.",  6700),
+        ("125A TPN Fuse Switch",                                                "Nos.",  4600),
+        ("100A TPN load Isolator",                                              "Nos.",  1470),
+        ("63A TPN load Isolator",                                               "Nos.",   900),
+        ("32A TPN load Isolator",                                               "Nos.",   650),
+    ],
+
+    "SUBFEEDER CABLES AND EARTHLEADS": [
+        ("4c x 240mm2 PVC/PVC Insulated copper cable c/w connecting accessories", "M",  3849),
+        ("4c x 185mm2 PVC/PVC Insulated copper cable c/w connecting accessories", "M",  2900),
+        ("4c x 150mm2 PVC/PVC Insulated copper cable c/w connecting accessories", "M",  2500),
+        ("4c x 120mm2 PVC/PVC Insulated copper cable c/w connecting accessories", "M",  2242.80),
+        ("4c x 95mm2 PVC/PVC Insulated copper cable c/w connecting accessories",  "M",  1850),
+        ("4c x 70mm2 PVC/PVC Insulated copper cable c/w connecting accessories",  "M",  1100),
+        ("4c x 50mm2 PVC/PVC Insulated copper cable c/w connecting accessories",  "M",   651),
+        ("4c x 35mm2 PVC/PVC Insulated copper cable c/w connecting accessories",  "M",   470),
+        ("4c x 25mm2 PVC/PVC Insulated copper cable c/w connecting accessories",  "M",   290),
+        ("4c x 16mm2 PVC/PVC Insulated copper cable c/w connecting accessories",  "M",   190),
+        ("4c x 10mm2 PVC/PVC Insulated copper cable c/w connecting accessories",  "M",   125),
+        ("1c x 240mm2 PVC Insulated copper cable c/w connecting accessories",     "M",   780),
+        ("1c x 185mm2 PVC Insulated copper cable c/w connecting accessories",     "M",   560),
+        ("1c x 120mm2 PVC Insulated copper cable c/w connecting accessories",     "M",   400),
+        ("1c x 95mm2 PVC Insulated copper cable c/w connecting accessories",      "M",   350),
+        ("1c x 70mm2 PVC Insulated copper cable c/w connecting accessories",      "M",   298),
+        ("1c x 50mm2 PVC Insulated copper cable c/w connecting accessories",      "M",   170),
+        ("1c x 35mm2 PVC Insulated copper cable c/w connecting accessories",      "M",   120),
+        ("1c x 25mm2 PVC Insulated copper cable c/w connecting accessories",      "M",    65),
+        ("1c x 16mm2 PVC Insulated copper cable c/w connecting accessories",      "M",    42),
+        ("1c x 10mm2 PVC Insulated copper cable c/w connecting accessories",      "M",    27),
+        ("100mm diameter PVC pipe",                                                "M",    25),
+        ("75mm diameter PVC pipe",                                                 "M",    18),
+        ("50mm diameter PVC pipe",                                                 "M",    12),
+    ],
+
+    "WIRING OF POINTS": [
+        ("1.5mm2 PVC insulated copper cable (Brown)",         "Coils", 391),
+        ("1.5mm2 PVC insulated copper cable (Blue)",          "Coils", 391),
+        ("1.5mm2 PVC insulated copper cable (Grey)",          "Coils", 391),
+        ("1.5mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 391),
+        ("2.5mm2 PVC insulated copper cable (Brown)",         "Coils", 653),
+        ("2.5mm2 PVC insulated copper cable (Blue)",          "Coils", 653),
+        ("2.5mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 653),
+        ("4.0mm2 PVC insulated copper cable (Brown)",         "Coils", 1037),
+        ("4.0mm2 PVC insulated copper cable (Blue)",          "Coils", 1037),
+        ("4.0mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 1037),
+        ("6.0mm2 PVC insulated copper cable (Brown)",         "Coils", 1500),
+        ("6.0mm2 PVC insulated copper cable (Blue)",          "Coils", 1500),
+        ("6.0mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 1500),
+        ("20mm diameter PVC conduit pipe",                    "Nos.",   14.63),
+        ("25mm diameter PVC conduit pipe",                    "Nos.",   19.50),
+        ("32mm diameter PVC conduit pipe",                    "Nos.",   28.00),
+        ("75mm x 75mm steel conduit boxes",                   "Nos.",   13),
+        ("150mm x 75mm steel conduit boxes",                  "Nos.",   18),
+        ("Circular boxes of various ways",                    "Nos.",    5),
+        ("Junction boxes",                                    "Nos.",    8),
+    ],
+
+    "LUMINAIRES": [
+        ("35W Round Recessed downlighter",                                         "Nos.", 550),
+        ("40W 230V 50Hz 600x600mm LED recessed FL light fitting c/w driver",       "Nos.", 599),
+        ("36W 1200mm LED linear Panel light c/w enclosure",                        "Nos.", 707.01),
+        ("36W 1200mm LED linear Panel light",                                      "Nos.", 372),
+        ("36W Round surface panel light",                                          "Nos.", 550),
+        ("18W LED round surface panel light",                                      "Nos.", 305),
+        ("18W LED round recessed panel light",                                     "Nos.", 310),
+        ("12W LED round surface panel light",                                      "Nos.", 226),
+        ("87W LED round high bay 230V 50Hz light",                                 "Nos.", 1100),
+        ("LED Strip light",                                                        "Coil",   35),
+        ("Emergency exit luminaire c/w battery backup",                            "Nos.", 480),
+        ("Outdoor wall-mounted LED floodlight 50W",                                "Nos.", 380),
+    ],
+
+    "ACCESSORIES": [
+        ("6A One Way One gang light switch (MK)",                              "Nos.",  20.73),
+        ("6A One Way two gang light switch (MK)",                              "Nos.",  34.13),
+        ("6A One Way three gang light switch (MK)",                            "Nos.",  51.52),
+        ("6A two Way one gang light switch (MK)",                              "Nos.",  23.16),
+        ("6A two Way two gang light switch (MK)",                              "Nos.",  35),
+        ("6A two Way three gang light switch (MK)",                            "Nos.",  55),
+        ("6 Compartment floor box c/w 2 double sockets + 2 double data outlet","Nos.", 2100),
+        ("1 x 13A unswitched Socket outlet (MK)",                              "Nos.",  40),
+        ("2 x 13A Switched Socket outlet (MK)",                                "Nos.",  60),
+        ("2 x 13A Switched Socket outlet with light + red colour (MK)",        "Nos.",  74),
+        ("2 x 13A USB Socket outlet (MK)",                                     "Nos.",  95),
+        ("20A DP switch with neon indicator (MK)",                             "Nos.",  35),
+        ("Plastic Automatic Hand Dryer",                                       "Nos.", 1250),
+        ("Weatherproof IP65 socket outlet",                                    "Nos.", 110),
+    ],
+
+    # ===== Bill 3 -- BONDING AND EARTHING ===============================
+    "BONDING AND EARTHING": [
+        ("70mm2 bare copper conductor",                                  "M",    289),
+        ("50mm2 bare copper conductor",                                  "M",    133),
+        ("35mm2 bare copper conductor",                                  "M",    120),
+        ("Galvanised steel holding rings",                               "Nos.",  20.30),
+        ("Equalisation bar c/w 8 studs and connecting accessories",      "Nos.", 548.55),
+        ("6x6 IP65 grounding junction box 20cm above FFL",               "Nos.",  36.57),
+        ("3x3 square box",                                               "Nos.",  13),
+        ("Arc welding -- mechanical attaching taps",                     "Pts.", 135),
+        ("Exothermic welding",                                           "Nos.", 750),
+        ("600mm x 600mm copper earth mat c/w 1500mm copper earth rod",   "Nos.",1700),
+        ("Roll of warning tape (yellow/green)",                          "Nos.", 150),
+        ("Standard 1.5M high graded copper earth rod",                   "Nos.",1200),
+        ("Concrete inspection chamber with cover",                       "Nos.", 457.13),
+        ("Test the installation -- electrical engineer's scripts",       "Lot",  5000),
+    ],
+
+    "EARTH ELECTRODE NETWORK": [
+        ("1500mm copper earth rod, buried 1.5m below ground",            "Set",  1200),
+        ("Prefabricated earth inspection chamber with lid",              "No.",   457.13),
+        ("1c x 240mm2 bare copper cable as earth jumper",                "M",     700),
+        ("6x6 IP65 junction box",                                        "M",      36.57),
+        ("Earth tape clamp",                                             "Nos.",   45),
+    ],
+
+    # ===== Bill 4 -- FIRE ALARM SYSTEM ==================================
+    "WIRING OF FIRE POINTS": [
+        ("3c x 2.5mm2 red fire-resistant network detection cable",       "M",   30),
+        ("20mm diameter self-extinguishing thermoplastic conduit pipe",  "Nos.",14.63),
+        ("75mm x 75mm steel conduit boxes",                              "Nos.",13),
+        ("Circular boxes of various ways",                               "Nos.", 5),
+    ],
+
+    "FIRE PANEL AND ACCESSORIES": [
+        ("Addressable optical Smoke detector",                                            "Nos.",  532),
+        ("Addressable heat detector",                                                     "Nos.",  580),
+        ("Break glass call point",                                                        "Nos.",  600),
+        ("Fire Alarm Beacon/Sounder indoor with strobe",                                  "Nos.",  980),
+        ("Outdoor Weatherproof siren c/w strobe",                                         "Nos.",  980),
+        ("Fire Alarm Junction Box",                                                       "Nos.",  250),
+        ("8 Zone Addressable Fire Alarm Control Panel inc LCD module and Control Keys",   "Nos.",53640),
+        ("4 Zone Conventional Fire Alarm Control Panel",                                  "Nos.", 8500),
+        ("Fire Exit Sign",                                                                "Nos.",  120),
+        ("Emergency Fire Bell",                                                           "Nos.",  450),
+    ],
+
+    # ===== Bill 5 -- DATA AND VOICE COMMUNICATIONS ======================
+    "DATA EQUIPMENT AND ACCESSORIES": [
+        ("Cat 6e UTP Data cable",                                                       "Coils",1650),
+        ("48 Port CAT 6 patch panel",                                                   "Nos.", 1500),
+        ("48 port CAT 6 Switch w/ 1GB fibre optic uplink (Cisco / Juniper class)",      "Nos.", 2300),
+        ("24 port CAT 6 Switch w/ 1GB fibre optic uplink",                              "Nos.", 1800),
+        ("Fibre patch",                                                                 "Nos.",  850),
+        ("12U Data network cabinet",                                                    "Nos.", 1600),
+        ("OM3 Laser-Optimized Multimode Aqua fibre optic cable",                        "M",      52),
+        ("RJ45 double data outlet c/w faceplate, insert and mounting screws",           "Nos.",  104),
+        ("Power strip",                                                                 "Nos.",  150),
+        ("Patch cord 1m CAT 6",                                                         "Nos.",   45),
+        ("Patch cord 2m CAT 6",                                                         "Nos.",   65),
+    ],
+
+    "VOICE EQUIPMENT AND ACCESSORIES": [
+        ("IP desk phone",                                                "Nos.",  650),
+        ("Wireless DECT base + handset",                                 "Nos.", 1200),
+        ("Voice cabling (Cat 6e)",                                       "Coils",1650),
+        ("Voice patch panel 24-port",                                    "Nos.", 1100),
+    ],
+
+    # ===== Bill 6 -- SIGNAL COMMUNICATION SYSTEMS =======================
+    "EQUIPMENT AND ACCESSORIES": [
+        ("IP Cam dome 100m, 180-degree view, night vision, motion detection",            "Nos.",  865),
+        ("IP Cam bullet IR 30m, outdoor IP67",                                           "Nos.", 1050),
+        ("Circular ceiling recessed audio speakers",                                     "Nos.",  260),
+        ("Wall mounted audio speakers",                                                  "Nos.",  400),
+        ("Power strip",                                                                  "Nos.",  150),
+        ("Building/Zonal IP audio amplifier",                                            "M",   4900),
+        ("20m AV cables -- building MIC to zonal amp",                                   "M",     19),
+        ("Audio speaker cables (pair)",                                                  "M",      3),
+        ("Network video recorder (NVR) 8-channel",                                       "Nos.", 5500),
+        ("Network video recorder (NVR) 16-channel",                                      "Nos.", 8800),
+        ("Access control reader (HID class)",                                            "Nos.", 1850),
+        ("Electromagnetic door lock",                                                    "Nos.", 1200),
+    ],
+
+    # ===== Bill 1 -- PRELIMINARIES ======================================
+    "PRELIMINARY ITEMS": [
+        ("Site mobilisation and setup",                                  "Lot", 25000),
+        ("Site insurance",                                               "Lot", 15000),
+        ("Project manager allowance",                                    "Mth",  8500),
+        ("Site engineer allowance",                                      "Mth",  7000),
+        ("Health & safety provisions",                                   "Lot",  6500),
+        ("Site office accommodation",                                    "Mth",  3500),
+        ("Tools and small plant",                                        "Lot",  4500),
+        ("Final commissioning and handover",                             "Lot",  8000),
+    ],
+}
+
+
+def _boq_catalog_for_section(section_title: str) -> list:
+    """Lookup helper: tries exact, upper, then partial-prefix match
+    against the catalogue keys."""
+    if not section_title:
+        return []
+    s = section_title.strip()
+    if s in _BOQ_SECTION_ITEM_CATALOG:
+        return list(_BOQ_SECTION_ITEM_CATALOG[s])
+    if s.upper() in _BOQ_SECTION_ITEM_CATALOG:
+        return list(_BOQ_SECTION_ITEM_CATALOG[s.upper()])
+    # Partial: first key whose start matches the title (e.g. "WIRING OF
+    # POINTS - Light points" -> "WIRING OF POINTS").
+    s_up = s.upper()
+    for key, items in _BOQ_SECTION_ITEM_CATALOG.items():
+        if s_up.startswith(key) or key.startswith(s_up):
+            return list(items)
+    return []
+
+
+# ----- Routes --------------------------------------------------------------
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/bill/<int:bill_no>/section/<letter>/grid", methods=["GET"])
+@login_required
+def boq_section_grid(pid, bid, fid, bill_no, letter):
+    """Spreadsheet-style entry page. Section heading is the page heading.
+    Catalogue dropdown on every Description field is scoped to the
+    section title -- pick auto-fills Unit + Basic Rate. Owner types Qty
+    and hits 'Save all rows'."""
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    building = _boq_building_owned_or_404(bid, pid)
+    floor = _boq_floor_owned_or_404(fid, bid)
+    letter = (letter or "").upper()[:8]
+    title = (request.args.get("title") or "").strip()[:160]
+    bill_name = (request.args.get("bill_name") or _boq_lookup_bill_name(bill_no)).strip()[:120]
+    subsec = (request.args.get("sub") or "").strip()[:20]
+    if not title:
+        title = bill_name
+
+    catalog = _boq_catalog_for_section(title)
+    # Always offer at least a small batch of empty rows so the owner can
+    # add bespoke items.
+    rows = list(catalog)
+    while len(rows) < max(8, len(catalog) + 3):
+        rows.append(("", "No.", 0))
+
+    # Existing items already saved under this Bill+Section -- shown above
+    # the grid (read-only) so the owner can see what they have without
+    # leaving the page.
+    with get_db() as c:
+        existing = c.execute(
+            "SELECT * FROM boq_floor_items "
+            "WHERE floor_id=? AND bill_no=? AND section_letter=? "
+            "ORDER BY id",
+            (fid, bill_no, letter),
+        ).fetchall()
+    next_item_no = _boq_next_item_no(fid, bill_no, letter)
+
+    return render_template(
+        "boq_floor_section_grid.html",
+        user=current_user(),
+        project=project, building=building, floor=floor,
+        bill_no=bill_no, bill_name=bill_name,
+        section_letter=letter, section_title=title,
+        subsection_label=subsec,
+        catalog=catalog,           # raw [(desc, unit, basic), ...] for the description dropdown
+        rows=rows,                 # initial table rows
+        existing=existing,
+        next_item_no=next_item_no,
+    )
+
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/bill/<int:bill_no>/section/<letter>/grid/save", methods=["POST"])
+@login_required
+def boq_section_grid_save(pid, bid, fid, bill_no, letter):
+    """Bulk-save every non-empty row from the grid in one transaction.
+    Owner directive: 90% time saving vs. a one-form-per-item flow."""
+    uid = session["user_id"]
+    _boq_project_owned_or_404(pid, uid)
+    _boq_building_owned_or_404(bid, pid)
+    _boq_floor_owned_or_404(fid, bid)
+    csrf_protect()
+    f = request.form
+    letter = (letter or "").upper()[:8]
+    title    = (f.get("section_title") or "").strip()[:160]
+    bill_name= (f.get("bill_name")     or _boq_lookup_bill_name(bill_no)).strip()[:120]
+    subsec   = (f.get("subsection_label") or "").strip()[:20]
+
+    # Defaults applied to every row in the bulk save -- typed once at the
+    # top of the grid, then propagated. Spec rate formula = build-up math.
+    def _pct(name):
+        try:
+            v = f.get(name, "")
+            return max(0.0, min(100.0, float(v))) if v not in (None, "",) else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    oh, prf, cnt, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
+
+    # Each row is posted with indexed keys: description[0], qty[0], ...
+    descriptions = f.getlist("description[]")
+    qtys         = f.getlist("qty[]")
+    units        = f.getlist("unit[]")
+    basics       = f.getlist("basic_price[]")
+    supplies     = f.getlist("supply_rate[]")
+    installs     = f.getlist("install_rate[]")
+    specs        = f.getlist("specification[]")
+    remarks_l    = f.getlist("remarks[]")
+
+    def _row_float(arr, i):
+        try:
+            v = arr[i] if i < len(arr) else ""
+            return float(v) if v not in (None, "",) else None
+        except (TypeError, ValueError):
+            return None
+
+    saved = 0
+    skipped = 0
+    next_no = int(_boq_next_item_no(fid, bill_no, letter))
+    with get_db() as c:
+        for i in range(len(descriptions)):
+            desc = (descriptions[i] or "").strip()[:500]
+            qty = _row_float(qtys, i) or 0.0
+            basic = _row_float(basics, i) or 0.0
+            supply_raw = _row_float(supplies, i)
+            install_raw = _row_float(installs, i)
+            unit = (units[i] if i < len(units) else "No.").strip() or "No."
+            spec_t = (specs[i] if i < len(specs) else "").strip()
+            remark = (remarks_l[i] if i < len(remarks_l) else "").strip()[:500]
+
+            # Skip rows the owner left empty.
+            if not desc or qty <= 0 or basic <= 0:
+                skipped += 1
+                continue
+
+            # Supply defaults to basic; install defaults to 0 (spec rule).
+            supply = supply_raw if supply_raw is not None else basic
+            install = install_raw if install_raw is not None else 0.0
+            final_rate = _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat)
+            total = qty * final_rate
+            item_no_disp = str(next_no)
+            next_no += 1
+
+            cur = c.execute(
+                "INSERT INTO boq_floor_items "
+                "(floor_id, building_id, project_id, user_id, section, subsection, "
+                " library_item_id, supplier_id, item_no, description, specification, "
+                " unit, qty, final_built_up_rate, total_amount, remarks, "
+                " source_type, approval_status, "
+                " bill_no, bill_name, section_letter, subsection_label, item_no_display) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (fid, bid, pid, uid, title.lower()[:80], "",
+                 None, None, item_no_disp,
+                 desc, spec_t, unit, qty, final_rate, total, remark,
+                 "custom_current_boq", "project_only",
+                 bill_no, bill_name, letter, subsec, item_no_disp),
+            )
+            item_id = int(cur.lastrowid or 0)
+            c.execute(
+                "INSERT INTO boq_floor_rate_buildup "
+                "(floor_item_id, project_id, user_id, basic_price, supply_rate, "
+                " install_rate, overhead_pct, profit_pct, contingency_pct, vat_pct, "
+                " final_built_up_rate, total_amount) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (item_id, pid, uid, basic, supply, install,
+                 oh, prf, cnt, vat, final_rate, total),
+            )
+            saved += 1
+        c.execute("UPDATE boq_projects  SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (pid,))
+        c.execute("UPDATE boq_buildings SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (bid,))
+        c.execute("UPDATE boq_floors    SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (fid,))
+
+    try:
+        from new_boq_hierarchy_schema import boq_audit
+        boq_audit(get_db, uid, "boq_section_grid_saved", "boq_floor", fid,
+                  f"bill={bill_no} sec={letter} saved={saved} skipped={skipped}")
+    except Exception:
+        pass
+
+    flash(f"Saved {saved} item(s) under {letter}. {title}. "
+          f"({skipped} blank row(s) ignored.)", "success")
+
+    nxt = (f.get("next_action") or "back").strip()
+    if nxt == "open_next":
+        return redirect(url_for("boq_section_setup", pid=pid, bid=bid, fid=fid, bill_no=bill_no))
+    if nxt == "stay":
+        return redirect(url_for(
+            "boq_section_grid",
+            pid=pid, bid=bid, fid=fid, bill_no=bill_no, letter=letter,
+            title=title, bill_name=bill_name, sub=subsec,
+        ))
+    return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
 
 
 if __name__ == "__main__":

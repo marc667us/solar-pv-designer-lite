@@ -3,7 +3,7 @@
 {% block content %}
 
 {# ------------------------------------------------------------------
-   BOQ display rule (master prompt §11 "Rate Build-Up Rule"):
+   BOQ display rule:
      Client view  = # · Description · Unit · Qty · Rate · Amount · Remarks
      Internal view= adds Basic Price / Supply / Install / OH / Profit /
                     Contingency / VAT / Final Rate / Amount
@@ -151,7 +151,7 @@
   </div>
 
   {% else %}
-  {# ============= CLIENT-CLEAN VIEW — spec §11 columns =============== #}
+  {# ============= CLIENT-CLEAN VIEW =============== #}
   <table class="table align-middle" style="color:#e0e0f0;font-size:13px">
     <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
       <tr>

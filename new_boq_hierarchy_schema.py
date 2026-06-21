@@ -187,6 +187,18 @@ _SQLITE_ALTERS_BOM_RATES = [
     "ALTER TABLE marketplace_bom_rates ADD COLUMN contingency_pct REAL DEFAULT 0",
 ]
 
+# 2026-06-21: real BOQ deliverables nest items under Bill -> Section ->
+# Sub-section. Add the columns to the existing boq_floor_items + a
+# per-floor contingency percentage (default 10 per the auditorium sample).
+_SQLITE_ALTERS_FLOOR_BILLS = [
+    "ALTER TABLE boq_floor_items ADD COLUMN bill_no INTEGER",
+    "ALTER TABLE boq_floor_items ADD COLUMN bill_name TEXT DEFAULT ''",
+    "ALTER TABLE boq_floor_items ADD COLUMN section_letter TEXT DEFAULT ''",
+    "ALTER TABLE boq_floor_items ADD COLUMN subsection_label TEXT DEFAULT ''",
+    "ALTER TABLE boq_floor_items ADD COLUMN item_no_display TEXT DEFAULT ''",
+    "ALTER TABLE boq_floors      ADD COLUMN contingency_pct REAL DEFAULT 10",
+]
+
 
 # ─── Postgres DDL ─────────────────────────────────────────────────────────────
 
@@ -321,6 +333,14 @@ _PG_CREATE_TABLES = [
 
     # Phase 1 rate-table extension (spec adds contingency to the build-up).
     "ALTER TABLE marketplace_bom_rates ADD COLUMN IF NOT EXISTS contingency_pct REAL DEFAULT 0",
+
+    # 2026-06-21 Bill -> Section -> Sub-section structure for floor items.
+    "ALTER TABLE boq_floor_items ADD COLUMN IF NOT EXISTS bill_no INTEGER",
+    "ALTER TABLE boq_floor_items ADD COLUMN IF NOT EXISTS bill_name VARCHAR(120) DEFAULT ''",
+    "ALTER TABLE boq_floor_items ADD COLUMN IF NOT EXISTS section_letter VARCHAR(8) DEFAULT ''",
+    "ALTER TABLE boq_floor_items ADD COLUMN IF NOT EXISTS subsection_label VARCHAR(20) DEFAULT ''",
+    "ALTER TABLE boq_floor_items ADD COLUMN IF NOT EXISTS item_no_display VARCHAR(8) DEFAULT ''",
+    "ALTER TABLE boq_floors      ADD COLUMN IF NOT EXISTS contingency_pct REAL DEFAULT 10",
 ]
 
 
@@ -363,6 +383,7 @@ def ensure_boq_hierarchy_schema(get_db_fn) -> None:
         _try_each(c, _SQLITE_ALTERS_BOM_ITEMS)
         _try_each(c, _SQLITE_ALTERS_CATALOG)
         _try_each(c, _SQLITE_ALTERS_BOM_RATES)
+        _try_each(c, _SQLITE_ALTERS_FLOOR_BILLS)
     _BOQ_SCHEMA_DONE["sqlite"] = True
 
 

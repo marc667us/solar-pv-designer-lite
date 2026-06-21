@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Open Section — {{ floor.floor_name }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('boq_projects_list') }}" class="text-warning">BOQ Projects</a> ·
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="text-warning">{{ project.project_name }}</a> ·
+      <a href="{{ url_for('boq_building_view', pid=project.id, bid=building.id) }}" class="text-warning">{{ building.building_name }}</a> ·
+      <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=floor.id) }}" class="text-warning">{{ floor.floor_name }}</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-folder-plus text-warning me-1"></i>Open new BOQ section</h5>
+    <div class="text-secondary small">Pick the Bill, Section letter and Section title. After saving you'll land on the item-add loop for this section.</div>
+  </div>
+</div>
+
+<div class="solar-card p-4">
+  <form method="POST" action="{{ url_for('boq_section_open', pid=project.id, bid=building.id, fid=floor.id) }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">Bill No.</label>
+        <select class="form-select" name="bill_no" id="bill_no" onchange="document.getElementById('bill_name').value=this.options[this.selectedIndex].dataset.name; window._boqRefreshTitles(this.value);">
+          {% for b in bills %}
+          <option value="{{ b.no }}" data-name="{{ b.name }}" {% if b.no == bill_no %}selected{% endif %}>Bill No. {{ b.no }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Bill name</label>
+        <input class="form-control" name="bill_name" id="bill_name" value="{{ bill_name }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">Section letter</label>
+        <input class="form-control" name="section_letter" value="{{ next_letter }}" maxlength="3" pattern="[A-Z]+">
+        <div class="text-secondary small mt-1">Next free: <strong>{{ next_letter }}</strong></div>
+      </div>
+
+      <div class="col-md-9">
+        <label class="form-label small text-secondary">Section title (heading at the top of the section form)</label>
+        <select class="form-select" id="section_title_pick" onchange="if(this.value){document.getElementById('section_title').value=this.value;}">
+          <option value="">— pick a standard title, or type your own below —</option>
+          {% for t in section_titles %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+        </select>
+        <input class="form-control mt-2" name="section_title" id="section_title" placeholder="e.g. SWITCH BOARDS AND DISTRIBUTION BOARDS" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">Sub-section (optional)</label>
+        <input class="form-control" name="subsection_label" placeholder="e.g. I or II" maxlength="20">
+        <div class="text-secondary small mt-1">Use for nested groupings like "I. Light points" inside a Wiring section.</div>
+      </div>
+    </div>
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+      <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-light btn-sm">Cancel</a>
+      <button class="btn btn-warning fw-bold"><i class="bi bi-arrow-right-circle me-1"></i>Open section &amp; start adding items</button>
+    </div>
+  </form>
+</div>
+
+<script>
+  // When the Bill changes, swap the standard-title dropdown to match.
+  window._boqTitlesByBill = {{ section_titles|tojson }} && {};
+  // Full taxonomy (server-side) for live swap — embedded as a tiny lookup so
+  // we don't need a round-trip per Bill change.
+  window._boqBillTitles = {
+    {% for b in bills %}{{ b.no }}: {{ (section_titles if b.no == bill_no else [])|tojson }},
+    {% endfor %}
+  };
+  window._boqRefreshTitles = function(billNo){
+    var sel = document.getElementById("section_title_pick");
+    sel.innerHTML = '<option value="">— pick a standard title, or type your own below —</option>';
+    // We can't ship the full map for every Bill without a server round-trip;
+    // a fetch keeps it small. (Falls back to no-op if endpoint missing.)
+    fetch("{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}?bill_no=" + encodeURIComponent(billNo), {headers:{Accept:"text/html"}})
+      .then(r => r.text())
+      .then(html => {
+        var m = html.match(/<option value="([^"]+)">\1<\/option>/g);
+        if (!m) return;
+        m.forEach(function(line){
+          var t = line.replace(/<\/?option[^>]*>/g, "");
+          if (t && t.indexOf("pick a standard") === -1) {
+            var o = document.createElement("option");
+            o.value = t; o.textContent = t;
+            sel.appendChild(o);
+          }
+        });
+      })
+      .catch(function(){});
+  };
+</script>
+{% endblock %}

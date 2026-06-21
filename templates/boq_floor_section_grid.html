@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}{{ section_letter }}. {{ section_title }}{% endblock %}
+{% block content %}
+{# Section heading IS the form heading.
+   Every Description field is a dropdown scoped to the section's catalogue.
+   Pick a description -> Unit and Basic Rate auto-fill. Owner only types Qty. #}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('boq_projects_list') }}" class="text-warning">BOQ Projects</a> ·
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="text-warning">{{ project.project_name }}</a> ·
+      <a href="{{ url_for('boq_building_view', pid=project.id, bid=building.id) }}" class="text-warning">{{ building.building_name }}</a> ·
+      <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=floor.id) }}" class="text-warning">{{ floor.floor_name }}</a>
+    </div>
+    <div class="text-secondary small mt-1" style="letter-spacing:1.5px;text-transform:uppercase">
+      Bill No. {{ bill_no }} — {{ bill_name }}
+    </div>
+    <h4 class="fw-black mb-0 mt-1" style="letter-spacing:.5px;text-transform:uppercase">
+      <span class="text-warning">{{ section_letter }}.</span> {{ section_title }}
+      {% if subsection_label %}<span class="text-secondary small ms-2">({{ subsection_label }})</span>{% endif %}
+    </h4>
+    <div class="text-secondary small mt-1">
+      Pre-loaded with {{ catalog|length }} typical item{{ '' if catalog|length == 1 else 's' }} for this section.
+      Set the Qty for the ones you need; leave blank to skip; pick a different description from the dropdown to swap an item.
+    </div>
+  </div>
+  <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-light btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Cancel &amp; back to floor
+  </a>
+</div>
+
+{# ─── Existing items already saved in this section ─────────────────── #}
+{% if existing %}
+<div class="solar-card p-3 mb-3">
+  <div class="text-secondary small mb-2"><i class="bi bi-list-ol me-1"></i>{{ existing|length }} item{{ '' if existing|length == 1 else 's' }} already saved in {{ section_letter }}. {{ section_title }}</div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:12px">
+      <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px">
+        <tr><th style="width:40px">Item</th><th>Description</th><th class="text-end">Qty</th><th>Unit</th><th class="text-end">Rate</th><th class="text-end">Amount</th></tr>
+      </thead>
+      <tbody>
+        {% for it in existing %}
+        <tr>
+          <td class="text-warning fw-bold">{{ it.item_no_display or it.item_no }}</td>
+          <td>{{ it.description }}</td>
+          <td class="text-end">{{ "%.2f"|format(it.qty or 0) }}</td>
+          <td>{{ it.unit }}</td>
+          <td class="text-end">{{ "%.2f"|format(it.final_built_up_rate or 0) }}</td>
+          <td class="text-end fw-bold">{{ "%.2f"|format(it.total_amount or 0) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{# ─── Bulk-save GRID ────────────────────────────────────────────────── #}
+<form method="POST" action="{{ url_for('boq_section_grid_save', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill_no, letter=section_letter) }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <input type="hidden" name="section_title" value="{{ section_title }}">
+  <input type="hidden" name="bill_name" value="{{ bill_name }}">
+  <input type="hidden" name="subsection_label" value="{{ subsection_label }}">
+
+  <div class="solar-card p-3 mb-3">
+    <div class="row g-2 mb-2 align-items-end">
+      <div class="col-md-3 text-warning fw-bold" style="text-transform:uppercase;font-size:12px;letter-spacing:.5px">
+        <i class="bi bi-percent me-1"></i>Section-wide markup
+      </div>
+      <div class="col-md-2"><label class="form-label small text-secondary mb-1">Overhead %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="overhead_pct" value="30"></div>
+      <div class="col-md-2"><label class="form-label small text-secondary mb-1">Profit %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="profit_pct" value="0"></div>
+      <div class="col-md-2"><label class="form-label small text-secondary mb-1">Contingency %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="contingency_pct" value="0"></div>
+      <div class="col-md-3"><label class="form-label small text-secondary mb-1">VAT %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="vat_pct" value="0"></div>
+    </div>
+    <div class="text-secondary small">Rate = Basic × (1 + OH% + Profit% + Contingency% + VAT%) / 100. Applied to every row in this section. Override individual lines by editing Basic.</div>
+  </div>
+
+  <div class="solar-card p-0 mb-3">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:12.5px">
+        <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
+          <tr>
+            <th style="width:30px">#</th>
+            <th>Description <span class="text-secondary">(pick from dropdown)</span></th>
+            <th style="width:70px">Unit</th>
+            <th class="text-end" style="width:80px">Qty</th>
+            <th class="text-end" style="width:90px">Basic</th>
+            <th class="text-end" style="width:90px">Supply</th>
+            <th class="text-end" style="width:90px">Install</th>
+            <th class="text-end" style="width:100px">Rate (auto)</th>
+            <th class="text-end" style="width:120px">Amount (auto)</th>
+            <th style="width:120px">Remarks</th>
+          </tr>
+        </thead>
+        <tbody id="grid_body">
+          {% for desc, unit, basic in rows %}
+          <tr class="boq-row">
+            <td class="text-secondary small text-end">{{ loop.index }}</td>
+            <td>
+              <select class="form-select form-select-sm boq-desc" name="description[]" onchange="window._boqRow(this);">
+                <option value="">— pick a typical item or leave blank to skip —</option>
+                {% for cdesc, cunit, cbasic in catalog %}
+                <option value="{{ cdesc }}" data-unit="{{ cunit }}" data-basic="{{ cbasic }}" {% if cdesc == desc %}selected{% endif %}>{{ cdesc }}</option>
+                {% endfor %}
+              </select>
+              <input class="form-control form-control-sm mt-1 boq-spec" name="specification[]" placeholder="Specification (optional)">
+            </td>
+            <td><input class="form-control form-control-sm boq-unit" name="unit[]" value="{{ unit }}"></td>
+            <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end boq-qty" name="qty[]" placeholder="0" onchange="window._boqRow(this);"></td>
+            <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end boq-basic" name="basic_price[]" value="{{ '%.2f'|format(basic) if basic else '' }}" placeholder="0.00" onchange="window._boqRow(this);"></td>
+            <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end boq-supply" name="supply_rate[]" placeholder="=basic" onchange="window._boqRow(this);"></td>
+            <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end boq-install" name="install_rate[]" placeholder="0" onchange="window._boqRow(this);"></td>
+            <td class="text-end boq-rate text-warning fw-bold">0.00</td>
+            <td class="text-end boq-amount fw-bold">0.00</td>
+            <td><input class="form-control form-control-sm boq-remarks" name="remarks[]"></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
+            <td colspan="8" class="text-end fw-black">SECTION SUBTOTAL (live)</td>
+            <td class="text-end fw-black text-warning" id="grid_subtotal">0.00</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="p-3 d-flex justify-content-between flex-wrap gap-2" style="border-top:1px solid #1e1e3a">
+      <button type="button" class="btn btn-outline-light btn-sm" onclick="window._boqAddRow();">
+        <i class="bi bi-plus-circle me-1"></i>Add blank row
+      </button>
+      <div class="d-flex gap-2 flex-wrap">
+        <button type="submit" name="next_action" value="stay" class="btn btn-outline-info">
+          <i class="bi bi-save me-1"></i>Save &amp; stay
+        </button>
+        <button type="submit" name="next_action" value="open_next" class="btn btn-outline-warning">
+          <i class="bi bi-arrow-right-circle me-1"></i>Save &amp; open next section
+        </button>
+        <button type="submit" name="next_action" value="back" class="btn btn-warning fw-bold">
+          <i class="bi bi-check2-circle me-1"></i>Save all &amp; back to floor
+        </button>
+      </div>
+    </div>
+  </div>
+</form>
+
+<script>
+  // _boqRow(el) -- recompute one row's rate + amount. _boqRecalc() -- subtotal.
+  // _boqAddRow() -- append a blank row that mirrors the structure above.
+  (function(){
+    function rates() {
+      var oh  = parseFloat(document.querySelector('[name=overhead_pct]').value || 0);
+      var prf = parseFloat(document.querySelector('[name=profit_pct]').value || 0);
+      var cnt = parseFloat(document.querySelector('[name=contingency_pct]').value || 0);
+      var vat = parseFloat(document.querySelector('[name=vat_pct]').value || 0);
+      return 1 + (oh + prf + cnt + vat) / 100;
+    }
+    window._boqRow = function(el) {
+      var tr = el.closest('tr.boq-row');
+      if (!tr) return;
+      var desc = tr.querySelector('.boq-desc');
+      var unit = tr.querySelector('.boq-unit');
+      var basic = tr.querySelector('.boq-basic');
+      var supply = tr.querySelector('.boq-supply');
+      var install = tr.querySelector('.boq-install');
+      var qty = tr.querySelector('.boq-qty');
+      var rate = tr.querySelector('.boq-rate');
+      var amount = tr.querySelector('.boq-amount');
+      // If description was just picked, auto-fill unit + basic from data-* attrs.
+      if (desc && desc.value && el === desc) {
+        var opt = desc.options[desc.selectedIndex];
+        if (opt && opt.dataset.unit && !unit.value) unit.value = opt.dataset.unit;
+        if (opt && opt.dataset.basic && !basic.value) basic.value = parseFloat(opt.dataset.basic).toFixed(2);
+      }
+      var b = parseFloat(basic.value || 0);
+      // Supply defaults to basic if left blank; install defaults to 0.
+      var s = (supply.value === '' || supply.value == null) ? b : parseFloat(supply.value || 0);
+      var i = (install.value === '' || install.value == null) ? 0 : parseFloat(install.value || 0);
+      var q = parseFloat(qty.value || 0);
+      var r = (s + i) * rates();
+      var a = q * r;
+      rate.textContent = r.toFixed(2);
+      amount.textContent = a.toFixed(2);
+      window._boqRecalc();
+    };
+    window._boqRecalc = function() {
+      var sum = 0;
+      document.querySelectorAll('tr.boq-row').forEach(function(tr){
+        sum += parseFloat(tr.querySelector('.boq-amount').textContent || 0);
+      });
+      document.getElementById('grid_subtotal').textContent = sum.toFixed(2);
+    };
+    window._boqAddRow = function() {
+      var tbody = document.getElementById('grid_body');
+      var first = tbody.querySelector('tr.boq-row');
+      if (!first) return;
+      var clone = first.cloneNode(true);
+      // Reset values in the clone.
+      clone.querySelectorAll('input').forEach(function(i){ i.value = ''; });
+      var sel = clone.querySelector('select');
+      if (sel) sel.selectedIndex = 0;
+      clone.querySelector('.boq-rate').textContent = '0.00';
+      clone.querySelector('.boq-amount').textContent = '0.00';
+      tbody.appendChild(clone);
+      // Renumber.
+      tbody.querySelectorAll('tr.boq-row').forEach(function(tr, idx){
+        tr.children[0].textContent = (idx + 1);
+      });
+    };
+    // Initial recompute (in case rows were pre-filled with values).
+    document.querySelectorAll('tr.boq-row .boq-basic').forEach(function(el){ window._boqRow(el); });
+    // Recompute when section-wide markup changes.
+    ['overhead_pct','profit_pct','contingency_pct','vat_pct'].forEach(function(n){
+      var el = document.querySelector('[name=' + n + ']');
+      if (el) el.addEventListener('input', function(){
+        document.querySelectorAll('tr.boq-row .boq-basic').forEach(function(b){ window._boqRow(b); });
+      });
+    });
+  })();
+</script>
+{% endblock %}

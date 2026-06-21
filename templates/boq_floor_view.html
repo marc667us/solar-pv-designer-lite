@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ floor.floor_name }} — {{ building.building_name }}{% endblock %}
 {% block content %}
+
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
   <div>
     <div class="text-secondary small">
@@ -13,113 +14,102 @@
       <span class="text-secondary small ms-2">Floor {{ floor.floor_level }}</span>
     </h5>
   </div>
-  <div class="kpi-card" style="min-width:200px">
-    <div class="kpi-label">Floor subtotal</div>
-    <div class="kpi-value">{{ "%.2f"|format(floor_subtotal) }}</div>
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    <a href="{{ url_for('boq_floor_summary', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-info btn-sm">
+      <i class="bi bi-stack me-1"></i>Bills Summary
+    </a>
+    <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-warning fw-bold btn-sm">
+      <i class="bi bi-folder-plus me-1"></i>Open new section
+    </a>
   </div>
 </div>
 
-{# ─── BOQ items table (client-clean) ────────────────────────────────── #}
+<div class="kpi-card mb-3" style="max-width:300px">
+  <div class="kpi-label">Floor subtotal (before contingency)</div>
+  <div class="kpi-value">{{ "%.2f"|format(floor_subtotal) }}</div>
+</div>
+
+{# ─── BOQ items grouped by Bill -> Section -> Sub-section ───────── #}
 {% if items %}
-<div class="solar-card p-3 mb-3">
-  <h6 class="fw-bold mb-3"><i class="bi bi-list-ul me-1 text-warning"></i>Floor BOQ items</h6>
-  <div class="table-responsive">
-    <table class="table table-sm align-middle" style="color:#e0e0f0;font-size:13px">
-      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
-        <tr><th>#</th><th>Description</th><th>Section</th><th>Unit</th><th class="text-end">Qty</th><th class="text-end">Rate</th><th class="text-end">Amount</th><th>Remarks</th><th></th></tr>
-      </thead>
-      <tbody>
-        {% for it in items %}
-        <tr>
-          <td class="small text-secondary">{{ loop.index }}</td>
-          <td>
-            <strong>{{ it.description }}</strong>
-            {% if it.specification %}<div class="small text-secondary">{{ it.specification }}</div>{% endif %}
-          </td>
-          <td class="small text-secondary">{{ sections|selectattr('0','equalto',it.section)|map(attribute='1')|first or it.section }}</td>
-          <td class="small">{{ it.unit }}</td>
-          <td class="text-end">{{ "%.2f"|format(it.qty or 0) }}</td>
-          <td class="text-end">{{ "%.2f"|format(it.final_built_up_rate or 0) }}</td>
-          <td class="text-end fw-bold text-warning">{{ "%.2f"|format(it.total_amount or 0) }}</td>
-          <td class="small text-secondary">{{ it.remarks or '' }}</td>
-          <td class="text-end">
-            <form method="POST" action="{{ url_for('boq_floor_delete_item', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" style="display:inline">
-              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-              <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove this item?')"><i class="bi bi-trash"></i></button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+{% set ns = namespace(prev_bill=None, prev_section=None, prev_sub=None) %}
+<div class="solar-card p-0 mb-3">
+  <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:13px">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
+      <tr>
+        <th style="width:40px">Item</th>
+        <th>Description</th>
+        <th class="text-end">Qty</th>
+        <th>Unit</th>
+        <th class="text-end">Basic Rate</th>
+        <th class="text-end">Rate</th>
+        <th class="text-end">Amount</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      {% set bill_no = it.bill_no or 0 %}
+      {% set section_letter = (it.section_letter or '')|upper %}
+      {% set subsec = it.subsection_label or '' %}
+      {% set bill_name = it.bill_name or '' %}
+
+      {% if bill_no != ns.prev_bill %}
+      <tr style="background:#0a0a14">
+        <td colspan="8" class="fw-bold text-warning" style="text-transform:uppercase;letter-spacing:.5px;font-size:12.5px">
+          BILL No. {{ bill_no }} — {{ bill_name or 'OTHER' }}
+        </td>
+      </tr>
+      {% set ns.prev_bill = bill_no %}
+      {% set ns.prev_section = None %}
+      {% set ns.prev_sub = None %}
+      {% endif %}
+
+      {% if section_letter and section_letter != ns.prev_section %}
+      <tr style="background:#10102a">
+        <td colspan="8" class="text-warning fw-bold" style="text-transform:uppercase;font-size:11.5px;letter-spacing:.5px">
+          <span class="me-2">{{ section_letter }}.</span>{{ it.specification or it.description if not it.description else (it.section|replace('_',' ')|upper if it.section else '') }}
+        </td>
+      </tr>
+      {% set ns.prev_section = section_letter %}
+      {% set ns.prev_sub = None %}
+      {% endif %}
+
+      {% if subsec and subsec != ns.prev_sub %}
+      <tr><td colspan="8" class="text-secondary" style="font-style:italic;font-size:12px;padding-left:1.5rem">
+        {{ subsec }}{% if it.specification %} — {{ it.specification }}{% endif %}
+      </td></tr>
+      {% set ns.prev_sub = subsec %}
+      {% endif %}
+
+      <tr>
+        <td class="text-warning fw-bold">{{ it.item_no_display or it.item_no or loop.index }}</td>
+        <td>
+          {{ it.description }}
+          {% if it.specification %}<div class="small text-secondary">{{ it.specification }}</div>{% endif %}
+        </td>
+        <td class="text-end">{{ "%.2f"|format(it.qty or 0) }}</td>
+        <td class="small">{{ it.unit }}</td>
+        <td class="text-end">{{ "%.2f"|format(it.bu_basic or 0) }}</td>
+        <td class="text-end">{{ "%.2f"|format(it.final_built_up_rate or 0) }}</td>
+        <td class="text-end fw-bold text-warning">{{ "%.2f"|format(it.total_amount or 0) }}</td>
+        <td class="text-end">
+          <form method="POST" action="{{ url_for('boq_floor_delete_item', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove this item?')"><i class="bi bi-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
 {% else %}
 <div class="solar-card p-4 text-center text-secondary mb-3">
-  <p class="mb-0">No items on this floor yet — add one below.</p>
+  <i class="bi bi-folder2-open" style="font-size:36px"></i>
+  <p class="mt-2 mb-2">No items on this floor yet — open the first section to start adding lines.</p>
+  <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-warning fw-bold btn-sm">
+    <i class="bi bi-folder-plus me-1"></i>Open first section
+  </a>
 </div>
 {% endif %}
-
-{# ─── Add Library Item / Add Floor Item form (master prompt §8-10) ──── #}
-<div class="solar-card p-3">
-  <h6 class="fw-bold mb-3"><i class="bi bi-plus-square me-1 text-warning"></i>Add BOQ item</h6>
-  <form method="POST" action="{{ url_for('boq_floor_add_item', pid=project.id, bid=building.id, fid=floor.id) }}">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <div class="row g-2">
-      <div class="col-md-8">
-        <label class="form-label small text-secondary">Description *</label>
-        <input class="form-control form-control-sm" name="description" required>
-      </div>
-      <div class="col-md-4">
-        <label class="form-label small text-secondary">BOQ section</label>
-        <select class="form-select form-select-sm" name="section">
-          {% for code, name in sections %}<option value="{{ code }}">{{ name }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-12">
-        <label class="form-label small text-secondary">Specification</label>
-        <textarea class="form-control form-control-sm" name="specification" rows="2" placeholder="Rating, size, type, installation standard…"></textarea>
-      </div>
-      <div class="col-md-2">
-        <label class="form-label small text-secondary">Unit *</label>
-        <input class="form-control form-control-sm" name="unit" value="No." required>
-      </div>
-      <div class="col-md-2">
-        <label class="form-label small text-secondary">Qty *</label>
-        <input type="number" step="0.01" min="0.01" class="form-control form-control-sm" name="qty" value="1" required>
-      </div>
-      <div class="col-md-3">
-        <label class="form-label small text-secondary">Library item id (optional)</label>
-        <input type="number" class="form-control form-control-sm" name="library_item_id" placeholder="If picking from catalogue">
-      </div>
-      <div class="col-md-5">
-        <label class="form-label small text-secondary">Remarks (shown on BOQ)</label>
-        <input class="form-control form-control-sm" name="remarks">
-      </div>
-
-      <div class="col-md-12 mt-3">
-        <div class="text-warning small fw-bold"><i class="bi bi-lock-fill me-1"></i>Rate build-up — internal only (never shown on BOQ)</div>
-      </div>
-      <div class="col-md-3"><label class="form-label small text-secondary">Basic price</label><input type="number" step="0.01" min="0" class="form-control form-control-sm" name="basic_price"></div>
-      <div class="col-md-3"><label class="form-label small text-secondary">Supply (default = basic)</label><input type="number" step="0.01" min="0" class="form-control form-control-sm" name="supply_rate"></div>
-      <div class="col-md-3"><label class="form-label small text-secondary">Install (default = 0)</label><input type="number" step="0.01" min="0" class="form-control form-control-sm" name="install_rate"></div>
-      <div class="col-md-3"><label class="form-label small text-secondary">Overheads %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="overhead_pct"></div>
-      <div class="col-md-3"><label class="form-label small text-secondary">Profit %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="profit_pct"></div>
-      <div class="col-md-3"><label class="form-label small text-secondary">Contingency %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="contingency_pct"></div>
-      <div class="col-md-3"><label class="form-label small text-secondary">VAT %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="vat_pct"></div>
-
-      <div class="col-md-3 mt-3">
-        <label class="form-label small text-secondary">Save option</label>
-        <select class="form-select form-select-sm" name="save_option">
-          <option value="current_boq_only">Current BOQ only</option>
-          <option value="save_to_project_library">Save to project library</option>
-          <option value="submit_to_master_library">Submit to master library</option>
-        </select>
-      </div>
-      <div class="col-md-9 d-flex align-items-end justify-content-end">
-        <button class="btn btn-warning btn-sm fw-bold"><i class="bi bi-plus-circle me-1"></i>Add to floor BOQ</button>
-      </div>
-    </div>
-  </form>
-</div>
 {% endblock %}
