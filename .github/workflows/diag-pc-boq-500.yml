@@ -6,7 +6,7 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Login + procurement-center BOQ creation + dump 500
+      - name: Login + full PC BOQ flow + export probes
         env:
           OWNER_PW: ${{ secrets.SOLARPRO_OWNER_PASSWORD }}
         run: |
@@ -19,38 +19,56 @@ jobs:
             -d "username=marc667us&password=${OWNER_PW}&_csrf=${CSRF}" \
             "$BASE/login?legacy=1"
 
-          # GET /procurement-center, harvest product ids + CSRF
+          # Create BOQ from procurement-center
           BODY=$(curl -sS -b "$COOKIE" "$BASE/procurement-center")
           CSRF=$(echo "$BODY" | grep -oE 'name="_csrf"[^>]+value="[^"]+"' | head -1 | sed -E 's/.*value="([^"]+)".*/\1/')
-          # Extract first 3 product ids from value="N" inside checkboxes
           IDS=$(echo "$BODY" | grep -oE 'name="product_ids" value="[0-9]+"' | grep -oE '[0-9]+' | head -3 | tr '\n' ' ')
-          echo "csrf_len=${#CSRF}  product_ids=$IDS"
+          DATA="_csrf=${CSRF}&doc_type=boq&currency=USD&title=DiagBOQ"
+          for ID in $IDS; do DATA="${DATA}&product_ids=${ID}"; done
+          curl -sS -b "$COOKIE" -X POST -d "$DATA" -o /dev/null "$BASE/procurement-center/add"
 
-          # Build POST data
-          DATA="_csrf=${CSRF}&doc_type=boq&currency=USD&title="
-          for ID in $IDS; do
-            DATA="${DATA}&product_ids=${ID}"
-          done
-          echo "---- POST /procurement-center/add doc_type=boq ----"
-          OUT=$(curl -sS -b "$COOKIE" -X POST \
-            -d "$DATA" \
-            -w "\nHTTP=%{http_code}\nLOC=%{redirect_url}" \
-            "$BASE/procurement-center/add")
-          STATUS=$(echo "$OUT" | grep '^HTTP=' | sed 's/HTTP=//')
-          LOC=$(echo "$OUT" | grep '^LOC=' | sed 's/LOC=//')
-          echo "  status=$STATUS"
-          echo "  redirect=$LOC"
-          if [ "$STATUS" = "500" ]; then
-            echo "---- 500 BODY ----"
-            echo "$OUT" | head -c -200 | tail -c 5000
-          fi
-          if [ -n "$LOC" ]; then
-            echo "---- GET redirect target ----"
-            OUT=$(curl -sS -b "$COOKIE" -w "\nHTTP=%{http_code}" "$LOC")
+          # Find the BOM id we just created
+          LIST=$(curl -sS -b "$COOKIE" "$BASE/boms")
+          BID=$(echo "$LIST" | grep -oE 'href="/boms/[0-9]+"' | head -1 | grep -oE '[0-9]+')
+          echo "bom_id=$BID"
+
+          # Probe every export / view surface for this BOM
+          for path in "/boms/${BID}" "/boms/${BID}/boq" "/boms/${BID}/boq.xlsx" "/boms/${BID}/boq.pdf" "/boms/${BID}/rate-buildup" "/boms/${BID}/boq.pdf?include_buildup=1" "/boms/${BID}/boq.xlsx?include_buildup=1"; do
+            OUT=$(curl -sS -b "$COOKIE" -w "\nHTTP=%{http_code}" "$BASE${path}")
             STATUS=$(echo "$OUT" | tail -1 | sed 's/HTTP=//')
-            echo "  status=$STATUS"
+            printf "  %-50s -> %s\n" "$path" "$STATUS"
             if [ "$STATUS" = "500" ]; then
-              echo "---- redirect target 500 BODY ----"
-              echo "$OUT" | head -c -8 | tail -c 5000
+              echo "    ---- 500 BODY ----"
+              echo "$OUT" | head -c -8 | tail -c 3000
+              echo "    ---- END ----"
             fi
+          done
+
+          # Also probe BOQ projects for the same exports
+          PROJS=$(curl -sS -b "$COOKIE" "$BASE/boq-projects")
+          PID=$(echo "$PROJS" | grep -oE 'href="/boq-projects/[0-9]+"' | head -1 | grep -oE '[0-9]+')
+          if [ -n "$PID" ]; then
+            echo "boq_project_id=$PID"
+            for path in "/boq-projects/${PID}" "/boq-projects/${PID}/boq" "/boq-projects/${PID}/boq.xlsx" "/boq-projects/${PID}/boq.pdf" "/boq-projects/${PID}/summary"; do
+              OUT=$(curl -sS -b "$COOKIE" -w "\nHTTP=%{http_code}" "$BASE${path}")
+              STATUS=$(echo "$OUT" | tail -1 | sed 's/HTTP=//')
+              printf "  %-50s -> %s\n" "$path" "$STATUS"
+              if [ "$STATUS" = "500" ]; then
+                echo "    ---- 500 BODY ----"
+                echo "$OUT" | head -c -8 | tail -c 3000
+                echo "    ---- END ----"
+              fi
+            done
+          fi
+
+          # Solar project PDFs
+          SOLAR=$(curl -sS -b "$COOKIE" "$BASE/myproject")
+          SID=$(echo "$SOLAR" | grep -oE 'href="/project/[0-9]+/' | head -1 | grep -oE '[0-9]+')
+          if [ -n "$SID" ]; then
+            echo "solar_project_id=$SID"
+            for path in "/project/${SID}/report/boq" "/project/${SID}/report/boq/pdf"; do
+              OUT=$(curl -sS -b "$COOKIE" -w "\nHTTP=%{http_code}" "$BASE${path}")
+              STATUS=$(echo "$OUT" | tail -1 | sed 's/HTTP=//')
+              printf "  %-50s -> %s\n" "$path" "$STATUS"
+            done
           fi
