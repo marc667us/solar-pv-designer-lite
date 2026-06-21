@@ -357,6 +357,7 @@
             {% if user.is_admin %}
             <li><hr class="dropdown-divider" style="border-color:#1e1e3a"></li>
             <li><span class="dropdown-header text-secondary" style="font-size:11px;letter-spacing:.5px;color:#9090c0!important">ADMIN</span></li>
+            <li><a class="dropdown-item" href="{{ url_for('admin_opportunities') }}"><i class="bi bi-broadcast me-2 text-warning"></i>Solar Opportunities (RFQ/RFP)<span class="badge ms-2" style="background:rgba(34,197,94,.15);color:#22c55e;font-size:9px">RSS</span></a></li>
             <li><a class="dropdown-item" href="{{ url_for('admin_marketplace_dashboard') }}"><i class="bi bi-shield-check me-2" style="color:#22c55e"></i>Marketplace Admin</a></li>
             <li><a class="dropdown-item" href="{{ url_for('admin_marketplace_pending') }}"><i class="bi bi-hourglass-split me-2" style="color:#f87171"></i>Pending Approvals</a></li>
             <li><a class="dropdown-item" href="{{ url_for('admin_marketplace_staff') }}"><i class="bi bi-people-fill me-2 text-warning"></i>Marketplace + Support Staff</a></li>

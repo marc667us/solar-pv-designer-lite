@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Solar Opportunities{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <h5 class="fw-black mb-0"><i class="bi bi-broadcast text-warning me-1"></i>Solar Opportunities (RFQ / RFP)</h5>
+    <div class="text-secondary small mt-1">
+      Pulled from public tender RSS feeds, filtered for solar / PV / off-grid / mini-grid / hybrid. Refreshes every 60 minutes.
+      Cache age: {{ cache_age_sec }} s. {{ total_unfiltered }} item(s) in cache.
+    </div>
+  </div>
+  <a href="{{ url_for('admin_opportunities', refresh=1) }}" class="btn btn-warning btn-sm fw-bold">
+    <i class="bi bi-arrow-clockwise me-1"></i>Refresh now
+  </a>
+</div>
+
+{# ── Manual Search Helper ───────────────────────────────────────────── #}
+{# Owner directive 2026-06-21: "if i manually search for them i get these   #}
+{# projects so why ai can get". Pre-canned Google queries so manual         #}
+{# search is one click -- you go directly to Google's index (faster +       #}
+{# broader than the agent's throttled DDG+Bing scrape).                     #}
+<div class="solar-card p-3 mb-3" style="border-left:4px solid #22c55e;background:rgba(34,197,94,.06)">
+  <div class="fw-bold mb-2" style="color:#4ade80;letter-spacing:.4px;font-size:13px">
+    <i class="bi bi-google me-1"></i>MANUAL SEARCH HELPER &mdash; 1-click Google search
+  </div>
+  <div class="text-secondary small mb-2" style="font-size:11.5px">
+    Each chip opens a Google search with the exact RFQ/RFP query in a new tab. Google is faster + indexes more sources than our agent.
+  </div>
+  {% set _qs = [
+    ("Ghana RFP solar",     '"request for proposal" solar (Ghana OR Accra OR Kumasi) 2026 2027'),
+    ("Ghana RFQ solar",     '"request for quotation" solar (Ghana OR Accra) 2026'),
+    ("Ghana tender solar",  '"invitation to bid" OR "tender" solar Ghana 2026 2027'),
+    ("Nigeria RFP solar",   '"request for proposal" solar (Nigeria OR Lagos OR Abuja) 2026 2027'),
+    ("Nigeria RFQ solar",   '"request for quotation" solar Nigeria 2026'),
+    ("Kenya RFP solar",     '"request for proposal" solar (Kenya OR Nairobi) 2026 2027'),
+    ("Kenya RFQ solar",     '"request for quotation" solar Kenya 2026'),
+    ("South Africa RFP solar", '"request for proposal" solar "South Africa" 2026 2027'),
+    ("Tanzania RFP solar",  '"request for proposal" solar Tanzania 2026 2027'),
+    ("Uganda RFP solar",    '"request for proposal" solar Uganda 2026 2027'),
+    ("UN Procurement",      'site:ungm.org solar OR photovoltaic 2026'),
+    ("ReliefWeb tenders",   'site:reliefweb.int solar tender 2026'),
+    ("World Bank solar",    'site:worldbank.org solar procurement OR tender 2026'),
+    ("AfDB solar",          'site:afdb.org solar tender OR procurement 2026'),
+    ("ECOWAS solar",        'site:ecreee.org OR site:ecowas.int solar tender 2026'),
+  ] %}
+  <div class="d-flex flex-wrap gap-2">
+    {% for label, q in _qs %}
+    <a href="https://www.google.com/search?q={{ q|urlencode }}" target="_blank" rel="noopener"
+       class="btn btn-sm btn-outline-success" style="font-size:11.5px">
+      <i class="bi bi-search me-1"></i>{{ label }}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+{# ── Filter chips ────────────────────────────────────────────────────── #}
+{% if total_unfiltered > 0 %}
+<div class="solar-card p-3 mb-3">
+  <div class="d-flex flex-wrap gap-3 align-items-start">
+    {% if types %}
+    <div>
+      <div class="text-secondary" style="font-size:10px;letter-spacing:.5px;text-transform:uppercase">Type</div>
+      <div class="d-flex flex-wrap gap-1 mt-1">
+        <a href="{{ url_for('admin_opportunities', country=active_country, source=active_source) }}"
+           class="badge text-decoration-none"
+           style="background:{% if not active_type %}rgba(245,158,11,.22){% else %}rgba(255,255,255,.05){% endif %};color:#fff;border:1px solid rgba(245,158,11,.5);font-size:10.5px">ALL</a>
+        {% for t in types %}
+        <a href="{{ url_for('admin_opportunities', type=t, country=active_country, source=active_source) }}"
+           class="badge text-decoration-none"
+           style="background:{% if active_type == t %}rgba(245,158,11,.22){% else %}rgba(255,255,255,.05){% endif %};color:#fff;border:1px solid rgba(245,158,11,.5);font-size:10.5px">{{ t }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {% if countries %}
+    <div>
+      <div class="text-secondary" style="font-size:10px;letter-spacing:.5px;text-transform:uppercase">Country</div>
+      <div class="d-flex flex-wrap gap-1 mt-1">
+        <a href="{{ url_for('admin_opportunities', type=active_type, source=active_source) }}"
+           class="badge text-decoration-none"
+           style="background:{% if not active_country %}rgba(34,197,94,.18){% else %}rgba(255,255,255,.05){% endif %};color:#fff;border:1px solid rgba(34,197,94,.5);font-size:10.5px">ALL</a>
+        {% for c in countries %}
+        <a href="{{ url_for('admin_opportunities', country=c, type=active_type, source=active_source) }}"
+           class="badge text-decoration-none"
+           style="background:{% if active_country == c %}rgba(34,197,94,.18){% else %}rgba(255,255,255,.05){% endif %};color:#fff;border:1px solid rgba(34,197,94,.5);font-size:10.5px">{{ c }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── List ───────────────────────────────────────────────────────────── #}
+{% if items %}
+<div class="solar-card p-0">
+  <table class="table table-hover mb-0" style="color:#e0e0f0;font-size:13px">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+      <tr>
+        <th style="width:70px">Type</th>
+        <th>Title</th>
+        <th style="width:120px">Country</th>
+        <th style="width:90px">Source</th>
+        <th style="width:130px">Published</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      <tr>
+        <td>
+          {% set _typecolor = {'RFQ':'#22c55e','RFP':'#0ea5e9','TENDER':'#a78bfa','EOI':'#f59e0b'}.get(it.type, '#6b7280') %}
+          <span class="badge" style="background:rgba(255,255,255,.04);color:{{ _typecolor }};border:1px solid {{ _typecolor }};font-size:10.5px">{{ it.type }}</span>
+        </td>
+        <td>
+          <a href="{{ it.source_url }}" target="_blank" rel="noopener" class="text-warning fw-semibold text-decoration-none">{{ it.title }}</a>
+          {% if it.body %}<div class="text-secondary small mt-1" style="font-size:11.5px;line-height:1.4">{{ it.body[:300] }}{% if it.body|length > 300 %}&hellip;{% endif %}</div>{% endif %}
+        </td>
+        <td class="small">{{ it.country or '&mdash;' }}</td>
+        <td class="small text-secondary">{{ it.source }}</td>
+        <td class="small text-secondary">{{ it.published[:16] }}</td>
+        <td class="text-end" style="white-space:nowrap">
+          <a href="{{ it.source_url }}" target="_blank" rel="noopener" class="btn btn-outline-warning btn-sm" title="Open source page">
+            <i class="bi bi-box-arrow-up-right"></i>
+          </a>
+          <form method="POST" action="{{ url_for('admin_opportunity_add_to_leads', src_url=it.source_url) }}" style="display:inline">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="title" value="{{ it.title|e }}">
+            <input type="hidden" name="country" value="{{ it.country|e }}">
+            <input type="hidden" name="type" value="{{ it.type }}">
+            <input type="hidden" name="body" value="{{ it.body|e }}">
+            <button type="submit" class="btn btn-outline-info btn-sm" title="Add to leads">
+              <i class="bi bi-plus-circle"></i>
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="solar-card p-4 text-center text-secondary">
+  <i class="bi bi-broadcast" style="font-size:36px"></i>
+  <p class="mt-2 mb-1">No solar opportunities in the RSS feed right now.</p>
+  <p class="small">Use the Manual Search Helper above &mdash; Google indexes far more sources than the RSS feeds we poll.</p>
+</div>
+{% endif %}
+
+{% endblock %}
