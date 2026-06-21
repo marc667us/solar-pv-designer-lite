@@ -14507,6 +14507,27 @@ def supplier_product_add():
     if not name:
         flash("Product name is required.", "danger")
         return redirect(url_for("supplier_product_add"))
+    # De-dup: refuse if the same (supplier, brand, name) trio already
+    # exists for this supplier. Case-insensitive comparison.
+    _brand = (f.get("brand") or "").strip()
+    try:
+        with get_db() as _c:
+            _dup = _c.execute(
+                "SELECT id, name, brand FROM equipment_catalog "
+                "WHERE supplier_id=? AND COALESCE(is_active,1)=1 "
+                "  AND LOWER(COALESCE(brand,'')) = LOWER(?) "
+                "  AND LOWER(name) = LOWER(?) LIMIT 1",
+                (s["id"], _brand, name),
+            ).fetchone()
+    except Exception:
+        _dup = None
+    if _dup:
+        flash(
+            f"You already have a product called '{_dup['name']}' from brand "
+            f"'{_dup['brand'] or '(no brand)'}'. Use Edit instead of adding a duplicate.",
+            "warning",
+        )
+        return redirect(url_for("supplier_products"))
     cat_id = _safe_int(f.get("category_id"), 0)
     # Look up the legacy free-text category label for backward compatibility
     # with solar's BOQ generator (it queries equipment_catalog.category by string).

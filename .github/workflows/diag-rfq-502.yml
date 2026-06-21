@@ -4,7 +4,7 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Login + probe RFQ view
+      - name: Login + brute-probe RFQ ids 1..30
         env: { OWNER_PW: "${{ secrets.SOLARPRO_OWNER_PASSWORD }}" }
         run: |
           set +e
@@ -15,21 +15,29 @@ jobs:
           curl -sS -o /dev/null -b "$COOKIE" -c "$COOKIE" -X POST \
             -d "username=marc667us&password=${OWNER_PW}&_csrf=${CSRF}" \
             "$BASE/login?legacy=1"
-          # List RFQs
+          # Dump /rfqs raw to understand what's there
           LIST=$(curl -sS -b "$COOKIE" "$BASE/rfqs")
-          RIDS=$(echo "$LIST" | grep -oE 'href="/rfqs/[0-9]+"' | grep -oE '[0-9]+' | sort -u | head -5)
-          echo "rfq_ids=$RIDS"
-          # Try each one with 30 sec timeout
-          for ID in $RIDS; do
-            START=$(date +%s); OUT=$(curl -sS -b "$COOKIE" --max-time 45 -w "\nHTTP=%{http_code}" "$BASE/rfqs/$ID"); END=$(date +%s)
-            STATUS=$(echo "$OUT" | grep '^HTTP=' | sed 's/HTTP=//')
+          echo "---- /rfqs HEAD ----"
+          echo "$LIST" | head -c 500
+          echo ""
+          echo "---- /rfqs grep for IDs ----"
+          echo "$LIST" | grep -oE "rfqs/[0-9]+" | sort -u
+          echo ""
+          echo "---- brute probe /rfqs/1..30 ----"
+          for ID in $(seq 1 30); do
+            START=$(date +%s)
+            STATUS=$(curl -sS -b "$COOKIE" --max-time 30 -o /dev/null -w "%{http_code}" "$BASE/rfqs/$ID")
+            END=$(date +%s)
             ELAPSED=$((END - START))
-            printf "  /rfqs/%-4s -> %s  (%ss)\n" "$ID" "$STATUS" "$ELAPSED"
-            if [ "$STATUS" = "500" ] || [ "$STATUS" = "502" ] || [ "$STATUS" = "503" ]; then
-              echo "    ---- body (first 3KB after status) ----"
-              echo "$OUT" | head -c -8 | head -c 3000
-              echo ""
-              echo "    ---- end ----"
+            if [ "$STATUS" != "404" ]; then
+              printf "  /rfqs/%-3s -> %s  (%ss)\n" "$ID" "$STATUS" "$ELAPSED"
+              if [ "$STATUS" = "500" ] || [ "$STATUS" = "502" ] || [ "$STATUS" = "503" ]; then
+                echo "    !! FAIL"
+                # Dump body for the failure
+                BODY=$(curl -sS -b "$COOKIE" --max-time 15 "$BASE/rfqs/$ID")
+                echo "$BODY" | head -c 2000
+                echo ""
+              fi
             fi
-            sleep 8
+            sleep 3
           done
