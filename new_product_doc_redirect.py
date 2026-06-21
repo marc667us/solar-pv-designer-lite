@@ -1,17 +1,19 @@
 # new_product_doc_redirect.py
 # Owner-reported 2026-06-21: "502 on the links for literature and datasheet
-# of product".
+# of product" + follow-up: "if its says the literature and datasheet are
+# load where can i find them as the links dont work".
 #
-# The marketplace product cards render p.literature_url and p.datasheet_url
-# as direct external links. When the upstream supplier domain is down or
-# the URL is stale, the browser shows the upstream 502 / DNS error / TLS
-# error -- not a SolarPro page.
+# Fix shape:
+#   1. GET /marketplace/product/<id>/doc/<kind> -- HEAD-probes the saved
+#      URL, 302s to it if reachable, otherwise renders error.html with
+#      the URL as a properly-clickable "Open directly" + Copy widget.
+#   2. GET /marketplace/product/<id>/docs -- always-on fallback page that
+#      lists EVERY saved URL for the product verbatim, regardless of
+#      whether it's reachable. So even when the supplier site is down the
+#      owner can copy the URL, save it, share it, try it later.
 #
-# Fix: route every literature / datasheet click through this redirect.
-# We do a 6 s HEAD probe. If 200/301/302/303/307/308 -- 302 the user
-# there. If anything else (5xx, 4xx, timeout, DNS error, TLS error) we
-# render templates/error.html with the URL surfaced so the user can copy
-# it manually and we can fix the stored value.
+# Both paths are public (no login) so anonymous marketplace browsers
+# still benefit.
 
 
 import urllib.request
@@ -31,6 +33,16 @@ def _doc_url_for_product(c, pid, kind):
     return row
 
 
+def _all_doc_urls_for_product(c, pid):
+    """Return both URLs at once for the /docs fallback page."""
+    row = c.execute(
+        "SELECT id, name, brand, literature_url, datasheet_url "
+        "FROM equipment_catalog WHERE id=?",
+        (int(pid),),
+    ).fetchone()
+    return row
+
+
 def _probe_url_ok(url, timeout=6.0):
     """HEAD-probe. Returns (ok, status_or_reason)."""
     try:
@@ -42,8 +54,6 @@ def _probe_url_ok(url, timeout=6.0):
         parsed = urllib.parse.urlparse(u)
         if not parsed.netloc:
             return (False, "no_host")
-        # Some servers reject HEAD with 405. We try HEAD first, then a 1-byte
-        # GET as fallback before declaring upstream broken.
         ctx = ssl.create_default_context()
         for method in ("HEAD", "GET"):
             req = urllib.request.Request(u, method=method, headers={
@@ -78,8 +88,8 @@ def _probe_url_ok(url, timeout=6.0):
 @app.route("/marketplace/product/<int:pid>/doc/<kind>")
 def marketplace_product_doc_redirect(pid, kind):
     """HEAD-probe the stored literature/datasheet URL. If upstream is OK,
-    302 the user there. If not, render the friendly error page so the
-    user never sees a bare 502 from the supplier domain."""
+    302 the user there. If not, render the friendly error page with the
+    URL surfaced so the user can copy it."""
     kind = (kind or "").strip().lower()
     if kind not in ("literature", "datasheet"):
         from flask import abort as _abort
@@ -104,23 +114,43 @@ def marketplace_product_doc_redirect(pid, kind):
     ok, status = _probe_url_ok(url, timeout=6.0)
     if ok:
         return redirect(url)
-    # Upstream is down / dead / 502. Show the friendly page with the
-    # URL exposed so the user can copy/paste into a new tab themselves.
-    msg = (
-        f"The supplier {kind} for <strong>{name}</strong> isn't reachable "
-        f"right now (upstream returned <code>{status}</code>). "
-        "You can try the link manually below -- the supplier site may "
-        "come back. We'll re-check the link on the next crawl."
-    )
+    # Upstream is down. Surface the URL as a real clickable widget via
+    # doc_url + doc_name (NOT embedded in message -- error.html escapes
+    # message text).
+    return render_template(
+        "error.html", code=502,
+        title=f"{kind.title()} temporarily unreachable",
+        message=(f"The supplier site that hosts the {kind} for "
+                 f"{name} isn't responding right now "
+                 f"(upstream returned {status}). The URL is saved -- "
+                 "open it directly below or copy it for later."),
+        doc_url=url,
+        doc_name=f"{name} -- {kind}",
+        user=current_user() if 'current_user' in globals() else None,
+    ), 200  # 200 so the browser shows the body, not its own error page
+
+
+@app.route("/marketplace/product/<int:pid>/docs")
+def marketplace_product_docs_listing(pid):
+    """Always-on fallback page that lists every saved URL for a product
+    verbatim, regardless of reachability. So even when the supplier
+    site is 502 the owner can still see, copy, and bookmark the URL."""
     try:
+        with get_db() as c:
+            row = _all_doc_urls_for_product(c, pid)
+    except Exception as e:
+        try: app.logger.warning("docs listing lookup failed pid=%s: %s", pid, e)
+        except Exception: pass
+        row = None
+    if not row:
         return render_template(
-            "error.html", code=502,
-            title=f"{kind.title()} temporarily unreachable",
-            message=msg + f'<br><br><a href="{url}" target="_blank" rel="noopener" '
-                          f'class="text-info">{url}</a>',
+            "error.html", code=404,
+            title="Product not found",
+            message="That product isn't in the catalogue.",
             user=current_user() if 'current_user' in globals() else None,
-        ), 502
-    except Exception:
-        return redirect(url_for("marketplace_product_view", pid=pid)
-                        if "marketplace_product_view" in app.view_functions
-                        else url_for("marketplace_index")), 302
+        ), 404
+    return render_template(
+        "product_docs.html",
+        product=row,
+        user=current_user() if 'current_user' in globals() else None,
+    )

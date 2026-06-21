@@ -10,16 +10,43 @@
 
     <h4 class="fw-bold mb-3">{{ title or "We hit a small hiccup" }}</h4>
     <p class="text-secondary mb-2">
-      {% if code == 404 %}
+      {% if code == 404 and not doc_url %}
         That page isn't here. The link may be old, or the item was renamed or deleted.
-      {% elif code == 500 %}
+      {% elif code == 500 and not doc_url %}
         We had trouble loading that just now. Your data is safe -- please try again.
-      {% elif code == 502 or code == 503 or code == 504 %}
+      {% elif (code == 502 or code == 503 or code == 504) and not doc_url %}
         The server is restarting. This usually clears in 10-20 seconds.
       {% else %}
         {{ message }}
       {% endif %}
     </p>
+
+    {# Optional: surface a saved document URL the user can open / copy. #}
+    {% if doc_url %}
+    <div class="solar-card p-3 mb-3 text-start" style="background:rgba(255,255,255,.04);max-width:520px;margin:0 auto">
+      <div class="text-secondary small mb-2"><i class="bi bi-link-45deg me-1"></i>Saved URL for <strong>{{ doc_name or 'this document' }}</strong>:</div>
+      <div class="d-flex gap-2 align-items-center" style="word-break:break-all">
+        <code class="flex-grow-1 text-info" style="font-size:11.5px" id="doc-url-text">{{ doc_url }}</code>
+      </div>
+      <div class="d-flex gap-2 mt-2 flex-wrap">
+        <a href="{{ doc_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-info">
+          <i class="bi bi-box-arrow-up-right me-1"></i>Open directly
+        </a>
+        <button type="button" class="btn btn-sm btn-outline-warning" onclick="
+          var t=document.getElementById('doc-url-text').textContent;
+          navigator.clipboard.writeText(t).then(function(){
+            this.innerHTML='<i class=&quot;bi bi-check2&quot;></i> Copied';
+          }.bind(this), function(){});
+          return false;">
+          <i class="bi bi-clipboard me-1"></i>Copy URL
+        </button>
+      </div>
+      <div class="text-secondary small mt-2" style="font-size:11px">
+        If the supplier site is down today, try again later -- the URL stays saved.
+      </div>
+    </div>
+    {% endif %}
+
     <p class="text-secondary small mb-4" id="err-redirect-msg">
       Taking you back in <span id="err-secs">5</span> seconds&hellip;
     </p>
@@ -57,6 +84,13 @@
 
 <script>
   (function(){
+    // If a doc URL is on screen, the user is here to copy it -- don't
+    // auto-redirect them away.
+    {% if doc_url %}
+    var msg = document.getElementById('err-redirect-msg');
+    if (msg) msg.style.display = 'none';
+    return;
+    {% endif %}
     var s = 5;
     var el = document.getElementById('err-secs');
     var msg = document.getElementById('err-redirect-msg');

@@ -178,6 +178,11 @@
         {% else %}
         <span class="text-warning" style="opacity:.85"><i class="bi bi-file-earmark-pdf me-1"></i>Datasheet: not found yet</span>
         {% endif %}
+        {% if p.literature_url or p.datasheet_url %}
+        <a href="{{ url_for('marketplace_product_docs_listing', pid=p.id) }}" target="_blank" rel="noopener" class="text-secondary small text-decoration-none ms-1" title="See the saved URLs so you can copy them if the supplier site is down">
+          <i class="bi bi-link-45deg"></i>URLs
+        </a>
+        {% endif %}
         {% if user and user.is_admin and (not p.literature_url or not p.datasheet_url) %}
         <form method="POST" action="{{ url_for('admin_find_product_links_one', pid=p.id) }}" style="display:inline;margin-left:auto" onsubmit="return confirm('Run web-crawl agent for this product? Takes ~5 seconds.');">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
