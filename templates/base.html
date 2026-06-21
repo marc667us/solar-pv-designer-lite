@@ -142,6 +142,15 @@
     .val,.data-row .val{color:#000 !important;font-weight:700 !important}
     .data-row.total .val{color:#b06000 !important}
     .section-head{color:#000 !important;border-bottom:1px solid #888 !important}
+    /* Owner directive 2026-06-21: all BOQ / cost-estimate / price-sheet
+       reports must print on A4 with solid dark column borders. */
+    @page { size: A4 portrait; margin: 12mm 10mm 14mm 10mm; }
+    table, .report-table { border-collapse: collapse !important; border: 1.2pt solid #000 !important; width: 100% !important; }
+    table th, .report-table th { background:#1e3a5f !important; color:#fff !important; border:1px solid #000 !important; padding:5px 7px !important; }
+    table td, .report-table td { border:1px solid #000 !important; padding:4px 7px !important; color:#000 !important; }
+    table tr:nth-child(even) td, .report-table tr:nth-child(even) td { background:#f5f7fb !important; }
+    /* Drop dark-mode card shells so columns + ink read clean on white paper */
+    .table-responsive { overflow:visible !important; }
   }
   @media(max-width:991px){.navbar-nav{padding:.5rem 0;gap:.25rem!important}}
 

@@ -3615,6 +3615,16 @@ def _xl_header(ws, cols, fill_color="1e1e3a", font_color="F59E0B"):
         ws.column_dimensions[c.column_letter].width = width
 
 def _xl_send(wb, filename):
+    try:
+        for _ws in wb.worksheets:
+            _solarpro_xlsx_apply_borders_and_a4(_ws)
+    except Exception:
+        pass
+    try:
+        for _ws in wb.worksheets:
+            _solarpro_xlsx_apply_borders_and_a4(_ws)
+    except Exception:
+        pass
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -4121,20 +4131,21 @@ def _render_pdf(title, md_content, filename):
     from markdown_pdf import MarkdownPdf, Section
 
     CSS = """
-    body{font-family:'Segoe UI',Arial,sans-serif;color:#111827;font-size:11pt;line-height:1.55;margin:0;padding:0}
-    h1{color:#b45309;font-size:17pt;border-bottom:3px solid #f59e0b;padding-bottom:8px;margin-bottom:14px}
-    h2{color:#1e3a8a;font-size:13pt;border-bottom:1px solid #bfdbfe;padding-bottom:4px;margin-top:20px}
-    h3{color:#374151;font-size:11pt;margin-top:14px}
-    table{width:100%;border-collapse:collapse;margin:10px 0;font-size:10pt}
-    th{background:#1e3a5f;color:#fff;padding:7px 10px;text-align:left}
-    td{border:1px solid #e5e7eb;padding:5px 10px}
-    tr:nth-child(even){background:#f8fafc}
-    blockquote{background:#f0fdf4;border-left:4px solid #22c55e;padding:10px 16px;margin:8px 0;border-radius:4px}
-    .warn{background:#fffbeb;border-left:4px solid #f59e0b;padding:10px 16px;margin:8px 0;border-radius:4px}
-    .danger{background:#fef2f2;border-left:4px solid #ef4444;padding:10px 16px;margin:8px 0;border-radius:4px}
-    p{margin:5px 0}
-    hr{border:none;border-top:1px solid #e5e7eb;margin:14px 0}
-    code{background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:10pt}
+    @page { size: A4 portrait; margin: 12mm 10mm 14mm 10mm; }
+    body{font-family:'Segoe UI',Arial,sans-serif;color:#111827;font-size:10pt;line-height:1.45;margin:0;padding:0}
+    h1{color:#b45309;font-size:16pt;border-bottom:3px solid #f59e0b;padding-bottom:6px;margin-bottom:10px}
+    h2{color:#1e3a8a;font-size:12pt;border-bottom:1px solid #bfdbfe;padding-bottom:3px;margin-top:14px}
+    h3{color:#374151;font-size:10.5pt;margin-top:10px}
+    table{width:100%;border-collapse:collapse;margin:8px 0;font-size:9pt;border:1.2pt solid #000}
+    th{background:#1e3a5f;color:#fff;padding:5px 7px;text-align:left;border:1px solid #000}
+    td{border:1px solid #000;padding:4px 7px;vertical-align:top}
+    tr:nth-child(even) td{background:#f5f7fb}
+    blockquote{background:#f0fdf4;border-left:4px solid #22c55e;padding:8px 12px;margin:6px 0;border-radius:3px}
+    .warn{background:#fffbeb;border-left:4px solid #f59e0b;padding:8px 12px;margin:6px 0;border-radius:3px}
+    .danger{background:#fef2f2;border-left:4px solid #ef4444;padding:8px 12px;margin:6px 0;border-radius:3px}
+    p{margin:4px 0}
+    hr{border:none;border-top:1px solid #444;margin:10px 0}
+    code{background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:9pt}
     """
 
     pdf = MarkdownPdf(toc_level=2)
@@ -17335,19 +17346,24 @@ def boms_save_rates(bom_id):
         # Clamp to a sane window — protects the totals from a runaway 1e9 value.
         return max(0.0, min(100.0, v))
     lab, ovh, prf, vat = _pct("labour_pct"), _pct("overhead_pct"), _pct("profit_pct"), _pct("vat_pct")
-    with get_db() as c:
-        # UPSERT — INSERT OR REPLACE on SQLite; ON CONFLICT on Postgres
-        # (db_adapter translates INSERT OR REPLACE → ON CONFLICT DO UPDATE).
-        c.execute(
-            "INSERT OR REPLACE INTO marketplace_bom_rates "
-            "(bom_id, labour_pct, overhead_pct, profit_pct, vat_pct) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (bom_id, lab, ovh, prf, vat),
-        )
-        c.execute(
-            "UPDATE marketplace_boms SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
-            (bom_id,),
-        )
+    try:
+        with get_db() as c:
+            # UPSERT — INSERT OR REPLACE on SQLite; ON CONFLICT on Postgres
+            c.execute(
+                "INSERT OR REPLACE INTO marketplace_bom_rates "
+                "(bom_id, labour_pct, overhead_pct, profit_pct, vat_pct) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (bom_id, lab, ovh, prf, vat),
+            )
+            c.execute(
+                "UPDATE marketplace_boms SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (bom_id,),
+            )
+    except Exception as _e:
+        try: app.logger.exception("boms_save_rates failed bom_id=%s: %s", bom_id, _e)
+        except Exception: pass
+        flash(f"Could not save rates: {_e!s}. The Cost Estimate is unchanged.", "danger")
+        return redirect(url_for("boms_view", bom_id=bom_id))
     flash(f"Rates updated — labour {lab}% / overhead {ovh}% / profit {prf}% / VAT {vat}%.", "success")
     return redirect(url_for("boms_view", bom_id=bom_id))
 
@@ -17511,6 +17527,11 @@ def boms_boq_xlsx(bom_id):
     ws2.cell(row=r2 + 1, column=1, value="GRAND TOTAL").font = bold
     ws2.cell(row=r2 + 1, column=2, value=round(totals["grand_total"], 2)).font = bold
 
+    try:
+        for _ws in wb.worksheets:
+            _solarpro_xlsx_apply_borders_and_a4(_ws)
+    except Exception:
+        pass
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -19984,7 +20005,12 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
 
     saved = 0
     skipped = 0
-    next_no = int(_boq_next_item_no(fid, bill_no, letter))
+    try:
+        next_no = int(_boq_next_item_no(fid, bill_no, letter))
+    except Exception as _e:
+        try: app.logger.exception("boq_section_grid_save next_no failed: %s", _e)
+        except Exception: pass
+        next_no = 1
     with get_db() as c:
         for i in range(len(descriptions)):
             desc = (descriptions[i] or "").strip()[:500]
@@ -20475,6 +20501,11 @@ def boq_project_xlsx(pid):
     for col, w in enumerate([8, 45, 18], 1):
         ws2.column_dimensions[get_column_letter(col)].width = w
 
+    try:
+        for _ws in wb.worksheets:
+            _solarpro_xlsx_apply_borders_and_a4(_ws)
+    except Exception:
+        pass
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", project["project_name"])[:60]
     try:
@@ -20593,8 +20624,19 @@ def boq_project_email(pid):
     safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", project["project_name"])[:60]
     try:
         from markdown_pdf import MarkdownPdf, Section
+        _A4_DARK_CSS = (
+            "@page { size: A4 portrait; margin: 12mm 10mm 14mm 10mm; }"
+            "body{font-family:'Segoe UI',Arial,sans-serif;color:#111827;font-size:10pt;line-height:1.45;margin:0;padding:0}"
+            "h1{color:#b45309;font-size:16pt;border-bottom:3px solid #f59e0b;padding-bottom:6px;margin-bottom:10px}"
+            "h2{color:#1e3a8a;font-size:12pt;border-bottom:1px solid #bfdbfe;padding-bottom:3px;margin-top:14px}"
+            "h3{color:#374151;font-size:10.5pt;margin-top:10px}"
+            "table{width:100%;border-collapse:collapse;margin:8px 0;font-size:9pt;border:1.2pt solid #000}"
+            "th{background:#1e3a5f;color:#fff;padding:5px 7px;text-align:left;border:1px solid #000}"
+            "td{border:1px solid #000;padding:4px 7px;vertical-align:top}"
+            "tr:nth-child(even) td{background:#f5f7fb}"
+        )
         pdf = MarkdownPdf(toc_level=2)
-        pdf.add_section(Section(md, toc=False))
+        pdf.add_section(Section(md, toc=False), user_css=_A4_DARK_CSS)
         import tempfile
         tf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         pdf.save(tf.name); tf.close()
@@ -22687,6 +22729,11 @@ def price_sheet_xlsx(sheet_id):
     for col, w in enumerate([5, 38, 6, 8, 14, 22, 16, 16, 24, 32], 1):
         ws.column_dimensions[get_column_letter(col)].width = w
 
+    try:
+        for _ws in wb.worksheets:
+            _solarpro_xlsx_apply_borders_and_a4(_ws)
+    except Exception:
+        pass
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -22777,8 +22824,19 @@ def price_sheet_email(sheet_id):
     attachment_bytes = b""
     try:
         from markdown_pdf import MarkdownPdf, Section
+        _A4_DARK_CSS = (
+            "@page { size: A4 portrait; margin: 12mm 10mm 14mm 10mm; }"
+            "body{font-family:'Segoe UI',Arial,sans-serif;color:#111827;font-size:10pt;line-height:1.45;margin:0;padding:0}"
+            "h1{color:#b45309;font-size:16pt;border-bottom:3px solid #f59e0b;padding-bottom:6px;margin-bottom:10px}"
+            "h2{color:#1e3a8a;font-size:12pt;border-bottom:1px solid #bfdbfe;padding-bottom:3px;margin-top:14px}"
+            "h3{color:#374151;font-size:10.5pt;margin-top:10px}"
+            "table{width:100%;border-collapse:collapse;margin:8px 0;font-size:9pt;border:1.2pt solid #000}"
+            "th{background:#1e3a5f;color:#fff;padding:5px 7px;text-align:left;border:1px solid #000}"
+            "td{border:1px solid #000;padding:4px 7px;vertical-align:top}"
+            "tr:nth-child(even) td{background:#f5f7fb}"
+        )
         pdf = MarkdownPdf(toc_level=2)
-        pdf.add_section(Section(md, toc=False))
+        pdf.add_section(Section(md, toc=False), user_css=_A4_DARK_CSS)
         import tempfile
         tf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         pdf.save(tf.name); tf.close()
@@ -22811,6 +22869,185 @@ def price_sheet_email(sheet_id):
         "success" if sent else "warning",
     )
     return redirect(url_for("price_sheet_view", sheet_id=sheet_id))
+
+
+# === BEGIN: solarpro_report_header splice ===
+# new_solarpro_report_header.py
+# Shared "SolarPro Marketplace Services" branded report header
+# modelled on Apinto / Agenda Commercial Limited price-list layout.
+#
+# Used by: boms_boq_pdf / boms_boq_xlsx (Quick Cost Estimate),
+# price_sheets_pdf / price_sheets_xlsx (Basic Price Sheet),
+# boq_project_pdf (formal BOQ).
+#
+# Layout (top of every report):
+#
+#   ============================================================
+#   SOLARPRO MARKETPLACE SERVICES
+#   Procurement | BOM | BOQ | Cost Estimate | Price Sheet
+#   ============================================================
+#   <REPORT SUBTITLE — e.g. BILL OF QUANTITIES>
+#   ------------------------------------------------------------
+#   Project    : <project name>
+#   Client     : <client name>
+#   Document   : <e.g. Quick Cost Estimate #42>
+#   Currency   : <ISO code + symbol>
+#   Generated  : <ISO timestamp>
+#   ------------------------------------------------------------
+#
+# Apinto-style table columns (9):
+#   #  Description  Qty  Unit  Basic Rate (LOCAL)  Basic Rate (US$)
+#   Brand  Supplier  Phone
+#
+
+from datetime import datetime, timezone
+
+
+def _solarpro_report_header_md(subtitle, project_name=None, client_name=None,
+                               doc_label=None, currency="GHS", generated_at=None):
+    """Return a list of markdown lines for the SolarPro Marketplace Services
+    branded header. Mirrors the Apinto/Agenda price-list block."""
+    lines = []
+    lines.append("# SolarPro Marketplace Services")
+    lines.append("")
+    lines.append("*Procurement &middot; BOM &middot; BOQ &middot; Cost Estimate &middot; Price Sheet*")
+    lines.append("")
+    if subtitle:
+        lines.append(f"## {subtitle}")
+        lines.append("")
+    lines.append("")
+    lines.append("| | |")
+    lines.append("|---|---|")
+    if project_name:
+        lines.append(f"| **Project** | {project_name} |")
+    if client_name:
+        lines.append(f"| **Client** | {client_name} |")
+    if doc_label:
+        lines.append(f"| **Document** | {doc_label} |")
+    lines.append(f"| **Currency** | {currency} (per row: local + US$ reference) |")
+    if generated_at:
+        lines.append(f"| **Generated** | {generated_at} |")
+    else:
+        lines.append(f"| **Generated** | {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} |")
+    lines.append("")
+    return lines
+
+
+def _solarpro_report_footer_md():
+    """Branded footer block matching supplier price-list style."""
+    return [
+        "",
+        "---",
+        "",
+        "**SolarPro Marketplace Services** &mdash; Africa's procurement marketplace for solar, "
+        "electrical and ICT contractors. Verified supplier pricing, brand schedules, "
+        "and bill-of-quantities tooling at https://solarpro.aiappinvent.com",
+        "",
+        "*This document is an estimate generated against the SolarPro catalogue at the "
+        "stated timestamp. Final pricing is subject to supplier confirmation, currency rate "
+        "at order date, freight, duties and statutory taxes.*",
+        "",
+    ]
+
+
+def _solarpro_report_header_xlsx(ws, subtitle, project_name=None, client_name=None,
+                                 doc_label=None, currency="GHS", generated_at=None):
+    """Write the SolarPro branded header into an openpyxl worksheet ``ws``.
+
+    Returns the next free row (1-based) that callers should use for the table.
+    """
+    try:
+        from openpyxl.styles import Font, Alignment, PatternFill
+    except Exception:
+        Font = Alignment = PatternFill = None
+
+    row = 1
+    ws.cell(row=row, column=1, value="SolarPro Marketplace Services")
+    if Font is not None:
+        ws.cell(row=row, column=1).font = Font(name="Calibri", size=16, bold=True, color="C49A2D")
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
+    row += 1
+    ws.cell(row=row, column=1, value="Procurement  -  BOM  -  BOQ  -  Cost Estimate  -  Price Sheet")
+    if Font is not None:
+        ws.cell(row=row, column=1).font = Font(name="Calibri", size=10, italic=True, color="606060")
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
+    row += 2
+    if subtitle:
+        ws.cell(row=row, column=1, value=subtitle.upper())
+        if Font is not None:
+            ws.cell(row=row, column=1).font = Font(name="Calibri", size=13, bold=True)
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
+        row += 1
+    row += 1
+    meta_rows = []
+    if project_name:
+        meta_rows.append(("Project", project_name))
+    if client_name:
+        meta_rows.append(("Client", client_name))
+    if doc_label:
+        meta_rows.append(("Document", doc_label))
+    meta_rows.append(("Currency", f"{currency} (each row: local + US$ reference)"))
+    if generated_at:
+        meta_rows.append(("Generated", str(generated_at)))
+    else:
+        meta_rows.append(("Generated", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")))
+
+    for label, value in meta_rows:
+        ws.cell(row=row, column=1, value=label)
+        ws.cell(row=row, column=2, value=value)
+        if Font is not None:
+            ws.cell(row=row, column=1).font = Font(name="Calibri", size=10, bold=True)
+            ws.cell(row=row, column=2).font = Font(name="Calibri", size=10)
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=9)
+        row += 1
+    row += 1
+    return row
+
+
+def _solarpro_fx_to_usd(local_amount, fx_rate_local_per_usd):
+    """Convert a local-currency amount back to a US$ reference value.
+    fx_rate_local_per_usd is the multiplier used to convert USD -> local
+    (so amount_usd = amount_local / fx_rate)."""
+    try:
+        r = float(fx_rate_local_per_usd or 1.0)
+        if r <= 0:
+            return 0.0
+        return float(local_amount or 0.0) / r
+    except Exception:
+        return 0.0
+
+
+def _solarpro_xlsx_apply_borders_and_a4(ws):
+    """Owner directive 2026-06-21: all reports must print A4 with solid
+    dark column borders. Applies thin black borders to every used cell and
+    sets A4 portrait page setup with fit-to-width."""
+    try:
+        from openpyxl.styles import Border, Side
+        from openpyxl.worksheet.page import PageMargins
+    except Exception:
+        return
+    thin = Side(border_style="thin", color="000000")
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    max_row = ws.max_row or 1
+    max_col = ws.max_column or 1
+    for row in ws.iter_rows(min_row=1, max_row=max_row,
+                            min_col=1, max_col=max_col):
+        for cell in row:
+            cell.border = box
+    try:
+        ws.page_setup.paperSize = ws.PAPERSIZE_A4
+        ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.print_options.gridLines = False
+        ws.print_options.horizontalCentered = True
+        ws.page_margins = PageMargins(left=0.4, right=0.4, top=0.6, bottom=0.6,
+                                      header=0.3, footer=0.3)
+    except Exception:
+        pass
+
+# === END: solarpro_report_header splice ===
 
 
 if __name__ == "__main__":
