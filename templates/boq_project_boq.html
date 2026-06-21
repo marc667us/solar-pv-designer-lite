@@ -113,8 +113,11 @@
 
           {% set sec = (r.section_letter or '')|upper %}
           {% if sec and sec != ns.prev_sec %}
+          {% set sect_title_db = (r.section|replace('_',' ')|upper if r.section else '') %}
           <tr><td colspan="{{ colspan }}" class="text-warning fw-bold" style="font-size:12px;padding-left:1.5rem">
-            {{ sec }}. {{ r.section|replace('_',' ')|upper if r.section else '' }}
+            {{ sec }}. {{ sect_title_db }}
+            {% set _sh = boq_section_subheading(sect_title_db) %}
+            {% if _sh %}<div class="text-secondary" style="font-size:11px;font-style:italic;font-weight:normal;margin-top:3px">{{ _sh }}</div>{% endif %}
           </td></tr>
           {% set ns.prev_sec = sec %}
           {% set ns.prev_sub = None %}

@@ -68,9 +68,17 @@
       {% endif %}
 
       {% if section_letter and section_letter != ns.prev_section %}
+      {% set sect_title_db = (it.section|replace('_',' ')|upper if it.section else '') %}
       <tr style="background:#10102a">
         <td colspan="8" class="text-warning fw-bold" style="text-transform:uppercase;font-size:11.5px;letter-spacing:.5px">
-          <span class="me-2">{{ section_letter }}.</span>{{ it.specification or it.description if not it.description else (it.section|replace('_',' ')|upper if it.section else '') }}
+          <div class="d-flex align-items-center justify-content-between">
+            <div><span class="me-2">{{ section_letter }}.</span>{{ sect_title_db }}</div>
+            <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill_no) }}" class="btn btn-outline-warning btn-sm" title="Add item to this section">
+              <i class="bi bi-plus-circle me-1"></i>Add item
+            </a>
+          </div>
+          {% set _sh = boq_section_subheading(sect_title_db) %}
+          {% if _sh %}<div class="text-secondary" style="font-size:11.5px;text-transform:none;letter-spacing:0;font-style:italic;font-weight:normal;margin-top:4px">{{ _sh }}</div>{% endif %}
         </td>
       </tr>
       {% set ns.prev_section = section_letter %}

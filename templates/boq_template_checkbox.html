@@ -52,6 +52,9 @@
           <span class="text-warning me-2">{{ section.letter }}.</span>{{ section.title }}
           {% if section.subsection %}<span class="text-secondary small ms-2">{{ section.subsection }}</span>{% endif %}
         </div>
+        {% if section.subheading %}
+        <div class="text-secondary mb-2" style="font-size:12px;font-style:italic;margin-left:.5rem">{{ section.subheading }}</div>
+        {% endif %}
         <div class="table-responsive">
           <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:13px;table-layout:auto;min-width:1200px">
             <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px">
