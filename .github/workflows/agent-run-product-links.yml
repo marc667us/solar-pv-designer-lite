@@ -15,8 +15,8 @@ jobs:
           curl -sS -o /dev/null -b "$COOKIE" -c "$COOKIE" -X POST \
             -d "username=marc667us&password=${OWNER_PW}&_csrf=${CSRF}" \
             "$BASE/login?legacy=1"
-          # Run bulk crawl 5 times -> processes 5 * 20 = 100 products
-          for ROUND in 1 2 3 4 5; do
+          # Run bulk crawl 30 times -> 30 * 3 = 90 products (LIMIT=3 to fit Render timeout)
+          for ROUND in $(seq 1 30); do
             echo "==== Round $ROUND ===="
             START=$(date +%s)
             # Need a CSRF from admin-products page

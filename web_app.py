@@ -22226,7 +22226,7 @@ def _find_links_for(name: str, brand: str = "", model: str = "") -> tuple:
         return _best_match(q, brand_domains, kind_key)
 
     ds = _try("datasheet", "datasheet")
-    time.sleep(2.0)  # politeness between queries
+    time.sleep(0.6)  # tighter to fit Render worker timeout
     lit = _try("brochure OR literature", "literature")
     return (ds, lit)
 
@@ -22242,7 +22242,7 @@ def admin_find_product_links_bulk():
         abort(403)
     csrf_protect()
     _ensure_product_link_columns()
-    LIMIT = 20
+    LIMIT = 3   # Render free has ~60s worker timeout; 20 products were timing out
     with get_db() as c:
         rows = c.execute(
             "SELECT id, name, brand, model FROM equipment_catalog "
