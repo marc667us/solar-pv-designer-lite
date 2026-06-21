@@ -1,34 +1,80 @@
 {% extends "base.html" %}
-{% block title %}{{ code }} — {{ title }}{% endblock %}
+{% block title %}{{ title }} - SolarPro{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-center align-items-center" style="min-height:55vh">
-  <div class="text-center" style="max-width:480px">
+  <div class="text-center" style="max-width:520px">
 
-    <div style="font-size:80px;font-weight:900;line-height:1;
-                background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));
-                -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-                background-clip:text;margin-bottom:8px">
-      {{ code }}
+    <div class="mb-3" style="font-size:60px;color:#f59e0b">
+      <i class="bi bi-cone-striped"></i>
     </div>
 
-    <h3 class="fw-bold mb-3">{{ title }}</h3>
-    <p class="text-secondary mb-4">{{ message }}</p>
+    <h4 class="fw-bold mb-3">{{ title or "We hit a small hiccup" }}</h4>
+    <p class="text-secondary mb-2">
+      {% if code == 404 %}
+        That page isn't here. The link may be old, or the item was renamed or deleted.
+      {% elif code == 500 %}
+        We had trouble loading that just now. Your data is safe -- please try again.
+      {% elif code == 502 or code == 503 or code == 504 %}
+        The server is restarting. This usually clears in 10-20 seconds.
+      {% else %}
+        {{ message }}
+      {% endif %}
+    </p>
+    <p class="text-secondary small mb-4" id="err-redirect-msg">
+      Taking you back in <span id="err-secs">5</span> seconds&hellip;
+    </p>
 
-    <div class="d-flex gap-3 justify-content-center flex-wrap">
+    <div class="d-flex gap-2 justify-content-center flex-wrap mb-3">
       {% if user %}
-      <a href="{{ url_for('dashboard') }}" class="btn btn-solar px-4">
-        <i class="bi bi-grid-3x3-gap me-1"></i> Dashboard
+      <a href="{{ url_for('dashboard') }}" class="btn btn-warning fw-bold px-4">
+        <i class="bi bi-grid-3x3-gap me-1"></i>Dashboard
       </a>
       {% else %}
-      <a href="{{ url_for('landing') }}" class="btn btn-solar px-4">
-        <i class="bi bi-house me-1"></i> Home
+      <a href="{{ url_for('landing') }}" class="btn btn-warning fw-bold px-4">
+        <i class="bi bi-house me-1"></i>Home
       </a>
       {% endif %}
-      <button onclick="history.back()" class="btn btn-outline-secondary px-4">
-        <i class="bi bi-arrow-left me-1"></i> Go Back
+      <button onclick="history.back()" class="btn btn-outline-light px-4">
+        <i class="bi bi-arrow-left me-1"></i>Go Back
+      </button>
+      <button onclick="location.reload()" class="btn btn-outline-warning px-4">
+        <i class="bi bi-arrow-clockwise me-1"></i>Try again
       </button>
     </div>
 
+    {% if user and user.is_admin %}
+    <details class="text-start mt-4 small text-secondary">
+      <summary class="text-warning small">Admin: technical details</summary>
+      <div class="mt-2">
+        <div><strong>Code:</strong> {{ code }}</div>
+        <div><strong>Path:</strong> {{ request.path if request else '' }}</div>
+      </div>
+    </details>
+    {% endif %}
+
   </div>
 </div>
+
+<script>
+  (function(){
+    var s = 5;
+    var el = document.getElementById('err-secs');
+    var msg = document.getElementById('err-redirect-msg');
+    var t = setInterval(function(){
+      s -= 1;
+      if (el) el.textContent = String(s);
+      if (s <= 0) {
+        clearInterval(t);
+        var target = "{{ url_for('dashboard') if user else url_for('landing') }}";
+        try {
+          if (document.referrer && document.referrer !== location.href) {
+            location.href = document.referrer;
+          } else {
+            location.href = target;
+          }
+        } catch(_) { location.href = target; }
+      }
+    }, 1000);
+  })();
+</script>
 {% endblock %}

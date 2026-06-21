@@ -8862,6 +8862,65 @@ def err_500(e):
         message="Something went wrong on our end. "
                 "Please go back to the dashboard and try again."), 500
 
+@app.errorhandler(405)
+def err_405(e):
+    return render_template("error.html", code=405,
+        title="Action Not Allowed Here",
+        message="This action isn't supported on this page. Try the dashboard."), 405
+
+@app.errorhandler(413)
+def err_413(e):
+    return render_template("error.html", code=413,
+        title="Upload Too Large",
+        message="The file you uploaded is too big for the free tier (16 MB max). "
+                "Please attach a smaller file."), 413
+
+@app.errorhandler(502)
+def err_502(e):
+    return render_template("error.html", code=502,
+        title="Brief reconnect",
+        message="The server is reconnecting -- this clears in 10-20 seconds. "
+                "Auto-retrying for you."), 502
+
+@app.errorhandler(503)
+def err_503(e):
+    return render_template("error.html", code=503,
+        title="Server warming up",
+        message="The server is warming up after an idle period (Render free tier). "
+                "Auto-retrying for you."), 503
+
+@app.errorhandler(504)
+def err_504(e):
+    return render_template("error.html", code=504,
+        title="Took a moment too long",
+        message="That request took longer than the gateway allows. "
+                "Auto-retrying for you."), 504
+
+@app.errorhandler(Exception)
+def err_uncaught(e):
+    # Catch-all so the owner never sees a bare 500/stack-trace page.
+    # If Flask already routed to a specific @app.errorhandler the
+    # exception never reaches here. Anything that DOES is genuinely
+    # unhandled -- log full trace, return the friendly template.
+    try:
+        import traceback as _tb
+        app.logger.error("UNCAUGHT " + request.method + " " + request.path + chr(10) + _tb.format_exc())
+    except Exception:
+        pass
+    # Werkzeug HTTPException -- honour its status code.
+    try:
+        from werkzeug.exceptions import HTTPException as _HTTPExc
+        if isinstance(e, _HTTPExc):
+            return render_template("error.html", code=e.code or 500,
+                title="Hiccup",
+                message=str(e.description or "We hit a small hiccup. Please try again.")
+            ), e.code or 500
+    except Exception:
+        pass
+    return render_template("error.html", code=500,
+        title="Small hiccup",
+        message="We hit a small hiccup. Your data is safe -- please try again."), 500
+
 
 # ─── Client Prospecting Agent ─────────────────────────────────────────────────
 
