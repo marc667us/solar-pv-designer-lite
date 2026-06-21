@@ -7,25 +7,46 @@
 </div>
 
 <div class="solar-card p-4">
+  {# Pre-filled defaults so the owner clicks through rather than types -- override only when needed. #}
+  {% set _today = (user.created_at if user else '')[0:10] if false else '' %}
   <form method="POST">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <div class="row g-3">
       <div class="col-md-6">
         <label class="form-label small text-secondary">Project name *</label>
-        <input class="form-control" name="project_name" required maxlength="300">
+        <input class="form-control" name="project_name" required maxlength="300" id="proj_name" placeholder="e.g. UGSL Auditorium Electrical">
+        <div class="text-secondary small mt-1">Click a suggestion:
+          <a href="#" class="text-warning" onclick="document.getElementById('proj_name').value='New BOQ Project';return false;">Generic</a> ·
+          <a href="#" class="text-warning" onclick="document.getElementById('proj_name').value=document.getElementById('client_pick').value + ' Electrical BOQ';return false;">Client + 'Electrical BOQ'</a>
+        </div>
       </div>
       <div class="col-md-6">
         <label class="form-label small text-secondary">Client name</label>
-        <input class="form-control" name="client_name" maxlength="300">
+        <input class="form-control" name="client_name" maxlength="300" id="client_pick" placeholder="Client / organisation">
       </div>
       <div class="col-md-6">
         <label class="form-label small text-secondary">Project location</label>
-        <input class="form-control" name="location" placeholder="City, region, country" maxlength="300">
+        <select class="form-select" id="loc_pick" onchange="if(this.value!=='__other'){document.getElementById('loc_input').value=this.value;document.getElementById('loc_input').readOnly=true;}else{document.getElementById('loc_input').value='';document.getElementById('loc_input').readOnly=false;document.getElementById('loc_input').focus();}">
+          <option value="Greater Accra, Ghana" selected>Greater Accra, Ghana</option>
+          <option value="Ashanti, Ghana">Ashanti, Ghana</option>
+          <option value="Western, Ghana">Western, Ghana</option>
+          <option value="Volta, Ghana">Volta, Ghana</option>
+          <option value="Northern, Ghana">Northern, Ghana</option>
+          <option value="Central, Ghana">Central, Ghana</option>
+          <option value="Eastern, Ghana">Eastern, Ghana</option>
+          <option value="Upper East, Ghana">Upper East, Ghana</option>
+          <option value="Upper West, Ghana">Upper West, Ghana</option>
+          <option value="Lagos, Nigeria">Lagos, Nigeria</option>
+          <option value="Abuja, Nigeria">Abuja, Nigeria</option>
+          <option value="Nairobi, Kenya">Nairobi, Kenya</option>
+          <option value="__other">Other / custom...</option>
+        </select>
+        <input class="form-control mt-2" name="location" id="loc_input" maxlength="300" value="Greater Accra, Ghana" readonly>
       </div>
       <div class="col-md-6">
         <label class="form-label small text-secondary">Project type</label>
         <select class="form-select" name="project_type">
-          <option value="single_building">Single building</option>
+          <option value="single_building" selected>Single building</option>
           <option value="multiple_buildings">Multiple buildings</option>
           <option value="campus">Campus</option>
           <option value="estate">Estate</option>
@@ -45,7 +66,7 @@
       </div>
     </div>
     <hr class="my-4" style="border-color:#1e1e3a">
-    <div class="text-secondary small mb-3">Next step after save: add the first building (purpose, subtype, number of floors).</div>
+    <div class="text-secondary small mb-3"><i class="bi bi-info-circle me-1"></i>Defaults are pre-filled — only change what doesn't match your project. Next step: add the first building.</div>
     <button class="btn btn-warning fw-bold"><i class="bi bi-arrow-right-circle me-1"></i>Create project &amp; add building</button>
   </form>
 </div>

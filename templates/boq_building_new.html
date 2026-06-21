@@ -18,11 +18,17 @@
     <div class="row g-3">
       <div class="col-md-8">
         <label class="form-label small text-secondary">Building name *</label>
-        <input class="form-control" name="building_name" required maxlength="300" placeholder="e.g. Block A">
+        <input class="form-control" name="building_name" id="bld_name" required maxlength="300" value="Block A" onfocus="this.select();">
+        <div class="text-secondary small mt-1">Quick pick:
+          <a href="#" class="text-warning" onclick="document.getElementById('bld_name').value='Block A';document.getElementById('bld_code').value='BLK-A';return false;">Block A</a> ·
+          <a href="#" class="text-warning" onclick="document.getElementById('bld_name').value='Main Building';document.getElementById('bld_code').value='MAIN';return false;">Main Building</a> ·
+          <a href="#" class="text-warning" onclick="document.getElementById('bld_name').value='Auditorium';document.getElementById('bld_code').value='AUD';return false;">Auditorium</a> ·
+          <a href="#" class="text-warning" onclick="document.getElementById('bld_name').value='Office Building';document.getElementById('bld_code').value='OFC';return false;">Office Building</a>
+        </div>
       </div>
       <div class="col-md-4">
         <label class="form-label small text-secondary">Building code</label>
-        <input class="form-control" name="building_code" maxlength="80" placeholder="e.g. BLK-A">
+        <input class="form-control" name="building_code" id="bld_code" maxlength="80" value="BLK-A">
       </div>
 
       <div class="col-md-12 mt-4">
@@ -33,7 +39,7 @@
             <label class="form-check-label" for="r1">Residential</label>
           </div>
           <div class="form-check">
-            <input class="form-check-input" type="radio" name="primary_purpose" id="r2" value="commercial" required onclick="window._boqSetSubs('commercial')">
+            <input class="form-check-input" type="radio" name="primary_purpose" id="r2" value="commercial" required checked onclick="window._boqSetSubs('commercial')">
             <label class="form-check-label" for="r2">Commercial</label>
           </div>
           <div class="form-check">
@@ -46,7 +52,7 @@
       <div class="col-md-6">
         <label class="form-label small text-secondary">Subtype *</label>
         <select class="form-select" name="purpose_subtype" id="purpose_subtype" required>
-          <option value="">— pick a primary purpose first —</option>
+          {% for s in subtypes.get('commercial', []) %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
         </select>
       </div>
       <div class="col-md-6">
