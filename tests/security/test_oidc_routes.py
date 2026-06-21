@@ -385,6 +385,7 @@ def test_register_oidc_is_idempotent(monkeypatch):
         r.endpoint for r in app.url_map.iter_rules()
         if r.endpoint.startswith("oidc.")
     ]
-    # 4 routes -- login, callback, logout, refresh.
+    # 5 routes -- login, register, callback, logout, refresh.
+    # (register added 2026-06-20 in Phase 7 KC cutover.)
     assert sorted(set(auth_endpoints)) == sorted(auth_endpoints)
-    assert len(auth_endpoints) == 4
+    assert len(auth_endpoints) == 5
