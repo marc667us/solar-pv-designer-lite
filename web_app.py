@@ -9313,6 +9313,12 @@ RESULTS TO ANALYSE:
 {snippets}
 
 INSTRUCTIONS — read each result's CONTENT carefully before deciding:
+0. **HARD RULE**: only emit results where the buyer is asking the market for a
+   QUOTE (RFQ) or PROPOSAL (RFP) for a SOLAR PV / PHOTOVOLTAIC / HYBRID / OFF-GRID /
+   MINI-GRID / ROOFTOP / GROUND-MOUNT / BATTERY / INVERTER system or solar-related
+   EPC works. Anything else MUST be omitted -- including: news articles, project
+   completion announcements, grants without a deliverable, EOIs that ask for
+   nothing, country overviews, generic tender directories. If you are unsure, OMIT.
 1. READ the full content provided. If it does not clearly confirm an open, active procurement for solar works IN {loc_label}, SKIP IT entirely.
 2. SKIP if the content is about a different country — even if {loc_label} appears once in a header or navigation. The TENDER ITSELF must be in {loc_label}.
 3. SKIP news articles, project completion stories, country overviews, funding announcements.
@@ -9337,7 +9343,7 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
   "prospects": [
     {{
       "company_name": "Issuing organisation",
-      "type": "RFP / Tender / EOI / ITB / Contract Notice / Grant / Installation Job",
+      "type": "MUST be exactly \"RFQ\" (Request for Quote) or \"RFP\" (Request for Proposal). NOTHING ELSE -- do NOT emit Tender, EOI, ITB, Grant, Contract Notice, Installation Job, news, project completion, or any other type. If the result is not asking for a quote or a proposal for a SOLAR system, OMIT IT entirely.",
       "project_category": "Rooftop / Ground-mount / Hybrid / Off-grid / Mini-grid / Street lighting / Water pumping / Other",
       "location": "city AND country from result, e.g. 'Accra, Ghana' — use city name if stated, else just country. Do NOT invent.",
       "estimated_kw": 0,
@@ -9485,6 +9491,46 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                 if raw.endswith("```"):
                     raw = raw[:-3]
             data = json.loads(raw)
+            # Owner directive 2026-06-21: prospecting agent MUST output only
+            # RFQ / RFP for solar systems. Drop anything else even if the LLM
+            # let it through.
+            try:
+                _SOLAR_KEYS = ("solar", "photovoltaic", " pv ", "pv ", " pv,", "pv,",
+                               "off-grid", "off grid", "on-grid", "on grid",
+                               "hybrid", "mini-grid", "mini grid",
+                               "rooftop", "ground-mount", "ground mount",
+                               "inverter", "battery", "epc")
+                _OK_TYPES = {"rfq", "rfp"}
+                _kept = []
+                _dropped_type = 0
+                _dropped_topic = 0
+                for _p in (data.get("prospects") or []):
+                    _t = (str(_p.get("type", "")).strip().lower())
+                    # Normalise common LLM variants -> rfq / rfp.
+                    if _t.startswith("rfq") or "request for quot" in _t:
+                        _t = "rfq"
+                    elif _t.startswith("rfp") or "request for propos" in _t:
+                        _t = "rfp"
+                    if _t not in _OK_TYPES:
+                        _dropped_type += 1
+                        continue
+                    _blob = " ".join([
+                        str(_p.get("pitch", "")), str(_p.get("work_description", "")),
+                        str(_p.get("project_category", "")), str(_p.get("tor", "")),
+                        str(_p.get("company_name", "")), str(_p.get("source_title", "")),
+                    ]).lower()
+                    if not any(k in _blob for k in _SOLAR_KEYS):
+                        _dropped_topic += 1
+                        continue
+                    _p["type"] = _t.upper()  # RFQ / RFP -- consistent UI label
+                    _kept.append(_p)
+                data["prospects"] = _kept
+                data["_filter_dropped"] = {
+                    "wrong_type": _dropped_type, "non_solar": _dropped_topic
+                }
+            except Exception as _filt_err:
+                try: app.logger.warning("prospect filter failed: %s", _filt_err)
+                except Exception: pass
             # AI_BUDGET_LEDGER_MARKER_AGENT - record one ledger row per
             # successful prospecting-agent run so admin spend is visible.
             try:
@@ -12864,6 +12910,10 @@ def project_shading(pid):
             "mount_type":           _normalize_mount_type(
                                        request.form.get("roof_type") or data.get("mounting_type")),
             "roof_height_m":        _shading_num(request.form.get("roof_height_m")),
+            # Owner directive 2026-06-21: real operator-entered building
+            # dimensions drive the 3D scene + engine, not a fake h*2.8.
+            "building_width_m":     _shading_num(request.form.get("building_width_m")),
+            "building_length_m":    _shading_num(request.form.get("building_length_m")),
             "inspection_confirmed": bool(request.form.get("inspection_confirmed")),
             # 3d10 plan sim_date/sim_time picker (2026-06-16 late).
             # YYYY-MM-DD + HH:MM strings; the engine reads sim_date in

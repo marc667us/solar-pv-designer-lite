@@ -492,12 +492,10 @@
     <div class="flex-grow-1" style="min-width:220px">
       <div class="fw-bold" style="color:#f5f5fa;font-size:14px;letter-spacing:.4px">
         <i class="bi bi-cpu me-1" style="color:#9bd1ff"></i>3D SHADING SIMULATION
+        <span class="badge ms-2" style="background:rgba(34,197,94,.18);color:#4ade80;border:1px solid rgba(34,197,94,.4);font-size:9px;letter-spacing:.5px;text-transform:uppercase">LIVE MODEL</span>
       </div>
       <div class="text-secondary" style="font-size:11px;line-height:1.4">
-        {{ project.name }}{% if reference_template and reference_template.scene_type %}
-        &middot; <span style="color:#4ade80;text-transform:uppercase;letter-spacing:.4px">
-          {{ reference_template.scene_type.replace('_',' ') }}</span>
-        {% endif %}
+        {{ project.name }} &middot; driven by THIS project's data (not stock images)
       </div>
     </div>
     <div class="text-center" style="min-width:78px">
@@ -535,11 +533,76 @@
   </script>
   {% endif %}
 
-  {# ── Closest reference profile (2026-06-16 AI Shading Agent v2) ─────── #}
-  {# The agent LEARNS from a curated catalogue of engineering attributes   #}
-  {# distilled from owner-provided reference dashboards. No reference     #}
-  {# imagery ships -- the 3D view below is our own original render driven  #}
-  {# by the engine + the matched profile's hints.                          #}
+  {# ── MODELING INPUTS panel (2026-06-21). Owner directive: the 3D model #}
+  {#    must be visibly DRIVEN by THIS project's building + obstruction    #}
+  {#    inputs. Showing the exact values the engine + agent are using.    #}
+  {% set _d = project.data if project and project.data else {} %}
+  {% set _has_lat = (_d.lat is defined and _d.lat) %}
+  {% set _has_lon = (_d.lng is defined and _d.lng) %}
+  <div class="solar-card p-3 mb-3"
+       style="border-left:4px solid #f59e0b;background:rgba(245,158,11,.05)">
+    <div class="d-flex align-items-center mb-2 flex-wrap gap-2">
+      <div class="fw-bold" style="color:#fbbf24;letter-spacing:.4px;font-size:13px">
+        <i class="bi bi-diagram-3 me-1"></i>MODELING INPUTS
+      </div>
+      <span class="text-secondary" style="font-size:11px">
+        &mdash; these are the actual values the engine + agent are using right now to build the scene below.
+      </span>
+    </div>
+    <div class="d-flex flex-wrap gap-3" style="font-size:12px;color:#e6e6f5">
+      <div style="min-width:130px">
+        <div class="text-secondary" style="font-size:10px;letter-spacing:.5px;text-transform:uppercase">Building H</div>
+        <div class="fw-bold">{{ "%.1f"|format(shading.roof_height_m or 0) }} m</div>
+      </div>
+      <div style="min-width:130px">
+        <div class="text-secondary" style="font-size:10px;letter-spacing:.5px;text-transform:uppercase">Building W</div>
+        <div class="fw-bold">
+          {% if shading.building_width_m %}{{ "%.1f"|format(shading.building_width_m|float) }} m
+          {% else %}<span class="text-warning" style="font-size:11px">not entered &mdash; using H&times;2.8 fallback</span>{% endif %}
+        </div>
+      </div>
+      <div style="min-width:130px">
+        <div class="text-secondary" style="font-size:10px;letter-spacing:.5px;text-transform:uppercase">Building L</div>
+        <div class="fw-bold">
+          {% if shading.building_length_m %}{{ "%.1f"|format(shading.building_length_m|float) }} m
+          {% else %}<span class="text-secondary" style="font-size:11px">not entered</span>{% endif %}
+        </div>
+      </div>
+      <div style="min-width:130px">
+        <div class="text-secondary" style="font-size:10px;letter-spacing:.5px;text-transform:uppercase">Mount</div>
+        <div class="fw-bold">{{ (shading.mount_type or _d.get('mounting_type','--'))|string|replace('_',' ') }}</div>
+      </div>
+      <div style="min-width:160px">
+        <div class="text-secondary" style="font-size:10px;letter-spacing:.5px;text-transform:uppercase">Location</div>
+        <div class="fw-bold">
+          {{ _d.get('region','') }}{% if _d.get('country') %}, {{ _d.country }}{% endif %}
+          {% if _has_lat and _has_lon %}
+            <span class="text-secondary" style="font-size:11px">({{ "%.3f"|format(_d.lat|float) }}, {{ "%.3f"|format(_d.lng|float) }})</span>
+          {% endif %}
+        </div>
+      </div>
+      <div style="min-width:140px">
+        <div class="text-secondary" style="font-size:10px;letter-spacing:.5px;text-transform:uppercase">Obstructions</div>
+        <div class="fw-bold">
+          {% set _obs_n = (shading.obstructions or [])|length %}
+          {{ _obs_n }} item{{ '' if _obs_n == 1 else 's' }} feeding the engine
+        </div>
+      </div>
+      <div style="min-width:140px">
+        <div class="text-secondary" style="font-size:10px;letter-spacing:.5px;text-transform:uppercase">Sim time</div>
+        <div class="fw-bold">{{ shading.sim_date or 'today' }} {{ shading.sim_time or '12:00' }}</div>
+      </div>
+    </div>
+    {% if (shading.obstructions or [])|length == 0 %}
+    <div class="text-warning small mt-2" style="font-size:11px">
+      <i class="bi bi-exclamation-triangle me-1"></i>No obstructions modeled yet &mdash; the engine will return factor 1.00 (no shading).
+      Add an obstruction below, then click <strong>Run AI</strong> to model real shading.
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Scene-profile chip (downgraded from a big card to a one-liner).   #}
+  {#    Owner directive: don't make this look like a stock image.         #}
   {% if reference_template and reference_template.template_id %}
   {% set _t  = reference_template.template %}
   {% set _ep = (_t.engine_result if _t else {}) or {} %}
@@ -549,7 +612,7 @@
     <div class="d-flex align-items-start gap-3 flex-wrap">
       <div class="flex-grow-1" style="min-width:260px">
         <div class="fw-bold small mb-1" style="color:#9bd1ff;letter-spacing:.4px">
-          <i class="bi bi-bookmark-check me-1"></i>CLOSEST REFERENCE PROFILE
+          <i class="bi bi-bookmark-check me-1"></i>ENGINE SCENE CLASSIFICATION
           {% if reference_template.scene_type %}
           <span class="badge ms-2"
                 style="background:rgba(34,197,94,.14);color:#4ade80;
@@ -717,9 +780,17 @@
         {% if _raw_house_h < 2.5 %}{% set _raw_house_h = 5.0 %}{% endif %}
         {% if _raw_house_h > 45 %}{% set _raw_house_h = 45.0 %}{% endif %}
         {% set _house_h_m = _raw_house_h %}
-        {% set _house_w_m = (_house_h_m * 2.8) %}
-        {% if _house_w_m < 8 %}{% set _house_w_m = 8 %}{% endif %}
-        {% if _house_w_m > 25 %}{% set _house_w_m = 25 %}{% endif %}
+        {# Building width: real operator-entered dimension, NOT a fake
+           derive-from-height. Falls back to 2.8x height only when the
+           operator hasn't entered the building width yet. 2026-06-21 #}
+        {% set _raw_house_w = (shading.building_width_m if shading and shading.building_width_m else 0)|float %}
+        {% if _raw_house_w <= 0 %}
+          {% set _house_w_m = (_house_h_m * 2.8) %}
+        {% else %}
+          {% set _house_w_m = _raw_house_w %}
+        {% endif %}
+        {% if _house_w_m < 6 %}{% set _house_w_m = 6 %}{% endif %}
+        {% if _house_w_m > 60 %}{% set _house_w_m = 60 %}{% endif %}
         {% set _house_h_px = (_house_h_m * _scale)|int %}
         {% set _house_w_px = (_house_w_m * _scale)|int %}
         {% set _house_x = 440 %}
@@ -4845,6 +4916,25 @@
         </label>
         <input name="roof_height_m" type="number" step="0.1" min="0"
                class="form-control sp-input" value="{{ shading.roof_height_m or '' }}">
+        <div class="text-secondary" style="font-size:10px">Ridge / eaves height of the building.</div>
+      </div>
+      <div class="col-md-3 col-6">
+        <label class="form-label small text-secondary fw-bold">
+          Building Width (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
+        </label>
+        <input name="building_width_m" type="number" step="0.1" min="0"
+               class="form-control sp-input" value="{{ shading.building_width_m or '' }}"
+               placeholder="auto if blank">
+        <div class="text-secondary" style="font-size:10px">East-West face. Drives the 3D scene width.</div>
+      </div>
+      <div class="col-md-3 col-6">
+        <label class="form-label small text-secondary fw-bold">
+          Building Length (<span class="js-unit-len">{{ 'ft' if _u == 'imperial' else 'm' }}</span>)
+        </label>
+        <input name="building_length_m" type="number" step="0.1" min="0"
+               class="form-control sp-input" value="{{ shading.building_length_m or '' }}"
+               placeholder="auto if blank">
+        <div class="text-secondary" style="font-size:10px">North-South depth. Used for array sizing.</div>
       </div>
       <div class="col-md-3 col-6">
         <label class="form-label small text-secondary fw-bold">
