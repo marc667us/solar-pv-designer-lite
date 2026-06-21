@@ -1,0 +1,15 @@
+name: Agents Smoke 2026-06-21
+on: { workflow_dispatch: {} }
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install requests
+      - name: Run smoke against live
+        env:
+          OWNER_PW: "${{ secrets.SOLARPRO_OWNER_PASSWORD }}"
+          BASE:     "https://solarpro.aiappinvent.com"
+        run: python tmp/test_agents_2026-06-21.py
