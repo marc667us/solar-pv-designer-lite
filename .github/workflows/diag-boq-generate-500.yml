@@ -1,0 +1,56 @@
+name: Diag BOQ Generate 500
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login + probe + dump
+        env:
+          OWNER_PW: ${{ secrets.SOLARPRO_OWNER_PASSWORD }}
+        run: |
+          set +e
+          BASE="https://solarpro.aiappinvent.com"
+          COOKIE=$(mktemp)
+          # GET login (legacy bypass) -> extract CSRF
+          BODY=$(curl -sS -c "$COOKIE" -b "$COOKIE" "$BASE/login?legacy=1")
+          CSRF=$(echo "$BODY" | grep -oE 'name="_csrf"[^>]+value="[^"]+"' | head -1 | sed -E 's/.*value="([^"]+)".*/\1/')
+          echo "CSRF len: ${#CSRF}"
+          # POST login
+          curl -sS -o /dev/null -b "$COOKIE" -c "$COOKIE" -X POST \
+            -d "username=marc667us&password=${OWNER_PW}&_csrf=${CSRF}" \
+            "$BASE/login?legacy=1"
+          # Probe project 3 BOQ view (the one the owner was on per logs)
+          echo "---- /boq-projects ----"
+          curl -sS -b "$COOKIE" -o /dev/null -w "  status=%{http_code}\n" "$BASE/boq-projects"
+          echo "---- /boq-projects/3 ----"
+          curl -sS -b "$COOKIE" -o /dev/null -w "  status=%{http_code}\n" "$BASE/boq-projects/3"
+          echo "---- /boq-projects/3/boq ----"
+          OUT=$(curl -sS -b "$COOKIE" -w "\nHTTP=%{http_code}" "$BASE/boq-projects/3/boq")
+          STATUS=$(echo "$OUT" | tail -1 | sed 's/HTTP=//')
+          echo "  status=$STATUS"
+          if [ "$STATUS" = "500" ]; then
+            echo "---- 500 response body (last 4KB) ----"
+            echo "$OUT" | head -c -8 | tail -c 4096
+          fi
+          # Also try the section grid save -> generate flow
+          echo "---- /boq-projects/3/buildings/3/floors/5/from-template/hostel-typical ----"
+          curl -sS -b "$COOKIE" -o /dev/null -w "  status=%{http_code}\n" \
+            "$BASE/boq-projects/3/buildings/3/floors/5/from-template/hostel-typical"
+          # POST the template save with ticks 0..2 + CSRF
+          BODY2=$(curl -sS -b "$COOKIE" "$BASE/boq-projects/3/buildings/3/floors/5/from-template/hostel-typical")
+          CSRF2=$(echo "$BODY2" | grep -oE 'name="_csrf"[^>]+value="[^"]+"' | head -1 | sed -E 's/.*value="([^"]+)".*/\1/')
+          echo "---- POST /from-template/hostel-typical/save ----"
+          OUT=$(curl -sS -b "$COOKIE" -X POST \
+            -d "_csrf=${CSRF2}&overhead_pct=30&profit_pct=0&contingency_pct=0&vat_pct=0&tick=0&tick=1&tick=2" \
+            -w "\nHTTP=%{http_code}\nLOC=%{redirect_url}" \
+            "$BASE/boq-projects/3/buildings/3/floors/5/from-template/hostel-typical/save")
+          STATUS=$(echo "$OUT" | grep '^HTTP=' | sed 's/HTTP=//')
+          LOC=$(echo "$OUT" | grep '^LOC=' | sed 's/LOC=//')
+          echo "  status=$STATUS"
+          echo "  redirect=$LOC"
+          if [ "$STATUS" = "500" ]; then
+            echo "---- save 500 body (last 4KB) ----"
+            echo "$OUT" | head -c -200 | tail -c 4096
+          fi
