@@ -9290,7 +9290,8 @@ def admin_agent_run():
     or_key   = os.environ.get("OPENROUTER_API_KEY", "")
     api_key  = os.environ.get("ANTHROPIC_API_KEY", "")
     gh_token = os.environ.get("GITHUB_TOKEN", "")
-    _has_any_ai = bool(or_key or api_key or gh_token or os.environ.get("OLLAMA_URL"))
+    # Owner: no Anthropic. _has_any_ai checks only OpenRouter / GH Models / Ollama.
+    _has_any_ai = bool(or_key or gh_token or os.environ.get("OLLAMA_URL"))
     if _has_any_ai and search_results:
         try:
             # Trim snippets: max 1500 chars each so total prompt stays under ~20k tokens
@@ -9469,19 +9470,9 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
                 except Exception as _oe3:
                     _provider_errors.append(f"GitHub: {_oe3}")
 
-            # ── 4. Anthropic Claude (last resort — saves API credits) ─────
-            if api_key and raw is None:
-                try:
-                    import anthropic as _ant
-                    client = _ant.Anthropic(api_key=api_key)
-                    msg    = client.messages.create(
-                        model="claude-opus-4-7", max_tokens=4000,
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    raw = msg.content[0].text.strip()
-                    ai_source = "web+claude"
-                except Exception as _oe_ant:
-                    _provider_errors.append(f"Claude: {_oe_ant}")
+            # Owner directive 2026-06-21: "dont use antropic api".
+            # Anthropic Claude fallback removed from the prospecting chain.
+            # Chain is OpenRouter free -> Ollama -> GitHub Models -> fail.
 
             if raw is None:
                 raise ValueError("No AI provider available; errors: " + " | ".join(_provider_errors))
