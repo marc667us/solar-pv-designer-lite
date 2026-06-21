@@ -18853,6 +18853,8 @@ def boq_building_view(pid, bid):
 @app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>")
 @login_required
 def boq_floor_view(pid, bid, fid):
+    try: _ensure_display_order_column()
+    except Exception: pass
     uid = session["user_id"]
     project = _boq_project_owned_or_404(pid, uid)
     building = _boq_building_owned_or_404(bid, pid)
