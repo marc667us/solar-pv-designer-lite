@@ -71,6 +71,8 @@
           <th class="text-end">Qty</th>
           <th>Unit</th>
           <th class="text-end">Basic Rate</th>
+          <th class="text-end">Supply Rate</th>
+          <th class="text-end">Install Rate</th>
           <th class="text-end">Total Rate</th>
           <th class="text-end">Amount</th>
         </tr>
@@ -156,6 +158,8 @@
             <td class="text-end">{{ "%.2f"|format(r.qty or 0) }}</td>
             <td class="small">{{ r.unit }}</td>
             <td class="text-end">{{ "%.2f"|format(r.basic_price or 0) }}</td>
+            <td class="text-end">{{ "%.2f"|format(r.supply_rate or r.basic_price or 0) }}</td>
+            <td class="text-end">{{ "%.2f"|format(r.install_rate or 0) }}</td>
             <td class="text-end">{{ "%.2f"|format(r.final_built_up_rate or 0) }}</td>
             <td class="text-end fw-bold text-warning">{{ "%.2f"|format(r.total_amount or 0) }}</td>
           </tr>
@@ -168,7 +172,7 @@
           <td colspan="12" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
           <td class="text-end fw-black text-warning" style="font-size:16px">{{ "%.2f"|format(grand.v) }}</td>
           {% else %}
-          <td colspan="6" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
+          <td colspan="8" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
           <td class="text-end fw-black text-warning" style="font-size:18px">{{ "%.2f"|format(grand.v) }}</td>
           {% endif %}
         </tr>
