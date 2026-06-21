@@ -1,0 +1,83 @@
+name: Diag Export Audit
+on:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login + probe every export / print / email surface
+        env:
+          OWNER_PW: ${{ secrets.SOLARPRO_OWNER_PASSWORD }}
+        run: |
+          set +e
+          BASE="https://solarpro.aiappinvent.com"
+          COOKIE=$(mktemp)
+          BODY=$(curl -sS -c "$COOKIE" -b "$COOKIE" "$BASE/login?legacy=1")
+          CSRF=$(echo "$BODY" | grep -oE 'name="_csrf"[^>]+value="[^"]+"' | head -1 | sed -E 's/.*value="([^"]+)".*/\1/')
+          curl -sS -o /dev/null -b "$COOKIE" -c "$COOKIE" -X POST \
+            -d "username=marc667us&password=${OWNER_PW}&_csrf=${CSRF}" \
+            "$BASE/login?legacy=1"
+
+          # Seed: locate existing ids the owner has on live
+          LIST=$(curl -sS -b "$COOKIE" "$BASE/boms")
+          BID=$(echo "$LIST" | grep -oE 'href="/boms/[0-9]+"' | head -1 | grep -oE '[0-9]+')
+          PROJS=$(curl -sS -b "$COOKIE" "$BASE/boq-projects")
+          PID=$(echo "$PROJS" | grep -oE 'href="/boq-projects/[0-9]+"' | head -1 | grep -oE '[0-9]+')
+          SOLAR=$(curl -sS -b "$COOKIE" "$BASE/myproject")
+          SID=$(echo "$SOLAR" | grep -oE 'href="/project/[0-9]+/' | head -1 | grep -oE '[0-9]+')
+          RFQS=$(curl -sS -b "$COOKIE" "$BASE/rfqs")
+          RID=$(echo "$RFQS" | grep -oE 'href="/rfqs/[0-9]+"' | head -1 | grep -oE '[0-9]+')
+          SHEETS=$(curl -sS -b "$COOKIE" "$BASE/price-sheets")
+          SHEET_ID=$(echo "$SHEETS" | grep -oE 'href="/price-sheets/[0-9]+"' | head -1 | grep -oE '[0-9]+')
+          echo "bom_id=$BID boq_pid=$PID solar_pid=$SID rfq_id=$RID sheet_id=$SHEET_ID"
+          echo ""
+
+          declare -a ENDPOINTS=()
+
+          # BOM/BOQ exports
+          if [ -n "$BID" ]; then
+            ENDPOINTS+=("/boms/${BID}" "/boms/${BID}/boq" "/boms/${BID}/boq.xlsx" "/boms/${BID}/boq.pdf" "/boms/${BID}/rate-buildup")
+          fi
+          # BOQ project exports
+          if [ -n "$PID" ]; then
+            ENDPOINTS+=("/boq-projects/${PID}" "/boq-projects/${PID}/boq" "/boq-projects/${PID}/boq?view=internal" "/boq-projects/${PID}/boq.xlsx" "/boq-projects/${PID}/boq.pdf" "/boq-projects/${PID}/summary")
+          fi
+          # Solar project reports (the 7 engineering reports)
+          if [ -n "$SID" ]; then
+            ENDPOINTS+=("/project/${SID}/report/boq" "/project/${SID}/report/pv" "/project/${SID}/report/cable" "/project/${SID}/report/economic" "/project/${SID}/report/installation" "/project/${SID}/report/energy" "/project/${SID}/report/proposal" "/project/${SID}/results")
+            # PDF exports
+            ENDPOINTS+=("/project/${SID}/report/boq/pdf" "/project/${SID}/report/pv/pdf" "/project/${SID}/report/cable/pdf" "/project/${SID}/report/economic/pdf" "/project/${SID}/report/installation/pdf" "/project/${SID}/report/energy/pdf" "/project/${SID}/report/proposal/pdf")
+          fi
+          # RFQ
+          if [ -n "$RID" ]; then
+            ENDPOINTS+=("/rfqs/${RID}" "/rfqs/${RID}/excel" "/rfqs/${RID}/pdf")
+          fi
+          # Price sheet
+          if [ -n "$SHEET_ID" ]; then
+            ENDPOINTS+=("/price-sheets/${SHEET_ID}" "/price-sheets/${SHEET_ID}/export" "/price-sheets/${SHEET_ID}/pdf" "/price-sheets/${SHEET_ID}.xlsx" "/price-sheets/${SHEET_ID}.pdf")
+          fi
+          # Marketplace + general
+          ENDPOINTS+=("/marketplace" "/procurement-center" "/admin/logs" "/admin")
+
+          FAILS=0
+          for path in "${ENDPOINTS[@]}"; do
+            START=$(date +%s)
+            STATUS=$(curl -sS -b "$COOKIE" --max-time 45 -o /dev/null -w "%{http_code}" "$BASE${path}")
+            END=$(date +%s)
+            ELAPSED=$((END - START))
+            STATUS_STR=$(printf "%-4s" "$STATUS")
+            FLAG=""
+            if [ "$STATUS" = "500" ] || [ "$STATUS" = "502" ] || [ "$STATUS" = "503" ] || [ "$STATUS" = "404" ]; then
+              FLAG="  <-- FAIL"
+              FAILS=$((FAILS + 1))
+            fi
+            printf "  %s  %-60s  (%ss)%s\n" "$STATUS_STR" "$path" "$ELAPSED" "$FLAG"
+            sleep 6  # politeness + worker breathing room
+          done
+
+          echo ""
+          echo "=========================="
+          echo "Total endpoints probed: ${#ENDPOINTS[@]}"
+          echo "Failures (500/502/503/404): $FAILS"
+          echo "=========================="
