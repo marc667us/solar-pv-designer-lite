@@ -25,13 +25,14 @@
 <div class="table-responsive">
   <table class="table table-sm align-middle" style="color:#e0e0f0">
     <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
-      <tr><th>Name</th><th>Country</th><th>Email</th><th>Categories</th><th>Owner</th><th>Status</th><th class="text-end">Actions</th></tr>
+      <tr><th>Name</th><th>Country</th><th>Address</th><th>Email</th><th>Categories</th><th>Owner</th><th>Status</th><th class="text-end">Actions</th></tr>
     </thead>
     <tbody>
       {% for s in suppliers %}
       <tr>
         <td><strong>{{ s.name }}</strong>{% if s.website %}<div class="small text-secondary">{{ s.website }}</div>{% endif %}</td>
         <td class="small">{{ s.country or '—' }}</td>
+        <td class="small text-secondary" style="max-width:220px;white-space:normal">{{ s.address or '—' }}</td>
         <td class="small text-secondary">{{ s.email or '—' }}</td>
         <td class="small text-secondary">{{ s.categories or '—' }}</td>
         <td class="small text-secondary">{{ s.owner_username or 'admin-seeded' }}</td>

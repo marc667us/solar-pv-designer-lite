@@ -14509,11 +14509,12 @@ def supplier_register():
             )
             uid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
             c.execute(
-                "INSERT INTO suppliers (name,country,contact_name,phone,email,website,"
+                "INSERT INTO suppliers (name,country,contact_name,phone,email,website,address,"
                 "categories,lead_time_days,payment_terms,rating,user_id,is_verified,is_active) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
                 (company, country, f.get("contact_name", ""), f.get("phone", ""),
-                 email, f.get("website", ""), f.get("categories", ""),
+                 email, f.get("website", ""), (f.get("address") or "").strip(),
+                 f.get("categories", ""),
                  _safe_int(f.get("lead_time_days"), 30),
                  f.get("payment_terms", "TT 30 days"), 5, uid, 0),
             )
@@ -14603,14 +14604,15 @@ def supplier_product_add():
             "WHERE is_active=1 ORDER BY display_order"
         ).fetchall()
     if request.method == "GET":
+        _subs_m, _units_m, _specs_m = _merged_marketplace_taxonomy()
         return render_template(
             "supplier_product_add.html",
             user=current_user(),
             supplier=s,
             categories=categories,
-            subcategories_by_code=_MARKETPLACE_SUBCATEGORIES,
-            default_unit_by_code=_MARKETPLACE_DEFAULT_UNIT,
-            spec_fields_by_code=_MARKETPLACE_SPEC_FIELDS,
+            subcategories_by_code=_subs_m,
+            default_unit_by_code=_units_m,
+            spec_fields_by_code=_specs_m,
         )
     csrf_protect()
     f = request.form
@@ -15845,6 +15847,30 @@ def _ensure_bom_tables():
                 _c.execute("ALTER TABLE marketplace_boms ADD COLUMN currency TEXT DEFAULT 'GHS'")
         except Exception:
             pass
+        # New 2026-06-22 (session A): description / specification / brand on BOM lines.
+        # Idempotent for SQLite + Postgres (psycopg accepts ADD COLUMN IF NOT EXISTS).
+        for _ddl in (
+            "ALTER TABLE marketplace_bom_items ADD COLUMN description TEXT DEFAULT ''",
+            "ALTER TABLE marketplace_bom_items ADD COLUMN specification TEXT DEFAULT ''",
+            "ALTER TABLE marketplace_bom_items ADD COLUMN brand TEXT DEFAULT ''",
+        ):
+            try:
+                with get_db() as _c:
+                    _c.execute(_ddl)
+            except Exception:
+                pass
+        # 2026-06-22 (session A): per-category taxonomy storage for the
+        # admin Manage Categories page. Idempotent on both engines.
+        for _ddl in (
+            "ALTER TABLE product_categories ADD COLUMN default_unit TEXT DEFAULT 'No.'",
+            "ALTER TABLE product_categories ADD COLUMN subcategories_csv TEXT DEFAULT ''",
+            "ALTER TABLE product_categories ADD COLUMN spec_fields_csv TEXT DEFAULT ''",
+        ):
+            try:
+                with get_db() as _c:
+                    _c.execute(_ddl)
+            except Exception:
+                pass
 
 
 def _bom_owned_or_404(bom_id: int, user_id: int):
@@ -15875,6 +15901,8 @@ def _bom_items_with_prices(bom_id: int):
             "       ec.is_verified AS catalog_verified, "
             "       s.name         AS supplier_name, "
             "       s.country      AS supplier_country, "
+            "       s.phone        AS supplier_phone, "
+            "       s.address      AS supplier_address, "
             "       pc.name        AS category_name, "
             "       pc.code        AS category_code "
             "FROM marketplace_bom_items bi "
@@ -16088,16 +16116,33 @@ def boms_add_item(bom_id):
         override = float(override_raw) if override_raw else None
     except ValueError:
         override = None
+    # 2026-06-22 (session A): description / specification / brand from BOM editor.
+    description    = (f.get("description") or "").strip()[:500]
+    specification  = (f.get("specification") or "").strip()[:500]
+    brand          = (f.get("brand") or "").strip()[:120]
     with get_db() as c:
-        c.execute(
-            "INSERT INTO marketplace_bom_items "
-            "(bom_id, product_id, custom_name, qty, unit, unit_price_override, notes) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (bom_id, pid, name, qty,
-             (f.get("unit") or "No.").strip(),
-             override,
-             (f.get("notes") or "").strip()),
-        )
+        try:
+            c.execute(
+                "INSERT INTO marketplace_bom_items "
+                "(bom_id, product_id, custom_name, qty, unit, unit_price_override, notes, description, specification, brand) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (bom_id, pid, name, qty,
+                 (f.get("unit") or "No.").strip(),
+                 override,
+                 (f.get("notes") or "").strip(),
+                 description, specification, brand),
+            )
+        except Exception:
+            # Schema not yet migrated -- fall back to legacy 7-col INSERT.
+            c.execute(
+                "INSERT INTO marketplace_bom_items "
+                "(bom_id, product_id, custom_name, qty, unit, unit_price_override, notes) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (bom_id, pid, name, qty,
+                 (f.get("unit") or "No.").strip(),
+                 override,
+                 (f.get("notes") or "").strip()),
+            )
         c.execute(
             "UPDATE marketplace_boms SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
             (bom_id,),
@@ -16897,7 +16942,7 @@ def admin_marketplace_supplier_edit(sid):
     with get_db() as c:
         c.execute(
             "UPDATE suppliers SET name=?, country=?, contact_name=?, phone=?, "
-            "email=?, website=?, categories=?, lead_time_days=?, "
+            "email=?, website=?, address=?, categories=?, lead_time_days=?, "
             "payment_terms=?, rating=?, is_verified=?, is_active=? "
             "WHERE id=?",
             (
@@ -16907,6 +16952,7 @@ def admin_marketplace_supplier_edit(sid):
                 (f.get("phone") or "").strip(),
                 (f.get("email") or "").strip(),
                 (f.get("website") or "").strip(),
+                (f.get("address") or "").strip(),
                 (f.get("categories") or "").strip(),
                 _safe_int(f.get("lead_time_days"), 30),
                 (f.get("payment_terms") or "").strip(),
@@ -16999,12 +17045,13 @@ def admin_marketplace_product_edit(pid):
             "SELECT id, name FROM suppliers WHERE is_active=1 ORDER BY name"
         ).fetchall()
     if request.method == "GET":
+        _subs_m, _units_m, _specs_m = _merged_marketplace_taxonomy()
         return render_template(
             "admin_marketplace_product_edit.html",
             user=current_user(), product=p, categories=categories, suppliers=suppliers,
-            subcategories_by_code=_MARKETPLACE_SUBCATEGORIES,
-            default_unit_by_code=_MARKETPLACE_DEFAULT_UNIT,
-            spec_fields_by_code=_MARKETPLACE_SPEC_FIELDS,
+            subcategories_by_code=_subs_m,
+            default_unit_by_code=_units_m,
+            spec_fields_by_code=_specs_m,
         )
     csrf_protect()
     f = request.form
@@ -17517,9 +17564,10 @@ def boms_boq_xlsx(bom_id):
     ws["A3"] = f"Client : {bom['client_name'] or '-'}"
     ws["A4"] = f"Date   : {bom['updated_at']}"
 
-    # Client-clean BOQ sheet: # / Description / Unit / Qty / Rate / Amount / Remarks
-    headers = ["#", "Description", "Unit", "Qty",
-               f"Rate ({cur_code})", f"Amount ({cur_code})", "Remarks"]
+    # Apinto / Agenda Commercial 9-column body (2026-06-22).
+    headers = ["#", "Description", "Qty", "Unit",
+               f"Basic Rate ({cur_code})", "Basic Rate (US$)",
+               "Brand", "Company", "Phone"]
     HROW = 6
     for col, h in enumerate(headers, 1):
         cell = ws.cell(row=HROW, column=col, value=h)
@@ -17545,29 +17593,36 @@ def boms_boq_xlsx(bom_id):
             ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=len(headers))
             row += 1
             prev_cat = cat
-        remarks = (it["remarks"] if "remarks" in it.keys() else None) or it["notes"] or ""
+        _fx = float(_brate or 1.0)
+        rate_local = float(line["total_rate"] or 0)
+        rate_usd   = (rate_local / _fx) if _fx else 0.0
+        brand   = (it["brand"] if "brand" in it.keys() and it["brand"] else (it["catalog_brand"] or "-"))
+        company = (it["supplier_name"] or "SolarPro Marketplace Services")
+        phone   = (it["supplier_phone"] if "supplier_phone" in it.keys() else "") or "-"
         ws.cell(row=row, column=1, value=idx)
         ws.cell(row=row, column=2, value=_sanitize(it["custom_name"]))
-        ws.cell(row=row, column=3, value=_sanitize(it["unit"]))
-        ws.cell(row=row, column=4, value=float(it["qty"] or 0))
-        ws.cell(row=row, column=5, value=round(line["total_rate"], 2))
-        ws.cell(row=row, column=6, value=round(line["line_total"], 2))
-        ws.cell(row=row, column=7, value=_sanitize(remarks))
+        ws.cell(row=row, column=3, value=float(it["qty"] or 0))
+        ws.cell(row=row, column=4, value=_sanitize(it["unit"]))
+        ws.cell(row=row, column=5, value=round(rate_local, 2))
+        ws.cell(row=row, column=6, value=round(rate_usd, 2))
+        ws.cell(row=row, column=7, value=_sanitize(brand))
+        ws.cell(row=row, column=8, value=_sanitize(company))
+        ws.cell(row=row, column=9, value=_sanitize(phone))
         for col in range(1, len(headers) + 1):
             ws.cell(row=row, column=col).border = box
         row += 1
 
-    # Subtotals + grand total
+    # Subtotals + grand total (9-col layout: rate column is #5).
     row += 1
     for cat, sub in totals["category_totals"].items():
-        ws.cell(row=row, column=2, value=f"{cat} subtotal").font = bold
-        ws.cell(row=row, column=6, value=round(sub, 2)).font = bold
+        ws.cell(row=row, column=2, value=f"{cat} subtotal (qty * rate, {cur_code})").font = bold
+        ws.cell(row=row, column=5, value=round(sub, 2)).font = bold
         row += 1
     row += 1
-    ws.cell(row=row, column=2, value="GRAND TOTAL").font = title_font
-    ws.cell(row=row, column=6, value=round(totals["grand_total"], 2)).font = title_font
+    ws.cell(row=row, column=2, value=f"GRAND TOTAL ({cur_code})").font = title_font
+    ws.cell(row=row, column=5, value=round(totals["grand_total"], 2)).font = title_font
 
-    for col, w in enumerate([5, 40, 8, 8, 14, 14, 30], 1):
+    for col, w in enumerate([5, 36, 7, 8, 16, 16, 14, 24, 18], 1):
         ws.column_dimensions[get_column_letter(col)].width = w
 
     if include_buildup:
@@ -17686,33 +17741,39 @@ def boms_boq_pdf(bom_id):
         md.append("")
     md.append("## Line items")
     md.append("")
-    if include_buildup:
-        md.append(f"| # | Description | Qty | Unit | Basic ({cur}) | Supply ({cur}) | Install ({cur}) | OH ({cur}) | Profit ({cur}) | VAT ({cur}) | Final Rate ({cur}) | Amount ({cur}) |")
-        md.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
-    else:
-        md.append(f"| # | Description | Unit | Qty | Rate ({cur}) | Amount ({cur}) | Remarks |")
-        md.append("|---|---|---|---|---|---|---|")
+    # Apinto / Agenda Commercial 9-column body (2026-06-22).
+    _fx = float(_brate or 1.0) if '_brate' in dir() else float(rates.get('fx_rate', 1.0) or 1.0)
+    md.append(f"| # | Description | Qty | Unit | Basic Rate ({cur}) | Basic Rate (US$) | Brand | Company | Phone |")
+    md.append("|---|---|---|---|---|---|---|---|---|")
     prev_cat = None
     for idx, line in enumerate(totals["lines"], 1):
         it = line["item"]
         cat = it["category_name"] or "Uncategorised"
         if cat != prev_cat:
-            blank = " | " * (11 if include_buildup else 6)
-            md.append(f"| | **{cat}** {blank}|")
+            md.append(f"| | **{cat}** |  |  |  |  |  |  |  |")
             prev_cat = cat
-        if include_buildup:
+        rate_local = float(line['total_rate'] or 0)
+        rate_usd   = (rate_local / _fx) if _fx else 0.0
+        brand   = (it['brand'] if 'brand' in it.keys() and it['brand'] else (it['catalog_brand'] or '-'))
+        company = (it['supplier_name'] or 'SolarPro Marketplace Services')
+        phone   = (it['supplier_phone'] if 'supplier_phone' in it.keys() else '') or '-'
+        md.append(
+            f"| {idx} | {it['custom_name']} | {it['qty']:.2f} | {it['unit']} | "
+            f"{rate_local:,.2f} | {rate_usd:,.2f} | {brand} | {company} | {phone} |"
+        )
+    if include_buildup:
+        md.append("")
+        md.append("## Internal rate build-up (do not share with client)")
+        md.append("")
+        md.append(f"| # | Description | Qty | Unit | Basic ({cur}) | +Labour ({cur}) | +OH ({cur}) | +Profit ({cur}) | +VAT ({cur}) | Final Rate ({cur}) | Amount ({cur}) |")
+        md.append("|---|---|---|---|---|---|---|---|---|---|---|")
+        for idx, line in enumerate(totals["lines"], 1):
+            it = line["item"]
             md.append(
                 f"| {idx} | {it['custom_name']} | {it['qty']:.2f} | {it['unit']} | "
-                f"{line['basic_rate']:.2f} | {line['basic_rate']:.2f} | "
-                f"{line['install_labour']:.2f} | {line['overhead']:.2f} | "
-                f"{line['profit']:.2f} | {line['vat']:.2f} | "
-                f"{line['total_rate']:.2f} | {line['line_total']:.2f} |"
-            )
-        else:
-            remarks = (it["remarks"] if "remarks" in it.keys() else None) or it["notes"] or ""
-            md.append(
-                f"| {idx} | {it['custom_name']} | {it['unit']} | {it['qty']:.2f} | "
-                f"{line['total_rate']:.2f} | {line['line_total']:.2f} | {remarks} |"
+                f"{line['basic_rate']:,.2f} | {line['install_labour']:,.2f} | "
+                f"{line['overhead']:,.2f} | {line['profit']:,.2f} | {line['vat']:,.2f} | "
+                f"{line['total_rate']:,.2f} | {line['line_total']:,.2f} |"
             )
     md.append("")
     md.append("## Category subtotals")
@@ -22797,9 +22858,9 @@ def price_sheet_xlsx(sheet_id):
     ws["A2"] = f"Currency: {cur}"
     ws["A3"] = f"Generated: {sheet['created_at']}"
 
-    headers = ["#", "Product / item description", "Qty", "Unit",
-               f"Price ({cur})", "Supplier", "Brand",
-               "Phone", "Email", "Address"]
+    headers = ["#", "Description", "Qty", "Unit",
+               f"Basic Rate ({cur})", "Basic Rate (US$)",
+               "Brand", "Company", "Phone"]
     HROW = 5
     for col, h in enumerate(headers, 1):
         cell = ws.cell(row=HROW, column=col, value=h)
@@ -22811,22 +22872,27 @@ def price_sheet_xlsx(sheet_id):
         return "'" + s if s and s[0] in ("=", "+", "-", "@") else s
 
     row = HROW + 1
+    try:
+        _fx = float(_CURRENCY_RATES_FROM_USD.get((cur or 'USD').upper(), 1.0) or 1.0)
+    except Exception:
+        _fx = 1.0
     for idx, it in enumerate(items, 1):
+        rate_local = float(it["price_at_add"] or 0)
+        rate_usd   = (rate_local / _fx) if _fx else 0.0
         ws.cell(row=row, column=1, value=idx)
         ws.cell(row=row, column=2, value=_san(it["custom_name"]))
         ws.cell(row=row, column=3, value=1)
         ws.cell(row=row, column=4, value=_san(it["unit"]))
-        ws.cell(row=row, column=5, value=round(float(it["price_at_add"] or 0), 2))
-        ws.cell(row=row, column=6, value=_san(it["supplier_name"]))
+        ws.cell(row=row, column=5, value=round(rate_local, 2))
+        ws.cell(row=row, column=6, value=round(rate_usd, 2))
         ws.cell(row=row, column=7, value=_san(it["supplier_brand"]))
-        ws.cell(row=row, column=8, value=_san(it["supplier_phone"]))
-        ws.cell(row=row, column=9, value=_san(it["supplier_email"]))
-        ws.cell(row=row, column=10, value=_san(it["supplier_address"]))
-        for col in range(1, 11):
+        ws.cell(row=row, column=8, value=_san(it["supplier_name"]))
+        ws.cell(row=row, column=9, value=_san(it["supplier_phone"]))
+        for col in range(1, 10):
             ws.cell(row=row, column=col).border = box
         row += 1
 
-    for col, w in enumerate([5, 38, 6, 8, 14, 22, 16, 16, 24, 32], 1):
+    for col, w in enumerate([5, 38, 6, 8, 16, 16, 16, 24, 18], 1):
         ws.column_dimensions[get_column_letter(col)].width = w
 
     try:
@@ -22864,17 +22930,22 @@ def _price_sheet_markdown(sheet_id: int) -> str:
         f"**Currency:** {cur}  ",
         f"**Generated:** {sheet['created_at']}",
         "",
-        f"| # | Product / item description | Qty | Unit | Price ({cur}) | Supplier | Brand | Phone | Email |",
+        f"| # | Description | Qty | Unit | Basic Rate ({cur}) | Basic Rate (US$) | Brand | Company | Phone |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
+    try:
+        _fx = float(_CURRENCY_RATES_FROM_USD.get((cur or 'USD').upper(), 1.0) or 1.0)
+    except Exception:
+        _fx = 1.0
     for idx, it in enumerate(items, 1):
+        rate_local = float(it['price_at_add'] or 0)
+        rate_usd   = (rate_local / _fx) if _fx else 0.0
         md.append(
             f"| {idx} | {it['custom_name']} | 1 | {it['unit']} | "
-            f"{float(it['price_at_add'] or 0):.2f} | "
-            f"{it['supplier_name'] or '-'} | "
+            f"{rate_local:,.2f} | {rate_usd:,.2f} | "
             f"{it['supplier_brand'] or '-'} | "
-            f"{it['supplier_phone'] or '-'} | "
-            f"{it['supplier_email'] or '-'} |"
+            f"{it['supplier_name'] or '-'} | "
+            f"{it['supplier_phone'] or '-'} |"
         )
     md.append("")
     md.append("---")
@@ -23528,6 +23599,219 @@ def admin_opportunity_add_to_leads(src_url):
     return redirect(url_for("admin_opportunities"))
 
 # === END: solar_opportunities splice ===
+
+# === BEGIN: admin_marketplace_categories splice ===
+# 2026-06-22 (session A): admin can add new product categories from the UI.
+# Hardcoded _MARKETPLACE_CATEGORIES (21 seeds) stays as fallback seed; the DB
+# is the source of truth at query time.  New rows added here pick up the
+# extra columns spliced into product_categories by patch_bom_supplier_categories.py:
+#   default_unit       TEXT
+#   subcategories_csv  TEXT  (comma-separated)
+#   spec_fields_csv    TEXT  (comma-separated)
+#
+# Routes:
+#   GET  /admin/marketplace/categories                  list + add form
+#   POST /admin/marketplace/categories/add              create
+#   POST /admin/marketplace/categories/<cid>/edit       update
+#   POST /admin/marketplace/categories/<cid>/toggle     activate / deactivate
+#
+# Helper:
+#   _merged_marketplace_taxonomy()  ->  returns {subcategories, default_unit,
+#   spec_fields} dicts that combine the hardcoded registries with whatever the
+#   admin has saved in product_categories. Used by the supplier product add
+#   form, the admin product edit form, and the BOM library modal so any new
+#   category shows up everywhere automatically.
+
+def _merged_marketplace_taxonomy():
+    """Return three dicts keyed by category code, merging the hardcoded
+    registries (_MARKETPLACE_SUBCATEGORIES / _MARKETPLACE_DEFAULT_UNIT /
+    _MARKETPLACE_SPEC_FIELDS) with the per-row overrides admins typed into
+    product_categories.subcategories_csv / default_unit / spec_fields_csv.
+    DB values WIN when present so admins can extend hardcoded categories too.
+    """
+    subs = {k: list(v) for k, v in _MARKETPLACE_SUBCATEGORIES.items()}
+    units = dict(_MARKETPLACE_DEFAULT_UNIT)
+    specs = {k: list(v) for k, v in _MARKETPLACE_SPEC_FIELDS.items()}
+    try:
+        with get_db() as c:
+            rows = c.execute(
+                "SELECT code, default_unit, subcategories_csv, spec_fields_csv "
+                "FROM product_categories WHERE is_active=1"
+            ).fetchall()
+        for r in rows:
+            code = (r["code"] or "").strip()
+            if not code:
+                continue
+            du = (r["default_unit"] if "default_unit" in r.keys() else "") or ""
+            sc = (r["subcategories_csv"] if "subcategories_csv" in r.keys() else "") or ""
+            sf = (r["spec_fields_csv"] if "spec_fields_csv" in r.keys() else "") or ""
+            if du.strip():
+                units[code] = du.strip()
+            if sc.strip():
+                subs[code] = [s.strip() for s in sc.split(",") if s.strip()]
+            if sf.strip():
+                specs[code] = [s.strip() for s in sf.split(",") if s.strip()]
+    except Exception:
+        pass
+    return subs, units, specs
+
+
+def _slugify_category_code(name: str) -> str:
+    """Turn 'Switchgear & Protection' -> 'switchgear_protection'. Used when
+    admin doesn't supply an explicit code."""
+    import re as _re
+    s = (name or "").lower().strip()
+    s = _re.sub(r"[^a-z0-9]+", "_", s).strip("_")
+    return s[:40] or "category"
+
+
+@app.route("/admin/marketplace/categories")
+@admin_required
+def admin_marketplace_categories():
+    """List every product category. Admins can add new ones from this page."""
+    _ensure_marketplace_tables()
+    _ensure_bom_tables()  # also runs the product_categories ALTERs
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT id, code, name, icon, display_order, is_active, "
+            "       default_unit, subcategories_csv, spec_fields_csv "
+            "FROM product_categories ORDER BY display_order, name"
+        ).fetchall()
+        # Per-category product counts so admins can see usage at a glance.
+        counts = {}
+        try:
+            cnt_rows = c.execute(
+                "SELECT category_id, COUNT(*) AS n FROM equipment_catalog "
+                "WHERE is_active=1 GROUP BY category_id"
+            ).fetchall()
+            for r in cnt_rows:
+                counts[int(r["category_id"] or 0)] = int(r["n"] or 0)
+        except Exception:
+            pass
+    return render_template(
+        "admin_marketplace_categories.html",
+        user=current_user(),
+        categories=rows,
+        product_counts=counts,
+    )
+
+
+@app.route("/admin/marketplace/categories/add", methods=["POST"])
+@admin_required
+def admin_marketplace_categories_add():
+    _ensure_marketplace_tables()
+    _ensure_bom_tables()
+    csrf_protect()
+    f = request.form
+    name = (f.get("name") or "").strip()
+    if not name:
+        flash("Category name is required.", "danger")
+        return redirect(url_for("admin_marketplace_categories"))
+    code = (f.get("code") or "").strip().lower() or _slugify_category_code(name)
+    icon = (f.get("icon") or "bi-box").strip()
+    try:
+        order = int(f.get("display_order") or 220)
+    except (TypeError, ValueError):
+        order = 220
+    default_unit = (f.get("default_unit") or "No.").strip()[:20]
+    subcats = (f.get("subcategories_csv") or "").strip()
+    specs = (f.get("spec_fields_csv") or "").strip()
+    try:
+        with get_db() as c:
+            c.execute(
+                "INSERT INTO product_categories "
+                "(code, name, icon, display_order, is_active, "
+                " default_unit, subcategories_csv, spec_fields_csv) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (code, name, icon, order, 1, default_unit, subcats, specs),
+            )
+        _log_marketplace_action("add_category", "product_category", 0, f"{code}: {name}")
+        flash(f"Added category '{name}' ({code}).", "success")
+    except Exception as e:
+        _msg = str(e).lower()
+        if "unique" in _msg or "duplicate" in _msg:
+            flash(f"A category with code '{code}' already exists.", "warning")
+        else:
+            try:
+                app.logger.exception("admin_marketplace_categories_add failed: %s", e)
+            except Exception:
+                pass
+            flash(f"Could not add category: {e!s}", "danger")
+    return redirect(url_for("admin_marketplace_categories"))
+
+
+@app.route("/admin/marketplace/categories/<int:cid>/edit", methods=["POST"])
+@admin_required
+def admin_marketplace_categories_edit(cid):
+    _ensure_marketplace_tables()
+    _ensure_bom_tables()
+    csrf_protect()
+    f = request.form
+    name = (f.get("name") or "").strip()
+    if not name:
+        flash("Category name is required.", "danger")
+        return redirect(url_for("admin_marketplace_categories"))
+    icon = (f.get("icon") or "bi-box").strip()
+    try:
+        order = int(f.get("display_order") or 220)
+    except (TypeError, ValueError):
+        order = 220
+    default_unit = (f.get("default_unit") or "No.").strip()[:20]
+    subcats = (f.get("subcategories_csv") or "").strip()
+    specs = (f.get("spec_fields_csv") or "").strip()
+    try:
+        with get_db() as c:
+            row = c.execute(
+                "SELECT id, code, name FROM product_categories WHERE id=?", (cid,)
+            ).fetchone()
+            if not row:
+                abort(404)
+            c.execute(
+                "UPDATE product_categories SET name=?, icon=?, display_order=?, "
+                "default_unit=?, subcategories_csv=?, spec_fields_csv=? WHERE id=?",
+                (name, icon, order, default_unit, subcats, specs, cid),
+            )
+        _log_marketplace_action("edit_category", "product_category", cid, f"{row['code']}: {name}")
+        flash(f"Updated category '{name}'.", "success")
+    except Exception as e:
+        try:
+            app.logger.exception("admin_marketplace_categories_edit failed: %s", e)
+        except Exception:
+            pass
+        flash(f"Could not update category: {e!s}", "danger")
+    return redirect(url_for("admin_marketplace_categories"))
+
+
+@app.route("/admin/marketplace/categories/<int:cid>/toggle", methods=["POST"])
+@admin_required
+def admin_marketplace_categories_toggle(cid):
+    _ensure_marketplace_tables()
+    csrf_protect()
+    with get_db() as c:
+        row = c.execute(
+            "SELECT id, code, name, is_active FROM product_categories WHERE id=?",
+            (cid,),
+        ).fetchone()
+        if not row:
+            abort(404)
+        new_state = 0 if (row["is_active"] or 0) else 1
+        c.execute(
+            "UPDATE product_categories SET is_active=? WHERE id=?",
+            (new_state, cid),
+        )
+    _log_marketplace_action(
+        "toggle_category", "product_category", cid,
+        f"{row['code']}: {'activated' if new_state else 'deactivated'}",
+    )
+    flash(
+        f"Category '{row['name']}' {'activated' if new_state else 'deactivated'}.",
+        "success" if new_state else "warning",
+    )
+    return redirect(url_for("admin_marketplace_categories"))
+
+
+# === END: admin_marketplace_categories splice ===
+
 
 if __name__ == "__main__":
     init_db()

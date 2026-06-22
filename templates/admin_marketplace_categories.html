@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Categories — Marketplace Admin{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <div class="text-secondary small"><a href="{{ url_for('admin_marketplace_dashboard') }}" class="text-warning">Marketplace</a> / Categories</div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-tags me-2 text-warning"></i>Product categories</h5>
+    <div class="text-secondary small">{{ categories|length }} total &middot; admins can add new categories &middot; new categories show up automatically in the supplier and admin product forms, the public marketplace, and the procurement center.</div>
+  </div>
+  <a href="{{ url_for('admin_marketplace_dashboard') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+</div>
+
+<!-- Add new category -->
+<div class="solar-card p-3 mb-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1 text-warning"></i>Add a new category</h6>
+  <form method="POST" action="{{ url_for('admin_marketplace_categories_add') }}" class="row g-2">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="col-md-3">
+      <label class="form-label small text-secondary">Name *</label>
+      <input class="form-control form-control-sm" name="name" required placeholder="e.g. Lightning Protection">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small text-secondary">Code <span class="text-secondary" style="font-size:10px">(auto if blank)</span></label>
+      <input class="form-control form-control-sm" name="code" placeholder="lightning_protection" pattern="[a-z0-9_]{2,40}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small text-secondary">Icon <a href="https://icons.getbootstrap.com/" target="_blank" class="text-warning small">bi-…</a></label>
+      <input class="form-control form-control-sm" name="icon" value="bi-box" placeholder="bi-box">
+    </div>
+    <div class="col-md-1">
+      <label class="form-label small text-secondary">Order</label>
+      <input type="number" class="form-control form-control-sm" name="display_order" value="220" min="1">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small text-secondary">Default unit</label>
+      <input class="form-control form-control-sm" name="default_unit" value="No." placeholder="No. / m / Roll">
+    </div>
+    <div class="col-md-2 d-flex align-items-end">
+      <button class="btn btn-warning btn-sm fw-bold w-100"><i class="bi bi-check2-circle me-1"></i>Add category</button>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label small text-secondary">Subcategories (comma-separated, optional)</label>
+      <input class="form-control form-control-sm" name="subcategories_csv" placeholder="Air Terminal, Down Conductor, Earth Pit">
+    </div>
+    <div class="col-md-6">
+      <label class="form-label small text-secondary">Required spec fields (comma-separated, optional)</label>
+      <input class="form-control form-control-sm" name="spec_fields_csv" placeholder="Material, Length, Standard">
+    </div>
+  </form>
+</div>
+
+<!-- Existing categories -->
+<div class="solar-card p-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-list-ul me-1 text-warning"></i>All categories</h6>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+        <tr>
+          <th style="width:50px">Order</th>
+          <th>Name</th>
+          <th>Code</th>
+          <th>Default unit</th>
+          <th>Subcategories</th>
+          <th>Spec fields</th>
+          <th class="text-end">Products</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in categories %}
+        <tr>
+          <td class="text-secondary small">{{ c.display_order }}</td>
+          <td>
+            <strong><i class="{{ c.icon or 'bi-box' }} me-1 text-warning"></i>{{ c.name }}</strong>
+          </td>
+          <td class="small text-secondary"><code>{{ c.code }}</code></td>
+          <td class="small">{{ c.default_unit or '—' }}</td>
+          <td class="small text-secondary" style="max-width:240px;white-space:normal">{{ c.subcategories_csv or '—' }}</td>
+          <td class="small text-secondary" style="max-width:240px;white-space:normal">{{ c.spec_fields_csv or '—' }}</td>
+          <td class="text-end">{{ product_counts.get(c.id, 0) }}</td>
+          <td>
+            {% if c.is_active %}<span class="badge bg-success">Active</span>
+            {% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}
+          </td>
+          <td class="text-end" style="white-space:nowrap">
+            <button class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editCat{{ c.id }}" title="Edit"><i class="bi bi-pencil"></i></button>
+            <form method="POST" action="{{ url_for('admin_marketplace_categories_toggle', cid=c.id) }}" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn btn-outline-secondary btn-sm" title="{{ 'Deactivate' if c.is_active else 'Activate' }}">
+                <i class="bi bi-{{ 'eye-slash' if c.is_active else 'eye' }}"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Edit modals (one per row, kept compact) ── #}
+{% for c in categories %}
+<div class="modal fade" id="editCat{{ c.id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:#13132a;color:#e0e0f0;border:1px solid #1e1e3a">
+      <form method="POST" action="{{ url_for('admin_marketplace_categories_edit', cid=c.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="modal-header" style="border-bottom:1px solid #1e1e3a">
+          <h6 class="modal-title fw-bold"><i class="bi bi-pencil text-warning me-1"></i>Edit category &mdash; {{ c.name }}</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-md-8">
+              <label class="form-label small text-secondary">Name *</label>
+              <input class="form-control form-control-sm" name="name" value="{{ c.name }}" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small text-secondary">Display order</label>
+              <input type="number" class="form-control form-control-sm" name="display_order" value="{{ c.display_order }}" min="1">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small text-secondary">Icon</label>
+              <input class="form-control form-control-sm" name="icon" value="{{ c.icon or 'bi-box' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small text-secondary">Default unit</label>
+              <input class="form-control form-control-sm" name="default_unit" value="{{ c.default_unit or 'No.' }}">
+            </div>
+            <div class="col-md-12">
+              <label class="form-label small text-secondary">Subcategories (comma-separated)</label>
+              <input class="form-control form-control-sm" name="subcategories_csv" value="{{ c.subcategories_csv or '' }}">
+            </div>
+            <div class="col-md-12">
+              <label class="form-label small text-secondary">Required spec fields (comma-separated)</label>
+              <input class="form-control form-control-sm" name="spec_fields_csv" value="{{ c.spec_fields_csv or '' }}">
+            </div>
+            <div class="col-md-12 text-secondary small mt-2">
+              Code <code>{{ c.code }}</code> is immutable. Toggle active / inactive from the row icon.
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="border-top:1px solid #1e1e3a">
+          <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-warning btn-sm fw-bold"><i class="bi bi-save me-1"></i>Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+{% endblock %}

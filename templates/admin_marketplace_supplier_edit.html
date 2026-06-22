@@ -26,6 +26,8 @@
             <input class="form-control" name="phone" value="{{ supplier.phone or '' }}"></div>
           <div class="col-md-12"><label class="form-label small text-secondary">Email</label>
             <input class="form-control" name="email" value="{{ supplier.email or '' }}"></div>
+          <div class="col-md-12"><label class="form-label small text-secondary">Office address</label>
+            <textarea class="form-control" name="address" rows="2" placeholder="Street, City, Country">{{ supplier.address or '' }}</textarea></div>
           <div class="col-md-12"><label class="form-label small text-secondary">Categories (comma-sep)</label>
             <input class="form-control" name="categories" value="{{ supplier.categories or '' }}"></div>
           <div class="col-md-4"><label class="form-label small text-secondary">Lead time (days)</label>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ bom.title }} — BOM{% endblock %}
+{% block title %}{{ bom.title }} — Bill of Materials{% endblock %}
 {% block content %}
 
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
@@ -7,13 +7,14 @@
     <div class="text-secondary small"><a href="{{ url_for('boms_list') }}" class="text-warning">My BOMs</a></div>
     <h5 class="fw-black mb-0 mt-1">{{ bom.title }}</h5>
     <div class="text-secondary small">
+      Bill of Materials &middot; material list only (no cost) &middot;
       {% if bom.project_name %}{{ bom.project_name }}{% endif %}
       {% if bom.client_name %} · client: {{ bom.client_name }}{% endif %}
       · created {{ bom.created_at }}
     </div>
   </div>
   <div class="d-flex gap-2 flex-wrap">
-    <a href="{{ url_for('boms_boq', bom_id=bom.id) }}" class="btn btn-outline-light btn-sm" target="_blank"><i class="bi bi-file-text me-1"></i>View BOQ</a>
+    <a href="{{ url_for('boms_boq', bom_id=bom.id) }}" class="btn btn-outline-warning btn-sm" title="Cost Estimate (rates + totals)"><i class="bi bi-calculator me-1"></i>Cost Estimate</a>
     <a href="{{ url_for('boms_boq_xlsx', bom_id=bom.id) }}" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-excel me-1"></i>Excel</a>
     <a href="{{ url_for('boms_boq_pdf', bom_id=bom.id) }}" class="btn btn-outline-danger btn-sm"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</a>
     {% if items %}
@@ -25,98 +26,73 @@
   </div>
 </div>
 
-<!-- Grand total card -->
+<!-- Counts -->
 <div class="row g-3 mb-4">
-  <div class="col-md-6">
-    <div class="kpi-card h-100">
-      <div class="kpi-label"><i class="bi bi-cash-stack me-1"></i>Grand total</div>
-      <div class="kpi-value">{{ currency or 'USD' }} {{ (totals.grand_total or 0)|fmt }}</div>
-      <div class="kpi-unit">{{ currency or 'USD' }} · all line items{% if currency and currency != 'USD' %} · indicative @ {{ rates_as_of }}{% endif %}</div>
-    </div>
-  </div>
   <div class="col-md-6">
     <div class="kpi-card h-100">
       <div class="kpi-label"><i class="bi bi-box-seam me-1"></i>Line items</div>
       <div class="kpi-value">{{ items|length }}</div>
-      <div class="kpi-unit">across {{ totals.category_totals|length }} categor{{ 'y' if totals.category_totals|length == 1 else 'ies' }}</div>
+      <div class="kpi-unit">{{ totals.category_totals|length }} categor{{ 'y' if totals.category_totals|length == 1 else 'ies' }}</div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="kpi-card h-100">
+      <div class="kpi-label"><i class="bi bi-info-circle me-1"></i>Cost view</div>
+      <div class="kpi-value" style="font-size:18px;line-height:1.2"><a href="{{ url_for('boms_boq', bom_id=bom.id) }}" class="text-warning">Cost Estimate</a></div>
+      <div class="kpi-unit">rates, markups and totals live there &mdash; not on the BOM</div>
     </div>
   </div>
 </div>
 
-<!-- Rates panel -->
+<!-- Items table -- materials only, no cost -->
 <div class="solar-card p-3 mb-4">
-  <h6 class="fw-bold mb-3"><i class="bi bi-percent me-1 text-warning"></i>Markup rates
-    <span class="text-secondary small">— applied to the basic supplier price for the BOQ total</span>
+  <h6 class="fw-bold mb-3"><i class="bi bi-list-ul me-1 text-warning"></i>Material list
+    <span class="text-secondary small">&mdash; material name &middot; description &middot; specification &middot; qty &middot; unit &middot; brand</span>
   </h6>
-  {% set rates = bom_rates if bom_rates is defined else {'labour_pct': 15, 'overhead_pct': 8, 'profit_pct': 12, 'vat_pct': 0} %}
-  <form method="POST" action="{{ url_for('boms_save_rates', bom_id=bom.id) }}" class="row g-2">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <div class="col-md-2">
-      <label class="form-label small text-secondary">Install labour %</label>
-      <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="labour_pct" value="{{ rates.labour_pct }}">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label small text-secondary">Overhead %</label>
-      <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="overhead_pct" value="{{ rates.overhead_pct }}">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label small text-secondary">Profit %</label>
-      <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="profit_pct" value="{{ rates.profit_pct }}">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label small text-secondary">VAT %</label>
-      <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="vat_pct" value="{{ rates.vat_pct }}">
-    </div>
-    <div class="col-md-4 d-flex align-items-end">
-      <button class="btn btn-warning btn-sm fw-bold w-100"><i class="bi bi-save me-1"></i>Save rates &amp; recalculate</button>
-    </div>
-    <div class="col-md-12 text-secondary small mt-2">
-      Total rate = (basic + labour) × (1 + overhead/100) × (1 + profit/100) × (1 + VAT/100). Apply once per BOM — applies to every line.
-    </div>
-  </form>
-</div>
-
-<!-- Items table -->
-<div class="solar-card p-3 mb-4">
-  <h6 class="fw-bold mb-3"><i class="bi bi-list-ul me-1 text-warning"></i>Line items</h6>
   {% if items %}
   <div class="table-responsive">
     <table class="table table-sm align-middle" style="color:#e0e0f0">
       <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
-        <tr><th>#</th><th>Item</th><th>Category</th><th>Supplier</th><th class="text-end">Qty</th><th class="text-end">Unit price</th><th class="text-end">Total</th><th></th></tr>
+        <tr>
+          <th>#</th>
+          <th>Material</th>
+          <th>Description</th>
+          <th>Specification</th>
+          <th class="text-end">Qty *</th>
+          <th>Unit</th>
+          <th>Brand</th>
+          <th></th>
+        </tr>
       </thead>
       <tbody>
+        {% set ns = namespace(prev_cat=None) %}
         {% for line in totals.lines %}
         {% set it = line.item %}
+        {% set cat = (it.category_name or 'Uncategorised') %}
+        {% if cat != ns.prev_cat %}
+        <tr style="background:#0a0a14">
+          <td colspan="8" class="text-warning small fw-bold text-uppercase" style="letter-spacing:1px"><i class="bi bi-folder me-1"></i>{{ cat }}</td>
+        </tr>
+        {% set ns.prev_cat = cat %}
+        {% endif %}
         <tr>
           <td class="text-secondary small">{{ loop.index }}</td>
           <td>
             <strong>{{ it.custom_name }}</strong>
-            {% if it.catalog_name and it.catalog_name != it.custom_name %}<div class="small text-secondary">{{ it.catalog_brand }} {{ it.catalog_model }}</div>{% endif %}
-            {% if it.notes %}<div class="small text-secondary"><i class="bi bi-card-text me-1"></i>{{ it.notes }}</div>{% endif %}
+            {% if it.catalog_name and it.catalog_name != it.custom_name %}<div class="small text-secondary">{{ it.catalog_name }}</div>{% endif %}
           </td>
-          <td class="small text-secondary">{{ it.category_name or '—' }}</td>
-          <td class="small">{{ it.supplier_name or '—' }}{% if it.supplier_country %}<div class="small text-secondary">{{ it.supplier_country }}</div>{% endif %}</td>
+          <td class="small text-secondary" style="max-width:240px;white-space:normal">{{ (it['description'] if 'description' in it.keys() else '') or '—' }}</td>
+          <td class="small text-secondary" style="max-width:240px;white-space:normal">{{ (it['specification'] if 'specification' in it.keys() else '') or (it.catalog_spec or '—') }}</td>
           <td class="text-end">
             <form method="POST" action="{{ url_for('boms_edit_item_qty', bom_id=bom.id, item_id=it.id) }}" class="d-inline-flex align-items-center gap-1" style="max-width:140px">
               <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-              <input type="number" step="0.01" min="0.01" name="qty" value="{{ "%.2f"|format(it.qty or 0) }}" class="form-control form-control-sm text-end" style="max-width:80px;padding:.2rem .4rem" title="Edit quantity">
+              <input type="number" step="0.01" min="0.01" required name="qty" value="{{ "%.2f"|format(it.qty or 0) }}" class="form-control form-control-sm text-end" style="max-width:80px;padding:.2rem .4rem" title="Edit quantity (required)">
               <input type="hidden" name="unit" value="{{ it.unit }}">
               <button type="submit" class="btn btn-sm btn-outline-warning" style="padding:.15rem .3rem" title="Save qty"><i class="bi bi-check2"></i></button>
             </form>
-            <div class="text-secondary small mt-1">{{ it.unit }}</div>
           </td>
-          <td class="text-end">
-            <form method="POST" action="{{ url_for('boms_edit_item_qty', bom_id=bom.id, item_id=it.id) }}" class="d-inline-flex align-items-center gap-1" style="max-width:140px">
-              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-              <input type="hidden" name="qty" value="{{ "%.2f"|format(it.qty or 0) }}">
-              <span class="text-secondary small me-1">{{ currency or 'USD' }}</span>
-              <input type="number" step="0.01" min="0" name="unit_price_override" value="{{ "%.2f"|format(line.unit_price) }}" class="form-control form-control-sm text-end" style="max-width:90px;padding:.2rem .4rem" title="Edit unit price (override)">
-              <button type="submit" class="btn btn-sm btn-outline-warning" style="padding:.15rem .3rem" title="Save price"><i class="bi bi-check2"></i></button>
-            </form>
-            {% if it.unit_price_override is not none %}<div class="small text-warning">override</div>{% endif %}
-          </td>
-          <td class="text-end fw-bold text-warning">{{ currency or 'USD' }} {{ (line.line_total)|fmt }}</td>
+          <td class="small">{{ it.unit }}</td>
+          <td class="small">{{ (it['brand'] if 'brand' in it.keys() and it['brand'] else (it.catalog_brand or '—')) }}</td>
           <td class="text-end">
             <form method="POST" action="{{ url_for('boms_delete_item', bom_id=bom.id, item_id=it.id) }}" style="display:inline">
               <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -126,18 +102,6 @@
         </tr>
         {% endfor %}
       </tbody>
-      <tfoot>
-        {% for cat, sub in totals.category_totals.items() %}
-        <tr style="background:#0a0a14">
-          <td colspan="6" class="text-end text-secondary small">{{ cat }} subtotal</td>
-          <td class="text-end fw-bold">{{ currency or 'USD' }} {{ (sub)|fmt }}</td><td></td>
-        </tr>
-        {% endfor %}
-        <tr style="background:rgba(245,158,11,.10)">
-          <td colspan="6" class="text-end fw-bold">Grand total</td>
-          <td class="text-end fw-black text-warning" style="font-size:16px">{{ currency or 'USD' }} {{ (totals.grand_total)|fmt }}</td><td></td>
-        </tr>
-      </tfoot>
     </table>
   </div>
   {% else %}
@@ -149,36 +113,46 @@
   <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
     <h6 class="fw-bold mb-0"><i class="bi bi-plus-circle me-1 text-warning"></i>Add line item</h6>
     <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#addLibraryItemModal">
-      <i class="bi bi-plus-square me-1"></i>+ Add Library Item
+      <i class="bi bi-plus-square me-1"></i>+ Add Library Item (with rate build-up)
     </button>
   </div>
   <form method="POST" action="{{ url_for('boms_add_item', bom_id=bom.id) }}" class="row g-2">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <div class="col-md-4">
-      <input class="form-control form-control-sm" name="name" placeholder="Item name *" required>
+    <div class="col-md-3">
+      <label class="form-label small text-secondary">Material name *</label>
+      <input class="form-control form-control-sm" name="name" placeholder="e.g. 4C Armoured LV Cable 4mm²" required>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-secondary">Description</label>
+      <input class="form-control form-control-sm" name="description" placeholder="What it is / where used">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-secondary">Specification</label>
+      <input class="form-control form-control-sm" name="specification" placeholder="Voltage / size / standard">
     </div>
     <div class="col-md-1">
-      <input type="number" step="0.01" class="form-control form-control-sm" name="qty" value="1" min="0.01" placeholder="Qty">
+      <label class="form-label small text-secondary">Qty *</label>
+      <input type="number" step="0.01" class="form-control form-control-sm" name="qty" min="0.01" placeholder="Qty" required>
     </div>
     <div class="col-md-1">
-      <input class="form-control form-control-sm" name="unit" value="No." placeholder="Unit">
+      <label class="form-label small text-secondary">Unit</label>
+      <input class="form-control form-control-sm" name="unit" value="No.">
     </div>
-    <div class="col-md-2">
-      <input type="number" step="0.01" class="form-control form-control-sm" name="unit_price_override" placeholder="Price override (opt.)">
+    <div class="col-md-1">
+      <label class="form-label small text-secondary">Brand</label>
+      <input class="form-control form-control-sm" name="brand" placeholder="e.g. ABB">
     </div>
-    <div class="col-md-2">
-      <input type="number" class="form-control form-control-sm" name="product_id" placeholder="Marketplace prod id (opt.)">
-    </div>
-    <div class="col-md-2">
-      <button class="btn btn-warning btn-sm fw-bold w-100"><i class="bi bi-plus-circle me-1"></i>Add</button>
-    </div>
-    <div class="col-md-12 text-secondary small">
-      Tip: pick a product on <a href="{{ url_for('marketplace_public') }}" class="text-warning">the marketplace</a> and click <strong>Add to BOM</strong> — it lands here automatically. Use <strong>+ Add Library Item</strong> when the item isn't in the catalogue yet.
+    <div class="col-md-12">
+      <button class="btn btn-warning btn-sm fw-bold"><i class="bi bi-plus-circle me-1"></i>Add to BOM</button>
+      <span class="text-secondary small ms-2">
+        Quantity is required. The BOM lists what you need &mdash; rates and totals appear on the
+        <a href="{{ url_for('boms_boq', bom_id=bom.id) }}" class="text-warning">Cost Estimate</a>.
+      </span>
     </div>
   </form>
 </div>
 
-{# ─── + Add Library Item modal ──────────────── #}
+{# ─── + Add Library Item modal (unchanged – feeds Cost Estimate with rate build-up) ─── #}
 <div class="modal fade" id="addLibraryItemModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content" style="background:#13132a;color:#e0e0f0;border:1px solid #1e1e3a">
@@ -190,7 +164,7 @@
         </div>
         <div class="modal-body">
           <p class="text-secondary small mb-3">
-            Use when the item you need isn't in the catalogue. The clean rate (final built-up) appears in the BOQ;
+            Use when the item you need isn't in the catalogue. The clean rate (final built-up) appears in the Cost Estimate;
             the basic-price / supply / install / overhead / profit / contingency / VAT breakdown stays internal
             on the Rate Build-Up page.
           </p>
@@ -203,20 +177,20 @@
               <label class="form-label small text-secondary">BOQ section</label>
               <select class="form-select form-select-sm" name="section">
                 <option value="preliminaries">Preliminaries</option>
-                <option value="switchboards">Switch Boards & DBs</option>
+                <option value="switchboards">Switch Boards &amp; DBs</option>
                 <option value="sub_feeders">Sub-feeder Cables</option>
                 <option value="wiring">Wiring of Points</option>
                 <option value="luminaires">Luminaires</option>
                 <option value="accessories">Accessories</option>
-                <option value="earthing">Bonding & Earthing</option>
-                <option value="fire_alarm">Fire Detection & Alarm</option>
-                <option value="data_voice">Data & Voice</option>
+                <option value="earthing">Bonding &amp; Earthing</option>
+                <option value="fire_alarm">Fire Detection &amp; Alarm</option>
+                <option value="data_voice">Data &amp; Voice</option>
                 <option value="lightning">Lightning Protection</option>
                 <option value="external_lighting">External Lighting</option>
                 <option value="solar_pv">Solar PV System</option>
-                <option value="generator_ups">Generator & UPS</option>
-                <option value="testing">Testing & Commissioning</option>
-                <option value="documentation">Documentation & Handover</option>
+                <option value="generator_ups">Generator &amp; UPS</option>
+                <option value="testing">Testing &amp; Commissioning</option>
+                <option value="documentation">Documentation &amp; Handover</option>
                 <option value="other">Other</option>
               </select>
             </div>
@@ -230,7 +204,7 @@
             </div>
             <div class="col-md-2">
               <label class="form-label small text-secondary">Qty *</label>
-              <input type="number" step="0.01" min="0.01" class="form-control form-control-sm" name="qty" value="1" required>
+              <input type="number" step="0.01" min="0.01" class="form-control form-control-sm" name="qty" required>
             </div>
             <div class="col-md-4">
               <label class="form-label small text-secondary">Brand</label>
@@ -242,7 +216,7 @@
             </div>
 
             <div class="col-md-12 mt-3">
-              <div class="text-warning small fw-bold"><i class="bi bi-lock-fill me-1"></i>Rate build-up (internal — never shown on BOQ)</div>
+              <div class="text-warning small fw-bold"><i class="bi bi-lock-fill me-1"></i>Rate build-up (Cost Estimate only &mdash; never shown on the BOM)</div>
             </div>
             <div class="col-md-3">
               <label class="form-label small text-secondary">Basic price</label>
@@ -278,13 +252,13 @@
             </div>
 
             <div class="col-md-12">
-              <label class="form-label small text-secondary">Notes / remarks (shown on BOQ)</label>
-              <input class="form-control form-control-sm" name="remarks" placeholder="Optional remark printed in the client BOQ">
+              <label class="form-label small text-secondary">Notes / remarks (Cost Estimate only)</label>
+              <input class="form-control form-control-sm" name="remarks" placeholder="Optional remark printed in the client Cost Estimate">
             </div>
             <div class="col-md-12 mt-2">
               <label class="form-label small text-secondary">Save option</label>
               <select class="form-select form-select-sm" name="save_option">
-                <option value="current_boq_only" selected>Use in current BOQ only</option>
+                <option value="current_boq_only" selected>Use in current BOM only</option>
                 <option value="save_to_project_library">Save to project library</option>
                 <option value="submit_to_master_library">Submit to master BOQ library (needs review)</option>
               </select>
@@ -293,7 +267,7 @@
         </div>
         <div class="modal-footer" style="border-top:1px solid #1e1e3a">
           <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-warning btn-sm fw-bold"><i class="bi bi-save me-1"></i>Save &amp; Add to BOQ</button>
+          <button type="submit" class="btn btn-warning btn-sm fw-bold"><i class="bi bi-save me-1"></i>Save &amp; Add</button>
         </div>
       </form>
     </div>
