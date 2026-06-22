@@ -24,8 +24,14 @@
         <input type="text" name="name" required value="{{ product.name }}" class="form-control" style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
       </div>
       <div class="col-md-4">
-        <label class="form-label small text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Brand</label>
-        <input type="text" name="brand" value="{{ product.brand or '' }}" class="form-control" style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+        <label class="form-label small text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Brand *</label>
+        <select name="brand" required class="form-select" style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
+          <option value="">— Select brand —</option>
+          {% if product.brand and product.brand not in (brands or [])|map(attribute='name')|list %}
+          <option value="{{ product.brand }}" selected>{{ product.brand }} (legacy)</option>
+          {% endif %}
+          {% for b in (brands or []) %}<option value="{{ b.name }}" {% if product.brand == b.name %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+        </select>
       </div>
       <div class="col-md-4">
         <label class="form-label small text-secondary" style="text-transform:uppercase;letter-spacing:.5px;font-weight:700">Model</label>

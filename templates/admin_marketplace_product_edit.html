@@ -13,8 +13,15 @@
         <div class="row g-3 mb-3">
           <div class="col-md-12"><label class="form-label small text-secondary">Product name *</label>
             <input class="form-control" name="name" required value="{{ product.name }}"></div>
-          <div class="col-md-6"><label class="form-label small text-secondary">Brand</label>
-            <input class="form-control" name="brand" value="{{ product.brand or '' }}"></div>
+          <div class="col-md-6"><label class="form-label small text-secondary">Brand *</label>
+            <select class="form-select" name="brand" required>
+              <option value="">— Select brand —</option>
+              {% if product.brand and product.brand not in (brands or [])|map(attribute='name')|list %}
+              <option value="{{ product.brand }}" selected>{{ product.brand }} (legacy)</option>
+              {% endif %}
+              {% for b in (brands or []) %}<option value="{{ b.name }}" {% if product.brand == b.name %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+            </select>
+          </div>
           <div class="col-md-6"><label class="form-label small text-secondary">Model</label>
             <input class="form-control" name="model" value="{{ product.model or '' }}"></div>
           <div class="col-md-12"><label class="form-label small text-secondary d-flex justify-content-between">

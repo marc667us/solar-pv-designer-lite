@@ -17,8 +17,12 @@
             <input class="form-control" name="name" required placeholder="ABB 500 kVA Distribution Transformer">
           </div>
           <div class="col-md-6">
-            <label class="form-label small text-secondary">Brand</label>
-            <input class="form-control" name="brand" placeholder="ABB">
+            <label class="form-label small text-secondary">Brand *</label>
+            <select class="form-select" name="brand" required>
+              <option value="">— Select brand —</option>
+              {% for b in (brands or []) %}<option value="{{ b.name }}">{{ b.name }}</option>{% endfor %}
+            </select>
+            <div class="text-secondary small mt-1">Brand missing? Admin adds it at <a href="{{ url_for('admin_marketplace_brands') }}" class="text-warning">Brands &mdash; manage</a>.</div>
           </div>
           <div class="col-md-6">
             <label class="form-label small text-secondary">Model</label>

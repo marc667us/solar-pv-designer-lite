@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Brands — Marketplace Admin{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <div class="text-secondary small"><a href="{{ url_for('admin_marketplace_dashboard') }}" class="text-warning">Marketplace</a> / Brands</div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-bookmark-star me-2 text-warning"></i>Product brands</h5>
+    <div class="text-secondary small">{{ brands|length }} total &middot; admins add brands here &middot; new brands appear automatically in the Add Product form on every page that uses the catalogue (supplier add, admin edit, procurement catalogue).</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('admin_marketplace_categories') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-tags me-1"></i>Categories</a>
+    <a href="{{ url_for('admin_marketplace_dashboard') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+  </div>
+</div>
+
+<!-- Add new brand -->
+<div class="solar-card p-3 mb-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle me-1 text-warning"></i>Add a new brand</h6>
+  <form method="POST" action="{{ url_for('admin_marketplace_brands_add') }}" class="row g-2">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="col-md-5">
+      <label class="form-label small text-secondary">Brand name *</label>
+      <input class="form-control form-control-sm" name="name" required placeholder="e.g. Mitsubishi Electric">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-secondary">Country of origin</label>
+      <input class="form-control form-control-sm" name="country" placeholder="e.g. Japan">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small text-secondary">Website</label>
+      <input class="form-control form-control-sm" name="website" placeholder="https://...">
+    </div>
+    <div class="col-md-2 d-flex align-items-end">
+      <button class="btn btn-warning btn-sm fw-bold w-100"><i class="bi bi-check2-circle me-1"></i>Add brand</button>
+    </div>
+  </form>
+</div>
+
+<!-- Existing brands -->
+<div class="solar-card p-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-list-ul me-1 text-warning"></i>All brands</h6>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+        <tr>
+          <th>Brand</th>
+          <th>Country</th>
+          <th>Website</th>
+          <th class="text-end">Products</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in brands %}
+        <tr>
+          <td><strong>{{ b.name }}</strong></td>
+          <td class="small text-secondary">{{ b.country or '—' }}</td>
+          <td class="small text-secondary">{% if b.website %}<a href="{{ b.website }}" target="_blank" class="text-warning">{{ b.website }}</a>{% else %}—{% endif %}</td>
+          <td class="text-end">{{ brand_counts.get(b.name, 0) }}</td>
+          <td>
+            {% if b.is_active %}<span class="badge bg-success">Active</span>
+            {% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}
+          </td>
+          <td class="text-end" style="white-space:nowrap">
+            <button class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editBrand{{ b.id }}" title="Edit"><i class="bi bi-pencil"></i></button>
+            <form method="POST" action="{{ url_for('admin_marketplace_brands_toggle', bid=b.id) }}" style="display:inline">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn btn-outline-secondary btn-sm" title="{{ 'Deactivate' if b.is_active else 'Activate' }}">
+                <i class="bi bi-{{ 'eye-slash' if b.is_active else 'eye' }}"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# Edit modals -- one per row, compact #}
+{% for b in brands %}
+<div class="modal fade" id="editBrand{{ b.id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:#13132a;color:#e0e0f0;border:1px solid #1e1e3a">
+      <form method="POST" action="{{ url_for('admin_marketplace_brands_edit', bid=b.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="modal-header" style="border-bottom:1px solid #1e1e3a">
+          <h6 class="modal-title fw-bold"><i class="bi bi-pencil text-warning me-1"></i>Edit brand &mdash; {{ b.name }}</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-md-12">
+              <label class="form-label small text-secondary">Brand name *</label>
+              <input class="form-control form-control-sm" name="name" value="{{ b.name }}" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small text-secondary">Country</label>
+              <input class="form-control form-control-sm" name="country" value="{{ b.country or '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small text-secondary">Website</label>
+              <input class="form-control form-control-sm" name="website" value="{{ b.website or '' }}">
+            </div>
+            <div class="col-md-12 text-secondary small mt-2">
+              Renaming the brand also updates every product currently tagged with the old name.
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="border-top:1px solid #1e1e3a">
+          <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-warning btn-sm fw-bold"><i class="bi bi-save me-1"></i>Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+{% endblock %}

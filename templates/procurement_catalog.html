@@ -39,8 +39,12 @@
             <label class="form-label small">Name *</label>
             <input type="text" name="name" required class="form-control form-control-sm bg-dark text-light border-secondary">
           </div>
-          <div class="col-md-4"><label class="form-label small">Brand</label>
-            <input type="text" name="brand" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+          <div class="col-md-4"><label class="form-label small">Brand *</label>
+            <select name="brand" required class="form-select form-select-sm bg-dark text-light border-secondary">
+              <option value="">— Select brand —</option>
+              {% for b in (brands or []) %}<option value="{{ b.name }}">{{ b.name }}</option>{% endfor %}
+            </select>
+          </div>
           <div class="col-md-4"><label class="form-label small">Model</label>
             <input type="text" name="model" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
           <div class="col-md-4"><label class="form-label small">Unit</label>
