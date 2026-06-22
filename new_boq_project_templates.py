@@ -345,6 +345,230 @@ _BOQ_PROJECT_TEMPLATES = {
             ]},
         ],
     },
+
+    # ─── Master Reference Library (Schools / Offices / Hospitals / Industrial) ──
+    # Composed from pvsolar1/supplier and price/update liberary.txt sections A-M.
+    # 13 bills covering Containment, Wiring, Accessories, Lighting, Distribution,
+    # Main Equipment, Earthing + Lightning, Solar PV, ICT, CCTV + Access Control,
+    # BMS, IoT, Testing + Commissioning. Quantities are placeholders for a
+    # 2-floor 800 m² commercial reference; rates are midpoints of the GHS
+    # price ranges in the doc. Owner unticks/edits what doesn't fit.
+    "master-reference-library": {
+        "name":        "Master Reference Library (Electrical + ICT + BMS + Solar)",
+        "purpose":     "commercial",
+        "subtype":     "Multi-discipline reference",
+        "description": "Comprehensive 13-bill reference covering containment, wiring, accessories, lighting, distribution, main LV/MV equipment, earthing, solar PV, ICT, CCTV, access control, BMS, IoT, and testing. Use as a fully-loaded starter; untick rows that don't apply.",
+        "bills": [
+            {"no": 1, "name": "PRELIMINARIES", "sections": [
+                {"letter": "A", "title": "PRELIMINARY ITEMS", "subsection": "", "items": [
+                    {"desc": "Site mobilisation and setup",       "unit": "Lot", "qty": 1, "basic": 18000, "spec": ""},
+                    {"desc": "Project manager allowance",         "unit": "Mth", "qty": 4, "basic":  8500, "spec": ""},
+                    {"desc": "Site engineer allowance",           "unit": "Mth", "qty": 4, "basic":  7000, "spec": ""},
+                    {"desc": "Health & safety provisions",        "unit": "Lot", "qty": 1, "basic":  6500, "spec": ""},
+                    {"desc": "Tools and small plant",             "unit": "Lot", "qty": 1, "basic":  4500, "spec": ""},
+                    {"desc": "Final commissioning and handover",  "unit": "Lot", "qty": 1, "basic":  8000, "spec": ""},
+                ]},
+            ]},
+            {"no": 2, "name": "CONTAINMENT (CONDUITS, BOXES, TRAYS, TRUNKING)", "sections": [
+                {"letter": "A", "title": "PVC CONDUITS", "subsection": "", "items": [
+                    {"desc": "20mm heavy-duty PVC conduit",   "unit": "m",   "qty": 600, "basic":   15, "spec": "BS EN 61386"},
+                    {"desc": "25mm heavy-duty PVC conduit",   "unit": "m",   "qty": 250, "basic":   21, "spec": "BS EN 61386"},
+                    {"desc": "32mm heavy-duty PVC conduit",   "unit": "m",   "qty": 100, "basic":   30, "spec": "BS EN 61386"},
+                ]},
+                {"letter": "B", "title": "STEEL CONDUITS", "subsection": "", "items": [
+                    {"desc": "20mm GI conduit (Class 4)",     "unit": "m",   "qty": 100, "basic":   45, "spec": ""},
+                    {"desc": "25mm GI conduit (Class 4)",     "unit": "m",   "qty":  50, "basic":   65, "spec": ""},
+                    {"desc": "Flexible conduit 20mm (PVC)",   "unit": "m",   "qty":  40, "basic":   38, "spec": "Adaptaflex / Legrand"},
+                ]},
+                {"letter": "C", "title": "BOXES", "subsection": "", "items": [
+                    {"desc": "1-gang flush box (35mm deep)",  "unit": "Nos", "qty":  80, "basic":   22, "spec": ""},
+                    {"desc": "2-gang flush box (35mm deep)",  "unit": "Nos", "qty":  50, "basic":   30, "spec": ""},
+                    {"desc": "Adaptable box 100x100x50mm (PVC)", "unit":"Nos","qty":40,"basic":50, "spec": "Gewiss / Legrand / MK"},
+                    {"desc": "Adaptable box 150x150x75mm (PVC)", "unit":"Nos","qty":20,"basic":75, "spec": "Gewiss / Legrand / MK"},
+                    {"desc": "GI draw box",                   "unit": "Nos", "qty":  10, "basic":  130, "spec": ""},
+                ]},
+                {"letter": "D", "title": "TRUNKING AND TRAYS", "subsection": "", "items": [
+                    {"desc": "PVC trunking 50x50mm",          "unit": "m",   "qty":  80, "basic":   42, "spec": "Marshall-Tufflex / Legrand"},
+                    {"desc": "PVC trunking 100x50mm",         "unit": "m",   "qty":  60, "basic":   65, "spec": ""},
+                    {"desc": "GI perforated cable tray 100mm","unit": "m",   "qty":  60, "basic":   95, "spec": "Unistrut / Legrand"},
+                    {"desc": "GI perforated cable tray 150mm","unit": "m",   "qty":  40, "basic":  140, "spec": ""},
+                    {"desc": "GI perforated cable tray 300mm","unit": "m",   "qty":  20, "basic":  240, "spec": ""},
+                ]},
+            ]},
+            {"no": 3, "name": "WIRING AND CABLES", "sections": [
+                {"letter": "A", "title": "SINGLE-CORE PVC COPPER WIRES", "subsection": "Lighting + socket circuits", "items": [
+                    {"desc": "1.5mm² Cu PVC cable (450/750V)", "unit": "m",   "qty": 1200, "basic":  10, "spec": "Nexans / Prysmian / Tropical Cable / Reroy"},
+                    {"desc": "2.5mm² Cu PVC cable (450/750V)", "unit": "m",   "qty":  900, "basic":  16, "spec": ""},
+                    {"desc": "4mm² Cu PVC cable (450/750V)",   "unit": "m",   "qty":  400, "basic":  25, "spec": ""},
+                    {"desc": "6mm² Cu PVC cable (450/750V)",   "unit": "m",   "qty":  200, "basic":  40, "spec": ""},
+                    {"desc": "10mm² Cu PVC cable (450/750V)",  "unit": "m",   "qty":  100, "basic":  62, "spec": ""},
+                    {"desc": "16mm² Cu PVC cable (450/750V)",  "unit": "m",   "qty":   60, "basic":  95, "spec": ""},
+                    {"desc": "Earth cable 10mm² (green/yellow)","unit":"m",   "qty":  100, "basic":  70, "spec": ""},
+                ]},
+                {"letter": "B", "title": "ARMOURED POWER CABLES (BS 5467)", "subsection": "", "items": [
+                    {"desc": "4C x 16mm² Cu XLPE/SWA/PVC",     "unit": "m",   "qty":   60, "basic":  150, "spec": ""},
+                    {"desc": "4C x 35mm² Cu XLPE/SWA/PVC",     "unit": "m",   "qty":   40, "basic":  270, "spec": ""},
+                    {"desc": "4C x 70mm² Cu XLPE/SWA/PVC",     "unit": "m",   "qty":   30, "basic":  500, "spec": ""},
+                    {"desc": "4C x 120mm² Cu XLPE/SWA/PVC",    "unit": "m",   "qty":   20, "basic":  825, "spec": ""},
+                ]},
+            ]},
+            {"no": 4, "name": "WIRING ACCESSORIES (MK / SCHNEIDER / LEGRAND)", "sections": [
+                {"letter": "A", "title": "SWITCHES", "subsection": "", "items": [
+                    {"desc": "1-gang 1-way light switch (10A)","unit": "Nos", "qty": 40, "basic":  40, "spec": "MK / Schneider AvatarOn / Legrand Mallia"},
+                    {"desc": "1-gang 2-way light switch (10A)","unit": "Nos", "qty": 20, "basic":  55, "spec": ""},
+                    {"desc": "2-gang light switch (10A)",      "unit": "Nos", "qty": 15, "basic":  65, "spec": ""},
+                    {"desc": "3-gang light switch (10A)",      "unit": "Nos", "qty": 10, "basic":  90, "spec": ""},
+                    {"desc": "Intermediate switch (10A)",      "unit": "Nos", "qty":  4, "basic": 120, "spec": ""},
+                ]},
+                {"letter": "B", "title": "SOCKET OUTLETS", "subsection": "", "items": [
+                    {"desc": "13A switched single socket",     "unit": "Nos", "qty": 30, "basic":  68, "spec": "MK / Crabtree / Schneider / Legrand"},
+                    {"desc": "13A switched twin socket",       "unit": "Nos", "qty": 50, "basic": 128, "spec": ""},
+                    {"desc": "13A twin socket with USB",       "unit": "Nos", "qty": 12, "basic": 315, "spec": ""},
+                    {"desc": "Weatherproof socket IP66",       "unit": "Nos", "qty":  8, "basic": 425, "spec": "MK Masterseal / Schneider / Gewiss"},
+                ]},
+                {"letter": "C", "title": "DP SWITCHES + ISOLATORS", "subsection": "", "items": [
+                    {"desc": "20A DP switch with neon (water heater)","unit":"Nos","qty":  8, "basic":  85, "spec": ""},
+                    {"desc": "45A cooker control unit with neon",    "unit": "Nos","qty":  4, "basic": 245, "spec": ""},
+                    {"desc": "20A AC isolator switch",        "unit": "Nos", "qty":  6, "basic": 165, "spec": ""},
+                    {"desc": "32A AC isolator switch",        "unit": "Nos", "qty":  4, "basic": 225, "spec": ""},
+                    {"desc": "63A AC isolator switch",        "unit": "Nos", "qty":  2, "basic": 365, "spec": ""},
+                ]},
+            ]},
+            {"no": 5, "name": "LED LIGHTING", "sections": [
+                {"letter": "A", "title": "INDOOR LUMINAIRES", "subsection": "", "items": [
+                    {"desc": "600x600 LED panel 36W (3000K/4000K)","unit":"Nos","qty": 60, "basic": 315, "spec": "Philips / Opple / Ledvance / Schneider"},
+                    {"desc": "12W LED downlight",             "unit": "Nos", "qty": 40, "basic":  80, "spec": ""},
+                    {"desc": "18W LED downlight",             "unit": "Nos", "qty": 30, "basic": 105, "spec": ""},
+                    {"desc": "IP65 LED bulkhead",             "unit": "Nos", "qty": 20, "basic": 235, "spec": ""},
+                ]},
+                {"letter": "B", "title": "EMERGENCY + EXTERIOR LIGHTING", "subsection": "", "items": [
+                    {"desc": "Emergency LED bulkhead (3-hour battery)","unit":"Nos","qty":12,"basic":575,"spec":"Thorn / Philips / Eaton"},
+                    {"desc": "LED exit sign (maintained)",    "unit": "Nos", "qty": 10, "basic": 500, "spec": ""},
+                    {"desc": "100W LED floodlight",           "unit": "Nos", "qty":  6, "basic": 615, "spec": ""},
+                    {"desc": "200W LED floodlight",           "unit": "Nos", "qty":  4, "basic":1125, "spec": ""},
+                ]},
+            ]},
+            {"no": 6, "name": "DISTRIBUTION BOARDS + PROTECTION", "sections": [
+                {"letter": "A", "title": "DISTRIBUTION BOARDS", "subsection": "", "items": [
+                    {"desc": "12-way SPN DB (flush)",         "unit": "Nos", "qty":  4, "basic":  1450, "spec": "Schneider Easy9 / Hager / ABB"},
+                    {"desc": "18-way SPN DB (flush)",         "unit": "Nos", "qty":  2, "basic":  2500, "spec": ""},
+                    {"desc": "24-way TPN DB (floor-mount)",   "unit": "Nos", "qty":  1, "basic":  8250, "spec": "Schneider PrismaSeT / ABB / Hager"},
+                ]},
+                {"letter": "B", "title": "MCBs / MCCBs / RCBOs / SPDs", "subsection": "", "items": [
+                    {"desc": "6A MCB SP",                     "unit": "Nos", "qty": 20, "basic":  122, "spec": ""},
+                    {"desc": "10A MCB SP",                    "unit": "Nos", "qty": 15, "basic":  122, "spec": ""},
+                    {"desc": "20A MCB SP",                    "unit": "Nos", "qty": 15, "basic":  122, "spec": ""},
+                    {"desc": "32A MCB SP",                    "unit": "Nos", "qty":  8, "basic":  167, "spec": ""},
+                    {"desc": "63A MCB SP",                    "unit": "Nos", "qty":  4, "basic":  285, "spec": ""},
+                    {"desc": "100A MCCB",                     "unit": "Nos", "qty":  2, "basic": 1700, "spec": ""},
+                    {"desc": "RCCB 30mA 4P",                  "unit": "Nos", "qty":  3, "basic":  485, "spec": ""},
+                    {"desc": "RCBO 32A 30mA",                 "unit": "Nos", "qty":  6, "basic":  385, "spec": ""},
+                    {"desc": "Surge Protection Device Type 1+2","unit":"Nos","qty":  2, "basic": 1850, "spec": "DEHN / Schneider / Phoenix Contact"},
+                ]},
+            ]},
+            {"no": 7, "name": "MAIN EQUIPMENT (LV / MV / GENERATOR / UPS)", "sections": [
+                {"letter": "A", "title": "TRANSFORMER + LV SWITCHBOARD", "subsection": "", "items": [
+                    {"desc": "500 kVA distribution transformer (11/0.415 kV)","unit":"Nos","qty":1,"basic":200000,"spec":"ABB / Schneider / Siemens"},
+                    {"desc": "Main LV switchboard (Form 3B floor-mount)",     "unit":"Item","qty":1,"basic":120000,"spec":""},
+                    {"desc": "Automatic transfer switch panel",               "unit":"Item","qty":1,"basic": 65000,"spec":"Socomec / Schneider / ABB"},
+                ]},
+                {"letter": "B", "title": "STANDBY POWER", "subsection": "", "items": [
+                    {"desc": "250 kVA diesel generator (silent canopy)","unit":"Nos","qty":1,"basic":265000,"spec":"Perkins / Cummins / FG Wilson / Caterpillar"},
+                    {"desc": "20 kVA online UPS (three-phase)",        "unit":"Nos","qty":1,"basic":156250,"spec":"Safenergy / APC / Eaton / Vertiv"},
+                ]},
+            ]},
+            {"no": 8, "name": "EARTHING AND LIGHTNING PROTECTION", "sections": [
+                {"letter": "A", "title": "EARTHING", "subsection": "", "items": [
+                    {"desc": "Copper-bonded earth rod 16mm x 3m","unit": "Nos","qty":  6, "basic":  285, "spec": "Furse / DEHN / AN Wallis"},
+                    {"desc": "Earth inspection pit",          "unit": "Nos", "qty":  6, "basic":  650, "spec": ""},
+                    {"desc": "Bare copper tape 25 x 3mm",     "unit": "m",   "qty":  60, "basic":  105, "spec": ""},
+                    {"desc": "Bare copper tape 50 x 6mm",     "unit": "m",   "qty":  30, "basic":  245, "spec": ""},
+                    {"desc": "Earth clamp + bonding kit",     "unit": "Nos", "qty":  8, "basic":  165, "spec": ""},
+                ]},
+                {"letter": "B", "title": "LIGHTNING PROTECTION", "subsection": "", "items": [
+                    {"desc": "Lightning air terminal (1m copper)","unit":"Nos","qty":  4, "basic":  485, "spec": ""},
+                    {"desc": "Lightning down conductor (copper tape)","unit":"m","qty":40,"basic":  105, "spec": ""},
+                    {"desc": "Equipotential bonding bar",     "unit": "Nos", "qty":  2, "basic":  525, "spec": ""},
+                ]},
+            ]},
+            {"no": 9, "name": "SOLAR PV SYSTEM", "sections": [
+                {"letter": "A", "title": "PV MODULES + MOUNTING", "subsection": "", "items": [
+                    {"desc": "550W mono-PERC PV module",      "unit": "Nos", "qty": 40, "basic":  1150, "spec": "JinkoSolar / JA Solar / Trina / Canadian Solar"},
+                    {"desc": "PV mounting rail (aluminium)",  "unit": "m",   "qty": 60, "basic":   185, "spec": "K2 Systems / Schletter / Clenergy"},
+                    {"desc": "MC4 connector pair",            "unit": "Pair","qty": 50, "basic":    85, "spec": "Staubli MC4 / Amphenol"},
+                    {"desc": "PV DC cable 6mm²",              "unit": "m",   "qty":120, "basic":    40, "spec": "Lapp / Prysmian / Nexans"},
+                ]},
+                {"letter": "B", "title": "INVERTERS + STORAGE", "subsection": "", "items": [
+                    {"desc": "10kW hybrid inverter (three-phase)","unit": "Nos","qty":1, "basic": 17250, "spec": "Deye / Growatt / Victron / Solis"},
+                    {"desc": "10 kWh LiFePO4 battery",        "unit": "Nos", "qty":  3, "basic": 21000, "spec": "BYD / Pylontech / Dyness / Felicity Solar"},
+                    {"desc": "DC combiner box with fuses + SPD","unit":"Nos","qty":  1, "basic":  3250, "spec": "Schneider / ABB / Suntree"},
+                    {"desc": "Solar monitoring gateway",      "unit": "Nos", "qty":  1, "basic":  8500, "spec": "Huawei SmartLogger / SMA Data Manager"},
+                ]},
+            ]},
+            {"no": 10, "name": "ICT, COMMUNICATIONS, STRUCTURED CABLING", "sections": [
+                {"letter": "A", "title": "STRUCTURED CABLING", "subsection": "", "items": [
+                    {"desc": "CAT6 UTP cable (305m box)",     "unit": "Roll","qty":  3, "basic":  3500, "spec": "Commscope / Panduit / Legrand / Schneider"},
+                    {"desc": "CAT6 RJ45 outlet",              "unit": "Nos", "qty": 60, "basic":    95, "spec": ""},
+                    {"desc": "24-port CAT6 patch panel",      "unit": "Nos", "qty":  3, "basic":   850, "spec": ""},
+                    {"desc": "42U network cabinet",           "unit": "Nos", "qty":  1, "basic":  8750, "spec": "APC / Rittal / Legrand"},
+                ]},
+                {"letter": "B", "title": "ACTIVE NETWORK + WIFI", "subsection": "", "items": [
+                    {"desc": "24-port PoE+ network switch",   "unit": "Nos", "qty":  2, "basic":  8750, "spec": "Cisco / Aruba / Ubiquiti / Huawei"},
+                    {"desc": "WiFi 6 indoor access point",    "unit": "Nos", "qty":  8, "basic":  2450, "spec": ""},
+                    {"desc": "Firewall appliance",            "unit": "Nos", "qty":  1, "basic": 28500, "spec": "Fortinet / Sophos / Cisco / pfSense"},
+                ]},
+            ]},
+            {"no": 11, "name": "CCTV + ACCESS CONTROL", "sections": [
+                {"letter": "A", "title": "CCTV", "subsection": "", "items": [
+                    {"desc": "4MP IP dome camera (PoE)",      "unit": "Nos", "qty": 12, "basic":  1175, "spec": "Hikvision / Dahua / Axis / Uniview"},
+                    {"desc": "4MP IP bullet camera (PoE)",    "unit": "Nos", "qty":  8, "basic":  1325, "spec": ""},
+                    {"desc": "32-channel NVR + 4TB HDD",      "unit": "Nos", "qty":  1, "basic":  8750, "spec": ""},
+                ]},
+                {"letter": "B", "title": "ACCESS CONTROL", "subsection": "", "items": [
+                    {"desc": "Card reader (proximity)",       "unit": "Nos", "qty":  6, "basic":   650, "spec": "ZKTeco / HID / Suprema"},
+                    {"desc": "Biometric reader (finger + card)","unit":"Nos","qty":  3, "basic":  1450, "spec": ""},
+                    {"desc": "Magnetic lock (600 lbs)",       "unit": "Nos", "qty":  6, "basic":   485, "spec": ""},
+                ]},
+            ]},
+            {"no": 12, "name": "BMS AND IoT", "sections": [
+                {"letter": "A", "title": "BMS CONTROLLERS + SENSORS", "subsection": "", "items": [
+                    {"desc": "BMS DDC controller (32 UI / 16 UO)","unit":"Nos","qty":  2, "basic":  5650, "spec": "Schneider / Siemens / Honeywell"},
+                    {"desc": "AHU controller",                "unit": "Nos", "qty":  2, "basic":  4250, "spec": ""},
+                    {"desc": "BACnet/Modbus gateway",         "unit": "Nos", "qty":  1, "basic":  3850, "spec": ""},
+                    {"desc": "Smart energy meter (3-phase)",  "unit": "Nos", "qty":  4, "basic":   925, "spec": "Schneider PowerLogic / Socomec / Janitza"},
+                ]},
+                {"letter": "B", "title": "IoT SENSORS + GATEWAYS", "subsection": "", "items": [
+                    {"desc": "Temperature sensor (NTC10K)",   "unit": "Nos", "qty": 12, "basic":   145, "spec": ""},
+                    {"desc": "CO2 sensor (Modbus, 0..2000 ppm)","unit": "Nos","qty":  6, "basic":   650, "spec": ""},
+                    {"desc": "Occupancy / PIR sensor",        "unit": "Nos", "qty": 16, "basic":   220, "spec": "Philips Dynalite / Steinel / Schneider"},
+                    {"desc": "LoRaWAN indoor gateway",        "unit": "Nos", "qty":  1, "basic":  2750, "spec": "Milesight / Kerlink / Dragino"},
+                ]},
+            ]},
+            {"no": 13, "name": "TESTING, COMMISSIONING, DOCUMENTATION", "sections": [
+                {"letter": "A", "title": "ELECTRICAL TESTS", "subsection": "", "items": [
+                    {"desc": "Insulation resistance testing", "unit": "Item","qty":  1, "basic":  4500, "spec": ""},
+                    {"desc": "Earth continuity testing",      "unit": "Item","qty":  1, "basic":  3500, "spec": ""},
+                    {"desc": "Earth resistance testing",      "unit": "Item","qty":  1, "basic":  3500, "spec": ""},
+                    {"desc": "RCD / RCCB trip testing",       "unit": "Item","qty":  1, "basic":  2500, "spec": ""},
+                    {"desc": "Phase rotation + load balancing","unit":"Item","qty":  1, "basic":  3000, "spec": ""},
+                    {"desc": "Thermographic inspection",      "unit": "Item","qty":  1, "basic":  6500, "spec": ""},
+                ]},
+                {"letter": "B", "title": "ICT + BMS TESTS", "subsection": "", "items": [
+                    {"desc": "Fibre OTDR testing",            "unit": "Item","qty":  1, "basic":  5500, "spec": ""},
+                    {"desc": "Structured cabling Fluke certification","unit":"Item","qty":1,"basic":8500,"spec":""},
+                    {"desc": "CCTV camera focusing + testing","unit": "Item","qty":  1, "basic":  3500, "spec": ""},
+                    {"desc": "Access control commissioning",  "unit": "Item","qty":  1, "basic":  3500, "spec": ""},
+                    {"desc": "BMS point-to-point testing",    "unit": "Item","qty":  1, "basic":  6500, "spec": ""},
+                    {"desc": "Solar PV performance testing",  "unit": "Item","qty":  1, "basic":  4500, "spec": ""},
+                ]},
+                {"letter": "C", "title": "HANDOVER DOCUMENTATION", "subsection": "", "items": [
+                    {"desc": "As-built drawings",             "unit": "Item","qty":  1, "basic":  8500, "spec": ""},
+                    {"desc": "Operation + maintenance manuals","unit":"Item","qty":  1, "basic":  5500, "spec": ""},
+                    {"desc": "User training",                 "unit": "Item","qty":  1, "basic":  4500, "spec": ""},
+                ]},
+            ]},
+        ],
+    },
 }
 
 
