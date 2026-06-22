@@ -242,11 +242,23 @@
     <i class="bi bi-folder2-open me-2"></i>My Projects
     <span class="badge ms-1" style="background:#1e1e3a;color:#6060a0;font-size:10px">{{ projects|length }}</span>
   </div>
-  {% if not at_limit %}
-  <a href="{{ url_for('project_new') }}" class="btn btn-solar btn-sm">
-    <i class="bi bi-plus-lg me-1"></i>New Project
-  </a>
-  {% endif %}
+  <div class="d-flex gap-2 flex-wrap">
+    {% if user.is_admin and (synth_count or 0) > 0 %}
+    <form method="POST" action="{{ url_for('dashboard_clear_synthetic') }}" style="display:inline"
+          onsubmit="return confirm('Permanently delete {{ synth_count }} synthetic-health project row(s)? This wipes the hourly monitor history.');">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-danger btn-sm"
+              title="Bulk-delete projects whose name starts with 'SyntheticHealth-' (admin only)">
+        <i class="bi bi-trash me-1"></i>Clear synthetic-health history ({{ synth_count }})
+      </button>
+    </form>
+    {% endif %}
+    {% if not at_limit %}
+    <a href="{{ url_for('project_new') }}" class="btn btn-solar btn-sm">
+      <i class="bi bi-plus-lg me-1"></i>New Project
+    </a>
+    {% endif %}
+  </div>
 </div>
 
 <div class="filter-bar mb-4">

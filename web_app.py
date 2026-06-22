@@ -2571,6 +2571,13 @@ def dashboard():
         emails_sent  = c.execute(
             "SELECT COUNT(*) FROM email_logs WHERE user_id=? AND status='sent'",
             (uid,)).fetchone()[0]
+        # 2026-06-22 (session B): admin-only count of synthetic-health monitor rows.
+        try:
+            synth_count = int(c.execute(
+                "SELECT COUNT(*) FROM projects WHERE name LIKE 'SyntheticHealth-%' OR name LIKE 'SyntheticHealth_%' OR name LIKE 'synthetic_health-%'"
+            ).fetchone()[0] or 0)
+        except Exception:
+            synth_count = 0
 
     # Enrich each project with parsed snapshot data
     projects = []
@@ -2615,7 +2622,7 @@ def dashboard():
 
     limit    = PLAN_LIMITS.get(plan, 1)
     at_limit = len(projects) >= limit
-    return render_template("dashboard.html", user=user, projects=projects,
+    return render_template("dashboard.html", synth_count=synth_count, user=user, projects=projects,
                            plan=plan, limit=limit, at_limit=at_limit,
                            open_tickets=open_tickets, emails_sent=emails_sent,
                            total_kwp=round(total_kwp, 1),
@@ -25153,6 +25160,36 @@ def admin_marketplace_settings():
 
 # === END: marketplace_pagination splice ===
 
+
+
+# 2026-06-22 (session B): admin button on /dashboard that wipes the
+# synthetic-health monitor's project rows so they don't pollute the UI.
+@app.route("/dashboard/clear-synthetic", methods=["POST"])
+@admin_required
+def dashboard_clear_synthetic():
+    csrf_protect()
+    n = 0
+    try:
+        with get_db() as c:
+            rows = c.execute(
+                "SELECT id FROM projects WHERE name LIKE 'SyntheticHealth-%' OR name LIKE 'SyntheticHealth_%' OR name LIKE 'synthetic_health-%'"
+            ).fetchall()
+            n = len(rows)
+            if n:
+                c.execute(
+                    "DELETE FROM projects WHERE name LIKE 'SyntheticHealth-%' OR name LIKE 'SyntheticHealth_%' OR name LIKE 'synthetic_health-%'"
+                )
+        try: _log_marketplace_action("clear_synthetic_health", "projects", n, f"deleted {n} synthetic-health project row(s)")
+        except Exception: pass
+        if n:
+            flash(f"Cleared {n} synthetic-health project row(s).", "success")
+        else:
+            flash("No synthetic-health rows to clear.", "info")
+    except Exception as _e:
+        try: app.logger.exception("clear_synthetic failed: %s", _e)
+        except Exception: pass
+        flash(f"Could not clear synthetic-health rows: {_e!s}", "danger")
+    return redirect(url_for("dashboard"))
 
 # === BEGIN: admin_actions_log splice ===
 # 2026-06-22 (session B): /admin/actions-log page reading marketplace_audit_log
