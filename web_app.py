@@ -15119,27 +15119,32 @@ _MARKETPLACE_AUDIT_ACTIONS = {
 def _log_marketplace_action(action: str, target_kind: str, target_id: int, notes: str = ""):
     """Lightweight audit logger — writes one row to marketplace_audit_log.
 
-    Idempotent table creation so this works even on the very first action."""
-    with get_db() as c:
-        c.execute(
-            """
-            CREATE TABLE IF NOT EXISTS marketplace_audit_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                action TEXT NOT NULL,
-                target_kind TEXT NOT NULL,
-                target_id INTEGER NOT NULL,
-                notes TEXT DEFAULT '',
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    2026-06-22 (session C): CREATE wrapped in try/except so an engine
+    that rejects the SQLite-flavoured DDL (Postgres complains about
+    'INTEGER PRIMARY KEY AUTOINCREMENT') doesn't roll back the INSERT.
+    The Postgres bootstrap creates the table with SERIAL separately."""
+    try:
+        with get_db() as c:
+            try:
+                c.execute(
+                    "CREATE TABLE IF NOT EXISTS marketplace_audit_log ("
+                    " id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,"
+                    " action TEXT NOT NULL, target_kind TEXT NOT NULL,"
+                    " target_id INTEGER NOT NULL, notes TEXT DEFAULT '',"
+                    " created_at TEXT DEFAULT CURRENT_TIMESTAMP)"
+                )
+            except Exception:
+                pass  # table already exists or DDL flavour mismatch (Postgres uses SERIAL via the bootstrap)
+        with get_db() as c:
+            c.execute(
+                "INSERT INTO marketplace_audit_log "
+                "(user_id, action, target_kind, target_id, notes) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (session.get("user_id", 0), action, target_kind, target_id, notes),
             )
-            """
-        )
-        c.execute(
-            "INSERT INTO marketplace_audit_log "
-            "(user_id, action, target_kind, target_id, notes) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (session.get("user_id", 0), action, target_kind, target_id, notes),
-        )
+    except Exception as _e:
+        try: app.logger.warning("_log_marketplace_action failed: %s", _e)
+        except Exception: pass
 
 
 @app.route("/admin/marketplace")
