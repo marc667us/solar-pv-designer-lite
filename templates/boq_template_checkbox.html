@@ -81,9 +81,13 @@
                 <th class="text-end" style="width:120px">Basic</th>
                 <th class="text-end" style="width:140px">Total Rate (auto)</th>
                 <th class="text-end" style="width:150px">Amount (auto)</th>
+                <th style="width:130px">Reorder</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody class="boq-tpl-tbody"
+                   data-bill-no="{{ bill.no }}"
+                   data-section-letter="{{ section.letter }}"
+                   data-section-title="{{ section.title }}">
               {% for item in section["items"] %}
               <tr class="boq-tpl-row">
                 <td><input type="checkbox" class="form-check-input boq-tick" name="tick" value="{{ ns.line_idx_g }}" checked></td>
@@ -96,11 +100,23 @@
                 <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end boq-basic" name="basic[{{ ns.line_idx_g }}]" value="{{ '%.2f'|format(item.basic) }}" onchange="window._boqTplRow(this);"></td>
                 <td class="text-end boq-rate text-warning fw-bold">0.00</td>
                 <td class="text-end boq-amount fw-bold">0.00</td>
+                <td style="white-space:nowrap">
+                  <button type="button" class="btn btn-outline-light btn-sm" style="padding:.1rem .35rem" title="Move row up" onclick="window._boqRowMove(this,'up')"><i class="bi bi-arrow-up"></i></button>
+                  <button type="button" class="btn btn-outline-light btn-sm" style="padding:.1rem .35rem" title="Move row down" onclick="window._boqRowMove(this,'down')"><i class="bi bi-arrow-down"></i></button>
+                  <button type="button" class="btn btn-outline-danger btn-sm" style="padding:.1rem .35rem" title="Remove row" onclick="window._boqRowRemove(this)"><i class="bi bi-x"></i></button>
+                </td>
               </tr>
               {% set ns.line_idx_g = ns.line_idx_g + 1 %}
               {% endfor %}
             </tbody>
           </table>
+        </div>
+        <div class="mt-2 text-end">
+          <button type="button" class="btn btn-outline-warning btn-sm"
+                  onclick="window._boqAddItem(this, {{ bill.no }}, '{{ section.letter }}', {{ section.title|tojson }})"
+                  title="Add a new line to this section">
+            <i class="bi bi-plus-circle me-1"></i>Add item to {{ section.letter }}. {{ section.title|truncate(36) }}
+          </button>
         </div>
       </div>
       {% endfor %}
@@ -172,6 +188,78 @@
       document.querySelectorAll('.boq-tick').forEach(function(c){ c.checked = state; });
       // recompute amounts (some show '—' when unticked).
       document.querySelectorAll('tr.boq-tpl-row .boq-basic').forEach(function(b){ window._boqTplRow(b); });
+    };
+    // ─── Reorder rows within a section ──────────────────────────────
+    window._boqRowMove = function(btn, dir) {
+      var tr = btn.closest('tr.boq-tpl-row'); if (!tr) return;
+      var sibling = (dir === 'up') ? tr.previousElementSibling : tr.nextElementSibling;
+      if (!sibling || !sibling.classList.contains('boq-tpl-row')) return;
+      var tbody = tr.parentElement;
+      if (dir === 'up') tbody.insertBefore(tr, sibling);
+      else tbody.insertBefore(sibling, tr);
+      window._boqRecalc();
+    };
+    window._boqRowRemove = function(btn) {
+      var tr = btn.closest('tr.boq-tpl-row'); if (!tr) return;
+      if (!confirm('Remove this row?')) return;
+      tr.parentElement.removeChild(tr);
+      window._boqRecalc();
+    };
+    // ─── Add Item to a specific section ─────────────────────────────
+    // Uses the same custom_* field names boq_template_save() already reads.
+    // Each new row carries its own custom_bill/custom_section/custom_title
+    // so the section attribution is preserved.
+    window._boqAddItem = function(btn, billNo, sectionLetter, sectionTitle) {
+      var card = btn.closest('.solar-card');
+      if (!card) return;
+      // Find the tbody that matches this bill+section. We rendered the
+      // boq-tpl-tbody with data-bill-no + data-section-letter; the button
+      // sits in the same .mb-3 wrapper as that tbody.
+      var wrapper = btn.closest('.mb-3');
+      var tbody = wrapper ? wrapper.querySelector('tbody.boq-tpl-tbody') : null;
+      if (!tbody) return;
+      var tr = document.createElement('tr');
+      tr.className = 'boq-tpl-row';
+      tr.innerHTML = ''
+        + '<td>'
+        +   '<input type="hidden" name="custom_bill[]"    value="' + billNo + '">'
+        +   '<input type="hidden" name="custom_section[]" value="' + sectionLetter + '">'
+        +   '<input type="hidden" name="custom_title[]"   value="' + sectionTitle.replace(/"/g,'&quot;') + '">'
+        +   '<span class="badge" style="background:rgba(34,197,94,.15);color:#22c55e;font-size:9px;padding:3px 6px">NEW</span>'
+        + '</td>'
+        + '<td><input class="form-control form-control-sm" name="custom_desc[]" placeholder="Description"></td>'
+        + '<td><input class="form-control form-control-sm" name="custom_unit[]" value="No."></td>'
+        + '<td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end boq-qty" name="custom_qty[]" placeholder="Qty" onchange="window._boqTplCustomRow(this);"></td>'
+        + '<td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end boq-basic" name="custom_basic[]" placeholder="Basic" onchange="window._boqTplCustomRow(this);"></td>'
+        + '<td class="text-end boq-rate text-warning fw-bold">0.00</td>'
+        + '<td class="text-end boq-amount fw-bold">0.00</td>'
+        + '<td style="white-space:nowrap">'
+        +   '<button type="button" class="btn btn-outline-light btn-sm" style="padding:.1rem .35rem" title="Move row up" onclick="window._boqRowMove(this,\'up\')"><i class="bi bi-arrow-up"></i></button> '
+        +   '<button type="button" class="btn btn-outline-light btn-sm" style="padding:.1rem .35rem" title="Move row down" onclick="window._boqRowMove(this,\'down\')"><i class="bi bi-arrow-down"></i></button> '
+        +   '<button type="button" class="btn btn-outline-danger btn-sm" style="padding:.1rem .35rem" title="Remove row" onclick="window._boqRowRemove(this)"><i class="bi bi-x"></i></button>'
+        + '</td>';
+      tbody.appendChild(tr);
+      var firstInput = tr.querySelector('input[name="custom_desc[]"]');
+      if (firstInput) firstInput.focus();
+    };
+    // Custom rows don't have a `.boq-tick` checkbox -- compute directly.
+    window._boqTplCustomRow = function(el) {
+      var tr = el.closest('tr.boq-tpl-row'); if (!tr) return;
+      var basic = parseFloat(tr.querySelector('input[name="custom_basic[]"]').value || 0);
+      var qty   = parseFloat(tr.querySelector('input[name="custom_qty[]"]').value || 0);
+      var r = basic * rates();
+      var a = qty * r;
+      tr.querySelector('.boq-rate').textContent = r.toFixed(2);
+      tr.querySelector('.boq-amount').textContent = a.toFixed(2);
+      // Approximate -- sum all amounts (including custom) into the live subtotal.
+      var sum = 0;
+      document.querySelectorAll('tr.boq-tpl-row').forEach(function(t){
+        var tick = t.querySelector('.boq-tick');
+        if (tick && !tick.checked) return;
+        var amt = parseFloat(t.querySelector('.boq-amount').textContent || 0);
+        if (!isNaN(amt)) sum += amt;
+      });
+      document.getElementById('grid_subtotal').textContent = sum.toFixed(2);
     };
     // initial compute
     document.querySelectorAll('tr.boq-tpl-row .boq-basic').forEach(function(b){ window._boqTplRow(b); });

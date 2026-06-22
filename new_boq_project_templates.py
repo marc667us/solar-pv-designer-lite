@@ -26,12 +26,15 @@
 
 _BOQ_PROJECT_TEMPLATES = {
 
-    # ─── Auditorium (1UGLS) -- full reference template ────────────────────
+    # ─── Schools, Offices and Auditorium (formerly auditorium-1ugls) ──────
+    # Slug kept stable so saved-project references don't break; display name
+    # updated 2026-06-22 to reflect the broader scope (school / office /
+    # auditorium / lecture-hall) the template actually covers.
     "auditorium-1ugls": {
-        "name":        "Auditorium -- full reference (1UGLS-style)",
+        "name":        "Schools, Offices and Auditorium",
         "purpose":     "commercial",
-        "subtype":     "Auditorium",
-        "description": "Mirrors the 1UGLS Auditorium electrical BOQ -- 6 bills, ~95 items. Use as a starting point for any auditorium / school hall / lecture-theatre project.",
+        "subtype":     "Schools / Offices / Auditorium",
+        "description": "Reference electrical + ICT BOQ for schools, offices, and auditoria -- 6 bills, ~95 items, covers preliminaries, switchboards, internal wiring, fire alarm, data / voice, signal comms.",
         "bills": [
             {"no": 1, "name": "PRELIMINARIES", "sections": [
                 {"letter": "A", "title": "PRELIMINARY ITEMS", "subsection": "", "items": [
