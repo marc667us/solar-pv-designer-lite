@@ -8121,38 +8121,85 @@ def procurement_catalog():
         f = request.form
         with get_db() as c:
             if action == "add":
+                # 2026-06-22: accept either category_id (FK, new) or category (legacy free-text).
+                _cat_id = 0
+                try: _cat_id = int(f.get("category_id") or 0)
+                except (TypeError, ValueError): _cat_id = 0
+                _cat_label = (f.get("category") or "").strip()
+                if _cat_id and not _cat_label:
+                    _r = c.execute("SELECT name FROM product_categories WHERE id=?", (_cat_id,)).fetchone()
+                    if _r: _cat_label = _r["name"] if hasattr(_r, "keys") else _r[0]
                 c.execute(
-                    "INSERT INTO equipment_catalog (category,name,brand,model,spec,unit,"
-                    "price_usd,supplier_id,lead_time_days,notes) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (f["category"], f["name"], f.get("brand",""), f.get("model",""),
+                    "INSERT INTO equipment_catalog (category,category_id,name,brand,model,spec,unit,"
+                    "price_usd,supplier_id,lead_time_days,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (_cat_label, _cat_id, f["name"], f.get("brand",""), f.get("model",""),
                      f.get("spec",""), f.get("unit","No."), float(f.get("price_usd",0)),
                      int(f.get("supplier_id",0)), int(f.get("lead_time_days",30)),
                      f.get("notes","")))
-                flash("Equipment added.", "success")
+                flash(f"Product added under '{_cat_label or 'Uncategorised'}'.", "success")
             elif action == "edit":
                 eid = f.get("eid", type=int)
+                _cat_id = 0
+                try: _cat_id = int(f.get("category_id") or 0)
+                except (TypeError, ValueError): _cat_id = 0
+                _cat_label = (f.get("category") or "").strip()
+                if _cat_id and not _cat_label:
+                    _r = c.execute("SELECT name FROM product_categories WHERE id=?", (_cat_id,)).fetchone()
+                    if _r: _cat_label = _r["name"] if hasattr(_r, "keys") else _r[0]
                 c.execute(
-                    "UPDATE equipment_catalog SET category=?,name=?,brand=?,model=?,spec=?,"
+                    "UPDATE equipment_catalog SET category=?,category_id=?,name=?,brand=?,model=?,spec=?,"
                     "unit=?,price_usd=?,supplier_id=?,lead_time_days=?,notes=? WHERE id=?",
-                    (f["category"], f["name"], f.get("brand",""), f.get("model",""),
+                    (_cat_label, _cat_id, f["name"], f.get("brand",""), f.get("model",""),
                      f.get("spec",""), f.get("unit","No."), float(f.get("price_usd",0)),
                      int(f.get("supplier_id",0)), int(f.get("lead_time_days",30)),
                      f.get("notes",""), eid))
-                flash("Equipment updated.", "success")
+                flash("Product updated.", "success")
             elif action == "delete":
                 c.execute("UPDATE equipment_catalog SET is_active=0 WHERE id=?",
                           (f.get("eid", type=int),))
                 flash("Item deactivated.", "info")
         return redirect(url_for("procurement_catalog"))
+    # 2026-06-22 defensive: fire the marketplace ensure so product_categories exists
+    # and the 21-entry taxonomy is seeded (was previously solar-only hardcoded list).
+    try:
+        _ensure_marketplace_tables()
+    except Exception:
+        pass
     with get_db() as c:
         items = c.execute(
-            "SELECT e.*, s.name as sup_name FROM equipment_catalog e "
-            "LEFT JOIN suppliers s ON e.supplier_id=s.id ORDER BY e.category, e.name").fetchall()
+            "SELECT e.*, s.name as sup_name, pc.name AS pc_name FROM equipment_catalog e "
+            "LEFT JOIN suppliers s ON e.supplier_id=s.id "
+            "LEFT JOIN product_categories pc ON pc.id=e.category_id "
+            "WHERE e.is_active=1 ORDER BY COALESCE(pc.display_order, 999), pc.name, e.name").fetchall()
         suppliers = c.execute("SELECT id,name FROM suppliers WHERE is_active=1").fetchall()
-    cats = ["PV Modules","Inverters","Batteries","MPPT","Cables",
-            "Protection","Earthing","Mounting","Testing","Sundries"]
+        categories = c.execute(
+            "SELECT id, code, name FROM product_categories "
+            "WHERE is_active=1 ORDER BY display_order"
+        ).fetchall()
+        if len(categories) < len(_MARKETPLACE_CATEGORIES):
+            for _row in _MARKETPLACE_CATEGORIES:
+                try:
+                    c.execute(
+                        "INSERT OR IGNORE INTO product_categories "
+                        "(code,name,icon,display_order) VALUES (?,?,?,?)",
+                        _row,
+                    )
+                except Exception:
+                    try:
+                        c.execute(
+                            "INSERT INTO product_categories "
+                            "(code,name,icon,display_order) VALUES (?,?,?,?) "
+                            "ON CONFLICT (code) DO NOTHING",
+                            _row,
+                        )
+                    except Exception:
+                        pass
+            categories = c.execute(
+                "SELECT id, code, name FROM product_categories "
+                "WHERE is_active=1 ORDER BY display_order"
+            ).fetchall()
     return render_template("procurement_catalog.html", user=current_user(),
-                           items=items, suppliers=suppliers, categories=cats)
+                           items=items, suppliers=suppliers, categories=categories)
 
 
 @app.route("/project/<int:pid>/procurement")

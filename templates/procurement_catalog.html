@@ -28,10 +28,12 @@
         <input type="hidden" name="action" value="add">
         <div class="modal-body row g-3">
           <div class="col-md-6">
-            <label class="form-label small">Category</label>
-            <select name="category" class="form-select form-select-sm bg-dark text-light border-secondary">
-              {% for c in categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+            <label class="form-label small">Category *</label>
+            <select name="category_id" class="form-select form-select-sm bg-dark text-light border-secondary" required>
+              <option value="">— Select category —</option>
+              {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
             </select>
+            <div class="text-secondary small mt-1">Full marketplace taxonomy &mdash; {{ categories|length }} categories. Manage at <a href="{{ url_for('admin_marketplace_categories') }}" class="text-warning">Categories &mdash; manage</a>.</div>
           </div>
           <div class="col-md-6">
             <label class="form-label small">Name *</label>
@@ -74,7 +76,7 @@
       <tbody>
       {% for item in items %}
       <tr>
-        <td class="ps-3"><span class="badge bg-dark border small">{{ item.category }}</span></td>
+        <td class="ps-3"><span class="badge bg-dark border small">{{ item.pc_name or item.category or '—' }}</span></td>
         <td class="small fw-semibold">{{ item.name }}</td>
         <td class="small text-secondary">{{ item.brand or '—' }}</td>
         <td class="small text-secondary" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ item.spec or '—' }}</td>
