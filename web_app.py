@@ -14081,6 +14081,9 @@ _MARKETPLACE_SPEC_FIELDS = {
 def _ensure_marketplace_tables():
     if bool(os.environ.get("DATABASE_URL")):
         _ensure_marketplace_schema_postgres()
+        # 2026-06-22: also seed canonical Ghana suppliers + products on Postgres.
+        try: _seed_ghana_suppliers_products()
+        except Exception: pass
         return
     """Idempotent — runs on every marketplace route hit. Cheap (CREATE IF NOT EXISTS)."""
     with get_db() as c:
