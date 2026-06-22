@@ -8107,9 +8107,25 @@ def procurement_suppliers():
                           (f.get("sid", type=int),))
                 flash("Supplier deactivated.", "info")
         return redirect(url_for("procurement_suppliers"))
+    # 2026-06-22 (session B): pagination + count.
+    try: _ppp = _products_per_page()
+    except Exception: _ppp = 24
+    try: _page = max(1, int(request.args.get("page") or 1))
+    except (TypeError, ValueError): _page = 1
     with get_db() as c:
-        rows = c.execute("SELECT * FROM suppliers ORDER BY name").fetchall()
-    return render_template("procurement_suppliers.html", user=current_user(), suppliers=rows)
+        _total = int(c.execute("SELECT COUNT(*) FROM suppliers").fetchone()[0] or 0)
+        _total_pages = max(1, (_total + _ppp - 1) // _ppp)
+        if _page > _total_pages: _page = _total_pages
+        _offset = (_page - 1) * _ppp
+        rows = c.execute(
+            "SELECT * FROM suppliers ORDER BY name LIMIT ? OFFSET ?",
+            (_ppp, _offset),
+        ).fetchall()
+    return render_template(
+        "procurement_suppliers.html", user=current_user(), suppliers=rows,
+        page=_page, total_pages=_total_pages, products_per_page=_ppp,
+        filter_count=_total,
+    )
 
 
 @app.route("/procurement/catalog", methods=["GET", "POST"])
@@ -8165,12 +8181,22 @@ def procurement_catalog():
         _ensure_marketplace_tables()
     except Exception:
         pass
+    # 2026-06-22 (session B): pagination on the catalogue.
+    try: _ppp_cat = _products_per_page()
+    except Exception: _ppp_cat = 24
+    try: _page_cat = max(1, int(request.args.get("page") or 1))
+    except (TypeError, ValueError): _page_cat = 1
     with get_db() as c:
+        _total_cat = int(c.execute("SELECT COUNT(*) FROM equipment_catalog WHERE is_active=1").fetchone()[0] or 0)
+        _total_pages_cat = max(1, (_total_cat + _ppp_cat - 1) // _ppp_cat)
+        if _page_cat > _total_pages_cat: _page_cat = _total_pages_cat
+        _offset_cat = (_page_cat - 1) * _ppp_cat
         items = c.execute(
             "SELECT e.*, s.name as sup_name, pc.name AS pc_name FROM equipment_catalog e "
             "LEFT JOIN suppliers s ON e.supplier_id=s.id "
             "LEFT JOIN product_categories pc ON pc.id=e.category_id "
-            "WHERE e.is_active=1 ORDER BY COALESCE(pc.display_order, 999), pc.name, e.name").fetchall()
+            "WHERE e.is_active=1 ORDER BY COALESCE(pc.display_order, 999), pc.name, e.name "
+            "LIMIT ? OFFSET ?", (_ppp_cat, _offset_cat)).fetchall()
         suppliers = c.execute("SELECT id,name FROM suppliers WHERE is_active=1").fetchall()
         categories = c.execute(
             "SELECT id, code, name FROM product_categories "
@@ -8200,7 +8226,9 @@ def procurement_catalog():
             ).fetchall()
     return render_template("procurement_catalog.html", user=current_user(),
                            items=items, suppliers=suppliers, categories=categories,
-                           brands=_get_active_brands())
+                           brands=_get_active_brands(),
+                           page=_page_cat, total_pages=_total_pages_cat,
+                           products_per_page=_ppp_cat, filter_count=_total_cat)
 
 
 @app.route("/project/<int:pid>/procurement")
@@ -14082,6 +14110,22 @@ _MARKETPLACE_SPEC_FIELDS = {
 def _ensure_marketplace_tables():
     if bool(os.environ.get("DATABASE_URL")):
         _ensure_marketplace_schema_postgres()
+        # 2026-06-22 (session B): extra columns on product_categories so the
+        # admin Manage Categories page can SELECT them on Postgres too.
+        for _ddl in (
+            "ALTER TABLE product_categories ADD COLUMN IF NOT EXISTS default_unit VARCHAR(20) DEFAULT 'No.'",
+            "ALTER TABLE product_categories ADD COLUMN IF NOT EXISTS subcategories_csv TEXT DEFAULT ''",
+            "ALTER TABLE product_categories ADD COLUMN IF NOT EXISTS spec_fields_csv TEXT DEFAULT ''",
+            "ALTER TABLE boq_projects ADD COLUMN IF NOT EXISTS services_csv TEXT DEFAULT ''",
+            "ALTER TABLE marketplace_bom_items ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''",
+            "ALTER TABLE marketplace_bom_items ADD COLUMN IF NOT EXISTS specification TEXT DEFAULT ''",
+            "ALTER TABLE marketplace_bom_items ADD COLUMN IF NOT EXISTS brand TEXT DEFAULT ''",
+        ):
+            try:
+                with get_db() as _c:
+                    _c.execute(_ddl)
+            except Exception:
+                pass
         # 2026-06-22: also seed canonical Ghana suppliers + products on Postgres.
         try: _seed_ghana_suppliers_products()
         except Exception: pass
