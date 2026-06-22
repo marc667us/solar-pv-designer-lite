@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Marketplace settings — Admin{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <div class="text-secondary small"><a href="{{ url_for('admin_marketplace_dashboard') }}" class="text-warning">Marketplace</a> / Settings</div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-sliders me-2 text-warning"></i>Marketplace settings</h5>
+    <div class="text-secondary small">Tunable knobs that apply to the public marketplace and procurement center.</div>
+  </div>
+  <a href="{{ url_for('admin_marketplace_dashboard') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-arrow-left me-1"></i>Back</a>
+</div>
+
+<div class="solar-card p-3">
+  <form method="POST" action="{{ url_for('admin_marketplace_settings') }}" class="row g-3">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="col-md-4">
+      <label class="form-label small text-secondary">Products per page *</label>
+      <input type="number" class="form-control form-control-sm" name="products_per_page" min="6" max="200" value="{{ products_per_page }}">
+      <div class="text-secondary small mt-1">How many product cards render before pagination kicks in. Clamped 6&ndash;200.</div>
+    </div>
+    <div class="col-md-8 d-flex align-items-end">
+      <button class="btn btn-warning btn-sm fw-bold"><i class="bi bi-save me-1"></i>Save</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

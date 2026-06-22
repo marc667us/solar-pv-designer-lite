@@ -16,6 +16,7 @@
 
 <form method="POST" action="{{ url_for('procurement_center_add') }}" id="procForm">
 <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+<input type="hidden" name="stored_ids" id="stored_ids" value="">
 
 <div class="row g-3">
 
@@ -164,22 +165,94 @@
       <a href="{{ url_for('procurement_center', currency=currency) }}" class="btn btn-warning fw-bold">View all</a>
     </div>
     {% endif %}
+
+    {# Pagination controls -- only show when we have multiple pages. #}
+    {% if (total_pages or 1) > 1 %}
+    <div class="solar-card p-3 mt-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div class="text-secondary small">
+        Page <strong class="text-warning">{{ page }}</strong> of <strong class="text-warning">{{ total_pages }}</strong>
+        &middot; {{ filter_count }} product{{ '' if filter_count == 1 else 's' }} match{{ '' if filter_count == 1 else '' }} this filter
+        &middot; <span id="selCount" class="text-warning fw-bold">0</span> selected across all pages
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        {% if page > 1 %}
+        <a href="{{ url_for('procurement_center', page=page-1, cat=selected_cat, q=q, currency=currency) }}" class="btn btn-outline-warning btn-sm"><i class="bi bi-chevron-left me-1"></i>Previous</a>
+        {% endif %}
+        {% for p in range(1, total_pages + 1) %}
+          {% if p == page %}
+          <span class="btn btn-warning fw-bold btn-sm">{{ p }}</span>
+          {% elif p <= 3 or p > total_pages - 3 or (p >= page - 1 and p <= page + 1) %}
+          <a href="{{ url_for('procurement_center', page=p, cat=selected_cat, q=q, currency=currency) }}" class="btn btn-outline-light btn-sm">{{ p }}</a>
+          {% elif p == 4 or p == total_pages - 3 %}
+          <span class="text-secondary small px-1">…</span>
+          {% endif %}
+        {% endfor %}
+        {% if page < total_pages %}
+        <a href="{{ url_for('procurement_center', page=page+1, cat=selected_cat, q=q, currency=currency) }}" class="btn btn-outline-warning btn-sm">Next<i class="bi bi-chevron-right ms-1"></i></a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
   </div>
 </div>
 </form>
 
 <script>
 (function(){
-  // Live counter on the Add button + enable/disable
-  function update(){
-    var n = document.querySelectorAll('.prod-chk:checked').length;
-    document.getElementById('addCount').textContent = n;
-    document.getElementById('addBtn').disabled = (n === 0);
+  // sessionStorage-backed selection that survives pagination navigation.
+  // Key per user-session; cleared after a successful POST via the
+  // procurement_center_add redirect.
+  var STORE_KEY = 'procurement_center.selected';
+  function loadStored(){
+    try {
+      var raw = sessionStorage.getItem(STORE_KEY);
+      if (!raw) return [];
+      var arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.map(String) : [];
+    } catch (e) { return []; }
   }
+  function saveStored(arr){
+    try {
+      sessionStorage.setItem(STORE_KEY, JSON.stringify(Array.from(new Set(arr.map(String)))));
+    } catch (e) {}
+  }
+  function clearStored(){ try { sessionStorage.removeItem(STORE_KEY); } catch (e) {} }
+
+  // 1) On load, restore ticks for products on THIS page that are in the store.
+  var stored = loadStored();
   document.querySelectorAll('.prod-chk').forEach(function(el){
-    el.addEventListener('change', update);
+    if (stored.indexOf(String(el.value)) !== -1) el.checked = true;
   });
-  update();
+
+  // 2) On change, update the store (add when checked, remove when unchecked).
+  document.querySelectorAll('.prod-chk').forEach(function(el){
+    el.addEventListener('change', function(){
+      var v = String(el.value);
+      var s = loadStored();
+      if (el.checked) { if (s.indexOf(v) === -1) s.push(v); }
+      else { s = s.filter(function(x){ return x !== v; }); }
+      saveStored(s);
+      updateCounters();
+    });
+  });
+
+  // 3) Counter shows TOTAL across all pages, button enables when >=1.
+  function updateCounters(){
+    var s = loadStored();
+    document.getElementById('addCount').textContent = s.length;
+    document.getElementById('addBtn').disabled = (s.length === 0);
+    var sc = document.getElementById('selCount');
+    if (sc) sc.textContent = s.length;
+    // Push the full set into the hidden input so the POST carries every ID.
+    var h = document.getElementById('stored_ids');
+    if (h) h.value = s.join(',');
+  }
+  updateCounters();
+
+  // 4) Clear sessionStorage on submit (the form serialises everything we need).
+  var f = document.getElementById('procForm');
+  if (f) f.addEventListener('submit', function(){ clearStored(); });
 })();
 </script>
 

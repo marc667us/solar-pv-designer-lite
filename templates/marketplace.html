@@ -243,6 +243,32 @@
 </div>
 {% endif %}
 
+{% if (total_pages or 1) > 1 %}
+<div class="solar-card p-3 mt-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <div class="text-secondary small">
+    Page <strong class="text-warning">{{ page }}</strong> of <strong class="text-warning">{{ total_pages }}</strong>
+    &middot; {{ filter_count }} product{{ '' if filter_count == 1 else 's' }} match this filter
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if page > 1 %}
+    <a href="{{ url_for('marketplace_public', page=page-1, cat=selected_category.id if selected_category else None, sub=selected_subcategory, q=q, currency=currency) }}" class="btn btn-outline-warning btn-sm"><i class="bi bi-chevron-left me-1"></i>Previous</a>
+    {% endif %}
+    {% for p in range(1, total_pages + 1) %}
+      {% if p == page %}
+      <span class="btn btn-warning fw-bold btn-sm">{{ p }}</span>
+      {% elif p <= 3 or p > total_pages - 3 or (p >= page - 1 and p <= page + 1) %}
+      <a href="{{ url_for('marketplace_public', page=p, cat=selected_category.id if selected_category else None, sub=selected_subcategory, q=q, currency=currency) }}" class="btn btn-outline-light btn-sm">{{ p }}</a>
+      {% elif p == 4 or p == total_pages - 3 %}
+      <span class="text-secondary small px-1">…</span>
+      {% endif %}
+    {% endfor %}
+    {% if page < total_pages %}
+    <a href="{{ url_for('marketplace_public', page=page+1, cat=selected_category.id if selected_category else None, sub=selected_subcategory, q=q, currency=currency) }}" class="btn btn-outline-warning btn-sm">Next<i class="bi bi-chevron-right ms-1"></i></a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <!-- Magnet CTA at bottom -->
 {% if not user %}
 <div class="rounded-3 p-4 mt-4 text-center" style="background:linear-gradient(135deg,rgba(245,158,11,.10),rgba(245,158,11,.04));border:1px solid rgba(245,158,11,.30)">

@@ -14372,8 +14372,25 @@ def marketplace_public():
             # cross-backend consistency, same trick as the `q` filter).
             sql += "AND LOWER(ec.subcategory)=? "
             args.append(sub.lower())
-        sql += "ORDER BY ec.created_at DESC LIMIT 200"
-        products = c.execute(sql, args).fetchall()
+        # 2026-06-22 (session B): admin-tunable pagination.
+        _ppp = _products_per_page()
+        try: _page = max(1, int(request.args.get("page") or 1))
+        except (TypeError, ValueError): _page = 1
+        _offset = (_page - 1) * _ppp
+        # Count rows that match THIS filter, not the global catalogue.
+        _count_sql = sql.replace(
+            "SELECT ec.id, ec.name, ec.brand, ec.model, ec.spec, ec.unit,        ec.price_usd, ec.lead_time_days, ec.subcategory,        ec.literature_url, ec.datasheet_url,        ec.image_url, ec.category_id,        s.name AS supplier_name, s.country AS supplier_country,        s.rating AS supplier_rating,        pc.name AS category_name, pc.icon AS category_icon ", "SELECT COUNT(*) "
+        )
+        try:
+            _filter_count = c.execute(_count_sql, args).fetchone()[0]
+        except Exception:
+            _filter_count = 0
+        _total_pages = max(1, (int(_filter_count) + _ppp - 1) // _ppp)
+        if _page > _total_pages:
+            _page = _total_pages
+            _offset = (_page - 1) * _ppp
+        sql += "ORDER BY ec.created_at DESC LIMIT ? OFFSET ?"
+        products = c.execute(sql, args + [_ppp, _offset]).fetchall()
 
         total_products = c.execute(
             "SELECT COUNT(*) FROM equipment_catalog "
@@ -14449,6 +14466,8 @@ def marketplace_public():
         currency=currency,
         currencies=list(_CURRENCY_RATES_FROM_USD.keys()),
         rates_as_of=_CURRENCY_RATES_AS_OF,
+        page=_page, total_pages=_total_pages, products_per_page=_ppp,
+        filter_count=_filter_count,
     )
 
 
@@ -14490,6 +14509,9 @@ def _ensure_supplier_schema():
             c.execute("ALTER TABLE suppliers ADD COLUMN is_verified INTEGER DEFAULT 0")
         if "address" not in scols:
             c.execute("ALTER TABLE suppliers ADD COLUMN address TEXT DEFAULT ''")
+        # 2026-06-22 (session B): users.last_seen for online-tracking widget.
+        try: _ensure_users_last_seen()
+        except Exception: pass
         # Mark the seeded reference suppliers (JinkoSolar, LONGi, etc.) as verified
         # so they continue to show up on the public marketplace.
         c.execute("UPDATE suppliers SET is_verified=1 WHERE user_id=0 AND is_verified=0")
@@ -18085,8 +18107,24 @@ def procurement_center():
             sql += ("AND (LOWER(ec.name) LIKE ? OR LOWER(ec.brand) LIKE ? "
                     "     OR LOWER(ec.model) LIKE ? OR LOWER(ec.spec) LIKE ?) ")
             args.extend([like, like, like, like])
-        sql += "ORDER BY ec.created_at DESC LIMIT 200"
-        products = c.execute(sql, args).fetchall()
+        # 2026-06-22 (session B): admin-tunable pagination.
+        _ppp = _products_per_page()
+        try: _page = max(1, int(request.args.get("page") or 1))
+        except (TypeError, ValueError): _page = 1
+        _offset = (_page - 1) * _ppp
+        _count_sql = sql.replace(
+            "SELECT ec.id, ec.name, ec.brand, ec.model, ec.spec, ec.unit,        ec.price_usd, ec.lead_time_days, ec.category_id,        ec.literature_url, ec.datasheet_url,        s.name AS supplier_name, s.country AS supplier_country,        s.phone AS supplier_phone, s.email AS supplier_email,        pc.name AS category_name, pc.icon AS category_icon ", "SELECT COUNT(*) "
+        )
+        try:
+            _filter_count = c.execute(_count_sql, args).fetchone()[0]
+        except Exception:
+            _filter_count = 0
+        _total_pages = max(1, (int(_filter_count) + _ppp - 1) // _ppp)
+        if _page > _total_pages:
+            _page = _total_pages
+            _offset = (_page - 1) * _ppp
+        sql += "ORDER BY ec.created_at DESC LIMIT ? OFFSET ?"
+        products = c.execute(sql, args + [_ppp, _offset]).fetchall()
 
     # Pre-compute per-product converted price for the template.
     rate = _CURRENCY_RATES_FROM_USD.get(currency, 1.0)
@@ -18125,6 +18163,8 @@ def procurement_center():
         currency=currency,
         currencies=list(_CURRENCY_RATES_FROM_USD.keys()),
         rates_as_of=_CURRENCY_RATES_AS_OF,
+        page=_page, total_pages=_total_pages, products_per_page=_ppp,
+        filter_count=_filter_count,
     )
 
 
@@ -18135,8 +18175,31 @@ def procurement_center():
 @login_required
 def procurement_center_add():
     """Take the checked product IDs from the form + the chosen doc type
-    + currency, and create the new doc populated with those products."""
+    + currency, and create the new doc populated with those products.
+
+    2026-06-22 (session B): also accept `stored_ids` (CSV from the
+    sessionStorage layer) so paginated selections aren't lost when the
+    user clicks Add on a later page.
+    """
     csrf_protect()
+    # Merge form checkboxes + persisted sessionStorage IDs.
+    try:
+        _stored = (request.form.get("stored_ids") or "").strip()
+        _extra = [s for s in _stored.split(",") if s.strip().isdigit()]
+        if _extra:
+            _form_list = list(request.form.getlist("product_ids"))
+            _merged = list(dict.fromkeys(_form_list + _extra))  # de-dup, keep order
+            # Inject into request.form's getlist by adding to a ImmutableMultiDict copy.
+            try:
+                from werkzeug.datastructures import ImmutableMultiDict
+                pairs = list(request.form.items(multi=True))
+                pairs = [(k, v) for k, v in pairs if k != "product_ids"]
+                pairs += [("product_ids", str(x)) for x in _merged]
+                request.form = ImmutableMultiDict(pairs)
+            except Exception:
+                pass
+    except Exception:
+        pass
     _ensure_marketplace_tables()
     _ensure_supplier_schema()
     _ensure_bom_tables()
@@ -24785,6 +24848,240 @@ def admin_marketplace_brands_toggle(bid):
 
 
 # === END: marketplace_brands splice ===
+
+
+# === BEGIN: online_users splice ===
+# 2026-06-22 (session B): track who's currently online for the admin panel.
+#
+# Mechanism:
+#   - users.last_seen TIMESTAMP column (idempotent ALTER).
+#   - before_request hook updates last_seen for logged-in users, throttled
+#     to once per 60s via a session timestamp marker so we don't write
+#     on every static fetch.
+#   - /admin/api/online-users JSON endpoint -> [{id,username,name,role,
+#     ip,since_seconds}]
+#   - Widget rendered on the admin marketplace dashboard (also good for
+#     /admin home).
+
+_ONLINE_WINDOW_SECS = 300   # 5 min counts as online
+_LAST_SEEN_WRITE_GAP = 60   # only re-write last_seen once per minute per session
+
+
+def _ensure_users_last_seen():
+    """Idempotent ALTER on both engines."""
+    for _ddl in (
+        "ALTER TABLE users ADD COLUMN last_seen TEXT DEFAULT NULL",
+    ):
+        try:
+            with get_db() as c:
+                c.execute(_ddl)
+        except Exception:
+            pass
+
+
+@app.before_request
+def _bump_last_seen():
+    """Update users.last_seen at most once per minute per active session."""
+    try:
+        uid = session.get("user_id")
+        if not uid:
+            return
+        # Throttle via a session marker so we don't write on every request.
+        try:
+            from time import time as _t
+        except Exception:
+            return
+        now_ts = int(_t())
+        last_write = int(session.get("_ls_w", 0) or 0)
+        if now_ts - last_write < _LAST_SEEN_WRITE_GAP:
+            return
+        session["_ls_w"] = now_ts
+        # Best-effort write; never raises.
+        try:
+            with get_db() as c:
+                c.execute(
+                    "UPDATE users SET last_seen=CURRENT_TIMESTAMP WHERE id=?",
+                    (uid,),
+                )
+        except Exception:
+            try: _ensure_users_last_seen()
+            except Exception: pass
+    except Exception:
+        pass
+
+
+def _online_users(window_secs=None):
+    """Return active-user rows (last_seen inside the window)."""
+    if window_secs is None:
+        window_secs = _ONLINE_WINDOW_SECS
+    is_pg = bool(os.environ.get("DATABASE_URL"))
+    try:
+        with get_db() as c:
+            if is_pg:
+                rows = c.execute(
+                    "SELECT id, username, COALESCE(name,'') AS name, "
+                    "       COALESCE(role,'') AS role, COALESCE(plan,'') AS plan, "
+                    "       last_seen, "
+                    "       EXTRACT(EPOCH FROM (NOW() - last_seen))::INT AS since_seconds "
+                    "FROM users "
+                    "WHERE last_seen IS NOT NULL "
+                    "  AND last_seen >= (NOW() - INTERVAL '%s seconds') "
+                    "ORDER BY last_seen DESC LIMIT 100" % int(window_secs)
+                ).fetchall()
+            else:
+                rows = c.execute(
+                    "SELECT id, username, COALESCE(name,'') AS name, "
+                    "       COALESCE(role,'') AS role, COALESCE(plan,'') AS plan, "
+                    "       last_seen, "
+                    "       CAST(strftime('%s','now') - strftime('%s', last_seen) AS INT) AS since_seconds "
+                    "FROM users "
+                    "WHERE last_seen IS NOT NULL "
+                    "  AND CAST(strftime('%s','now') - strftime('%s', last_seen) AS INT) <= ? "
+                    "ORDER BY last_seen DESC LIMIT 100",
+                    (window_secs,),
+                ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            out.append({
+                "id":            d.get("id"),
+                "username":      d.get("username"),
+                "name":          d.get("name") or "",
+                "role":          d.get("role") or "",
+                "plan":          d.get("plan") or "",
+                "since_seconds": int(d.get("since_seconds") or 0),
+            })
+        return out
+    except Exception:
+        try: _ensure_users_last_seen()
+        except Exception: pass
+        return []
+
+
+@app.route("/admin/api/online-users")
+@admin_required
+def admin_api_online_users():
+    """JSON feed for the admin online-users widget. Polled every ~30s by
+    the widget JS so the admin can see who's currently active."""
+    users = _online_users()
+    return jsonify({
+        "count":  len(users),
+        "users":  users,
+        "window_seconds": _ONLINE_WINDOW_SECS,
+    })
+
+
+@app.route("/admin/online-users")
+@admin_required
+def admin_online_users_page():
+    """Full-page view of online users for admins. Same data as the JSON
+    endpoint but rendered as a table for first-load."""
+    return render_template(
+        "admin_online_users.html",
+        user=current_user(),
+        online=_online_users(),
+        window_seconds=_ONLINE_WINDOW_SECS,
+    )
+
+
+# === END: online_users splice ===
+
+
+# === BEGIN: marketplace_pagination splice ===
+# 2026-06-22 (session B): admin-tunable products_per_page setting +
+# helpers that paginate marketplace_public / procurement_center, plus a
+# small admin settings page.
+
+def _ensure_admin_settings_table():
+    is_pg = bool(os.environ.get("DATABASE_URL"))
+    if is_pg:
+        ddl = """CREATE TABLE IF NOT EXISTS admin_settings (
+            key   VARCHAR(80) PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )"""
+    else:
+        ddl = """CREATE TABLE IF NOT EXISTS admin_settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )"""
+    try:
+        with get_db() as c:
+            c.execute(ddl)
+    except Exception:
+        pass
+
+
+def _admin_setting(key, default=None):
+    """Read a value from admin_settings. Falls back to ``default``."""
+    _ensure_admin_settings_table()
+    try:
+        with get_db() as c:
+            r = c.execute(
+                "SELECT value FROM admin_settings WHERE key=?", (key,)
+            ).fetchone()
+        if r:
+            return r["value"] if hasattr(r, "keys") else r[0]
+    except Exception:
+        pass
+    return default
+
+
+def _admin_setting_set(key, value):
+    """Write (upsert) a value into admin_settings."""
+    _ensure_admin_settings_table()
+    is_pg = bool(os.environ.get("DATABASE_URL"))
+    try:
+        with get_db() as c:
+            if is_pg:
+                c.execute(
+                    "INSERT INTO admin_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) "
+                    "ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=CURRENT_TIMESTAMP",
+                    (key, str(value)),
+                )
+            else:
+                c.execute(
+                    "INSERT OR REPLACE INTO admin_settings (key, value, updated_at) "
+                    "VALUES (?, ?, CURRENT_TIMESTAMP)",
+                    (key, str(value)),
+                )
+        return True
+    except Exception:
+        return False
+
+
+def _products_per_page():
+    """Return the admin-tunable products_per_page (default 24, clamped 6..200)."""
+    try:
+        v = int(_admin_setting("products_per_page", 24) or 24)
+    except (TypeError, ValueError):
+        v = 24
+    return max(6, min(200, v))
+
+
+@app.route("/admin/marketplace/settings", methods=["GET", "POST"])
+@admin_required
+def admin_marketplace_settings():
+    _ensure_admin_settings_table()
+    if request.method == "POST":
+        csrf_protect()
+        try:
+            ppp = int(request.form.get("products_per_page") or 24)
+        except (TypeError, ValueError):
+            ppp = 24
+        ppp = max(6, min(200, ppp))
+        _admin_setting_set("products_per_page", ppp)
+        flash(f"Saved: products per page = {ppp}.", "success")
+        return redirect(url_for("admin_marketplace_settings"))
+    return render_template(
+        "admin_marketplace_settings.html",
+        user=current_user(),
+        products_per_page=_products_per_page(),
+    )
+
+
+# === END: marketplace_pagination splice ===
 
 
 if __name__ == "__main__":

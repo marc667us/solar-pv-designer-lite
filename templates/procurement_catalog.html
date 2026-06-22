@@ -81,23 +81,80 @@
       {% for item in items %}
       <tr>
         <td class="ps-3"><span class="badge bg-dark border small">{{ item.pc_name or item.category or '—' }}</span></td>
-        <td class="small fw-semibold">{{ item.name }}</td>
+        <td class="small fw-semibold">{{ item.name }}{% if item.model %}<div class="small text-secondary">{{ item.model }}</div>{% endif %}</td>
         <td class="small text-secondary">{{ item.brand or '—' }}</td>
         <td class="small text-secondary" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ item.spec or '—' }}</td>
         <td class="fw-bold" style="color:var(--solar-gold)">${{ item.price_usd|int }}/{{ item.unit }}</td>
         <td class="small text-secondary">{{ item.sup_name or '—' }}</td>
         <td class="small text-secondary">{{ item.lead_time_days }}d</td>
-        <td class="pe-3">
+        <td class="pe-3" style="white-space:nowrap">
+          <button class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editItem{{ item.id }}" title="Edit"><i class="bi bi-pencil"></i></button>
           <form method="POST" class="d-inline">
             <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="eid" value="{{ item.id }}">
-            <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove item?')">
+            <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove {{ item.name|e }}?')" title="Soft-delete">
               <i class="bi bi-x"></i>
             </button>
           </form>
         </td>
       </tr>
+      <!-- Edit modal per product -->
+      <div class="modal fade" id="editItem{{ item.id }}" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content bg-dark border-secondary">
+            <div class="modal-header border-secondary">
+              <h6 class="modal-title">Edit Product &mdash; {{ item.name }}</h6>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="edit">
+              <input type="hidden" name="eid" value="{{ item.id }}">
+              <div class="modal-body row g-3">
+                <div class="col-md-6">
+                  <label class="form-label small">Category</label>
+                  <select name="category_id" class="form-select form-select-sm bg-dark text-light border-secondary">
+                    <option value="">— Select category —</option>
+                    {% for c in categories %}<option value="{{ c.id }}" {% if c.id == item.category_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Name *</label>
+                  <input type="text" name="name" value="{{ item.name }}" required class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+                <div class="col-md-4"><label class="form-label small">Brand *</label>
+                  <select name="brand" required class="form-select form-select-sm bg-dark text-light border-secondary">
+                    <option value="">— Select brand —</option>
+                    {% if item.brand and item.brand not in (brands or [])|map(attribute='name')|list %}
+                    <option value="{{ item.brand }}" selected>{{ item.brand }} (legacy)</option>
+                    {% endif %}
+                    {% for b in (brands or []) %}<option value="{{ b.name }}" {% if item.brand == b.name %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-4"><label class="form-label small">Model</label>
+                  <input type="text" name="model" value="{{ item.model or '' }}" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+                <div class="col-md-4"><label class="form-label small">Unit</label>
+                  <input type="text" name="unit" value="{{ item.unit or 'No.' }}" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+                <div class="col-12"><label class="form-label small">Specification</label>
+                  <input type="text" name="spec" value="{{ item.spec or '' }}" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+                <div class="col-md-4"><label class="form-label small">Price (USD)</label>
+                  <input type="number" name="price_usd" step="0.01" value="{{ item.price_usd or 0 }}" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+                <div class="col-md-4"><label class="form-label small">Supplier</label>
+                  <select name="supplier_id" class="form-select form-select-sm bg-dark text-light border-secondary">
+                    <option value="0">— Select —</option>
+                    {% for s in suppliers %}<option value="{{ s.id }}" {% if s.id == item.supplier_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-4"><label class="form-label small">Lead Time (days)</label>
+                  <input type="number" name="lead_time_days" value="{{ item.lead_time_days or 30 }}" class="form-control form-control-sm bg-dark text-light border-secondary"></div>
+              </div>
+              <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-solar btn-sm"><i class="bi bi-save me-1"></i>Save changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
       {% else %}
       <tr><td colspan="8" class="text-center text-secondary py-4">No products in catalog yet.</td></tr>
       {% endfor %}
