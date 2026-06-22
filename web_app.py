@@ -6223,8 +6223,18 @@ def admin_users():
         users = c.execute(
             "SELECT u.*, (SELECT COUNT(*) FROM projects WHERE user_id=u.id) AS proj_count "
             "FROM users u ORDER BY u.created_at DESC").fetchall()
+    # 2026-06-22 (session B): online indicator -- gather ids active in the window.
+    try:
+        _on = _online_users()
+        _online_ids = {int(u.get("id") or 0) for u in _on}
+        _online_map = {int(u.get("id") or 0): int(u.get("since_seconds") or 0) for u in _on}
+        _online_window = _ONLINE_WINDOW_SECS
+    except Exception:
+        _online_ids = set(); _online_map = {}; _online_window = 300
     return render_template("admin_users.html", user=current_user(),
-                           users=users, plan_prices=PLAN_PRICES)
+                           users=users, plan_prices=PLAN_PRICES,
+                           online_ids=_online_ids, online_map=_online_map,
+                           online_window_secs=_online_window)
 
 
 @app.route("/admin/tickets")
@@ -8090,6 +8100,8 @@ def procurement_suppliers():
                      f.get("categories",""), int(f.get("lead_time_days",30)),
                      f.get("payment_terms","TT 30 days"), int(f.get("rating",5)),
                      f.get("notes","")))
+                try: _log_marketplace_action("add_supplier_legacy", "supplier", 0, f.get("name",""))
+                except Exception: pass
                 flash("Supplier added.", "success")
             elif action == "edit":
                 sid = f.get("sid", type=int)
@@ -8101,10 +8113,14 @@ def procurement_suppliers():
                      f.get("categories",""), int(f.get("lead_time_days",30)),
                      f.get("payment_terms","TT 30 days"), int(f.get("rating",5)),
                      f.get("notes",""), sid))
+                try: _log_marketplace_action("edit_supplier_legacy", "supplier", int(sid or 0), f.get("name",""))
+                except Exception: pass
                 flash("Supplier updated.", "success")
             elif action == "delete":
-                c.execute("UPDATE suppliers SET is_active=0 WHERE id=?",
-                          (f.get("sid", type=int),))
+                _sid = f.get("sid", type=int)
+                c.execute("UPDATE suppliers SET is_active=0 WHERE id=?", (_sid,))
+                try: _log_marketplace_action("delete_supplier_legacy", "supplier", int(_sid or 0), "soft-delete")
+                except Exception: pass
                 flash("Supplier deactivated.", "info")
         return redirect(url_for("procurement_suppliers"))
     # 2026-06-22 (session B): pagination + count.
@@ -8152,6 +8168,8 @@ def procurement_catalog():
                      f.get("spec",""), f.get("unit","No."), float(f.get("price_usd",0)),
                      int(f.get("supplier_id",0)), int(f.get("lead_time_days",30)),
                      f.get("notes","")))
+                try: _log_marketplace_action("add_product_catalog", "product", 0, f"{f.get('name','')} / {_cat_label or 'Uncategorised'}")
+                except Exception: pass
                 flash(f"Product added under '{_cat_label or 'Uncategorised'}'.", "success")
             elif action == "edit":
                 eid = f.get("eid", type=int)
@@ -8169,10 +8187,14 @@ def procurement_catalog():
                      f.get("spec",""), f.get("unit","No."), float(f.get("price_usd",0)),
                      int(f.get("supplier_id",0)), int(f.get("lead_time_days",30)),
                      f.get("notes",""), eid))
+                try: _log_marketplace_action("edit_product_catalog", "product", int(eid or 0), f.get("name",""))
+                except Exception: pass
                 flash("Product updated.", "success")
             elif action == "delete":
-                c.execute("UPDATE equipment_catalog SET is_active=0 WHERE id=?",
-                          (f.get("eid", type=int),))
+                _eid = f.get("eid", type=int)
+                c.execute("UPDATE equipment_catalog SET is_active=0 WHERE id=?", (_eid,))
+                try: _log_marketplace_action("delete_product_catalog", "product", int(_eid or 0), "soft-delete")
+                except Exception: pass
                 flash("Item deactivated.", "info")
         return redirect(url_for("procurement_catalog"))
     # 2026-06-22 defensive: fire the marketplace ensure so product_categories exists
@@ -24584,6 +24606,8 @@ def admin_marketplace_reseed_ghana():
     csrf_protect()
     _ensure_marketplace_tables()
     _seed_ghana_suppliers_products()
+    try: _log_marketplace_action("reseed_ghana", "system", 0, "manual re-fire of canonical Ghana seed")
+    except Exception: pass
     flash("Ghana suppliers + price-sheet products re-seeded (idempotent).", "success")
     return redirect(url_for("admin_marketplace_dashboard"))
 
@@ -25116,6 +25140,8 @@ def admin_marketplace_settings():
             ppp = 24
         ppp = max(6, min(200, ppp))
         _admin_setting_set("products_per_page", ppp)
+        try: _log_marketplace_action("settings_save", "admin_settings", 0, f"products_per_page={ppp}")
+        except Exception: pass
         flash(f"Saved: products per page = {ppp}.", "success")
         return redirect(url_for("admin_marketplace_settings"))
     return render_template(
@@ -25126,6 +25152,124 @@ def admin_marketplace_settings():
 
 
 # === END: marketplace_pagination splice ===
+
+
+# === BEGIN: admin_actions_log splice ===
+# 2026-06-22 (session B): /admin/actions-log page reading marketplace_audit_log
+# with filters (action substring, user, time window) + pagination.
+#
+# Uses the existing _log_marketplace_action() writer + the
+# marketplace_audit_log table that's already created lazily on first use.
+
+@app.route("/admin/actions-log")
+@admin_required
+def admin_actions_log():
+    """Admin-only audit feed. Filterable by action substring, user name,
+    and time window (hours). Paginated via _products_per_page() default."""
+    # Make sure the table exists so even a fresh DB renders an empty page.
+    try:
+        with get_db() as c:
+            c.execute(
+                """
+                CREATE TABLE IF NOT EXISTS marketplace_audit_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    action TEXT NOT NULL,
+                    target_kind TEXT NOT NULL,
+                    target_id INTEGER NOT NULL,
+                    notes TEXT DEFAULT '',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+    except Exception:
+        pass
+
+    action_q = (request.args.get("action") or "").strip().lower()[:80]
+    user_q   = (request.args.get("user") or "").strip().lower()[:80]
+    try:
+        hours_q = int(request.args.get("hours") or 0)
+    except (TypeError, ValueError):
+        hours_q = 0
+    try:
+        page = max(1, int(request.args.get("page") or 1))
+    except (TypeError, ValueError):
+        page = 1
+
+    try:
+        per_page = _products_per_page()
+    except Exception:
+        per_page = 24
+    per_page = max(10, min(200, per_page))  # logs render denser; sensible window.
+
+    is_pg = bool(os.environ.get("DATABASE_URL"))
+
+    where = ["1=1"]
+    args  = []
+    if action_q:
+        where.append("LOWER(mal.action) LIKE ?")
+        args.append(f"%{action_q}%")
+    if user_q:
+        where.append("LOWER(COALESCE(u.username,'')) LIKE ?")
+        args.append(f"%{user_q}%")
+    if hours_q and hours_q > 0:
+        if is_pg:
+            where.append("mal.created_at >= (NOW() - INTERVAL '%d hours')" % int(hours_q))
+        else:
+            where.append("CAST(strftime('%s','now') - strftime('%s', mal.created_at) AS INT) <= ?")
+            args.append(int(hours_q) * 3600)
+
+    where_clause = " AND ".join(where)
+    rows, total = [], 0
+    try:
+        with get_db() as c:
+            count_sql = (
+                "SELECT COUNT(*) "
+                "FROM marketplace_audit_log mal "
+                "LEFT JOIN users u ON u.id=mal.user_id "
+                f"WHERE {where_clause}"
+            )
+            total = int(c.execute(count_sql, args).fetchone()[0] or 0)
+            total_pages = max(1, (total + per_page - 1) // per_page)
+            if page > total_pages:
+                page = total_pages
+            offset = (page - 1) * per_page
+            sql = (
+                "SELECT mal.id, mal.user_id, mal.action, mal.target_kind, mal.target_id, "
+                "       mal.notes, mal.created_at, COALESCE(u.username,'(system)') AS actor "
+                "FROM marketplace_audit_log mal "
+                "LEFT JOIN users u ON u.id=mal.user_id "
+                f"WHERE {where_clause} "
+                "ORDER BY mal.created_at DESC, mal.id DESC LIMIT ? OFFSET ?"
+            )
+            rows = c.execute(sql, args + [per_page, offset]).fetchall()
+    except Exception:
+        total_pages = 1
+
+    # Action-type tally for the filter chips.
+    action_tally = []
+    try:
+        with get_db() as c:
+            trows = c.execute(
+                "SELECT action, COUNT(*) AS n FROM marketplace_audit_log "
+                "GROUP BY action ORDER BY n DESC LIMIT 20"
+            ).fetchall()
+            action_tally = [{"action": r["action"], "n": int(r["n"])} for r in trows]
+    except Exception:
+        pass
+
+    return render_template(
+        "admin_actions_log.html",
+        user=current_user(),
+        rows=rows,
+        page=page, total_pages=total_pages, products_per_page=per_page,
+        filter_count=total,
+        action_q=action_q, user_q=user_q, hours_q=hours_q,
+        action_tally=action_tally,
+    )
+
+
+# === END: admin_actions_log splice ===
 
 
 if __name__ == "__main__":
