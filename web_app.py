@@ -25774,6 +25774,68 @@ _LIBRARY_EXPANSION_PRODUCTS_GHS = [
     ("APT Ghana", "panel_boards", "Meter Panel (3-phase, 4-meter)",     "Schneider","MP-3PH-4M","3-phase 4-meter housing panel",               "No.", 4250.00, 30, "Meter Panel"),
     ("APT Ghana", "panel_boards", "ATS Panel 250A",                     "Socomec",  "ATS-250",  "Automatic transfer switch panel 250A",         "No.",18500.00, 30, "ATS Panel"),
     ("APT Ghana", "panel_boards", "ATS Panel 630A",                     "Socomec",  "ATS-630",  "Automatic transfer switch panel 630A",         "No.",38500.00, 45, "ATS Panel"),
+
+    # ======================================================================
+    # 2026-06-22 session C v3: top-up AVR (was 1 product) + UPS (was 9).
+    # Source: same indicative GHS midpoints + supplier mapping from
+    # update liberary.txt. AVR sizes 3-1500kVA single + three phase, both
+    # servo and static. UPS sizes 2-500kVA across Safenergy / APC /
+    # Eaton / Vertiv / Huawei.
+    # ======================================================================
+
+    # ---- AVR: Single-phase Servo ----
+    ("Grand Pacific Limited", "avr", "3 kVA Single-Phase Servo AVR",      "Safenergy", "AVR-3K-SP-S",   "3 kVA single-phase servo voltage stabilizer, ±15% input range, copper winding", "No.",   2850.00, 14, "Single-phase"),
+    ("Grand Pacific Limited", "avr", "5 kVA Single-Phase Servo AVR",      "Safenergy", "AVR-5K-SP-S",   "5 kVA single-phase servo voltage stabilizer",                                    "No.",   4250.00, 14, "Single-phase"),
+    ("Grand Pacific Limited", "avr", "10 kVA Single-Phase Servo AVR",     "Safenergy", "AVR-10K-SP-S",  "10 kVA single-phase servo voltage stabilizer, wall-mount",                       "No.",   7850.00, 14, "Single-phase"),
+    ("Grand Pacific Limited", "avr", "15 kVA Single-Phase Servo AVR",     "Safenergy", "AVR-15K-SP-S",  "15 kVA single-phase servo voltage stabilizer, floor-mount",                      "No.",  11500.00, 14, "Single-phase"),
+    ("Grand Pacific Limited", "avr", "30 kVA Single-Phase Servo AVR",     "Safenergy", "AVR-30K-SP-S",  "30 kVA single-phase servo voltage stabilizer, industrial",                       "No.",  22500.00, 21, "Single-phase"),
+
+    # ---- AVR: Three-phase Servo ----
+    ("Grand Pacific Limited", "avr", "15 kVA Three-Phase Servo AVR",      "Safenergy", "AVR-15K-3P-S",  "15 kVA three-phase servo voltage stabilizer, copper winding, ±25% range",        "No.",  18500.00, 21, "Three-phase"),
+    ("Grand Pacific Limited", "avr", "30 kVA Three-Phase Servo AVR",      "Safenergy", "AVR-30K-3P-S",  "30 kVA three-phase servo voltage stabilizer",                                    "No.",  32500.00, 21, "Three-phase"),
+    ("Grand Pacific Limited", "avr", "60 kVA Three-Phase Servo AVR",      "Safenergy", "AVR-60K-3P-S",  "60 kVA three-phase servo voltage stabilizer",                                    "No.",  56500.00, 21, "Three-phase"),
+    ("Grand Pacific Limited", "avr", "100 kVA Three-Phase Servo AVR",     "Safenergy", "AVR-100K-3P-S", "100 kVA three-phase servo voltage stabilizer",                                   "No.",  88500.00, 30, "Three-phase"),
+    ("Grand Pacific Limited", "avr", "150 kVA Three-Phase Servo AVR",     "Safenergy", "AVR-150K-3P-S", "150 kVA three-phase servo voltage stabilizer",                                   "No., ",128500.00, 30, "Three-phase"),
+    ("Grand Pacific Limited", "avr", "200 kVA Three-Phase Servo AVR",     "Safenergy", "AVR-200K-3P-S", "200 kVA three-phase servo voltage stabilizer",                                   "No.", 168500.00, 45, "Three-phase"),
+    ("Grand Pacific Limited", "avr", "300 kVA Three-Phase Servo AVR",     "Safenergy", "AVR-300K-3P-S", "300 kVA three-phase servo voltage stabilizer, industrial floor-mount",           "No.", 245000.00, 45, "Three-phase"),
+    ("Grand Pacific Limited", "avr", "500 kVA Three-Phase Servo AVR",     "Safenergy", "AVR-500K-3P-S", "500 kVA three-phase servo voltage stabilizer",                                   "No.", 385000.00, 60, "Three-phase"),
+    ("Grand Pacific Limited", "avr", "1000 kVA Three-Phase Servo AVR",    "Safenergy", "AVR-1000K-3P-S","1000 kVA three-phase servo voltage stabilizer, industrial",                     "No.", 725000.00, 75, "Three-phase"),
+    ("Grand Pacific Limited", "avr", "1500 kVA Three-Phase Servo AVR",    "Safenergy", "AVR-1500K-3P-S","1500 kVA three-phase servo voltage stabilizer, industrial",                     "No.",1085000.00, 90, "Three-phase"),
+
+    # ---- AVR: Static / Industrial alternates ----
+    ("NESSTRA Ghana Ltd", "avr", "10 kVA Static AVR (single-phase)",      "Schneider", "AVR-10K-STC",   "Static AVR with bypass arrangement, 1-cycle response", "No.",  9850.00, 21, "Static"),
+    ("NESSTRA Ghana Ltd", "avr", "50 kVA Static AVR (three-phase)",       "Schneider", "AVR-50K-STC-3P","Static AVR three-phase, fast electronic switching",    "No.", 38500.00, 30, "Static"),
+    ("NESSTRA Ghana Ltd", "avr", "Industrial AVR 200 kVA (3P)",           "ABB",       "AVR-IND-200",   "Industrial three-phase AVR 200kVA",                    "No.",185000.00, 45, "Industrial"),
+
+    # ---- UPS top-up: extra Safenergy three-phase sizes ----
+    ("Grand Pacific Limited", "power_system", "2 kVA Online UPS (single-phase)",  "Safenergy",  "S1-2K",   "2 kVA online UPS, single-phase, 30min runtime",  "No.",   7250.00, 14, "UPS"),
+    ("Grand Pacific Limited", "power_system", "6 kVA Online UPS (single-phase)",  "Safenergy",  "S1-6K",   "6 kVA online UPS, single-phase",                  "No.",  22500.00, 14, "UPS"),
+    ("Grand Pacific Limited", "power_system", "15 kVA Online UPS (three-phase)",  "Safenergy",  "S3-15K",  "15 kVA online UPS, three-phase",                  "No.", 105000.00, 21, "UPS"),
+    ("Grand Pacific Limited", "power_system", "40 kVA Online UPS (three-phase)",  "Safenergy",  "S3-40K",  "40 kVA online UPS, three-phase",                  "No.", 235000.00, 21, "UPS"),
+    ("Grand Pacific Limited", "power_system", "50 kVA Online UPS (three-phase)",  "Safenergy",  "S3-50K",  "50 kVA online UPS, three-phase",                  "No.", 285000.00, 21, "UPS"),
+    ("Grand Pacific Limited", "power_system", "120 kVA Online UPS (three-phase)", "Safenergy",  "S3-120K", "120 kVA online UPS, three-phase",                 "No.", 495000.00, 45, "UPS"),
+    ("Grand Pacific Limited", "power_system", "160 kVA Online UPS (three-phase)", "Safenergy",  "S3-160K", "160 kVA online UPS, three-phase",                 "No.", 625000.00, 45, "UPS"),
+    ("Grand Pacific Limited", "power_system", "300 kVA Online UPS (three-phase)", "Safenergy",  "S3-300K", "300 kVA online UPS, three-phase, industrial",     "No.",1125000.00, 60, "UPS"),
+    ("Grand Pacific Limited", "power_system", "500 kVA Online UPS (three-phase)", "Safenergy",  "S3-500K", "500 kVA online UPS, three-phase, industrial",     "No.",1825000.00, 75, "UPS"),
+
+    # ---- UPS top-up: alternate brands ----
+    ("JMG Offshore Ghana", "power_system", "10 kVA APC Smart-UPS On-Line (3P)",    "APC",     "SRT10KXLI",   "APC Smart-UPS On-Line SRT 10kVA, three-phase",         "No.", 165000.00, 21, "UPS"),
+    ("JMG Offshore Ghana", "power_system", "20 kVA APC Smart-UPS On-Line (3P)",    "APC",     "SRT20KXLI",   "APC Smart-UPS On-Line SRT 20kVA, three-phase",         "No.", 285000.00, 21, "UPS"),
+    ("JMG Offshore Ghana", "power_system", "40 kVA Eaton 93PS UPS (3P)",            "Eaton",   "93PS-40",     "Eaton 93PS 40kVA three-phase UPS, modular",            "No.", 425000.00, 30, "UPS"),
+    ("JMG Offshore Ghana", "power_system", "80 kVA Eaton 93PR UPS (3P)",            "Eaton",   "93PR-80",     "Eaton 93PR 80kVA three-phase UPS, fault-tolerant",     "No.", 685000.00, 45, "UPS"),
+    ("JMG Offshore Ghana", "power_system", "100 kVA Vertiv Liebert UPS (3P)",       "Vertiv",  "LBT-100",     "Vertiv Liebert APM 100kVA three-phase UPS",            "No.", 825000.00, 45, "UPS"),
+    ("JMG Offshore Ghana", "power_system", "200 kVA Vertiv Liebert UPS (3P)",       "Vertiv",  "LBT-200",     "Vertiv Liebert APM 200kVA three-phase UPS",            "No.",1485000.00, 60, "UPS"),
+    ("JMG Offshore Ghana", "power_system", "100 kVA Huawei UPS5000-E (3P)",         "Huawei",  "UPS5000-100", "Huawei UPS5000-E 100kVA modular three-phase UPS",       "No.", 765000.00, 45, "UPS"),
+    ("JMG Offshore Ghana", "power_system", "200 kVA Huawei UPS5000-E (3P)",         "Huawei",  "UPS5000-200", "Huawei UPS5000-E 200kVA modular three-phase UPS",       "No.",1325000.00, 60, "UPS"),
+
+    # ---- UPS: line-interactive + rack-mount (data-centre + office) ----
+    ("Comsys Ghana Ltd.", "power_system", "1 kVA Line-Interactive UPS (tower)",  "APC",     "SUA1000I",     "APC Smart-UPS 1000VA line-interactive tower UPS",         "No.",   3850.00, 7,  "UPS"),
+    ("Comsys Ghana Ltd.", "power_system", "2 kVA Line-Interactive UPS (tower)",  "APC",     "SUA2200I",     "APC Smart-UPS 2200VA line-interactive tower UPS",         "No.",   8250.00, 7,  "UPS"),
+    ("Comsys Ghana Ltd.", "power_system", "1.5 kVA Rack-Mount UPS (2U)",          "APC",     "SMT1500RMI",   "APC Smart-UPS 1500VA 2U rack-mount",                       "No.",   6250.00, 7,  "UPS"),
+    ("Comsys Ghana Ltd.", "power_system", "3 kVA Rack-Mount UPS (2U)",            "APC",     "SMT3000RMI",   "APC Smart-UPS 3000VA 2U rack-mount",                       "No.",  11500.00, 14, "UPS"),
+    ("Comsys Ghana Ltd.", "power_system", "10 kVA Rack-Mount UPS (6U)",           "Eaton",   "9PX10KIRT",    "Eaton 9PX 10kVA 6U rack/tower online UPS",                 "No.",  78500.00, 21, "UPS"),
+    ("Comsys Ghana Ltd.", "power_system", "External Battery Cabinet (96V, 60Ah)", "APC",     "BATCAB-96V",   "External battery cabinet for extended runtime, 96V 60Ah",  "No.",  18500.00, 14, "UPS"),
+    ("Comsys Ghana Ltd.", "power_system", "Maintenance Bypass Switch (40A)",      "APC",     "MBP-40A",      "Maintenance bypass switch 40A for UPS hot-swap servicing", "No.",   8750.00, 14, "UPS"),
 ]
 
 
