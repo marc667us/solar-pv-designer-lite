@@ -14596,6 +14596,14 @@ def supplier_product_add():
     s = _current_supplier()
     if not s:
         return redirect(url_for("supplier_dashboard"))
+    # 2026-06-22 defensive: re-fire the schema bootstrap (cheap; just runs
+    # CREATE IF NOT EXISTS + INSERT OR IGNORE) and re-seed any missing
+    # categories. Bug report: the Add Product dropdown only showed one
+    # category live; this guarantees the full 21 are populated.
+    try:
+        _ensure_marketplace_tables()
+    except Exception:
+        pass
     with get_db() as c:
         # Include `code` so the template can look up subcategories /
         # default unit / required spec fields from the taxonomy registries.
@@ -14603,6 +14611,29 @@ def supplier_product_add():
             "SELECT id, code, name FROM product_categories "
             "WHERE is_active=1 ORDER BY display_order"
         ).fetchall()
+        if len(categories) < len(_MARKETPLACE_CATEGORIES):
+            # Emergency reseed -- INSERT OR IGNORE is no-op on existing rows.
+            for _row in _MARKETPLACE_CATEGORIES:
+                try:
+                    c.execute(
+                        "INSERT OR IGNORE INTO product_categories "
+                        "(code,name,icon,display_order) VALUES (?,?,?,?)",
+                        _row,
+                    )
+                except Exception:
+                    try:
+                        c.execute(
+                            "INSERT INTO product_categories "
+                            "(code,name,icon,display_order) VALUES (?,?,?,?) "
+                            "ON CONFLICT (code) DO NOTHING",
+                            _row,
+                        )
+                    except Exception:
+                        pass
+            categories = c.execute(
+                "SELECT id, code, name FROM product_categories "
+                "WHERE is_active=1 ORDER BY display_order"
+            ).fetchall()
     if request.method == "GET":
         _subs_m, _units_m, _specs_m = _merged_marketplace_taxonomy()
         return render_template(
@@ -17050,6 +17081,28 @@ def admin_marketplace_product_edit(pid):
             "SELECT id, code, name FROM product_categories "
             "WHERE is_active=1 ORDER BY display_order"
         ).fetchall()
+        if len(categories) < len(_MARKETPLACE_CATEGORIES):
+            for _row in _MARKETPLACE_CATEGORIES:
+                try:
+                    c.execute(
+                        "INSERT OR IGNORE INTO product_categories "
+                        "(code,name,icon,display_order) VALUES (?,?,?,?)",
+                        _row,
+                    )
+                except Exception:
+                    try:
+                        c.execute(
+                            "INSERT INTO product_categories "
+                            "(code,name,icon,display_order) VALUES (?,?,?,?) "
+                            "ON CONFLICT (code) DO NOTHING",
+                            _row,
+                        )
+                    except Exception:
+                        pass
+            categories = c.execute(
+                "SELECT id, code, name FROM product_categories "
+                "WHERE is_active=1 ORDER BY display_order"
+            ).fetchall()
         suppliers = c.execute(
             "SELECT id, name FROM suppliers WHERE is_active=1 ORDER BY name"
         ).fetchall()
