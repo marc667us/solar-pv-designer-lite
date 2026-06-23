@@ -48,6 +48,11 @@
       <div class="text-secondary mt-1">Manage plans, roles, and accounts</div>
     </div>
     <div class="d-flex gap-2">
+      <a href="https://auth.aiappinvent.com/admin/" target="_blank" rel="noopener"
+         class="btn btn-warning btn-sm fw-bold"
+         title="Opens the Keycloak admin console -- master realm root admin: 'admin' / KC_BOOTSTRAP_ADMIN_PASSWORD from GH Secrets (NOT your SolarPro admin password). Switch to the 'solarpro' realm after login to manage users.">
+        <i class="bi bi-shield-lock-fill me-1"></i>Keycloak User Console <i class="bi bi-box-arrow-up-right ms-1" style="font-size:10px"></i>
+      </a>
       <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left me-1"></i>Dashboard
       </a>
