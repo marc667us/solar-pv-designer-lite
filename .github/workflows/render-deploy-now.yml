@@ -67,10 +67,15 @@ jobs:
 
           echo "Syncing $(echo "$NEW_VARS" | jq 'length') vars to Render service $RENDER_SERVICE_ID..."
 
-          # GET current vars and merge
+          # GET current vars and merge.
+          # ?limit=100 is REQUIRED: Render's default page size is 20, and
+          # solar holds ~30 env vars including the 5 KEYCLOAK_* keys. Without
+          # the limit, KC vars fall off the page, the subsequent PUT replaces
+          # the env set with the truncated list, and the live cutover goes
+          # silently dormant. (Root cause of the 2026-06-22 KC outage.)
           CURRENT=$(curl -s \
             -H "Authorization: Bearer $RENDER_API_KEY" \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars")
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars?limit=100")
           CURRENT_CLEAN=$(echo "$CURRENT" | jq 'if (.[0] | has("envVar")) then [.[].envVar | {key:.key,value:.value}] else [.[] | {key:.key,value:.value}] end' 2>/dev/null || echo '[]')
           MERGED=$(echo "$CURRENT_CLEAN" | jq --argjson n "$NEW_VARS" 'map(select(.key as $k | ($n | map(.key) | index($k)) == null)) + $n')
 
