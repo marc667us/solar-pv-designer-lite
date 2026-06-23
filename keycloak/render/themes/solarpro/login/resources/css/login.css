@@ -397,7 +397,7 @@ a[href*="login-actions/reset-credentials"]:hover {
   justify-content: center !important;
   gap: 0 !important;                              /* no gap between cards */
   width: 100% !important;
-  max-width: 380px !important;
+  max-width: 200px !important;
   min-height: calc(100vh - 220px) !important;     /* leave room for footer below */
   margin: 24px auto 0 auto !important;
   padding: 0 16px !important;
@@ -410,7 +410,7 @@ a[href*="login-actions/reset-credentials"]:hover {
    the form so it visually carries the hero below it too. */
 .sp-form-panel {
   width: 100% !important;
-  max-width: 380px !important;
+  max-width: 200px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -420,7 +420,7 @@ a[href*="login-actions/reset-credentials"]:hover {
 .sp-form-panel > .card-pf,
 .sp-form-panel > .pf-v5-c-login__main {
   width: 100% !important;
-  max-width: 380px !important;
+  max-width: 200px !important;
   border-top-left-radius: var(--sp-radius) !important;
   border-top-right-radius: var(--sp-radius) !important;
   border-bottom-left-radius: 0 !important;
@@ -436,7 +436,7 @@ a[href*="login-actions/reset-credentials"]:hover {
    centered column. */
 .sp-hero {
   width: 100% !important;
-  max-width: 380px !important;
+  max-width: 200px !important;
   margin-left: auto !important;
   margin-right: auto !important;
   margin-top: -1px !important;                    /* nudge over the form's border line */
