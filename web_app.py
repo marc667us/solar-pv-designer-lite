@@ -10348,6 +10348,10 @@ def terms():
 def privacy():
     return render_template("privacy.html")
 
+@app.route("/data-protection")
+def data_protection():
+    return render_template("data_protection.html")
+
 
 # -- Beta Testing ----------------------------------------------------------
 

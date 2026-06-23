@@ -362,7 +362,9 @@ a[href*="login-actions/reset-credentials"]:hover {
    ─────────────────────────────────────────────────────────────── */
 
 /* Two-column shell wraps the existing KC card so we don't disturb its
-   internal layout. On narrow screens the hero collapses above the form. */
+   internal layout. Login form stays in its original (left) position;
+   marketing hero sits in the right column. On narrow screens the
+   hero stacks below the form (form remains the primary action). */
 .sp-shell {
   display: flex !important;
   flex-direction: row !important;
@@ -374,8 +376,17 @@ a[href*="login-actions/reset-credentials"]:hover {
   padding: 0 16px !important;
   flex-wrap: wrap;
 }
+/* Explicit order: form left, hero right. JS injects [hero, form] in
+   DOM order; the order properties below flip them visually without
+   asking the JS to re-shuffle the DOM. */
+.sp-form-panel { order: 1 !important; }
+.sp-hero       { order: 2 !important; }
+
 @media (max-width: 880px) {
   .sp-shell { flex-direction: column !important; gap: 18px !important; }
+  /* Stacked: form on top (primary action), hero below it. */
+  .sp-form-panel { order: 1 !important; }
+  .sp-hero       { order: 2 !important; }
 }
 
 .sp-form-panel {
@@ -529,21 +540,66 @@ a[href*="login-actions/reset-credentials"]:hover {
   max-width: 1080px !important;
   margin: 8px auto 24px auto !important;
   padding: 16px 20px !important;
-  text-align: center !important;
-  color: var(--sp-muted) !important;
-  font-size: 12.5px !important;
-  line-height: 1.55 !important;
+  color: var(--sp-sub) !important;
+  font-size: 13px !important;
+  line-height: 1.6 !important;
 }
+
+/* Privacy + Data Protection summary cards */
+.sp-privacy__summary {
+  background: rgba(15, 15, 34, 0.6) !important;
+  border: 1px solid var(--sp-border) !important;
+  border-left: 3px solid var(--solar-gold) !important;
+  border-radius: 10px !important;
+  padding: 14px 18px !important;
+  margin: 10px auto !important;
+  max-width: 880px !important;
+}
+.sp-privacy__heading {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  font-weight: 800 !important;
+  color: var(--solar-gold) !important;
+  font-size: 13px !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase !important;
+  margin-bottom: 6px !important;
+}
+.sp-privacy__icon {
+  display: inline-flex !important;
+  width: 22px !important;
+  height: 22px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(245,158,11,0.15) !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+}
+.sp-privacy__body {
+  color: var(--sp-text) !important;
+  font-size: 13px !important;
+  line-height: 1.6 !important;
+  margin: 0 !important;
+  font-weight: 400 !important;
+}
+
+/* Link row + copyright row */
 .sp-privacy__row {
-  margin: 4px 0 !important;
+  margin: 8px 0 !important;
+  text-align: center !important;
 }
-.sp-privacy__row a {
+.sp-privacy__links {
+  margin-top: 16px !important;
+}
+.sp-privacy__links a {
   color: var(--solar-gold) !important;
   font-weight: 700 !important;
   text-decoration: none !important;
   margin: 0 2px !important;
+  font-size: 13px !important;
 }
-.sp-privacy__row a:hover {
+.sp-privacy__links a:hover {
   color: var(--solar-orange) !important;
   text-decoration: underline !important;
 }
@@ -551,12 +607,10 @@ a[href*="login-actions/reset-credentials"]:hover {
   margin: 0 6px !important;
   color: var(--sp-border) !important;
 }
-.sp-privacy__fineprint {
-  max-width: 760px !important;
-  margin: 8px auto 0 auto !important;
+.sp-privacy__copy {
   color: var(--sp-muted) !important;
-  font-size: 11.5px !important;
-  font-style: italic !important;
+  font-size: 12px !important;
+  margin-top: 6px !important;
 }
 
 /* When sp-enhance has mounted, the body background gets the radial

@@ -95,21 +95,52 @@
   function buildFooter() {
     var year = (new Date()).getFullYear();
     return el('footer', { className: 'sp-privacy', 'data-sp-injected': '1' }, [
-      el('div', { className: 'sp-privacy__row' }, [
-        el('span', null, ['© ' + year + ' AI App Invent -- SolarPro Global']),
+
+      // ── Privacy summary ────────────────────────────────────────
+      el('div', { className: 'sp-privacy__summary' }, [
+        el('div', { className: 'sp-privacy__heading' }, [
+          el('span', { className: 'sp-privacy__icon', 'aria-hidden':'true' }, ['\u{1F512}']),
+          el('span', null, ['Privacy at a glance']),
+        ]),
+        el('p', { className: 'sp-privacy__body' }, [
+          'We collect only the data we need to run SolarPro for you -- your ' +
+          'account profile, the solar designs you create, and a payment ' +
+          'reference when you subscribe. We never store card numbers (Paystack / ' +
+          'Stripe handle those) and we do not sell your personal data to anyone. ' +
+          'You can read, export, correct or delete your data from your account ' +
+          'at any time.',
+        ]),
       ]),
-      el('div', { className: 'sp-privacy__row' }, [
-        el('a', { href: 'https://solarpro.aiappinvent.com/privacy', target: '_blank', rel: 'noopener' }, ['Privacy Policy']),
+
+      // ── Data-protection summary ────────────────────────────────
+      el('div', { className: 'sp-privacy__summary' }, [
+        el('div', { className: 'sp-privacy__heading' }, [
+          el('span', { className: 'sp-privacy__icon', 'aria-hidden':'true' }, ['\u{1F6E1}']),
+          el('span', null, ['Data Protection at a glance']),
+        ]),
+        el('p', { className: 'sp-privacy__body' }, [
+          'Lawful bases: contract, legitimate interests, and your consent. ' +
+          'Retention: account data for the life of the account + 12 months; ' +
+          'payment references for 7 years to satisfy tax law; audit + auth logs ' +
+          'for 1 year. Hosting: Render (US); transactional email via Brevo (EU). ' +
+          'Identity is managed by Keycloak (Apache 2.0, self-hosted) -- ' +
+          'credentials never leave SolarPro infrastructure. Your rights of ' +
+          'access, rectification, erasure, restriction, portability, objection ' +
+          'and complaint to a supervisory authority are honoured within 30 ' +
+          'days at support@aiappinvent.com.',
+        ]),
+      ]),
+
+      // ── Links + copyright ──────────────────────────────────────
+      el('div', { className: 'sp-privacy__row sp-privacy__links' }, [
+        el('a', { href: 'https://solarpro.aiappinvent.com/privacy',         target: '_blank', rel: 'noopener' }, ['Privacy Policy']),
         el('span', { className: 'sp-privacy__sep' }, ['•']),
-        el('a', { href: 'https://solarpro.aiappinvent.com/terms',   target: '_blank', rel: 'noopener' }, ['Terms of Service']),
+        el('a', { href: 'https://solarpro.aiappinvent.com/terms',           target: '_blank', rel: 'noopener' }, ['Terms of Service']),
         el('span', { className: 'sp-privacy__sep' }, ['•']),
         el('a', { href: 'https://solarpro.aiappinvent.com/data-protection', target: '_blank', rel: 'noopener' }, ['Data Protection']),
       ]),
-      el('div', { className: 'sp-privacy__row sp-privacy__fineprint' }, [
-        'Identity managed by Keycloak (Apache 2.0). Authentication credentials ' +
-        'never leave SolarPro infrastructure. Personal data is processed under ' +
-        'a lawful basis -- see Data Protection for retention windows, your ' +
-        'rights of access and erasure, and the data-processor list.',
+      el('div', { className: 'sp-privacy__row sp-privacy__copy' }, [
+        '© ' + year + ' AI App Invent -- SolarPro Global -- All rights reserved.',
       ]),
     ]);
   }

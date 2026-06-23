@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Data Protection — SolarPro Global{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:860px">
+
+  <div class="mb-5 text-center">
+    <div style="font-size:40px">🛡️</div>
+    <h2 class="fw-black mt-3">Data Protection Statement</h2>
+    <p class="text-muted">Last updated: 23 June 2026 &nbsp;|&nbsp; Effective for all accounts</p>
+    <div class="d-flex justify-content-center gap-3 mt-3">
+      <a href="/privacy" class="btn btn-sm btn-outline-secondary">Privacy Policy</a>
+      <a href="/terms" class="btn btn-sm btn-outline-secondary">Terms of Service</a>
+      <a href="/register" class="btn btn-sm" style="background:#f59e0b;color:#000;font-weight:700">Create Account</a>
+    </div>
+  </div>
+
+  <div class="solar-card p-4 mb-4" style="border-color:rgba(14,165,233,.3)">
+    <p class="mb-0" style="color:#0ea5e9;font-weight:600;font-size:14px">
+      <i class="bi bi-shield-check me-2"></i>
+      This statement summarises how SolarPro Global protects your personal data: the lawful bases we rely on, how long we keep your data, who we share it with, where it is stored, and the rights you can exercise at any time.
+    </p>
+  </div>
+
+  {% macro section(id, title) %}
+  <div id="{{ id }}" class="solar-card p-4 mb-3">
+    <h5 class="fw-bold mb-3" style="color:#0ea5e9">{{ title }}</h5>
+  {% endmacro %}
+
+  {{ section("d1", "1. Data Controller") }}
+    <p class="mb-0">SolarPro Global, operated by AI App Invent, is the data controller for personal data processed through the SolarPro platform. Enquiries about this statement, requests to exercise your rights, and complaints can be sent to <a href="mailto:support@aiappinvent.com" style="color:#a78bfa">support@aiappinvent.com</a>.</p>
+  </div>
+
+  {{ section("d2", "2. Lawful Bases for Processing") }}
+    <p>We process your personal data under the following lawful bases:</p>
+    <ul class="mb-0">
+      <li><strong>Contract</strong> — to provide the SolarPro service to you (account, designs, BOQs, proposals, payments).</li>
+      <li><strong>Legitimate interests</strong> — to keep the platform secure, prevent fraud, and improve the product through aggregated usage analytics. We balance these interests against your rights and freedoms.</li>
+      <li><strong>Consent</strong> — for optional features such as marketing emails, beta-feedback follow-ups, and analytics cookies you opt into. You can withdraw consent at any time.</li>
+      <li><strong>Legal obligation</strong> — to meet tax, accounting, anti-fraud, and law-enforcement-cooperation duties when required.</li>
+    </ul>
+  </div>
+
+  {{ section("d3", "3. Categories of Data") }}
+    <p>The complete list is in our <a href="/privacy" style="color:#a78bfa">Privacy Policy §2</a>. In summary: account identifiers (name, email, username, company, country), project engineering inputs you submit, payment references (no card numbers), and usage data (IP, browser, pages visited, error logs).</p>
+    <p class="mb-0">We do not knowingly process special-category data (health, biometrics, political opinions, religious beliefs). Do not submit such data to the platform.</p>
+  </div>
+
+  {{ section("d4", "4. Retention Periods") }}
+    <p>We keep your data only as long as we need it:</p>
+    <ul class="mb-0">
+      <li><strong>Account data</strong> — for the life of your account plus 12 months after closure, to allow reactivation and resolve disputes.</li>
+      <li><strong>Project / design data</strong> — for the life of your account; deleted within 90 days of account closure.</li>
+      <li><strong>Payment references</strong> — 7 years, to satisfy tax/accounting law in the jurisdictions we operate in.</li>
+      <li><strong>Support communications</strong> — 3 years from last interaction.</li>
+      <li><strong>Audit and security logs</strong> — 1 year (rolling).</li>
+      <li><strong>Authentication events (Keycloak)</strong> — admin events 90 days, login successes/failures 30 days.</li>
+    </ul>
+  </div>
+
+  {{ section("d5", "5. Where Your Data Is Stored") }}
+    <p>Production data is stored on Render Inc. (US) infrastructure. We use Render's managed PostgreSQL service, hosted in the United States. Identity records (managed by Keycloak) live in the same PostgreSQL instance under a dedicated, locked-down schema.</p>
+    <p class="mb-0">Transactional email is sent via Brevo (Sendinblue, EU). Card payments are processed by Paystack (Nigeria/global) and Stripe (US/global). Cross-border transfers rely on Standard Contractual Clauses or equivalent safeguards published by each processor.</p>
+  </div>
+
+  {{ section("d6", "6. Processors We Share Data With") }}
+    <ul class="mb-0">
+      <li><strong>Render</strong> — application hosting + managed database (US).</li>
+      <li><strong>Brevo (Sendinblue)</strong> — transactional + verification email (EU).</li>
+      <li><strong>Paystack</strong> — card payments for accounts in supported African markets.</li>
+      <li><strong>Stripe</strong> — card payments for accounts elsewhere.</li>
+      <li><strong>OpenRouter / Ollama</strong> — AI assistant model routing. Prompts you submit to the in-app helpline pass through these services; we never send credentials, financial data, or full project records.</li>
+      <li><strong>Cloudflare</strong> — DNS + DDoS protection + TLS termination.</li>
+      <li><strong>Keycloak (Apache 2.0, self-hosted)</strong> — identity and access management. Runs on our infrastructure; no third-party identity vendor sees your credentials.</li>
+    </ul>
+  </div>
+
+  {{ section("d7", "7. Your Rights") }}
+    <p>You can exercise the following rights at any time by emailing <a href="mailto:support@aiappinvent.com" style="color:#a78bfa">support@aiappinvent.com</a> (we respond within 30 days):</p>
+    <ul class="mb-0">
+      <li><strong>Access</strong> — receive a copy of the personal data we hold about you.</li>
+      <li><strong>Rectification</strong> — correct inaccurate data. Most fields you can update yourself from <em>Account → Settings</em>.</li>
+      <li><strong>Erasure</strong> — delete your account and project data (subject to retention rules in §4).</li>
+      <li><strong>Restriction</strong> — pause processing while a dispute is resolved.</li>
+      <li><strong>Portability</strong> — receive your project data in a machine-readable format (JSON or CSV).</li>
+      <li><strong>Objection</strong> — object to processing relying on legitimate interests, including direct marketing.</li>
+      <li><strong>Withdraw consent</strong> — for any processing previously based on consent.</li>
+      <li><strong>Complain</strong> — to a competent supervisory authority in your country.</li>
+    </ul>
+  </div>
+
+  {{ section("d8", "8. Security Measures") }}
+    <ul class="mb-0">
+      <li>All traffic encrypted in transit (TLS 1.2+, HSTS, Cloudflare).</li>
+      <li>Database access restricted to the application service account; row-level security on tenant tables.</li>
+      <li>Authentication migrated to Keycloak (OIDC + PKCE S256, refresh-token rotation, optional MFA).</li>
+      <li>Audit log on every authentication event, every admin action, every cross-tenant access attempt.</li>
+      <li>Quarterly review of access privileges; immediate revocation on departure.</li>
+      <li>Dependency vulnerability scanning (pip-audit / Trivy) on every release.</li>
+    </ul>
+  </div>
+
+  {{ section("d9", "9. Children") }}
+    <p class="mb-0">SolarPro is not intended for users under 18. We do not knowingly collect data from children. If we learn we have collected such data, we delete it.</p>
+  </div>
+
+  {{ section("d10", "10. Changes to This Statement") }}
+    <p class="mb-0">Material changes will be announced via email and posted at the top of this page with a new "Last updated" date. Continued use of the platform after a change indicates acceptance of the revised statement.</p>
+  </div>
+
+  <div class="text-center mt-4 text-muted" style="font-size:13px">
+    Questions? Email <a href="mailto:support@aiappinvent.com" style="color:#a78bfa">support@aiappinvent.com</a>
+  </div>
+
+</div>
+{% endblock %}
