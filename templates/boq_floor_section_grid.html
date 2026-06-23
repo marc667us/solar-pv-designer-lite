@@ -253,6 +253,55 @@
         document.querySelectorAll('tr.boq-row .boq-basic').forEach(function(b){ window._boqRow(b); });
       });
     });
+
+    // Submit guard -- block the form when there is nothing to save.
+    // The catalog pre-fills description + basic and pre-ticks the row, but
+    // it CANNOT know what Qty the owner wants. Without this guard, hitting
+    // any Save / Generate button while every Qty is blank causes the server
+    // to silently skip all rows and redirect to an empty BOQ page -- the
+    // "Generate BOQ button does nothing" bug.
+    var formEl = document.querySelector('form[action*="grid/save"]');
+    if (formEl) {
+      formEl.addEventListener('submit', function(e){
+        var btn = (e.submitter || document.activeElement || {});
+        var action = (btn && btn.value) || 'back';
+        var savable = 0;
+        var missingQty = 0;
+        document.querySelectorAll('tr.boq-row').forEach(function(tr){
+          var tick = tr.querySelector('.boq-tick');
+          if (!tick || !tick.checked) return;
+          var q = parseFloat((tr.querySelector('.boq-qty').value || '0'));
+          var b = parseFloat((tr.querySelector('.boq-basic').value || '0'));
+          var d = (tr.querySelector('.boq-desc').value || '').trim();
+          if (d && q > 0 && b > 0) { savable++; }
+          else if (d && b > 0 && (!q || q <= 0)) { missingQty++; }
+        });
+        if (savable === 0) {
+          e.preventDefault();
+          var label = (action === 'generate') ? 'Generate BOQ' : 'Save';
+          var msg = 'Nothing to ' + label + '.\n\n';
+          if (missingQty > 0) {
+            msg += missingQty + ' ticked row(s) have a description and price but no Qty.\n'
+                +  'Enter Qty in at least one row, then try again.';
+          } else {
+            msg += 'Tick at least one row and make sure its Description, Qty, and Basic price are all filled in.';
+          }
+          alert(msg);
+          // Focus the first ticked row's qty cell, if any.
+          var firstTickedQty = null;
+          document.querySelectorAll('tr.boq-row').forEach(function(tr){
+            if (firstTickedQty) return;
+            var tick = tr.querySelector('.boq-tick');
+            if (tick && tick.checked) {
+              var q = tr.querySelector('.boq-qty');
+              if (q && (!q.value || parseFloat(q.value) <= 0)) firstTickedQty = q;
+            }
+          });
+          if (firstTickedQty) { firstTickedQty.focus(); firstTickedQty.select && firstTickedQty.select(); }
+          return false;
+        }
+      });
+    }
   })();
 </script>
 {% endblock %}

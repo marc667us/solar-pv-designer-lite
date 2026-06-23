@@ -160,22 +160,57 @@ aside .solar-card {
 .pf-v5-c-form__helper-text,
 .pf-v5-c-helper-text__item-text { color: var(--sp-muted) !important; font-size: 12px !important; }
 
-/* PF5 input group (used when a password input has an eye-toggle) */
+/* PF5 input group (used when a password input has an eye-toggle).
+   The wrapper carries the visible border so its outer dimensions must
+   match the plain .pf-v5-c-form-control above (46px tall, 8px radius,
+   1px border) -- otherwise the password row looks taller/shorter than
+   the username/email rows around it. */
 .pf-v5-c-input-group {
   border:        1px solid var(--sp-border) !important;
   border-radius: 8px !important;
   background:    rgba(255, 255, 255, .04) !important;
   overflow:      hidden;
+  display:       flex !important;
+  align-items:   stretch !important;
+  min-height:    46px !important;
+  width:         100% !important;
+  box-sizing:    border-box !important;
+}
+.pf-v5-c-input-group:focus-within {
+  border-color: var(--sp-accent) !important;
+  box-shadow:   0 0 0 .2rem rgba(245, 158, 11, .18) !important;
 }
 .pf-v5-c-input-group .pf-v5-c-form-control {
-  border:     none !important;
-  background: transparent !important;
+  border:        none !important;
+  background:    transparent !important;
+  box-shadow:    none !important;
+  min-height:    0 !important;
+  height:        auto !important;
+  flex:          1 1 auto !important;
+  border-radius: 0 !important;
+  padding:       .65rem .9rem !important;
 }
+.pf-v5-c-input-group .pf-v5-c-form-control:focus,
+.pf-v5-c-input-group .pf-v5-c-form-control:focus-within,
+.pf-v5-c-input-group .pf-v5-c-form-control:focus-visible {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.pf-v5-c-input-group .pf-v5-c-input-group__item {
+  display:     flex !important;
+  align-items: stretch !important;
+}
+.pf-v5-c-input-group .pf-v5-c-input-group__item.pf-m-fill { flex: 1 1 auto !important; }
 .pf-v5-c-input-group .pf-v5-c-button {
-  background: transparent !important;
-  color:      var(--sp-sub) !important;
-  border:     none !important;
+  background:  transparent !important;
+  color:       var(--sp-sub) !important;
+  border:      none !important;
+  border-radius: 0 !important;
+  padding:     0 .75rem !important;
+  min-height:  0 !important;
+  align-self:  stretch !important;
 }
+.pf-v5-c-input-group .pf-v5-c-button:hover { color: var(--sp-text) !important; background: rgba(255,255,255,.04) !important; }
 
 /* PF5 primary submit button -- match .btn-solar */
 .pf-v5-c-button.pf-m-primary {

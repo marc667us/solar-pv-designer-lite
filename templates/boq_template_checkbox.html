@@ -277,6 +277,69 @@
         document.querySelectorAll('tr.boq-tpl-row .boq-basic').forEach(function(b){ window._boqTplRow(b); });
       });
     });
+
+    // Submit guard -- block Generate BOQ when nothing has Qty set.
+    // Without this, the template pre-fills description + basic and pre-ticks
+    // every row, but Qty is left blank by default -- so clicking Generate
+    // posts the form, every row gets server-skipped (qty<=0), and the
+    // redirect lands on an empty BOQ page with no useful indicator of why.
+    var formEl = document.querySelector('form[action*="template/"][action*="/save"]');
+    if (formEl) {
+      formEl.addEventListener('submit', function(e){
+        var savable = 0;
+        var missingQty = 0;
+        document.querySelectorAll('tr.boq-tpl-row').forEach(function(tr){
+          var tick = tr.querySelector('.boq-tick');
+          // Custom rows have no tick checkbox; they're always considered.
+          var checked = (tick) ? tick.checked : true;
+          if (!checked) return;
+          var qInput = tr.querySelector('.boq-qty') || tr.querySelector('input[name="custom_qty[]"]');
+          var bInput = tr.querySelector('.boq-basic') || tr.querySelector('input[name="custom_basic[]"]');
+          var dInput = tr.querySelector('input[name="desc[' + (tr.dataset.idx || '') + ']"]')
+                   || tr.querySelector('input[name="custom_desc[]"]');
+          var q = parseFloat((qInput && qInput.value) || '0');
+          var b = parseFloat((bInput && bInput.value) || '0');
+          var dHasText = dInput ? (dInput.value || '').trim().length > 0
+                                : (tr.textContent || '').trim().length > 0;
+          if (dHasText && q > 0 && b > 0) { savable++; }
+          else if (dHasText && b > 0 && (!q || q <= 0)) { missingQty++; }
+        });
+        // Also count custom rows posted via custom_desc[]
+        document.querySelectorAll('input[name="custom_desc[]"]').forEach(function(d){
+          if (!d.value || !d.value.trim()) return;
+          var tr = d.closest('tr') || d.closest('.row') || d.parentElement;
+          if (!tr) return;
+          var q = tr.querySelector('input[name="custom_qty[]"]');
+          var b = tr.querySelector('input[name="custom_basic[]"]');
+          if (q && parseFloat(q.value||'0') > 0 && b && parseFloat(b.value||'0') > 0) {
+            savable++;
+          }
+        });
+        if (savable === 0) {
+          e.preventDefault();
+          var msg = 'Nothing to Generate.\n\n';
+          if (missingQty > 0) {
+            msg += missingQty + ' ticked row(s) have a description and price but no Qty.\n'
+                +  'Enter Qty in at least one row, then click Generate BOQ again.';
+          } else {
+            msg += 'Tick at least one row and make sure its Qty and Basic price are filled in.\n'
+                +  'You can also add a Custom item under any section.';
+          }
+          alert(msg);
+          // Focus first ticked row whose Qty is blank.
+          var firstQty = null;
+          document.querySelectorAll('tr.boq-tpl-row').forEach(function(tr){
+            if (firstQty) return;
+            var tick = tr.querySelector('.boq-tick');
+            if (!tick || !tick.checked) return;
+            var q = tr.querySelector('.boq-qty');
+            if (q && (!q.value || parseFloat(q.value) <= 0)) firstQty = q;
+          });
+          if (firstQty) { firstQty.focus(); firstQty.select && firstQty.select(); }
+          return false;
+        }
+      });
+    }
   })();
 </script>
 {% endblock %}

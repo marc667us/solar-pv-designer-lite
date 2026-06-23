@@ -20543,6 +20543,24 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
     except Exception:
         pass
 
+    # When zero rows actually saved (every row was skipped because the
+    # catalog pre-tick leaves Qty blank by default), this used to look
+    # like the Generate button "did nothing": success toast + redirect
+    # to an empty BOQ page. Reroute owner back to the grid with a
+    # clearer warning so they can fill Qty and try again.
+    if saved == 0 and skipped > 0:
+        flash(
+            "Nothing saved -- " + str(skipped) + " row(s) were skipped because "
+            "Qty was blank, the description was empty, or the Basic price was 0. "
+            "Tick at least one row and enter a Qty greater than 0, then try again.",
+            "warning",
+        )
+        return redirect(url_for(
+            "boq_section_grid",
+            pid=pid, bid=bid, fid=fid, bill_no=bill_no, letter=letter,
+            title=title, bill_name=bill_name, sub=subsec,
+        ))
+
     flash(f"Saved {saved} item(s) under {letter}. {title}. "
           f"({skipped} blank row(s) ignored.)", "success")
 
@@ -20819,6 +20837,21 @@ def boq_template_save(pid, bid, fid, slug):
                   f"template={slug} saved={saved} skipped={skipped}")
     except Exception:
         pass
+    # When zero rows actually generated (template pre-fills basic + ticks
+    # but leaves Qty blank by default), the user otherwise lands on an
+    # empty BOQ page wondering why "Generate BOQ" did nothing. Redirect
+    # back to the template-picker with a clear warning instead.
+    if saved == 0:
+        flash(
+            "Nothing generated -- " + str(skipped) + " row(s) were skipped "
+            "(blank Qty, empty description, or Basic price = 0). Enter a Qty "
+            "for at least one ticked row, then click Generate BOQ again.",
+            "warning",
+        )
+        return redirect(url_for(
+            "boq_template_checkbox", pid=pid, bid=bid, fid=fid, slug=slug,
+        ))
+
     flash(f"Generated {saved} line(s) from template '{slug}'. ({skipped} skipped.)", "success")
     # "Generate BOQ" lands on the project BOQ view immediately.
     return redirect(url_for("boq_project_boq", pid=pid))
