@@ -347,6 +347,67 @@ def auth_callback():
         "roles": (claims.get("realm_access") or {}).get("roles") or [],
     }
 
+    # ALSO populate the legacy session keys (`user_id`, `username`) that
+    # the rest of solar's @login_required decorator + current_user()
+    # helper + base.html navbar all read. Without this, a successful KC
+    # authentication leaves session["user"] populated but session["user_id"]
+    # missing, so the very next request to /dashboard bounces back to
+    # /login -> KC -> /auth/callback -> /dashboard ... infinite loop
+    # (the "login succeeds in KC but doesn't actually log me in" bug).
+    #
+    # Auto-provision a solar `users` row if KC has a user that solar
+    # doesn't yet -- KC is the source of truth for identities post-cutover.
+    try:
+        from flask import current_app
+        get_db = current_app.extensions.get("get_db") if hasattr(current_app, "extensions") else None
+    except Exception:
+        get_db = None
+    if get_db is None:
+        # The Blueprint is registered on the main Flask app where get_db
+        # lives at module scope; import lazily to avoid a circular import.
+        try:
+            from web_app import get_db  # type: ignore[import-not-found]
+        except Exception as e:
+            log.warning("OIDC callback could not import get_db: %s", e)
+            get_db = None
+
+    if get_db is not None:
+        kc_username = (claims.get("preferred_username") or "").strip()
+        kc_email    = (claims.get("email") or "").strip().lower()
+        kc_name     = (claims.get("name") or kc_username or "").strip()
+        try:
+            with get_db() as c:
+                row = c.execute(
+                    "SELECT id, username FROM users "
+                    "WHERE lower(username)=lower(?) OR lower(email)=lower(?) LIMIT 1",
+                    (kc_username, kc_email),
+                ).fetchone()
+                if row is None and kc_username:
+                    # KC-side user not yet present in solar -- provision a
+                    # minimal `users` row. password_hash stays NULL because
+                    # the user can ONLY authenticate via KC from now on.
+                    c.execute(
+                        "INSERT INTO users (username, email, name, plan, is_admin, created_at) "
+                        "VALUES (?, ?, ?, 'free', 0, CURRENT_TIMESTAMP)",
+                        (kc_username, kc_email, kc_name),
+                    )
+                    row = c.execute(
+                        "SELECT id, username FROM users WHERE lower(username)=lower(?) LIMIT 1",
+                        (kc_username,),
+                    ).fetchone()
+                if row is not None:
+                    session["user_id"]  = row["id"]
+                    session["username"] = row["username"]
+                else:
+                    log.warning(
+                        "OIDC callback: could not resolve solar user for "
+                        "preferred_username=%r email=%r -- session['user_id'] "
+                        "NOT set; @login_required will bounce.",
+                        kc_username, kc_email,
+                    )
+        except Exception as e:
+            log.exception("OIDC callback: legacy-session population failed: %s", e)
+
     # Refresh token in HttpOnly cookie. Inaccessible to JavaScript;
     # SameSite=Lax keeps it CSRF-safe across same-site nav.
     response = make_response(redirect(next_url))

@@ -160,6 +160,26 @@ aside .solar-card {
 .pf-v5-c-form__helper-text,
 .pf-v5-c-helper-text__item-text { color: var(--sp-muted) !important; font-size: 12px !important; }
 
+/* PF5 helper-text error variant -- register form field-level errors
+   ("Please specify username", "Invalid email", etc.) must be RED, not
+   muted, otherwise they disappear into the form chrome and the user
+   thinks the registration silently failed. */
+.pf-v5-c-helper-text__item.pf-m-error,
+.pf-v5-c-helper-text__item.pf-m-error .pf-v5-c-helper-text__item-text,
+.pf-v5-c-helper-text__item.pf-m-error .pf-v5-c-helper-text__item-icon,
+.pf-v5-c-form__helper-text.pf-m-error,
+.kc-feedback-text { color: #fca5a5 !important; }
+
+/* PF5 input error state -- mark the field itself red so the user can
+   see which input failed validation. */
+.pf-v5-c-form-control[aria-invalid="true"],
+.pf-v5-c-form-control.pf-m-error,
+.pf-v5-c-input-group.pf-m-error,
+.pf-v5-c-input-group:has(.pf-v5-c-form-control[aria-invalid="true"]) {
+  border-color: #ef4444 !important;
+  box-shadow:   0 0 0 .2rem rgba(239, 68, 68, .18) !important;
+}
+
 /* PF5 input group (used when a password input has an eye-toggle).
    The wrapper carries the visible border so its outer dimensions must
    match the plain .pf-v5-c-form-control above (46px tall, 8px radius,
