@@ -361,56 +361,85 @@ a[href*="login-actions/reset-credentials"]:hover {
    structure contract.
    ─────────────────────────────────────────────────────────────── */
 
-/* Two-column shell wraps the existing KC card so we don't disturb its
-   internal layout. Login form stays in its original (left) position;
-   marketing hero sits in the right column. On narrow screens the
-   hero stacks below the form (form remains the primary action). */
+/* Two-column shell wraps the existing KC card. Login form stays on
+   the LEFT (its original position); marketing hero sits on the RIGHT.
+   The two columns sit flush -- no centre gap, no empty middle. On
+   narrow screens the form stacks on top of the hero (form remains
+   the primary action). */
 .sp-shell {
   display: flex !important;
   flex-direction: row !important;
   align-items: stretch !important;
   justify-content: center !important;
-  gap: 28px !important;
-  max-width: 1080px !important;
+  gap: 0 !important;
+  max-width: 1100px !important;
   margin: 32px auto !important;
   padding: 0 16px !important;
   flex-wrap: wrap;
 }
 /* Explicit order: form left, hero right. JS injects [hero, form] in
-   DOM order; the order properties below flip them visually without
-   asking the JS to re-shuffle the DOM. */
+   DOM order; order: flips them visually without re-shuffling DOM. */
 .sp-form-panel { order: 1 !important; }
 .sp-hero       { order: 2 !important; }
 
 @media (max-width: 880px) {
-  .sp-shell { flex-direction: column !important; gap: 18px !important; }
+  .sp-shell { flex-direction: column !important; gap: 14px !important; }
   /* Stacked: form on top (primary action), hero below it. */
   .sp-form-panel { order: 1 !important; }
   .sp-hero       { order: 2 !important; }
 }
 
+/* Form panel ~ 40% of width, hugs the KC card so there is no empty
+   strip between the card and the hero. flex-basis 420px keeps it
+   near the KC card's natural width (PF5 main is ~440px). */
 .sp-form-panel {
-  flex: 0 1 460px !important;
-  min-width: 320px !important;
+  flex: 0 1 420px !important;
+  min-width: 300px !important;
   display: flex !important;
   align-items: center !important;
-  justify-content: center !important;
+  justify-content: flex-end !important;  /* hug the seam */
+  padding-right: 0 !important;
 }
 
-/* The KC card sits inside .sp-form-panel; let it own its own width. */
+/* The KC card sits inside .sp-form-panel; let it own its width and
+   anchor against the right edge so the hero panel can sit flush. */
 .sp-form-panel > .card-pf,
 .sp-form-panel > .pf-v5-c-login__main {
   width: 100% !important;
-  max-width: 460px !important;
+  max-width: 420px !important;
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
 }
 
-/* ── Hero panel (left column) ─────────────────────────────────── */
+/* Hero takes the remaining width; grows to fill. */
 .sp-hero {
-  flex: 1 1 460px !important;
+  flex: 1 1 480px !important;
+  /* Round the right edge but not the left -- left edge butts against
+     the form card so they read as a single horizontal panel. */
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+
+/* On narrow screens the radius hack is wrong (cards stack vertically);
+   restore full radius on stacked layout. */
+@media (max-width: 880px) {
+  .sp-form-panel > .card-pf,
+  .sp-form-panel > .pf-v5-c-login__main {
+    border-radius: var(--sp-radius) !important;
+    max-width: 100% !important;
+  }
+  .sp-hero {
+    border-radius: var(--sp-radius) !important;
+  }
+  .sp-form-panel { justify-content: center !important; }
+}
+
+/* ── Hero panel (right column) ─────────────────────────────────── */
+/* Flex sizing + order rules above; this block owns the visual style. */
+.sp-hero {
   min-width: 320px !important;
   background: linear-gradient(135deg, #0f0f22 0%, #13133a 60%, #0f1428 100%) !important;
   border: 1px solid var(--sp-border) !important;
-  border-radius: var(--sp-radius) !important;
   padding: 28px 28px 24px !important;
   color: var(--sp-text) !important;
   position: relative !important;
