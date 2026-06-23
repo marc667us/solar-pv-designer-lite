@@ -37,9 +37,14 @@
 
         <#-- Realm-level message banner (locked-out / temporary-disabled / info) -->
         <#if displayMessage && message?has_content && (message.type != 'warning' || !isAppInitiatedAction??)>
-          <#assign alertClass = (message.type == 'error')?then('danger',
-                                (message.type == 'success')?then('success',
-                                (message.type == 'warning')?then('warning', 'info'))) />
+          <#assign alertClass = "info">
+          <#if message.type == 'error'>
+            <#assign alertClass = "danger">
+          <#elseif message.type == 'success'>
+            <#assign alertClass = "success">
+          <#elseif message.type == 'warning'>
+            <#assign alertClass = "warning">
+          </#if>
           <div class="alert alert-${alertClass} small py-2 px-3 mb-3" role="alert">
             ${kcSanitize(message.summary)?no_esc}
           </div>
