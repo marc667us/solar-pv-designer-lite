@@ -72,6 +72,14 @@ html, body {
   border-radius: var(--sp-radius);
   box-shadow:    0 8px 32px rgba(0, 0, 0, 0.5);
 }
+
+/* Side-pitch cards (left + right asides) sit beside the main login
+   card; cut their shadow down so the login card stays the visual
+   anchor. The asides are wrapped in <aside class="col-lg-3 ...">,
+   so we scope by parent tag. */
+aside .solar-card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
 .btn-solar {
   background: linear-gradient(135deg, var(--solar-gold), var(--solar-orange));
   border:     none;
