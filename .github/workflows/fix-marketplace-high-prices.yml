@@ -1,0 +1,104 @@
+# One-off: apply the marketplace price corrections to LIVE Postgres.
+# The seed in web_app.py is already updated, but the seed only
+# backfills EMPTY categories -- the avr + power_system categories are
+# already populated, so a fresh deploy wouldn't update them. This
+# workflow runs targeted UPDATE statements against the live solarpro
+# Postgres so the corrections take effect immediately.
+#
+# Idempotent (UPDATE is safe to re-run; sets the same value if already
+# corrected). Safe in production because each UPDATE is scoped by
+# exact model/sku string.
+
+name: Fix Marketplace High Prices
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install --quiet psycopg2-binary requests
+
+      - name: Resolve solarpro-postgres URL
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXTERNAL=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "external=$EXTERNAL" >> $GITHUB_OUTPUT
+
+      - name: Apply price corrections
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          python3 <<'PY'
+          import os, psycopg2
+          conn = psycopg2.connect(os.environ["DATABASE_URL"], sslmode="require")
+          conn.autocommit = False
+          cur = conn.cursor()
+
+          # (model_or_sku, old_price, new_price, descriptive_name)
+          # Apply via model field (which matches the SKU in the seed)
+          CORRECTIONS = [
+              ("SRT10KXLI",    165000.00,  90000.00, "10 kVA APC Smart-UPS On-Line (3P)"),
+              ("SRT20KXLI",    285000.00, 160000.00, "20 kVA APC Smart-UPS On-Line (3P)"),
+              ("S3-15K",       105000.00,  65000.00, "15 kVA Online UPS (Safenergy 3P)"),
+              ("S3-40K",       235000.00, 175000.00, "40 kVA Online UPS (Safenergy 3P)"),
+              ("S3-50K",       285000.00, 215000.00, "50 kVA Online UPS (Safenergy 3P)"),
+          ]
+
+          report = []
+          for model, old_p, new_p, label in CORRECTIONS:
+              # Match by model (SKU) string, scoped to the active catalogue
+              cur.execute(
+                  "SELECT id, name, price_usd FROM equipment_catalog "
+                  "WHERE model=%s AND is_active=1",
+                  (model,),
+              )
+              rows = cur.fetchall()
+              if not rows:
+                  report.append(f"  [skip] {model} -- no row matched")
+                  continue
+              for rid, name, current in rows:
+                  if abs(float(current) - new_p) < 0.5:
+                      report.append(f"  [have] {model} ({name}) already at {new_p:,.0f}")
+                      continue
+                  cur.execute(
+                      "UPDATE equipment_catalog SET price_usd=%s, "
+                      "updated_at=CURRENT_TIMESTAMP WHERE id=%s",
+                      (new_p, rid),
+                  )
+                  report.append(
+                      f"  [ok]   {model} ({name}) {current:,.0f} -> {new_p:,.0f}  "
+                      f"(seed-suggested {old_p:,.0f} -> {new_p:,.0f})"
+                  )
+          conn.commit()
+          cur.close(); conn.close()
+          print("\n".join(report))
+          print("\nDone -- live Postgres updated.")
+          PY
