@@ -361,24 +361,28 @@ a[href*="login-actions/reset-credentials"]:hover {
    structure contract.
    ─────────────────────────────────────────────────────────────── */
 
-/* Single-column stacked shell -- login form centered horizontally
-   at the top of the page (the classic KC "form in the middle" look),
-   the marketing hero centered below it, privacy footer below that.
-   Owner directive: "the form must at the center". */
+/* Single-column stacked shell -- login form + hero card sit flush
+   together (no empty band between them) and the whole stack is
+   centered both horizontally AND vertically in the viewport.
+   Owner directive: "remove the space in the middle and put the
+   text and login in the middle". */
 .sp-shell {
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
-  justify-content: flex-start !important;
-  gap: 24px !important;
-  max-width: 720px !important;
-  margin: 32px auto !important;
+  justify-content: center !important;
+  gap: 0 !important;                              /* no gap between cards */
+  width: 100% !important;
+  max-width: 440px !important;
+  min-height: calc(100vh - 220px) !important;     /* leave room for footer below */
+  margin: 24px auto 0 auto !important;
   padding: 0 16px !important;
 }
 .sp-form-panel { order: 1 !important; }
 .sp-hero       { order: 2 !important; }
 
-/* Form panel hugs its KC card and centers on the page. */
+/* Form panel hugs its KC card. Inner (bottom) corners squared so it
+   seams flush with the hero card directly below. */
 .sp-form-panel {
   width: 100% !important;
   max-width: 440px !important;
@@ -390,19 +394,28 @@ a[href*="login-actions/reset-credentials"]:hover {
 .sp-form-panel > .pf-v5-c-login__main {
   width: 100% !important;
   max-width: 440px !important;
-  border-radius: var(--sp-radius) !important;
+  border-top-left-radius: var(--sp-radius) !important;
+  border-top-right-radius: var(--sp-radius) !important;
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  /* Tighten the bottom border so the seam looks like one card. */
+  border-bottom: 0 !important;
 }
 
-/* Hero card matches the form width (440px) and centers directly
-   below it, so the two cards read as a single stacked column rather
-   than a wider banner overflowing the form's footprint. Owner
-   directive: 'put the text card under login in the middle'. */
+/* Hero card sits flush directly below the form, no gap. Top inner
+   corners squared to seam against the form's squared bottom; outer
+   (bottom) corners stay rounded. The two cards read as one continuous
+   centered column. */
 .sp-hero {
   width: 100% !important;
   max-width: 440px !important;
   margin-left: auto !important;
   margin-right: auto !important;
-  border-radius: var(--sp-radius) !important;
+  margin-top: -1px !important;                    /* nudge over the form's border line */
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+  border-bottom-left-radius: var(--sp-radius) !important;
+  border-bottom-right-radius: var(--sp-radius) !important;
 }
 
 /* ── Hero panel (right column) ─────────────────────────────────── */
