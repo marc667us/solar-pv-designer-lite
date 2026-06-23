@@ -425,29 +425,51 @@ a[href*="login-actions/reset-credentials"]:hover {
 /* ── Hero block (visual continuation of the form card) ──────────
    "make the column one" -- drop the hero's separate background,
    border and shadow so the marketing content reads as a single
-   panel with the form above it, not two stacked cards. */
+   panel with the form above it, not two stacked cards. Tight
+   padding so the gap to the form is small. */
 .sp-hero {
   min-width: 320px !important;
-  background: var(--sp-card-bg) !important;        /* match form card */
+  background: var(--sp-card-bg) !important;
   border: 1px solid var(--sp-border) !important;
-  border-top: 0 !important;                        /* form owns the top edge */
-  padding: 22px 28px 28px !important;
+  border-top: 0 !important;
+  padding: 6px 28px 22px !important;               /* tighter top */
   color: var(--sp-text) !important;
   position: relative !important;
   overflow: hidden !important;
-  box-shadow: none !important;                     /* shadow lives on form */
+  box-shadow: none !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 14px !important;
+  gap: 12px !important;
 }
-/* Subtle divider above the hero content so the eye knows the block
-   below the form is a related section, not a totally separate card. */
 .sp-hero::before {
   content: '';
   position: absolute;
   top: 0; left: 28px; right: 28px;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--sp-border) 30%, var(--sp-border) 70%, transparent);
+}
+
+/* Compress KC's form-card padding-bottom so the join sits close
+   to the last form element. KC v2 uses pf-v5-c-login__main with
+   ~32px bottom; legacy uses .card-pf with ~30px. Override both. */
+.sp-form-panel > .pf-v5-c-login__main,
+.sp-form-panel > .pf-v5-c-login__main-body,
+.sp-form-panel > .pf-v5-c-login__main-footer,
+.sp-form-panel .pf-v5-c-login__main-footer-band,
+.sp-form-panel > .card-pf,
+.sp-form-panel > .card-pf-body {
+  padding-bottom: 8px !important;
+  margin-bottom: 0 !important;
+}
+/* The KC form's own #kc-info / footer band sits at the very bottom
+   of the form card -- tighten that too. */
+.sp-form-panel #kc-info,
+.sp-form-panel #kc-info-wrapper,
+.sp-form-panel .pf-v5-c-login__main-footer-band {
+  margin-top: 8px !important;
+  margin-bottom: 8px !important;
+  padding-top: 8px !important;
+  padding-bottom: 0 !important;
 }
 /* subtle radial glow */
 .sp-hero::after {
