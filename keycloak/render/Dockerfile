@@ -56,6 +56,14 @@ COPY --from=builder /opt/keycloak/ /opt/keycloak/
 # Renaming to realm-prod.json keeps it distinct from the local-dev file.
 COPY keycloak/render/realm-prod.json /opt/keycloak/data/import/realm-prod.json
 
+# Bake the SolarPro login theme into the KC distribution. The realm's
+# loginTheme="solarpro" property selects this theme; KC reads themes
+# from /opt/keycloak/themes/<name>/ at request time so no rebuild is
+# required to update CSS (just redeploy the image after editing).
+# Theme inherits keycloak.v2 (PatternFly 5) and overrides login.css to
+# match the SolarPro web app palette (templates/base.html).
+COPY keycloak/render/themes/solarpro/ /opt/keycloak/themes/solarpro/
+
 # Render terminates TLS at its load balancer and forwards plain HTTP to
 # the container. KC_PROXY=edge tells Keycloak to trust the X-Forwarded-*
 # headers so SSL-required checks pass; KC_HOSTNAME_STRICT_HTTPS=false

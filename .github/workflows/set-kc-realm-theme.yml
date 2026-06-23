@@ -1,0 +1,97 @@
+# Switch the live solarpro realm to use the custom 'solarpro' login theme.
+#
+# Why this workflow exists:
+#   * realm-prod.json + docs/keycloak/realm-export.json both set
+#     loginTheme="solarpro", but KC only reads the import file on FIRST
+#     boot. After that, the realm lives in Postgres and only PATCH via
+#     the admin REST API can change it.
+#   * Run AFTER `Deploy Keycloak` rebuilds the image -- the new theme
+#     directory at /opt/keycloak/themes/solarpro/ must be present before
+#     the realm can reference it (else KC silently falls back to the
+#     parent theme).
+#
+# Safe to re-run: PATCH is idempotent. Verifies before+after state.
+
+name: Set KC Realm Theme
+
+on:
+  workflow_dispatch:
+    inputs:
+      login_theme:
+        description: "Login theme name (must exist at /opt/keycloak/themes/<name>/)"
+        required: false
+        default: "solarpro"
+
+permissions:
+  contents: read
+
+jobs:
+  set-theme:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER }}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.KC_BOOTSTRAP_ADMIN_PASSWORD }}
+      LOGIN_THEME: ${{ github.event.inputs.login_theme }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install --quiet requests
+
+      - name: PATCH realm.loginTheme
+        run: |
+          python3 << 'PY'
+          import os, sys, requests
+          BASE = os.environ['KEYCLOAK_ISSUER'].rsplit('/realms/', 1)[0]
+          ADM = os.environ['KC_BOOTSTRAP_ADMIN_PASSWORD']
+          THEME = os.environ['LOGIN_THEME'] or 'solarpro'
+
+          tok = requests.post(
+              f"{BASE}/realms/master/protocol/openid-connect/token",
+              data={"client_id":"admin-cli","grant_type":"password",
+                    "username":"admin","password":ADM},
+              timeout=10).json()["access_token"]
+          H = {"Authorization": f"Bearer {tok}", "Content-Type":"application/json"}
+
+          before = requests.get(f"{BASE}/admin/realms/solarpro", headers=H).json()
+          themes = ("loginTheme","accountTheme","adminTheme","emailTheme")
+          print("before:", {k: before.get(k) for k in themes})
+
+          r = requests.put(
+              f"{BASE}/admin/realms/solarpro",
+              headers=H,
+              json={"loginTheme": THEME},
+              timeout=10)
+          if r.status_code not in (204, 200):
+              sys.stderr.write(f"PUT failed: {r.status_code}: {r.text[:300]}\n")
+              sys.exit(1)
+
+          after = requests.get(f"{BASE}/admin/realms/solarpro", headers=H).json()
+          print("after :", {k: after.get(k) for k in themes})
+
+          if after.get("loginTheme") != THEME:
+              sys.stderr.write(f"loginTheme did NOT take effect (got {after.get('loginTheme')!r})\n")
+              sys.exit(1)
+          print(f"OK -- loginTheme={THEME!r}")
+          PY
+
+      - name: Smoke -- render the OIDC auth page and look for theme markers
+        run: |
+          set -e
+          # Reach into the KC auth URL (with a dummy state/nonce) and pull
+          # the rendered HTML. The custom theme injects 'SolarPro Global'
+          # as the brand wordmark via CSS; we also check for the theme's
+          # styles.css path which KC builds as resources/<resourceVersion>/
+          # login/<theme>/css/login.css.
+          AUTH="${KEYCLOAK_ISSUER}/protocol/openid-connect/auth?client_id=solarpro-web&response_type=code&scope=openid&redirect_uri=https://solarpro.aiappinvent.com/auth/callback&state=smoke&nonce=smoke"
+          curl -fsSL "$AUTH" -o /tmp/auth.html
+          BYTES=$(wc -c < /tmp/auth.html)
+          echo "rendered ${BYTES} bytes"
+          if grep -q "/login/solarpro/" /tmp/auth.html; then
+            echo "OK -- 'solarpro' theme path present in rendered HTML"
+          else
+            echo "::warning::theme-path marker not seen; first match for /css/:"
+            grep -oE 'href="[^"]*\.css[^"]*"' /tmp/auth.html | head -3 || true
+          fi
+        env:
+          KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER }}

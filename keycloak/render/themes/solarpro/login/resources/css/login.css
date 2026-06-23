@@ -1,0 +1,298 @@
+/*
+ * SolarPro login theme -- matches the dark-navy + solar-gold palette of
+ * the SolarPro web app (templates/base.html). Parent theme is keycloak.v2
+ * (PatternFly 5); these overrides target both the new PF5 classes
+ * (.pf-v5-c-*) AND the legacy login-pf-page classes for safety.
+ *
+ * Palette mirrors web_app.py base.html :root vars.
+ */
+
+:root {
+  --sp-bg: #0a0a14;
+  --sp-card-bg: #0f0f22;
+  --sp-card-bg-2: #13133a;
+  --sp-border: #1e1e3a;
+  --sp-text: #e2e2f0;
+  --sp-muted: #6868a0;
+  --sp-sub: #9090c0;
+  --solar-gold: #f59e0b;
+  --solar-orange: #ea580c;
+  --solar-blue: #0ea5e9;
+  --solar-green: #22c55e;
+  --sp-radius: 14px;
+  --sp-font: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+html, body {
+  background: var(--sp-bg) !important;
+  color: var(--sp-text) !important;
+  font-family: var(--sp-font) !important;
+  min-height: 100vh;
+}
+
+/* Outer page chrome -- v2 + legacy */
+.pf-v5-c-login,
+.pf-v5-c-background-image,
+.login-pf,
+.login-pf-page,
+.login-pf body {
+  background: var(--sp-bg) !important;
+  background-image: radial-gradient(circle at 20% 10%, rgba(245,158,11,0.08), transparent 40%),
+                    radial-gradient(circle at 80% 90%, rgba(14,165,233,0.08), transparent 40%) !important;
+}
+
+/* Card / main login container */
+.pf-v5-c-login__main,
+.pf-v5-c-login__container,
+.login-pf-page .card-pf,
+#kc-content,
+#kc-form-wrapper,
+.card-pf {
+  background: var(--sp-card-bg) !important;
+  border: 1px solid var(--sp-border) !important;
+  border-radius: var(--sp-radius) !important;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5) !important;
+  color: var(--sp-text) !important;
+}
+
+/* Card header gradient strip -- mirrors solar's .report-header::before */
+.pf-v5-c-login__main-header,
+.login-pf-page-header,
+#kc-header {
+  background: transparent !important;
+  position: relative;
+  padding-top: 16px !important;
+}
+.pf-v5-c-login__main-header::before,
+.login-pf-page-header::before,
+#kc-header::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--solar-gold), var(--solar-blue), #a78bfa);
+  border-radius: var(--sp-radius) var(--sp-radius) 0 0;
+}
+
+/* Headings + brand text */
+.pf-v5-c-login__main-header h1,
+.pf-v5-c-title,
+#kc-page-title,
+.login-pf-page h1,
+.login-pf-page h2,
+.kc-logo-text {
+  color: var(--sp-text) !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.5px !important;
+  background: linear-gradient(90deg, var(--solar-gold), var(--solar-blue)) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+
+/* Default Keycloak logo - hide, replace with SolarPro wordmark */
+#kc-header-wrapper,
+.pf-v5-c-brand {
+  background-image: none !important;
+  color: transparent !important;
+  font-size: 0 !important;
+  position: relative;
+  height: 56px;
+  margin-bottom: 8px;
+}
+#kc-header-wrapper::after,
+.pf-v5-c-brand::after {
+  content: 'SolarPro Global';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -0.6px;
+  background: linear-gradient(90deg, var(--solar-gold), var(--solar-blue));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-family: var(--sp-font);
+  white-space: nowrap;
+}
+
+/* Form labels */
+label,
+.pf-v5-c-form__label,
+.pf-v5-c-form__label-text,
+.control-label,
+#kc-form-wrapper label {
+  color: var(--sp-sub) !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* Inputs */
+input,
+input[type=text],
+input[type=password],
+input[type=email],
+.pf-v5-c-form-control,
+.form-control {
+  background: rgba(255,255,255,0.04) !important;
+  color: var(--sp-text) !important;
+  border: 1px solid var(--sp-border) !important;
+  border-radius: 8px !important;
+  padding: .6rem .85rem !important;
+  font-size: 15px !important;
+  transition: border-color .15s, box-shadow .15s !important;
+}
+input:focus,
+.pf-v5-c-form-control:focus,
+.form-control:focus {
+  border-color: var(--solar-gold) !important;
+  box-shadow: 0 0 0 2px rgba(245,158,11,0.18) !important;
+  outline: none !important;
+  background: rgba(255,255,255,0.06) !important;
+}
+input::placeholder,
+.pf-v5-c-form-control::placeholder {
+  color: var(--sp-muted) !important;
+}
+
+/* Primary button -- solar-gold gradient with black text */
+.pf-v5-c-button.pf-m-primary,
+.pf-v5-c-button.pf-m-primary:focus,
+input[type=submit],
+input[type=submit].btn-primary,
+button.btn-primary,
+.btn.btn-primary {
+  background: linear-gradient(135deg, var(--solar-gold), var(--solar-orange)) !important;
+  border: none !important;
+  color: #0a0a14 !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.3px !important;
+  border-radius: 8px !important;
+  padding: .65rem 1.1rem !important;
+  text-shadow: none !important;
+  box-shadow: 0 2px 8px rgba(245,158,11,0.25) !important;
+}
+.pf-v5-c-button.pf-m-primary:hover,
+input[type=submit]:hover,
+.btn.btn-primary:hover {
+  filter: brightness(1.1) !important;
+  color: #0a0a14 !important;
+}
+
+/* Secondary / link buttons */
+.pf-v5-c-button.pf-m-secondary,
+.btn.btn-default,
+.btn-default {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid var(--sp-border) !important;
+  color: var(--sp-text) !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+}
+.pf-v5-c-button.pf-m-secondary:hover,
+.btn.btn-default:hover {
+  background: rgba(255,255,255,0.08) !important;
+  color: var(--sp-text) !important;
+}
+
+/* Links -- solar-gold */
+a,
+a:visited,
+.pf-v5-c-button.pf-m-link {
+  color: var(--solar-gold) !important;
+  text-decoration: none !important;
+}
+a:hover {
+  color: var(--solar-orange) !important;
+  text-decoration: underline !important;
+}
+
+/* Alerts */
+.pf-v5-c-alert,
+.alert {
+  background: var(--sp-card-bg-2) !important;
+  border: 1px solid var(--sp-border) !important;
+  border-radius: 8px !important;
+  color: var(--sp-text) !important;
+}
+.pf-v5-c-alert.pf-m-danger,
+.alert-danger,
+.alert-error,
+#input-error,
+.pf-v5-c-form__helper-text.pf-m-error {
+  border-left: 3px solid #ef4444 !important;
+  color: #fca5a5 !important;
+}
+.pf-v5-c-alert.pf-m-success,
+.alert-success {
+  border-left: 3px solid var(--solar-green) !important;
+  color: #86efac !important;
+}
+.pf-v5-c-alert.pf-m-warning,
+.alert-warning {
+  border-left: 3px solid var(--solar-gold) !important;
+  color: #fcd34d !important;
+}
+
+/* Checkboxes / radios (remember-me etc.) */
+.pf-v5-c-check__input,
+input[type=checkbox],
+input[type=radio] {
+  accent-color: var(--solar-gold) !important;
+}
+.pf-v5-c-check__label,
+.checkbox label {
+  color: var(--sp-sub) !important;
+  font-size: 13px !important;
+}
+
+/* "Forgot password?" / "Don't have an account?" link cluster below the card */
+#kc-info,
+#kc-info-wrapper,
+.login-pf-signup,
+.pf-v5-c-login__main-footer-band {
+  color: var(--sp-muted) !important;
+  font-size: 13px !important;
+  margin-top: 1rem;
+}
+#kc-info a,
+.login-pf-signup a {
+  color: var(--solar-gold) !important;
+  font-weight: 700 !important;
+}
+
+/* Social-provider buttons (if any provider is configured later) */
+#kc-social-providers a {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid var(--sp-border) !important;
+  border-radius: 8px !important;
+  color: var(--sp-text) !important;
+}
+
+/* Footer attribution */
+.pf-v5-c-login__footer,
+.login-pf-footer {
+  color: var(--sp-muted) !important;
+  font-size: 12px !important;
+  text-align: center;
+  margin-top: 1.5rem;
+}
+
+/* Form group spacing */
+.pf-v5-c-form__group,
+.form-group {
+  margin-bottom: 1rem !important;
+}
+
+/* Required-field indicator */
+.pf-v5-c-form__label-required {
+  color: var(--solar-orange) !important;
+}
+
+/* Required-actions banner (UPDATE_PASSWORD etc.) */
+.pf-v5-c-login__main-header-desc {
+  color: var(--sp-sub) !important;
+}

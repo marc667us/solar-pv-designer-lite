@@ -61,7 +61,7 @@
   "webAuthnPolicyUserVerificationRequirement": "preferred",
   "webAuthnPolicyCreateTimeout": 0,
   "webAuthnPolicyAvoidSameAuthenticatorRegister": true,
-  "loginTheme": "keycloak.v2",
+  "loginTheme": "solarpro",
   "accountTheme": "keycloak.v2",
   "adminTheme": "keycloak.v2",
   "emailTheme": "keycloak",
