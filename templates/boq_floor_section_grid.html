@@ -73,7 +73,11 @@
       <div class="col-md-2"><label class="form-label small text-secondary mb-1">Contingency %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="contingency_pct" value="0"></div>
       <div class="col-md-3"><label class="form-label small text-secondary mb-1">VAT %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="vat_pct" value="0"></div>
     </div>
-    <div class="text-secondary small">Rate = Basic × (1 + OH% + Profit% + Contingency% + VAT%) / 100. Applied to every row in this section. Override individual lines by editing Basic.</div>
+    <div class="text-secondary small">
+      Compound build-up:
+      <span class="text-warning">Rate = (Supply + Install) × (1 + (OH% + Profit%)/100) × (1 + Cont%/100) × (1 + VAT%/100)</span>.
+      Supply defaults to Basic; Install defaults to 0. Override per-row in the Supply / Install columns. Matches GRA / FIRS / KRA tax-authority practice.
+    </div>
   </div>
 
   <div class="solar-card p-0 mb-3">
@@ -167,11 +171,15 @@
   // _boqAddRow() -- append a blank row that mirrors the structure above.
   (function(){
     function rates() {
+      // Compound build-up to match server-side _boq_safe_rate:
+      //   final = direct * (1 + (oh+prf)/100) * (1 + cnt/100) * (1 + vat/100)
+      // where direct = supply + install per row, applied at the row level.
+      // This helper returns the per-rate MULTIPLIER (everything except direct).
       var oh  = parseFloat(document.querySelector('[name=overhead_pct]').value || 0);
       var prf = parseFloat(document.querySelector('[name=profit_pct]').value || 0);
       var cnt = parseFloat(document.querySelector('[name=contingency_pct]').value || 0);
       var vat = parseFloat(document.querySelector('[name=vat_pct]').value || 0);
-      return 1 + (oh + prf + cnt + vat) / 100;
+      return (1 + (oh + prf) / 100) * (1 + cnt / 100) * (1 + vat / 100);
     }
     window._boqRow = function(el) {
       var tr = el.closest('tr.boq-row');

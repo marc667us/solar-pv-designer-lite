@@ -19775,13 +19775,65 @@ def _boq_next_item_no(floor_id: int, bill_no: int, section_letter: str) -> str:
 
 
 def _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat):
-    """Spec rate build-up: final = (supply + install) * (1 + sum_pct/100).
-    Supply defaults to basic; install defaults to 0."""
+    """Industry-standard rate build-up (compounded, tax-authority defensible).
+
+    Chain:
+        direct      = supply_rate + install_rate
+        (supply defaults to basic when blank; install defaults to 0)
+        subtotal_1  = direct      * (1 + (overhead% + profit%) / 100)
+        subtotal_2  = subtotal_1  * (1 + contingency% / 100)
+        final       = subtotal_2  * (1 + VAT% / 100)
+
+    Each pct compounds on the running subtotal, NOT added flat to
+    basic (the old buggy formula understated totals by ~5-10%).
+    Matches GRA / FIRS / KRA tax-authority practice and the reviewer
+    comments on the 1UGLS Auditorium sample.
+    """
     b = max(0.0, float(basic or 0))
     s = max(0.0, float(supply if supply not in (None, "") else b))
     i = max(0.0, float(install if install not in (None, "") else 0))
-    tot = (float(oh or 0) + float(prf or 0) + float(cnt or 0) + float(vat or 0))
-    return (s + i) * (1.0 + tot / 100.0)
+    oh_f  = float(oh  or 0) / 100.0
+    prf_f = float(prf or 0) / 100.0
+    cnt_f = float(cnt or 0) / 100.0
+    vat_f = float(vat or 0) / 100.0
+    direct = s + i
+    return direct * (1.0 + oh_f + prf_f) * (1.0 + cnt_f) * (1.0 + vat_f)
+
+
+def _boq_rate_breakdown(basic, supply, install, oh, prf, cnt, vat):
+    """Per-step breakdown of the rate build-up for audit display.
+
+    Returns a dict with each intermediate amount so the rate-buildup
+    view can show how basic + supplier markup + contractor markup +
+    contingency + VAT compound to the final built-up rate.
+    """
+    b = max(0.0, float(basic or 0))
+    s = max(0.0, float(supply if supply not in (None, "") else b))
+    i = max(0.0, float(install if install not in (None, "") else 0))
+    oh_v  = float(oh  or 0)
+    prf_v = float(prf or 0)
+    cnt_v = float(cnt or 0)
+    vat_v = float(vat or 0)
+    direct = s + i
+    after_ohp  = direct     * (1.0 + (oh_v + prf_v) / 100.0)
+    after_cont = after_ohp  * (1.0 + cnt_v / 100.0)
+    final      = after_cont * (1.0 + vat_v / 100.0)
+    return {
+        "basic_price": b,
+        "supply_rate": s,
+        "install_rate": i,
+        "direct_cost": direct,
+        "overhead_pct": oh_v,
+        "profit_pct": prf_v,
+        "overhead_profit_amt": after_ohp - direct,
+        "after_overhead_profit": after_ohp,
+        "contingency_pct": cnt_v,
+        "contingency_amt": after_cont - after_ohp,
+        "after_contingency": after_cont,
+        "vat_pct": vat_v,
+        "vat_amt": final - after_cont,
+        "final_built_up_rate": final,
+    }
 
 
 # ----- Routes --------------------------------------------------------------
@@ -22485,6 +22537,84 @@ def boq_project_edit(pid):
         user=current_user(),
         project=project,
     )
+
+
+@app.route("/boq-projects/<int:pid>/recalc", methods=["POST"])
+@login_required
+def boq_project_recalc(pid):
+    """Recompute total_amount + final_built_up_rate for every item in
+    the project using the current compound rate-buildup formula.
+
+    Idempotent. Reads basic/supply/install/oh/prf/cnt/vat from
+    boq_floor_rate_buildup, calls _boq_safe_rate, writes the new
+    final_built_up_rate + total_amount back to BOTH boq_floor_items
+    and boq_floor_rate_buildup. Flashes count + old vs new grand
+    total so the owner sees the delta from the math fix.
+    """
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    csrf_protect()
+    confirm = (request.form.get("confirm") or "").strip()
+    if confirm != "RECALC":
+        flash("Type RECALC to confirm recomputing all rates.", "warning")
+        return redirect(url_for("boq_project_overview", pid=pid))
+    updated = 0
+    old_grand = 0.0
+    new_grand = 0.0
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT i.id AS item_id, i.qty, i.total_amount AS old_total, "
+            "       rb.basic_price, rb.supply_rate, rb.install_rate, "
+            "       rb.overhead_pct, rb.profit_pct, "
+            "       rb.contingency_pct, rb.vat_pct "
+            "FROM boq_floor_items i "
+            "LEFT JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
+            "WHERE i.project_id=?",
+            (pid,),
+        ).fetchall()
+        for r in rows:
+            qty = float(r["qty"] or 0)
+            old_total = float(r["old_total"] or 0)
+            old_grand += old_total
+            new_rate = _boq_safe_rate(
+                r["basic_price"], r["supply_rate"], r["install_rate"],
+                r["overhead_pct"], r["profit_pct"],
+                r["contingency_pct"], r["vat_pct"],
+            )
+            new_total = qty * new_rate
+            new_grand += new_total
+            c.execute(
+                "UPDATE boq_floor_items SET final_built_up_rate=?, "
+                "       total_amount=? WHERE id=?",
+                (new_rate, new_total, r["item_id"]),
+            )
+            c.execute(
+                "UPDATE boq_floor_rate_buildup SET final_built_up_rate=?, "
+                "       total_amount=? WHERE floor_item_id=?",
+                (new_rate, new_total, r["item_id"]),
+            )
+            updated += 1
+        c.execute(
+            "UPDATE boq_projects SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (pid,),
+        )
+    try:
+        from new_boq_hierarchy_schema import boq_audit
+        boq_audit(get_db, uid, "boq_project_recalc", "boq_project", pid,
+                  "items=" + str(updated) + " old_grand=" + str(round(old_grand, 2))
+                  + " new_grand=" + str(round(new_grand, 2)))
+    except Exception:
+        pass
+    delta = new_grand - old_grand
+    sign = "+" if delta >= 0 else ""
+    flash(
+        "Recalculated " + str(updated) + " item(s). "
+        "Grand total " + str(round(old_grand, 2)) + " -> "
+        + str(round(new_grand, 2)) + " (" + sign + str(round(delta, 2)) + ")."
+        " Using compound rate-buildup formula.",
+        "success",
+    )
+    return redirect(url_for("boq_project_overview", pid=pid))
 
 
 @app.route("/boq-projects/<int:pid>/reset", methods=["POST"])

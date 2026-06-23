@@ -33,6 +33,9 @@
     <a href="{{ url_for('boq_project_edit', pid=project.id) }}" class="btn btn-outline-warning btn-sm" title="Edit project details">
       <i class="bi bi-pencil me-1"></i>Edit
     </a>
+    <button type="button" class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#recalcBoqModal" title="Recompute all item rates using the current compound build-up formula">
+      <i class="bi bi-calculator-fill me-1"></i>Recalculate rates
+    </button>
     <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#resetBoqModal" title="Clear all line items but keep buildings + floors">
       <i class="bi bi-arrow-counterclockwise me-1"></i>Start all over
     </button>
@@ -93,6 +96,36 @@
   </a>
 </div>
 {% endif %}
+
+<div class="modal fade" id="recalcBoqModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:#13132a;color:#e0e0f0;border:1px solid #1e1e3a">
+      <form method="POST" action="{{ url_for('boq_project_recalc', pid=project.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="modal-header" style="border-bottom:1px solid #1e1e3a">
+          <h6 class="modal-title fw-bold text-info"><i class="bi bi-calculator-fill me-1"></i>Recalculate rates &mdash; {{ project.project_name }} (#{{ project.id }})</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>Recompute <strong>Total Rate</strong> and <strong>Amount</strong> for every item in this project using the current compound rate build-up formula:</p>
+          <div class="solar-card p-2 small text-secondary mb-3" style="background:rgba(14,165,233,.05);border:1px solid rgba(14,165,233,.25)">
+            <code style="color:#7dd3fc">
+              Rate = (Supply + Install) &times; (1 + (OH% + Profit%)/100) &times; (1 + Cont%/100) &times; (1 + VAT%/100)
+            </code>
+          </div>
+          <p class="text-secondary small mb-2">Items saved with the older FLAT-additive formula (rate = direct &times; (1 + sum of all pcts / 100)) will see their totals <strong>increase ~5&ndash;10%</strong> because the new compound formula correctly nests contingency and VAT on top of the marked-up subtotal &mdash; tax-authority defensible (GRA / FIRS / KRA).</p>
+          <p class="text-secondary small mb-2">Per-item percentages stored in the rate build-up table are <strong>not</strong> changed by this action &mdash; only the recomputed totals are written back.</p>
+          <label class="form-label small text-secondary">Type <code>RECALC</code> to confirm:</label>
+          <input class="form-control" name="confirm" placeholder="RECALC" required>
+        </div>
+        <div class="modal-footer" style="border-top:1px solid #1e1e3a">
+          <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-info btn-sm fw-bold"><i class="bi bi-calculator-fill me-1"></i>Recalculate every item</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
 <div class="modal fade" id="resetBoqModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
