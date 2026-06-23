@@ -130,9 +130,9 @@ label,
   letter-spacing: 0.4px;
 }
 
-/* Inputs -- owner directive: 'reduce the height of the fields'.
-   Smaller vertical padding (was .6rem) + line-height locked so KC's
-   wrapper doesn't add extra space. */
+/* Inputs -- owner: 'reduce the size of the login fields'. Pushed
+   to a compact 30px row height; KC's PF5 wrapper sometimes forces
+   its own height so we lock both height + min-height + line-height. */
 input,
 input[type=text],
 input[type=password],
@@ -142,19 +142,35 @@ input[type=email],
   background: rgba(255,255,255,0.04) !important;
   color: var(--sp-text) !important;
   border: 1px solid var(--sp-border) !important;
-  border-radius: 8px !important;
-  padding: .35rem .75rem !important;
-  font-size: 14px !important;
-  line-height: 1.4 !important;
-  height: auto !important;
-  min-height: 34px !important;
+  border-radius: 6px !important;
+  padding: .2rem .65rem !important;
+  font-size: 13.5px !important;
+  line-height: 1.3 !important;
+  height: 30px !important;
+  min-height: 30px !important;
   transition: border-color .15s, box-shadow .15s !important;
 }
-/* Tighten KC's form-group spacing too so successive fields are
-   close together, not just smaller individually. */
+/* Same for the PF5 input groups + KC's username/password wrappers. */
+.pf-v5-c-form-control input,
+.pf-v5-c-input-group input,
+.pf-v5-c-form__group .pf-v5-c-form-control {
+  height: 30px !important;
+  min-height: 30px !important;
+}
+/* Tighten KC's form-group spacing so successive fields sit close. */
 .pf-v5-c-form__group,
 .form-group {
-  margin-bottom: .6rem !important;
+  margin-bottom: .5rem !important;
+}
+/* Submit button stays bigger than the input row so it's the clear
+   call-to-action, but trim a bit too. */
+.pf-v5-c-button.pf-m-primary,
+input[type=submit],
+button.btn-primary,
+.btn.btn-primary {
+  padding: .4rem 1rem !important;
+  min-height: 34px !important;
+  font-size: 13.5px !important;
 }
 input:focus,
 .pf-v5-c-form-control:focus,
@@ -456,6 +472,13 @@ a[href*="login-actions/reset-credentials"]:hover {
 /* Hide the logo + 'SolarPro Global' wordmark + tagline cluster --
    the page title already names the product. */
 .sp-hero__brand {
+  display: none !important;
+}
+
+/* Owner: 'remove the space and the text in the middle'. Hide the
+   marketing pitch paragraph -- the feature bullets already carry
+   the message and removing the pitch tightens the merged card. */
+.sp-hero__pitch {
   display: none !important;
 }
 
