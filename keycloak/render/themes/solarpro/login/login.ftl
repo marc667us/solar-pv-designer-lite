@@ -1,117 +1,64 @@
-<#--
-    login.ftl  --  byte-faithful mirror of templates/auth.html (mode=login).
-
-    The HTML below is structurally identical to the Jinja block in
-    templates/auth.html when rendered under base.html.  Every class name
-    is a Bootstrap 5.3.3 utility OR one of the two custom solar classes
-    (`solar-card`, `btn-solar`) defined in templates/base.html and
-    re-declared in login.css.
-
-    The only Keycloak-specific substitutions:
-      - <form action> points at ${url.loginAction} (KC handles CSRF itself)
-      - the "Forgot password?" link uses ${url.loginResetCredentialsUrl}
-      - the "Create account" link uses ${url.registrationUrl}
-      - the username input is pre-filled from ${login.username!''}
-      - a `credentialId` hidden field is added (KC requires it)
-      - inline KC error message rendered as a Bootstrap `alert alert-danger`
-      - field-level errors flip the input to `.is-invalid` (Bootstrap)
--->
 <#import "template.ftl" as layout>
-<@layout.registrationLayout displayMessage=!messagesPerField.existsError('username','password')
-                            displayInfo=realm.password && realm.registrationAllowed && !registrationDisabled??; section>
+<@layout.registrationLayout displayMessage=!messagesPerField.existsError('username','password') displayInfo=realm.password && realm.registrationAllowed && !registrationDisabled??; section>
 
   <#if section = "header">
     Welcome Back
-
   <#elseif section = "form">
 
-    <div class="row justify-content-center">
-    <div class="col-md-5 col-lg-4">
-      <div class="solar-card p-4 mt-4">
+    <form id="kc-form-login" class="solar-form" action="${url.loginAction}" method="post" autocomplete="off">
 
-        <div class="text-center mb-4">
-          <div style="font-size:36px">&#9728;&#65039;</div>
-          <h4 class="fw-bold mt-2">Welcome Back</h4>
-          <p class="text-secondary small">Sign in to your account.</p>
-        </div>
-
-        <#-- Realm-level message banner (locked-out / temporary-disabled / info) -->
-        <#if displayMessage && message?has_content && (message.type != 'warning' || !isAppInitiatedAction??)>
-          <#assign alertClass = "info">
-          <#if message.type == 'error'>
-            <#assign alertClass = "danger">
-          <#elseif message.type == 'success'>
-            <#assign alertClass = "success">
-          <#elseif message.type == 'warning'>
-            <#assign alertClass = "warning">
-          </#if>
-          <div class="alert alert-${alertClass} small py-2 px-3 mb-3" role="alert">
-            ${kcSanitize(message.summary)?no_esc}
-          </div>
-        </#if>
-
-        <form id="kc-form-login" method="post" action="${url.loginAction}" autocomplete="off">
-
-          <div class="mb-3">
-            <label class="form-label small fw-bold text-secondary" for="username">USERNAME</label>
-            <input id="username" name="username" type="text"
-                   value="${(login.username!'')}"
-                   class="form-control <#if messagesPerField.existsError('username','password')>is-invalid</#if>"
-                   placeholder="username"
-                   autocomplete="username"
-                   autofocus required/>
-          </div>
-
-          <div class="mb-3">
-            <div class="d-flex justify-content-between align-items-center mb-1">
-              <label class="form-label small fw-bold text-secondary mb-0" for="password">PASSWORD</label>
-              <#if realm.resetPasswordAllowed>
-                <a href="${url.loginResetCredentialsUrl}" class="small text-warning" style="font-size:11px">Forgot password?</a>
-              </#if>
-            </div>
-            <input id="password" name="password" type="password"
-                   class="form-control <#if messagesPerField.existsError('username','password')>is-invalid</#if>"
-                   placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
-                   autocomplete="current-password" required/>
-          </div>
-
-          <#-- Inline field-level error mirrors Bootstrap invalid-feedback styling -->
-          <#if messagesPerField.existsError('username','password')>
-            <div class="alert alert-danger small py-2 px-3 mb-3" role="alert">
-              ${kcSanitize(messagesPerField.getFirstError('username','password'))?no_esc}
-            </div>
-          </#if>
-
-          <#-- Remember-me toggle (Bootstrap form-check) -->
-          <#if realm.rememberMe && !usernameHidden??>
-            <div class="form-check mb-3">
-              <input class="form-check-input" type="checkbox" id="rememberMe" name="rememberMe"
-                     <#if login.rememberMe??>checked</#if>>
-              <label class="form-check-label small text-secondary" for="rememberMe">
-                Keep me signed in
-              </label>
-            </div>
-          </#if>
-
-          <#-- KC requires this hidden field on every login POST -->
-          <input type="hidden" id="id-hidden-input" name="credentialId"
-                 <#if auth.selectedCredential?has_content>value="${auth.selectedCredential}"</#if>/>
-
-          <button type="submit" name="login" id="kc-login" class="btn btn-solar w-100 mt-2">
-            Sign In
-          </button>
-        </form>
-
-        <#if realm.password && realm.registrationAllowed && !registrationDisabled??>
-          <div class="text-center mt-3 small text-secondary">
-            New user? <a href="${url.registrationUrl}" class="text-warning">Create account</a>
-          </div>
-        </#if>
-
+      <div class="solar-field">
+        <label class="solar-field__label" for="username">USERNAME</label>
+        <input type="text"
+               id="username" name="username"
+               value="${(login.username!'')}"
+               class="solar-field__input <#if messagesPerField.existsError('username','password')>solar-field__input--error</#if>"
+               placeholder="username"
+               autocomplete="username"
+               autofocus required/>
       </div>
-    </div>
-    </div>
 
+      <div class="solar-field">
+        <div class="solar-field__row">
+          <label class="solar-field__label" for="password">PASSWORD</label>
+          <#if realm.resetPasswordAllowed>
+            <a class="solar-link-warning solar-link-warning--small" href="${url.loginResetCredentialsUrl}">Forgot password?</a>
+          </#if>
+        </div>
+        <input type="password"
+               id="password" name="password"
+               class="solar-field__input <#if messagesPerField.existsError('username','password')>solar-field__input--error</#if>"
+               placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
+               autocomplete="current-password" required/>
+      </div>
+
+      <#-- Inline field-level error message -->
+      <#if messagesPerField.existsError('username','password')>
+        <div class="solar-alert solar-alert--error">
+          ${kcSanitize(messagesPerField.getFirstError('username','password'))?no_esc}
+        </div>
+      </#if>
+
+      <#-- Remember me (only if realm enables it) -->
+      <#if realm.rememberMe && !usernameHidden??>
+        <label class="solar-check">
+          <input tabindex="3" id="rememberMe" name="rememberMe" type="checkbox" <#if login.rememberMe??>checked</#if>>
+          <span>Keep me signed in</span>
+        </label>
+      </#if>
+
+      <input type="hidden" id="id-hidden-input" name="credentialId" <#if auth.selectedCredential?has_content>value="${auth.selectedCredential}"</#if>/>
+
+      <button type="submit" name="login" id="kc-login" class="solar-btn-primary">
+        Sign In
+      </button>
+    </form>
+
+  <#elseif section = "info">
+    <#if realm.password && realm.registrationAllowed && !registrationDisabled??>
+      <span class="solar-info-text">New user?</span>
+      <a class="solar-link-warning" href="${url.registrationUrl}">Create account</a>
+    </#if>
   </#if>
 
 </@layout.registrationLayout>

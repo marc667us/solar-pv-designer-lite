@@ -1,206 +1,241 @@
-/* =====================================================================
-   SolarPro Keycloak login -- palette + custom classes only.
-
-   Re-declares the EXACT :root variables and the two custom classes
-   (`.solar-card`, `.btn-solar`) from templates/base.html in the main
-   solar app, plus the navbar / footer / beta-banner overrides that
-   base.html injects.  Everything else (rows, columns, form-control,
-   form-label, text-secondary, text-warning, mb-3, p-4, mt-4,
-   alert/danger, form-check) is Bootstrap 5.3.3 utility CSS loaded
-   from the same CDN by template.ftl.
-   ===================================================================== */
+/*
+ * SolarPro KC login theme -- mirrors templates/auth.html (the legacy
+ * SolarPro login template) so the KC page looks like the rest of the
+ * app. Custom login.ftl + template.ftl produce the DOM; this file
+ * paints it.
+ */
 
 :root {
-  --sp-bg:        #0a0a14;
-  --sp-card-bg:   #0f0f22;
-  --sp-border:    #1e1e3a;
-  --sp-text:      #e2e2f0;
-  --sp-muted:     #6868a0;
-  --sp-sub:       #9090c0;
-  --sp-accent:    #f59e0b;
-  --sp-accent2:   #ea580c;
-  --sp-font:      'Segoe UI', system-ui, sans-serif;
-  --sp-fs:        16px;
-  --sp-radius:    14px;
-  --solar-gold:   var(--sp-accent);
-  --solar-orange: var(--sp-accent2);
-  --solar-blue:   #0ea5e9;
-  --solar-green:  #22c55e;
+  --sp-bg: #0a0a14;
+  --sp-card-bg: #0f0f22;
+  --sp-card-bg-2: #13133a;
+  --sp-border: #1e1e3a;
+  --sp-text: #e2e2f0;
+  --sp-muted: #6868a0;
+  --sp-sub: #9090c0;
+  --solar-gold: #f59e0b;
+  --solar-orange: #ea580c;
+  --solar-blue: #0ea5e9;
+  --solar-purple: #a78bfa;
+  --sp-radius: 14px;
+  --sp-font: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* ---------- Body --------------------------------------------------- */
-body {
-  background:  var(--sp-bg);
-  color:       var(--sp-text);
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--sp-bg);
+  color: var(--sp-text);
   font-family: var(--sp-font);
-  font-size:   var(--sp-fs);
-  min-height:  100vh;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
-/* ---------- Beta banner (copied verbatim from base.html) ---------- */
-.sp-beta-banner {
-  display:         flex;
-  align-items:     center;
-  justify-content: center;
-  flex-wrap:       wrap;
-  gap:             10px;
-  padding:         6px 14px;
-  font-size:       12.5px;
-  font-weight:     600;
-  background:      linear-gradient(90deg, #f59e0b 0%, #fbbf24 50%, #f59e0b 100%);
-  color:           #1a1006;
-  border-bottom:   1px solid #b8780a;
-  text-align:      center;
-  line-height:     1.35;
+/* Hide the Keycloak default chrome we're not using.
+   The v2 theme used to inject .pf-v5-c-login wrappers; our custom
+   template.ftl doesn't, so these are belt-and-braces in case anything
+   slips through. */
+.pf-v5-c-login,
+.login-pf,
+.login-pf-page,
+.pf-v5-c-background-image,
+#kc-header-wrapper {
+  display: none !important;
 }
-.sp-beta-pill {
-  background:     #1a1006;
-  color:          #fde68a;
-  border-radius:  4px;
-  padding:        2px 8px;
-  font-size:      10.5px;
-  letter-spacing: .6px;
-  font-weight:    800;
+
+/* Page chrome -- centered vertically + horizontally, subtle radial wash. */
+.sp-page {
+  background: var(--sp-bg);
+  background-image:
+    radial-gradient(circle at 20% 12%, rgba(245,158,11,0.08), transparent 38%),
+    radial-gradient(circle at 80% 88%, rgba(14,165,233,0.08), transparent 40%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sp-page__container {
+  width: 100%;
+  max-width: 420px;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
+}
+
+/* The card itself -- matches .solar-card in base.html. */
+.solar-card {
+  background: var(--sp-card-bg);
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-radius);
+  padding: 1.5rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.solar-card__header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+.solar-card__icon {
+  font-size: 36px;
+  line-height: 1;
+}
+.solar-card__title {
+  margin: 0.5rem 0 0.25rem 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--sp-text);
+  letter-spacing: -0.25px;
+}
+.solar-card__subtitle {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--sp-sub);
+}
+
+/* Alerts inside the card. */
+.solar-alert {
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 1rem;
+  font-size: 13.5px;
+  line-height: 1.5;
+  border: 1px solid var(--sp-border);
+  background: var(--sp-card-bg-2);
+}
+.solar-alert--error   { border-left: 3px solid #ef4444;          color: #fca5a5; }
+.solar-alert--success { border-left: 3px solid #22c55e;          color: #86efac; }
+.solar-alert--warning { border-left: 3px solid var(--solar-gold); color: #fcd34d; }
+.solar-alert--info    { border-left: 3px solid var(--solar-blue); color: #7dd3fc; }
+
+/* Form layout. */
+.solar-form { display: flex; flex-direction: column; gap: 1rem; }
+
+.solar-field { display: flex; flex-direction: column; }
+.solar-field__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+.solar-field__label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--sp-sub);
+  letter-spacing: 0.4px;
+  margin-bottom: 0.25rem;
   text-transform: uppercase;
 }
-.sp-beta-msg  { max-width: 760px; }
-.sp-beta-link { color: #1a1006; text-decoration: underline; font-weight: 800; }
-.sp-beta-link:hover { color: #3a2410; }
-@media (max-width: 576px) {
-  .sp-beta-banner { padding: 6px 10px; font-size: 11.5px; }
-  .sp-beta-msg    { font-size: 11px; }
-}
+.solar-field__row .solar-field__label { margin-bottom: 0; }
 
-/* ---------- Navbar (matches base.html) ---------------------------- */
-.navbar {
-  background:    linear-gradient(135deg, #0f0f20, #141430) !important;
-  border-bottom: 1px solid #1e1e3a;
-  padding-top:   .65rem;
-  padding-bottom:.65rem;
-}
-.navbar-brand {
-  font-weight:    900;
-  font-size:      1.15rem;
-  letter-spacing: -0.3px;
-  background:     linear-gradient(90deg, var(--solar-gold), var(--solar-blue));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-.navbar-brand:hover { opacity: .85; }
-.nav-link {
-  color:         #a0a0c8 !important;
-  font-size:     14px;
-  font-weight:   600;
-  padding:       .35rem .6rem !important;
-  border-radius: 6px;
-  transition:    all .15s;
-}
-.nav-link:hover,
-.nav-link.active {
-  color:      #e2e2f0 !important;
-  background: rgba(255,255,255,.07);
-}
-
-/* ---------- The .solar-card + .btn-solar contract from base.html -- */
-.solar-card {
-  background:    var(--sp-card-bg);
-  border:        1px solid var(--sp-border);
-  border-radius: var(--sp-radius);
-}
-.btn-solar {
-  background:  linear-gradient(135deg, var(--solar-gold), var(--solar-orange));
-  border:      none;
-  color:       #000;
-  font-weight: 700;
-}
-.btn-solar:hover {
-  filter: brightness(1.1);
-  color:  #000;
-}
-
-/* ---------- Form controls re-themed for dark Bootstrap ------------ */
-.form-control,
-.form-select {
-  background:    rgba(255,255,255,.04);
-  border:        1px solid var(--sp-border);
-  color:         var(--sp-text);
+.solar-field__input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--sp-text);
+  border: 1px solid var(--sp-border);
   border-radius: 8px;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  line-height: 1.4;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
 }
-.form-control:focus,
-.form-select:focus {
-  background:   rgba(255,255,255,.06);
-  border-color: var(--sp-accent);
-  color:        var(--sp-text);
-  box-shadow:   0 0 0 .2rem rgba(245,158,11,.18);
+.solar-field__input::placeholder { color: var(--sp-muted); }
+.solar-field__input:focus {
+  border-color: var(--solar-gold);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
 }
-.form-control::placeholder { color: var(--sp-muted); }
-.form-control.is-invalid,
-.form-control.is-invalid:focus {
+.solar-field__input--error {
   border-color: #ef4444;
-  box-shadow:   0 0 0 .2rem rgba(239,68,68,.18);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.12);
 }
 
-/* ---------- Form check ------------------------------------------- */
-.form-check-input {
-  background-color: rgba(255,255,255,.06);
-  border-color:     var(--sp-border);
+/* Remember-me checkbox. */
+.solar-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sp-sub);
+  font-size: 0.85rem;
+  cursor: pointer;
 }
-.form-check-input:checked {
-  background-color: var(--sp-accent);
-  border-color:     var(--sp-accent);
-}
-.form-check-input:focus {
-  border-color: var(--sp-accent);
-  box-shadow:   0 0 0 .2rem rgba(245,158,11,.18);
-}
+.solar-check input { accent-color: var(--solar-gold); }
 
-/* ---------- Alerts tinted on dark backgrounds --------------------- */
-.alert {
-  border-radius: 10px;
-  border:        1px solid transparent;
+/* Submit button -- gold/orange gradient with black text, matches .btn-solar. */
+.solar-btn-primary {
+  display: block;
+  width: 100%;
+  background: linear-gradient(135deg, var(--solar-gold), var(--solar-orange));
+  color: #0a0a14;
+  font-weight: 700;
+  font-size: 0.95rem;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  transition: filter 0.15s, transform 0.05s;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.25);
 }
-.alert-danger {
-  background:   rgba(239,68,68,.10);
-  border-color: rgba(239,68,68,.35);
-  color:        #fecaca;
-}
-.alert-warning {
-  background:   rgba(245,158,11,.10);
-  border-color: rgba(245,158,11,.35);
-  color:        #fde68a;
-}
-.alert-info {
-  background:   rgba(14,165,233,.10);
-  border-color: rgba(14,165,233,.35);
-  color:        #bae6fd;
-}
-.alert-success {
-  background:   rgba(34,197,94,.10);
-  border-color: rgba(34,197,94,.35);
-  color:        #bbf7d0;
-}
+.solar-btn-primary:hover  { filter: brightness(1.1); }
+.solar-btn-primary:active { transform: translateY(1px); }
 
-/* ---------- Footer (matches base.html .footer-bar) --------------- */
-.footer-bar {
-  border-top: 1px solid #1e1e3a;
-  color:      #5a5a8a;
-  font-size:  13px;
-  padding:    28px 0;
-  margin-top: 48px;
+/* Card footer -- "New user? Create account" cluster. */
+.solar-card__footer {
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: var(--sp-sub);
 }
-.footer-link {
-  color:           #6a6aa0;
+.solar-info-text { color: var(--sp-sub); margin-right: 4px; }
+
+/* Links. */
+.solar-link-warning {
+  color: var(--solar-gold);
+  font-weight: 600;
   text-decoration: none;
-  transition:      color .15s;
 }
-.footer-link:hover { color: #b0b0d8; }
+.solar-link-warning:hover {
+  color: var(--solar-orange);
+  text-decoration: underline;
+}
+.solar-link-warning--small {
+  font-size: 11px;
+  font-weight: 600;
+}
 
-/* ---------- Phone breakpoint (matches base.html) ----------------- */
-@media (max-width: 767px) {
-  :root { --sp-fs: 17px; }
-  main.container-xl { padding-left: 12px; padding-right: 12px; }
-  .solar-card { border-radius: 10px; }
-  /* iOS Safari needs >=16px on inputs to avoid auto-zoom on focus */
-  .form-control, .form-select { font-size: 16px !important; }
+/* Legal footer below the card. */
+.sp-legal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--sp-muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.sp-legal a {
+  color: var(--solar-gold);
+  text-decoration: none;
+  font-weight: 600;
+}
+.sp-legal a:hover {
+  color: var(--solar-orange);
+  text-decoration: underline;
+}
+.sp-legal__sep { color: var(--sp-border); }
+
+/* Small-screen tightening. */
+@media (max-width: 480px) {
+  .sp-page__container { padding: 16px 12px; }
+  .solar-card { padding: 1.25rem 1rem; }
+  .solar-card__title { font-size: 1.25rem; }
 }
