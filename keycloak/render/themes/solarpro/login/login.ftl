@@ -24,13 +24,13 @@
     <form id="kc-form-login" action="${url.loginAction}" method="post" autocomplete="off">
 
       <div class="mb-3">
-        <label class="form-label small fw-bold text-secondary" for="username">USERNAME</label>
-        <input type="text"
+        <label class="form-label small fw-bold text-secondary" for="username">EMAIL</label>
+        <input type="email"
                id="username" name="username"
                value="${(login.username!'')}"
                class="form-control <#if messagesPerField.existsError('username','password')>is-invalid</#if>"
-               placeholder="username"
-               autocomplete="username"
+               placeholder="you@email.com"
+               autocomplete="email"
                autofocus required/>
       </div>
 
