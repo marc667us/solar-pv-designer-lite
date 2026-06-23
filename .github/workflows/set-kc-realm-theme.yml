@@ -76,22 +76,61 @@ jobs:
           PY
 
       - name: Smoke -- render the OIDC auth page and look for theme markers
-        run: |
-          set -e
-          # Reach into the KC auth URL (with a dummy state/nonce) and pull
-          # the rendered HTML. The custom theme injects 'SolarPro Global'
-          # as the brand wordmark via CSS; we also check for the theme's
-          # styles.css path which KC builds as resources/<resourceVersion>/
-          # login/<theme>/css/login.css.
-          AUTH="${KEYCLOAK_ISSUER}/protocol/openid-connect/auth?client_id=solarpro-web&response_type=code&scope=openid&redirect_uri=https://solarpro.aiappinvent.com/auth/callback&state=smoke&nonce=smoke"
-          curl -fsSL "$AUTH" -o /tmp/auth.html
-          BYTES=$(wc -c < /tmp/auth.html)
-          echo "rendered ${BYTES} bytes"
-          if grep -q "/login/solarpro/" /tmp/auth.html; then
-            echo "OK -- 'solarpro' theme path present in rendered HTML"
-          else
-            echo "::warning::theme-path marker not seen; first match for /css/:"
-            grep -oE 'href="[^"]*\.css[^"]*"' /tmp/auth.html | head -3 || true
-          fi
         env:
           KEYCLOAK_ISSUER: ${{ secrets.KEYCLOAK_ISSUER }}
+          LOGIN_THEME: ${{ github.event.inputs.login_theme }}
+        run: |
+          # solarpro-web client requires PKCE (code_challenge_method=S256)
+          # per realm-export.json. A bare GET without code_challenge gets
+          # KC's 400 "Missing parameter: code_challenge_method" so we must
+          # generate a valid PKCE pair before requesting the auth page.
+          python3 << 'PY'
+          import os, sys, secrets, hashlib, base64, urllib.parse, requests
+
+          issuer = os.environ['KEYCLOAK_ISSUER'].rstrip('/')
+          theme  = os.environ.get('LOGIN_THEME') or 'solarpro'
+
+          # PKCE per RFC 7636 -- urlsafe-base64(sha256(verifier)), no '=' pad.
+          verifier  = secrets.token_urlsafe(64)
+          digest    = hashlib.sha256(verifier.encode('ascii')).digest()
+          challenge = base64.urlsafe_b64encode(digest).rstrip(b'=').decode('ascii')
+
+          params = {
+              'client_id':            'solarpro-web',
+              'response_type':        'code',
+              'scope':                'openid profile email',
+              'redirect_uri':         'https://solarpro.aiappinvent.com/auth/callback',
+              'state':                secrets.token_urlsafe(16),
+              'nonce':                secrets.token_urlsafe(16),
+              'code_challenge':       challenge,
+              'code_challenge_method':'S256',
+          }
+          url = f"{issuer}/protocol/openid-connect/auth?" + urllib.parse.urlencode(params)
+          print(f"GET {url[:120]}...")
+
+          r = requests.get(url, timeout=20, allow_redirects=True,
+                           headers={'User-Agent': 'SetKCRealmTheme-Smoke/1.0'})
+          print(f"final URL: {r.url[:140]}")
+          print(f"status: {r.status_code} bytes: {len(r.text)}")
+          if r.status_code != 200:
+              sys.stderr.write(f"::error::auth page returned {r.status_code} -- expected 200\n")
+              sys.stderr.write(r.text[:400] + '\n')
+              sys.exit(1)
+
+          html = r.text
+          theme_path = f"/login/{theme}/css/"
+          markers = {
+              f"theme path '{theme_path}' present":  theme_path in html,
+              "loginTheme name in HTML":             theme in html,
+              "linked stylesheet present":           '<link' in html and 'login.css' in html,
+          }
+          for k, v in markers.items():
+              print(f"  {'OK' if v else 'MISS'} -- {k}")
+
+          if not markers[f"theme path '{theme_path}' present"]:
+              sys.stderr.write("::warning::theme path missing in rendered HTML; KC may still be loading the new pod\n")
+              # Don't fail the workflow on this -- PATCH succeeded and the
+              # pod may need 30-60s to pick up the theme directory.
+          else:
+              print(f"OK -- '{theme}' theme is live on the rendered login page")
+          PY
