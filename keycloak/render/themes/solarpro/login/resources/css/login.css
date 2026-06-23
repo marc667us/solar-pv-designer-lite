@@ -249,19 +249,76 @@ input[type=radio] {
   font-size: 13px !important;
 }
 
-/* "Forgot password?" / "Don't have an account?" link cluster below the card */
+/* "Forgot password?" / "New user? Register" link clusters.
+   Both are rendered by KC but were too muted in the first pass.
+   Promote them with bigger font, clear top border separator, gold link
+   colour, and a hover underline so the call-to-action is obvious. */
 #kc-info,
 #kc-info-wrapper,
 .login-pf-signup,
-.pf-v5-c-login__main-footer-band {
-  color: var(--sp-muted) !important;
-  font-size: 13px !important;
-  margin-top: 1rem;
+.pf-v5-c-login__main-footer-band,
+#kc-form-options,
+.kc-login-tooltip {
+  color: var(--sp-sub) !important;
+  font-size: 15px !important;
+  margin-top: 1.25rem !important;
+  padding-top: 1rem !important;
+  border-top: 1px solid var(--sp-border) !important;
+  text-align: center !important;
 }
+
+/* "New user?" + "Register" inside the v2 footer band. */
+#kc-registration-container,
+#kc-registration,
+.pf-v5-c-login__main-footer-band-item {
+  display: block !important;
+  margin: 0.5rem 0 !important;
+  font-size: 15px !important;
+  color: var(--sp-sub) !important;
+}
+
+/* All sign-up / reset links -- gold, bold, visible. */
 #kc-info a,
-.login-pf-signup a {
+.login-pf-signup a,
+#kc-registration a,
+.pf-v5-c-login__main-footer-band a,
+a[href*="login-actions/registration"],
+a[href*="login-actions/reset-credentials"] {
   color: var(--solar-gold) !important;
-  font-weight: 700 !important;
+  font-weight: 800 !important;
+  font-size: 15px !important;
+  text-decoration: none !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  transition: background .15s, color .15s !important;
+}
+#kc-info a:hover,
+.login-pf-signup a:hover,
+#kc-registration a:hover,
+.pf-v5-c-login__main-footer-band a:hover,
+a[href*="login-actions/registration"]:hover,
+a[href*="login-actions/reset-credentials"]:hover {
+  color: var(--solar-orange) !important;
+  background: rgba(245, 158, 11, 0.10) !important;
+  text-decoration: underline !important;
+}
+
+/* "Forgot Password?" lives inline next to the password field via #kc-form-options.
+   Give it its own padded chip so it doesn't disappear next to the input. */
+#kc-form-options {
+  border-top: none !important;
+  padding-top: 0 !important;
+  margin-top: 0.5rem !important;
+  margin-bottom: 1rem !important;
+  text-align: right !important;
+}
+
+/* Force the registration footer band to be visible -- some PF5 layouts
+   collapse this band when empty; we want it always painted as long as
+   the realm has registrationAllowed=true. */
+.pf-v5-c-login__main-footer-band {
+  display: block !important;
+  padding: 1rem 0 !important;
 }
 
 /* Social-provider buttons (if any provider is configured later) */
