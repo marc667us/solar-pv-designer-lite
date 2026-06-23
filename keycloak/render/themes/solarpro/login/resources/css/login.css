@@ -1,52 +1,58 @@
-/*
- * SolarPro KC login theme -- mirrors templates/auth.html (the legacy
- * SolarPro login template) so the KC page looks like the rest of the
- * app. Custom login.ftl + template.ftl produce the DOM; this file
- * paints it.
- */
+/* =====================================================================
+   SolarPro Keycloak login -- mirror of templates/auth.html (legacy).
+
+   Bootstrap 5.3.3 supplies all utility classes (row/col/mb-3/p-4/mt-4/
+   form-control/form-label/text-warning/text-secondary/d-flex/...).
+   This file only declares:
+     - the :root palette + body that base.html injects inline
+     - .solar-card  (background + border + radius)
+     - .btn-solar   (gold/orange gradient with black text)
+     - dark-mode overrides for form-control / form-check / alert
+     - the .alert-error alias so KC's "error" message type maps to red
+     - the .sp-page / .sp-legal chrome around the card
+   ===================================================================== */
 
 :root {
-  --sp-bg: #0a0a14;
-  --sp-card-bg: #0f0f22;
+  --sp-bg:        #0a0a14;
+  --sp-card-bg:   #0f0f22;
   --sp-card-bg-2: #13133a;
-  --sp-border: #1e1e3a;
-  --sp-text: #e2e2f0;
-  --sp-muted: #6868a0;
-  --sp-sub: #9090c0;
-  --solar-gold: #f59e0b;
-  --solar-orange: #ea580c;
-  --solar-blue: #0ea5e9;
+  --sp-border:    #1e1e3a;
+  --sp-text:      #e2e2f0;
+  --sp-muted:     #6868a0;
+  --sp-sub:       #9090c0;
+  --sp-accent:    #f59e0b;
+  --sp-accent2:   #ea580c;
+  --sp-font:      'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --sp-radius:    14px;
+  --solar-gold:   var(--sp-accent);
+  --solar-orange: var(--sp-accent2);
+  --solar-blue:   #0ea5e9;
+  --solar-green:  #22c55e;
   --solar-purple: #a78bfa;
-  --sp-radius: 14px;
-  --sp-font: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 * { box-sizing: border-box; }
 
 html, body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  background: var(--sp-bg);
-  color: var(--sp-text);
+  height:      100%;
+  margin:      0;
+  padding:     0;
+  background:  var(--sp-bg);
+  color:       var(--sp-text);
   font-family: var(--sp-font);
-  font-size: 16px;
+  font-size:   16px;
   line-height: 1.5;
 }
 
-/* Hide the Keycloak default chrome we're not using.
-   The v2 theme used to inject .pf-v5-c-login wrappers; our custom
-   template.ftl doesn't, so these are belt-and-braces in case anything
-   slips through. */
+/* Hide any PatternFly chrome that the parent keycloak.v2 theme might
+   still inject into pages we have not overridden. */
 .pf-v5-c-login,
 .login-pf,
 .login-pf-page,
 .pf-v5-c-background-image,
-#kc-header-wrapper {
-  display: none !important;
-}
+#kc-header-wrapper { display: none !important; }
 
-/* Page chrome -- centered vertically + horizontally, subtle radial wash. */
+/* Page wrapper -- subtle radial wash, vertically centered. */
 .sp-page {
   background: var(--sp-bg);
   background-image:
@@ -57,185 +63,110 @@ html, body {
   align-items: center;
   justify-content: center;
 }
+.sp-page__container { width: 100%; }
 
-.sp-page__container {
-  width: 100%;
-  max-width: 420px;
-  padding: 24px 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 18px;
-}
-
-/* The card itself -- matches .solar-card in base.html. */
+/* ---------- The two custom classes from templates/base.html ----- */
 .solar-card {
-  background: var(--sp-card-bg);
-  border: 1px solid var(--sp-border);
+  background:    var(--sp-card-bg);
+  border:        1px solid var(--sp-border);
   border-radius: var(--sp-radius);
-  padding: 1.5rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  box-shadow:    0 8px 32px rgba(0, 0, 0, 0.5);
 }
-
-.solar-card__header {
-  text-align: center;
-  margin-bottom: 1.5rem;
-}
-.solar-card__icon {
-  font-size: 36px;
-  line-height: 1;
-}
-.solar-card__title {
-  margin: 0.5rem 0 0.25rem 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--sp-text);
-  letter-spacing: -0.25px;
-}
-.solar-card__subtitle {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--sp-sub);
-}
-
-/* Alerts inside the card. */
-.solar-alert {
-  border-radius: 8px;
-  padding: 10px 14px;
-  margin-bottom: 1rem;
-  font-size: 13.5px;
-  line-height: 1.5;
-  border: 1px solid var(--sp-border);
-  background: var(--sp-card-bg-2);
-}
-.solar-alert--error   { border-left: 3px solid #ef4444;          color: #fca5a5; }
-.solar-alert--success { border-left: 3px solid #22c55e;          color: #86efac; }
-.solar-alert--warning { border-left: 3px solid var(--solar-gold); color: #fcd34d; }
-.solar-alert--info    { border-left: 3px solid var(--solar-blue); color: #7dd3fc; }
-
-/* Form layout. */
-.solar-form { display: flex; flex-direction: column; gap: 1rem; }
-
-.solar-field { display: flex; flex-direction: column; }
-.solar-field__row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.25rem;
-}
-.solar-field__label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--sp-sub);
-  letter-spacing: 0.4px;
-  margin-bottom: 0.25rem;
-  text-transform: uppercase;
-}
-.solar-field__row .solar-field__label { margin-bottom: 0; }
-
-.solar-field__input {
-  width: 100%;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--sp-text);
-  border: 1px solid var(--sp-border);
-  border-radius: 8px;
-  padding: 0.55rem 0.8rem;
-  font-size: 0.95rem;
-  font-family: inherit;
-  line-height: 1.4;
-  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
-}
-.solar-field__input::placeholder { color: var(--sp-muted); }
-.solar-field__input:focus {
-  border-color: var(--solar-gold);
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
-  outline: none;
-  background: rgba(255, 255, 255, 0.06);
-}
-.solar-field__input--error {
-  border-color: #ef4444;
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.12);
-}
-
-/* Remember-me checkbox. */
-.solar-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--sp-sub);
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-.solar-check input { accent-color: var(--solar-gold); }
-
-/* Submit button -- gold/orange gradient with black text, matches .btn-solar. */
-.solar-btn-primary {
-  display: block;
-  width: 100%;
+.btn-solar {
   background: linear-gradient(135deg, var(--solar-gold), var(--solar-orange));
-  color: #0a0a14;
-  font-weight: 700;
-  font-size: 0.95rem;
-  border: none;
+  border:     none;
+  color:      #000;
+  font-weight:700;
+}
+.btn-solar:hover,
+.btn-solar:focus { filter: brightness(1.1); color: #000; }
+.btn-solar:active { transform: translateY(1px); }
+
+/* ---------- Dark-themed form controls ---------------------------- */
+.form-control,
+.form-select {
+  background:    rgba(255, 255, 255, 0.04);
+  border:        1px solid var(--sp-border);
+  color:         var(--sp-text);
   border-radius: 8px;
-  padding: 0.6rem 1rem;
-  cursor: pointer;
-  margin-top: 0.5rem;
-  transition: filter 0.15s, transform 0.05s;
-  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.25);
 }
-.solar-btn-primary:hover  { filter: brightness(1.1); }
-.solar-btn-primary:active { transform: translateY(1px); }
-
-/* Card footer -- "New user? Create account" cluster. */
-.solar-card__footer {
-  text-align: center;
-  margin-top: 1rem;
-  font-size: 0.85rem;
-  color: var(--sp-sub);
+.form-control:focus,
+.form-select:focus {
+  background:   rgba(255, 255, 255, 0.06);
+  border-color: var(--sp-accent);
+  color:        var(--sp-text);
+  box-shadow:   0 0 0 .2rem rgba(245, 158, 11, .18);
 }
-.solar-info-text { color: var(--sp-sub); margin-right: 4px; }
-
-/* Links. */
-.solar-link-warning {
-  color: var(--solar-gold);
-  font-weight: 600;
-  text-decoration: none;
-}
-.solar-link-warning:hover {
-  color: var(--solar-orange);
-  text-decoration: underline;
-}
-.solar-link-warning--small {
-  font-size: 11px;
-  font-weight: 600;
+.form-control::placeholder { color: var(--sp-muted); }
+.form-control.is-invalid,
+.form-control.is-invalid:focus {
+  border-color: #ef4444;
+  box-shadow:   0 0 0 .2rem rgba(239, 68, 68, .18);
 }
 
-/* Legal footer below the card. */
+/* Form check (remember-me) */
+.form-check-input {
+  background-color: rgba(255, 255, 255, .06);
+  border-color:     var(--sp-border);
+}
+.form-check-input:checked {
+  background-color: var(--sp-accent);
+  border-color:     var(--sp-accent);
+}
+.form-check-input:focus {
+  border-color: var(--sp-accent);
+  box-shadow:   0 0 0 .2rem rgba(245, 158, 11, .18);
+}
+
+/* ---------- Alerts tinted for dark background ------------------- */
+.alert { border-radius: 10px; border: 1px solid transparent; }
+.alert-danger,
+.alert-error {
+  background:   rgba(239, 68, 68, .10);
+  border-color: rgba(239, 68, 68, .35);
+  color:        #fecaca;
+}
+.alert-warning {
+  background:   rgba(245, 158, 11, .10);
+  border-color: rgba(245, 158, 11, .35);
+  color:        #fde68a;
+}
+.alert-info {
+  background:   rgba(14, 165, 233, .10);
+  border-color: rgba(14, 165, 233, .35);
+  color:        #bae6fd;
+}
+.alert-success {
+  background:   rgba(34, 197, 94, .10);
+  border-color: rgba(34, 197, 94, .35);
+  color:        #bbf7d0;
+}
+
+/* ---------- Legal footer below the card ------------------------- */
 .sp-legal {
-  display: flex;
-  align-items: center;
+  display:         flex;
+  align-items:     center;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  color: var(--sp-muted);
-  font-size: 12px;
-  margin-top: 4px;
+  flex-wrap:       wrap;
+  gap:             4px 8px;
+  color:           var(--sp-muted);
+  font-size:       12px;
+  margin-top:      14px;
 }
 .sp-legal a {
-  color: var(--solar-gold);
+  color:           var(--solar-gold);
   text-decoration: none;
-  font-weight: 600;
+  font-weight:     600;
 }
 .sp-legal a:hover {
-  color: var(--solar-orange);
+  color:           var(--solar-orange);
   text-decoration: underline;
 }
 .sp-legal__sep { color: var(--sp-border); }
 
-/* Small-screen tightening. */
+/* ---------- Small-screen tightening ---------------------------- */
 @media (max-width: 480px) {
-  .sp-page__container { padding: 16px 12px; }
-  .solar-card { padding: 1.25rem 1rem; }
-  .solar-card__title { font-size: 1.25rem; }
+  .solar-card { border-radius: 10px; }
+  /* iOS Safari needs >=16px on inputs to avoid auto-zoom on focus */
+  .form-control, .form-select { font-size: 16px !important; }
 }

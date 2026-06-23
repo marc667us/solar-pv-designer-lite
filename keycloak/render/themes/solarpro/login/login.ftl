@@ -1,63 +1,78 @@
+<#--
+    login.ftl -- byte-faithful mirror of templates/auth.html (mode=login).
+
+    FreeMarker spine is unchanged from the working 3658ecc baseline
+    (header / form / info sections, same conditionals). Only the HTML
+    class names have been switched to the legacy Bootstrap utilities
+    plus the .btn-solar custom class -- both as used by templates/auth.html.
+
+    KC-specific bits preserved:
+      - <form action> uses ${url.loginAction}
+      - "Forgot password?" link uses ${url.loginResetCredentialsUrl}
+      - "Create account" link uses ${url.registrationUrl}
+      - field-level errors flip the input to `.is-invalid` (Bootstrap)
+      - the credentialId hidden input is required by KC
+-->
 <#import "template.ftl" as layout>
 <@layout.registrationLayout displayMessage=!messagesPerField.existsError('username','password') displayInfo=realm.password && realm.registrationAllowed && !registrationDisabled??; section>
 
   <#if section = "header">
     Welcome Back
+
   <#elseif section = "form">
 
-    <form id="kc-form-login" class="solar-form" action="${url.loginAction}" method="post" autocomplete="off">
+    <form id="kc-form-login" action="${url.loginAction}" method="post" autocomplete="off">
 
-      <div class="solar-field">
-        <label class="solar-field__label" for="username">USERNAME</label>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-secondary" for="username">USERNAME</label>
         <input type="text"
                id="username" name="username"
                value="${(login.username!'')}"
-               class="solar-field__input <#if messagesPerField.existsError('username','password')>solar-field__input--error</#if>"
+               class="form-control <#if messagesPerField.existsError('username','password')>is-invalid</#if>"
                placeholder="username"
                autocomplete="username"
                autofocus required/>
       </div>
 
-      <div class="solar-field">
-        <div class="solar-field__row">
-          <label class="solar-field__label" for="password">PASSWORD</label>
+      <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <label class="form-label small fw-bold text-secondary mb-0" for="password">PASSWORD</label>
           <#if realm.resetPasswordAllowed>
-            <a class="solar-link-warning solar-link-warning--small" href="${url.loginResetCredentialsUrl}">Forgot password?</a>
+            <a class="small text-warning" style="font-size:11px" href="${url.loginResetCredentialsUrl}">Forgot password?</a>
           </#if>
         </div>
         <input type="password"
                id="password" name="password"
-               class="solar-field__input <#if messagesPerField.existsError('username','password')>solar-field__input--error</#if>"
+               class="form-control <#if messagesPerField.existsError('username','password')>is-invalid</#if>"
                placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
                autocomplete="current-password" required/>
       </div>
 
-      <#-- Inline field-level error message -->
+      <#-- Inline field-level error -->
       <#if messagesPerField.existsError('username','password')>
-        <div class="solar-alert solar-alert--error">
+        <div class="alert alert-danger small py-2 px-3 mb-3" role="alert">
           ${kcSanitize(messagesPerField.getFirstError('username','password'))?no_esc}
         </div>
       </#if>
 
       <#-- Remember me (only if realm enables it) -->
       <#if realm.rememberMe && !usernameHidden??>
-        <label class="solar-check">
-          <input tabindex="3" id="rememberMe" name="rememberMe" type="checkbox" <#if login.rememberMe??>checked</#if>>
-          <span>Keep me signed in</span>
-        </label>
+        <div class="form-check mb-3">
+          <input tabindex="3" class="form-check-input" id="rememberMe" name="rememberMe" type="checkbox" <#if login.rememberMe??>checked</#if>>
+          <label class="form-check-label small text-secondary" for="rememberMe">Keep me signed in</label>
+        </div>
       </#if>
 
       <input type="hidden" id="id-hidden-input" name="credentialId" <#if auth.selectedCredential?has_content>value="${auth.selectedCredential}"</#if>/>
 
-      <button type="submit" name="login" id="kc-login" class="solar-btn-primary">
+      <button type="submit" name="login" id="kc-login" class="btn btn-solar w-100 mt-2">
         Sign In
       </button>
     </form>
 
   <#elseif section = "info">
     <#if realm.password && realm.registrationAllowed && !registrationDisabled??>
-      <span class="solar-info-text">New user?</span>
-      <a class="solar-link-warning" href="${url.registrationUrl}">Create account</a>
+      New user? <a class="text-warning" href="${url.registrationUrl}">Create account</a>
     </#if>
   </#if>
 
