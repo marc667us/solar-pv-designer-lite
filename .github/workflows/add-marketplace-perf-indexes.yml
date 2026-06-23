@@ -1,0 +1,158 @@
+# Add the composite + per-column indexes the marketplace query needs.
+# Baseline 2026-06-23 23:25 UTC: GET /marketplace = 4 s p50 with 1 user.
+# Postgres has no indexes on equipment_catalog (only the implicit PK on
+# id), so the marketplace_public route does a sequential scan of every
+# row on every request. With 437 rows that's tolerable; under load it
+# becomes the bottleneck because every concurrent request scans the
+# whole table separately.
+#
+# Indexes (Postgres):
+#   ix_eq_filter        (is_active, is_public_visible, is_verified)
+#                       -- WHERE clause filter; matches every public
+#                       request.
+#   ix_eq_filter_cat    (is_active, is_public_visible, is_verified,
+#                        category_id)
+#                       -- the same plus category for the cat-chip
+#                       drilldown.
+#   ix_eq_supplier      (supplier_id)
+#                       -- the LEFT JOIN suppliers on every row.
+#   ix_eq_subcat_lower  (LOWER(subcategory))
+#                       -- the case-insensitive subcategory filter.
+#   ix_eq_name_lower    (LOWER(name))
+#                       -- search box; the 4-column OR scan needs all
+#                       four to be index-supported to avoid sequential.
+#   ix_eq_brand_lower   (LOWER(brand))
+#   ix_eq_model_lower   (LOWER(model))
+#   ix_eq_spec_lower    (LOWER(spec))
+#   ix_eq_created_desc  (created_at DESC)
+#                       -- ORDER BY on the listing.
+#
+# All CREATE INDEX IF NOT EXISTS so the workflow is idempotent.
+#
+# Triggered manually:
+#   gh workflow run "Add Marketplace Perf Indexes"
+
+name: Add Marketplace Perf Indexes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install --quiet psycopg2-binary requests
+
+      - name: Resolve solarpro-postgres URL
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXTERNAL=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "external=$EXTERNAL" >> $GITHUB_OUTPUT
+
+      - name: CREATE INDEX IF NOT EXISTS
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          python3 <<'PY'
+          import os, time, psycopg2
+          conn = psycopg2.connect(os.environ["DATABASE_URL"], sslmode="require")
+          conn.autocommit = True
+          cur = conn.cursor()
+          STATEMENTS = [
+              ("ix_eq_filter",
+               "CREATE INDEX IF NOT EXISTS ix_eq_filter "
+               "ON equipment_catalog (is_active, is_public_visible, is_verified)"),
+              ("ix_eq_filter_cat",
+               "CREATE INDEX IF NOT EXISTS ix_eq_filter_cat "
+               "ON equipment_catalog (is_active, is_public_visible, is_verified, category_id)"),
+              ("ix_eq_supplier",
+               "CREATE INDEX IF NOT EXISTS ix_eq_supplier "
+               "ON equipment_catalog (supplier_id)"),
+              ("ix_eq_subcat_lower",
+               "CREATE INDEX IF NOT EXISTS ix_eq_subcat_lower "
+               "ON equipment_catalog (LOWER(subcategory))"),
+              ("ix_eq_name_lower",
+               "CREATE INDEX IF NOT EXISTS ix_eq_name_lower "
+               "ON equipment_catalog (LOWER(name))"),
+              ("ix_eq_brand_lower",
+               "CREATE INDEX IF NOT EXISTS ix_eq_brand_lower "
+               "ON equipment_catalog (LOWER(brand))"),
+              ("ix_eq_model_lower",
+               "CREATE INDEX IF NOT EXISTS ix_eq_model_lower "
+               "ON equipment_catalog (LOWER(model))"),
+              ("ix_eq_spec_lower",
+               "CREATE INDEX IF NOT EXISTS ix_eq_spec_lower "
+               "ON equipment_catalog (LOWER(spec))"),
+              ("ix_eq_created_desc",
+               "CREATE INDEX IF NOT EXISTS ix_eq_created_desc "
+               "ON equipment_catalog (created_at DESC)"),
+              # BOQ side -- /boq-projects/<id>/boq filters by project_id
+              # then joins building+floor; these speed the rollup.
+              ("ix_boqfi_project",
+               "CREATE INDEX IF NOT EXISTS ix_boqfi_project "
+               "ON boq_floor_items (project_id)"),
+              ("ix_boqfi_floor",
+               "CREATE INDEX IF NOT EXISTS ix_boqfi_floor "
+               "ON boq_floor_items (floor_id)"),
+              ("ix_boqfi_building",
+               "CREATE INDEX IF NOT EXISTS ix_boqfi_building "
+               "ON boq_floor_items (building_id)"),
+              ("ix_boqrb_floor_item",
+               "CREATE INDEX IF NOT EXISTS ix_boqrb_floor_item "
+               "ON boq_floor_rate_buildup (floor_item_id)"),
+              # suppliers + product_categories joined on every marketplace render
+              ("ix_suppliers_active",
+               "CREATE INDEX IF NOT EXISTS ix_suppliers_active "
+               "ON suppliers (is_active)"),
+              ("ix_pc_active_order",
+               "CREATE INDEX IF NOT EXISTS ix_pc_active_order "
+               "ON product_categories (is_active, display_order)"),
+          ]
+          for name, sql in STATEMENTS:
+              t0 = time.time()
+              try:
+                  cur.execute(sql)
+                  dt = (time.time() - t0) * 1000
+                  print(f"  [ok]   {name:25s}  {dt:6.0f}ms")
+              except psycopg2.errors.UndefinedTable as e:
+                  print(f"  [skip] {name:25s}  table missing: {e}")
+              except psycopg2.errors.UndefinedColumn as e:
+                  print(f"  [skip] {name:25s}  column missing: {e}")
+              except Exception as e:
+                  print(f"  [err]  {name:25s}  {type(e).__name__}: {e}")
+
+          # ANALYZE to refresh the query planner's stats
+          cur.execute("ANALYZE equipment_catalog")
+          cur.execute("ANALYZE boq_floor_items")
+          cur.execute("ANALYZE suppliers")
+          cur.execute("ANALYZE product_categories")
+          print("ANALYZE done.")
+
+          cur.close(); conn.close()
+          PY
