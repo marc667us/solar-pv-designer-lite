@@ -88,9 +88,9 @@ jobs:
                   if abs(float(current) - new_p) < 0.5:
                       report.append(f"  [have] {model} ({name}) already at {new_p:,.0f}")
                       continue
+                  # equipment_catalog has no updated_at column; just bump price_usd.
                   cur.execute(
-                      "UPDATE equipment_catalog SET price_usd=%s, "
-                      "updated_at=CURRENT_TIMESTAMP WHERE id=%s",
+                      "UPDATE equipment_catalog SET price_usd=%s WHERE id=%s",
                       (new_p, rid),
                   )
                   report.append(
