@@ -361,77 +361,45 @@ a[href*="login-actions/reset-credentials"]:hover {
    structure contract.
    ─────────────────────────────────────────────────────────────── */
 
-/* Two-column shell wraps the existing KC card. Login form stays on
-   the LEFT (its original position); marketing hero sits on the RIGHT.
-   The two columns sit flush -- no centre gap, no empty middle. On
-   narrow screens the form stacks on top of the hero (form remains
-   the primary action). */
+/* Single-column stacked shell -- login form centered horizontally
+   at the top of the page (the classic KC "form in the middle" look),
+   the marketing hero centered below it, privacy footer below that.
+   Owner directive: "the form must at the center". */
 .sp-shell {
   display: flex !important;
-  flex-direction: row !important;
-  align-items: stretch !important;
-  justify-content: center !important;
-  gap: 0 !important;
-  max-width: 1100px !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 24px !important;
+  max-width: 720px !important;
   margin: 32px auto !important;
   padding: 0 16px !important;
-  flex-wrap: wrap;
 }
-/* Explicit order: form left, hero right. JS injects [hero, form] in
-   DOM order; order: flips them visually without re-shuffling DOM. */
 .sp-form-panel { order: 1 !important; }
 .sp-hero       { order: 2 !important; }
 
-@media (max-width: 880px) {
-  .sp-shell { flex-direction: column !important; gap: 14px !important; }
-  /* Stacked: form on top (primary action), hero below it. */
-  .sp-form-panel { order: 1 !important; }
-  .sp-hero       { order: 2 !important; }
-}
-
-/* Form panel ~ 40% of width, hugs the KC card so there is no empty
-   strip between the card and the hero. flex-basis 420px keeps it
-   near the KC card's natural width (PF5 main is ~440px). */
+/* Form panel hugs its KC card and centers on the page. */
 .sp-form-panel {
-  flex: 0 1 420px !important;
-  min-width: 300px !important;
+  width: 100% !important;
+  max-width: 440px !important;
   display: flex !important;
   align-items: center !important;
-  justify-content: flex-end !important;  /* hug the seam */
-  padding-right: 0 !important;
+  justify-content: center !important;
 }
-
-/* The KC card sits inside .sp-form-panel; let it own its width and
-   anchor against the right edge so the hero panel can sit flush. */
 .sp-form-panel > .card-pf,
 .sp-form-panel > .pf-v5-c-login__main {
   width: 100% !important;
-  max-width: 420px !important;
-  border-top-right-radius: 0 !important;
-  border-bottom-right-radius: 0 !important;
+  max-width: 440px !important;
+  border-radius: var(--sp-radius) !important;
 }
 
-/* Hero takes the remaining width; grows to fill. */
+/* Hero centered below the form, slightly wider so the marketing copy
+   has room to breathe but still feels balanced under the narrower
+   form. Restore full radius now that the seam is gone. */
 .sp-hero {
-  flex: 1 1 480px !important;
-  /* Round the right edge but not the left -- left edge butts against
-     the form card so they read as a single horizontal panel. */
-  border-top-left-radius: 0 !important;
-  border-bottom-left-radius: 0 !important;
-}
-
-/* On narrow screens the radius hack is wrong (cards stack vertically);
-   restore full radius on stacked layout. */
-@media (max-width: 880px) {
-  .sp-form-panel > .card-pf,
-  .sp-form-panel > .pf-v5-c-login__main {
-    border-radius: var(--sp-radius) !important;
-    max-width: 100% !important;
-  }
-  .sp-hero {
-    border-radius: var(--sp-radius) !important;
-  }
-  .sp-form-panel { justify-content: center !important; }
+  width: 100% !important;
+  max-width: 640px !important;
+  border-radius: var(--sp-radius) !important;
 }
 
 /* ── Hero panel (right column) ─────────────────────────────────── */
