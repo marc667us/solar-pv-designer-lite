@@ -25869,7 +25869,7 @@ _LIBRARY_EXPANSION_PRODUCTS_GHS = [
 
     # ---- additional generators ----
     ("Powertech Generators Ghana Limited", "power_system", "60 kVA Diesel Generator (silent)",  "Perkins", "GEN-60-S",  "60 kVA silent diesel gen, ATS",       "No.",  82500.00, 45, "Generators"),
-    ("Powertech Generators Ghana Limited", "power_system", "150 kVA Diesel Generator (silent)", "Cummins", "GEN-150-S", "150 kVA silent diesel gen, ATS",      "No.", 175000.00, 60, "Generators"),
+    ("Powertech Generators Ghana Limited", "power_system", "150 kVA Diesel Generator (silent)", "Cummins", "GEN-150-S", "150 kVA silent diesel gen, ATS",      "No.", 235000.00, 60, "Generators"),
     ("Powertech Generators Ghana Limited", "power_system", "200 kVA Diesel Generator (silent)", "Cummins", "GEN-200-S", "200 kVA silent diesel gen, ATS",      "No.", 225000.00, 60, "Generators"),
     ("Powertech Generators Ghana Limited", "power_system", "400 kVA Diesel Generator (silent)", "FG Wilson","GEN-400-S","400 kVA silent diesel gen, ATS",     "No.", 475000.00, 75, "Generators"),
     ("Powertech Generators Ghana Limited", "power_system", "750 kVA Diesel Generator (silent)", "Caterpillar","GEN-750-S","750 kVA silent diesel gen, ATS",   "No.",1125000.00, 90, "Generators"),
@@ -25999,17 +25999,17 @@ _LIBRARY_EXPANSION_PRODUCTS_GHS = [
     # ---- UPS top-up: extra Safenergy three-phase sizes ----
     ("Grand Pacific Limited", "power_system", "2 kVA Online UPS (single-phase)",  "Safenergy",  "S1-2K",   "2 kVA online UPS, single-phase, 30min runtime",  "No.",   7250.00, 14, "UPS"),
     ("Grand Pacific Limited", "power_system", "6 kVA Online UPS (single-phase)",  "Safenergy",  "S1-6K",   "6 kVA online UPS, single-phase",                  "No.",  22500.00, 14, "UPS"),
-    ("Grand Pacific Limited", "power_system", "15 kVA Online UPS (three-phase)",  "Safenergy",  "S3-15K",  "15 kVA online UPS, three-phase",                  "No.", 65000.00, 21, "UPS"),
+    ("Grand Pacific Limited", "power_system", "15 kVA Online UPS (three-phase)",  "Safenergy",  "S3-15K",  "15 kVA online UPS, three-phase",                  "No.", 105000.00, 21, "UPS"),
     ("Grand Pacific Limited", "power_system", "40 kVA Online UPS (three-phase)",  "Safenergy",  "S3-40K",  "40 kVA online UPS, three-phase",                  "No.", 175000.00, 21, "UPS"),
-    ("Grand Pacific Limited", "power_system", "50 kVA Online UPS (three-phase)",  "Safenergy",  "S3-50K",  "50 kVA online UPS, three-phase",                  "No.", 215000.00, 21, "UPS"),
+    ("Grand Pacific Limited", "power_system", "50 kVA Online UPS (three-phase)",  "Safenergy",  "S3-50K",  "50 kVA online UPS, three-phase",                  "No.", 285000.00, 21, "UPS"),
     ("Grand Pacific Limited", "power_system", "120 kVA Online UPS (three-phase)", "Safenergy",  "S3-120K", "120 kVA online UPS, three-phase",                 "No.", 495000.00, 45, "UPS"),
     ("Grand Pacific Limited", "power_system", "160 kVA Online UPS (three-phase)", "Safenergy",  "S3-160K", "160 kVA online UPS, three-phase",                 "No.", 625000.00, 45, "UPS"),
     ("Grand Pacific Limited", "power_system", "300 kVA Online UPS (three-phase)", "Safenergy",  "S3-300K", "300 kVA online UPS, three-phase, industrial",     "No.",1125000.00, 60, "UPS"),
     ("Grand Pacific Limited", "power_system", "500 kVA Online UPS (three-phase)", "Safenergy",  "S3-500K", "500 kVA online UPS, three-phase, industrial",     "No.",1825000.00, 75, "UPS"),
 
     # ---- UPS top-up: alternate brands ----
-    ("JMG Offshore Ghana", "power_system", "10 kVA APC Smart-UPS On-Line (3P)",    "APC",     "SRT10KXLI",   "APC Smart-UPS On-Line SRT 10kVA, three-phase",         "No.", 90000.00, 21, "UPS"),
-    ("JMG Offshore Ghana", "power_system", "20 kVA APC Smart-UPS On-Line (3P)",    "APC",     "SRT20KXLI",   "APC Smart-UPS On-Line SRT 20kVA, three-phase",         "No.", 160000.00, 21, "UPS"),
+    ("JMG Offshore Ghana", "power_system", "10 kVA APC Smart-UPS On-Line (3P)",    "APC",     "SRT10KXLI",   "APC Smart-UPS On-Line SRT 10kVA, three-phase",         "No.", 165000.00, 21, "UPS"),
+    ("JMG Offshore Ghana", "power_system", "20 kVA APC Smart-UPS On-Line (3P)",    "APC",     "SRT20KXLI",   "APC Smart-UPS On-Line SRT 20kVA, three-phase",         "No.", 285000.00, 21, "UPS"),
     ("JMG Offshore Ghana", "power_system", "40 kVA Eaton 93PS UPS (3P)",            "Eaton",   "93PS-40",     "Eaton 93PS 40kVA three-phase UPS, modular",            "No.", 425000.00, 30, "UPS"),
     ("JMG Offshore Ghana", "power_system", "80 kVA Eaton 93PR UPS (3P)",            "Eaton",   "93PR-80",     "Eaton 93PR 80kVA three-phase UPS, fault-tolerant",     "No.", 685000.00, 45, "UPS"),
     ("JMG Offshore Ghana", "power_system", "100 kVA Vertiv Liebert UPS (3P)",       "Vertiv",  "LBT-100",     "Vertiv Liebert APM 100kVA three-phase UPS",            "No.", 825000.00, 45, "UPS"),

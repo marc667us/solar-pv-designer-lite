@@ -1,0 +1,107 @@
+# EMERGENCY ROLLBACK of the price corrections applied by
+# `Fix Marketplace High Prices` (run 28063839617 on 2026-06-23 23:20 UTC).
+#
+# That workflow misread the GHS seed values as USD overwrites and blew
+# up the owner-corrected USD prices on the live catalogue. This restores
+# the EXACT pre-change values captured from the run log:
+#
+#   SRT10KXLI  (10 kVA Online UPS Tower)              90,000 -> 4,600
+#   SRT10KXLI  (10 kVA APC Smart-UPS On-Line (3P))    90,000 -> 11,379
+#   SRT20KXLI  (20 kVA APC Smart-UPS On-Line (3P))   160,000 -> 19,655
+#   S3-15K     (15 kVA Online UPS (three-phase))      65,000 -> 7,241
+#   S3-40K     (40 kVA Online UPS (three-phase))     175,000 -> 16,207
+#   S3-50K     (50 kVA Online UPS (three-phase))     215,000 -> 19,655
+#
+# Idempotent. Safe to re-run (UPDATE writes the same value if already
+# rolled back).
+
+name: Rollback Marketplace Price Changes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install --quiet psycopg2-binary requests
+
+      - name: Resolve solarpro-postgres URL
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXTERNAL=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "external=$EXTERNAL" >> $GITHUB_OUTPUT
+
+      - name: Restore pre-change prices
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          python3 <<'PY'
+          import os, psycopg2
+          conn = psycopg2.connect(os.environ["DATABASE_URL"], sslmode="require")
+          conn.autocommit = False
+          cur = conn.cursor()
+
+          # (model, exact_product_name, restore_to_USD)
+          RESTORES = [
+              ("SRT10KXLI",  "10 kVA Online UPS Tower",                      4600.00),
+              ("SRT10KXLI",  "10 kVA APC Smart-UPS On-Line (3P)",           11379.00),
+              ("SRT20KXLI",  "20 kVA APC Smart-UPS On-Line (3P)",           19655.00),
+              ("S3-15K",     "15 kVA Online UPS (three-phase)",              7241.00),
+              ("S3-40K",     "40 kVA Online UPS (three-phase)",             16207.00),
+              ("S3-50K",     "50 kVA Online UPS (three-phase)",             19655.00),
+          ]
+
+          report = []
+          for model, name, restored in RESTORES:
+              cur.execute(
+                  "SELECT id, price_usd FROM equipment_catalog "
+                  "WHERE model=%s AND name=%s AND is_active=1",
+                  (model, name),
+              )
+              rows = cur.fetchall()
+              if not rows:
+                  report.append(f"  [skip] {model} ({name}) -- not found")
+                  continue
+              for rid, current in rows:
+                  if abs(float(current) - restored) < 0.5:
+                      report.append(f"  [have] {model} ({name}) already at {restored:,.0f}")
+                      continue
+                  cur.execute(
+                      "UPDATE equipment_catalog SET price_usd=%s WHERE id=%s",
+                      (restored, rid),
+                  )
+                  report.append(
+                      f"  [ok]   {model} ({name}) {current:,.0f} -> {restored:,.0f} (RESTORED)"
+                  )
+          conn.commit()
+          cur.close(); conn.close()
+          print("\n".join(report))
+          print("\nRolled back -- live Postgres restored to pre-2026-06-23-23:20 values.")
+          PY
