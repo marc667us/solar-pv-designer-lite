@@ -381,14 +381,17 @@ a[href*="login-actions/reset-credentials"]:hover {
 .sp-form-panel { order: 1 !important; }
 .sp-hero       { order: 2 !important; }
 
-/* Form panel hugs its KC card. Inner (bottom) corners squared so it
-   seams flush with the hero card directly below. */
+/* Form panel hugs its KC card. Inner (bottom) corners squared so the
+   marketing block below reads as the same card. The shadow lives on
+   the form so it visually carries the hero below it too. */
 .sp-form-panel {
   width: 100% !important;
   max-width: 440px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+  /* drop-shadow on the panel so it spans both children visually */
+  filter: drop-shadow(0 8px 32px rgba(0,0,0,0.5)) !important;
 }
 .sp-form-panel > .card-pf,
 .sp-form-panel > .pf-v5-c-login__main {
@@ -398,8 +401,9 @@ a[href*="login-actions/reset-credentials"]:hover {
   border-top-right-radius: var(--sp-radius) !important;
   border-bottom-left-radius: 0 !important;
   border-bottom-right-radius: 0 !important;
-  /* Tighten the bottom border so the seam looks like one card. */
+  /* Drop bottom border + own card shadow so the seam disappears. */
   border-bottom: 0 !important;
+  box-shadow: none !important;
 }
 
 /* Hero card sits flush directly below the form, no gap. Top inner
@@ -418,28 +422,32 @@ a[href*="login-actions/reset-credentials"]:hover {
   border-bottom-right-radius: var(--sp-radius) !important;
 }
 
-/* ── Hero panel (right column) ─────────────────────────────────── */
-/* Flex sizing + order rules above; this block owns the visual style. */
+/* ── Hero block (visual continuation of the form card) ──────────
+   "make the column one" -- drop the hero's separate background,
+   border and shadow so the marketing content reads as a single
+   panel with the form above it, not two stacked cards. */
 .sp-hero {
   min-width: 320px !important;
-  background: linear-gradient(135deg, #0f0f22 0%, #13133a 60%, #0f1428 100%) !important;
+  background: var(--sp-card-bg) !important;        /* match form card */
   border: 1px solid var(--sp-border) !important;
-  padding: 28px 28px 24px !important;
+  border-top: 0 !important;                        /* form owns the top edge */
+  padding: 22px 28px 28px !important;
   color: var(--sp-text) !important;
   position: relative !important;
   overflow: hidden !important;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.5) !important;
+  box-shadow: none !important;                     /* shadow lives on form */
   display: flex !important;
   flex-direction: column !important;
   gap: 14px !important;
 }
-/* gold/blue top accent strip — matches solar app .report-header::before */
+/* Subtle divider above the hero content so the eye knows the block
+   below the form is a related section, not a totally separate card. */
 .sp-hero::before {
   content: '';
   position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--solar-gold), var(--solar-blue), #a78bfa);
+  top: 0; left: 28px; right: 28px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--sp-border) 30%, var(--sp-border) 70%, transparent);
 }
 /* subtle radial glow */
 .sp-hero::after {
