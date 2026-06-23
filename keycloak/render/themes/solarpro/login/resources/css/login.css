@@ -130,7 +130,9 @@ label,
   letter-spacing: 0.4px;
 }
 
-/* Inputs */
+/* Inputs -- owner directive: 'reduce the height of the fields'.
+   Smaller vertical padding (was .6rem) + line-height locked so KC's
+   wrapper doesn't add extra space. */
 input,
 input[type=text],
 input[type=password],
@@ -141,9 +143,18 @@ input[type=email],
   color: var(--sp-text) !important;
   border: 1px solid var(--sp-border) !important;
   border-radius: 8px !important;
-  padding: .6rem .85rem !important;
-  font-size: 15px !important;
+  padding: .35rem .75rem !important;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+  height: auto !important;
+  min-height: 34px !important;
   transition: border-color .15s, box-shadow .15s !important;
+}
+/* Tighten KC's form-group spacing too so successive fields are
+   close together, not just smaller individually. */
+.pf-v5-c-form__group,
+.form-group {
+  margin-bottom: .6rem !important;
 }
 input:focus,
 .pf-v5-c-form-control:focus,
@@ -338,11 +349,8 @@ a[href*="login-actions/reset-credentials"]:hover {
   margin-top: 1.5rem;
 }
 
-/* Form group spacing */
-.pf-v5-c-form__group,
-.form-group {
-  margin-bottom: 1rem !important;
-}
+/* Form group spacing -- tightened above (around line 155). Keeping
+   this block empty for backwards-locating but the .6rem rule wins. */
 
 /* Required-field indicator */
 .pf-v5-c-form__label-required {
@@ -423,30 +431,32 @@ a[href*="login-actions/reset-credentials"]:hover {
 }
 
 /* ── Hero block (visual continuation of the form card) ──────────
-   "make the column one" -- drop the hero's separate background,
-   border and shadow so the marketing content reads as a single
-   panel with the form above it, not two stacked cards. Tight
-   padding so the gap to the form is small. */
+   Owner directives:
+     * remove the divider line above the marketing block
+     * remove the SolarPro Global logo + wordmark inside the hero
+       (the page <title> already says 'Sign in to SolarPro Global')
+   Hero now starts straight at the pitch line. */
 .sp-hero {
   min-width: 320px !important;
   background: var(--sp-card-bg) !important;
   border: 1px solid var(--sp-border) !important;
   border-top: 0 !important;
-  padding: 6px 28px 22px !important;               /* tighter top */
+  padding: 6px 28px 18px !important;
   color: var(--sp-text) !important;
   position: relative !important;
   overflow: hidden !important;
   box-shadow: none !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 12px !important;
+  gap: 10px !important;
 }
-.sp-hero::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 28px; right: 28px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--sp-border) 30%, var(--sp-border) 70%, transparent);
+/* divider line removed per owner request */
+.sp-hero::before { display: none !important; }
+
+/* Hide the logo + 'SolarPro Global' wordmark + tagline cluster --
+   the page title already names the product. */
+.sp-hero__brand {
+  display: none !important;
 }
 
 /* Compress KC's form-card padding-bottom so the join sits close
@@ -579,10 +589,13 @@ a[href*="login-actions/reset-credentials"]:hover {
 }
 
 /* ── Privacy / data-protection footer ─────────────────────────── */
+/* Owner: 'bring the privacy statement closer to the login frame'.
+   Reduced top margin so the footer sits directly under the merged
+   card with minimal breathing room. */
 .sp-privacy {
   max-width: 1080px !important;
-  margin: 8px auto 24px auto !important;
-  padding: 16px 20px !important;
+  margin: 0 auto 18px auto !important;             /* tight to the card above */
+  padding: 6px 20px 12px !important;
   color: var(--sp-sub) !important;
   font-size: 13px !important;
   line-height: 1.6 !important;
