@@ -49,7 +49,7 @@
   <div class="col-md-6">
     <div class="kpi-card h-100">
       <div class="kpi-label"><i class="bi bi-cash-stack me-1"></i>Project grand total</div>
-      <div class="kpi-value">{{ (grand_total)|fmt }}</div>
+      <div class="kpi-value">{{ (grand_total)|money }}</div>
       <div class="kpi-unit">sum of all floor items</div>
     </div>
   </div>
@@ -78,7 +78,7 @@
         <td class="small">{{ b.primary_purpose|title }}</td>
         <td class="small text-secondary">{{ b.purpose_subtype }}{% if b.purpose_subtype == 'Other' and b.other_purpose_description %} — {{ b.other_purpose_description }}{% endif %}</td>
         <td class="text-end">{{ b.n_floors }}</td>
-        <td class="text-end fw-bold text-warning">{{ (b.subtotal or 0)|fmt }}</td>
+        <td class="text-end fw-bold text-warning">{{ (b.subtotal or 0)|money }}</td>
         <td class="text-end">
           <a href="{{ url_for('boq_building_view', pid=project.id, bid=b.id) }}" class="btn btn-outline-warning btn-sm">Open</a>
         </td>

@@ -29,7 +29,7 @@
         <td class="small">{{ p.client_name or '—' }}</td>
         <td class="small">{{ p.n_buildings }}</td>
         <td class="text-end small">{{ p.n_items }}</td>
-        <td class="text-end fw-bold text-warning">{{ (p.grand_total or 0)|fmt }}</td>
+        <td class="text-end fw-bold text-warning">{{ (p.grand_total or 0)|money }}</td>
         <td class="small text-secondary">{{ p.updated_at }}</td>
         <td class="text-end" style="white-space:nowrap">
           <a href="{{ url_for('boq_project_overview', pid=p.id) }}" class="btn btn-warning fw-bold btn-sm" title="Open this project">

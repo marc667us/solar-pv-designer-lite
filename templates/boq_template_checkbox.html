@@ -180,17 +180,21 @@
       var q = parseFloat(qty.value || 0);
       var r = b * rates();
       var a = q * r;
-      rate.textContent = r.toFixed(2);
-      amount.textContent = tick.checked ? a.toFixed(2) : '—';
+      var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
+      rate.textContent = nf.format(Math.round(r));
+      amount.textContent = tick.checked ? nf.format(Math.round(a)) : '—';
       window._boqRecalc();
     };
     window._boqRecalc = function() {
       var sum = 0;
       document.querySelectorAll('tr.boq-tpl-row').forEach(function(tr){
         if (!tr.querySelector('.boq-tick').checked) return;
-        sum += parseFloat(tr.querySelector('.boq-amount').textContent || 0);
+        var txt = (tr.querySelector('.boq-amount').textContent || '0').replace(/,/g, '');
+        var v = parseFloat(txt);
+        if (!isNaN(v)) sum += v;
       });
-      document.getElementById('grid_subtotal').textContent = sum.toFixed(2);
+      var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
+      document.getElementById('grid_subtotal').textContent = nf.format(Math.round(sum));
     };
     window._boqTickAll = function(state) {
       document.querySelectorAll('.boq-tick').forEach(function(c){ c.checked = state; });
@@ -257,17 +261,19 @@
       var qty   = parseFloat(tr.querySelector('input[name="custom_qty[]"]').value || 0);
       var r = basic * rates();
       var a = qty * r;
-      tr.querySelector('.boq-rate').textContent = r.toFixed(2);
-      tr.querySelector('.boq-amount').textContent = a.toFixed(2);
+      var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
+      tr.querySelector('.boq-rate').textContent = nf.format(Math.round(r));
+      tr.querySelector('.boq-amount').textContent = nf.format(Math.round(a));
       // Approximate -- sum all amounts (including custom) into the live subtotal.
       var sum = 0;
       document.querySelectorAll('tr.boq-tpl-row').forEach(function(t){
         var tick = t.querySelector('.boq-tick');
         if (tick && !tick.checked) return;
-        var amt = parseFloat(t.querySelector('.boq-amount').textContent || 0);
+        var txt = (t.querySelector('.boq-amount').textContent || '0').replace(/,/g, '');
+        var amt = parseFloat(txt);
         if (!isNaN(amt)) sum += amt;
       });
-      document.getElementById('grid_subtotal').textContent = sum.toFixed(2);
+      document.getElementById('grid_subtotal').textContent = nf.format(Math.round(sum));
     };
     // initial compute
     document.querySelectorAll('tr.boq-tpl-row .boq-basic').forEach(function(b){ window._boqTplRow(b); });

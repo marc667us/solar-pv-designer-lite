@@ -127,21 +127,21 @@
         </td>
         <td class="text-end">{{ (it.qty or 0)|fmt }}</td>
         <td class="small text-secondary">{{ it.unit }}</td>
-        <td class="text-end">{{ (line.basic_rate or 0)|fmt }}</td>
-        <td class="text-end">{{ (line.basic_rate or 0)|fmt }}</td>
-        <td class="text-end">{{ (line.install_labour or 0)|fmt }}</td>
-        <td class="text-end">{{ (line.overhead or 0)|fmt }}</td>
-        <td class="text-end">{{ (line.profit or 0)|fmt }}</td>
-        <td class="text-end">{{ (line.vat or 0)|fmt }}</td>
-        <td class="text-end fw-bold text-warning">{{ (line.total_rate or 0)|fmt }}</td>
-        <td class="text-end fw-bold">{{ (line.line_total or 0)|fmt }}</td>
+        <td class="text-end">{{ (line.basic_rate or 0)|money }}</td>
+        <td class="text-end">{{ (line.basic_rate or 0)|money }}</td>
+        <td class="text-end">{{ (line.install_labour or 0)|money }}</td>
+        <td class="text-end">{{ (line.overhead or 0)|money }}</td>
+        <td class="text-end">{{ (line.profit or 0)|money }}</td>
+        <td class="text-end">{{ (line.vat or 0)|money }}</td>
+        <td class="text-end fw-bold text-warning">{{ (line.total_rate or 0)|money }}</td>
+        <td class="text-end fw-bold">{{ (line.line_total or 0)|money }}</td>
       </tr>
       {% endfor %}
     </tbody>
     <tfoot>
       <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
         <td colspan="11" class="text-end fw-black" style="font-size:13px">GRAND TOTAL ({{ currency or 'USD' }})</td>
-        <td class="text-end fw-black text-warning" style="font-size:16px">{{ (totals.grand_total)|fmt }}</td>
+        <td class="text-end fw-black text-warning" style="font-size:16px">{{ (totals.grand_total)|money }}</td>
       </tr>
     </tfoot>
   </table>
@@ -183,19 +183,19 @@
         </td>
         <td class="small text-secondary">{{ it.unit }}</td>
         <td class="text-end">{{ (it.qty or 0)|fmt }}</td>
-        <td class="text-end">{{ (line.total_rate if line.total_rate is defined else line.unit_price)|fmt }}</td>
-        <td class="text-end fw-bold">{{ (line.line_total)|fmt }}</td>
+        <td class="text-end">{{ (line.total_rate if line.total_rate is defined else line.unit_price)|money }}</td>
+        <td class="text-end fw-bold">{{ (line.line_total)|money }}</td>
         <td class="text-secondary small">{{ it.remarks or it.notes or '' }}</td>
       </tr>
       {% endfor %}
     </tbody>
     <tfoot>
       {% for cat, sub in totals.category_totals.items() %}
-      <tr><td colspan="5" class="text-end text-secondary">{{ cat }} subtotal</td><td class="text-end fw-bold">{{ (sub)|fmt }}</td><td></td></tr>
+      <tr><td colspan="5" class="text-end text-secondary">{{ cat }} subtotal</td><td class="text-end fw-bold">{{ (sub)|money }}</td><td></td></tr>
       {% endfor %}
       <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
         <td colspan="5" class="text-end fw-black" style="font-size:14px">GRAND TOTAL ({{ currency or 'USD' }})</td>
-        <td class="text-end fw-black text-warning" style="font-size:18px">{{ (totals.grand_total)|fmt }}</td>
+        <td class="text-end fw-black text-warning" style="font-size:18px">{{ (totals.grand_total)|money }}</td>
         <td></td>
       </tr>
     </tfoot>

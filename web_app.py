@@ -4131,6 +4131,28 @@ def fmti(v):
         return str(v)
 
 
+@app.template_filter("money")
+def money(v):
+    """Integer-formatted money: 1,234,567 (no decimals).
+
+    Used for all price / rate / amount columns in BOQ + marketplace +
+    BOM + cost-estimate templates per owner directive 2026-06-23:
+    "round off prices remove the decimals". Rounds half-away-from-zero
+    (Python's round() uses banker's rounding, so add a tiny epsilon
+    to force standard arithmetic rounding for half-cents).
+    """
+    try:
+        x = float(v)
+        # Standard rounding (away from zero on .5) -- the +eps trick.
+        if x >= 0:
+            n = int(x + 0.5)
+        else:
+            n = -int(-x + 0.5)
+        return f"{n:,}"
+    except Exception:
+        return str(v)
+
+
 # ─── PDF helper ───────────────────────────────────────────────────────────────
 
 def _render_pdf(title, md_content, filename):

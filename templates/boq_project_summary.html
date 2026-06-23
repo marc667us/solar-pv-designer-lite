@@ -11,7 +11,7 @@
   </div>
   <div class="kpi-card" style="min-width:240px">
     <div class="kpi-label">Grand total</div>
-    <div class="kpi-value">{{ (grand_total)|fmt }}</div>
+    <div class="kpi-value">{{ (grand_total)|money }}</div>
   </div>
 </div>
 
@@ -27,14 +27,14 @@
         <td><strong>{{ b.building_name }}</strong></td>
         <td class="small">{{ b.primary_purpose|title }}</td>
         <td class="small text-secondary">{{ b.purpose_subtype }}</td>
-        <td class="text-end fw-bold text-warning">{{ (b.subtotal or 0)|fmt }}</td>
+        <td class="text-end fw-bold text-warning">{{ (b.subtotal or 0)|money }}</td>
       </tr>
       {% endfor %}
     </tbody>
     <tfoot>
       <tr style="background:rgba(245,158,11,.10)">
         <td colspan="3" class="text-end fw-black">PROJECT GRAND TOTAL</td>
-        <td class="text-end fw-black text-warning">{{ (grand_total)|fmt }}</td>
+        <td class="text-end fw-black text-warning">{{ (grand_total)|money }}</td>
       </tr>
     </tfoot>
   </table>
@@ -52,7 +52,7 @@
         <td>{{ f.building_name }}</td>
         <td>{{ f.floor_name }}</td>
         <td class="small text-secondary">{{ f.floor_level }}</td>
-        <td class="text-end fw-bold">{{ (f.subtotal or 0)|fmt }}</td>
+        <td class="text-end fw-bold">{{ (f.subtotal or 0)|money }}</td>
       </tr>
       {% endfor %}
     </tbody>

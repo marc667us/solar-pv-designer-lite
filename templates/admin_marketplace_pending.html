@@ -112,7 +112,7 @@
             <td class="small">{{ p.supplier_name or '—' }}</td>
             <td class="small text-secondary">{{ p.category_name or '—' }}{% if p.subcategory %}<div>{{ p.subcategory }}</div>{% endif %}</td>
             <td class="small text-secondary" style="max-width:300px">{{ p.spec or '—' }}</td>
-            <td class="text-end fw-bold text-warning">USD {{ (p.price_usd or 0)|fmt }} <span class="text-secondary small">/ {{ p.unit }}</span></td>
+            <td class="text-end fw-bold text-warning">USD {{ (p.price_usd or 0)|money }} <span class="text-secondary small">/ {{ p.unit }}</span></td>
             <td class="text-end">
               <form method="POST" action="{{ url_for('admin_marketplace_approve_product', pid=p.id) }}" style="display:inline">
                 <input type="hidden" name="_csrf" value="{{ csrf_token() }}">

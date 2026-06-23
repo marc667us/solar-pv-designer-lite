@@ -46,8 +46,8 @@
           <td>{{ it.description }}</td>
           <td class="text-end">{{ (it.qty or 0)|fmt }}</td>
           <td>{{ it.unit }}</td>
-          <td class="text-end">{{ (it.final_built_up_rate or 0)|fmt }}</td>
-          <td class="text-end fw-bold">{{ (it.total_amount or 0)|fmt }}</td>
+          <td class="text-end">{{ (it.final_built_up_rate or 0)|money }}</td>
+          <td class="text-end fw-bold">{{ (it.total_amount or 0)|money }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -208,8 +208,11 @@
       var q = parseFloat(qty.value || 0);
       var r = (s + i) * rates();
       var a = q * r;
-      rate.textContent = r.toFixed(2);
-      amount.textContent = (tick && tick.checked) ? a.toFixed(2) : '—';
+      // Owner directive 2026-06-23: round off prices, no decimals.
+      // Use Intl.NumberFormat for thousands separators on integers.
+      var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
+      rate.textContent = nf.format(Math.round(r));
+      amount.textContent = (tick && tick.checked) ? nf.format(Math.round(a)) : '—';
       window._boqRecalc();
     };
     window._boqRecalc = function() {
@@ -217,9 +220,12 @@
       document.querySelectorAll('tr.boq-row').forEach(function(tr){
         var tick = tr.querySelector('.boq-tick');
         if (tick && !tick.checked) return;
-        sum += parseFloat(tr.querySelector('.boq-amount').textContent || 0);
+        var txt = (tr.querySelector('.boq-amount').textContent || '0').replace(/,/g, '');
+        var v = parseFloat(txt);
+        if (!isNaN(v)) sum += v;
       });
-      document.getElementById('grid_subtotal').textContent = sum.toFixed(2);
+      var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
+      document.getElementById('grid_subtotal').textContent = nf.format(Math.round(sum));
     };
     window._boqTickAll = function(state) {
       document.querySelectorAll('.boq-tick').forEach(function(c){ c.checked = state; });

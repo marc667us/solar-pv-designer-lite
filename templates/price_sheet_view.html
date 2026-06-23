@@ -89,7 +89,7 @@
           <td><strong>{{ it.custom_name }}</strong></td>
           <td class="text-center">1</td>
           <td class="text-center small">{{ it.unit }}</td>
-          <td class="text-end fw-bold text-warning">{{ sheet.currency }} {{ (it.price_at_add or 0)|fmt }}</td>
+          <td class="text-end fw-bold text-warning">{{ sheet.currency }} {{ (it.price_at_add or 0)|money }}</td>
           <td class="small">{{ it.supplier_name or '—' }}</td>
           <td class="small">{{ it.supplier_brand or '—' }}</td>
           <td class="small text-secondary">{{ it.supplier_phone or '—' }}</td>

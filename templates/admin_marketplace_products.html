@@ -45,7 +45,7 @@
         <td><strong>{{ p.name }}</strong>{% if p.brand or p.model %}<div class="small text-secondary">{{ p.brand }}{% if p.model %} · {{ p.model }}{% endif %}</div>{% endif %}</td>
         <td class="small">{{ p.supplier_name or '—' }}</td>
         <td class="small text-secondary">{{ p.category_name or '—' }}{% if p.subcategory %}<div class="small text-secondary">{{ p.subcategory }}</div>{% endif %}</td>
-        <td class="text-end fw-bold text-warning">USD {{ (p.price_usd or 0)|fmt }} <span class="text-secondary small">/ {{ p.unit }}</span></td>
+        <td class="text-end fw-bold text-warning">USD {{ (p.price_usd or 0)|money }} <span class="text-secondary small">/ {{ p.unit }}</span></td>
         <td>
           {% if not p.is_active %}<span class="badge bg-danger">Deleted</span>
           {% elif p.is_verified and p.is_public_visible %}<span class="badge bg-success">Live</span>

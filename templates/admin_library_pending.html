@@ -27,7 +27,7 @@
           <td class="small text-secondary">{{ r.category }}</td>
           <td class="small">{{ r.brand or '—' }}</td>
           <td class="small">{{ r.unit }}</td>
-          <td class="text-end">{{ (r.price_usd or 0)|fmt }}</td>
+          <td class="text-end">{{ (r.price_usd or 0)|money }}</td>
           <td class="small text-secondary">user #{{ r.submitted_by_user_id or '—' }}</td>
           <td class="small text-secondary">{{ r.created_at }}</td>
           <td class="text-end">

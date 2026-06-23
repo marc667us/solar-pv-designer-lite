@@ -40,13 +40,13 @@
       <tr>
         <td class="text-secondary">{{ loop.index }}</td>
         <td><strong>BILL No. {{ b.bill_no }} — {{ b.bill_name }}</strong></td>
-        <td class="text-end">{{ (b.subtotal)|fmt }}</td>
+        <td class="text-end">{{ (b.subtotal)|money }}</td>
       </tr>
       {% endfor %}
       <tr>
         <td></td>
         <td class="fw-bold" style="border-top:1px solid #1e1e3a">SUB TOTAL</td>
-        <td class="text-end fw-bold" style="border-top:1px solid #1e1e3a">{{ (subtotal)|fmt }}</td>
+        <td class="text-end fw-bold" style="border-top:1px solid #1e1e3a">{{ (subtotal)|money }}</td>
       </tr>
       <tr>
         <td></td>
