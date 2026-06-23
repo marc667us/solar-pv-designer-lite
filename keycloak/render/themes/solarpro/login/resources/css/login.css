@@ -353,3 +353,220 @@ a[href*="login-actions/reset-credentials"]:hover {
 .pf-v5-c-login__main-header-desc {
   color: var(--sp-sub) !important;
 }
+
+/* ───────────────────────────────────────────────────────────────
+   sp-enhance.js — injected marketing hero, sales pitch, technical
+   features and privacy/data-protection footer. CSS classes here
+   match the DOM that sp-enhance.js creates; see that file for the
+   structure contract.
+   ─────────────────────────────────────────────────────────────── */
+
+/* Two-column shell wraps the existing KC card so we don't disturb its
+   internal layout. On narrow screens the hero collapses above the form. */
+.sp-shell {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  justify-content: center !important;
+  gap: 28px !important;
+  max-width: 1080px !important;
+  margin: 32px auto !important;
+  padding: 0 16px !important;
+  flex-wrap: wrap;
+}
+@media (max-width: 880px) {
+  .sp-shell { flex-direction: column !important; gap: 18px !important; }
+}
+
+.sp-form-panel {
+  flex: 0 1 460px !important;
+  min-width: 320px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* The KC card sits inside .sp-form-panel; let it own its own width. */
+.sp-form-panel > .card-pf,
+.sp-form-panel > .pf-v5-c-login__main {
+  width: 100% !important;
+  max-width: 460px !important;
+}
+
+/* ── Hero panel (left column) ─────────────────────────────────── */
+.sp-hero {
+  flex: 1 1 460px !important;
+  min-width: 320px !important;
+  background: linear-gradient(135deg, #0f0f22 0%, #13133a 60%, #0f1428 100%) !important;
+  border: 1px solid var(--sp-border) !important;
+  border-radius: var(--sp-radius) !important;
+  padding: 28px 28px 24px !important;
+  color: var(--sp-text) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+}
+/* gold/blue top accent strip — matches solar app .report-header::before */
+.sp-hero::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--solar-gold), var(--solar-blue), #a78bfa);
+}
+/* subtle radial glow */
+.sp-hero::after {
+  content: '';
+  position: absolute;
+  bottom: -60px; right: -60px;
+  width: 200px; height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(245,158,11,0.18), transparent 60%);
+  pointer-events: none;
+}
+
+.sp-hero__brand {
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+}
+.sp-hero__logo {
+  width: 64px !important;
+  height: 64px !important;
+  filter: drop-shadow(0 4px 12px rgba(245,158,11,0.4));
+  flex: 0 0 auto;
+}
+.sp-hero__wordmark { display: flex !important; flex-direction: column !important; }
+.sp-hero__title {
+  font-size: 26px !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.6px !important;
+  line-height: 1.1 !important;
+  background: linear-gradient(90deg, var(--solar-gold), var(--solar-blue)) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+.sp-hero__subtitle {
+  font-size: 13px !important;
+  color: var(--sp-sub) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.2px !important;
+}
+
+.sp-hero__pitch {
+  font-size: 15px !important;
+  color: var(--sp-text) !important;
+  line-height: 1.55 !important;
+  margin: 4px 0 4px 0 !important;
+}
+
+.sp-hero__features {
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 4px 0 8px 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+.sp-hero__features li {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 10px !important;
+  font-size: 14px !important;
+  color: var(--sp-text) !important;
+  line-height: 1.4 !important;
+}
+.sp-hero__icon {
+  flex: 0 0 22px !important;
+  width: 22px !important;
+  height: 22px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(245,158,11,0.12) !important;
+  color: var(--solar-gold) !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+}
+.sp-hero__feature-text { flex: 1 1 auto !important; }
+
+.sp-hero__sales {
+  margin-top: 6px !important;
+  padding: 12px 14px !important;
+  background: rgba(245,158,11,0.08) !important;
+  border: 1px solid rgba(245,158,11,0.25) !important;
+  border-radius: 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex-wrap: wrap;
+}
+.sp-hero__chip {
+  display: inline-block !important;
+  padding: 4px 10px !important;
+  background: linear-gradient(135deg, var(--solar-gold), var(--solar-orange)) !important;
+  color: #0a0a14 !important;
+  font-weight: 800 !important;
+  font-size: 11px !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase !important;
+  border-radius: 999px !important;
+  white-space: nowrap;
+}
+.sp-hero__sales-text {
+  font-size: 13px !important;
+  color: var(--sp-sub) !important;
+  flex: 1 1 auto !important;
+}
+
+/* ── Privacy / data-protection footer ─────────────────────────── */
+.sp-privacy {
+  max-width: 1080px !important;
+  margin: 8px auto 24px auto !important;
+  padding: 16px 20px !important;
+  text-align: center !important;
+  color: var(--sp-muted) !important;
+  font-size: 12.5px !important;
+  line-height: 1.55 !important;
+}
+.sp-privacy__row {
+  margin: 4px 0 !important;
+}
+.sp-privacy__row a {
+  color: var(--solar-gold) !important;
+  font-weight: 700 !important;
+  text-decoration: none !important;
+  margin: 0 2px !important;
+}
+.sp-privacy__row a:hover {
+  color: var(--solar-orange) !important;
+  text-decoration: underline !important;
+}
+.sp-privacy__sep {
+  margin: 0 6px !important;
+  color: var(--sp-border) !important;
+}
+.sp-privacy__fineprint {
+  max-width: 760px !important;
+  margin: 8px auto 0 auto !important;
+  color: var(--sp-muted) !important;
+  font-size: 11.5px !important;
+  font-style: italic !important;
+}
+
+/* When sp-enhance has mounted, the body background gets the radial
+   wash we used to put on .pf-v5-c-login -- because the form is now
+   inside .sp-form-panel and the page chrome around it expanded. */
+html[data-sp-enhanced="1"] body,
+html[data-sp-enhanced="1"] .login-pf-page,
+html[data-sp-enhanced="1"] .pf-v5-c-login {
+  background: var(--sp-bg) !important;
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(245,158,11,0.08), transparent 38%),
+    radial-gradient(circle at 82% 88%, rgba(14,165,233,0.08), transparent 40%) !important;
+}
