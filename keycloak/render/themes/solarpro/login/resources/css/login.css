@@ -112,6 +112,83 @@ aside .solar-card {
   box-shadow:   0 0 0 .2rem rgba(239, 68, 68, .18);
 }
 
+/* PatternFly v5 form controls (used by KC's parent register.ftl and
+   any other unoverridden flows). Styled to match the .form-control
+   dark theme AND given a touch more vertical room than KC's default
+   so the register fields don't feel cramped. */
+.pf-v5-c-form-control {
+  background:    rgba(255, 255, 255, .04) !important;
+  border:        1px solid var(--sp-border) !important;
+  color:         var(--sp-text) !important;
+  border-radius: 8px !important;
+  padding:       .65rem .9rem !important;
+  font-size:     .95rem !important;
+  line-height:   1.45 !important;
+  min-height:    46px !important;
+  width:         100% !important;
+}
+.pf-v5-c-form-control:focus,
+.pf-v5-c-form-control:focus-within,
+.pf-v5-c-form-control:focus-visible {
+  background:   rgba(255, 255, 255, .06) !important;
+  border-color: var(--sp-accent) !important;
+  box-shadow:   0 0 0 .2rem rgba(245, 158, 11, .18) !important;
+  outline:      none !important;
+}
+.pf-v5-c-form-control::placeholder { color: var(--sp-muted) !important; }
+.pf-v5-c-form-control input,
+.pf-v5-c-form-control select,
+.pf-v5-c-form-control textarea {
+  background: transparent !important;
+  border:     none !important;
+  color:      inherit !important;
+  width:      100% !important;
+  padding:    0 !important;
+  min-height: 0 !important;
+  line-height:inherit !important;
+}
+.pf-v5-c-form__group { margin-bottom: 1rem !important; }
+.pf-v5-c-form__label,
+.pf-v5-c-form__label-text {
+  color:         var(--sp-sub) !important;
+  font-size:     12px !important;
+  font-weight:   700 !important;
+  text-transform:uppercase !important;
+  letter-spacing:.4px !important;
+}
+.pf-v5-c-form__label-required { color: var(--sp-accent) !important; }
+.pf-v5-c-form__helper-text,
+.pf-v5-c-helper-text__item-text { color: var(--sp-muted) !important; font-size: 12px !important; }
+
+/* PF5 input group (used when a password input has an eye-toggle) */
+.pf-v5-c-input-group {
+  border:        1px solid var(--sp-border) !important;
+  border-radius: 8px !important;
+  background:    rgba(255, 255, 255, .04) !important;
+  overflow:      hidden;
+}
+.pf-v5-c-input-group .pf-v5-c-form-control {
+  border:     none !important;
+  background: transparent !important;
+}
+.pf-v5-c-input-group .pf-v5-c-button {
+  background: transparent !important;
+  color:      var(--sp-sub) !important;
+  border:     none !important;
+}
+
+/* PF5 primary submit button -- match .btn-solar */
+.pf-v5-c-button.pf-m-primary {
+  background:  linear-gradient(135deg, var(--solar-gold), var(--solar-orange)) !important;
+  border:      none !important;
+  color:       #000 !important;
+  font-weight: 700 !important;
+  border-radius: 8px !important;
+  padding:     .6rem 1rem !important;
+}
+.pf-v5-c-button.pf-m-primary:hover,
+.pf-v5-c-button.pf-m-primary:focus { filter: brightness(1.1) !important; color: #000 !important; }
+
 /* Form check (remember-me) */
 .form-check-input {
   background-color: rgba(255, 255, 255, .06);
