@@ -393,12 +393,15 @@ a[href*="login-actions/reset-credentials"]:hover {
   border-radius: var(--sp-radius) !important;
 }
 
-/* Hero centered below the form, slightly wider so the marketing copy
-   has room to breathe but still feels balanced under the narrower
-   form. Restore full radius now that the seam is gone. */
+/* Hero card matches the form width (440px) and centers directly
+   below it, so the two cards read as a single stacked column rather
+   than a wider banner overflowing the form's footprint. Owner
+   directive: 'put the text card under login in the middle'. */
 .sp-hero {
   width: 100% !important;
-  max-width: 640px !important;
+  max-width: 440px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
   border-radius: var(--sp-radius) !important;
 }
 
