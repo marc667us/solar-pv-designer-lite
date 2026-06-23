@@ -1,10 +1,8 @@
 /*
- * SolarPro login theme -- matches the dark-navy + solar-gold palette of
- * the SolarPro web app (templates/base.html). Parent theme is keycloak.v2
- * (PatternFly 5); these overrides target both the new PF5 classes
- * (.pf-v5-c-*) AND the legacy login-pf-page classes for safety.
- *
- * Palette mirrors web_app.py base.html :root vars.
+ * SolarPro KC login theme -- mirrors templates/auth.html (the legacy
+ * SolarPro login template) so the KC page looks like the rest of the
+ * app. Custom login.ftl + template.ftl produce the DOM; this file
+ * paints it.
  */
 
 :root {
@@ -18,662 +16,226 @@
   --solar-gold: #f59e0b;
   --solar-orange: #ea580c;
   --solar-blue: #0ea5e9;
-  --solar-green: #22c55e;
+  --solar-purple: #a78bfa;
   --sp-radius: 14px;
   --sp-font: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+* { box-sizing: border-box; }
+
 html, body {
-  background: var(--sp-bg) !important;
-  color: var(--sp-text) !important;
-  font-family: var(--sp-font) !important;
-  min-height: 100vh;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--sp-bg);
+  color: var(--sp-text);
+  font-family: var(--sp-font);
+  font-size: 16px;
+  line-height: 1.5;
 }
 
-/* Outer page chrome -- v2 + legacy */
+/* Hide the Keycloak default chrome we're not using.
+   The v2 theme used to inject .pf-v5-c-login wrappers; our custom
+   template.ftl doesn't, so these are belt-and-braces in case anything
+   slips through. */
 .pf-v5-c-login,
-.pf-v5-c-background-image,
 .login-pf,
 .login-pf-page,
-.login-pf body {
-  background: var(--sp-bg) !important;
-  background-image: radial-gradient(circle at 20% 10%, rgba(245,158,11,0.08), transparent 40%),
-                    radial-gradient(circle at 80% 90%, rgba(14,165,233,0.08), transparent 40%) !important;
+.pf-v5-c-background-image,
+#kc-header-wrapper {
+  display: none !important;
 }
 
-/* Card / main login container */
-.pf-v5-c-login__main,
-.pf-v5-c-login__container,
-.login-pf-page .card-pf,
-#kc-content,
-#kc-form-wrapper,
-.card-pf {
-  background: var(--sp-card-bg) !important;
-  border: 1px solid var(--sp-border) !important;
-  border-radius: var(--sp-radius) !important;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.5) !important;
-  color: var(--sp-text) !important;
-}
-
-/* Card header gradient strip -- mirrors solar's .report-header::before */
-.pf-v5-c-login__main-header,
-.login-pf-page-header,
-#kc-header {
-  background: transparent !important;
-  position: relative;
-  padding-top: 16px !important;
-}
-.pf-v5-c-login__main-header::before,
-.login-pf-page-header::before,
-#kc-header::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--solar-gold), var(--solar-blue), #a78bfa);
-  border-radius: var(--sp-radius) var(--sp-radius) 0 0;
-}
-
-/* Headings + brand text */
-.pf-v5-c-login__main-header h1,
-.pf-v5-c-title,
-#kc-page-title,
-.login-pf-page h1,
-.login-pf-page h2,
-.kc-logo-text {
-  color: var(--sp-text) !important;
-  font-weight: 900 !important;
-  letter-spacing: -0.5px !important;
-  background: linear-gradient(90deg, var(--solar-gold), var(--solar-blue)) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
-  background-clip: text !important;
-}
-
-/* Default Keycloak logo - hide, replace with SolarPro wordmark */
-#kc-header-wrapper,
-.pf-v5-c-brand {
-  background-image: none !important;
-  color: transparent !important;
-  font-size: 0 !important;
-  position: relative;
-  height: 56px;
-  margin-bottom: 8px;
-}
-#kc-header-wrapper::after,
-.pf-v5-c-brand::after {
-  content: 'SolarPro Global';
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 28px;
-  font-weight: 900;
-  letter-spacing: -0.6px;
-  background: linear-gradient(90deg, var(--solar-gold), var(--solar-blue));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  font-family: var(--sp-font);
-  white-space: nowrap;
-}
-
-/* Form labels */
-label,
-.pf-v5-c-form__label,
-.pf-v5-c-form__label-text,
-.control-label,
-#kc-form-wrapper label {
-  color: var(--sp-sub) !important;
-  font-weight: 600 !important;
-  font-size: 13px !important;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-/* Form inputs -- comfortable 36px row, readable 14px font, snug
-   gap between fields. Smaller than KC's default but not cramped. */
-input,
-input[type=text],
-input[type=password],
-input[type=email],
-.pf-v5-c-form-control,
-.form-control {
-  background: rgba(255,255,255,0.04) !important;
-  color: var(--sp-text) !important;
-  border: 1px solid var(--sp-border) !important;
-  border-radius: 8px !important;
-  padding: .45rem .8rem !important;
-  font-size: 14px !important;
-  line-height: 1.4 !important;
-  height: 36px !important;
-  min-height: 36px !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
-  transition: border-color .15s, box-shadow .15s !important;
-}
-.pf-v5-c-form-control input,
-.pf-v5-c-input-group input,
-.pf-v5-c-form__group .pf-v5-c-form-control {
-  height: 36px !important;
-  min-height: 36px !important;
-}
-.pf-v5-c-form__group,
-.form-group {
-  margin-bottom: .85rem !important;
-}
-/* Submit button: 40px so it's a clear CTA above the input row. */
-.pf-v5-c-button.pf-m-primary,
-input[type=submit],
-button.btn-primary,
-.btn.btn-primary {
-  padding: .5rem 1rem !important;
-  height: 40px !important;
-  min-height: 40px !important;
-  font-size: 14px !important;
-  width: 100% !important;
-}
-input:focus,
-.pf-v5-c-form-control:focus,
-.form-control:focus {
-  border-color: var(--solar-gold) !important;
-  box-shadow: 0 0 0 2px rgba(245,158,11,0.18) !important;
-  outline: none !important;
-  background: rgba(255,255,255,0.06) !important;
-}
-input::placeholder,
-.pf-v5-c-form-control::placeholder {
-  color: var(--sp-muted) !important;
-}
-
-/* Primary button -- solar-gold gradient with black text */
-.pf-v5-c-button.pf-m-primary,
-.pf-v5-c-button.pf-m-primary:focus,
-input[type=submit],
-input[type=submit].btn-primary,
-button.btn-primary,
-.btn.btn-primary {
-  background: linear-gradient(135deg, var(--solar-gold), var(--solar-orange)) !important;
-  border: none !important;
-  color: #0a0a14 !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.3px !important;
-  border-radius: 8px !important;
-  padding: .65rem 1.1rem !important;
-  text-shadow: none !important;
-  box-shadow: 0 2px 8px rgba(245,158,11,0.25) !important;
-}
-.pf-v5-c-button.pf-m-primary:hover,
-input[type=submit]:hover,
-.btn.btn-primary:hover {
-  filter: brightness(1.1) !important;
-  color: #0a0a14 !important;
-}
-
-/* Secondary / link buttons */
-.pf-v5-c-button.pf-m-secondary,
-.btn.btn-default,
-.btn-default {
-  background: rgba(255,255,255,0.04) !important;
-  border: 1px solid var(--sp-border) !important;
-  color: var(--sp-text) !important;
-  border-radius: 8px !important;
-  font-weight: 600 !important;
-}
-.pf-v5-c-button.pf-m-secondary:hover,
-.btn.btn-default:hover {
-  background: rgba(255,255,255,0.08) !important;
-  color: var(--sp-text) !important;
-}
-
-/* Links -- solar-gold */
-a,
-a:visited,
-.pf-v5-c-button.pf-m-link {
-  color: var(--solar-gold) !important;
-  text-decoration: none !important;
-}
-a:hover {
-  color: var(--solar-orange) !important;
-  text-decoration: underline !important;
-}
-
-/* Alerts */
-.pf-v5-c-alert,
-.alert {
-  background: var(--sp-card-bg-2) !important;
-  border: 1px solid var(--sp-border) !important;
-  border-radius: 8px !important;
-  color: var(--sp-text) !important;
-}
-.pf-v5-c-alert.pf-m-danger,
-.alert-danger,
-.alert-error,
-#input-error,
-.pf-v5-c-form__helper-text.pf-m-error {
-  border-left: 3px solid #ef4444 !important;
-  color: #fca5a5 !important;
-}
-.pf-v5-c-alert.pf-m-success,
-.alert-success {
-  border-left: 3px solid var(--solar-green) !important;
-  color: #86efac !important;
-}
-.pf-v5-c-alert.pf-m-warning,
-.alert-warning {
-  border-left: 3px solid var(--solar-gold) !important;
-  color: #fcd34d !important;
-}
-
-/* Checkboxes / radios (remember-me etc.) */
-.pf-v5-c-check__input,
-input[type=checkbox],
-input[type=radio] {
-  accent-color: var(--solar-gold) !important;
-}
-.pf-v5-c-check__label,
-.checkbox label {
-  color: var(--sp-sub) !important;
-  font-size: 13px !important;
-}
-
-/* "Forgot password?" / "New user? Register" link clusters.
-   Both are rendered by KC but were too muted in the first pass.
-   Promote them with bigger font, clear top border separator, gold link
-   colour, and a hover underline so the call-to-action is obvious. */
-#kc-info,
-#kc-info-wrapper,
-.login-pf-signup,
-.pf-v5-c-login__main-footer-band,
-#kc-form-options,
-.kc-login-tooltip {
-  color: var(--sp-sub) !important;
-  font-size: 15px !important;
-  margin-top: 1.25rem !important;
-  padding-top: 1rem !important;
-  border-top: 1px solid var(--sp-border) !important;
-  text-align: center !important;
-}
-
-/* "New user?" + "Register" inside the v2 footer band. */
-#kc-registration-container,
-#kc-registration,
-.pf-v5-c-login__main-footer-band-item {
-  display: block !important;
-  margin: 0.5rem 0 !important;
-  font-size: 15px !important;
-  color: var(--sp-sub) !important;
-}
-
-/* All sign-up / reset links -- gold, bold, visible. */
-#kc-info a,
-.login-pf-signup a,
-#kc-registration a,
-.pf-v5-c-login__main-footer-band a,
-a[href*="login-actions/registration"],
-a[href*="login-actions/reset-credentials"] {
-  color: var(--solar-gold) !important;
-  font-weight: 800 !important;
-  font-size: 15px !important;
-  text-decoration: none !important;
-  padding: 2px 6px !important;
-  border-radius: 4px !important;
-  transition: background .15s, color .15s !important;
-}
-#kc-info a:hover,
-.login-pf-signup a:hover,
-#kc-registration a:hover,
-.pf-v5-c-login__main-footer-band a:hover,
-a[href*="login-actions/registration"]:hover,
-a[href*="login-actions/reset-credentials"]:hover {
-  color: var(--solar-orange) !important;
-  background: rgba(245, 158, 11, 0.10) !important;
-  text-decoration: underline !important;
-}
-
-/* "Forgot Password?" lives inline next to the password field via #kc-form-options.
-   Give it its own padded chip so it doesn't disappear next to the input. */
-#kc-form-options {
-  border-top: none !important;
-  padding-top: 0 !important;
-  margin-top: 0.5rem !important;
-  margin-bottom: 1rem !important;
-  text-align: right !important;
-}
-
-/* Force the registration footer band to be visible -- some PF5 layouts
-   collapse this band when empty; we want it always painted as long as
-   the realm has registrationAllowed=true. */
-.pf-v5-c-login__main-footer-band {
-  display: block !important;
-  padding: 1rem 0 !important;
-}
-
-/* Social-provider buttons (if any provider is configured later) */
-#kc-social-providers a {
-  background: rgba(255,255,255,0.04) !important;
-  border: 1px solid var(--sp-border) !important;
-  border-radius: 8px !important;
-  color: var(--sp-text) !important;
-}
-
-/* Footer attribution */
-.pf-v5-c-login__footer,
-.login-pf-footer {
-  color: var(--sp-muted) !important;
-  font-size: 12px !important;
-  text-align: center;
-  margin-top: 1.5rem;
-}
-
-/* Form group spacing -- tightened above (around line 155). Keeping
-   this block empty for backwards-locating but the .6rem rule wins. */
-
-/* Required-field indicator */
-.pf-v5-c-form__label-required {
-  color: var(--solar-orange) !important;
-}
-
-/* Required-actions banner (UPDATE_PASSWORD etc.) */
-.pf-v5-c-login__main-header-desc {
-  color: var(--sp-sub) !important;
-}
-
-/* ───────────────────────────────────────────────────────────────
-   sp-enhance.js — injected marketing hero, sales pitch, technical
-   features and privacy/data-protection footer. CSS classes here
-   match the DOM that sp-enhance.js creates; see that file for the
-   structure contract.
-   ─────────────────────────────────────────────────────────────── */
-
-/* ═══════════════════════════════════════════════════════════════
-   CLEAN LAYOUT REWRITE
-   Owner directive: "the arrangement on the page is very bad recreate
-   the login page rearrange the login fields and the text well".
-
-   Stack, top-to-bottom, centered on page:
-     1. Login card (400px, normal rounded corners, own shadow)
-     2. 18px gap
-     3. Marketing card (400px, smaller padding, feature bullets only)
-     4. 16px gap
-     5. Privacy summary cards (two)
-     6. Legal links + copyright
-
-   No seam-flush hack, no merged-card filter, no -1px nudge. Each
-   card is its own thing with its own rounded corners and border.
-   ═══════════════════════════════════════════════════════════════ */
-
-.sp-shell {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: flex-start !important;
-  gap: 18px !important;
-  width: 100% !important;
-  max-width: 400px !important;
-  margin: 48px auto 0 auto !important;
-  padding: 0 16px !important;
-  min-height: auto !important;
-}
-.sp-form-panel { order: 1 !important; }
-.sp-hero       { order: 2 !important; }
-
-/* Login card: clean standalone card, all 4 corners rounded, own shadow. */
-.sp-form-panel {
-  width: 100% !important;
-  max-width: 400px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  filter: none !important;
-}
-.sp-form-panel > .card-pf,
-.sp-form-panel > .pf-v5-c-login__main {
-  width: 100% !important;
-  max-width: 400px !important;
-  border: 1px solid var(--sp-border) !important;
-  border-radius: var(--sp-radius) !important;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
-  padding: 28px 24px !important;
-}
-
-/* Hero card sits flush directly below the form, no gap. Top inner
-   corners squared to seam against the form's squared bottom; outer
-   (bottom) corners stay rounded. The two cards read as one continuous
-   centered column. */
-.sp-hero {
-  width: 100% !important;
-  max-width: 200px !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
-  margin-top: -1px !important;                    /* nudge over the form's border line */
-  border-top-left-radius: 0 !important;
-  border-top-right-radius: 0 !important;
-  border-bottom-left-radius: var(--sp-radius) !important;
-  border-bottom-right-radius: var(--sp-radius) !important;
-}
-
-/* ── Marketing card (own standalone card, below the form) ───────
-   No seam, no merged-with-form trick. Own border, own padding,
-   own corners. Smaller and quieter so the eye focuses on the form
-   above it. Only feature bullets + sales chip are visible inside
-   (brand + pitch hidden per prior owner directives). */
-.sp-hero {
-  width: 100% !important;
-  min-width: 0 !important;
-  max-width: 400px !important;
-  background: var(--sp-card-bg) !important;
-  border: 1px solid var(--sp-border) !important;
-  border-radius: var(--sp-radius) !important;
-  padding: 18px 24px !important;
-  color: var(--sp-text) !important;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 10px !important;
-  margin: 0 auto !important;
-}
-.sp-hero::before, .sp-hero::after { display: none !important; }
-.sp-hero__brand { display: none !important; }
-.sp-hero__pitch { display: none !important; }
-
-/* (Earlier tight-seam padding overrides removed -- card is standalone
-   again so KC's normal internal padding is fine.) */
-/* subtle radial glow */
-.sp-hero::after {
-  content: '';
-  position: absolute;
-  bottom: -60px; right: -60px;
-  width: 200px; height: 200px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(245,158,11,0.18), transparent 60%);
-  pointer-events: none;
-}
-
-.sp-hero__brand {
-  display: flex !important;
-  align-items: center !important;
-  gap: 14px !important;
-}
-.sp-hero__logo {
-  width: 64px !important;
-  height: 64px !important;
-  filter: drop-shadow(0 4px 12px rgba(245,158,11,0.4));
-  flex: 0 0 auto;
-}
-.sp-hero__wordmark { display: flex !important; flex-direction: column !important; }
-.sp-hero__title {
-  font-size: 26px !important;
-  font-weight: 900 !important;
-  letter-spacing: -0.6px !important;
-  line-height: 1.1 !important;
-  background: linear-gradient(90deg, var(--solar-gold), var(--solar-blue)) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
-  background-clip: text !important;
-}
-.sp-hero__subtitle {
-  font-size: 13px !important;
-  color: var(--sp-sub) !important;
-  font-weight: 600 !important;
-  letter-spacing: 0.2px !important;
-}
-
-.sp-hero__pitch {
-  font-size: 15px !important;
-  color: var(--sp-text) !important;
-  line-height: 1.55 !important;
-  margin: 4px 0 4px 0 !important;
-}
-
-.sp-hero__features {
-  list-style: none !important;
-  padding: 0 !important;
-  margin: 4px 0 8px 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 10px !important;
-}
-.sp-hero__features li {
-  display: flex !important;
-  align-items: flex-start !important;
-  gap: 10px !important;
-  font-size: 14px !important;
-  color: var(--sp-text) !important;
-  line-height: 1.4 !important;
-}
-.sp-hero__icon {
-  flex: 0 0 22px !important;
-  width: 22px !important;
-  height: 22px !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  background: rgba(245,158,11,0.12) !important;
-  color: var(--solar-gold) !important;
-  border-radius: 6px !important;
-  font-size: 12px !important;
-  font-weight: 800 !important;
-}
-.sp-hero__feature-text { flex: 1 1 auto !important; }
-
-.sp-hero__sales {
-  margin-top: 6px !important;
-  padding: 12px 14px !important;
-  background: rgba(245,158,11,0.08) !important;
-  border: 1px solid rgba(245,158,11,0.25) !important;
-  border-radius: 10px !important;
-  display: flex !important;
-  align-items: center !important;
-  gap: 12px !important;
-  flex-wrap: wrap;
-}
-.sp-hero__chip {
-  display: inline-block !important;
-  padding: 4px 10px !important;
-  background: linear-gradient(135deg, var(--solar-gold), var(--solar-orange)) !important;
-  color: #0a0a14 !important;
-  font-weight: 800 !important;
-  font-size: 11px !important;
-  letter-spacing: 0.5px !important;
-  text-transform: uppercase !important;
-  border-radius: 999px !important;
-  white-space: nowrap;
-}
-.sp-hero__sales-text {
-  font-size: 13px !important;
-  color: var(--sp-sub) !important;
-  flex: 1 1 auto !important;
-}
-
-/* ── Privacy / data-protection footer ─────────────────────────── */
-/* Owner: 'bring the privacy statement closer to the login frame'.
-   Reduced top margin so the footer sits directly under the merged
-   card with minimal breathing room. */
-.sp-privacy {
-  max-width: 1080px !important;
-  margin: 0 auto 18px auto !important;             /* tight to the card above */
-  padding: 6px 20px 12px !important;
-  color: var(--sp-sub) !important;
-  font-size: 13px !important;
-  line-height: 1.6 !important;
-}
-
-/* Privacy + Data Protection summary cards */
-.sp-privacy__summary {
-  background: rgba(15, 15, 34, 0.6) !important;
-  border: 1px solid var(--sp-border) !important;
-  border-left: 3px solid var(--solar-gold) !important;
-  border-radius: 10px !important;
-  padding: 14px 18px !important;
-  margin: 10px auto !important;
-  max-width: 880px !important;
-}
-.sp-privacy__heading {
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  font-weight: 800 !important;
-  color: var(--solar-gold) !important;
-  font-size: 13px !important;
-  letter-spacing: 0.5px !important;
-  text-transform: uppercase !important;
-  margin-bottom: 6px !important;
-}
-.sp-privacy__icon {
-  display: inline-flex !important;
-  width: 22px !important;
-  height: 22px !important;
-  align-items: center !important;
-  justify-content: center !important;
-  background: rgba(245,158,11,0.15) !important;
-  border-radius: 6px !important;
-  font-size: 13px !important;
-}
-.sp-privacy__body {
-  color: var(--sp-text) !important;
-  font-size: 13px !important;
-  line-height: 1.6 !important;
-  margin: 0 !important;
-  font-weight: 400 !important;
-}
-
-/* Link row + copyright row */
-.sp-privacy__row {
-  margin: 8px 0 !important;
-  text-align: center !important;
-}
-.sp-privacy__links {
-  margin-top: 16px !important;
-}
-.sp-privacy__links a {
-  color: var(--solar-gold) !important;
-  font-weight: 700 !important;
-  text-decoration: none !important;
-  margin: 0 2px !important;
-  font-size: 13px !important;
-}
-.sp-privacy__links a:hover {
-  color: var(--solar-orange) !important;
-  text-decoration: underline !important;
-}
-.sp-privacy__sep {
-  margin: 0 6px !important;
-  color: var(--sp-border) !important;
-}
-.sp-privacy__copy {
-  color: var(--sp-muted) !important;
-  font-size: 12px !important;
-  margin-top: 6px !important;
-}
-
-/* When sp-enhance has mounted, the body background gets the radial
-   wash we used to put on .pf-v5-c-login -- because the form is now
-   inside .sp-form-panel and the page chrome around it expanded. */
-html[data-sp-enhanced="1"] body,
-html[data-sp-enhanced="1"] .login-pf-page,
-html[data-sp-enhanced="1"] .pf-v5-c-login {
-  background: var(--sp-bg) !important;
+/* Page chrome -- centered vertically + horizontally, subtle radial wash. */
+.sp-page {
+  background: var(--sp-bg);
   background-image:
-    radial-gradient(circle at 18% 12%, rgba(245,158,11,0.08), transparent 38%),
-    radial-gradient(circle at 82% 88%, rgba(14,165,233,0.08), transparent 40%) !important;
+    radial-gradient(circle at 20% 12%, rgba(245,158,11,0.08), transparent 38%),
+    radial-gradient(circle at 80% 88%, rgba(14,165,233,0.08), transparent 40%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sp-page__container {
+  width: 100%;
+  max-width: 420px;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
+}
+
+/* The card itself -- matches .solar-card in base.html. */
+.solar-card {
+  background: var(--sp-card-bg);
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-radius);
+  padding: 1.5rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.solar-card__header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+.solar-card__icon {
+  font-size: 36px;
+  line-height: 1;
+}
+.solar-card__title {
+  margin: 0.5rem 0 0.25rem 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--sp-text);
+  letter-spacing: -0.25px;
+}
+.solar-card__subtitle {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--sp-sub);
+}
+
+/* Alerts inside the card. */
+.solar-alert {
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 1rem;
+  font-size: 13.5px;
+  line-height: 1.5;
+  border: 1px solid var(--sp-border);
+  background: var(--sp-card-bg-2);
+}
+.solar-alert--error   { border-left: 3px solid #ef4444;          color: #fca5a5; }
+.solar-alert--success { border-left: 3px solid #22c55e;          color: #86efac; }
+.solar-alert--warning { border-left: 3px solid var(--solar-gold); color: #fcd34d; }
+.solar-alert--info    { border-left: 3px solid var(--solar-blue); color: #7dd3fc; }
+
+/* Form layout. */
+.solar-form { display: flex; flex-direction: column; gap: 1rem; }
+
+.solar-field { display: flex; flex-direction: column; }
+.solar-field__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+.solar-field__label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--sp-sub);
+  letter-spacing: 0.4px;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+}
+.solar-field__row .solar-field__label { margin-bottom: 0; }
+
+.solar-field__input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--sp-text);
+  border: 1px solid var(--sp-border);
+  border-radius: 8px;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  line-height: 1.4;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+.solar-field__input::placeholder { color: var(--sp-muted); }
+.solar-field__input:focus {
+  border-color: var(--solar-gold);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
+}
+.solar-field__input--error {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.12);
+}
+
+/* Remember-me checkbox. */
+.solar-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sp-sub);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.solar-check input { accent-color: var(--solar-gold); }
+
+/* Submit button -- gold/orange gradient with black text, matches .btn-solar. */
+.solar-btn-primary {
+  display: block;
+  width: 100%;
+  background: linear-gradient(135deg, var(--solar-gold), var(--solar-orange));
+  color: #0a0a14;
+  font-weight: 700;
+  font-size: 0.95rem;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  transition: filter 0.15s, transform 0.05s;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.25);
+}
+.solar-btn-primary:hover  { filter: brightness(1.1); }
+.solar-btn-primary:active { transform: translateY(1px); }
+
+/* Card footer -- "New user? Create account" cluster. */
+.solar-card__footer {
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: var(--sp-sub);
+}
+.solar-info-text { color: var(--sp-sub); margin-right: 4px; }
+
+/* Links. */
+.solar-link-warning {
+  color: var(--solar-gold);
+  font-weight: 600;
+  text-decoration: none;
+}
+.solar-link-warning:hover {
+  color: var(--solar-orange);
+  text-decoration: underline;
+}
+.solar-link-warning--small {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Legal footer below the card. */
+.sp-legal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--sp-muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.sp-legal a {
+  color: var(--solar-gold);
+  text-decoration: none;
+  font-weight: 600;
+}
+.sp-legal a:hover {
+  color: var(--solar-orange);
+  text-decoration: underline;
+}
+.sp-legal__sep { color: var(--sp-border); }
+
+/* Small-screen tightening. */
+@media (max-width: 480px) {
+  .sp-page__container { padding: 16px 12px; }
+  .solar-card { padding: 1.25rem 1rem; }
+  .solar-card__title { font-size: 1.25rem; }
 }
