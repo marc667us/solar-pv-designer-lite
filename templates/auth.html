@@ -12,6 +12,13 @@
 
     <form method="POST">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {# Phase A escape hatch: if the GET came in with ?legacy=1, the page is
+         rendered for the seed admin. Carry that signal through the POST as a
+         hidden input so the Phase A guard (which also checks request.form)
+         keeps honoring it even if the browser drops the query string. #}
+      {% if request.args.get('legacy') == '1' %}
+      <input type="hidden" name="legacy" value="1">
+      {% endif %}
       {% if mode == "register" %}
       <div class="mb-3">
         <label class="form-label small fw-bold text-secondary">FULL NAME</label>

@@ -1763,7 +1763,7 @@ def register():
     # page. POST handling is untouched so the legacy form keeps working.
     if request.method in ("GET", "POST") \
         and os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
-        and request.args.get("legacy") != "1":
+        and (request.args.get("legacy") != "1" and request.form.get("legacy") != "1"):
         _kc_next = request.args.get("next")
         if _kc_next:
             return redirect(url_for("oidc.auth_register", next=_kc_next))
@@ -1889,7 +1889,7 @@ def login():
     # POST handling is untouched so the legacy form keeps working.
     if request.method in ("GET", "POST") \
         and os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
-        and request.args.get("legacy") != "1":
+        and (request.args.get("legacy") != "1" and request.form.get("legacy") != "1"):
         _kc_next = request.args.get("next")
         if _kc_next:
             return redirect(url_for("oidc.auth_login", next=_kc_next))
@@ -1967,7 +1967,7 @@ def logout():
 @limiter.limit("5 per hour")
 def forgot_password():
     if os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
-        and request.args.get("legacy") != "1":
+        and (request.args.get("legacy") != "1" and request.form.get("legacy") != "1"):
         flash("Password reset is now managed by the SolarPro identity service. Use the \"Forgot password?\" link on the login page.", "info")
         return redirect(url_for("oidc.auth_login"))
     if request.method == "POST":
@@ -2016,7 +2016,7 @@ def forgot_password():
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
     if os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
-        and request.args.get("legacy") != "1":
+        and (request.args.get("legacy") != "1" and request.form.get("legacy") != "1"):
         flash("Password reset is now managed by the SolarPro identity service. Use the \"Forgot password?\" link on the login page.", "info")
         return redirect(url_for("oidc.auth_login"))
     with get_db() as c:
