@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Recheck review — {{ meta.cat_name }}{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('admin_marketplace_recheck') }}" class="text-warning"><i class="bi bi-arrow-left me-1"></i>Back to recheck picker</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1">
+      <i class="bi bi-search-heart text-info me-1"></i>Proposed catalogue prices &mdash; {{ meta.cat_name }}
+    </h5>
+    <div class="text-secondary small">
+      Source: <strong>{{ meta.source }}</strong> &middot;
+      Country: <strong>{{ meta.country }}</strong> &middot;
+      Currency: <strong>{{ meta.currency }}</strong> &middot;
+      {{ rows|length }} item{{ '' if rows|length == 1 else 's' }}
+    </div>
+  </div>
+</div>
+
+<div class="solar-card p-3 mb-3" style="border:1px solid #0ea5e944;background:rgba(14,165,233,.05)">
+  <p class="small mb-1 text-info">
+    <i class="bi bi-info-circle me-1"></i>
+    Tick the rows you want to apply. Anomalies (&gt;&plusmn;25% from current) are auto-unticked &mdash; review them carefully.
+  </p>
+  <p class="small mb-0 text-secondary">
+    Applying writes a price-history row + stores the three supplier quotes against each catalogue item.
+  </p>
+</div>
+
+<form method="POST" action="{{ url_for('admin_marketplace_recheck_apply', cat_id=meta.cat_id) }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+  <div class="solar-card p-3 mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+      <h6 class="fw-bold mb-0"><i class="bi bi-list-check me-1 text-warning"></i>{{ rows|length }} item{{ '' if rows|length == 1 else 's' }}</h6>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-light btn-sm" onclick="document.querySelectorAll('input[name=apply]').forEach(c=>c.checked=true)">
+          <i class="bi bi-check-all me-1"></i>Tick all
+        </button>
+        <button type="button" class="btn btn-outline-light btn-sm" onclick="document.querySelectorAll('input[name=apply]').forEach(c=>c.checked=false)">
+          <i class="bi bi-x me-1"></i>Untick all
+        </button>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle" style="color:#e0e0f0;font-size:12px">
+        <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px">
+          <tr>
+            <th style="width:38px">Apply</th>
+            <th>#</th>
+            <th>Item</th>
+            <th class="text-end">Current ({{ meta.currency }})</th>
+            <th class="text-end">Sup 1</th>
+            <th class="text-end">Sup 2</th>
+            <th class="text-end">Sup 3</th>
+            <th class="text-end">Proposed (avg)</th>
+            <th class="text-end">Δ</th>
+            <th>Conf./Flag</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for iid, info in rows %}
+          {% set delta = (info.proposed or 0) - (info.current or 0) %}
+          {% set good  = info.proposed and info.proposed > 0 %}
+          {% set quotes = info.quotes or [] %}
+          <tr>
+            <td class="text-center">
+              {% if good %}
+                <input class="form-check-input" type="checkbox" name="apply" value="{{ iid }}" {% if info.confidence == 'high' and not info.anomaly %}checked{% endif %}>
+              {% else %}
+                <span class="text-secondary small" title="No price returned">—</span>
+              {% endif %}
+            </td>
+            <td class="text-secondary small">{{ loop.index }}</td>
+            <td>
+              <strong>{{ info.name }}</strong>
+              <div class="text-secondary" style="font-size:10px">{{ info.unit }} &middot; {{ info.src_note or '' }}</div>
+              {% if quotes %}
+              <div class="text-secondary" style="font-size:10px;margin-top:2px">
+                {% for q in quotes %}<span class="me-2"><i class="bi bi-shop me-1"></i>{{ q.supplier or '?' }}{% if q.note %} ({{ q.note }}){% endif %}</span>{% endfor %}
+              </div>
+              {% endif %}
+            </td>
+            <td class="text-end">{{ '{:,.2f}'.format(info.current or 0) }}</td>
+            {% for n in range(3) %}
+              {% set q = quotes[n] if n < quotes|length else None %}
+              <td class="text-end small">
+                {% if q and q.price and q.price > 0 %}{{ '{:,.2f}'.format(q.price) }}{% else %}—{% endif %}
+              </td>
+            {% endfor %}
+            <td class="text-end {% if good %}fw-bold text-info{% else %}text-secondary{% endif %}">
+              {{ '{:,.2f}'.format(info.proposed or 0) if good else '—' }}
+            </td>
+            <td class="text-end {% if delta > 0 %}text-warning{% elif delta < 0 %}text-success{% else %}text-secondary{% endif %}">
+              {% if good %}{{ ('+' if delta >= 0 else '') ~ '{:,.2f}'.format(delta) }}{% else %}—{% endif %}
+            </td>
+            <td>
+              {% set badge = {'high':'success','med':'info','low':'secondary'}.get(info.confidence, 'secondary') %}
+              <span class="badge bg-{{ badge }} text-uppercase">{{ info.confidence }}</span>
+              {% if info.anomaly %}
+              <span class="badge bg-warning text-dark ms-1" title="More than ±25% from current — review carefully">
+                <i class="bi bi-exclamation-triangle"></i> &gt;±25%
+              </span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-between flex-wrap gap-2">
+    <a href="{{ url_for('admin_marketplace_recheck') }}" class="btn btn-outline-light btn-sm">
+      <i class="bi bi-x-circle me-1"></i>Cancel
+    </a>
+    <button type="submit" class="btn btn-warning fw-bold">
+      <i class="bi bi-save me-1"></i>Apply ticked prices to catalogue
+    </button>
+  </div>
+</form>
+
+{% endblock %}

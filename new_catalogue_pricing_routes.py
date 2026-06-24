@@ -221,6 +221,247 @@ def register_catalogue_pricing_routes(
         )
         return redirect(url_for("procurement_catalog"))
 
+    # ─────────── Bulk catalogue recheck (admin-only) ───────────
+
+    @app.route("/admin/marketplace/recheck", methods=["GET", "POST"])
+    @admin_required
+    def admin_marketplace_recheck():
+        """Bulk recheck a catalogue category against the LLM. GET shows
+        the picker form (category + country/currency + cap). POST runs
+        the LLM on the matching items and redirects to the review page."""
+        with get_db() as c:
+            categories = c.execute(
+                "SELECT id, name, code FROM product_categories "
+                "WHERE is_active=1 ORDER BY display_order, name"
+            ).fetchall()
+
+        if request.method == "GET":
+            return render_template(
+                "admin_marketplace_recheck.html",
+                user=current_user(), categories=categories,
+            )
+
+        # POST -- run the LLM
+        csrf_protect()
+        f = request.form
+        try:
+            cat_id = int(f.get("category_id") or 0)
+        except (TypeError, ValueError):
+            cat_id = 0
+        if cat_id <= 0:
+            flash("Pick a category.", "warning")
+            return redirect(url_for("admin_marketplace_recheck"))
+        currency = (f.get("currency") or "GHS").upper().strip()[:3]
+        try:
+            cap = int(f.get("cap") or 30)
+        except (TypeError, ValueError):
+            cap = 30
+        cap = max(1, min(50, cap))
+
+        with get_db() as c:
+            cat_row = c.execute(
+                "SELECT id, name FROM product_categories WHERE id=?",
+                (cat_id,),
+            ).fetchone()
+            if not cat_row:
+                flash("Category not found.", "warning")
+                return redirect(url_for("admin_marketplace_recheck"))
+            cat_name = cat_row["name"]
+            items = c.execute(
+                "SELECT id, name, brand, model, spec, unit, price_usd "
+                "FROM equipment_catalog "
+                "WHERE category_id=? AND is_active=1 "
+                "ORDER BY id LIMIT ?",
+                (cat_id, cap),
+            ).fetchall()
+
+        if not items:
+            flash(f"No active products in '{cat_name}'.", "warning")
+            return redirect(url_for("admin_marketplace_recheck"))
+
+        # Reuse the recheck engine from new_recheck_prices_routes.
+        from new_recheck_prices_routes import (
+            _recheck_build_prompt, _recheck_call_llm, _recheck_parse,
+            _recheck_country_for,
+        )
+        country, _ = _recheck_country_for(currency)
+        fx_rate = float(_CURRENCY_RATES_FROM_USD.get(currency, 1.0) or 1.0)
+        if fx_rate <= 0:
+            fx_rate = 1.0
+
+        prompt_items = []
+        for it in items:
+            current_local = float(it["price_usd"] or 0) * fx_rate
+            prompt_items.append({
+                "id": int(it["id"]),
+                "name": str(it["name"] or ""),
+                "spec": str((it["spec"] if "spec" in it.keys() else "") or ""),
+                "brand": str((it["brand"] if "brand" in it.keys() else "") or ""),
+                "unit": str(it["unit"] or "No."),
+                "current_price": current_local,
+            })
+        prompt = _recheck_build_prompt(prompt_items, country, currency)
+        raw, src = _recheck_call_llm(prompt)
+        if raw is None:
+            flash(
+                f"Bulk recheck could not reach any AI provider ({src}). "
+                "Set OPENROUTER_API_KEY or OLLAMA_URL and retry.",
+                "danger",
+            )
+            return redirect(url_for("admin_marketplace_recheck"))
+        proposed = _recheck_parse(raw)
+        if not proposed:
+            flash(
+                f"LLM ({src}) returned no usable prices. Try again later.",
+                "warning",
+            )
+            return redirect(url_for("admin_marketplace_recheck"))
+
+        def _anomaly(current, prop):
+            if not current or current <= 0 or not prop or prop <= 0:
+                return False
+            return abs(prop - current) / current > 0.25
+
+        # Stash in session keyed by category id.
+        skey = f"cat_recheck_{cat_id}"
+        session[skey] = {
+            "currency": currency,
+            "country":  country,
+            "cat_id":   cat_id,
+            "cat_name": cat_name,
+            "source":   src,
+            "items": {
+                str(it["id"]): {
+                    "current":   it["current_price"],
+                    "current_usd": float(items[idx]["price_usd"] or 0),
+                    "name":      it["name"],
+                    "unit":      it["unit"],
+                    "proposed":  proposed.get(it["id"], {}).get("price", 0),
+                    "src_note":  proposed.get(it["id"], {}).get("source", ""),
+                    "confidence":proposed.get(it["id"], {}).get("confidence", "low"),
+                    "quotes":    proposed.get(it["id"], {}).get("quotes", []),
+                    "anomaly":   _anomaly(it["current_price"],
+                                          proposed.get(it["id"], {}).get("price", 0)),
+                }
+                for idx, it in enumerate(prompt_items)
+            },
+        }
+        flash(
+            f"Bulk recheck via {src}: {len(prompt_items)} items in "
+            f"'{cat_name}' ({country}/{currency}). Review and tick "
+            "rows to apply.",
+            "info",
+        )
+        return redirect(url_for("admin_marketplace_recheck_review",
+                                cat_id=cat_id))
+
+    @app.route("/admin/marketplace/recheck/<int:cat_id>/review",
+               methods=["GET"])
+    @admin_required
+    def admin_marketplace_recheck_review(cat_id):
+        skey = f"cat_recheck_{cat_id}"
+        proposals = session.get(skey) or {}
+        if not proposals.get("items"):
+            flash("No proposals in session. Run the bulk recheck first.",
+                  "warning")
+            return redirect(url_for("admin_marketplace_recheck"))
+        rows = []
+        for sid, info in proposals["items"].items():
+            try:
+                rows.append((int(sid), info))
+            except ValueError:
+                continue
+        rows.sort(key=lambda r: r[0])
+        return render_template(
+            "admin_marketplace_recheck_review.html",
+            user=current_user(), rows=rows, meta=proposals,
+        )
+
+    @app.route("/admin/marketplace/recheck/<int:cat_id>/apply",
+               methods=["POST"])
+    @admin_required
+    def admin_marketplace_recheck_apply(cat_id):
+        csrf_protect()
+        skey = f"cat_recheck_{cat_id}"
+        proposals = session.get(skey) or {}
+        if not proposals.get("items"):
+            flash("Proposals expired -- run the recheck again.", "warning")
+            return redirect(url_for("admin_marketplace_recheck"))
+        currency = proposals.get("currency", "GHS")
+        fx_rate = float(_CURRENCY_RATES_FROM_USD.get(currency, 1.0) or 1.0)
+        if fx_rate <= 0:
+            fx_rate = 1.0
+
+        ticked = set()
+        for k in request.form.getlist("apply"):
+            try:
+                ticked.add(int(k))
+            except (TypeError, ValueError):
+                pass
+
+        uid = session.get("user_id") or 0
+        applied = 0
+        skipped = 0
+        with get_db() as c:
+            for sid, info in proposals["items"].items():
+                try:
+                    iid = int(sid)
+                except ValueError:
+                    continue
+                if iid not in ticked:
+                    skipped += 1
+                    continue
+                proposed_local = float(info.get("proposed") or 0)
+                if proposed_local <= 0:
+                    skipped += 1
+                    continue
+                proposed_usd = proposed_local / fx_rate
+                old_usd = float(info.get("current_usd") or 0)
+                try:
+                    c.execute(
+                        "UPDATE equipment_catalog SET price_usd=? WHERE id=?",
+                        (proposed_usd, iid),
+                    )
+                except Exception:
+                    skipped += 1
+                    continue
+                # History + per-supplier quotes.
+                _record_price_history(
+                    get_db, iid, old_usd, proposed_usd, currency,
+                    proposed_local,
+                    f"bulk-recheck cat={cat_id}",
+                    f"AI source: {proposals.get('source','?')}",
+                    uid, status="approved",
+                )
+                for q in (info.get("quotes") or []):
+                    _record_catalog_quote(
+                        get_db, iid,
+                        (q.get("supplier") or "")[:200], 0,
+                        float(q.get("price") or 0), currency,
+                        (q.get("note") or "")[:300],
+                        bool(info.get("anomaly")),
+                        uid, status="proposed",
+                    )
+                applied += 1
+        # audit
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(
+                get_db, uid, "catalogue_bulk_recheck_applied",
+                "product_category", cat_id,
+                f"applied={applied} skipped={skipped} cat='{proposals.get('cat_name','')}' "
+                f"src={proposals.get('source','?')}",
+            )
+        except Exception:
+            pass
+        session.pop(skey, None)
+        flash(
+            f"Bulk recheck applied: {applied} catalogue price(s) updated, "
+            f"{skipped} skipped. History + supplier quotes logged.",
+            "success",
+        )
+        return redirect(url_for("admin_marketplace_recheck"))
+
     @app.route("/admin/catalogue/<int:item_id>/price-history",
                methods=["GET"])
     @admin_required

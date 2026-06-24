@@ -8,7 +8,10 @@
     <h4 class="fw-black mb-0">Product Catalogue</h4>
     <div class="text-secondary small">Price library for BOQ and procurement planning</div>
   </div>
-  <div class="ms-auto">
+  <div class="ms-auto d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-info btn-sm" href="{{ url_for('admin_marketplace_recheck') }}" title="Bulk recheck a category's prices via the AI market-lookup">
+      <i class="bi bi-search-heart me-1"></i>Bulk recheck
+    </a>
     <button class="btn btn-solar btn-sm" data-bs-toggle="modal" data-bs-target="#addItemModal">
       <i class="bi bi-plus-circle me-1"></i>Add Product
     </button>

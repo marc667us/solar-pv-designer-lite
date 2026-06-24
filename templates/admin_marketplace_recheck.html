@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Bulk catalogue recheck{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('procurement_catalog') }}" class="text-warning"><i class="bi bi-arrow-left me-1"></i>Back to Product Catalogue</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1">
+      <i class="bi bi-search-heart text-warning me-1"></i>Bulk catalogue price recheck
+    </h5>
+    <div class="text-secondary small">Pick a category, run the AI market-lookup, review proposed prices and apply.</div>
+  </div>
+</div>
+
+<div class="solar-card p-3 mb-3" style="border:1px solid #f59e0b44;background:rgba(245,158,11,.05)">
+  <p class="small mb-2">
+    <i class="bi bi-info-circle me-1 text-warning"></i>
+    <strong>How it works.</strong> Pick a category + the country/currency context, and the AI returns three vendor-named quotes per item for that local market. Up to 50 items per run (you can run the same category twice if you have more rows).
+  </p>
+  <p class="small mb-0 text-secondary">
+    Applying a row updates <code>equipment_catalog.price_usd</code>, writes a row to <code>equipment_catalog_price_history</code>, and stores the three supplier quotes in <code>equipment_catalog_quotes</code>. Anomalies (proposed price &gt;&plusmn;25% from current) are badged for review.
+  </p>
+</div>
+
+<form method="POST" class="solar-card p-3">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label small text-secondary">Category *</label>
+      <select name="category_id" class="form-select form-select-sm bg-dark text-light border-secondary" required>
+        <option value="">&mdash; Pick a category &mdash;</option>
+        {% for c in categories %}
+        <option value="{{ c.id }}">{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-secondary">Country / Currency *</label>
+      <select name="currency" class="form-select form-select-sm bg-dark text-light border-secondary" required>
+        <option value="GHS" selected>Ghana (GHS)</option>
+        <option value="NGN">Nigeria (NGN)</option>
+        <option value="KES">Kenya (KES)</option>
+        <option value="ZAR">South Africa (ZAR)</option>
+        <option value="USD">Global (USD)</option>
+        <option value="EUR">Europe (EUR)</option>
+        <option value="GBP">UK (GBP)</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-secondary">Cap (1&ndash;50)</label>
+      <input type="number" name="cap" min="1" max="50" value="30" class="form-control form-control-sm bg-dark text-light border-secondary">
+    </div>
+  </div>
+  <div class="d-flex justify-content-end mt-3">
+    <button type="submit" class="btn btn-warning fw-bold">
+      <i class="bi bi-search-heart me-1"></i>Run bulk recheck
+    </button>
+  </div>
+</form>
+
+{% endblock %}
