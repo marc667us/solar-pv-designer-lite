@@ -212,11 +212,13 @@
       <div class="d-grid gap-2">
 
         {% if paystack_public_key %}
+        {% set _pa = (paystack_amounts or {}).get(plan_key) or {'local': pp.usd, 'subunit': (pp.usd * 100)|int} %}
         <button class="btn fw-bold w-100 py-2"
                 style="background:{% if is_popular %}linear-gradient(135deg,var(--solar-gold),var(--solar-orange)){% else %}{{ color }}{% endif %};color:#000;border-radius:10px"
-                onclick="payWithPaystack('{{ plan_key }}', {{ pp.usd }})">
+                onclick="payWithPaystack('{{ plan_key }}', {{ _pa.subunit }}, '{{ paystack_currency or 'USD' }}')">
           <i class="bi bi-{% if is_popular %}stars{% else %}phone{% endif %} me-2"></i>
-          Pay ${{ pp.usd }}/mo — Card / MoMo
+          {% if (paystack_currency or 'USD') == 'USD' %}Pay ${{ pp.usd }}/mo — Card / MoMo
+          {% else %}Pay {{ paystack_currency }} {{ '{:,.0f}'.format(_pa.local) }}/mo — Card / MoMo (≈ ${{ pp.usd }}){% endif %}
         </button>
 
         {% elif stripe_key %}
@@ -499,18 +501,18 @@
 {% block scripts %}
 {% if paystack_public_key %}
 <script>
-function payWithPaystack(plan, amountUsd) {
+function payWithPaystack(plan, amountSubunit, currency) {
   const email  = document.getElementById('user_email').dataset.v;
   const csrf   = document.getElementById('csrf_val').dataset.v;
-  const amount = amountUsd * 100; // Paystack: USD cents
+  const userId = {{ paystack_user_id|default(0) }};
 
   const handler = PaystackPop.setup({
     key:      '{{ paystack_public_key }}',
     email:    email,
-    amount:   amount,
-    currency: 'USD',
+    amount:   amountSubunit,
+    currency: currency || 'USD',
     ref:      'pso_' + Math.random().toString(36).substr(2, 9) + Date.now(),
-    metadata: { plan: plan },
+    metadata: { plan: plan, user_id: userId },
     callback: function(response) {
       const form = document.createElement('form');
       form.method = 'POST';

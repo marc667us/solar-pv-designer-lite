@@ -31,6 +31,8 @@ _CURRENCY_RATES_FROM_USD = {
     "NGN": _fx_rate("NGN", 1550.0),
     "KES": _fx_rate("KES", 130.0),
     "ZAR": _fx_rate("ZAR", 18.5),
+    "XOF": _fx_rate("XOF", 610.0),
+    "ZMW": _fx_rate("ZMW", 24.0),
 }
 _CURRENCY_RATES_AS_OF = os.environ.get("FX_RATES_AS_OF", "2026-06-18")
 

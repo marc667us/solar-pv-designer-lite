@@ -7082,16 +7082,57 @@ def assistant_escalate():
 
 # ─── Phase 4: Subscription upgrade & payment ─────────────────────────────────
 
+# === Paystack country -> currency map (Task #5a) ===
+_COUNTRY_TO_PAYSTACK_CURRENCY = {
+    "Ghana": "GHS",
+    "Nigeria": "NGN",
+    "Kenya": "KES",
+    "South Africa": "ZAR",
+    "Mali": "XOF",
+    "Burkina Faso": "XOF",
+    "Cote d'Ivoire": "XOF",
+    "Ivory Coast": "XOF",
+    "Senegal": "XOF",
+    "Togo": "XOF",
+    "Benin": "XOF",
+    "Niger": "XOF",
+    "Guinea-Bissau": "XOF",
+    "Zambia": "USD",
+}
+_PAYSTACK_NO_SUBUNIT = {"XOF", "XAF"}
+
+def _paystack_currency_for_country(country):
+    return _COUNTRY_TO_PAYSTACK_CURRENCY.get((country or "").strip(), "USD")
+
+def _paystack_subunit(amount_local, currency):
+    if currency in _PAYSTACK_NO_SUBUNIT:
+        return int(round(float(amount_local or 0)))
+    return int(round(float(amount_local or 0) * 100))
+
+
 @app.route("/upgrade")
 @login_required
 def upgrade():
     user = current_user()
+    _country = (user["country"] if user and "country" in (user.keys() if hasattr(user, "keys") else []) else "") or ""
+    _ps_cur = _paystack_currency_for_country(_country)
+    _ps_fx = _CURRENCY_RATES_FROM_USD.get(_ps_cur, 1.0)
+    _ps_amounts = {
+        _code: {
+            "local": round(float(_p["usd"]) * float(_ps_fx), 2),
+            "subunit": _paystack_subunit(float(_p["usd"]) * float(_ps_fx), _ps_cur),
+        }
+        for _code, _p in PLAN_PRICES.items()
+    }
     return render_template("upgrade.html", user=user,
                            plan_prices=PLAN_PRICES,
                            current_plan=(user["plan"] or "free").lower(),
                            stripe_key=bool(STRIPE_SECRET),
                            paystack_key=bool(PAYSTACK_SECRET),
                            paystack_public_key=PAYSTACK_PUBLIC,
+                           paystack_currency=_ps_cur,
+                           paystack_amounts=_ps_amounts,
+                           paystack_user_id=int(session.get("user_id", 0)),
                            demo_mode=DEMO_MODE)
 
 
@@ -7190,9 +7231,8 @@ def paystack_verify():
     if not _ps_ok:
         flash("Payment verification failed — please contact billing@aiappinvent.com.", "danger")
         return redirect(url_for("upgrade"))
-    plan = session.pop("paystack_plan", "")
-    if not plan:
-        plan = (_ps_txn.get("metadata") or {}).get("plan", "")
+    # Plan source: prefer form (set by PaystackPop callback) over metadata.
+    # session.pop("paystack_plan") used to be checked here but JS never set it.
 
     if ref and PAYSTACK_SECRET and plan:
         import urllib.request as _ur
@@ -18148,6 +18188,8 @@ _CURRENCY_RATES_FROM_USD = {
     "NGN": _fx_rate("NGN", 1550.0),
     "KES": _fx_rate("KES", 130.0),
     "ZAR": _fx_rate("ZAR", 18.5),
+    "XOF": _fx_rate("XOF", 610.0),
+    "ZMW": _fx_rate("ZMW", 24.0),
 }
 _CURRENCY_RATES_AS_OF = os.environ.get("FX_RATES_AS_OF", "2026-06-18")
 
