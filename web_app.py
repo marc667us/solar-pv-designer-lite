@@ -16736,6 +16736,236 @@ def boms_basic_prices_email(bom_id):
     return redirect(url_for("boms_basic_prices", bom_id=bom_id))
 
 
+# === Stage 1 BOM material-list exports (Task #12, 2026-06-24) ===
+# Material list only -- NO price column, NO subtotal, NO grand total.
+# For sending the BOM to a quantity surveyor / warehouse / installer
+# without leaking any pricing. Cost stays on Stage 2 and Stage 3.
+
+def _bom_materials_rows(bom_id):
+    """Shared helper: returns (bom, rows) where rows is a list of dicts
+    with name, description, specification, category, qty, unit, brand.
+    No price/rate/subtotal/total fields populated."""
+    _ensure_bom_tables()
+    uid = session["user_id"]
+    bom = _bom_owned_or_404(bom_id, uid)
+    items = _bom_items_with_prices(bom_id)
+    rows = []
+    for it in items:
+        try:
+            cat = (it["category_name"] if "category_name" in it.keys() else None) or "Uncategorised"
+        except Exception:
+            cat = "Uncategorised"
+        try:
+            desc = (it["description"] if "description" in it.keys() else None) or ""
+        except Exception:
+            desc = ""
+        try:
+            spec = ((it["specification"] if "specification" in it.keys() else None) or it["catalog_spec"] or "")
+        except Exception:
+            spec = ""
+        try:
+            brand = ((it["brand"] if "brand" in it.keys() and it["brand"] else None) or it["catalog_brand"] or "")
+        except Exception:
+            brand = ""
+        rows.append({
+            "name":          it["custom_name"],
+            "description":   desc,
+            "specification": spec,
+            "category":      cat,
+            "qty":           float(it["qty"] or 0),
+            "unit":          it["unit"],
+            "brand":         brand,
+        })
+    return bom, rows
+
+
+@app.route("/boms/<int:bom_id>/materials.xlsx")
+@login_required
+def boms_materials_xlsx(bom_id):
+    bom, rows = _bom_materials_rows(bom_id)
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Materials"
+    title_font  = Font(bold=True, size=14, color="F59E0B")
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="4B5563")
+    cat_fill    = PatternFill("solid", fgColor="FEF3C7")
+    bold = Font(bold=True)
+    thin = Side(border_style="thin", color="D1D5DB")
+    box  = Border(left=thin, right=thin, top=thin, bottom=thin)
+    ws["A1"] = f"Bill of Materials -- {bom['title']}"
+    ws["A1"].font = title_font
+    ws.merge_cells("A1:G1")
+    ws["A2"] = f"Project: {bom['project_name'] or '-'}"
+    ws["A3"] = f"Client : {bom['client_name'] or '-'}"
+    ws["A4"] = f"Date   : {bom['updated_at']}"
+    ws["A5"] = "MATERIAL LIST ONLY -- no pricing, no totals."
+    ws["A5"].font = bold
+    headers = ["#", "Material", "Description", "Specification", "Qty", "Unit", "Brand"]
+    HROW = 7
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=HROW, column=col, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = box
+        cell.alignment = Alignment(horizontal="center")
+    def _sanitize(v):
+        s = str(v or "")
+        return "'" + s if s and s[0] in ("=", "+", "-", "@") else s
+    r = HROW + 1
+    prev_cat = None
+    for idx, row in enumerate(rows, 1):
+        if row["category"] != prev_cat:
+            ws.cell(row=r, column=1, value=row["category"]).font = bold
+            ws.cell(row=r, column=1).fill = cat_fill
+            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=len(headers))
+            r += 1
+            prev_cat = row["category"]
+        ws.cell(row=r, column=1, value=idx)
+        ws.cell(row=r, column=2, value=_sanitize(row["name"]))
+        ws.cell(row=r, column=3, value=_sanitize(row["description"]))
+        ws.cell(row=r, column=4, value=_sanitize(row["specification"]))
+        ws.cell(row=r, column=5, value=row["qty"])
+        ws.cell(row=r, column=6, value=_sanitize(row["unit"]))
+        ws.cell(row=r, column=7, value=_sanitize(row["brand"]))
+        for c in range(1, len(headers)+1):
+            ws.cell(row=r, column=c).border = box
+        r += 1
+    widths = [5, 32, 36, 32, 8, 8, 18]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    try:
+        _solarpro_xlsx_apply_borders_and_a4(ws)
+    except Exception:
+        pass
+    import io as _io
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", bom["title"])[:60]
+    return send_file(buf,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     as_attachment=True,
+                     download_name=f"BOM_{safe}.xlsx")
+
+
+@app.route("/boms/<int:bom_id>/materials.pdf")
+@login_required
+def boms_materials_pdf(bom_id):
+    bom, rows = _bom_materials_rows(bom_id)
+    md = []
+    md.append(f"# Bill of Materials -- {bom['title']}")
+    if bom["project_name"]:
+        md.append(f"**Project:** {bom['project_name']}  ")
+    if bom["client_name"]:
+        md.append(f"**Client:** {bom['client_name']}  ")
+    md.append(f"**Generated:** {bom['updated_at']}")
+    md.append("")
+    md.append("**Material list only.** No pricing, no totals.")
+    md.append("")
+    md.append("## Items")
+    md.append("")
+    md.append("| # | Material | Description | Specification | Qty | Unit | Brand |")
+    md.append("|---|---|---|---|---|---|---|")
+    prev_cat = None
+    for idx, row in enumerate(rows, 1):
+        if row["category"] != prev_cat:
+            md.append(f"| | **{row['category']}** |  |  |  |  |  |")
+            prev_cat = row["category"]
+        md.append(
+            f"| {idx} | {row['name']} | {row['description'] or '-'} | {row['specification'] or '-'} | "
+            f"{row['qty']:.2f} | {row['unit']} | {row['brand'] or '-'} |"
+        )
+    md.append("")
+    md.append(f"**Total line items:** {len(rows)}")
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", bom["title"])[:60]
+    return _render_pdf(
+        f"Bill of Materials -- {bom['title']}",
+        "\n".join(md),
+        f"BOM_{safe}.pdf",
+    )
+
+
+def _bom_materials_pdf_bytes(bom_id):
+    uid = session.get("user_id") or 0
+    if not uid:
+        return b""
+    with app.test_request_context("/_internal_materials_pdf"):
+        session["user_id"] = uid
+        try:
+            resp = boms_materials_pdf(bom_id)
+        except Exception as _e:
+            try: app.logger.warning("materials pdf bytes failed: %s", _e)
+            except Exception: pass
+            return b""
+    try:
+        return resp.get_data()
+    except Exception:
+        return b""
+
+
+def _bom_materials_xlsx_bytes(bom_id):
+    return _xlsx_bytes_via_route(boms_materials_xlsx, bom_id)
+
+
+@app.route("/boms/<int:bom_id>/materials/email", methods=["POST"])
+@login_required
+def boms_materials_email(bom_id):
+    """Email the cost-free Bill of Materials (no pricing) to a recipient.
+    Attaches both PDF + Excel byte-identical to the downloads."""
+    uid = session["user_id"]
+    bom = _bom_owned_or_404(bom_id, uid)
+    csrf_protect()
+    to_email = (request.form.get("to_email") or "").strip().lower()[:200]
+    if "@" not in to_email or "." not in to_email:
+        flash("Invalid recipient email address.", "warning")
+        return redirect(url_for("boms_view", bom_id=bom_id))
+    subject = (request.form.get("subject")
+               or f"Bill of Materials -- {bom['title']}")[:200]
+    body = (request.form.get("body")
+            or f"Please find attached the bill of materials '{bom['title']}'.\n"
+               f"Material list only -- no pricing.\n"
+               f"Generated by SolarPro -- {bom['updated_at']}.")
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", bom["title"])[:60]
+    pdf_bytes = b""
+    try:
+        pdf_bytes = _bom_materials_pdf_bytes(bom_id)
+    except Exception as _e:
+        try: app.logger.warning("materials email pdf failed: %s", _e)
+        except Exception: pass
+    xlsx_bytes = b""
+    try:
+        xlsx_bytes = _bom_materials_xlsx_bytes(bom_id)
+    except Exception as _e:
+        try: app.logger.warning("materials email xlsx failed: %s", _e)
+        except Exception: pass
+    if not pdf_bytes and not xlsx_bytes:
+        flash("Could not build PDF or Excel attachment for email.", "danger")
+        return redirect(url_for("boms_view", bom_id=bom_id))
+    sent = False
+    try:
+        atts = []
+        if pdf_bytes:
+            atts.append((f"BOM_{safe_name}.pdf", pdf_bytes, "application/pdf"))
+        if xlsx_bytes:
+            atts.append((f"BOM_{safe_name}.xlsx", xlsx_bytes,
+                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+        result = _send_email(to_email, subject, body, attachments=atts)
+        sent = bool(result[0]) if isinstance(result, tuple) else bool(result)
+    except Exception as _e:
+        try: app.logger.warning("materials email send failed: %s", _e)
+        except Exception: pass
+        sent = False
+    flash(
+        f"Email {'sent' if sent else 'failed -- check server log'} to {to_email}.",
+        "success" if sent else "warning",
+    )
+    return redirect(url_for("boms_view", bom_id=bom_id))
+
+
 # ───────────────────────── BOM item add / update / delete ────────────────
 
 
