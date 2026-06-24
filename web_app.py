@@ -7084,6 +7084,12 @@ def assistant_escalate():
 
 # === Paystack country -> currency map (Task #5a) ===
 _COUNTRY_TO_PAYSTACK_CURRENCY = {
+    # Logical map: which currency BEST fits each target country. Reality
+    # is clamped to _PAYSTACK_SUPPORTED_CURRENCIES (the merchant account
+    # only enables a subset). Per Diag Paystack Merchant Config run on
+    # 2026-06-24, the account supports GHS only -- everything else gets
+    # clamped down to GHS so the popup opens. Expand the env var as the
+    # owner enables more currencies on Paystack.
     "Ghana": "GHS",
     "Nigeria": "NGN",
     "Kenya": "KES",
@@ -7100,9 +7106,25 @@ _COUNTRY_TO_PAYSTACK_CURRENCY = {
     "Zambia": "USD",
 }
 _PAYSTACK_NO_SUBUNIT = {"XOF", "XAF"}
+# Currencies the merchant account actually accepts. Override at deploy
+# time with env PAYSTACK_SUPPORTED_CURRENCIES=GHS,NGN,KES (comma-separated).
+# When None or empty, defaults to GHS only (the conservative safe value
+# proven by the 2026-06-24 diag).
+def _paystack_supported_currencies():
+    raw = (os.environ.get("PAYSTACK_SUPPORTED_CURRENCIES") or "GHS").strip()
+    return {c.strip().upper() for c in raw.split(",") if c.strip()}
 
 def _paystack_currency_for_country(country):
-    return _COUNTRY_TO_PAYSTACK_CURRENCY.get((country or "").strip(), "USD")
+    """Return the Paystack currency for the user's country, clamped to
+    what the merchant account actually accepts."""
+    logical = _COUNTRY_TO_PAYSTACK_CURRENCY.get((country or "").strip(), "USD")
+    supported = _paystack_supported_currencies()
+    if logical in supported:
+        return logical
+    # Fallback priority: GHS (primary market) > first supported alphabetic.
+    if "GHS" in supported:
+        return "GHS"
+    return sorted(supported)[0] if supported else "GHS"
 
 def _paystack_subunit(amount_local, currency):
     if currency in _PAYSTACK_NO_SUBUNIT:
