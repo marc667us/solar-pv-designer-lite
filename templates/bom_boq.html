@@ -2,7 +2,11 @@
 {% block title %}BOQ — {{ bom.title }}{% endblock %}
 {% block content %}
 
-{# Task #4 changelog banner -- dismissable; remove after 2026-07-08 (14 days). #}
+{# Task #4 changelog banner -- AUTO-HIDES after 2026-07-08 (14 days post-deploy).
+   No manual removal needed: the {% if %} compares today's UTC date to the
+   sunset, so the block stops rendering automatically. #}
+{% set _changelog_sunset = '2026-07-08' %}
+{% if (today_iso|default('')) <= _changelog_sunset %}
 <div class="alert alert-info alert-dismissible no-print" role="alert"
      style="background:#0a1a2a;border:1px solid #1e4a6a;color:#a0d0e8;font-size:13px"
      id="bomFormulaChangelog">
@@ -13,6 +17,7 @@
   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"
           style="filter:invert(1) hue-rotate(180deg)"></button>
 </div>
+{% endif %}
 
 {# ------------------------------------------------------------------
    BOQ display rule:

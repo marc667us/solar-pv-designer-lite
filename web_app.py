@@ -868,6 +868,14 @@ def inject_user_into_templates():
     return {"user": current_user()}
 
 
+@app.context_processor
+def inject_today_iso():
+    # Expose today's UTC date as ISO string so templates can date-gate
+    # transient banners without server-side touching. e.g. Task #4 BOM
+    # changelog banner sunsets on 2026-07-08 by comparing this value.
+    return {"today_iso": datetime.utcnow().strftime("%Y-%m-%d")}
+
+
 def get_project(pid):
     with get_db() as c:
         row = c.execute("SELECT * FROM projects WHERE id=? AND user_id=?",
