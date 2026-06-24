@@ -9,6 +9,12 @@
     <div class="text-secondary small">Price library for BOQ and procurement planning</div>
   </div>
   <div class="ms-auto d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-warning btn-sm position-relative" href="{{ url_for('admin_marketplace_anomalies') }}" title="Review price-change proposals queued for manager approval">
+      <i class="bi bi-shield-exclamation me-1"></i>Anomaly queue
+      {% if (pending_anomaly_count or 0) > 0 %}
+      <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style="font-size:9px">{{ pending_anomaly_count }}</span>
+      {% endif %}
+    </a>
     <a class="btn btn-outline-info btn-sm" href="{{ url_for('admin_marketplace_recheck') }}" title="Bulk recheck a category's prices via the AI market-lookup">
       <i class="bi bi-search-heart me-1"></i>Bulk recheck
     </a>

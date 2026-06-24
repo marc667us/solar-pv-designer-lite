@@ -12,6 +12,14 @@
     </h5>
     <div class="text-secondary small">Pick a category, run the AI market-lookup, review proposed prices and apply.</div>
   </div>
+  <div>
+    <a class="btn btn-outline-warning btn-sm position-relative" href="{{ url_for('admin_marketplace_anomalies') }}">
+      <i class="bi bi-shield-exclamation me-1"></i>Anomaly queue
+      {% if (pending_anomaly_count or 0) > 0 %}
+      <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style="font-size:9px">{{ pending_anomaly_count }}</span>
+      {% endif %}
+    </a>
+  </div>
 </div>
 
 <div class="solar-card p-3 mb-3" style="border:1px solid #f59e0b44;background:rgba(245,158,11,.05)">

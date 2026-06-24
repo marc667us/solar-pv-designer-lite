@@ -127,6 +127,8 @@
             </div>
             <div>
               <div class="fw-bold" style="color:#e0e0f0">
+                {% set _is_on_inline = (online_ids is defined and u.id in online_ids) %}
+                <span class="me-1" title="{{ 'Online now' if _is_on_inline else 'Offline' }}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:{{ '#22c55e' if _is_on_inline else '#6868a0' }};{{ 'box-shadow:0 0 5px #22c55e;' if _is_on_inline else '' }}vertical-align:middle"></span>
                 {{ u.username }}
                 {% if u.is_admin %}
                 <i class="bi bi-shield-fill ms-1" style="font-size:9px;color:#f59e0b" title="Admin"></i>

@@ -59,32 +59,38 @@ def _ensure_pricing_tables(get_db, is_pg_fn):
     """
     history_ddl_pg = """
         CREATE TABLE IF NOT EXISTS equipment_catalog_price_history (
-            id               SERIAL PRIMARY KEY,
-            catalog_item_id  INTEGER NOT NULL,
-            old_price_usd    REAL DEFAULT 0,
-            new_price_usd    REAL DEFAULT 0,
-            currency_local   VARCHAR(3) DEFAULT '',
-            new_price_local  REAL DEFAULT 0,
-            source           VARCHAR(200) DEFAULT '',
-            reason           TEXT DEFAULT '',
-            set_by_user_id   INTEGER DEFAULT 0,
-            approval_status  VARCHAR(20) DEFAULT 'approved',
-            set_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            id                  SERIAL PRIMARY KEY,
+            catalog_item_id     INTEGER NOT NULL,
+            old_price_usd       REAL DEFAULT 0,
+            new_price_usd       REAL DEFAULT 0,
+            currency_local      VARCHAR(3) DEFAULT '',
+            new_price_local     REAL DEFAULT 0,
+            source              VARCHAR(200) DEFAULT '',
+            reason              TEXT DEFAULT '',
+            set_by_user_id      INTEGER DEFAULT 0,
+            submitted_by_email  VARCHAR(200) DEFAULT '',
+            approval_status     VARCHAR(20) DEFAULT 'approved',
+            set_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            decided_at          TIMESTAMP,
+            decided_by_user_id  INTEGER DEFAULT 0
         )
     """
     history_ddl_sqlite = """
         CREATE TABLE IF NOT EXISTS equipment_catalog_price_history (
-            id               INTEGER PRIMARY KEY AUTOINCREMENT,
-            catalog_item_id  INTEGER NOT NULL,
-            old_price_usd    REAL DEFAULT 0,
-            new_price_usd    REAL DEFAULT 0,
-            currency_local   TEXT DEFAULT '',
-            new_price_local  REAL DEFAULT 0,
-            source           TEXT DEFAULT '',
-            reason           TEXT DEFAULT '',
-            set_by_user_id   INTEGER DEFAULT 0,
-            approval_status  TEXT DEFAULT 'approved',
-            set_at           TEXT DEFAULT CURRENT_TIMESTAMP
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            catalog_item_id     INTEGER NOT NULL,
+            old_price_usd       REAL DEFAULT 0,
+            new_price_usd       REAL DEFAULT 0,
+            currency_local      TEXT DEFAULT '',
+            new_price_local     REAL DEFAULT 0,
+            source              TEXT DEFAULT '',
+            reason              TEXT DEFAULT '',
+            set_by_user_id      INTEGER DEFAULT 0,
+            submitted_by_email  TEXT DEFAULT '',
+            approval_status     TEXT DEFAULT 'approved',
+            set_at              TEXT DEFAULT CURRENT_TIMESTAMP,
+            decided_at          TEXT,
+            decided_by_user_id  INTEGER DEFAULT 0
         )
     """
     for ddl in (
@@ -94,10 +100,31 @@ def _ensure_pricing_tables(get_db, is_pg_fn):
         "ON equipment_catalog_quotes(catalog_item_id)",
         "CREATE INDEX IF NOT EXISTS idx_eq_cat_history_item "
         "ON equipment_catalog_price_history(catalog_item_id)",
+        "CREATE INDEX IF NOT EXISTS idx_eq_cat_history_status "
+        "ON equipment_catalog_price_history(approval_status)",
     ):
         try:
             with get_db() as c:
                 c.execute(ddl)
+        except Exception:
+            pass
+    # Idempotent ALTERs for the 3 columns added 2026-06-24 v3 (anomaly queue).
+    for col_ddl in (
+        "ALTER TABLE equipment_catalog_price_history ADD COLUMN "
+        + ("IF NOT EXISTS " if is_pg else "")
+        + "submitted_by_email "
+        + ("VARCHAR(200) DEFAULT ''" if is_pg else "TEXT DEFAULT ''"),
+        "ALTER TABLE equipment_catalog_price_history ADD COLUMN "
+        + ("IF NOT EXISTS " if is_pg else "")
+        + "decided_at "
+        + ("TIMESTAMP" if is_pg else "TEXT"),
+        "ALTER TABLE equipment_catalog_price_history ADD COLUMN "
+        + ("IF NOT EXISTS " if is_pg else "")
+        + "decided_by_user_id INTEGER DEFAULT 0",
+    ):
+        try:
+            with get_db() as c:
+                c.execute(col_ddl)
         except Exception:
             pass
     _PRICING_SCHEMA_DONE["v"] = True
@@ -106,25 +133,65 @@ def _ensure_pricing_tables(get_db, is_pg_fn):
 # ─────────────────────────── Shared helpers ────────────────────────────
 
 
-def _record_price_history(get_db, item_id, old_usd, new_usd,
-                           currency_local, new_local, source, reason,
-                           user_id, status="approved"):
-    """Append a history row. Non-raising."""
+def _resolve_user_email(get_db, user_id):
+    """Look up the user's email by id. Returns '' on miss."""
+    if not user_id:
+        return ""
     try:
         with get_db() as c:
-            c.execute(
+            row = c.execute(
+                "SELECT email FROM users WHERE id=?", (int(user_id),),
+            ).fetchone()
+        if row:
+            return (row["email"] or "")[:200]
+    except Exception:
+        pass
+    return ""
+
+
+def _record_price_history(get_db, item_id, old_usd, new_usd,
+                           currency_local, new_local, source, reason,
+                           user_id, status="approved",
+                           submitted_by_email=None):
+    """Append a history row. Non-raising. Returns the inserted row id (or 0)."""
+    if submitted_by_email is None:
+        submitted_by_email = _resolve_user_email(get_db, user_id)
+    try:
+        with get_db() as c:
+            cur = c.execute(
                 "INSERT INTO equipment_catalog_price_history "
                 "(catalog_item_id, old_price_usd, new_price_usd, "
                 " currency_local, new_price_local, source, reason, "
-                " set_by_user_id, approval_status) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
+                " set_by_user_id, submitted_by_email, approval_status) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (int(item_id or 0), float(old_usd or 0), float(new_usd or 0),
                  (currency_local or "")[:3], float(new_local or 0),
                  (source or "")[:200], (reason or "")[:500],
-                 int(user_id or 0), (status or "approved")[:20]),
+                 int(user_id or 0), (submitted_by_email or "")[:200],
+                 (status or "approved")[:20]),
             )
+            try:
+                return int(cur.lastrowid or 0)
+            except Exception:
+                return 0
     except Exception:
-        pass
+        # Schema may pre-date submitted_by_email -- retry without it.
+        try:
+            with get_db() as c:
+                c.execute(
+                    "INSERT INTO equipment_catalog_price_history "
+                    "(catalog_item_id, old_price_usd, new_price_usd, "
+                    " currency_local, new_price_local, source, reason, "
+                    " set_by_user_id, approval_status) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    (int(item_id or 0), float(old_usd or 0), float(new_usd or 0),
+                     (currency_local or "")[:3], float(new_local or 0),
+                     (source or "")[:200], (reason or "")[:500],
+                     int(user_id or 0), (status or "approved")[:20]),
+                )
+        except Exception:
+            pass
+    return 0
 
 
 def _record_catalog_quote(get_db, item_id, supplier_name, supplier_id,
@@ -160,6 +227,20 @@ def register_catalogue_pricing_routes(
     @app.before_request
     def _ensure_pricing_schema_once():
         _ensure_pricing_tables(get_db, is_pg_fn)
+
+    @app.context_processor
+    def _inject_pending_anomaly_count():
+        """Expose `pending_anomaly_count` to every template so the catalogue
+        + bulk-recheck pages can badge it. Non-raising; returns 0 on miss."""
+        try:
+            with get_db() as c:
+                row = c.execute(
+                    "SELECT COUNT(*) AS n FROM equipment_catalog_price_history "
+                    "WHERE approval_status='pending'"
+                ).fetchone()
+            return {"pending_anomaly_count": int((row["n"] if row else 0) or 0)}
+        except Exception:
+            return {"pending_anomaly_count": 0}
 
     @app.route("/admin/catalogue/<int:item_id>/update-price",
                methods=["POST"])
@@ -400,7 +481,9 @@ def register_catalogue_pricing_routes(
                 pass
 
         uid = session.get("user_id") or 0
+        submitter_email = _resolve_user_email(get_db, uid)
         applied = 0
+        queued = 0
         skipped = 0
         with get_db() as c:
             for sid, info in proposals["items"].items():
@@ -417,50 +500,204 @@ def register_catalogue_pricing_routes(
                     continue
                 proposed_usd = proposed_local / fx_rate
                 old_usd = float(info.get("current_usd") or 0)
-                try:
-                    c.execute(
-                        "UPDATE equipment_catalog SET price_usd=? WHERE id=?",
-                        (proposed_usd, iid),
+                is_anomaly = bool(info.get("anomaly"))
+
+                if is_anomaly:
+                    # Queue for manager review -- do NOT touch equipment_catalog.
+                    _record_price_history(
+                        get_db, iid, old_usd, proposed_usd, currency,
+                        proposed_local,
+                        f"bulk-recheck cat={cat_id} (ANOMALY)",
+                        f"AI source: {proposals.get('source','?')} "
+                        f"-- queued for manager approval (>+/-25% from current).",
+                        uid, status="pending",
+                        submitted_by_email=submitter_email,
                     )
-                except Exception:
-                    skipped += 1
-                    continue
-                # History + per-supplier quotes.
-                _record_price_history(
-                    get_db, iid, old_usd, proposed_usd, currency,
-                    proposed_local,
-                    f"bulk-recheck cat={cat_id}",
-                    f"AI source: {proposals.get('source','?')}",
-                    uid, status="approved",
-                )
+                    queued += 1
+                else:
+                    try:
+                        c.execute(
+                            "UPDATE equipment_catalog SET price_usd=? WHERE id=?",
+                            (proposed_usd, iid),
+                        )
+                    except Exception:
+                        skipped += 1
+                        continue
+                    _record_price_history(
+                        get_db, iid, old_usd, proposed_usd, currency,
+                        proposed_local,
+                        f"bulk-recheck cat={cat_id}",
+                        f"AI source: {proposals.get('source','?')}",
+                        uid, status="approved",
+                        submitted_by_email=submitter_email,
+                    )
+                    applied += 1
+
+                # Quotes are always recorded (regardless of approval state).
                 for q in (info.get("quotes") or []):
                     _record_catalog_quote(
                         get_db, iid,
                         (q.get("supplier") or "")[:200], 0,
                         float(q.get("price") or 0), currency,
                         (q.get("note") or "")[:300],
-                        bool(info.get("anomaly")),
-                        uid, status="proposed",
+                        is_anomaly, uid, status="proposed",
                     )
-                applied += 1
         # audit
         try:
             from new_boq_hierarchy_schema import boq_audit
             boq_audit(
                 get_db, uid, "catalogue_bulk_recheck_applied",
                 "product_category", cat_id,
-                f"applied={applied} skipped={skipped} cat='{proposals.get('cat_name','')}' "
+                f"applied={applied} queued={queued} skipped={skipped} "
+                f"cat='{proposals.get('cat_name','')}' "
                 f"src={proposals.get('source','?')}",
             )
         except Exception:
             pass
         session.pop(skey, None)
+        bits = [f"{applied} applied"]
+        if queued:
+            bits.append(f"{queued} queued for manager approval (anomalies)")
+        bits.append(f"{skipped} skipped")
         flash(
-            f"Bulk recheck applied: {applied} catalogue price(s) updated, "
-            f"{skipped} skipped. History + supplier quotes logged.",
-            "success",
+            "Bulk recheck: " + ", ".join(bits) + ". "
+            + ("Review the anomaly queue at the link above." if queued else
+               "History + supplier quotes logged."),
+            "success" if applied or queued else "info",
         )
         return redirect(url_for("admin_marketplace_recheck"))
+
+    # ─────────── Anomaly review queue (admin-only) ───────────
+
+    @app.route("/admin/marketplace/anomalies", methods=["GET"])
+    @admin_required
+    def admin_marketplace_anomalies():
+        """List all pending catalogue price-change proposals (anomalies)."""
+        with get_db() as c:
+            rows = c.execute(
+                "SELECT h.id AS history_id, h.catalog_item_id, h.old_price_usd, "
+                "       h.new_price_usd, h.currency_local, h.new_price_local, "
+                "       h.source, h.reason, h.set_by_user_id, "
+                "       h.submitted_by_email, h.set_at, "
+                "       e.name AS item_name, e.brand, e.unit, "
+                "       e.price_usd AS current_price_usd "
+                "FROM equipment_catalog_price_history h "
+                "LEFT JOIN equipment_catalog e ON e.id=h.catalog_item_id "
+                "WHERE h.approval_status='pending' "
+                "ORDER BY h.set_at DESC LIMIT 500"
+            ).fetchall()
+        # Pre-compute delta + per-item supplier quotes around the same time.
+        pending = []
+        for r in rows:
+            try:
+                old = float(r["old_price_usd"] or 0)
+                new = float(r["new_price_usd"] or 0)
+                delta_pct = ((new - old) / old * 100.0) if old else 0.0
+            except Exception:
+                delta_pct = 0.0
+            try:
+                with get_db() as c:
+                    quotes = c.execute(
+                        "SELECT supplier_name, price_local, currency, source_note "
+                        "FROM equipment_catalog_quotes "
+                        "WHERE catalog_item_id=? "
+                        "ORDER BY quoted_at DESC LIMIT 6",
+                        (r["catalog_item_id"],),
+                    ).fetchall()
+            except Exception:
+                quotes = []
+            pending.append({"row": r, "delta_pct": delta_pct, "quotes": quotes})
+        return render_template(
+            "admin_anomaly_queue.html",
+            user=current_user(), pending=pending,
+        )
+
+    @app.route("/admin/marketplace/anomalies/<int:history_id>/decide",
+               methods=["POST"])
+    @admin_required
+    def admin_marketplace_anomaly_decide(history_id):
+        """Approve or reject a queued anomaly. Approve writes the price to
+        equipment_catalog; reject just flips the status."""
+        csrf_protect()
+        decision = (request.form.get("decision") or "").strip().lower()
+        if decision not in ("approve", "reject"):
+            flash("Invalid decision.", "warning")
+            return redirect(url_for("admin_marketplace_anomalies"))
+        uid = session.get("user_id") or 0
+        with get_db() as c:
+            row = c.execute(
+                "SELECT catalog_item_id, new_price_usd, old_price_usd, "
+                "       approval_status, submitted_by_email "
+                "FROM equipment_catalog_price_history WHERE id=?",
+                (history_id,),
+            ).fetchone()
+            if not row:
+                flash("Queue entry not found.", "warning")
+                return redirect(url_for("admin_marketplace_anomalies"))
+            if row["approval_status"] != "pending":
+                flash(
+                    f"Already decided ({row['approval_status']}).", "info"
+                )
+                return redirect(url_for("admin_marketplace_anomalies"))
+
+            if decision == "approve":
+                # Apply the proposed price to the catalogue, then flip status.
+                try:
+                    c.execute(
+                        "UPDATE equipment_catalog SET price_usd=? WHERE id=?",
+                        (float(row["new_price_usd"] or 0),
+                         int(row["catalog_item_id"] or 0)),
+                    )
+                except Exception:
+                    flash("Could not update catalogue. Reverted.", "danger")
+                    return redirect(url_for("admin_marketplace_anomalies"))
+                try:
+                    c.execute(
+                        "UPDATE equipment_catalog_price_history "
+                        "SET approval_status='approved', "
+                        "    decided_at=CURRENT_TIMESTAMP, "
+                        "    decided_by_user_id=? WHERE id=?",
+                        (uid, history_id),
+                    )
+                except Exception:
+                    # decided_at/decided_by columns may not exist on older schemas.
+                    c.execute(
+                        "UPDATE equipment_catalog_price_history "
+                        "SET approval_status='approved' WHERE id=?",
+                        (history_id,),
+                    )
+                flash(
+                    f"Approved: USD {row['old_price_usd']:.2f} -> "
+                    f"{row['new_price_usd']:.2f} applied to catalogue.",
+                    "success",
+                )
+            else:
+                try:
+                    c.execute(
+                        "UPDATE equipment_catalog_price_history "
+                        "SET approval_status='rejected', "
+                        "    decided_at=CURRENT_TIMESTAMP, "
+                        "    decided_by_user_id=? WHERE id=?",
+                        (uid, history_id),
+                    )
+                except Exception:
+                    c.execute(
+                        "UPDATE equipment_catalog_price_history "
+                        "SET approval_status='rejected' WHERE id=?",
+                        (history_id,),
+                    )
+                flash("Rejected. Catalogue price unchanged.", "info")
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(
+                get_db, uid, f"anomaly_{decision}d",
+                "price_history", history_id,
+                f"item={row['catalog_item_id']} new_usd={row['new_price_usd']:.2f} "
+                f"submitter={row['submitted_by_email'] or 'n/a'}",
+            )
+        except Exception:
+            pass
+        return redirect(url_for("admin_marketplace_anomalies"))
 
     @app.route("/admin/catalogue/<int:item_id>/price-history",
                methods=["GET"])

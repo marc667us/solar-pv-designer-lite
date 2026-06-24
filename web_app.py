@@ -15332,7 +15332,10 @@ def _log_marketplace_action(action: str, target_kind: str, target_id: int, notes
 
 
 @app.route("/admin/marketplace")
-@require_role("marketplace_admin")  # Phase 2 pilot: enforced only when KEYCLOAK_ENABLED=true
+# 2026-06-24: @require_role("marketplace_admin") pilot removed -- the
+# require_jwt chain demanded a Bearer token under KEYCLOAK_ENABLED=true,
+# blocking session-based admin logins. Restore the KC role-check after
+# admin OIDC login is fully rolled out + session-bridged.
 @admin_required
 def admin_marketplace_dashboard():
     """Admin landing for the marketplace verification queue."""

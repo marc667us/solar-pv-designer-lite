@@ -487,7 +487,9 @@ def register_recheck_prices_routes(
                             )
 
                 # C (push-to-catalogue): if owner ticked the box AND the line
-                # points at a real catalogue product, update the master price.
+                # points at a real catalogue product, update the master price
+                # -- UNLESS it's an anomaly, in which case queue for manager
+                # approval (admin_marketplace_anomalies).
                 if iid in push_to_catalog and _record_price_history:
                     try:
                         prod_row = c.execute(
@@ -503,18 +505,29 @@ def register_recheck_prices_routes(
                             (cat_pid,),
                         ).fetchone()
                         old_usd = float((old_row["price_usd"] if old_row else 0) or 0)
-                        c.execute(
-                            "UPDATE equipment_catalog SET price_usd=? WHERE id=?",
-                            (proposed_usd, cat_pid),
-                        )
-                        _record_price_history(
-                            get_db, cat_pid, old_usd, proposed_usd,
-                            currency, proposed_local,
-                            f"recheck-from-bom #{bom_id}",
-                            f"AI source: {proposals.get('source','?')}",
-                            uid, status="approved",
-                        )
-                        catalogue_pushes += 1
+                        is_anomaly = bool(info.get("anomaly"))
+                        if is_anomaly:
+                            _record_price_history(
+                                get_db, cat_pid, old_usd, proposed_usd,
+                                currency, proposed_local,
+                                f"recheck-from-bom #{bom_id} (ANOMALY)",
+                                f"AI source: {proposals.get('source','?')} "
+                                f"-- queued for manager approval.",
+                                uid, status="pending",
+                            )
+                        else:
+                            c.execute(
+                                "UPDATE equipment_catalog SET price_usd=? WHERE id=?",
+                                (proposed_usd, cat_pid),
+                            )
+                            _record_price_history(
+                                get_db, cat_pid, old_usd, proposed_usd,
+                                currency, proposed_local,
+                                f"recheck-from-bom #{bom_id}",
+                                f"AI source: {proposals.get('source','?')}",
+                                uid, status="approved",
+                            )
+                            catalogue_pushes += 1
             c.execute(
                 "UPDATE marketplace_boms SET updated_at=CURRENT_TIMESTAMP "
                 "WHERE id=?",
