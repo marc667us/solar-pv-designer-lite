@@ -16497,6 +16497,245 @@ def boms_basic_prices(bom_id):
     )
 
 
+# === Stage 2 exports (Task #11): Excel / PDF / Email for Basic Price Schedule ===
+def _bom_basic_prices_compute(bom_id):
+    """Shared helper: returns (bom, lines, grand_basic, cat_totals,
+    currency, fx_rate). lines is a list of dicts with item, category,
+    basic_price (local), qty, subtotal (local). NO mark-ups."""
+    _ensure_bom_tables()
+    uid = session["user_id"]
+    bom = _bom_owned_or_404(bom_id, uid)
+    items = _bom_items_with_prices(bom_id)
+    _bcur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
+    _brate = float(_CURRENCY_RATES_FROM_USD.get(_bcur, 1.0) or 1.0)
+    lines = []
+    grand_basic = 0.0
+    cat_totals = {}
+    for it in items:
+        try:
+            cat = (it["category_name"] if "category_name" in it.keys() else None) or "Uncategorised"
+        except Exception:
+            cat = "Uncategorised"
+        basic_usd = float(
+            (it["unit_price_override"] if it["unit_price_override"] is not None
+             else (it["catalog_price"] or 0)) or 0
+        )
+        basic_local = basic_usd * _brate
+        qty = float(it["qty"] or 0)
+        subtotal = basic_local * qty
+        grand_basic += subtotal
+        cat_totals[cat] = cat_totals.get(cat, 0.0) + subtotal
+        lines.append({
+            "item": it, "category": cat,
+            "basic_price": basic_local, "qty": qty, "subtotal": subtotal,
+        })
+    return bom, lines, grand_basic, cat_totals, _bcur, _brate
+
+
+@app.route("/boms/<int:bom_id>/basic-prices.xlsx")
+@login_required
+def boms_basic_prices_xlsx(bom_id):
+    bom, lines, grand_basic, cat_totals, cur, _ = _bom_basic_prices_compute(bom_id)
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Basic Price Schedule"
+    title_font  = Font(bold=True, size=14, color="0EA5E9")
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="0E4A6A")
+    cat_fill    = PatternFill("solid", fgColor="DBEAFE")
+    bold = Font(bold=True)
+    thin = Side(border_style="thin", color="D1D5DB")
+    box  = Border(left=thin, right=thin, top=thin, bottom=thin)
+    ws["A1"] = f"Basic Price Schedule -- {bom['title']}"
+    ws["A1"].font = title_font
+    ws.merge_cells("A1:F1")
+    ws["A2"] = f"Project: {bom['project_name'] or '-'}"
+    ws["A3"] = f"Client : {bom['client_name'] or '-'}"
+    ws["A4"] = f"Date   : {bom['updated_at']}"
+    ws["A5"] = "BASIC PRICE ONLY (no labour, OH, profit, contingency, VAT)."
+    ws["A5"].font = bold
+    headers = ["#", "Material", "Qty", "Unit", f"Basic price ({cur})", f"Subtotal ({cur})"]
+    HROW = 7
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=HROW, column=col, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = box
+        cell.alignment = Alignment(horizontal="center")
+    def _sanitize(v):
+        s = str(v or "")
+        return "'" + s if s and s[0] in ("=", "+", "-", "@") else s
+    row = HROW + 1
+    prev_cat = None
+    for idx, line in enumerate(lines, 1):
+        it = line["item"]
+        cat = line["category"]
+        if cat != prev_cat:
+            ws.cell(row=row, column=1, value=cat).font = bold
+            ws.cell(row=row, column=1).fill = cat_fill
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=len(headers))
+            row += 1
+            prev_cat = cat
+        ws.cell(row=row, column=1, value=idx)
+        ws.cell(row=row, column=2, value=_sanitize(it["custom_name"]))
+        ws.cell(row=row, column=3, value=float(line["qty"]))
+        ws.cell(row=row, column=4, value=_sanitize(it["unit"]))
+        ws.cell(row=row, column=5, value=round(float(line["basic_price"]), 2))
+        ws.cell(row=row, column=6, value=round(float(line["subtotal"]), 2))
+        for c in range(1, len(headers)+1):
+            ws.cell(row=row, column=c).border = box
+        row += 1
+    # Grand total row
+    ws.cell(row=row, column=5, value="Basic total").font = bold
+    ws.cell(row=row, column=6, value=round(float(grand_basic), 2)).font = bold
+    for c in (5, 6):
+        ws.cell(row=row, column=c).border = box
+    # Column widths
+    widths = [5, 42, 8, 8, 18, 18]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    try:
+        _solarpro_xlsx_apply_borders_and_a4(ws)
+    except Exception:
+        pass
+    import io as _io
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", bom["title"])[:60]
+    return send_file(buf,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     as_attachment=True,
+                     download_name=f"BasicPriceSchedule_{safe}.xlsx")
+
+
+@app.route("/boms/<int:bom_id>/basic-prices.pdf")
+@login_required
+def boms_basic_prices_pdf(bom_id):
+    bom, lines, grand_basic, cat_totals, cur, _ = _bom_basic_prices_compute(bom_id)
+    md = []
+    md.append(f"# Basic Price Schedule -- {bom['title']}")
+    if bom["project_name"]:
+        md.append(f"**Project:** {bom['project_name']}  ")
+    if bom["client_name"]:
+        md.append(f"**Client:** {bom['client_name']}  ")
+    md.append(f"**Generated:** {bom['updated_at']}")
+    md.append("")
+    md.append("**Basic price only.** No labour, overhead, profit, contingency or VAT mark-ups.")
+    md.append("")
+    md.append("## Line items")
+    md.append("")
+    md.append(f"| # | Material | Qty | Unit | Basic price ({cur}) | Subtotal ({cur}) |")
+    md.append("|---|---|---|---|---|---|")
+    prev_cat = None
+    for idx, line in enumerate(lines, 1):
+        it = line["item"]
+        if line["category"] != prev_cat:
+            md.append(f"| | **{line['category']}** |  |  |  |  |")
+            prev_cat = line["category"]
+        md.append(
+            f"| {idx} | {it['custom_name']} | {line['qty']:.2f} | {it['unit']} | "
+            f"{line['basic_price']:,.2f} | {line['subtotal']:,.2f} |"
+        )
+    md.append("")
+    md.append("## Category subtotals")
+    md.append("")
+    md.append(f"| Category | Subtotal ({cur}) |")
+    md.append("|---|---|")
+    for cat, sub in cat_totals.items():
+        md.append(f"| {cat} | {sub:,.2f} |")
+    md.append("")
+    md.append(f"## Basic total\n\n**{cur} {grand_basic:,.2f}**\n")
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", bom["title"])[:60]
+    return _render_pdf(
+        f"Basic Price Schedule -- {bom['title']}",
+        "\n".join(md),
+        f"BasicPriceSchedule_{safe}.pdf",
+    )
+
+
+def _bom_basic_prices_pdf_bytes(bom_id):
+    """Mirror of _bom_boq_pdf_bytes -- used by the email handler so the
+    attached PDF == the downloaded PDF byte-for-byte."""
+    uid = session.get("user_id") or 0
+    if not uid:
+        return b""
+    with app.test_request_context("/_internal_basic_prices_pdf"):
+        session["user_id"] = uid
+        try:
+            resp = boms_basic_prices_pdf(bom_id)
+        except Exception as _e:
+            try: app.logger.warning("basic-prices pdf bytes failed: %s", _e)
+            except Exception: pass
+            return b""
+    try:
+        return resp.get_data()
+    except Exception:
+        return b""
+
+
+def _bom_basic_prices_xlsx_bytes(bom_id):
+    return _xlsx_bytes_via_route(boms_basic_prices_xlsx, bom_id)
+
+
+@app.route("/boms/<int:bom_id>/basic-prices/email", methods=["POST"])
+@login_required
+def boms_basic_prices_email(bom_id):
+    """Email the Basic Price Schedule (no mark-ups) to a recipient.
+    Attaches both PDF + Excel byte-identical to the downloads."""
+    uid = session["user_id"]
+    bom = _bom_owned_or_404(bom_id, uid)
+    csrf_protect()
+    to_email = (request.form.get("to_email") or "").strip().lower()[:200]
+    if "@" not in to_email or "." not in to_email:
+        flash("Invalid recipient email address.", "warning")
+        return redirect(url_for("boms_basic_prices", bom_id=bom_id))
+    subject = (request.form.get("subject")
+               or f"Basic Price Schedule -- {bom['title']}")[:200]
+    body = (request.form.get("body")
+            or f"Please find attached the basic price schedule '{bom['title']}'.\n"
+               f"Basic prices only -- no mark-ups applied.\n"
+               f"Generated by SolarPro -- {bom['updated_at']}.")
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", bom["title"])[:60]
+    pdf_bytes = b""
+    try:
+        pdf_bytes = _bom_basic_prices_pdf_bytes(bom_id)
+    except Exception as _e:
+        try: app.logger.warning("basic-prices email pdf failed: %s", _e)
+        except Exception: pass
+    xlsx_bytes = b""
+    try:
+        xlsx_bytes = _bom_basic_prices_xlsx_bytes(bom_id)
+    except Exception as _e:
+        try: app.logger.warning("basic-prices email xlsx failed: %s", _e)
+        except Exception: pass
+    if not pdf_bytes and not xlsx_bytes:
+        flash("Could not build PDF or Excel attachment for email.", "danger")
+        return redirect(url_for("boms_basic_prices", bom_id=bom_id))
+    sent = False
+    try:
+        atts = []
+        if pdf_bytes:
+            atts.append((f"BasicPriceSchedule_{safe_name}.pdf", pdf_bytes, "application/pdf"))
+        if xlsx_bytes:
+            atts.append((f"BasicPriceSchedule_{safe_name}.xlsx", xlsx_bytes,
+                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+        result = _send_email(to_email, subject, body, attachments=atts)
+        sent = bool(result[0]) if isinstance(result, tuple) else bool(result)
+    except Exception as _e:
+        try: app.logger.warning("basic-prices email send failed: %s", _e)
+        except Exception: pass
+        sent = False
+    flash(
+        f"Email {'sent' if sent else 'failed -- check server log'} to {to_email}.",
+        "success" if sent else "warning",
+    )
+    return redirect(url_for("boms_basic_prices", bom_id=bom_id))
+
+
 # ───────────────────────── BOM item add / update / delete ────────────────
 
 
