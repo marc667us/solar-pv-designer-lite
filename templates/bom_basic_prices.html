@@ -18,6 +18,7 @@
   </div>
   <div class="d-flex gap-2 flex-wrap">
     <button onclick="window.print()" class="btn btn-outline-light btn-sm"><i class="bi bi-printer me-1"></i>Print</button>
+    <a href="{{ url_for('boms_list') }}" class="btn btn-outline-success btn-sm"><i class="bi bi-check2-circle me-1"></i>Done · Back to BOMs</a>
     <a href="{{ url_for('boms_boq', bom_id=bom.id) }}" class="btn btn-warning btn-sm fw-bold">
       <i class="bi bi-calculator me-1"></i>Get Full Cost Estimate →
     </a>
@@ -124,17 +125,23 @@
   {% endif %}
 </div>
 
-<!-- Footer CTA: advance to Stage 3 -->
+<!-- Footer CTA: advance to Stage 3 (optional) -->
 {% if lines %}
 <div class="solar-card p-4 text-center no-print" style="background:linear-gradient(135deg,#1a0f00,#120a00);border:1px solid #f59e0b44">
-  <div class="fw-bold mb-2" style="color:#f0d080">Next: Full Cost Estimate</div>
+  <div class="fw-bold mb-2" style="color:#f0d080">Optional next step: Full Cost Estimate</div>
   <div class="text-secondary small mb-3" style="max-width:560px;margin:0 auto">
+    You can stop here if a basic price list is all you need.
     The Full Cost Estimate applies labour, overhead, profit, contingency, and VAT mark-ups
     on top of these basic prices using the BOQ chain (sum OH+P · compound contingency · compound VAT).
   </div>
-  <a href="{{ url_for('boms_boq', bom_id=bom.id) }}" class="btn btn-solar btn-lg fw-bold px-4">
-    <i class="bi bi-calculator me-2"></i>Get Full Cost Estimate
-  </a>
+  <div class="d-flex justify-content-center gap-2 flex-wrap">
+    <a href="{{ url_for('boms_list') }}" class="btn btn-outline-light">
+      <i class="bi bi-check2-circle me-1"></i>I'm done · Back to BOMs
+    </a>
+    <a href="{{ url_for('boms_boq', bom_id=bom.id) }}" class="btn btn-solar fw-bold px-4">
+      <i class="bi bi-calculator me-2"></i>Get Full Cost Estimate
+    </a>
+  </div>
 </div>
 {% endif %}
 
