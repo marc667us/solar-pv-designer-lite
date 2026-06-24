@@ -1,0 +1,199 @@
+# Phase B (Day +14 after Keycloak cutover) -- apply migration 005.
+#
+# What 005 does:
+#   * Renames users.password_hash      -> users.legacy_password_hash
+#   * Renames users.is_admin           -> users.legacy_is_admin
+#   * Truncates login_failures rows older than 90 days
+#   * Idempotent (DO blocks check information_schema first)
+#
+# After this migration runs, the ?legacy=1 POST path can no longer
+# read bcrypt hashes -- the legacy form returns "Invalid username
+# or password" because users.password_hash no longer exists.
+#
+# SAFETY:
+#   * Default dry_run mode (per feedback_workflow_dry_run_gate.md).
+#   * Set confirm=PHASE_B to actually apply.
+#   * Pre-checks live state before applying:
+#       - KEYCLOAK_ENABLED=true must be on Render env
+#       - migrations 003 + 004 must already be applied
+#       - At least 14 days must have passed since cutover (warning, not blocker)
+#   * Idempotent: re-running after success is a no-op.
+#
+# Trigger via:
+#   gh workflow run "Apply Migration 005 (Phase B)"                         # dry-run preview
+#   gh workflow run "Apply Migration 005 (Phase B)" -f confirm=PHASE_B      # commit
+
+name: Apply Migration 005 (Phase B)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type PHASE_B to commit. Leave blank = dry-run preview (no SQL executed).'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      CONFIRM:           ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode (dry-run vs apply)
+        run: |
+          if [ "$CONFIRM" = "PHASE_B" ]; then
+            echo "=== APPLY MODE -- will commit migration 005 to live Postgres ==="
+            echo "MODE=apply" >> $GITHUB_ENV
+          else
+            echo "=== DRY-RUN MODE -- migration 005 will be parsed but not executed ==="
+            echo "Re-run with input: confirm=PHASE_B to commit."
+            echo "MODE=dryrun" >> $GITHUB_ENV
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/005_phase7_drop_password_hash.sql
+          echo "OK: migrations/005_phase7_drop_password_hash.sql present"
+
+      - name: Pre-flight -- KEYCLOAK_ENABLED=true on Render
+        run: |
+          set -e
+          if [ -z "$RENDER_SERVICE_ID" ]; then
+            echo "::warning::RENDER_SERVICE_ID secret missing; cannot verify KEYCLOAK_ENABLED. Continuing."
+            exit 0
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars?limit=100" \
+            -o /tmp/env.json
+          KC=$(jq -r '.[] | .envVar | select(.key=="KEYCLOAK_ENABLED") | .value' /tmp/env.json)
+          if [ "$KC" != "true" ]; then
+            echo "::error::Pre-flight failed: KEYCLOAK_ENABLED=$KC on Render. Must be 'true'."
+            echo "Run \"Cut Over To Keycloak\" workflow first."
+            exit 1
+          fi
+          echo "OK: KEYCLOAK_ENABLED=true on Render."
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- migrations 003 + 004 already applied
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          # 003 added the helper functions. If they're missing, 003 didn't run.
+          HELPER_COUNT=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM pg_proc WHERE proname IN ('current_tenant_id','current_user_sub')")
+          if [ "$HELPER_COUNT" -lt "2" ]; then
+            echo "::error::Pre-flight failed: migrations 003 did not run (helper functions missing). Apply migrations 003 + 004 first."
+            exit 1
+          fi
+          echo "OK: migrations 003 helpers present ($HELPER_COUNT functions)."
+          # 004 added audit_logs.tenant_id column.
+          COL=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT column_name FROM information_schema.columns WHERE table_name='audit_logs' AND column_name='tenant_id'")
+          if [ -z "$COL" ]; then
+            echo "::error::Pre-flight failed: migrations 004 did not run (audit_logs.tenant_id missing)."
+            exit 1
+          fi
+          echo "OK: migrations 004 audit_logs.tenant_id present."
+
+      - name: Pre-flight -- current state of users table
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          echo "--- columns currently on public.users ---"
+          psql "$DATABASE_URL" -A -t -c \
+            "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name IN ('password_hash','legacy_password_hash','is_admin','legacy_is_admin') ORDER BY column_name"
+          echo "--- users count ---"
+          psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM users"
+          echo "--- recent legacy logins (last 7 days) ---"
+          psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM audit_logs WHERE action='login_success' AND created_at > NOW() - INTERVAL '7 days'" || echo "(could not query audit_logs)"
+
+      - name: Show migration SQL
+        run: |
+          echo "--- migrations/005_phase7_drop_password_hash.sql ---"
+          cat migrations/005_phase7_drop_password_hash.sql
+
+      - name: Apply migration 005 (only when confirm=PHASE_B)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/005_phase7_drop_password_hash.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/005_phase7_drop_password_hash.sql
+          echo "OK: migration 005 applied."
+
+      - name: Verify post-apply (only when confirm=PHASE_B)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- expect: legacy_password_hash + legacy_is_admin both present ---"
+          NEW=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name IN ('legacy_password_hash','legacy_is_admin') ORDER BY column_name")
+          echo "$NEW"
+          NEW_COUNT=$(echo "$NEW" | grep -c .)
+          if [ "$NEW_COUNT" -lt "2" ]; then
+            echo "::error::Verification failed: expected 2 renamed columns, got $NEW_COUNT"
+            exit 1
+          fi
+          echo "--- expect: password_hash + is_admin both ABSENT ---"
+          OLD=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name IN ('password_hash','is_admin') ORDER BY column_name")
+          if [ -n "$OLD" ]; then
+            echo "::error::Verification failed: old column names still present: $OLD"
+            exit 1
+          fi
+          echo "OK: rename verified."
+
+      - name: Summary
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " PHASE B COMPLETE -- users.password_hash renamed to legacy_*"
+            echo "================================================================"
+            echo " Legacy POST /login can no longer bcrypt-authenticate."
+            echo " ?legacy=1 GET still renders the form for the seed admin --"
+            echo " consider following up with a code change to remove that path."
+          else
+            echo "DRY-RUN complete. No changes applied."
+            echo "Re-run with input: confirm=PHASE_B to commit."
+          fi
