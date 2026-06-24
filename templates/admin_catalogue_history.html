@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Price history — {{ item.name }}{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('procurement_catalog') }}" class="text-warning"><i class="bi bi-arrow-left me-1"></i>Back to Product Catalogue</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1">
+      <i class="bi bi-clock-history text-info me-1"></i>Price history &mdash; {{ item.name }}
+    </h5>
+    <div class="text-secondary small">
+      {{ item.brand or '&mdash;' }} &middot; {{ item.unit or 'No.' }} &middot;
+      current USD {{ '{:,.2f}'.format(item.price_usd or 0) }}
+    </div>
+  </div>
+</div>
+
+<div class="solar-card p-3 mb-4">
+  <h6 class="fw-bold mb-3"><i class="bi bi-arrow-up-right-circle me-1 text-warning"></i>Price changes ({{ history|length }})</h6>
+  {% if history %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+        <tr>
+          <th>When</th>
+          <th class="text-end">Old USD</th>
+          <th class="text-end">New USD</th>
+          <th class="text-end">Δ</th>
+          <th>Local</th>
+          <th>Source</th>
+          <th>Reason</th>
+          <th>By</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in history %}
+        {% set delta = (h.new_price_usd or 0) - (h.old_price_usd or 0) %}
+        <tr>
+          <td class="small text-secondary">{{ h.set_at }}</td>
+          <td class="text-end">{{ '{:,.2f}'.format(h.old_price_usd or 0) }}</td>
+          <td class="text-end fw-bold">{{ '{:,.2f}'.format(h.new_price_usd or 0) }}</td>
+          <td class="text-end {% if delta > 0 %}text-warning{% elif delta < 0 %}text-success{% else %}text-secondary{% endif %}">
+            {{ ('+' if delta >= 0 else '') ~ '{:,.2f}'.format(delta) }}
+          </td>
+          <td class="small">
+            {% if h.currency_local and h.currency_local != 'USD' %}
+              {{ h.currency_local }} {{ '{:,.2f}'.format(h.new_price_local or 0) }}
+            {% else %}
+              &mdash;
+            {% endif %}
+          </td>
+          <td class="small text-secondary">{{ h.source or '&mdash;' }}</td>
+          <td class="small text-secondary" style="max-width:240px;white-space:normal">{{ h.reason or '&mdash;' }}</td>
+          <td class="small">user #{{ h.set_by_user_id or 0 }}</td>
+          <td>
+            <span class="badge bg-{{ 'success' if h.approval_status == 'approved' else 'secondary' }} text-uppercase">{{ h.approval_status }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-secondary small py-3 text-center"><i class="bi bi-inbox" style="font-size:24px"></i><p class="mt-2 mb-0">No price history yet.</p></div>
+  {% endif %}
+</div>
+
+<div class="solar-card p-3 mb-4">
+  <h6 class="fw-bold mb-3"><i class="bi bi-people me-1 text-info"></i>Supplier quotes ({{ quotes|length }})</h6>
+  {% if quotes %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+        <tr>
+          <th>When</th>
+          <th>Supplier</th>
+          <th class="text-end">Price</th>
+          <th>Source</th>
+          <th>Anomaly</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for q in quotes %}
+        <tr>
+          <td class="small text-secondary">{{ q.quoted_at }}</td>
+          <td><strong>{{ q.supplier_name or '&mdash;' }}</strong></td>
+          <td class="text-end">{{ q.currency }} {{ '{:,.2f}'.format(q.price_local or 0) }}</td>
+          <td class="small text-secondary" style="max-width:240px;white-space:normal">{{ q.source_note or '&mdash;' }}</td>
+          <td>
+            {% if q.anomaly_flag %}
+              <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>flagged</span>
+            {% else %}
+              <span class="text-secondary small">&mdash;</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge bg-{{ {'approved':'success','proposed':'info','rejected':'danger'}.get(q.status,'secondary') }} text-uppercase">{{ q.status }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-secondary small py-3 text-center"><i class="bi bi-inbox" style="font-size:24px"></i><p class="mt-2 mb-0">No supplier quotes recorded yet. Run Recheck Prices on a BOM that references this item.</p></div>
+  {% endif %}
+</div>
+
+{% endblock %}

@@ -51,46 +51,73 @@
       </div>
     </div>
     <div class="table-responsive">
-      <table class="table table-sm align-middle" style="color:#e0e0f0">
-        <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+      <table class="table table-sm align-middle" style="color:#e0e0f0;font-size:12px">
+        <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px">
           <tr>
-            <th style="width:42px"></th>
+            <th style="width:38px">Apply</th>
             <th>#</th>
             <th>Item</th>
-            <th>Unit</th>
             <th class="text-end">Current ({{ meta.currency }})</th>
-            <th class="text-end">Proposed ({{ meta.currency }})</th>
+            <th class="text-end">Sup 1</th>
+            <th class="text-end">Sup 2</th>
+            <th class="text-end">Sup 3</th>
+            <th class="text-end">Proposed (avg)</th>
             <th class="text-end">Δ</th>
-            <th>Source note</th>
-            <th>Conf.</th>
+            <th>Conf./Flag</th>
+            <th style="width:80px">Push to catalogue</th>
           </tr>
         </thead>
         <tbody>
           {% for iid, info in rows %}
           {% set delta = (info.proposed or 0) - (info.current or 0) %}
           {% set good  = info.proposed and info.proposed > 0 %}
+          {% set quotes = info.quotes or [] %}
           <tr>
             <td class="text-center">
               {% if good %}
-                <input class="form-check-input" type="checkbox" name="apply" value="{{ iid }}" {% if info.confidence == 'high' %}checked{% endif %}>
+                <input class="form-check-input" type="checkbox" name="apply" value="{{ iid }}" {% if info.confidence == 'high' and not info.anomaly %}checked{% endif %}>
               {% else %}
                 <span class="text-secondary small" title="No price returned">—</span>
               {% endif %}
             </td>
             <td class="text-secondary small">{{ loop.index }}</td>
-            <td><strong>{{ info.name }}</strong></td>
-            <td class="small">{{ info.unit }}</td>
+            <td>
+              <strong>{{ info.name }}</strong>
+              <div class="text-secondary" style="font-size:10px">{{ info.unit }} &middot; {{ info.src_note or '' }}</div>
+              {% if quotes %}
+              <div class="text-secondary" style="font-size:10px;margin-top:2px">
+                {% for q in quotes %}<span class="me-2"><i class="bi bi-shop me-1"></i>{{ q.supplier or '?' }}{% if q.note %} ({{ q.note }}){% endif %}</span>{% endfor %}
+              </div>
+              {% endif %}
+            </td>
             <td class="text-end">{{ '{:,.2f}'.format(info.current or 0) }}</td>
+            {% for n in range(3) %}
+              {% set q = quotes[n] if n < quotes|length else None %}
+              <td class="text-end small">
+                {% if q and q.price and q.price > 0 %}{{ '{:,.2f}'.format(q.price) }}{% else %}—{% endif %}
+              </td>
+            {% endfor %}
             <td class="text-end {% if good %}fw-bold text-info{% else %}text-secondary{% endif %}">
               {{ '{:,.2f}'.format(info.proposed or 0) if good else '—' }}
             </td>
             <td class="text-end {% if delta > 0 %}text-warning{% elif delta < 0 %}text-success{% else %}text-secondary{% endif %}">
               {% if good %}{{ ('+' if delta >= 0 else '') ~ '{:,.2f}'.format(delta) }}{% else %}—{% endif %}
             </td>
-            <td class="small text-secondary" style="max-width:240px;white-space:normal">{{ info.src_note or '—' }}</td>
             <td>
               {% set badge = {'high':'success','med':'info','low':'secondary'}.get(info.confidence, 'secondary') %}
               <span class="badge bg-{{ badge }} text-uppercase">{{ info.confidence }}</span>
+              {% if info.anomaly %}
+              <span class="badge bg-warning text-dark ms-1" title="More than ±25% from current — review carefully">
+                <i class="bi bi-exclamation-triangle"></i> &gt;±25%
+              </span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if good %}
+                <input class="form-check-input" type="checkbox" name="push_catalog" value="{{ iid }}" title="Also update the master catalogue product price">
+              {% else %}
+                <span class="text-secondary small">—</span>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}

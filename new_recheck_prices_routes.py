@@ -73,18 +73,36 @@ def _recheck_build_prompt(items_for_prompt, country, currency):
         )
     body = "\n".join(rows)
     return (
-        "You are a procurement analyst. For each item below, return the "
-        "typical CURRENT retail unit price in {country} as of {today}, "
-        "quoted in {currency}, from local electrical / solar / construction "
-        "suppliers (e.g. for Ghana: Tridem, Beta Stores, A-Life Magnetic, "
-        "ABB Ghana, Schneider Electric Ghana; for Nigeria: Coscharis, "
-        "Power Limited, etc.). If unsure, set price = 0 and confidence = "
-        "\"low\".\n\n"
+        "You are a procurement analyst. For each item below, return THREE "
+        "current retail unit prices from THREE DIFFERENT NAMED SUPPLIERS in "
+        "{country} as of {today}, quoted in {currency}, from local "
+        "electrical / solar / construction suppliers "
+        "(e.g. for Ghana: Tridem, Beta Stores, A-Life Magnetic, ABB Ghana, "
+        "Schneider Electric Ghana; for Nigeria: Coscharis, Power Limited; "
+        "for Kenya: Davis & Shirtliff, Power Technics). If you cannot find "
+        "three real suppliers, return what you have and set "
+        "confidence='low' on missing rows.\n\n"
         "Items:\n{body}\n\n"
-        "Return ONLY a valid JSON object, no markdown, no commentary:\n"
-        "{{\n  \"prices\": [\n    {{\"id\": <int>, \"price\": <number in "
-        "{currency}>, \"source\": \"<short note: vendor name or 'market avg'>\", "
-        "\"confidence\": \"low\"|\"med\"|\"high\"}}\n  ]\n}}".format(
+        "Return ONLY a valid JSON object, no markdown, no commentary. "
+        "The 'price' field is the AVERAGE of the three supplier quotes "
+        "(use this as the proposed new basic price). The 'quotes' array "
+        "must contain THREE supplier-named entries (omit at most one if "
+        "truly unavailable):\n"
+        "{{\n"
+        "  \"prices\": [\n"
+        "    {{\n"
+        "      \"id\": <int>,\n"
+        "      \"price\": <average of the three quotes in {currency}>,\n"
+        "      \"source\": \"<short note: 'avg of 3 quotes' or vendor name>\",\n"
+        "      \"confidence\": \"low\"|\"med\"|\"high\",\n"
+        "      \"quotes\": [\n"
+        "        {{\"supplier\": \"<vendor 1 name>\", \"price\": <num>, \"note\": \"<optional source url or note>\"}},\n"
+        "        {{\"supplier\": \"<vendor 2 name>\", \"price\": <num>, \"note\": \"\"}},\n"
+        "        {{\"supplier\": \"<vendor 3 name>\", \"price\": <num>, \"note\": \"\"}}\n"
+        "      ]\n"
+        "    }}\n"
+        "  ]\n"
+        "}}".format(
             country=country, today=today, currency=currency, body=body,
         )
     )
@@ -217,7 +235,25 @@ def _recheck_parse(raw: str):
             conf = (row.get("confidence") or "low")[:10].lower()
             if conf not in ("low", "med", "high"):
                 conf = "low"
-            out[iid] = {"price": price, "source": source, "confidence": conf}
+            quotes = []
+            for q in (row.get("quotes") or [])[:5]:
+                try:
+                    quotes.append({
+                        "supplier": (q.get("supplier") or "")[:200],
+                        "price":    float(q.get("price") or 0),
+                        "note":     (q.get("note") or "")[:300],
+                    })
+                except (TypeError, ValueError):
+                    continue
+            # If model gave quotes but no avg, compute it.
+            if quotes and price <= 0:
+                ps = [q["price"] for q in quotes if q["price"] > 0]
+                if ps:
+                    price = sum(ps) / len(ps)
+            out[iid] = {
+                "price": price, "source": source, "confidence": conf,
+                "quotes": quotes,
+            }
         except (TypeError, ValueError):
             continue
     return out
@@ -295,9 +331,13 @@ def register_recheck_prices_routes(
             )
             return redirect(url_for("boms_basic_prices", bom_id=bom_id))
 
-        # Stash proposals in session, keyed by bom_id, so the review page
-        # can render the diff without re-calling the LLM.
+        # Stash proposals in session, keyed by bom_id. Includes per-supplier
+        # quotes (B feature) + anomaly flag (>+/-25% from current price).
         key = f"recheck_proposals_{bom_id}"
+        def _anomaly(current, prop):
+            if not current or current <= 0 or not prop or prop <= 0:
+                return False
+            return abs(prop - current) / current > 0.25
         session[key] = {
             "currency": currency,
             "country":  country,
@@ -305,12 +345,15 @@ def register_recheck_prices_routes(
             "ts":       _date.today().isoformat(),
             "items": {
                 str(it["id"]): {
-                    "current": it["current_price"],
-                    "name":    it["name"],
-                    "unit":    it["unit"],
+                    "current":   it["current_price"],
+                    "name":      it["name"],
+                    "unit":      it["unit"],
                     "proposed":  proposed.get(it["id"], {}).get("price", 0),
                     "src_note":  proposed.get(it["id"], {}).get("source", ""),
                     "confidence":proposed.get(it["id"], {}).get("confidence", "low"),
+                    "quotes":    proposed.get(it["id"], {}).get("quotes", []),
+                    "anomaly":   _anomaly(it["current_price"],
+                                          proposed.get(it["id"], {}).get("price", 0)),
                 }
                 for it in prompt_items
             },
@@ -366,12 +409,30 @@ def register_recheck_prices_routes(
             fx_rate = 1.0
         applied = 0
         skipped = 0
+        catalogue_pushes = 0
         ticked = set()
+        push_to_catalog = set()
         for k in request.form.getlist("apply"):
             try:
                 ticked.add(int(k))
             except (TypeError, ValueError):
                 pass
+        for k in request.form.getlist("push_catalog"):
+            try:
+                push_to_catalog.add(int(k))
+            except (TypeError, ValueError):
+                pass
+        # Lazy import to avoid circular at module load.
+        try:
+            from new_catalogue_pricing_routes import (
+                _record_catalog_quote, _record_price_history,
+                _ensure_pricing_tables,
+            )
+            _ensure_pricing_tables(get_db,
+                lambda: bool(__import__("os").environ.get("DATABASE_URL")))
+        except Exception:
+            _record_catalog_quote = None
+            _record_price_history = None
         with get_db() as c:
             for sid, info in proposals["items"].items():
                 try:
@@ -385,12 +446,6 @@ def register_recheck_prices_routes(
                 if proposed_local <= 0:
                     skipped += 1
                     continue
-                # Convert local currency back to USD for storage. The
-                # marketplace_bom_items.basic_price column stores the local
-                # value directly so the new _bom_totals_with_rates picks
-                # it up without an FX round-trip. unit_price_override is
-                # the legacy USD-denominated override; we set BOTH so the
-                # Cost Estimate and the Basic Price Schedule agree.
                 proposed_usd = proposed_local / fx_rate
                 try:
                     c.execute(
@@ -400,7 +455,6 @@ def register_recheck_prices_routes(
                         (proposed_local, proposed_usd, iid, bom_id),
                     )
                 except Exception:
-                    # Schema not migrated -- update unit_price_override only.
                     c.execute(
                         "UPDATE marketplace_bom_items "
                         "SET unit_price_override=? "
@@ -408,6 +462,59 @@ def register_recheck_prices_routes(
                         (proposed_usd, iid, bom_id),
                     )
                 applied += 1
+
+                # B (3-quote): record every supplier quote that came back.
+                quotes = info.get("quotes") or []
+                anomaly = bool(info.get("anomaly"))
+                if _record_catalog_quote and quotes:
+                    # Resolve the catalogue product_id for this BOM line.
+                    try:
+                        prod_row = c.execute(
+                            "SELECT product_id FROM marketplace_bom_items WHERE id=?",
+                            (iid,),
+                        ).fetchone()
+                        cat_pid = int((prod_row["product_id"] if prod_row else 0) or 0)
+                    except Exception:
+                        cat_pid = 0
+                    if cat_pid:
+                        for q in quotes:
+                            _record_catalog_quote(
+                                get_db, cat_pid,
+                                q.get("supplier") or "", 0,
+                                float(q.get("price") or 0),
+                                currency, q.get("note") or "",
+                                anomaly, uid, status="proposed",
+                            )
+
+                # C (push-to-catalogue): if owner ticked the box AND the line
+                # points at a real catalogue product, update the master price.
+                if iid in push_to_catalog and _record_price_history:
+                    try:
+                        prod_row = c.execute(
+                            "SELECT product_id FROM marketplace_bom_items WHERE id=?",
+                            (iid,),
+                        ).fetchone()
+                        cat_pid = int((prod_row["product_id"] if prod_row else 0) or 0)
+                    except Exception:
+                        cat_pid = 0
+                    if cat_pid:
+                        old_row = c.execute(
+                            "SELECT price_usd FROM equipment_catalog WHERE id=?",
+                            (cat_pid,),
+                        ).fetchone()
+                        old_usd = float((old_row["price_usd"] if old_row else 0) or 0)
+                        c.execute(
+                            "UPDATE equipment_catalog SET price_usd=? WHERE id=?",
+                            (proposed_usd, cat_pid),
+                        )
+                        _record_price_history(
+                            get_db, cat_pid, old_usd, proposed_usd,
+                            currency, proposed_local,
+                            f"recheck-from-bom #{bom_id}",
+                            f"AI source: {proposals.get('source','?')}",
+                            uid, status="approved",
+                        )
+                        catalogue_pushes += 1
             c.execute(
                 "UPDATE marketplace_boms SET updated_at=CURRENT_TIMESTAMP "
                 "WHERE id=?",
@@ -425,8 +532,10 @@ def register_recheck_prices_routes(
         except Exception:
             pass
         session.pop(key, None)
+        push_msg = (f" {catalogue_pushes} also pushed to the master catalogue."
+                    if catalogue_pushes else "")
         flash(
-            f"Applied {applied} new price(s). {skipped} skipped. "
+            f"Applied {applied} new price(s). {skipped} skipped.{push_msg} "
             "Recompute the Cost Estimate to see the new totals.",
             "success",
         )

@@ -27338,6 +27338,21 @@ except Exception as _e_rcp:
     except Exception:
         pass
 
+
+# CATALOGUE_PRICING_ROUTES_v1 -- do not remove
+try:
+    from new_catalogue_pricing_routes import register_catalogue_pricing_routes
+    register_catalogue_pricing_routes(
+        app, admin_required, session, request, redirect, url_for, flash,
+        render_template, current_user, get_db, csrf_protect,
+        _CURRENCY_RATES_FROM_USD,
+    )
+except Exception as _e_cpr:
+    try:
+        app.logger.warning('catalogue-pricing routes failed to register: %s', _e_cpr)
+    except Exception:
+        pass
+
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=5000, debug=False)
