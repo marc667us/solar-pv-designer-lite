@@ -1,0 +1,175 @@
+# Task #4 -- BOM Formula V1 (current compound OH×P) vs V2 (BOQ-aligned sum OH+P)
+# READ-ONLY audit. No UPDATE statements. Reports per-BOM delta + grand total per
+# currency so the owner can decide whether to align the BOM formula to the BOQ
+# formula. See scratchpad/task_4_bom_boq_formula_brief.md for the full brief.
+#
+# Read-only workflows are EXEMPT from the dry-run gate convention
+# (feedback_workflow_dry_run_gate.md) -- no inputs.confirm field here.
+
+name: Audit BOM Formula V1 vs V2
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install --quiet psycopg2-binary requests
+
+      - name: Resolve solarpro-postgres URL
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXTERNAL=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "external=$EXTERNAL" >> $GITHUB_OUTPUT
+
+      - name: Compute BOM v1 vs v2 deltas (READ-ONLY)
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          python3 <<'PY'
+          import os, psycopg2
+          conn = psycopg2.connect(os.environ["DATABASE_URL"], sslmode="require")
+          cur = conn.cursor()
+
+          # FX rates -- indicative, matches _CURRENCY_RATES_FROM_USD in web_app.py.
+          FX = {
+              "USD": 1.0,   "EUR":  0.93, "GBP":  0.79,
+              "GHS": 14.5,  "NGN": 1550.0, "KES": 130.0,
+              "ZAR": 18.5,  "XOF": 610.0, "ZMW":  24.0,
+          }
+          DEFAULTS = {"labour_pct": 0.0, "overhead_pct": 30.0,
+                      "profit_pct":  10.0, "vat_pct": 12.5}
+
+          # Pull all BOMs. currency column may not exist on older DBs.
+          try:
+              cur.execute("SELECT id, title, currency FROM marketplace_boms ORDER BY id")
+              boms = [(r[0], r[1], (r[2] or "GHS").upper()) for r in cur.fetchall()]
+          except Exception:
+              cur.execute("SELECT id, title FROM marketplace_boms ORDER BY id")
+              boms = [(r[0], r[1], "GHS") for r in cur.fetchall()]
+
+          if not boms:
+              print("No BOMs in DB. Nothing to audit.")
+              cur.close(); conn.close()
+              raise SystemExit(0)
+
+          report = []
+          per_ccy = {}    # currency -> [v1_sum, v2_sum, bom_count, item_count]
+
+          for bom_id, title, currency in boms:
+              fx = FX.get(currency, 1.0)
+              # Per-BOM rates (or defaults)
+              try:
+                  cur.execute(
+                      "SELECT labour_pct, overhead_pct, profit_pct, vat_pct "
+                      "FROM marketplace_bom_rates WHERE bom_id=%s", (bom_id,)
+                  )
+                  rrow = cur.fetchone()
+              except Exception:
+                  rrow = None
+              if rrow:
+                  lab, ovh, prf, vat = (float(x or 0) for x in rrow)
+              else:
+                  lab, ovh, prf, vat = (DEFAULTS["labour_pct"],
+                                        DEFAULTS["overhead_pct"],
+                                        DEFAULTS["profit_pct"],
+                                        DEFAULTS["vat_pct"])
+
+              # Items + catalog price
+              cur.execute(
+                  "SELECT bi.qty, bi.unit_price_override, ec.price_usd "
+                  "FROM marketplace_bom_items bi "
+                  "LEFT JOIN equipment_catalog ec ON ec.id = bi.product_id "
+                  "WHERE bi.bom_id=%s", (bom_id,)
+              )
+              items = cur.fetchall()
+              if not items:
+                  continue
+
+              v1_total = v2_total = 0.0
+              for qty, upo, cat_price in items:
+                  qty       = float(qty or 0)
+                  basic_usd = float(upo if upo is not None else (cat_price or 0))
+                  basic     = basic_usd * fx
+                  # V1 = current BOM (web_app.py:17794-17811):
+                  # compound OH × P separately.
+                  rate_v1 = basic * (1+lab/100) * (1+ovh/100) * (1+prf/100) * (1+vat/100)
+                  # V2 = BOQ-aligned (Option A): sum OH + P into one factor.
+                  # No contingency_pct because BOM table doesn't carry one.
+                  direct  = basic * (1+lab/100)
+                  rate_v2 = direct * (1 + (ovh+prf)/100) * (1+vat/100)
+                  v1_total += rate_v1 * qty
+                  v2_total += rate_v2 * qty
+
+              delta_abs = v1_total - v2_total
+              delta_pct = (delta_abs / v1_total * 100) if v1_total else 0.0
+
+              accum = per_ccy.setdefault(currency, [0.0, 0.0, 0, 0])
+              accum[0] += v1_total
+              accum[1] += v2_total
+              accum[2] += 1
+              accum[3] += len(items)
+
+              report.append(
+                  f"  BOM#{bom_id:<4} [{currency}] "
+                  f"lab={lab:>5.1f} ovh={ovh:>5.1f} prf={prf:>5.1f} vat={vat:>5.1f}  "
+                  f"items={len(items):>3}  "
+                  f"v1={v1_total:>14,.2f}  v2={v2_total:>14,.2f}  "
+                  f"d={delta_abs:>12,.2f} ({delta_pct:>5.2f}%)  "
+                  f"\"{(title or '')[:36]}\""
+              )
+
+          cur.close(); conn.close()
+
+          print("=" * 100)
+          print(" BOM FORMULA V1 (current: compound OH x P) vs V2 (Option A: sum OH + P)")
+          print(" READ-ONLY -- no rows modified.")
+          print("=" * 100)
+          print()
+          print("Per-BOM detail:")
+          for line in report:
+              print(line)
+          print()
+          print("=" * 100)
+          print(" PER-CURRENCY TOTALS (in local currency, NOT USD-normalised)")
+          print("=" * 100)
+          print(f"  {'ccy':<5} {'BOMs':>5} {'items':>6}  {'V1 total':>16}  {'V2 total':>16}  {'delta':>14}  {'pct':>7}")
+          for ccy, (v1, v2, nb, ni) in sorted(per_ccy.items()):
+              d = v1 - v2
+              p = (d / v1 * 100) if v1 else 0.0
+              print(f"  {ccy:<5} {nb:>5} {ni:>6}  {v1:>16,.2f}  {v2:>16,.2f}  {d:>14,.2f}  {p:>6.2f}%")
+          print()
+          print(f"  TOTAL BOMs audited: {sum(c[2] for c in per_ccy.values())}")
+          print(f"  TOTAL items:        {sum(c[3] for c in per_ccy.values())}")
+          print()
+          print("Interpretation: positive delta means BOM total is HIGHER than the BOQ-aligned")
+          print("formula would produce. Customers see lower numbers if V2 ships. Per the")
+          print("3-worked-examples brief, expected gap is 2-12% depending on labour_pct.")
+          PY
