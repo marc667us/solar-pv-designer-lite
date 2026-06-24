@@ -1,0 +1,202 @@
+# Read-only Paystack merchant diagnostic. Replaces the manual
+# dashboard.paystack.com -> Settings -> Preferences check.
+#
+# Reports:
+#   1. Merchant identity (business name + country)
+#   2. Account currencies enabled
+#   3. Registered webhooks (does ours point at solarpro.aiappinvent.com/paystack/webhook?)
+#   4. Whether a test transaction can be initialized (smoke without charging)
+#
+# Read-only -- no inputs.confirm needed per feedback_workflow_dry_run_gate.
+
+name: Diag Paystack Merchant Config
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY }}
+      PAYSTACK_PUBLIC_KEY: ${{ secrets.PAYSTACK_PUBLIC_KEY }}
+      EXPECTED_WEBHOOK_URL: "https://solarpro.aiappinvent.com/paystack/webhook"
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Probe Paystack API
+        run: |
+          python3 <<'PY'
+          import os, json, urllib.request, urllib.error
+
+          SK = os.environ.get("PAYSTACK_SECRET_KEY", "")
+          PK = os.environ.get("PAYSTACK_PUBLIC_KEY", "")
+          EXPECT = os.environ.get("EXPECTED_WEBHOOK_URL", "")
+
+          print("=" * 80)
+          print(" PAYSTACK MERCHANT DIAGNOSTIC")
+          print("=" * 80)
+          print(f"  Secret key set: {bool(SK)}  prefix={SK[:8] + '...' if SK else 'MISSING'}")
+          print(f"  Public key set: {bool(PK)}  prefix={PK[:8] + '...' if PK else 'MISSING'}")
+          print(f"  Mode: {'TEST' if SK.startswith('sk_test_') else ('LIVE' if SK.startswith('sk_live_') else 'UNKNOWN')}")
+          print(f"  Expected webhook: {EXPECT}")
+          print()
+
+          if not SK:
+              print("FAIL: PAYSTACK_SECRET_KEY missing; cannot probe API.")
+              raise SystemExit(1)
+
+          def call(path):
+              req = urllib.request.Request(
+                  f"https://api.paystack.co{path}",
+                  headers={"Authorization": f"Bearer {SK}",
+                           "User-Agent": "solarpro-paystack-diag/1.0"},
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=15) as r:
+                      return r.status, json.loads(r.read())
+              except urllib.error.HTTPError as e:
+                  body = ""
+                  try: body = e.read().decode()
+                  except Exception: pass
+                  return e.code, {"status": False, "message": body[:200]}
+              except Exception as e:
+                  return 0, {"status": False, "message": str(e)[:200]}
+
+          # ----- 1) Merchant identity / settings -----
+          # Paystack doesn't expose "/account" directly; we infer from a balance call
+          # which returns the account currency in its data array.
+          print("-" * 80)
+          print(" 1. ACCOUNT CURRENCIES (via /balance)")
+          print("-" * 80)
+          status, data = call("/balance")
+          if status == 200 and data.get("status"):
+              for entry in data.get("data", []):
+                  ccy = entry.get("currency", "?")
+                  bal = entry.get("balance", 0) / 100
+                  print(f"  - {ccy:5}  balance={bal:,.2f}")
+              # Quick consistency check vs our country->currency map
+              supported = [e.get("currency") for e in data.get("data", [])]
+              expected_for_targets = {"GHS", "NGN", "KES"}
+              missing = expected_for_targets - set(supported)
+              if missing:
+                  print(f"  WARN: target-market currencies missing from this account: {sorted(missing)}")
+                  print(f"        Users in those countries will be charged USD as a fallback (if your account supports USD).")
+              else:
+                  print(f"  OK: all target currencies (GHS/NGN/KES) appear in this account.")
+          else:
+              print(f"  FAIL: /balance call returned {status} {data}")
+
+          # ----- 2) Webhook registration -----
+          # The webhook is set in the dashboard UI, not via API, but Paystack
+          # exposes /integration/keys + /integration which returns the
+          # configured callback_url and webhook URL on the integration settings.
+          print()
+          print("-" * 80)
+          print(" 2. WEBHOOK URL (via /integration)")
+          print("-" * 80)
+          status, data = call("/integration")
+          if status == 200 and data.get("status"):
+              info = data.get("data", {})
+              actual_webhook = info.get("webhook_url") or info.get("live_webhook_url") or info.get("test_webhook_url") or ""
+              print(f"  Current webhook URL: {actual_webhook or '(not set)'}")
+              if actual_webhook == EXPECT:
+                  print(f"  OK: matches expected URL {EXPECT}")
+              elif actual_webhook:
+                  print(f"  WARN: webhook is set but to a DIFFERENT URL.")
+                  print(f"        Expected: {EXPECT}")
+                  print(f"        Got:      {actual_webhook}")
+              else:
+                  print(f"  FAIL: no webhook URL registered.")
+                  print(f"        Set it at: dashboard.paystack.com -> Settings -> API Keys & Webhooks")
+                  print(f"        Value:     {EXPECT}")
+          else:
+              print(f"  FAIL: /integration call returned {status} {data}")
+
+          # ----- 3) Initialize a test transaction (smoke, does not charge) -----
+          print()
+          print("-" * 80)
+          print(" 3. INITIALIZE TEST TRANSACTION (smoke -- not charged)")
+          print("-" * 80)
+          import json as _json
+          body = _json.dumps({
+              "email": "smoke@solarpro.aiappinvent.com",
+              "amount": 100,   # 1 GHS in pesewas
+              "currency": "GHS",
+              "metadata": {"plan": "professional", "user_id": 0, "smoke": True},
+          }).encode()
+          req = urllib.request.Request(
+              "https://api.paystack.co/transaction/initialize",
+              data=body,
+              headers={"Authorization": f"Bearer {SK}",
+                       "Content-Type": "application/json",
+                       "User-Agent": "solarpro-paystack-diag/1.0"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=15) as r:
+                  resp = json.loads(r.read())
+              if resp.get("status"):
+                  d = resp.get("data", {})
+                  print(f"  OK: transaction initialized.")
+                  print(f"      reference:     {d.get('reference')}")
+                  print(f"      access_code:   {d.get('access_code')}")
+                  print(f"      checkout URL:  {d.get('authorization_url')}")
+                  print(f"      GHS supported on this account: YES.")
+              else:
+                  print(f"  FAIL: {resp.get('message', '(no message)')}")
+          except urllib.error.HTTPError as e:
+              body = e.read().decode() if hasattr(e, "read") else ""
+              print(f"  FAIL: HTTP {e.code}  {body[:300]}")
+              if "currency" in body.lower():
+                  print(f"  HINT: This account does not support GHS. We map Ghana -> GHS in the")
+                  print(f"        frontend; users in Ghana will hit a currency-not-supported error.")
+                  print(f"        Either enable GHS on the merchant account or change the mapping to USD.")
+          except Exception as e:
+              print(f"  FAIL: {e}")
+
+          # ----- 4) Same test in NGN, KES, USD just to know -----
+          print()
+          print("-" * 80)
+          print(" 4. CURRENCY-SUPPORT MATRIX (init test transactions per currency)")
+          print("-" * 80)
+          for ccy in ("GHS", "NGN", "KES", "USD", "ZAR", "XOF"):
+              body = _json.dumps({
+                  "email": "smoke@solarpro.aiappinvent.com",
+                  "amount": 100,
+                  "currency": ccy,
+                  "metadata": {"smoke": True},
+              }).encode()
+              req = urllib.request.Request(
+                  "https://api.paystack.co/transaction/initialize",
+                  data=body,
+                  headers={"Authorization": f"Bearer {SK}",
+                           "Content-Type": "application/json",
+                           "User-Agent": "solarpro-paystack-diag/1.0"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=15) as r:
+                      resp = json.loads(r.read())
+                  if resp.get("status"):
+                      print(f"  {ccy:4}  SUPPORTED  (ref={resp.get('data', {}).get('reference')})")
+                  else:
+                      print(f"  {ccy:4}  REJECTED   {resp.get('message', '(no message)')}")
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode() if hasattr(e, "read") else ""
+                  reason = body[:120].replace("\n", " ")
+                  print(f"  {ccy:4}  REJECTED   HTTP {e.code}  {reason}")
+              except Exception as e:
+                  print(f"  {ccy:4}  ERROR      {e}")
+
+          print()
+          print("Done. Use these results to confirm the country->currency map in")
+          print("web_app.py:_COUNTRY_TO_PAYSTACK_CURRENCY matches what the merchant")
+          print("account actually accepts.")
+          PY
