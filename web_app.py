@@ -2113,6 +2113,11 @@ _SUPPORT_ASSETS = {
     # someone needs audio-only - just not exposed here.
     "user-walkthrough": ("SolarPro_User_Walkthrough.mp4", "video/mp4"),
     "tech-walkthrough": ("SolarPro_Tech_Walkthrough.mp4", "video/mp4"),
+    # Loom-style task-specific shorts built 2026-06-24 from
+    # docs/loom_shell_0{1,2,3}_*.md via scripts/build_loom_videos.py.
+    "boq-60s":           ("SolarPro_BOQ_60s.mp4",         "video/mp4"),
+    "cost-estimate-60s": ("SolarPro_CostEstimate_60s.mp4", "video/mp4"),
+    "send-to-client-30s":("SolarPro_SendToClient_30s.mp4", "video/mp4"),
 }
 
 @app.route("/support/asset/<slug>")
