@@ -20348,6 +20348,17 @@ def boq_floor_add_item(pid, bid, fid):
             (item_id, pid, uid, basic, supply, install,
              oh, prf, cnt, vat, final_rate, total),
         )
+        try:
+            c.execute(
+                "UPDATE boq_floor_rate_buildup SET freight_pct=?, "
+                "handling_pct=?, insurance_pct=?, wastage_pct=?, "
+                "labour_amt=?, tools_amt=?, equipment_amt=?, "
+                "testing_amt=?, supervision_amt=? WHERE floor_item_id=?",
+                (fr_pct, hd_pct, ins_pct, ws_pct,
+                 lab_amt, tools_amt, eq_amt, test_amt, sup_amt, item_id),
+            )
+        except Exception:
+            pass  # Sub-field columns not migrated yet -- harmless.
         c.execute("UPDATE boq_projects  SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (pid,))
         c.execute("UPDATE boq_buildings SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (bid,))
         c.execute("UPDATE boq_floors    SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (fid,))
@@ -20626,61 +20637,145 @@ def _boq_next_item_no(floor_id: int, bill_no: int, section_letter: str) -> str:
     return str(int((row["n"] if row else 0) or 0) + 1)
 
 
-def _boq_safe_rate(basic, supply, install, oh, prf, cnt=0, vat=0):
-    """Additive rate build-up (2026-06-24 owner spec).
+_BOQ_LEGACY_MIGRATION_DONE = {"v": False}
 
-    All five inputs are PERCENTAGES of basic. The old `supply` and
-    `install` args (previously currency amounts) are now interpreted
-    as percentages of basic. `cnt` and `vat` are accepted for back-
-    compat with existing callsites but IGNORED.
+def _migrate_legacy_boq_rate_buildup():
+    """2026-06-24 v2 -- spec-aligned cleanup.
 
-    Caps (server-side, silently clamped here; route handlers reject
-    out-of-cap input with a flash warning before reaching this fn):
-        supply_pct   0..15      profit_pct   0..5
-        install_pct  0..25      overhead_pct 0..15
+    Class A (pre-2026-06-24 morning): supply_rate / install_rate hold
+    currency amounts > 100. These ALREADY match the new spec semantics --
+    leave them alone.
 
-    Formula:
-        total = basic * (1 + (supply_pct + profit_pct
-                              + install_pct + overhead_pct) / 100)
+    Class B (additive-model rows shipped 2026-06-24 morning, now reverted):
+    supply_rate in 0..15, install_rate in 0..25 (percentages). Zero these
+    so the new currency-amount semantics do not treat 15 as GHS 15.
+    Reset final_built_up_rate = basic_price so totals stay sane until the
+    owner re-enters supply/install build-ups.
+
+    Idempotent (WHERE clause only matches Class B rows). Non-raising.
     """
-    b   = max(0.0, float(basic or 0))
-    sp  = max(0.0, min(15.0, float(supply  or 0)))
-    ip  = max(0.0, min(25.0, float(install or 0)))
-    op  = max(0.0, min(15.0, float(oh      or 0)))
-    pp  = max(0.0, min( 5.0, float(prf     or 0)))
-    return b * (1.0 + (sp + pp + ip + op) / 100.0)
+    if _BOQ_LEGACY_MIGRATION_DONE["v"]:
+        return
+    try:
+        with get_db() as c:
+            try:
+                n_row = c.execute(
+                    "SELECT COUNT(*) AS n FROM boq_floor_rate_buildup "
+                    "WHERE (supply_rate > 0 AND supply_rate < 100) "
+                    "   OR (install_rate > 0 AND install_rate < 100)"
+                ).fetchone()
+                n = int((n_row["n"] if n_row else 0) or 0)
+            except Exception:
+                n = -1
+            if n != 0:
+                try:
+                    c.execute(
+                        "UPDATE boq_floor_rate_buildup "
+                        "SET supply_rate=0, install_rate=0, "
+                        "    final_built_up_rate=basic_price, "
+                        "    total_amount=basic_price * COALESCE("
+                        "      (SELECT qty FROM boq_floor_items i "
+                        "       WHERE i.id=boq_floor_rate_buildup.floor_item_id), 0) "
+                        "WHERE (supply_rate > 0 AND supply_rate < 100) "
+                        "   OR (install_rate > 0 AND install_rate < 100)"
+                    )
+                except Exception as _e:
+                    try:
+                        app.logger.warning(
+                            "legacy boq rate-buildup v2 update failed: %s", _e)
+                    except Exception:
+                        pass
+        try:
+            app.logger.info(
+                "legacy boq rate-buildup v2: zeroed %s row(s) of additive-model data",
+                "?" if n < 0 else n)
+        except Exception:
+            pass
+    except Exception as _e:
+        try:
+            app.logger.warning("legacy boq rate-buildup v2 skipped: %s", _e)
+        except Exception:
+            pass
+    _BOQ_LEGACY_MIGRATION_DONE["v"] = True
+
+
+def _boq_safe_rate(basic, supply, install, oh, prf, cnt=0, vat=0):
+    """Spec-aligned BOQ rate build-up (2026-06-24 v2).
+
+    Matches the canonical methodology in
+    `pvsolar1/supplier and price/prates and pricing modeling1.txt`.
+
+    Args (semantics restored to pre-2026-06-24-morning meaning):
+        basic   -- material cost per unit (currency)
+        supply  -- SUPPLY RATE amount (currency): basic + freight + handling
+                   + insurance + wastage. Falls back to basic when 0.
+        install -- INSTALL RATE amount (currency): labour + tools + equipment
+                   + testing + supervision. Falls back to 0.
+        oh, prf, cnt, vat -- percentages (0..20 / 0..30 / 0..15 / 0..50)
+
+    Chain (matches spec worked example exactly):
+        Prime    = supply + install
+        Overhead = Prime    * oh%
+        Profit   = (Prime + Overhead) * prf%
+        Subtotal = Prime + Overhead + Profit
+        Cont     = Subtotal * cnt%
+        VAT      = (Subtotal + Cont) * vat%
+        Total    = Subtotal + Cont + VAT
+    """
+    b = max(0.0, float(basic or 0))
+    s = max(0.0, float(supply or 0))
+    if s <= 0:
+        s = b  # supply defaults to basic when no delivery extras provided
+    i = max(0.0, float(install or 0))
+    op = max(0.0, min(20.0, float(oh  or 0)))
+    pp = max(0.0, min(30.0, float(prf or 0)))
+    cp = max(0.0, min(15.0, float(cnt or 0)))
+    vp = max(0.0, min(50.0, float(vat or 0)))
+    prime    = s + i
+    overhead = prime    * op / 100.0
+    profit   = (prime + overhead) * pp / 100.0
+    subtotal = prime + overhead + profit
+    contingency = subtotal * cp / 100.0
+    vat_amt     = (subtotal + contingency) * vp / 100.0
+    return subtotal + contingency + vat_amt
 
 
 def _boq_rate_breakdown(basic, supply, install, oh, prf, cnt=0, vat=0):
-    """Per-step breakdown for the internal Rate Build-Up audit view.
+    """Spec-aligned per-step breakdown (2026-06-24 v2).
 
-    Args mirror _boq_safe_rate: supply/install/oh/prf are PERCENTAGES.
-    cnt and vat are accepted-and-ignored.
+    Args mirror _boq_safe_rate: supply/install are CURRENCY amounts;
+    oh/prf/cnt/vat are percentages.
     """
-    b   = max(0.0, float(basic or 0))
-    sp  = max(0.0, min(15.0, float(supply  or 0)))
-    ip  = max(0.0, min(25.0, float(install or 0)))
-    op  = max(0.0, min(15.0, float(oh      or 0)))
-    pp  = max(0.0, min( 5.0, float(prf     or 0)))
-    supply_amt   = b * sp / 100.0
-    profit_amt   = b * pp / 100.0
-    install_amt  = b * ip / 100.0
-    overhead_amt = b * op / 100.0
-    supply_disp  = supply_amt  + profit_amt
-    install_disp = install_amt + overhead_amt
-    total        = b + supply_disp + install_disp
+    b = max(0.0, float(basic or 0))
+    s = max(0.0, float(supply or 0))
+    if s <= 0:
+        s = b
+    i = max(0.0, float(install or 0))
+    op = max(0.0, min(20.0, float(oh  or 0)))
+    pp = max(0.0, min(30.0, float(prf or 0)))
+    cp = max(0.0, min(15.0, float(cnt or 0)))
+    vp = max(0.0, min(50.0, float(vat or 0)))
+    prime    = s + i
+    overhead = prime    * op / 100.0
+    profit   = (prime + overhead) * pp / 100.0
+    subtotal = prime + overhead + profit
+    cont_amt = subtotal * cp / 100.0
+    vat_amt  = (subtotal + cont_amt) * vp / 100.0
+    total    = subtotal + cont_amt + vat_amt
     return {
-        "basic_price":     b,
-        "supply_pct":      sp,
-        "profit_pct":      pp,
-        "install_pct":     ip,
-        "overhead_pct":    op,
-        "supply_amount":   supply_amt,
-        "profit_amount":   profit_amt,
-        "install_amount":  install_amt,
-        "overhead_amount": overhead_amt,
-        "supply_disp":     supply_disp,
-        "install_disp":    install_disp,
+        "basic_price":      b,
+        "supply_amount":    s,
+        "install_amount":   i,
+        "prime_cost":       prime,
+        "overhead_pct":     op,
+        "overhead_amount":  overhead,
+        "profit_pct":       pp,
+        "profit_amount":    profit,
+        "subtotal":         subtotal,
+        "contingency_pct":  cp,
+        "contingency_amount": cont_amt,
+        "vat_pct":          vp,
+        "vat_amount":       vat_amt,
         "final_built_up_rate": total,
     }
 
@@ -20863,25 +20958,46 @@ def boq_section_add_item(pid, bid, fid, bill_no, letter):
     if not unit:
         unit = "No."
 
-    # 2026-06-24 additive model. supply/install/profit/overhead are
-    # percentages of basic; out-of-cap input is rejected, NOT clamped.
-    def _capped(name, lo, hi):
+    # 2026-06-24 v2 spec-aligned. Read supply build-up sub-pcts +
+    # install build-up amounts; compute supply_amt + install_amt.
+    def _num_cap(name, lo, hi, default=0.0):
         raw = (f.get(name) or "").strip()
         if not raw:
-            return 0.0, True
+            return float(default), True
         try:
             v = float(raw)
         except (TypeError, ValueError):
-            return 0.0, False
+            return float(default), False
         return v, (lo <= v <= hi)
-    supply,   ok_s = _capped("supply_rate",    0.0, 15.0)
-    install,  ok_i = _capped("install_rate",   0.0, 25.0)
-    prf,      ok_p = _capped("profit_pct",     0.0,  5.0)
-    oh,       ok_o = _capped("overhead_pct",   0.0, 15.0)
-    cnt = 0.0; vat = 0.0
-    if not (ok_s and ok_i and ok_p and ok_o):
-        flash("Rate caps: Supply 0-15%, Install 0-25%, Profit 0-5%, Overhead 0-15%. Enter percentages, not amounts.", "warning")
+    # Supply build-up sub-pcts (defaults per spec: 3/1/1/5).
+    fr_pct, ok_fr = _num_cap("freight_pct",    0.0, 10.0, 3.0)
+    hd_pct, ok_hd = _num_cap("handling_pct",   0.0,  5.0, 1.0)
+    ins_pct, ok_in = _num_cap("insurance_pct", 0.0,  5.0, 1.0)
+    ws_pct, ok_ws = _num_cap("wastage_pct",    0.0, 15.0, 5.0)
+    # Install build-up amounts (currency). No caps, just >=0.
+    def _amt(name):
+        raw = (f.get(name) or "").strip()
+        if not raw:
+            return 0.0
+        try:
+            return max(0.0, float(raw))
+        except (TypeError, ValueError):
+            return 0.0
+    lab_amt = _amt("labour_amt")
+    tools_amt = _amt("tools_amt")
+    eq_amt    = _amt("equipment_amt")
+    test_amt  = _amt("testing_amt")
+    sup_amt   = _amt("supervision_amt")
+    # Tax / contingency / overhead / profit percentages.
+    oh,  ok_o = _num_cap("overhead_pct",    0.0, 20.0, 15.0)
+    prf, ok_p = _num_cap("profit_pct",      0.0, 30.0, 15.0)
+    cnt, ok_c = _num_cap("contingency_pct", 0.0, 15.0,  0.0)
+    vat, ok_v = _num_cap("vat_pct",         0.0, 50.0,  0.0)
+    if not (ok_fr and ok_hd and ok_in and ok_ws and ok_o and ok_p and ok_c and ok_v):
+        flash("Out-of-range percent: Freight 0-10, Handling 0-5, Insurance 0-5, Wastage 0-15, OH 0-20, Profit 0-30, Cont 0-15, VAT 0-50.", "warning")
         return redirect(_section_loop_url(pid, bid, fid, bill_no, letter, title, bill_name, subsec))
+    supply  = basic * (1.0 + (fr_pct + hd_pct + ins_pct + ws_pct) / 100.0)
+    install = lab_amt + tools_amt + eq_amt + test_amt + sup_amt
     final_rate = _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat)
     total = qty * final_rate
     if final_rate <= 0:
@@ -20917,6 +21033,17 @@ def boq_section_add_item(pid, bid, fid, bill_no, letter):
             (item_id, pid, uid, basic, supply, install,
              oh, prf, cnt, vat, final_rate, total),
         )
+        try:
+            c.execute(
+                "UPDATE boq_floor_rate_buildup SET freight_pct=?, "
+                "handling_pct=?, insurance_pct=?, wastage_pct=?, "
+                "labour_amt=?, tools_amt=?, equipment_amt=?, "
+                "testing_amt=?, supervision_amt=? WHERE floor_item_id=?",
+                (fr_pct, hd_pct, ins_pct, ws_pct,
+                 lab_amt, tools_amt, eq_amt, test_amt, sup_amt, item_id),
+            )
+        except Exception:
+            pass
         c.execute("UPDATE boq_projects  SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (pid,))
         c.execute("UPDATE boq_buildings SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (bid,))
         c.execute("UPDATE boq_floors    SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (fid,))
@@ -22892,8 +23019,33 @@ CREATE INDEX IF NOT EXISTS idx_boq_user_overrides_user
 """
 
 
+_BOQ_SPEC_COLS_DONE = {"v": False}
+
+def _boq_ensure_spec_buildup_columns():
+    """2026-06-24 v2 -- add 9 spec sub-fields to boq_floor_rate_buildup.
+    Idempotent on SQLite (try/except per ALTER) and Postgres (ADD COLUMN
+    IF NOT EXISTS supported by psycopg2)."""
+    if _BOQ_SPEC_COLS_DONE["v"]:
+        return
+    is_pg = bool(os.environ.get("DATABASE_URL"))
+    ddl = ("freight_pct", "handling_pct", "insurance_pct", "wastage_pct",
+           "labour_amt", "tools_amt", "equipment_amt", "testing_amt",
+           "supervision_amt")
+    for col in ddl:
+        stmt = ("ALTER TABLE boq_floor_rate_buildup ADD COLUMN "
+                + ("IF NOT EXISTS " if is_pg else "")
+                + col + " REAL DEFAULT 0")
+        try:
+            with get_db() as _c:
+                _c.execute(stmt)
+        except Exception:
+            pass
+    _BOQ_SPEC_COLS_DONE["v"] = True
+
+
 def _boq_ensure_overrides_table():
     """Idempotent bootstrap. Same pattern as ensure_boq_hierarchy_schema."""
+    _boq_ensure_spec_buildup_columns()
     try:
         is_pg = bool(os.environ.get("DATABASE_URL"))
         with get_db() as c:
@@ -22978,7 +23130,12 @@ def boq_floor_item_edit(pid, bid, fid, iid):
             "SELECT i.*, rb.basic_price AS bu_basic, rb.supply_rate AS bu_supply, "
             "       rb.install_rate AS bu_install, rb.overhead_pct AS bu_oh, "
             "       rb.profit_pct AS bu_profit, rb.contingency_pct AS bu_cont, "
-            "       rb.vat_pct AS bu_vat "
+            "       rb.vat_pct AS bu_vat, "
+            "       rb.freight_pct AS bu_freight, rb.handling_pct AS bu_handling, "
+            "       rb.insurance_pct AS bu_insurance, rb.wastage_pct AS bu_wastage, "
+            "       rb.labour_amt AS bu_labour, rb.tools_amt AS bu_tools, "
+            "       rb.equipment_amt AS bu_equipment, rb.testing_amt AS bu_testing, "
+            "       rb.supervision_amt AS bu_supervision "
             "FROM boq_floor_items i "
             "LEFT JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
             "WHERE i.id=? AND i.floor_id=?",
@@ -23002,27 +23159,46 @@ def boq_floor_item_edit(pid, bid, fid, iid):
             basic = max(0.0, float(f.get("basic_price") or 0))
         except ValueError:
             basic = 0.0
-        # 2026-06-24 additive model. Percentages only; out-of-cap rejected.
-        def _capped(name, lo, hi):
+        # 2026-06-24 v2 spec-aligned. Supply build-up sub-pcts +
+        # install build-up amounts -> compute supply_amt + install_amt.
+        def _num_cap(name, lo, hi, default=0.0):
             raw = (f.get(name) or "").strip()
             if not raw:
-                return 0.0, True
+                return float(default), True
             try:
                 v = float(raw)
             except (TypeError, ValueError):
-                return 0.0, False
+                return float(default), False
             return v, (lo <= v <= hi)
-        supply,  ok_s = _capped("supply_rate",  0.0, 15.0)
-        install, ok_i = _capped("install_rate", 0.0, 25.0)
-        prf,     ok_p = _capped("profit_pct",   0.0,  5.0)
-        oh,      ok_o = _capped("overhead_pct", 0.0, 15.0)
-        cnt = 0.0; vat = 0.0
+        def _amt(name):
+            raw = (f.get(name) or "").strip()
+            if not raw:
+                return 0.0
+            try:
+                return max(0.0, float(raw))
+            except (TypeError, ValueError):
+                return 0.0
+        fr_pct, ok_fr = _num_cap("freight_pct",    0.0, 10.0, 3.0)
+        hd_pct, ok_hd = _num_cap("handling_pct",   0.0,  5.0, 1.0)
+        ins_pct, ok_in = _num_cap("insurance_pct", 0.0,  5.0, 1.0)
+        ws_pct, ok_ws = _num_cap("wastage_pct",    0.0, 15.0, 5.0)
+        lab_amt   = _amt("labour_amt")
+        tools_amt = _amt("tools_amt")
+        eq_amt    = _amt("equipment_amt")
+        test_amt  = _amt("testing_amt")
+        sup_amt   = _amt("supervision_amt")
+        oh,  ok_o = _num_cap("overhead_pct",    0.0, 20.0, 15.0)
+        prf, ok_p = _num_cap("profit_pct",      0.0, 30.0, 15.0)
+        cnt, ok_c = _num_cap("contingency_pct", 0.0, 15.0,  0.0)
+        vat, ok_v = _num_cap("vat_pct",         0.0, 50.0,  0.0)
         if not desc or qty <= 0 or basic <= 0:
             flash("Description, qty and basic price are all required.", "warning")
             return redirect(url_for("boq_floor_item_edit", pid=pid, bid=bid, fid=fid, iid=iid))
-        if not (ok_s and ok_i and ok_p and ok_o):
-            flash("Rate caps: Supply 0-15%, Install 0-25%, Profit 0-5%, Overhead 0-15%. Enter percentages, not amounts.", "warning")
+        if not (ok_fr and ok_hd and ok_in and ok_ws and ok_o and ok_p and ok_c and ok_v):
+            flash("Out-of-range percent: Freight 0-10, Handling 0-5, Insurance 0-5, Wastage 0-15, OH 0-20, Profit 0-30, Cont 0-15, VAT 0-50.", "warning")
             return redirect(url_for("boq_floor_item_edit", pid=pid, bid=bid, fid=fid, iid=iid))
+        supply  = basic * (1.0 + (fr_pct + hd_pct + ins_pct + ws_pct) / 100.0)
+        install = lab_amt + tools_amt + eq_amt + test_amt + sup_amt
         final_rate = _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat)
         total = qty * final_rate
         with get_db() as c:
@@ -23040,6 +23216,17 @@ def boq_floor_item_edit(pid, bid, fid, iid):
                 (basic, supply, install, oh, prf, cnt, vat,
                  final_rate, total, iid),
             )
+            try:
+                c.execute(
+                    "UPDATE boq_floor_rate_buildup SET freight_pct=?, "
+                    "handling_pct=?, insurance_pct=?, wastage_pct=?, "
+                    "labour_amt=?, tools_amt=?, equipment_amt=?, "
+                    "testing_amt=?, supervision_amt=? WHERE floor_item_id=?",
+                    (fr_pct, hd_pct, ins_pct, ws_pct,
+                     lab_amt, tools_amt, eq_amt, test_amt, sup_amt, iid),
+                )
+            except Exception:
+                pass  # Sub-field columns not migrated yet -- harmless.
             c.execute("UPDATE boq_floors SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (fid,))
         # LEARN: record the user's preferred unit + basic for this description.
         _boq_record_override(uid, desc, unit, basic)
@@ -23454,10 +23641,12 @@ def boq_project_recalc(pid):
             qty = float(r["qty"] or 0)
             old_total = float(r["old_total"] or 0)
             old_grand += old_total
-            # 2026-06-24 additive: cnt/vat ignored. supply/install are pcts now.
+            # 2026-06-24 v2 spec: supply/install are CURRENCY amounts.
+            # Pass contingency_pct + vat_pct from the stored row too.
             new_rate = _boq_safe_rate(
                 r["basic_price"], r["supply_rate"], r["install_rate"],
-                r["overhead_pct"], r["profit_pct"], 0, 0,
+                r["overhead_pct"], r["profit_pct"],
+                r["contingency_pct"], r["vat_pct"],
             )
             new_total = qty * new_rate
             new_grand += new_total

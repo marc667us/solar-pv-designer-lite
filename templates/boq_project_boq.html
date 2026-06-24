@@ -91,15 +91,23 @@
   {% set grand = namespace(v=0.0) %}
   {% if rows %}
     {% set ns = namespace(prev_bid=None, prev_fid=None, prev_bill=None, prev_sec=None, prev_sub=None) %}
-    <table class="table align-middle" style="color:#e0e0f0;font-size:13px">
+    <style>
+      .boq-table { color:#e0e0f0; font-size:13px; }
+      .boq-table .text-end { white-space: nowrap; }
+      .boq-table th.col-amt, .boq-table td.col-amt { min-width: 120px; white-space: nowrap; padding-right: 12px; }
+      .boq-table th.col-rate, .boq-table td.col-rate { min-width: 100px; white-space: nowrap; }
+      @media print { .boq-table { font-size: 11px; } }
+    </style>
+    <div class="table-responsive">
+    <table class="table align-middle boq-table">
       <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
         {% if internal %}
         <tr>
           <th style="width:40px">Item</th><th>Description</th>
           <th class="text-end">Qty</th><th>Unit</th>
-          <th class="text-end">Basic</th><th class="text-end">Supply</th><th class="text-end">Install</th>
+          <th class="text-end col-rate">Basic</th><th class="text-end col-rate">Supply</th><th class="text-end col-rate">Install</th>
           <th class="text-end">+OH</th><th class="text-end">+Profit</th><th class="text-end">+Cont</th><th class="text-end">+VAT</th>
-          <th class="text-end">Total Rate</th><th class="text-end">Amount</th>
+          <th class="text-end col-rate">Total Rate</th><th class="text-end col-amt">Amount</th>
         </tr>
         {% else %}
         <tr>
@@ -107,16 +115,16 @@
           <th>Description</th>
           <th class="text-end">Qty</th>
           <th>Unit</th>
-          <th class="text-end">Basic Rate</th>
-          <th class="text-end">Supply Rate</th>
-          <th class="text-end">Install Rate</th>
-          <th class="text-end">Total Rate</th>
-          <th class="text-end">Amount</th>
+          <th class="text-end col-rate">Basic Rate</th>
+          <th class="text-end col-rate">Supply Rate</th>
+          <th class="text-end col-rate">Install Rate</th>
+          <th class="text-end col-rate">Total Rate</th>
+          <th class="text-end col-amt">Amount</th>
         </tr>
         {% endif %}
       </thead>
       <tbody>
-        {% set colspan = 13 if internal else 7 %}
+        {% set colspan = 13 if internal else 9 %}
         {% for r in rows %}
           {% if r.building_id != ns.prev_bid %}
           <tr style="background:#0a0a14"><td colspan="{{ colspan }}" class="fw-bold text-warning" style="text-transform:uppercase">
@@ -178,15 +186,15 @@
             </td>
             <td class="text-end">{{ (r.qty or 0)|fmt }}</td>
             <td class="small">{{ r.unit }}</td>
-            <td class="text-end">{{ (r.basic_price or 0)|money }}</td>
-            <td class="text-end">{{ (r.supply_rate or 0)|money }}</td>
-            <td class="text-end">{{ (r.install_rate or 0)|money }}</td>
+            <td class="text-end col-rate">{{ (r.basic_price or 0)|money }}</td>
+            <td class="text-end col-rate">{{ (r.supply_rate or 0)|money }}</td>
+            <td class="text-end col-rate">{{ (r.install_rate or 0)|money }}</td>
             <td class="text-end">{{ (r.overhead_pct or 0)|fmt(1) }}%</td>
             <td class="text-end">{{ (r.profit_pct or 0)|fmt(1) }}%</td>
             <td class="text-end">{{ (r.contingency_pct or 0)|fmt(1) }}%</td>
             <td class="text-end">{{ (r.vat_pct or 0)|fmt(1) }}%</td>
-            <td class="text-end fw-bold text-warning">{{ (r.final_built_up_rate or 0)|money }}</td>
-            <td class="text-end fw-bold">{{ (r.total_amount or 0)|money }}</td>
+            <td class="text-end col-rate fw-bold text-warning">{{ (r.final_built_up_rate or 0)|money }}</td>
+            <td class="text-end col-amt fw-bold">{{ (r.total_amount or 0)|money }}</td>
           </tr>
           {% else %}
           <tr>
@@ -197,11 +205,11 @@
             </td>
             <td class="text-end">{{ (r.qty or 0)|fmt }}</td>
             <td class="small">{{ r.unit }}</td>
-            <td class="text-end">{{ (r.basic_price or 0)|money }}</td>
-            <td class="text-end">{{ (r.supply_rate or r.basic_price or 0)|money }}</td>
-            <td class="text-end">{{ (r.install_rate or 0)|money }}</td>
-            <td class="text-end">{{ (r.final_built_up_rate or 0)|money }}</td>
-            <td class="text-end fw-bold text-warning">{{ (r.total_amount or 0)|money }}</td>
+            <td class="text-end col-rate">{{ (r.basic_price or 0)|money }}</td>
+            <td class="text-end col-rate">{{ (r.supply_rate or r.basic_price or 0)|money }}</td>
+            <td class="text-end col-rate">{{ (r.install_rate or 0)|money }}</td>
+            <td class="text-end col-rate">{{ (r.final_built_up_rate or 0)|money }}</td>
+            <td class="text-end col-amt fw-bold text-warning">{{ (r.total_amount or 0)|money }}</td>
           </tr>
           {% endif %}
         {% endfor %}
@@ -210,14 +218,15 @@
         <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
           {% if internal %}
           <td colspan="12" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
-          <td class="text-end fw-black text-warning" style="font-size:16px">{{ (grand.v)|money }}</td>
+          <td class="text-end col-amt fw-black text-warning" style="font-size:16px">{{ (grand.v)|money }}</td>
           {% else %}
           <td colspan="8" class="text-end fw-black" style="font-size:14px">GRAND TOTAL</td>
-          <td class="text-end fw-black text-warning" style="font-size:18px">{{ (grand.v)|money }}</td>
+          <td class="text-end col-amt fw-black text-warning" style="font-size:18px">{{ (grand.v)|money }}</td>
           {% endif %}
         </tr>
       </tfoot>
     </table>
+    </div>
   {% else %}
     <div class="text-center text-secondary py-3">
       <i class="bi bi-inbox" style="font-size:32px"></i>
