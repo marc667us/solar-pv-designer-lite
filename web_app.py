@@ -23631,84 +23631,58 @@ def boms_boq_email(bom_id):
 
 
 # --- Helpers for the email routes -- in-memory bytes versions of the existing exports ---
+def _xlsx_bytes_via_route(view_func, *args, uid=None, query_string=""):
+    """Invoke an @login_required xlsx route INSIDE a test_request_context
+    with a fake session so we get the full Response bytes back. Used by
+    the email handlers so the attached Excel == the downloaded Excel.
+    """
+    if uid is None:
+        uid = session.get("user_id") or 0
+    if not uid:
+        return b""
+    # Path is illustrative -- the route function is called by reference,
+    # not URL-matched; the context lets @login_required see a real session.
+    with app.test_request_context("/_internal_xlsx_call?" + (query_string or "")):
+        session["user_id"] = uid
+        try:
+            resp = view_func(*args)
+        except Exception as _e:
+            try: app.logger.warning("xlsx-bytes-via-route call failed: %s", _e)
+            except Exception: pass
+            return b""
+    # Flask response: get_data() returns the bytes payload
+    try:
+        return resp.get_data()
+    except Exception:
+        return b""
+
+
 def _bom_boq_xlsx_bytes(bom_id: int) -> bytes:
-    """Return the BOM/cost-estimate Excel as bytes (shared with email + download)."""
-    # Re-use the route by calling it via the test client OR rebuild here.
-    # Simplest: rebuild via the same code path. The route function
-    # boms_boq_xlsx returns a Response; we just call into the underlying
-    # logic by invoking the existing helpers inline.
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    bom = _bom_get(bom_id)
-    items = _bom_items_with_prices(bom_id)
-    rates = _bom_rates_for(bom_id)
-    _bcur = bom.get("currency", "GHS") if isinstance(bom, dict) else (bom["currency"] or "GHS")
-    _brate = _CURRENCY_RATES_FROM_USD.get(_bcur, 1.0)
-    totals = _bom_totals_with_rates(items, rates, fx_rate=_brate)
-    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Cost Estimate"
-    bold = Font(bold=True)
-    title_font = Font(bold=True, size=14, color="B45309")
-    header_font = Font(bold=True, color="FFFFFF")
-    header_fill = PatternFill("solid", fgColor="1E3A5F")
-    thin = Side(border_style="thin", color="000000")
-    box = Border(left=thin, right=thin, top=thin, bottom=thin)
-    title = bom["title"] if hasattr(bom, "keys") else bom.get("title", "")
-    ws["A1"] = f"Cost Estimate -- {title}"
-    ws["A1"].font = title_font; ws.merge_cells("A1:G1")
-    headers = ["#", "Description", "Qty", "Unit", "Rate", "Amount", "Brand"]
-    for col, h in enumerate(headers, 1):
-        c = ws.cell(row=3, column=col, value=h)
-        c.font = header_font; c.fill = header_fill; c.border = box
-        c.alignment = Alignment(horizontal="center")
-    row = 4
-    for idx, line in enumerate(totals["lines"], 1):
-        it = line["item"]
-        ws.cell(row=row, column=1, value=idx)
-        ws.cell(row=row, column=2, value=str(it["custom_name"] or ""))
-        ws.cell(row=row, column=3, value=float(it["qty"] or 0))
-        ws.cell(row=row, column=4, value=str(it["unit"] or ""))
-        ws.cell(row=row, column=5, value=round(float(line["total_rate"] or 0), 0))
-        ws.cell(row=row, column=6, value=round(float(line["line_total"] or 0), 0))
-        ws.cell(row=row, column=7, value=str((it["catalog_brand"] if "catalog_brand" in it.keys() else "") or "-"))
-        for col in range(1, 8):
-            ws.cell(row=row, column=col).border = box
-        row += 1
-    ws.cell(row=row + 1, column=4, value="GRAND TOTAL").font = title_font
-    ws.cell(row=row + 1, column=6, value=round(float(totals["grand_total"] or 0), 0)).font = title_font
-    try: _solarpro_xlsx_apply_borders_and_a4(ws)
-    except Exception: pass
-    buf = io.BytesIO(); wb.save(buf); return buf.getvalue()
-
-
-def _bom_boq_pdf_bytes(bom_id: int) -> bytes:
-    """Return the BOM cost-estimate PDF as bytes via the markdown helper."""
-    md = _bom_boq_markdown(bom_id)
-    from markdown_pdf import MarkdownPdf, Section
-    _CSS = ("@page { size: A4 portrait; margin: 12mm 10mm 14mm 10mm; }"
-            "body{font-family:'Segoe UI',Arial,sans-serif;color:#111827;font-size:10pt;line-height:1.45}"
-            "h1{color:#b45309;font-size:16pt}h2{color:#1e3a8a;font-size:12pt}"
-            "table{width:100%;border-collapse:collapse;margin:8px 0;font-size:9pt;border:1.2pt solid #000}"
-            "th{background:#1e3a5f;color:#fff;padding:5px 7px;text-align:left;border:1px solid #000}"
-            "td{border:1px solid #000;padding:4px 7px;vertical-align:top}")
-    pdf = MarkdownPdf(toc_level=2)
-    pdf.add_section(Section(md, toc=False), user_css=_CSS)
-    import tempfile
-    tf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
-    pdf.save(tf.name); tf.close()
-    with open(tf.name, "rb") as fh:
-        return fh.read()
+    """Return the BOM/cost-estimate Excel as bytes (shared with email + download).
+    Mirrors GET /boms/<bom_id>/boq.xlsx?include_buildup=1 so the email recipient
+    gets the SAME 9-column main sheet + Project Rate Build-Up sheet + Summary
+    sheet (including the per-line Basic / Supply / Install / +OH / +Profit /
+    +VAT / Final Rate / Amount cost buildup that BOM is the source of truth for).
+    """
+    return _xlsx_bytes_via_route(boms_boq_xlsx, bom_id,
+                                  query_string="include_buildup=1")
 
 
 def _price_sheet_xlsx_bytes(sheet_id: int) -> bytes:
-    """Return the price-sheet Excel as bytes (shared with email + download)."""
-    # Defer to the existing route handler by capturing its body. Simplest
-    # path: re-derive items + headers inline (lightweight).
-    return b""
+    """Return the price-sheet Excel as bytes (shared with email + download).
+    Mirrors GET /price-sheets/<sheet_id>/xlsx -- 9-column sheet with the
+    Basic Rate (local + USD) + supplier columns.
+    """
+    return _xlsx_bytes_via_route(price_sheet_xlsx, sheet_id)
 
 
 def _boq_project_xlsx_bytes(pid: int) -> bytes:
-    """Return the BOQ-project Excel as bytes (shared with email)."""
-    return b""
+    """Return the BOQ-project Excel as bytes (shared with email).
+    Mirrors GET /boq-projects/<pid>/boq.xlsx -- main BOQ sheet grouped by
+    Building / Floor / Bill / Section with per-item Basic Rate / Total Rate /
+    Amount columns.
+    """
+    return _xlsx_bytes_via_route(boq_project_xlsx, pid)
 
 
 @app.route("/price-sheets/<int:sheet_id>/email", methods=["POST"])
