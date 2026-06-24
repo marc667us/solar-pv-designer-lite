@@ -13,6 +13,11 @@ name: Fix Marketplace High Prices
 
 on:
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type APPLY to commit changes. Anything else = dry-run preview only (no UPDATE executed).'
+        required: true
+        default: ''
 
 permissions:
   contents: read
@@ -55,9 +60,20 @@ jobs:
       - name: Apply price corrections
         env:
           DATABASE_URL: ${{ steps.pg.outputs.external }}
+          CONFIRM: ${{ inputs.confirm }}
         run: |
           python3 <<'PY'
-          import os, psycopg2
+          import os, sys, psycopg2
+          CONFIRM = os.environ.get("CONFIRM", "")
+          dry_run = CONFIRM != "APPLY"
+          if dry_run:
+              print("=== DRY-RUN MODE (no UPDATE will be committed) ===")
+              print("To commit, re-run this workflow with input: confirm=APPLY")
+              print()
+          else:
+              print("=== APPLY MODE -- will commit UPDATEs to live Postgres ===")
+              print()
+
           conn = psycopg2.connect(os.environ["DATABASE_URL"], sslmode="require")
           conn.autocommit = False
           cur = conn.cursor()
@@ -73,8 +89,8 @@ jobs:
           ]
 
           report = []
+          changed = 0
           for model, old_p, new_p, label in CORRECTIONS:
-              # Match by model (SKU) string, scoped to the active catalogue
               cur.execute(
                   "SELECT id, name, price_usd FROM equipment_catalog "
                   "WHERE model=%s AND is_active=1",
@@ -88,17 +104,26 @@ jobs:
                   if abs(float(current) - new_p) < 0.5:
                       report.append(f"  [have] {model} ({name}) already at {new_p:,.0f}")
                       continue
-                  # equipment_catalog has no updated_at column; just bump price_usd.
-                  cur.execute(
-                      "UPDATE equipment_catalog SET price_usd=%s WHERE id=%s",
-                      (new_p, rid),
-                  )
+                  prefix = "[would]" if dry_run else "[ok]   "
                   report.append(
-                      f"  [ok]   {model} ({name}) {current:,.0f} -> {new_p:,.0f}  "
+                      f"  {prefix} {model} ({name}) {current:,.0f} -> {new_p:,.0f}  "
                       f"(seed-suggested {old_p:,.0f} -> {new_p:,.0f})"
                   )
-          conn.commit()
+                  changed += 1
+                  if not dry_run:
+                      cur.execute(
+                          "UPDATE equipment_catalog SET price_usd=%s WHERE id=%s",
+                          (new_p, rid),
+                      )
+
+          if dry_run:
+              conn.rollback()
+              print("\n".join(report))
+              print(f"\nDRY-RUN: {changed} row(s) would be updated. Nothing committed.")
+              print("Re-run with input: confirm=APPLY to commit.")
+          else:
+              conn.commit()
+              print("\n".join(report))
+              print(f"\nAPPLIED: {changed} row(s) committed to live Postgres.")
           cur.close(); conn.close()
-          print("\n".join(report))
-          print("\nDone -- live Postgres updated.")
           PY
