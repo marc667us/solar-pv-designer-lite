@@ -123,9 +123,6 @@
 
   <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
     <h6 class="fw-bold mb-0"><i class="bi bi-plus-circle me-1 text-warning"></i>Add line item</h6>
-    <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#addLibraryItemModal">
-      <i class="bi bi-plus-square me-1"></i>+ Add Library Item (with rate build-up)
-    </button>
   </div>
   <form method="POST" action="{{ url_for('boms_add_item', bom_id=bom.id) }}" class="row g-2">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -163,7 +160,11 @@
   </form>
 </div>
 
-{# ─── + Add Library Item modal (unchanged – feeds Cost Estimate with rate build-up) ─── #}
+{# Rate build-up belongs to the Cost Estimate, not the BOM. The Add Library Item
+   modal that used to live here was removed 2026-06-24 per owner directive
+   ("BOM doesn't need cost details or rate builder"). Library items with full
+   rate build-up are entered from the BOQ Project per-item form / Cost Estimate. #}
+{% if false %}
 <div class="modal fade" id="addLibraryItemModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content" style="background:#13132a;color:#e0e0f0;border:1px solid #1e1e3a">
@@ -284,6 +285,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 {# Task #12: email modal -- sends BOM PDF + Excel (material list, NO cost). #}
 <div class="modal fade" id="emailMaterialsModal" tabindex="-1" aria-labelledby="emailMaterialsLabel" aria-hidden="true">

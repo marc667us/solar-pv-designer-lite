@@ -17056,29 +17056,70 @@ def boms_add_item(bom_id):
     description    = (f.get("description") or "").strip()[:500]
     specification  = (f.get("specification") or "").strip()[:500]
     brand          = (f.get("brand") or "").strip()[:120]
+
+    # 2026-06-24 rate-builder: actually READ + STORE the per-line rate-buildup
+    # fields the modal exposes (they were previously dropped silently).
+    def _capped(name, lo, hi):
+        raw = (f.get(name) or "").strip()
+        if not raw:
+            return None, True
+        try:
+            v = float(raw)
+        except (TypeError, ValueError):
+            return None, False
+        return v, (lo <= v <= hi)
+    try:
+        bp_raw = (f.get("basic_price") or "").strip()
+        basic_price = float(bp_raw) if bp_raw else None
+    except (TypeError, ValueError):
+        basic_price = None
+    supply_pct,  ok_s = _capped("supply_rate",  0.0, 15.0)
+    install_pct, ok_i = _capped("install_rate", 0.0, 25.0)
+    profit_pct,  ok_p = _capped("profit_pct",   0.0,  5.0)
+    overhead_pct, ok_o = _capped("overhead_pct",0.0, 15.0)
+    if not (ok_s and ok_i and ok_p and ok_o):
+        flash("Rate caps: Supply 0-15%, Install 0-25%, Profit 0-5%, Overhead 0-15%. Enter percentages, not amounts.", "warning")
+        return redirect(url_for("boms_view", bom_id=bom_id))
+
     with get_db() as c:
         try:
+            # 14-col INSERT including the new rate-buildup fields.
             c.execute(
                 "INSERT INTO marketplace_bom_items "
-                "(bom_id, product_id, custom_name, qty, unit, unit_price_override, notes, description, specification, brand) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "(bom_id, product_id, custom_name, qty, unit, unit_price_override, notes, "
+                " description, specification, brand, "
+                " basic_price, supply_pct, profit_pct, install_pct, overhead_pct) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (bom_id, pid, name, qty,
                  (f.get("unit") or "No.").strip(),
                  override,
                  (f.get("notes") or "").strip(),
-                 description, specification, brand),
+                 description, specification, brand,
+                 basic_price, supply_pct, profit_pct, install_pct, overhead_pct),
             )
         except Exception:
-            # Schema not yet migrated -- fall back to legacy 7-col INSERT.
-            c.execute(
-                "INSERT INTO marketplace_bom_items "
-                "(bom_id, product_id, custom_name, qty, unit, unit_price_override, notes) "
-                "VALUES (?,?,?,?,?,?,?)",
-                (bom_id, pid, name, qty,
-                 (f.get("unit") or "No.").strip(),
-                 override,
-                 (f.get("notes") or "").strip()),
-            )
+            try:
+                c.execute(
+                    "INSERT INTO marketplace_bom_items "
+                    "(bom_id, product_id, custom_name, qty, unit, unit_price_override, notes, description, specification, brand) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (bom_id, pid, name, qty,
+                     (f.get("unit") or "No.").strip(),
+                     override,
+                     (f.get("notes") or "").strip(),
+                     description, specification, brand),
+                )
+            except Exception:
+                # Last resort: legacy 7-col INSERT.
+                c.execute(
+                    "INSERT INTO marketplace_bom_items "
+                    "(bom_id, product_id, custom_name, qty, unit, unit_price_override, notes) "
+                    "VALUES (?,?,?,?,?,?,?)",
+                    (bom_id, pid, name, qty,
+                     (f.get("unit") or "No.").strip(),
+                     override,
+                     (f.get("notes") or "").strip()),
+                )
         c.execute(
             "UPDATE marketplace_boms SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
             (bom_id,),
@@ -17337,6 +17378,13 @@ def _ensure_marketplace_schema_postgres():
         # _ensure_bom_tables; Postgres init never picked it up so
         # /procurement-center/add doc_type=bom 500'd in prod). Idempotent.
         "ALTER TABLE marketplace_boms ADD COLUMN IF NOT EXISTS currency VARCHAR(3) DEFAULT 'GHS'",
+
+        # 2026-06-24 rate-builder rework -- per-line basic + 4 pct columns.
+        "ALTER TABLE marketplace_bom_items ADD COLUMN IF NOT EXISTS basic_price  REAL",
+        "ALTER TABLE marketplace_bom_items ADD COLUMN IF NOT EXISTS supply_pct   REAL",
+        "ALTER TABLE marketplace_bom_items ADD COLUMN IF NOT EXISTS profit_pct   REAL",
+        "ALTER TABLE marketplace_bom_items ADD COLUMN IF NOT EXISTS install_pct  REAL",
+        "ALTER TABLE marketplace_bom_items ADD COLUMN IF NOT EXISTS overhead_pct REAL",
 
         # Slice 3 — audit log
         """CREATE TABLE IF NOT EXISTS marketplace_audit_log (
@@ -18400,77 +18448,109 @@ def _bom_rates_for(bom_id: int) -> dict:
 
 
 def _bom_totals_with_rates(items, rates: dict, fx_rate: float = 1.0) -> dict:
-    """Compute per-line basic / install / overhead / profit / VAT / total
-    rate / amount columns + grand total + per-category subtotals.
+    """Additive rate build-up (2026-06-24 owner spec). Mirrors _boq_safe_rate.
 
-    Returns the same shape as the original _bom_totals() so existing
-    templates that only use {lines, category_totals, grand_total} keep
-    working — but each line dict now also carries the rate breakdown."""
-    lab_pct  = max(0.0, float(rates.get("labour_pct",      0)))
-    ovh_pct  = max(0.0, float(rates.get("overhead_pct",    0)))
-    prf_pct  = max(0.0, float(rates.get("profit_pct",      0)))
-    cnt_pct  = max(0.0, float(rates.get("contingency_pct", 0)))
-    vat_pct  = max(0.0, float(rates.get("vat_pct",         0)))
+    Per-line: if marketplace_bom_items.basic_price / supply_pct /
+    profit_pct / install_pct / overhead_pct are set, those win.
+    Otherwise fall back to the project-wide defaults in `rates`
+    (the marketplace_bom_rates row).
+
+    Compatibility: project-wide overhead_pct/profit_pct stay as-is.
+    contingency_pct is re-purposed as the project-wide supply_pct
+    default, vat_pct as the project-wide install_pct default — so
+    the existing rows do not need migrating. labour_pct is ignored.
+
+    Caps: supply 15, install 25, profit 5, overhead 15.
+    """
+    def _clamp(v, lo, hi):
+        try:
+            x = float(v or 0)
+        except (TypeError, ValueError):
+            x = 0.0
+        return max(lo, min(hi, x))
+    # Project-wide fallbacks (re-purposed columns -- see docstring).
+    default_supply   = _clamp(rates.get("contingency_pct", 0), 0.0, 15.0)
+    default_install  = _clamp(rates.get("vat_pct",         0), 0.0, 25.0)
+    default_profit   = _clamp(rates.get("profit_pct",      0), 0.0,  5.0)
+    default_overhead = _clamp(rates.get("overhead_pct",    0), 0.0, 15.0)
+
+    def _row_val(it, key):
+        try:
+            keys = it.keys() if hasattr(it, "keys") else []
+            if key in keys:
+                v = it[key]
+                return v if v is not None else None
+        except Exception:
+            pass
+        return None
 
     lines = []
     cat_totals: dict = {}
     grand = 0.0
     for it in items:
-        basic_rate_usd = float(
-            (it["unit_price_override"] if it["unit_price_override"] is not None
-             else (it["catalog_price"] or 0)) or 0
-        )
-        # Convert source USD to target currency at the rate the route
-        # looked up from _CURRENCY_RATES_FROM_USD. All downstream rates
-        # (labour, overhead, profit, VAT) inherit the currency.
-        # Task #4 Option A (2026-06-24): BOQ-aligned chain.
-         #   direct      = basic * (1 + lab/100)
-        #   subtotal_op = direct * (1 + (ovh+prf)/100)   <-- summed, not compounded
-        #   subtotal_c  = subtotal_op * (1 + cnt/100)
-        #   total_rate  = subtotal_c  * (1 + vat/100)
-        # Template-compat: overhead + profit split BACK out for display.
-        basic_rate     = basic_rate_usd * float(fx_rate or 1.0)
-        install_labour = basic_rate * lab_pct / 100.0
-        direct         = basic_rate + install_labour
-        overhead       = direct * ovh_pct / 100.0
-        profit         = direct * prf_pct / 100.0
-        after_ohp      = direct + overhead + profit
-        contingency    = after_ohp * cnt_pct / 100.0
-        after_cnt      = after_ohp + contingency
-        vat            = after_cnt * vat_pct / 100.0
-        total_rate     = after_cnt + vat
-        # Names preserved for template back-compat:
-        supply_install = direct  # alias
-        with_overhead  = direct + overhead
-        before_vat     = after_cnt
-        qty            = float(it["qty"] or 0)
-        line_total     = total_rate * qty
+        # Per-line basic_price wins; else unit_price_override; else catalog.
+        line_basic = _row_val(it, "basic_price")
+        if line_basic in (None, 0, 0.0):
+            line_basic = it["unit_price_override"] if it["unit_price_override"] is not None else (it["catalog_price"] or 0)
+        basic_rate = float(line_basic or 0) * float(fx_rate or 1.0)
+
+        sp = _row_val(it, "supply_pct")
+        ip = _row_val(it, "install_pct")
+        pp = _row_val(it, "profit_pct")
+        op = _row_val(it, "overhead_pct")
+        sp = _clamp(sp, 0.0, 15.0) if sp not in (None, "") else default_supply
+        ip = _clamp(ip, 0.0, 25.0) if ip not in (None, "") else default_install
+        pp = _clamp(pp, 0.0,  5.0) if pp not in (None, "") else default_profit
+        op = _clamp(op, 0.0, 15.0) if op not in (None, "") else default_overhead
+
+        supply_amt   = basic_rate * sp / 100.0
+        profit_amt   = basic_rate * pp / 100.0
+        install_amt  = basic_rate * ip / 100.0
+        overhead_amt = basic_rate * op / 100.0
+        supply_disp  = supply_amt  + profit_amt
+        install_disp = install_amt + overhead_amt
+        total_rate   = basic_rate + supply_disp + install_disp
+        qty          = float(it["qty"] or 0)
+        line_total   = total_rate * qty
         cat = it["category_name"] or "Uncategorised"
         cat_totals[cat] = cat_totals.get(cat, 0) + line_total
         grand += line_total
         lines.append({
             "item": it,
-            "basic_rate": basic_rate,
-            "install_labour": install_labour,
-            "overhead": overhead,
-            "profit": profit,
-            "contingency": contingency,
-            "vat": vat,
-            "total_rate": total_rate,
-            "line_total": line_total,
-            # Backward-compat with the old template:
-            "unit_price": basic_rate,
+            "basic_rate":     basic_rate,
+            "supply_pct":     sp,
+            "profit_pct":     pp,
+            "install_pct":    ip,
+            "overhead_pct":   op,
+            "supply_amount":  supply_amt,
+            "profit_amount":  profit_amt,
+            "install_amount": install_amt,
+            "overhead_amount": overhead_amt,
+            "supply_disp":    supply_disp,
+            "install_disp":   install_disp,
+            "total_rate":     total_rate,
+            "line_total":     line_total,
+            # Back-compat aliases for older templates:
+            "install_labour": 0.0,
+            "overhead":       overhead_amt,
+            "profit":         profit_amt,
+            "contingency":    0.0,
+            "vat":            0.0,
+            "unit_price":     basic_rate,
         })
     return {
         "lines": lines,
         "category_totals": cat_totals,
         "grand_total": grand,
         "rates": rates,
-        "totals_basic": sum(l["basic_rate"] * (l["item"]["qty"] or 0) for l in lines),
-        "totals_labour": sum(l["install_labour"] * (l["item"]["qty"] or 0) for l in lines),
-        "totals_overhead": sum(l["overhead"] * (l["item"]["qty"] or 0) for l in lines),
-        "totals_profit": sum(l["profit"] * (l["item"]["qty"] or 0) for l in lines),
-        "totals_vat": sum(l["vat"] * (l["item"]["qty"] or 0) for l in lines),
+        "totals_basic":    sum(l["basic_rate"]     * (l["item"]["qty"] or 0) for l in lines),
+        "totals_supply":   sum(l["supply_disp"]    * (l["item"]["qty"] or 0) for l in lines),
+        "totals_install":  sum(l["install_disp"]   * (l["item"]["qty"] or 0) for l in lines),
+        # Back-compat aliases:
+        "totals_labour":   0.0,
+        "totals_overhead": sum(l["overhead_amount"] * (l["item"]["qty"] or 0) for l in lines),
+        "totals_profit":   sum(l["profit_amount"]   * (l["item"]["qty"] or 0) for l in lines),
+        "totals_vat":      0.0,
     }
 
 
@@ -19860,6 +19940,11 @@ def _boq_ensure_schema():
 
 
 def _boq_project_owned_or_404(pid: int, uid: int):
+    # 2026-06-24: lazy one-shot migration of legacy rate-buildup rows.
+    try:
+        _migrate_legacy_boq_rate_buildup()
+    except Exception:
+        pass
     _boq_ensure_schema()
     with get_db() as c:
         row = c.execute(
@@ -20541,65 +20626,62 @@ def _boq_next_item_no(floor_id: int, bill_no: int, section_letter: str) -> str:
     return str(int((row["n"] if row else 0) or 0) + 1)
 
 
-def _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat):
-    """Industry-standard rate build-up (compounded, tax-authority defensible).
+def _boq_safe_rate(basic, supply, install, oh, prf, cnt=0, vat=0):
+    """Additive rate build-up (2026-06-24 owner spec).
 
-    Chain:
-        direct      = supply_rate + install_rate
-        (supply defaults to basic when blank; install defaults to 0)
-        subtotal_1  = direct      * (1 + (overhead% + profit%) / 100)
-        subtotal_2  = subtotal_1  * (1 + contingency% / 100)
-        final       = subtotal_2  * (1 + VAT% / 100)
+    All five inputs are PERCENTAGES of basic. The old `supply` and
+    `install` args (previously currency amounts) are now interpreted
+    as percentages of basic. `cnt` and `vat` are accepted for back-
+    compat with existing callsites but IGNORED.
 
-    Each pct compounds on the running subtotal, NOT added flat to
-    basic (the old buggy formula understated totals by ~5-10%).
-    Matches GRA / FIRS / KRA tax-authority practice and the reviewer
-    comments on the 1UGLS Auditorium sample.
+    Caps (server-side, silently clamped here; route handlers reject
+    out-of-cap input with a flash warning before reaching this fn):
+        supply_pct   0..15      profit_pct   0..5
+        install_pct  0..25      overhead_pct 0..15
+
+    Formula:
+        total = basic * (1 + (supply_pct + profit_pct
+                              + install_pct + overhead_pct) / 100)
     """
-    b = max(0.0, float(basic or 0))
-    s = max(0.0, float(supply if supply not in (None, "") else b))
-    i = max(0.0, float(install if install not in (None, "") else 0))
-    oh_f  = float(oh  or 0) / 100.0
-    prf_f = float(prf or 0) / 100.0
-    cnt_f = float(cnt or 0) / 100.0
-    vat_f = float(vat or 0) / 100.0
-    direct = s + i
-    return direct * (1.0 + oh_f + prf_f) * (1.0 + cnt_f) * (1.0 + vat_f)
+    b   = max(0.0, float(basic or 0))
+    sp  = max(0.0, min(15.0, float(supply  or 0)))
+    ip  = max(0.0, min(25.0, float(install or 0)))
+    op  = max(0.0, min(15.0, float(oh      or 0)))
+    pp  = max(0.0, min( 5.0, float(prf     or 0)))
+    return b * (1.0 + (sp + pp + ip + op) / 100.0)
 
 
-def _boq_rate_breakdown(basic, supply, install, oh, prf, cnt, vat):
-    """Per-step breakdown of the rate build-up for audit display.
+def _boq_rate_breakdown(basic, supply, install, oh, prf, cnt=0, vat=0):
+    """Per-step breakdown for the internal Rate Build-Up audit view.
 
-    Returns a dict with each intermediate amount so the rate-buildup
-    view can show how basic + supplier markup + contractor markup +
-    contingency + VAT compound to the final built-up rate.
+    Args mirror _boq_safe_rate: supply/install/oh/prf are PERCENTAGES.
+    cnt and vat are accepted-and-ignored.
     """
-    b = max(0.0, float(basic or 0))
-    s = max(0.0, float(supply if supply not in (None, "") else b))
-    i = max(0.0, float(install if install not in (None, "") else 0))
-    oh_v  = float(oh  or 0)
-    prf_v = float(prf or 0)
-    cnt_v = float(cnt or 0)
-    vat_v = float(vat or 0)
-    direct = s + i
-    after_ohp  = direct     * (1.0 + (oh_v + prf_v) / 100.0)
-    after_cont = after_ohp  * (1.0 + cnt_v / 100.0)
-    final      = after_cont * (1.0 + vat_v / 100.0)
+    b   = max(0.0, float(basic or 0))
+    sp  = max(0.0, min(15.0, float(supply  or 0)))
+    ip  = max(0.0, min(25.0, float(install or 0)))
+    op  = max(0.0, min(15.0, float(oh      or 0)))
+    pp  = max(0.0, min( 5.0, float(prf     or 0)))
+    supply_amt   = b * sp / 100.0
+    profit_amt   = b * pp / 100.0
+    install_amt  = b * ip / 100.0
+    overhead_amt = b * op / 100.0
+    supply_disp  = supply_amt  + profit_amt
+    install_disp = install_amt + overhead_amt
+    total        = b + supply_disp + install_disp
     return {
-        "basic_price": b,
-        "supply_rate": s,
-        "install_rate": i,
-        "direct_cost": direct,
-        "overhead_pct": oh_v,
-        "profit_pct": prf_v,
-        "overhead_profit_amt": after_ohp - direct,
-        "after_overhead_profit": after_ohp,
-        "contingency_pct": cnt_v,
-        "contingency_amt": after_cont - after_ohp,
-        "after_contingency": after_cont,
-        "vat_pct": vat_v,
-        "vat_amt": final - after_cont,
-        "final_built_up_rate": final,
+        "basic_price":     b,
+        "supply_pct":      sp,
+        "profit_pct":      pp,
+        "install_pct":     ip,
+        "overhead_pct":    op,
+        "supply_amount":   supply_amt,
+        "profit_amount":   profit_amt,
+        "install_amount":  install_amt,
+        "overhead_amount": overhead_amt,
+        "supply_disp":     supply_disp,
+        "install_disp":    install_disp,
+        "final_built_up_rate": total,
     }
 
 
@@ -20781,11 +20863,25 @@ def boq_section_add_item(pid, bid, fid, bill_no, letter):
     if not unit:
         unit = "No."
 
-    oh, prf, cnt, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
-    supply_raw  = (f.get("supply_rate") or "").strip()
-    install_raw = (f.get("install_rate") or "").strip()
-    supply  = _num("supply_rate", basic)   if supply_raw  else basic
-    install = _num("install_rate", 0.0)    if install_raw else 0.0
+    # 2026-06-24 additive model. supply/install/profit/overhead are
+    # percentages of basic; out-of-cap input is rejected, NOT clamped.
+    def _capped(name, lo, hi):
+        raw = (f.get(name) or "").strip()
+        if not raw:
+            return 0.0, True
+        try:
+            v = float(raw)
+        except (TypeError, ValueError):
+            return 0.0, False
+        return v, (lo <= v <= hi)
+    supply,   ok_s = _capped("supply_rate",    0.0, 15.0)
+    install,  ok_i = _capped("install_rate",   0.0, 25.0)
+    prf,      ok_p = _capped("profit_pct",     0.0,  5.0)
+    oh,       ok_o = _capped("overhead_pct",   0.0, 15.0)
+    cnt = 0.0; vat = 0.0
+    if not (ok_s and ok_i and ok_p and ok_o):
+        flash("Rate caps: Supply 0-15%, Install 0-25%, Profit 0-5%, Overhead 0-15%. Enter percentages, not amounts.", "warning")
+        return redirect(_section_loop_url(pid, bid, fid, bill_no, letter, title, bill_name, subsec))
     final_rate = _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat)
     total = qty * final_rate
     if final_rate <= 0:
@@ -21318,10 +21414,11 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
                 skipped += 1
                 continue
 
-            # Supply defaults to basic; install defaults to 0 (spec rule).
-            supply = supply_raw if supply_raw is not None else basic
-            install = install_raw if install_raw is not None else 0.0
-            final_rate = _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat)
+            # 2026-06-24 additive: supply/install are PERCENTAGES of basic.
+            # Section-grid bulk rows do not collect them, default to 0/0.
+            supply = max(0.0, min(15.0, float(supply_raw or 0)))
+            install = max(0.0, min(25.0, float(install_raw or 0)))
+            final_rate = _boq_safe_rate(basic, supply, install, oh, prf, 0, 0)
             total = qty * final_rate
             item_no_disp = str(next_no)
             next_no += 1
@@ -21547,7 +21644,8 @@ def boq_template_save(pid, bid, fid, slug):
             if not desc or qty <= 0 or basic <= 0:
                 skipped += 1
                 continue
-            final_rate = _boq_safe_rate(basic, basic, 0, oh, prf, cnt, vat)
+            # 2026-06-24 additive: 0/0 percentages for template rows.
+            final_rate = _boq_safe_rate(basic, 0, 0, oh, prf, 0, 0)
             total = qty * final_rate
 
             key = (bill_no, sect_letter)
@@ -21613,7 +21711,8 @@ def boq_template_save(pid, bid, fid, slug):
             sect_letter = (custom_sect[i] if i < len(custom_sect) else "Z").strip().upper()[:8] or "Z"
             sect_title = (custom_title[i] if i < len(custom_title) else "CUSTOM ITEMS").strip()[:160] or "CUSTOM ITEMS"
             bill_name = _boq_lookup_bill_name(bill_no) or "OTHER"
-            final_rate = _boq_safe_rate(basic, basic, 0, oh, prf, cnt, vat)
+            # 2026-06-24 additive: 0/0 percentages for template custom rows.
+            final_rate = _boq_safe_rate(basic, 0, 0, oh, prf, 0, 0)
             total = qty * final_rate
             key = (bill_no, sect_letter)
             if key not in next_no_cache:
@@ -22903,26 +23002,27 @@ def boq_floor_item_edit(pid, bid, fid, iid):
             basic = max(0.0, float(f.get("basic_price") or 0))
         except ValueError:
             basic = 0.0
-        def _pct(name):
+        # 2026-06-24 additive model. Percentages only; out-of-cap rejected.
+        def _capped(name, lo, hi):
+            raw = (f.get(name) or "").strip()
+            if not raw:
+                return 0.0, True
             try:
-                v = f.get(name, "")
-                return max(0.0, min(100.0, float(v))) if v not in (None, "",) else 0.0
+                v = float(raw)
             except (TypeError, ValueError):
-                return 0.0
-        oh, prf, cnt, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
+                return 0.0, False
+            return v, (lo <= v <= hi)
+        supply,  ok_s = _capped("supply_rate",  0.0, 15.0)
+        install, ok_i = _capped("install_rate", 0.0, 25.0)
+        prf,     ok_p = _capped("profit_pct",   0.0,  5.0)
+        oh,      ok_o = _capped("overhead_pct", 0.0, 15.0)
+        cnt = 0.0; vat = 0.0
         if not desc or qty <= 0 or basic <= 0:
             flash("Description, qty and basic price are all required.", "warning")
             return redirect(url_for("boq_floor_item_edit", pid=pid, bid=bid, fid=fid, iid=iid))
-        try:
-            supply_raw = f.get("supply_rate", "")
-            supply = float(supply_raw) if supply_raw not in (None, "",) else basic
-        except ValueError:
-            supply = basic
-        try:
-            install_raw = f.get("install_rate", "")
-            install = float(install_raw) if install_raw not in (None, "",) else 0.0
-        except ValueError:
-            install = 0.0
+        if not (ok_s and ok_i and ok_p and ok_o):
+            flash("Rate caps: Supply 0-15%, Install 0-25%, Profit 0-5%, Overhead 0-15%. Enter percentages, not amounts.", "warning")
+            return redirect(url_for("boq_floor_item_edit", pid=pid, bid=bid, fid=fid, iid=iid))
         final_rate = _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat)
         total = qty * final_rate
         with get_db() as c:
@@ -23354,10 +23454,10 @@ def boq_project_recalc(pid):
             qty = float(r["qty"] or 0)
             old_total = float(r["old_total"] or 0)
             old_grand += old_total
+            # 2026-06-24 additive: cnt/vat ignored. supply/install are pcts now.
             new_rate = _boq_safe_rate(
                 r["basic_price"], r["supply_rate"], r["install_rate"],
-                r["overhead_pct"], r["profit_pct"],
-                r["contingency_pct"], r["vat_pct"],
+                r["overhead_pct"], r["profit_pct"], 0, 0,
             )
             new_total = qty * new_rate
             new_grand += new_total
@@ -27033,6 +27133,21 @@ def admin_marketplace_reseed_library():
 
 # === END: library_expansion splice ===
 
+
+
+# RECHECK_PRICES_ROUTES_v1 -- do not remove
+try:
+    from new_recheck_prices_routes import register_recheck_prices_routes
+    register_recheck_prices_routes(
+        app, login_required, session, request, redirect, url_for, flash,
+        render_template, current_user, get_db, _bom_owned_or_404,
+        _bom_items_with_prices, _CURRENCY_RATES_FROM_USD, csrf_protect,
+    )
+except Exception as _e_rcp:
+    try:
+        app.logger.warning('recheck-prices routes failed to register: %s', _e_rcp)
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     init_db()

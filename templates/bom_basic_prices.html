@@ -21,6 +21,12 @@
     <a href="{{ url_for('boms_basic_prices_pdf', bom_id=bom.id) }}" class="btn btn-danger btn-sm"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</a>
     <button type="button" class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#emailBasicPricesModal"><i class="bi bi-envelope me-1"></i>Email</button>
     <button onclick="window.print()" class="btn btn-outline-light btn-sm"><i class="bi bi-printer me-1"></i>Print</button>
+    <form method="POST" action="{{ url_for('boms_recheck_prices', bom_id=bom.id) }}" style="display:inline">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-warning btn-sm fw-bold" title="Query the AI market lookup for current prices in this BOM's country/currency">
+        <i class="bi bi-search-heart me-1"></i>Recheck prices
+      </button>
+    </form>
     <a href="{{ url_for('boms_list') }}" class="btn btn-outline-success btn-sm"><i class="bi bi-check2-circle me-1"></i>Done · Back to BOMs</a>
     <a href="{{ url_for('boms_boq', bom_id=bom.id) }}" class="btn btn-warning btn-sm fw-bold">
       <i class="bi bi-calculator me-1"></i>Get Full Cost Estimate →
@@ -73,32 +79,25 @@
     </div>
   </div>
   <div class="text-secondary" style="font-size:12px">
-    Catalogue basic price only. <strong>No labour, overhead, profit, contingency or VAT mark-ups.</strong>
-    Those are added on the next page (Full Cost Estimate).
+    Price per unit item only. <strong>No mark-ups, no billing, no totals.</strong>
+    Mark-ups (supply, install, profit, overhead) are added on the next page (Full Cost Estimate).
   </div>
 </div>
 
-<!-- KPI strip -->
+<!-- KPI strip — basic prices only, no totals/billing per owner spec 2026-06-24 -->
 <div class="row g-3 mb-3 no-print">
-  <div class="col-md-4">
+  <div class="col-md-6">
     <div class="kpi-card h-100">
       <div class="kpi-label"><i class="bi bi-box-seam me-1"></i>Line items</div>
       <div class="kpi-value">{{ lines|length }}</div>
       <div class="kpi-unit">{{ cat_totals|length }} categor{{ 'y' if cat_totals|length == 1 else 'ies' }}</div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-6">
     <div class="kpi-card h-100">
       <div class="kpi-label"><i class="bi bi-currency-exchange me-1"></i>Currency</div>
       <div class="kpi-value" style="font-size:24px">{{ currency }}</div>
       <div class="kpi-unit">indicative FX as of {{ rates_as_of }}</div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="kpi-card h-100" style="border:1px solid #0ea5e944">
-      <div class="kpi-label"><i class="bi bi-tag me-1 text-info"></i>Basic total</div>
-      <div class="kpi-value text-info">{{ '{:,.0f}'.format(grand_basic) }}</div>
-      <div class="kpi-unit">{{ currency }} · before mark-ups</div>
     </div>
   </div>
 </div>
@@ -116,8 +115,7 @@
           <th>Specification</th>
           <th class="text-end">Qty</th>
           <th>Unit</th>
-          <th class="text-end">Basic price ({{ currency }})</th>
-          <th class="text-end">Subtotal ({{ currency }})</th>
+          <th class="text-end">Basic price per unit ({{ currency }})</th>
         </tr>
       </thead>
       <tbody>
@@ -126,9 +124,8 @@
         {% set it = line.item %}
         {% if line.category != ns.prev_cat %}
         <tr style="background:#0a0a14">
-          <td colspan="7" class="text-info small fw-bold text-uppercase" style="letter-spacing:1px">
+          <td colspan="6" class="text-info small fw-bold text-uppercase" style="letter-spacing:1px">
             <i class="bi bi-folder me-1"></i>{{ line.category }}
-            <span class="text-secondary float-end">{{ '{:,.0f}'.format(cat_totals[line.category]) }} {{ currency }}</span>
           </td>
         </tr>
         {% set ns.prev_cat = line.category %}
@@ -143,13 +140,8 @@
           <td class="text-end">{{ '{:,.2f}'.format(line.qty) }}</td>
           <td class="small">{{ it.unit }}</td>
           <td class="text-end">{{ '{:,.0f}'.format(line.basic_price) }}</td>
-          <td class="text-end fw-bold text-info">{{ '{:,.0f}'.format(line.subtotal) }}</td>
         </tr>
         {% endfor %}
-        <tr style="background:#0a1422;border-top:2px solid #0ea5e9">
-          <td colspan="6" class="text-end fw-black text-uppercase" style="color:#0ea5e9;letter-spacing:1px">Basic total ({{ currency }})</td>
-          <td class="text-end fw-black text-info" style="font-size:18px">{{ '{:,.0f}'.format(grand_basic) }}</td>
-        </tr>
       </tbody>
     </table>
   </div>
@@ -168,8 +160,8 @@
   <div class="fw-bold mb-2" style="color:#f0d080">Optional next step: Full Cost Estimate</div>
   <div class="text-secondary small mb-3" style="max-width:560px;margin:0 auto">
     You can stop here if a basic price list is all you need.
-    The Full Cost Estimate applies labour, overhead, profit, contingency, and VAT mark-ups
-    on top of these basic prices using the BOQ chain (sum OH+P · compound contingency · compound VAT).
+    The Full Cost Estimate adds supply (≤15%), install (≤25%), profit (≤5%) and overhead (≤15%)
+    mark-ups on top of these basic prices to give the client-facing total rate per item.
   </div>
   <div class="d-flex justify-content-center gap-2 flex-wrap">
     <a href="{{ url_for('boms_list') }}" class="btn btn-outline-light">
