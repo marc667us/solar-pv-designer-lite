@@ -1753,7 +1753,7 @@ def register():
     # marc667us escape hatch (?legacy=1) is absent, bounce GET /register
     # to the OIDC blueprint so users land on the Keycloak registration
     # page. POST handling is untouched so the legacy form keeps working.
-    if request.method == "GET" \
+    if request.method in ("GET", "POST") \
         and os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
         and request.args.get("legacy") != "1":
         _kc_next = request.args.get("next")
@@ -1879,7 +1879,7 @@ def login():
     # marc667us escape hatch (?legacy=1) is absent, bounce GET /login
     # to the OIDC blueprint so users land on the Keycloak login page.
     # POST handling is untouched so the legacy form keeps working.
-    if request.method == "GET" \
+    if request.method in ("GET", "POST") \
         and os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
         and request.args.get("legacy") != "1":
         _kc_next = request.args.get("next")
@@ -1958,6 +1958,10 @@ def logout():
 @app.route("/forgot-password", methods=["GET", "POST"])
 @limiter.limit("5 per hour")
 def forgot_password():
+    if os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
+        and request.args.get("legacy") != "1":
+        flash("Password reset is now managed by the SolarPro identity service. Use the \"Forgot password?\" link on the login page.", "info")
+        return redirect(url_for("oidc.auth_login"))
     if request.method == "POST":
         csrf_protect()
         email = request.form.get("email", "").strip().lower()
@@ -2003,6 +2007,10 @@ def forgot_password():
 
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
+    if os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
+        and request.args.get("legacy") != "1":
+        flash("Password reset is now managed by the SolarPro identity service. Use the \"Forgot password?\" link on the login page.", "info")
+        return redirect(url_for("oidc.auth_login"))
     with get_db() as c:
         rec = c.execute(
             "SELECT * FROM password_reset_tokens WHERE token=? AND used=0",
