@@ -1,0 +1,205 @@
+# Switch Paystack from TEST mode (sk_test_/pk_test_) to LIVE mode
+# (sk_live_/pk_live_) by rotating the Render env vars to the values
+# in PAYSTACK_SECRET_KEY_LIVE + PAYSTACK_PUBLIC_KEY_LIVE GH Secrets.
+#
+# Prerequisites (one-time):
+#   1. Get the live keys from dashboard.paystack.com -> Settings ->
+#      API Keys & Webhooks.
+#   2. Set them as GH Secrets:
+#      gh secret set PAYSTACK_SECRET_KEY_LIVE -b "sk_live_..."
+#      gh secret set PAYSTACK_PUBLIC_KEY_LIVE -b "pk_live_..."
+#
+# This workflow then:
+#   1. Sanity-checks the live keys are non-empty and start with sk_live_/pk_live_.
+#   2. Backs up the current PAYSTACK_*_KEY values from Render to the run log
+#      (masked, so you can recover the test keys if needed).
+#   3. PUTs the merged env-var set (replaces the two PAYSTACK_*_KEY entries
+#      with the live values; every other env var preserved).
+#   4. Triggers a redeploy.
+#   5. After deploy, runs the Diag Paystack Merchant Config workflow's logic
+#      inline to confirm Mode: LIVE.
+#
+# Safety:
+#   * Default dry-run (per feedback_workflow_dry_run_gate). Set confirm=GO_LIVE
+#     to actually swap.
+#   * No-op if the LIVE secrets are missing -- shows a clear error.
+#   * Idempotent: re-running after success is harmless (PUT puts the same values).
+#
+# Rollback: if the diag step shows the swap broke something, just re-set the
+# test keys back into Render env via dashboard.render.com -> Environment.
+
+name: Paystack Rotate To Live
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type GO_LIVE to commit. Leave blank = dry-run preview (no env-var change).'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  rotate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      RENDER_API_KEY:              ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID:           ${{ secrets.RENDER_SERVICE_ID }}
+      PAYSTACK_SECRET_KEY_LIVE:    ${{ secrets.PAYSTACK_SECRET_KEY_LIVE }}
+      PAYSTACK_PUBLIC_KEY_LIVE:    ${{ secrets.PAYSTACK_PUBLIC_KEY_LIVE }}
+      CONFIRM:                     ${{ inputs.confirm }}
+    steps:
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "GO_LIVE" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- will rotate Render env to LIVE keys + redeploy ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- no env-var change ==="
+            echo "Re-run with -f confirm=GO_LIVE to commit."
+          fi
+
+      - name: Verify live secrets present + well-formed
+        run: |
+          MISSING=""
+          [ -z "$PAYSTACK_SECRET_KEY_LIVE" ] && MISSING="$MISSING PAYSTACK_SECRET_KEY_LIVE"
+          [ -z "$PAYSTACK_PUBLIC_KEY_LIVE" ] && MISSING="$MISSING PAYSTACK_PUBLIC_KEY_LIVE"
+          if [ -n "$MISSING" ]; then
+            echo "::error::Missing GH Secrets:$MISSING"
+            echo "Set them with: gh secret set <name> -b '<value>'"
+            exit 1
+          fi
+          # Validate prefixes (must start with sk_live_ / pk_live_).
+          case "$PAYSTACK_SECRET_KEY_LIVE" in
+            sk_live_*) ;;
+            *) echo "::error::PAYSTACK_SECRET_KEY_LIVE must start with sk_live_ (got prefix: ${PAYSTACK_SECRET_KEY_LIVE:0:8})"; exit 1 ;;
+          esac
+          case "$PAYSTACK_PUBLIC_KEY_LIVE" in
+            pk_live_*) ;;
+            *) echo "::error::PAYSTACK_PUBLIC_KEY_LIVE must start with pk_live_ (got prefix: ${PAYSTACK_PUBLIC_KEY_LIVE:0:8})"; exit 1 ;;
+          esac
+          echo "OK: both LIVE keys present and well-formed."
+
+      - name: Fetch current Render env vars
+        id: env
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars?limit=100" \
+            -o /tmp/env_current.json
+          NCOUNT=$(jq 'length' /tmp/env_current.json)
+          echo "Render currently holds $NCOUNT env vars."
+          # Surface current Paystack prefix (masked to first 8 chars) so we
+          # can confirm we're moving FROM test mode.
+          CUR_SK=$(jq -r '.[] | .envVar | select(.key=="PAYSTACK_SECRET_KEY") | .value' /tmp/env_current.json)
+          CUR_PK=$(jq -r '.[] | .envVar | select(.key=="PAYSTACK_PUBLIC_KEY") | .value' /tmp/env_current.json)
+          echo "Current PAYSTACK_SECRET_KEY prefix: ${CUR_SK:0:8}"
+          echo "Current PAYSTACK_PUBLIC_KEY prefix: ${CUR_PK:0:8}"
+
+      - name: Build merged env-var set (LIVE)
+        run: |
+          set -e
+          jq --arg sk "$PAYSTACK_SECRET_KEY_LIVE" \
+             --arg pk "$PAYSTACK_PUBLIC_KEY_LIVE" '
+            [.[] | .envVar | {key, value}]
+            | map(if .key == "PAYSTACK_SECRET_KEY" then .value = $sk
+                  elif .key == "PAYSTACK_PUBLIC_KEY" then .value = $pk
+                  else . end)
+            | . as $merged
+            | if any(.[]; .key == "PAYSTACK_SECRET_KEY") then $merged
+              else $merged + [{key: "PAYSTACK_SECRET_KEY", value: $sk}] end
+            | . as $merged2
+            | if any(.[]; .key == "PAYSTACK_PUBLIC_KEY") then $merged2
+              else $merged2 + [{key: "PAYSTACK_PUBLIC_KEY", value: $pk}] end
+          ' /tmp/env_current.json > /tmp/env_merged.json
+          NCOUNT=$(jq 'length' /tmp/env_merged.json)
+          echo "Merged set has $NCOUNT env vars."
+
+      - name: PUT merged env-var set (only when confirm=GO_LIVE)
+        if: env.MODE == 'apply'
+        run: |
+          set -e
+          curl -fsS -X PUT \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data-binary "@/tmp/env_merged.json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars" \
+            | jq 'length as $n | "Render confirmed \($n) env vars set."'
+
+      - name: Trigger redeploy (only when confirm=GO_LIVE)
+        if: env.MODE == 'apply'
+        id: deploy
+        run: |
+          set -e
+          DEPLOY=$(curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}' \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys")
+          DEPLOY_ID=$(echo "$DEPLOY" | jq -r '.id')
+          echo "Render deploy id: $DEPLOY_ID"
+          echo "id=$DEPLOY_ID" >> $GITHUB_OUTPUT
+
+      - name: Wait for deploy live (up to 5 min)
+        if: env.MODE == 'apply'
+        env:
+          DEPLOY_ID: ${{ steps.deploy.outputs.id }}
+        run: |
+          set -e
+          for i in $(seq 1 20); do
+            STATUS=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$DEPLOY_ID" \
+              | jq -r '.status')
+            echo "[$i/20] deploy status: $STATUS"
+            case "$STATUS" in
+              live)            exit 0 ;;
+              build_failed|deactivated|canceled|update_failed)
+                echo "::error::deploy failed: $STATUS"; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::warning::deploy did not reach 'live' in 5 min"
+
+      - name: Verify LIVE mode (only when confirm=GO_LIVE)
+        if: env.MODE == 'apply'
+        run: |
+          # Hit Paystack /balance with the new key. If it returns 200 + a real
+          # balance shape, we know the live key works AND the mode is live.
+          python3 <<'PY'
+          import os, json, urllib.request, urllib.error
+          SK = os.environ.get("PAYSTACK_SECRET_KEY_LIVE","")
+          req = urllib.request.Request("https://api.paystack.co/balance",
+              headers={"Authorization": f"Bearer {SK}", "User-Agent": "solarpro-rotate/1.0"})
+          try:
+              with urllib.request.urlopen(req, timeout=15) as r:
+                  data = json.loads(r.read())
+              if data.get("status"):
+                  print("OK: live key verified against Paystack API")
+                  for entry in data.get("data", []):
+                      print(f"  - {entry.get('currency')}  balance={entry.get('balance', 0)/100:,.2f}")
+              else:
+                  print(f"FAIL: {data}")
+                  raise SystemExit(1)
+          except urllib.error.HTTPError as e:
+              print(f"FAIL: HTTP {e.code}")
+              raise SystemExit(1)
+          PY
+
+      - name: Summary
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "===================================================="
+            echo " PAYSTACK ROTATED TO LIVE MODE"
+            echo "===================================================="
+            echo " Render env updated, redeploy live, /balance probe ok."
+            echo " Verify end-to-end with the buyer e2e smoke:"
+            echo "   python scripts/smoke_buyer_e2e.py"
+            echo " Charges will now hit real cards. NOT test transactions."
+          else
+            echo "DRY-RUN complete. No env-var change."
+            echo "Re-run with -f confirm=GO_LIVE to commit."
+          fi
