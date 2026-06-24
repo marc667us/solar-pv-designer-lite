@@ -14036,6 +14036,7 @@ _MARKETPLACE_CATEGORIES = [
     ("solar_equipment",   "Solar Equipment",                  "bi-sun",              190),
     ("ict_elv",           "ICT / ELV Products",               "bi-router",           200),
     ("power_system",      "Power System Equipment",           "bi-cpu",              210),
+    ("generators",        "Generators",                       "bi-lightning-charge-fill", 215),
 ]
 
 # Subcategory taxonomy -- source of truth for the supplier product upload form's
@@ -14119,9 +14120,14 @@ _MARKETPLACE_SUBCATEGORIES = {
         "Combiner Boxes", "Monitoring Systems",
     ],
     "power_system": [
-        "RMU", "Generators", "UPS", "Static Transfer Switches",
+        "RMU", "UPS", "Static Transfer Switches",
         "Capacitor Banks", "Busduct Systems", "Switchgear",
         "Protection Relays",
+    ],
+    "generators": [
+        "Diesel", "Petrol", "Gas", "Standby", "Prime Power",
+        "Open-set", "Sound-proof Canopy", "Containerized",
+        "Portable",
     ],
     "ict_elv": [
         "Data Outlets", "Network Switches", "Access Points", "CCTV",
@@ -14153,6 +14159,7 @@ _MARKETPLACE_DEFAULT_UNIT = {
     "light_switches":      "No.",
     "solar_equipment":     "No.",
     "power_system":        "No.",
+    "generators":          "No.",
     "ict_elv":             "No.",
 }
 
@@ -14237,6 +14244,11 @@ _MARKETPLACE_SPEC_FIELDS = {
     "power_system": [
         "Rated power", "Voltage", "Current rating", "Phase",
         "Frequency", "Protection class", "Cooling / fuel type",
+    ],
+    "generators": [
+        "kVA rating", "Fuel type", "Phase", "Cooling",
+        "Engine make", "Alternator make", "Speed (rpm)",
+        "Frequency", "Enclosure", "Control panel", "Fuel tank capacity",
     ],
     "ict_elv": [
         "Standard / category", "Ports / channels", "Power source",
@@ -14430,7 +14442,11 @@ def _seed_marketplace_samples(c):
         ("solar_equipment",    "MC4 Connector Pair (TUV)",             "Generic",   "MC4-PAIR",   "MC4 male+female connector pair, TUV, 1500 VDC",      "No.",     2, rs,        7,  "MC4 Connectors"),
         ("solar_equipment",    "DC Combiner Box 4-in/1-out 1000V",     "Generic",   "DCB-4-1",    "4-in/1-out DC combiner, 1000 VDC, SPD + fuses, IP65","No.",   145, rs,        14, "Combiner Boxes"),
         ("power_system",       "11 kV RMU 2-Way Compact",              "ABB",       "SafeRing-2W","11 kV, 2-way ring main unit, SF6, 630A, 21kA",       "No.", 11500, schneider, 75, "RMU"),
-        ("power_system",       "250 kVA Cummins Genset",               "Cummins",   "C250D5",     "250 kVA, 3PH, diesel, open-set, 1500 rpm",           "No.", 28500, rs,        45, "Generators"),
+        ("generators",         "100 kVA Cummins Diesel Genset",        "Cummins",   "C100D5",     "100 kVA, 3PH, diesel, open-set, 1500 rpm",           "No.", 14500, rs,        30, "Open-set"),
+        ("generators",         "250 kVA Cummins Diesel Genset",        "Cummins",   "C250D5",     "250 kVA, 3PH, diesel, open-set, 1500 rpm",           "No.", 28500, rs,        45, "Open-set"),
+        ("generators",         "500 kVA Cummins Sound-Proof Canopy",   "Cummins",   "C500D5-CN", "500 kVA, 3PH, diesel, sound-attenuated canopy <75 dBA","No.", 52000, rs,        60, "Sound-proof Canopy"),
+        ("generators",         "50 kVA Honda Petrol Standby",          "Honda",     "EG5000C",    "50 kVA, 3PH, petrol, recoil + electric start",       "No.",  7800, rs,        21, "Petrol"),
+        ("generators",         "1000 kVA Containerized Genset",        "Cummins",   "C1000D5-CT","1000 kVA, 3PH, 40-ft container, AMF, redundant",   "No.",110000, rs,        90, "Containerized"),
         ("power_system",       "10 kVA Online UPS Tower",              "APC",       "SRT10KXLI",  "10 kVA / 10 kW, online double-conversion, tower",    "No.",  4600, rs,        21, "UPS"),
         ("power_system",       "MCCB 400A 4P 50kA",                    "Schneider", "MCCB-400-4P","400A 4P MCCB, 50kA breaking capacity",               "No.",   520, schneider, 21, "Switchgear"),
         ("ict_elv",            "Cat6 UTP Data Outlet (RJ45)",          "Legrand",   "RJ45-C6",    "Cat6 UTP RJ45 data outlet, flush, white",            "No.",     8, rs,        7,  "Data Outlets"),
@@ -15123,7 +15139,8 @@ def supplier_upload_template():
         "dp_switches":         ("20A DP Water Heater Switch",              11, "MK",        "K5403WHI",   "20A DP switch with neon, flush, white", 7),
         "light_switches":      ("1 Gang 2 Way Switch",                      6, "MK",        "K4871WHI",   "1 gang 2 way switch, 10A, white", 7),
         "solar_equipment":     ("JA Solar 550W Mono PV Module",           180, "JA Solar",  "JAM72S30-550", "550W, mono-PERC, 72-cell, 21.3% eff.", 21),
-        "power_system":        ("250 kVA Cummins Genset",               28500, "Cummins",   "C250D5",     "250 kVA, 3PH, diesel, open-set, 1500 rpm", 45),
+        "power_system":        ("11 kV RMU 2-Way Compact",              11500, "ABB",       "SafeRing-2W","11 kV, 2-way ring main unit, SF6, 630A, 21kA",       75),
+        "generators":          ("250 kVA Cummins Diesel Genset",        28500, "Cummins",   "C250D5",     "250 kVA, 3PH, diesel, open-set, 1500 rpm", 45),
         "ict_elv":             ("24-port Gigabit PoE+ Switch",            620, "Cisco",     "CBS250-24P", "24-port Gigabit + 4 SFP, PoE+ 195W, managed", 21),
     }
     code_to_label = {row[0]: row[1] for row in _MARKETPLACE_CATEGORIES}
@@ -17641,7 +17658,11 @@ def _seed_marketplace_postgres_samples():
         ("solar_equipment",    "MC4 Connector Pair (TUV)",             "Generic",   "MC4-PAIR",   "MC4 male+female connector pair, TUV, 1500 VDC",      "No.",     2, generic,   7,  "MC4 Connectors"),
         ("solar_equipment",    "DC Combiner Box 4-in/1-out 1000V",     "Generic",   "DCB-4-1",    "4-in/1-out DC combiner, 1000 VDC, SPD + fuses, IP65","No.",   145, generic,   14, "Combiner Boxes"),
         ("power_system",       "11 kV RMU 2-Way Compact",              "ABB",       "SafeRing-2W","11 kV, 2-way ring main unit, SF6, 630A, 21kA",       "No.", 11500, abb,       75, "RMU"),
-        ("power_system",       "250 kVA Cummins Genset",               "Cummins",   "C250D5",     "250 kVA, 3PH, diesel, open-set, 1500 rpm",           "No.", 28500, sup.get("Cummins", generic), 45, "Generators"),
+        ("generators",         "100 kVA Cummins Diesel Genset",        "Cummins",   "C100D5",     "100 kVA, 3PH, diesel, open-set, 1500 rpm",           "No.", 14500, sup.get("Cummins", generic), 30, "Open-set"),
+        ("generators",         "250 kVA Cummins Diesel Genset",        "Cummins",   "C250D5",     "250 kVA, 3PH, diesel, open-set, 1500 rpm",           "No.", 28500, sup.get("Cummins", generic), 45, "Open-set"),
+        ("generators",         "500 kVA Cummins Sound-Proof Canopy",   "Cummins",   "C500D5-CN", "500 kVA, 3PH, diesel, sound-attenuated canopy <75 dBA","No.", 52000, sup.get("Cummins", generic), 60, "Sound-proof Canopy"),
+        ("generators",         "50 kVA Honda Petrol Standby",          "Honda",     "EG5000C",    "50 kVA, 3PH, petrol, recoil + electric start",       "No.",  7800, sup.get("Honda", generic), 21, "Petrol"),
+        ("generators",         "1000 kVA Containerized Genset",        "Cummins",   "C1000D5-CT","1000 kVA, 3PH, 40-ft container, AMF, redundant",   "No.",110000, sup.get("Cummins", generic), 90, "Containerized"),
         ("power_system",       "10 kVA Online UPS Tower",              "APC",       "SRT10KXLI",  "10 kVA / 10 kW, online double-conversion, tower",    "No.",  4600, sup.get("APC", generic), 21, "UPS"),
         ("power_system",       "MCCB 400A 4P 50kA",                    "Schneider", "MCCB-400-4P","400A 4P MCCB, 50kA breaking capacity",               "No.",   520, schneider, 21, "Switchgear"),
         ("ict_elv",            "Cat6 UTP Data Outlet (RJ45)",          "Legrand",   "RJ45-C6",    "Cat6 UTP RJ45 data outlet, flush, white",            "No.",     8, sup.get("Legrand", generic), 7,  "Data Outlets"),
@@ -25552,8 +25573,8 @@ _GHANA_PRODUCTS_GHS = [
     ("Grand Pacific Limited", "power_system", "80 kVA Online UPS Three-Phase", "Safenergy", "S3-80K", "80 kVA online double-conversion three-phase UPS, 1 yr warranty", "No.", 356250.00, 21, "UPS"),
 
     # ---- Powertech / Global Engineering: Cummins Generator ----
-    ("Powertech Generators Ghana Limited", "power_system", "325 kVA Cummins Standby Generator", "Cummins", "C325D5", "Prime 325kVA / Standby 330kVA, Cummins engine, Leroy Somer alternator, AMF DEEPSEA 6110 MkIII, 3-phase 230/400V 1500 rpm 50Hz, tropical radiator, residential silencer", "No.", 450000.00, 60, "Generators"),
-    ("Powertech Generators Ghana Limited", "power_system", "330 kVA Standby Generator (acoustic canopy)", "Cummins", "C330S-AC", "330kVA standby generator with acoustic canopy (75dBA at 1m), tropicalised radiator, residential silencer, electric start, audio alarms", "No.", 550000.00, 75, "Generators"),
+    ("Powertech Generators Ghana Limited", "generators", "325 kVA Cummins Standby Generator", "Cummins", "C325D5", "Prime 325kVA / Standby 330kVA, Cummins engine, Leroy Somer alternator, AMF DEEPSEA 6110 MkIII, 3-phase 230/400V 1500 rpm 50Hz, tropical radiator, residential silencer", "No.", 450000.00, 60, "Standby"),
+    ("Powertech Generators Ghana Limited", "generators", "330 kVA Standby Generator (acoustic canopy)", "Cummins", "C330S-AC", "330kVA standby generator with acoustic canopy (75dBA at 1m), tropicalised radiator, residential silencer, electric start, audio alarms", "No.", 550000.00, 75, "Sound-proof Canopy"),
 
     # ---- NESSTRA Ghana: LV/MV Power Systems ----
     ("NESSTRA Ghana Ltd", "panel_boards", "12-way 400A MCCB Distribution Panel (incomer 400A, 3P)", "NESSTRA", "MCCB-12W-400", "12-way TPN MCCB panel: 400A incomer 3P, 2x 160A 3P, 3x 100A 3P, 5x 63A 3P, 2x 125A 3P; indication lamps + DM outgoing", "No.", 64666.94, 30, "Main Panel"),
@@ -26519,10 +26540,10 @@ _LIBRARY_EXPANSION_PRODUCTS_GHS = [
     ("Automation Ghana Group", "transformers", "1000 kVA Distribution Transformer","ABB",     "T-1000-ONAN","1000 kVA 11/0.415 kV ONAN distribution transformer","No.",  450000.00, 90, "Distribution"),
     ("Automation Ghana Group", "transformers", "1500 kVA Distribution Transformer","Siemens", "T-1500-ONAN","1500 kVA 11/0.415 kV ONAN distribution transformer","No.",  685000.00, 90, "Distribution"),
     ("Automation Ghana Group", "transformers", "2000 kVA Distribution Transformer","Siemens", "T-2000-ONAN","2000 kVA 11/0.415 kV ONAN distribution transformer","No.", 1075000.00, 120,"Distribution"),
-    ("Powertech Generators Ghana Limited", "power_system", "100 kVA Diesel Generator (Silent)", "Perkins",  "GEN-100-S",  "100 kVA silent diesel generator with ATS panel",   "No.", 132500.00, 60, "Generators"),
-    ("Powertech Generators Ghana Limited", "power_system", "250 kVA Diesel Generator (Silent)", "FG Wilson","GEN-250-S",  "250 kVA silent diesel generator with ATS panel",   "No.", 265000.00, 60, "Generators"),
-    ("Powertech Generators Ghana Limited", "power_system", "500 kVA Diesel Generator (Silent)", "Cummins",  "GEN-500-S",  "500 kVA silent diesel generator with ATS panel",   "No.", 625000.00, 75, "Generators"),
-    ("Powertech Generators Ghana Limited", "power_system", "1000 kVA Diesel Generator (Silent)","Caterpillar","GEN-1000-S","1000 kVA silent diesel generator with ATS panel", "No.",1700000.00, 90, "Generators"),
+    ("Powertech Generators Ghana Limited", "generators", "100 kVA Diesel Generator (Silent)", "Perkins",  "GEN-100-S",  "100 kVA silent diesel generator with ATS panel",   "No.", 132500.00, 60, "Sound-proof Canopy"),
+    ("Powertech Generators Ghana Limited", "generators", "250 kVA Diesel Generator (Silent)", "FG Wilson","GEN-250-S",  "250 kVA silent diesel generator with ATS panel",   "No.", 265000.00, 60, "Sound-proof Canopy"),
+    ("Powertech Generators Ghana Limited", "generators", "500 kVA Diesel Generator (Silent)", "Cummins",  "GEN-500-S",  "500 kVA silent diesel generator with ATS panel",   "No.", 625000.00, 75, "Sound-proof Canopy"),
+    ("Powertech Generators Ghana Limited", "generators", "1000 kVA Diesel Generator (Silent)","Caterpillar","GEN-1000-S","1000 kVA silent diesel generator with ATS panel", "No.",1700000.00, 90, "Sound-proof Canopy"),
 
     # ---- SECTION G: Earthing + Lightning protection (Tricord / APT) ----
     ("Tricord Limited", "earthing", "Copper-bonded Earth Rod 16mm x 3m", "Furse",     "ER-16-3M",  "Copper-bonded earth rod 16mm dia, 3m long",  "No.",   285.00, 14, "Earth Rods"),
@@ -26725,12 +26746,12 @@ _LIBRARY_EXPANSION_PRODUCTS_GHS = [
     ("Grand Pacific Limited", "power_system", "200 kVA Online UPS (three-phase)", "Safenergy",  "S3-200K", "200 kVA online UPS, three-phase",                "No.",750000.00, 60, "UPS"),
 
     # ---- additional generators ----
-    ("Powertech Generators Ghana Limited", "power_system", "60 kVA Diesel Generator (silent)",  "Perkins", "GEN-60-S",  "60 kVA silent diesel gen, ATS",       "No.",  82500.00, 45, "Generators"),
-    ("Powertech Generators Ghana Limited", "power_system", "150 kVA Diesel Generator (silent)", "Cummins", "GEN-150-S", "150 kVA silent diesel gen, ATS",      "No.", 235000.00, 60, "Generators"),
-    ("Powertech Generators Ghana Limited", "power_system", "200 kVA Diesel Generator (silent)", "Cummins", "GEN-200-S", "200 kVA silent diesel gen, ATS",      "No.", 225000.00, 60, "Generators"),
-    ("Powertech Generators Ghana Limited", "power_system", "400 kVA Diesel Generator (silent)", "FG Wilson","GEN-400-S","400 kVA silent diesel gen, ATS",     "No.", 475000.00, 75, "Generators"),
-    ("Powertech Generators Ghana Limited", "power_system", "750 kVA Diesel Generator (silent)", "Caterpillar","GEN-750-S","750 kVA silent diesel gen, ATS",   "No.",1125000.00, 90, "Generators"),
-    ("Powertech Generators Ghana Limited", "power_system", "1500 kVA Diesel Generator (silent)","Caterpillar","GEN-1500-S","1500 kVA silent diesel gen, ATS","No.",2750000.00,120, "Generators"),
+    ("Powertech Generators Ghana Limited", "generators", "60 kVA Diesel Generator (silent)",  "Perkins", "GEN-60-S",  "60 kVA silent diesel gen, ATS",       "No.",  82500.00, 45, "Sound-proof Canopy"),
+    ("Powertech Generators Ghana Limited", "generators", "150 kVA Diesel Generator (silent)", "Cummins", "GEN-150-S", "150 kVA silent diesel gen, ATS",      "No.", 235000.00, 60, "Sound-proof Canopy"),
+    ("Powertech Generators Ghana Limited", "generators", "200 kVA Diesel Generator (silent)", "Cummins", "GEN-200-S", "200 kVA silent diesel gen, ATS",      "No.", 225000.00, 60, "Sound-proof Canopy"),
+    ("Powertech Generators Ghana Limited", "generators", "400 kVA Diesel Generator (silent)", "FG Wilson","GEN-400-S","400 kVA silent diesel gen, ATS",     "No.", 475000.00, 75, "Sound-proof Canopy"),
+    ("Powertech Generators Ghana Limited", "generators", "750 kVA Diesel Generator (silent)", "Caterpillar","GEN-750-S","750 kVA silent diesel gen, ATS",   "No.",1125000.00, 90, "Sound-proof Canopy"),
+    ("Powertech Generators Ghana Limited", "generators", "1500 kVA Diesel Generator (silent)","Caterpillar","GEN-1500-S","1500 kVA silent diesel gen, ATS","No.",2750000.00,120, "Sound-proof Canopy"),
 
     # ---- additional transformers (sizes 250 / 315 / 1250 / 2500 kVA) ----
     ("Automation Ghana Group", "transformers", "250 kVA Distribution Transformer", "ABB",     "T-250-ONAN",  "250 kVA 11/0.415 kV ONAN distribution transformer", "No.", 115000.00, 60, "Distribution"),

@@ -1,0 +1,155 @@
+# Migrate "Generators" subcategory products out of "power_system" and
+# into their own top-level category "generators".
+#
+# Steps (all wrapped in a single transaction for safety):
+#   1. INSERT product_categories row code='generators' (idempotent)
+#   2. UPDATE equipment_catalog rows where subcategory='Generators'
+#      AND category_id = power_system_id -> category_id = generators_id
+#   3. Optionally rename the now-redundant subcategory label on the
+#      moved rows from "Generators" to "Open-set" so they fit cleanly
+#      under the new category's subcategory taxonomy.
+#
+# Default = dry-run. confirm=APPLY commits. Per
+# feedback_workflow_dry_run_gate.md.
+
+name: Migrate Generators Category
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type APPLY to commit. Leave blank = dry-run preview (no UPDATE executed).'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet psycopg2-binary
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Run migration
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          python3 <<'PY'
+          import os, psycopg2
+          CONFIRM = os.environ.get("CONFIRM","")
+          dry_run = CONFIRM != "APPLY"
+          mode = "DRY-RUN" if dry_run else "APPLY"
+          print(f"=== {mode} MODE -- generators category migration ===")
+          if dry_run:
+              print("Re-run with -f confirm=APPLY to commit.")
+          print()
+
+          conn = psycopg2.connect(os.environ["DATABASE_URL"], sslmode="require")
+          conn.autocommit = False
+          cur = conn.cursor()
+
+          # --- Pre-state ---
+          cur.execute("SELECT id, code, name, display_order FROM product_categories WHERE code IN ('power_system','generators') ORDER BY display_order")
+          rows = cur.fetchall()
+          print("Existing categories (power_system + generators):")
+          for r in rows:
+              print(f"  id={r[0]:>3}  code={r[1]:<14}  name={r[2]:<25}  order={r[3]}")
+          power_id = next((r[0] for r in rows if r[1] == "power_system"), None)
+          gen_id   = next((r[0] for r in rows if r[1] == "generators"), None)
+          if not power_id:
+              print("ERROR: power_system category not in product_categories table.")
+              raise SystemExit(1)
+
+          # --- 1. Create generators category if missing ---
+          if gen_id is None:
+              prefix = "[would]" if dry_run else "[ok]   "
+              print(f"\n{prefix} INSERT product_categories code='generators' name='Generators' icon='bi-lightning-charge-fill' order=215")
+              if not dry_run:
+                  cur.execute(
+                      "INSERT INTO product_categories (code, name, icon, display_order, is_active) "
+                      "VALUES ('generators','Generators','bi-lightning-charge-fill',215,1) "
+                      "ON CONFLICT (code) DO NOTHING RETURNING id"
+                  )
+                  row = cur.fetchone()
+                  gen_id = row[0] if row else None
+                  if gen_id is None:
+                      # Re-read in case of ON CONFLICT path
+                      cur.execute("SELECT id FROM product_categories WHERE code='generators'")
+                      r = cur.fetchone()
+                      gen_id = r[0] if r else None
+                  print(f"          (assigned id={gen_id})")
+          else:
+              print(f"\n[have] generators category already exists at id={gen_id}")
+
+          # In dry-run, fake an id so the SELECTs below produce a useful preview.
+          preview_gen_id = gen_id if gen_id is not None else -1
+
+          # --- 2. Show rows that will be reassigned ---
+          cur.execute(
+              "SELECT id, name, brand, model, subcategory, price_usd "
+              "FROM equipment_catalog "
+              "WHERE category_id=%s AND LOWER(subcategory)=%s "
+              "ORDER BY id",
+              (power_id, "generators"),
+          )
+          to_move = cur.fetchall()
+          print(f"\n{len(to_move)} row(s) currently in power_system with subcategory='Generators':")
+          for r in to_move:
+              prefix = "[would]" if dry_run else "[ok]   "
+              print(f"  {prefix} id={r[0]:>4}  '{r[1]}'  brand={r[2]}  model={r[3]}  subcat='{r[4]}'  price={r[5]}")
+
+          # --- 3. Reassign + relabel subcategory to "Open-set" ---
+          if to_move and not dry_run and gen_id is not None:
+              cur.execute(
+                  "UPDATE equipment_catalog SET category_id=%s, subcategory='Open-set' "
+                  "WHERE category_id=%s AND LOWER(subcategory)=%s",
+                  (gen_id, power_id, "generators"),
+              )
+              print(f"\nUPDATE returned rowcount={cur.rowcount}")
+
+          if dry_run:
+              conn.rollback()
+              print(f"\nDRY-RUN complete. Would: create category (if missing) + move {len(to_move)} row(s). Nothing committed.")
+          else:
+              conn.commit()
+              print(f"\nAPPLIED: generators category present id={gen_id}; {len(to_move)} row(s) reassigned + relabelled 'Open-set'.")
+
+          # --- 4. Post-state (always show, even in dry-run) ---
+          cur.execute("SELECT COUNT(*) FROM equipment_catalog WHERE category_id=%s", (preview_gen_id,))
+          n_gen = cur.fetchone()[0] if preview_gen_id > 0 else 0
+          cur.execute("SELECT COUNT(*) FROM equipment_catalog WHERE category_id=%s AND LOWER(subcategory)=%s", (power_id, "generators"))
+          n_left = cur.fetchone()[0]
+          print(f"\nPost-state:")
+          print(f"  rows under 'generators' category:                              {n_gen}")
+          print(f"  rows still tagged subcategory='Generators' under power_system: {n_left}")
+
+          cur.close(); conn.close()
+          PY

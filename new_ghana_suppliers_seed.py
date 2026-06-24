@@ -102,8 +102,8 @@ _GHANA_PRODUCTS_GHS = [
     ("Grand Pacific Limited", "power_system", "80 kVA Online UPS Three-Phase", "Safenergy", "S3-80K", "80 kVA online double-conversion three-phase UPS, 1 yr warranty", "No.", 356250.00, 21, "UPS"),
 
     # ---- Powertech / Global Engineering: Cummins Generator ----
-    ("Powertech Generators Ghana Limited", "power_system", "325 kVA Cummins Standby Generator", "Cummins", "C325D5", "Prime 325kVA / Standby 330kVA, Cummins engine, Leroy Somer alternator, AMF DEEPSEA 6110 MkIII, 3-phase 230/400V 1500 rpm 50Hz, tropical radiator, residential silencer", "No.", 450000.00, 60, "Generators"),
-    ("Powertech Generators Ghana Limited", "power_system", "330 kVA Standby Generator (acoustic canopy)", "Cummins", "C330S-AC", "330kVA standby generator with acoustic canopy (75dBA at 1m), tropicalised radiator, residential silencer, electric start, audio alarms", "No.", 550000.00, 75, "Generators"),
+    ("Powertech Generators Ghana Limited", "generators", "325 kVA Cummins Standby Generator", "Cummins", "C325D5", "Prime 325kVA / Standby 330kVA, Cummins engine, Leroy Somer alternator, AMF DEEPSEA 6110 MkIII, 3-phase 230/400V 1500 rpm 50Hz, tropical radiator, residential silencer", "No.", 450000.00, 60, "Standby"),
+    ("Powertech Generators Ghana Limited", "generators", "330 kVA Standby Generator (acoustic canopy)", "Cummins", "C330S-AC", "330kVA standby generator with acoustic canopy (75dBA at 1m), tropicalised radiator, residential silencer, electric start, audio alarms", "No.", 550000.00, 75, "Sound-proof Canopy"),
 
     # ---- NESSTRA Ghana: LV/MV Power Systems ----
     ("NESSTRA Ghana Ltd", "panel_boards", "12-way 400A MCCB Distribution Panel (incomer 400A, 3P)", "NESSTRA", "MCCB-12W-400", "12-way TPN MCCB panel: 400A incomer 3P, 2x 160A 3P, 3x 100A 3P, 5x 63A 3P, 2x 125A 3P; indication lamps + DM outgoing", "No.", 64666.94, 30, "Main Panel"),
