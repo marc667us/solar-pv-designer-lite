@@ -18369,6 +18369,10 @@ _BOM_DEFAULT_RATES = {
     "profit_pct":     12.0,   # % of direct added as profit  (summed with overhead)
     "contingency_pct": 0.0,   # % risk reserve compounded after OH+P, before VAT
     "vat_pct":         0.0,   # % VAT applied as final layer
+    # 2026-06-24 (Cost Estimate v3): client-facing Labour line at the
+    # bottom of the table = materials_subtotal * labour_pct_client/100.
+    # Cap 10..30. Separate from the engine-level `labour_pct` above.
+    "labour_pct_client": 20.0,
 }
 
 
@@ -18389,6 +18393,7 @@ def _ensure_bom_rates_table():
                 updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
             "ALTER TABLE marketplace_bom_rates ADD COLUMN IF NOT EXISTS contingency_pct REAL DEFAULT 0",
+            "ALTER TABLE marketplace_bom_rates ADD COLUMN IF NOT EXISTS labour_pct_client REAL DEFAULT 20",
         ]:
             try:
                 with get_db() as c:
@@ -18415,6 +18420,11 @@ def _ensure_bom_rates_table():
             c.execute("ALTER TABLE marketplace_bom_rates ADD COLUMN contingency_pct REAL DEFAULT 0")
         except Exception:
             pass
+        # 2026-06-24 Cost Estimate v3: labour_pct_client (10..30).
+        try:
+            c.execute("ALTER TABLE marketplace_bom_rates ADD COLUMN labour_pct_client REAL DEFAULT 20")
+        except Exception:
+            pass
 
 
 def _bom_rates_for(bom_id: int) -> dict:
@@ -18424,7 +18434,7 @@ def _bom_rates_for(bom_id: int) -> dict:
     try:
         with get_db() as c:
             row = c.execute(
-                "SELECT labour_pct, overhead_pct, profit_pct, vat_pct, contingency_pct "
+                "SELECT labour_pct, overhead_pct, profit_pct, vat_pct, contingency_pct, labour_pct_client "
                 "FROM marketplace_bom_rates WHERE bom_id=?", (bom_id,),
             ).fetchone()
     except Exception:
@@ -18446,6 +18456,8 @@ def _bom_rates_for(bom_id: int) -> dict:
             "profit_pct":      float(row["profit_pct"]   or 0),
             "vat_pct":         float(row["vat_pct"]      or 0),
             "contingency_pct": float(row["contingency_pct"] or 0) if "contingency_pct" in _keys else 0.0,
+            "labour_pct_client": (max(10.0, min(30.0, float(row["labour_pct_client"] or 20.0)))
+                                  if "labour_pct_client" in _keys else 20.0),
         }
     return dict(_BOM_DEFAULT_RATES)
 
@@ -18576,15 +18588,30 @@ def boms_save_rates(bom_id):
         # Clamp to a sane window — protects the totals from a runaway 1e9 value.
         return max(0.0, min(100.0, v))
     lab, ovh, prf, cnt, vat = _pct("labour_pct"), _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
+    # 2026-06-24 Cost Estimate v3: client-facing labour line. Cap 10..30.
+    try:
+        _lab_c_raw = float(f.get("labour_pct_client", 20.0))
+    except (TypeError, ValueError):
+        _lab_c_raw = 20.0
+    lab_client = max(10.0, min(30.0, _lab_c_raw))
     try:
         with get_db() as c:
             # UPSERT — INSERT OR REPLACE on SQLite; ON CONFLICT on Postgres
-            c.execute(
-                "INSERT OR REPLACE INTO marketplace_bom_rates "
-                "(bom_id, labour_pct, overhead_pct, profit_pct, contingency_pct, vat_pct) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (bom_id, lab, ovh, prf, cnt, vat),
-            )
+            try:
+                c.execute(
+                    "INSERT OR REPLACE INTO marketplace_bom_rates "
+                    "(bom_id, labour_pct, overhead_pct, profit_pct, contingency_pct, vat_pct, labour_pct_client) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (bom_id, lab, ovh, prf, cnt, vat, lab_client),
+                )
+            except Exception:
+                # Column not migrated yet: fall back to legacy 6-col upsert.
+                c.execute(
+                    "INSERT OR REPLACE INTO marketplace_bom_rates "
+                    "(bom_id, labour_pct, overhead_pct, profit_pct, contingency_pct, vat_pct) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (bom_id, lab, ovh, prf, cnt, vat),
+                )
             c.execute(
                 "UPDATE marketplace_boms SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
                 (bom_id,),
@@ -18594,7 +18621,7 @@ def boms_save_rates(bom_id):
         except Exception: pass
         flash(f"Could not save rates: {_e!s}. The Cost Estimate is unchanged.", "danger")
         return redirect(url_for("boms_view", bom_id=bom_id))
-    flash(f"Rates updated — labour {lab}% / overhead {ovh}% / profit {prf}% / contingency {cnt}% / VAT {vat}%.", "success")
+    flash(f"Rates updated — labour {lab}% / overhead {ovh}% / profit {prf}% / contingency {cnt}% / VAT {vat}% / client labour {lab_client}%.", "success")
     return redirect(url_for("boms_view", bom_id=bom_id))
 
 
@@ -18639,19 +18666,22 @@ def boms_boq_xlsx(bom_id):
             pass
     cur_code = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
 
-    # Title + meta
-    ws["A1"] = f"Quick Cost Estimate (for Electricians) — {bom['title']}"
-    ws["A1"].font = title_font
-    ws.merge_cells("A1:G1")
-    ws["A2"] = f"Project: {bom['project_name'] or '-'}"
-    ws["A3"] = f"Client : {bom['client_name'] or '-'}"
-    ws["A4"] = f"Date   : {bom['updated_at']}"
+    # Title + meta (2026-06-24 v3: SolarPro Marketplace branding;
+    # Brand/Company/Phone columns dropped per owner directive).
+    ws["A1"] = "SolarPro Marketplace · Accra, Ghana"
+    ws["A1"].font = Font(bold=True, size=12, color="1E3A5F")
+    ws.merge_cells("A1:F1")
+    ws["A2"] = f"Quick Cost Estimate (for Electricians) — {bom['title']}"
+    ws["A2"].font = title_font
+    ws.merge_cells("A2:F2")
+    ws["A3"] = f"Project: {bom['project_name'] or '-'}"
+    ws["A4"] = f"Client : {bom['client_name'] or '-'}"
+    ws["A5"] = f"Date   : {bom['updated_at']}"
 
-    # Apinto / Agenda Commercial 9-column body (2026-06-22).
+    # 2026-06-24 v3: 6-column body. Brand/Company/Phone dropped.
     headers = ["#", "Description", "Qty", "Unit",
-               f"Basic Rate ({cur_code})", "Basic Rate (US$)",
-               "Brand", "Company", "Phone"]
-    HROW = 6
+               f"Basic Rate ({cur_code})", "Basic Rate (US$)"]
+    HROW = 7  # shifted +1 to make room for the branding row in A1
     for col, h in enumerate(headers, 1):
         cell = ws.cell(row=HROW, column=col, value=h)
         cell.font = header_font
@@ -18679,33 +18709,42 @@ def boms_boq_xlsx(bom_id):
         _fx = float(_brate or 1.0)
         rate_local = float(line["total_rate"] or 0)
         rate_usd   = (rate_local / _fx) if _fx else 0.0
-        brand   = (it["brand"] if "brand" in it.keys() and it["brand"] else (it["catalog_brand"] or "-"))
-        company = (it["supplier_name"] or "SolarPro Marketplace Services")
-        phone   = (it["supplier_phone"] if "supplier_phone" in it.keys() else "") or "-"
+        # 2026-06-24 v3: Brand/Company/Phone columns dropped.
         ws.cell(row=row, column=1, value=idx)
         ws.cell(row=row, column=2, value=_sanitize(it["custom_name"]))
         ws.cell(row=row, column=3, value=float(it["qty"] or 0))
         ws.cell(row=row, column=4, value=_sanitize(it["unit"]))
         ws.cell(row=row, column=5, value=round(rate_local, 2))
         ws.cell(row=row, column=6, value=round(rate_usd, 2))
-        ws.cell(row=row, column=7, value=_sanitize(brand))
-        ws.cell(row=row, column=8, value=_sanitize(company))
-        ws.cell(row=row, column=9, value=_sanitize(phone))
         for col in range(1, len(headers) + 1):
             ws.cell(row=row, column=col).border = box
         row += 1
 
-    # Subtotals + grand total (9-col layout: rate column is #5).
+    # Subtotals + materials total + labour line + grand total (6-col layout).
     row += 1
     for cat, sub in totals["category_totals"].items():
         ws.cell(row=row, column=2, value=f"{cat} subtotal (qty * rate, {cur_code})").font = bold
         ws.cell(row=row, column=5, value=round(sub, 2)).font = bold
         row += 1
     row += 1
+    # 2026-06-24 v3: Materials subtotal + Labour cost + Grand Total.
+    _mat_total   = float(totals.get("grand_total", 0) or 0)
+    _lab_c_pct   = float(rates.get("labour_pct_client", 20.0) or 20.0)
+    _lab_c_pct   = max(10.0, min(30.0, _lab_c_pct))
+    _lab_c_amt   = _mat_total * _lab_c_pct / 100.0
+    _final_total = _mat_total + _lab_c_amt
+    ws.cell(row=row, column=2, value=f"Materials subtotal ({cur_code})").font = bold
+    ws.cell(row=row, column=5, value=round(_mat_total, 2)).font = bold
+    row += 1
+    ws.cell(row=row, column=2, value=f"Labour cost — {_lab_c_pct:.0f}% of materials ({cur_code})").font = bold
+    ws.cell(row=row, column=5, value=round(_lab_c_amt, 2)).font = bold
+    row += 1
     ws.cell(row=row, column=2, value=f"GRAND TOTAL ({cur_code})").font = title_font
-    ws.cell(row=row, column=5, value=round(totals["grand_total"], 2)).font = title_font
+    ws.cell(row=row, column=5, value=round(_final_total, 2)).font = title_font
+    row += 2
+    ws.cell(row=row, column=2, value="SolarPro Marketplace · Accra, Ghana").font = Font(italic=True, color="9090B0")
 
-    for col, w in enumerate([5, 36, 7, 8, 16, 16, 14, 24, 18], 1):
+    for col, w in enumerate([5, 38, 8, 8, 18, 18], 1):
         ws.column_dimensions[get_column_letter(col)].width = w
 
     if include_buildup:
@@ -18805,6 +18844,8 @@ def boms_boq_pdf(bom_id):
             pass
     cur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
     md = []
+    md.append("**SolarPro Marketplace · Accra, Ghana**  ")
+    md.append("")
     md.append(f"# Quick Cost Estimate (for Electricians) — {bom['title']}" + (" (Internal Build-Up)" if include_buildup else ""))
     if bom["project_name"]:
         md.append(f"**Project:** {bom['project_name']}  ")
@@ -18826,23 +18867,21 @@ def boms_boq_pdf(bom_id):
     md.append("")
     # Apinto / Agenda Commercial 9-column body (2026-06-22).
     _fx = float(_brate or 1.0) if '_brate' in dir() else float(rates.get('fx_rate', 1.0) or 1.0)
-    md.append(f"| # | Description | Qty | Unit | Basic Rate ({cur}) | Basic Rate (US$) | Brand | Company | Phone |")
-    md.append("|---|---|---|---|---|---|---|---|---|")
+    # 2026-06-24 v3: 6-col table (Brand/Company/Phone dropped).
+    md.append(f"| # | Description | Qty | Unit | Basic Rate ({cur}) | Basic Rate (US$) |")
+    md.append("|---|---|---|---|---|---|")
     prev_cat = None
     for idx, line in enumerate(totals["lines"], 1):
         it = line["item"]
         cat = it["category_name"] or "Uncategorised"
         if cat != prev_cat:
-            md.append(f"| | **{cat}** |  |  |  |  |  |  |  |")
+            md.append(f"| | **{cat}** |  |  |  |  |")
             prev_cat = cat
         rate_local = float(line['total_rate'] or 0)
         rate_usd   = (rate_local / _fx) if _fx else 0.0
-        brand   = (it['brand'] if 'brand' in it.keys() and it['brand'] else (it['catalog_brand'] or '-'))
-        company = (it['supplier_name'] or 'SolarPro Marketplace Services')
-        phone   = (it['supplier_phone'] if 'supplier_phone' in it.keys() else '') or '-'
         md.append(
             f"| {idx} | {it['custom_name']} | {it['qty']:.2f} | {it['unit']} | "
-            f"{rate_local:,.2f} | {rate_usd:,.2f} | {brand} | {company} | {phone} |"
+            f"{rate_local:,.2f} | {rate_usd:,.2f} |"
         )
     if include_buildup:
         md.append("")
@@ -18866,7 +18905,20 @@ def boms_boq_pdf(bom_id):
     for cat, sub in totals["category_totals"].items():
         md.append(f"| {cat} | {sub:.2f} |")
     md.append("")
-    md.append(f"## Grand total\n\n**{cur} {totals['grand_total']:.2f}**\n")
+    # 2026-06-24 v3: client-facing Labour line under Materials grand total.
+    _materials_total = float(totals.get("grand_total", 0) or 0)
+    _lab_client_pct = float(rates.get("labour_pct_client", 20.0) or 20.0)
+    _lab_amt = _materials_total * _lab_client_pct / 100.0
+    _final_total = _materials_total + _lab_amt
+    md.append("")
+    md.append("## Totals")
+    md.append("")
+    md.append(f"| Line | Amount ({cur}) |")
+    md.append("|---|---|")
+    md.append(f"| Materials subtotal | {_materials_total:,.2f} |")
+    md.append(f"| Labour cost ({_lab_client_pct:.0f}% of materials) | {_lab_amt:,.2f} |")
+    md.append(f"| **GRAND TOTAL** | **{_final_total:,.2f}** |")
+    md.append("")
 
     safe_title = re.sub(r"[^A-Za-z0-9_.-]+", "_", bom["title"])[:60]
     return _render_pdf(
@@ -26311,9 +26363,16 @@ def admin_marketplace_brands_toggle(bid):
 _ONLINE_WINDOW_SECS = 300   # 5 min counts as online
 _LAST_SEEN_WRITE_GAP = 60   # only re-write last_seen once per minute per session
 
+# Process-level flag: ensure the last_seen column exists eagerly so the
+# first UPDATE doesn't silently fail on a fresh DB.
+_USERS_LAST_SEEN_READY = {"v": False}
+
 
 def _ensure_users_last_seen():
-    """Idempotent ALTER on both engines."""
+    """Idempotent ALTER on both engines. Marks the process flag on success
+    so subsequent calls are cheap no-ops."""
+    if _USERS_LAST_SEEN_READY["v"]:
+        return
     for _ddl in (
         "ALTER TABLE users ADD COLUMN last_seen TEXT DEFAULT NULL",
     ):
@@ -26322,15 +26381,22 @@ def _ensure_users_last_seen():
                 c.execute(_ddl)
         except Exception:
             pass
+    _USERS_LAST_SEEN_READY["v"] = True
 
 
 @app.before_request
 def _bump_last_seen():
-    """Update users.last_seen at most once per minute per active session."""
+    """Update users.last_seen at most once per minute per active session.
+    2026-06-24 fix: eager-init the column once per process so the first
+    UPDATE on a fresh DB doesn't silently fail."""
     try:
         uid = session.get("user_id")
         if not uid:
             return
+        # Eager column init -- one-time per process.
+        if not _USERS_LAST_SEEN_READY["v"]:
+            try: _ensure_users_last_seen()
+            except Exception: pass
         # Throttle via a session marker so we don't write on every request.
         try:
             from time import time as _t
@@ -26351,8 +26417,39 @@ def _bump_last_seen():
         except Exception:
             try: _ensure_users_last_seen()
             except Exception: pass
+            # Retry the update after the column was just added.
+            try:
+                with get_db() as c:
+                    c.execute(
+                        "UPDATE users SET last_seen=CURRENT_TIMESTAMP WHERE id=?",
+                        (uid,),
+                    )
+            except Exception:
+                pass
     except Exception:
         pass
+
+
+@app.route("/admin/users/refresh-online", methods=["POST"])
+def admin_users_refresh_online():
+    """Force-update the current session's last_seen + return to /admin/users.
+    Useful when the throttle hasn't fired yet for the calling admin."""
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    try:
+        with get_db() as c:
+            c.execute(
+                "UPDATE users SET last_seen=CURRENT_TIMESTAMP WHERE id=?",
+                (session["user_id"],),
+            )
+        try: session.pop("_ls_w", None)
+        except Exception: pass
+        flash("Your online status was refreshed.", "info")
+    except Exception as _e:
+        try: app.logger.warning("refresh-online failed: %s", _e)
+        except Exception: pass
+        flash("Could not refresh online status.", "warning")
+    return redirect(url_for("admin_users"))
 
 
 def _online_users(window_secs=None):

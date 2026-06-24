@@ -319,13 +319,63 @@
       {% for cat, sub in totals.category_totals.items() %}
       <tr><td colspan="5" class="text-end text-secondary">{{ cat }} subtotal</td><td class="text-end fw-bold">{{ (sub)|money }}</td><td></td></tr>
       {% endfor %}
-      <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
+      {# 2026-06-24 v3: Materials subtotal + Labour cost + Grand Total. #}
+      {% set _materials = totals.grand_total or 0 %}
+      {% set _lab_pct = bom_rates.labour_pct_client if (bom_rates is defined and bom_rates.labour_pct_client is defined) else 20 %}
+      {% set _lab_pct = (_lab_pct if _lab_pct >= 10 else 10) %}
+      {% set _lab_pct = (_lab_pct if _lab_pct <= 30 else 30) %}
+      {% set _lab_amt = _materials * _lab_pct / 100.0 %}
+      {% set _final = _materials + _lab_amt %}
+      <tr style="background:rgba(14,165,233,.06);border-top:1px dashed #1e1e3a">
+        <td colspan="5" class="text-end fw-bold text-secondary">Materials subtotal ({{ currency or 'USD' }})</td>
+        <td class="text-end fw-bold">{{ _materials|money }}</td>
+        <td></td>
+      </tr>
+      <tr style="background:rgba(14,165,233,.10)">
+        <td colspan="5" class="text-end fw-bold text-info">Labour cost &mdash; {{ '%.0f'|format(_lab_pct) }}% of materials ({{ currency or 'USD' }})</td>
+        <td class="text-end fw-bold text-info">{{ _lab_amt|money }}</td>
+        <td></td>
+      </tr>
+      <tr style="background:rgba(245,158,11,.18);border-top:2px solid #f59e0b">
         <td colspan="5" class="text-end fw-black" style="font-size:14px">GRAND TOTAL ({{ currency or 'USD' }})</td>
-        <td class="text-end fw-black text-warning" style="font-size:18px">{{ (totals.grand_total)|money }}</td>
+        <td class="text-end fw-black text-warning" style="font-size:18px">{{ _final|money }}</td>
         <td></td>
       </tr>
     </tfoot>
   </table>
+
+  <div class="text-center text-secondary small mt-2 mb-2" style="font-style:italic;letter-spacing:1px">
+    <i class="bi bi-shop me-1"></i>SolarPro Marketplace &middot; Accra, Ghana
+  </div>
+
+  {# Labour-percent picker -- shown on client view; persists to bom_rates.labour_pct_client. #}
+  <div class="solar-card p-3 mt-3 no-print" style="background:rgba(14,165,233,.05);border:1px solid rgba(14,165,233,.30)">
+    <form method="POST" action="{{ url_for('boms_save_rates', bom_id=bom.id) }}" class="row g-2 align-items-end">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {# Carry the existing markup rates through so this form doesn't reset them. #}
+      <input type="hidden" name="labour_pct"      value="{{ bom_rates.labour_pct|default(0) }}">
+      <input type="hidden" name="overhead_pct"    value="{{ bom_rates.overhead_pct|default(0) }}">
+      <input type="hidden" name="profit_pct"      value="{{ bom_rates.profit_pct|default(0) }}">
+      <input type="hidden" name="contingency_pct" value="{{ bom_rates.contingency_pct|default(0) }}">
+      <input type="hidden" name="vat_pct"         value="{{ bom_rates.vat_pct|default(0) }}">
+      <div class="col-md-4">
+        <label class="form-label small text-info fw-bold"><i class="bi bi-people-fill me-1"></i>Labour cost % of materials</label>
+        <input type="range" min="10" max="30" step="1" name="labour_pct_client" value="{{ _lab_pct }}"
+               class="form-range" oninput="document.getElementById('lpcv').textContent=this.value+'%'">
+        <div class="text-secondary small mt-1">10% – 30% &middot; <strong id="lpcv" class="text-info">{{ '%.0f'|format(_lab_pct) }}%</strong> &middot; click Save to apply.</div>
+      </div>
+      <div class="col-md-3">
+        <button type="submit" class="btn btn-info fw-bold btn-sm w-100">
+          <i class="bi bi-save me-1"></i>Save labour %
+        </button>
+      </div>
+      <div class="col-md-5">
+        <div class="text-secondary small">
+          Updates the Labour cost line above and re-emits the Excel/PDF/email exports with the new percentage.
+        </div>
+      </div>
+    </form>
+  </div>
   {% endif %}
 
   <div class="text-secondary small mt-4">

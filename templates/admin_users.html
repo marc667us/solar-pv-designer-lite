@@ -91,6 +91,13 @@
     {% endfor %}
   </div>
   <span id="userCount" class="text-secondary small">{{ total }} users</span>
+  <form method="POST" action="{{ url_for('admin_users_refresh_online') }}" class="ms-auto" style="display:inline">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-outline-success btn-sm" title="Force-update your own last_seen so the dot reflects right now">
+      <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#16a34a;border:1px solid #0f6b2e;box-shadow:0 0 6px #16a34a;margin-right:5px;vertical-align:middle"></span>
+      Refresh my online status
+    </button>
+  </form>
 </div>
 
 <!-- Users table -->
@@ -128,7 +135,13 @@
             <div>
               <div class="fw-bold" style="color:#e0e0f0">
                 {% set _is_on_inline = (online_ids is defined and u.id in online_ids) %}
-                <span class="me-1" title="{{ 'Online now' if _is_on_inline else 'Offline' }}" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:{{ '#22c55e' if _is_on_inline else '#6868a0' }};{{ 'box-shadow:0 0 5px #22c55e;' if _is_on_inline else '' }}vertical-align:middle"></span>
+                {# 2026-06-24: deeper green + larger dot + multi-layer glow so the indicator is unmistakable on dark theme. #}
+                <span class="me-1" title="{{ 'Online now' if _is_on_inline else 'Offline' }}"
+                      style="display:inline-block;width:12px;height:12px;border-radius:50%;
+                             background:{{ '#16a34a' if _is_on_inline else '#5a5a82' }};
+                             border:2px solid {{ '#0f6b2e' if _is_on_inline else '#444466' }};
+                             {{ 'box-shadow:0 0 8px 2px #16a34a, 0 0 14px 1px #22c55e88;' if _is_on_inline else '' }}
+                             vertical-align:middle"></span>
                 {{ u.username }}
                 {% if u.is_admin %}
                 <i class="bi bi-shield-fill ms-1" style="font-size:9px;color:#f59e0b" title="Admin"></i>
@@ -146,13 +159,13 @@
           {% set _is_on = (online_ids is defined and u.id in online_ids) %}
           {% if _is_on %}
             {% set _since = (online_map or {}).get(u.id, 0) %}
-            <span class="badge" style="background:rgba(34,197,94,.18);color:#22c55e;padding:4px 9px;font-weight:700">
-              <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 4px #22c55e;margin-right:4px"></span>Online
+            <span class="badge" style="background:rgba(22,163,74,.22);color:#16a34a;padding:4px 9px;font-weight:700;border:1px solid #16a34a55">
+              <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#16a34a;border:1px solid #0f6b2e;box-shadow:0 0 6px #16a34a;margin-right:5px"></span>Online
             </span>
             <div class="text-secondary" style="font-size:10px;margin-top:2px">{{ _since }}s ago</div>
           {% else %}
             <span class="badge" style="background:rgba(120,120,160,.18);color:#9090c0;padding:4px 9px;font-weight:700">
-              <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#6868a0;margin-right:4px"></span>Offline
+              <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#5a5a82;border:1px solid #444466;margin-right:5px"></span>Offline
             </span>
             {% if u.last_seen %}<div class="text-secondary" style="font-size:10px;margin-top:2px" title="Last seen">last: {{ u.last_seen[:16] }}</div>{% endif %}
           {% endif %}
