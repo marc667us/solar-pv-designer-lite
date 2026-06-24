@@ -21,8 +21,8 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Type APPLY to commit changes. Anything else = dry-run preview only (no UPDATE executed).'
-        required: true
+        description: 'Type APPLY to commit changes. Leave blank = dry-run preview only (no UPDATE executed).'
+        required: false
         default: ''
 
 permissions:
