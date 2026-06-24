@@ -17709,10 +17709,15 @@ def _notify_buyer_rfq_response(buyer_email, buyer_name, supplier_name, rfq_title
 # (.xlsx via openpyxl) or PDF (via solar's existing MarkdownPdf chain).
 
 _BOM_DEFAULT_RATES = {
-    "labour_pct":   15.0,   # % of basic supply rate added as install labour
-    "overhead_pct":  8.0,   # % of (supply + labour) added as overhead
-    "profit_pct":   12.0,   # % of (supply + labour + overhead) added as profit
-    "vat_pct":       0.0,   # % VAT applied AFTER profit
+    # Task #4 (2026-06-24): BOM aligned to BOQ chain --
+    #   final = direct * (1 + (ovh+prf)/100) * (1 + cnt/100) * (1 + vat/100)
+    #   where direct = basic * (1 + lab/100).
+    # Sum OH+P (was compound) + new contingency layer.
+    "labour_pct":     15.0,   # % of basic supply rate added as install labour
+    "overhead_pct":    8.0,   # % of direct added as overhead (summed with profit)
+    "profit_pct":     12.0,   # % of direct added as profit  (summed with overhead)
+    "contingency_pct": 0.0,   # % risk reserve compounded after OH+P, before VAT
+    "vat_pct":         0.0,   # % VAT applied as final layer
 }
 
 
@@ -17724,13 +17729,15 @@ def _ensure_bom_rates_table():
         # marketplace bootstrap above is one-shot at first marketplace hit.
         for ddl in [
             """CREATE TABLE IF NOT EXISTS marketplace_bom_rates (
-                bom_id       INTEGER PRIMARY KEY,
-                labour_pct   REAL DEFAULT 15,
-                overhead_pct REAL DEFAULT 8,
-                profit_pct   REAL DEFAULT 12,
-                vat_pct      REAL DEFAULT 0,
-                updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                bom_id           INTEGER PRIMARY KEY,
+                labour_pct       REAL DEFAULT 15,
+                overhead_pct     REAL DEFAULT 8,
+                profit_pct       REAL DEFAULT 12,
+                contingency_pct  REAL DEFAULT 0,
+                vat_pct          REAL DEFAULT 0,
+                updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
+            "ALTER TABLE marketplace_bom_rates ADD COLUMN IF NOT EXISTS contingency_pct REAL DEFAULT 0",
         ]:
             try:
                 with get_db() as c:
@@ -17742,15 +17749,21 @@ def _ensure_bom_rates_table():
         c.executescript(
             """
             CREATE TABLE IF NOT EXISTS marketplace_bom_rates (
-                bom_id       INTEGER PRIMARY KEY,
-                labour_pct   REAL DEFAULT 15,
-                overhead_pct REAL DEFAULT 8,
-                profit_pct   REAL DEFAULT 12,
-                vat_pct      REAL DEFAULT 0,
-                updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
+                bom_id           INTEGER PRIMARY KEY,
+                labour_pct       REAL DEFAULT 15,
+                overhead_pct     REAL DEFAULT 8,
+                profit_pct       REAL DEFAULT 12,
+                contingency_pct  REAL DEFAULT 0,
+                vat_pct          REAL DEFAULT 0,
+                updated_at       TEXT DEFAULT CURRENT_TIMESTAMP
             );
             """
         )
+        # SQLite-side idempotent ALTER for pre-Task-#4 DBs.
+        try:
+            c.execute("ALTER TABLE marketplace_bom_rates ADD COLUMN contingency_pct REAL DEFAULT 0")
+        except Exception:
+            pass
 
 
 def _bom_rates_for(bom_id: int) -> dict:
@@ -17760,17 +17773,28 @@ def _bom_rates_for(bom_id: int) -> dict:
     try:
         with get_db() as c:
             row = c.execute(
-                "SELECT labour_pct, overhead_pct, profit_pct, vat_pct "
+                "SELECT labour_pct, overhead_pct, profit_pct, vat_pct, contingency_pct "
                 "FROM marketplace_bom_rates WHERE bom_id=?", (bom_id,),
             ).fetchone()
     except Exception:
-        row = None
+        # contingency_pct missing on pre-Task-#4 DBs -- retry without it.
+        try:
+            with get_db() as c:
+                row = c.execute(
+                    "SELECT labour_pct, overhead_pct, profit_pct, vat_pct "
+                    "FROM marketplace_bom_rates WHERE bom_id=?", (bom_id,),
+                ).fetchone()
+        except Exception:
+            row = None
     if row:
+        # Postgres rows expose .keys(); SQLite Row objects do too.
+        _keys = list(row.keys()) if hasattr(row, "keys") else []
         return {
-            "labour_pct":   float(row["labour_pct"]   or 0),
-            "overhead_pct": float(row["overhead_pct"] or 0),
-            "profit_pct":   float(row["profit_pct"]   or 0),
-            "vat_pct":      float(row["vat_pct"]      or 0),
+            "labour_pct":      float(row["labour_pct"]   or 0),
+            "overhead_pct":    float(row["overhead_pct"] or 0),
+            "profit_pct":      float(row["profit_pct"]   or 0),
+            "vat_pct":         float(row["vat_pct"]      or 0),
+            "contingency_pct": float(row["contingency_pct"] or 0) if "contingency_pct" in _keys else 0.0,
         }
     return dict(_BOM_DEFAULT_RATES)
 
@@ -17782,10 +17806,11 @@ def _bom_totals_with_rates(items, rates: dict, fx_rate: float = 1.0) -> dict:
     Returns the same shape as the original _bom_totals() so existing
     templates that only use {lines, category_totals, grand_total} keep
     working — but each line dict now also carries the rate breakdown."""
-    lab_pct  = max(0.0, float(rates.get("labour_pct",   0)))
-    ovh_pct  = max(0.0, float(rates.get("overhead_pct", 0)))
-    prf_pct  = max(0.0, float(rates.get("profit_pct",   0)))
-    vat_pct  = max(0.0, float(rates.get("vat_pct",      0)))
+    lab_pct  = max(0.0, float(rates.get("labour_pct",      0)))
+    ovh_pct  = max(0.0, float(rates.get("overhead_pct",    0)))
+    prf_pct  = max(0.0, float(rates.get("profit_pct",      0)))
+    cnt_pct  = max(0.0, float(rates.get("contingency_pct", 0)))
+    vat_pct  = max(0.0, float(rates.get("vat_pct",         0)))
 
     lines = []
     cat_totals: dict = {}
@@ -17798,15 +17823,26 @@ def _bom_totals_with_rates(items, rates: dict, fx_rate: float = 1.0) -> dict:
         # Convert source USD to target currency at the rate the route
         # looked up from _CURRENCY_RATES_FROM_USD. All downstream rates
         # (labour, overhead, profit, VAT) inherit the currency.
-        basic_rate = basic_rate_usd * float(fx_rate or 1.0)
+        # Task #4 Option A (2026-06-24): BOQ-aligned chain.
+         #   direct      = basic * (1 + lab/100)
+        #   subtotal_op = direct * (1 + (ovh+prf)/100)   <-- summed, not compounded
+        #   subtotal_c  = subtotal_op * (1 + cnt/100)
+        #   total_rate  = subtotal_c  * (1 + vat/100)
+        # Template-compat: overhead + profit split BACK out for display.
+        basic_rate     = basic_rate_usd * float(fx_rate or 1.0)
         install_labour = basic_rate * lab_pct / 100.0
-        supply_install = basic_rate + install_labour
-        overhead       = supply_install * ovh_pct / 100.0
-        with_overhead  = supply_install + overhead
-        profit         = with_overhead * prf_pct / 100.0
-        before_vat     = with_overhead + profit
-        vat            = before_vat * vat_pct / 100.0
-        total_rate     = before_vat + vat
+        direct         = basic_rate + install_labour
+        overhead       = direct * ovh_pct / 100.0
+        profit         = direct * prf_pct / 100.0
+        after_ohp      = direct + overhead + profit
+        contingency    = after_ohp * cnt_pct / 100.0
+        after_cnt      = after_ohp + contingency
+        vat            = after_cnt * vat_pct / 100.0
+        total_rate     = after_cnt + vat
+        # Names preserved for template back-compat:
+        supply_install = direct  # alias
+        with_overhead  = direct + overhead
+        before_vat     = after_cnt
         qty            = float(it["qty"] or 0)
         line_total     = total_rate * qty
         cat = it["category_name"] or "Uncategorised"
@@ -17818,6 +17854,7 @@ def _bom_totals_with_rates(items, rates: dict, fx_rate: float = 1.0) -> dict:
             "install_labour": install_labour,
             "overhead": overhead,
             "profit": profit,
+            "contingency": contingency,
             "vat": vat,
             "total_rate": total_rate,
             "line_total": line_total,
@@ -17855,15 +17892,15 @@ def boms_save_rates(bom_id):
             v = _BOM_DEFAULT_RATES[name]
         # Clamp to a sane window — protects the totals from a runaway 1e9 value.
         return max(0.0, min(100.0, v))
-    lab, ovh, prf, vat = _pct("labour_pct"), _pct("overhead_pct"), _pct("profit_pct"), _pct("vat_pct")
+    lab, ovh, prf, cnt, vat = _pct("labour_pct"), _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
     try:
         with get_db() as c:
             # UPSERT — INSERT OR REPLACE on SQLite; ON CONFLICT on Postgres
             c.execute(
                 "INSERT OR REPLACE INTO marketplace_bom_rates "
-                "(bom_id, labour_pct, overhead_pct, profit_pct, vat_pct) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (bom_id, lab, ovh, prf, vat),
+                "(bom_id, labour_pct, overhead_pct, profit_pct, contingency_pct, vat_pct) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (bom_id, lab, ovh, prf, cnt, vat),
             )
             c.execute(
                 "UPDATE marketplace_boms SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
@@ -17874,7 +17911,7 @@ def boms_save_rates(bom_id):
         except Exception: pass
         flash(f"Could not save rates: {_e!s}. The Cost Estimate is unchanged.", "danger")
         return redirect(url_for("boms_view", bom_id=bom_id))
-    flash(f"Rates updated — labour {lab}% / overhead {ovh}% / profit {prf}% / VAT {vat}%.", "success")
+    flash(f"Rates updated — labour {lab}% / overhead {ovh}% / profit {prf}% / contingency {cnt}% / VAT {vat}%.", "success")
     return redirect(url_for("boms_view", bom_id=bom_id))
 
 

@@ -2,6 +2,18 @@
 {% block title %}BOQ — {{ bom.title }}{% endblock %}
 {% block content %}
 
+{# Task #4 changelog banner -- dismissable; remove after 2026-07-08 (14 days). #}
+<div class="alert alert-info alert-dismissible no-print" role="alert"
+     style="background:#0a1a2a;border:1px solid #1e4a6a;color:#a0d0e8;font-size:13px"
+     id="bomFormulaChangelog">
+  <strong><i class="bi bi-info-circle me-1"></i>Rate buildup updated 2026-06-24.</strong>
+  Formula now matches the BOQ chain used by GRA/FIRS/KRA: <code>direct × (1 + (OH+P)/100) × (1 + cont/100) × (1 + VAT/100)</code>.
+  Existing BOMs re-open ~2% lower than before (the previous compound-OH×P formula slightly over-stated totals).
+  PDFs/Excels already exported are unchanged.
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"
+          style="filter:invert(1) hue-rotate(180deg)"></button>
+</div>
+
 {# ------------------------------------------------------------------
    BOQ display rule:
      Client view  = # · Description · Unit · Qty · Rate · Amount · Remarks
