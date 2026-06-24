@@ -14,15 +14,15 @@
     </div>
   </div>
   <div class="d-flex gap-2 flex-wrap">
-    <a href="{{ url_for('boms_boq', bom_id=bom.id) }}" class="btn btn-outline-warning btn-sm" title="Cost Estimate (rates + totals)"><i class="bi bi-calculator me-1"></i>Cost Estimate</a>
-    <a href="{{ url_for('boms_boq_xlsx', bom_id=bom.id) }}" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-excel me-1"></i>Excel</a>
-    <a href="{{ url_for('boms_boq_pdf', bom_id=bom.id) }}" class="btn btn-outline-danger btn-sm"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</a>
     {% if items %}
+    <a href="{{ url_for('boms_basic_prices', bom_id=bom.id) }}" class="btn btn-info fw-bold btn-sm" title="Stage 2: catalog basic price, no mark-ups"><i class="bi bi-tag me-1"></i>Get Basic Price Schedule</a>
     <form method="POST" action="{{ url_for('boms_clone_to_rfq', bom_id=bom.id) }}" style="display:inline">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      <button class="btn btn-warning fw-bold btn-sm"><i class="bi bi-send me-1"></i>Clone to RFQ</button>
+      <button class="btn btn-outline-warning fw-bold btn-sm" title="Send to suppliers for live quotes"><i class="bi bi-send me-1"></i>Clone to RFQ</button>
     </form>
     {% endif %}
+    {# Excel/PDF/Email exports moved to the Cost Estimate page -- they carry cost
+       data and must NOT appear on the BOM (per project rule). #}
   </div>
 </div>
 
@@ -36,10 +36,12 @@
     </div>
   </div>
   <div class="col-md-6">
-    <div class="kpi-card h-100">
-      <div class="kpi-label"><i class="bi bi-info-circle me-1"></i>Cost view</div>
-      <div class="kpi-value" style="font-size:18px;line-height:1.2"><a href="{{ url_for('boms_boq', bom_id=bom.id) }}" class="text-warning">Cost Estimate</a></div>
-      <div class="kpi-unit">rates, markups and totals live there &mdash; not on the BOM</div>
+    <div class="kpi-card h-100" style="border:1px solid #0ea5e944">
+      <div class="kpi-label"><i class="bi bi-arrow-right-circle me-1 text-info"></i>Next step</div>
+      <div class="kpi-value" style="font-size:18px;line-height:1.2">
+        <a href="{{ url_for('boms_basic_prices', bom_id=bom.id) }}" class="text-info">Get Basic Price Schedule &rarr;</a>
+      </div>
+      <div class="kpi-unit">basic prices first &mdash; Full Cost Estimate after</div>
     </div>
   </div>
 </div>

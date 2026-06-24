@@ -16404,6 +16404,11 @@ def boms_new():
 @app.route("/boms/<int:bom_id>")
 @login_required
 def boms_view(bom_id):
+    """BOM editor -- material list ONLY. Cost lives on /boms/<id>/boq
+    (the Cost Estimate). The owner rule: BOM = quantities, Cost Estimate
+    = the money. We DO NOT call _bom_totals_with_rates here so the cost
+    chain never runs on this surface, period.
+    """
     _ensure_bom_tables()
     uid = session["user_id"]
     bom = _bom_owned_or_404(bom_id, uid)
@@ -16411,13 +16416,83 @@ def boms_view(bom_id):
     bom_rates = _bom_rates_for(bom_id)
     _bcur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
     _brate = _CURRENCY_RATES_FROM_USD.get(_bcur, 1.0)
-    totals = _bom_totals_with_rates(items, bom_rates, fx_rate=_brate)
+    # Cost-free totals shape: template only reads .lines[].item +
+    # .category_totals|length. No basic_rate / overhead / profit / vat
+    # / line_total / grand_total fields populated.
+    _cat_seen = {}
+    _lines = []
+    for _it in items:
+        try:
+            _cat = (_it["category_name"] if "category_name" in _it.keys() else None) or "Uncategorised"
+        except Exception:
+            _cat = "Uncategorised"
+        _cat_seen[_cat] = _cat_seen.get(_cat, 0) + 1
+        _lines.append({"item": _it})
+    totals = {"lines": _lines, "category_totals": _cat_seen, "grand_total": None}
     return render_template(
         "bom_view.html",
         user=current_user(),
         bom=bom, items=items, totals=totals, bom_rates=bom_rates,
         currency=_bcur, fx_rate=_brate,
         currencies=list(_CURRENCY_RATES_FROM_USD.keys()),
+        rates_as_of=_CURRENCY_RATES_AS_OF,
+    )
+
+
+# === Stage 2: Basic Price Schedule (Task #10, 2026-06-24) ===
+# Per owner rule, BOM (Stage 1) carries NO cost; user clicks
+# "Get Basic Price Schedule" to land here, where catalog basic price
+# (supply rate only, no mark-ups) appears next to each line, then
+# "Get Full Cost Estimate" advances to /boms/<id>/boq for the BOQ
+# chain with OH/profit/contingency/VAT.
+@app.route("/boms/<int:bom_id>/basic-prices")
+@login_required
+def boms_basic_prices(bom_id):
+    """Stage 2 view: per-item catalog basic price (no mark-ups).
+
+    Computes only:
+      basic_price_local = catalog_price_usd * fx_rate
+      subtotal_local    = basic_price_local * qty
+      grand_basic_local = sum(subtotal_local)
+    No labour, no overhead, no profit, no contingency, no VAT.
+    That chain runs in /boms/<bom_id>/boq (Stage 3).
+    """
+    _ensure_bom_tables()
+    uid = session["user_id"]
+    bom = _bom_owned_or_404(bom_id, uid)
+    items = _bom_items_with_prices(bom_id)
+    _bcur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
+    _brate = float(_CURRENCY_RATES_FROM_USD.get(_bcur, 1.0) or 1.0)
+    lines = []
+    grand_basic = 0.0
+    cat_totals = {}
+    for it in items:
+        try:
+            cat = (it["category_name"] if "category_name" in it.keys() else None) or "Uncategorised"
+        except Exception:
+            cat = "Uncategorised"
+        basic_usd = float(
+            (it["unit_price_override"] if it["unit_price_override"] is not None
+             else (it["catalog_price"] or 0)) or 0
+        )
+        basic_local = basic_usd * _brate
+        qty = float(it["qty"] or 0)
+        subtotal = basic_local * qty
+        grand_basic += subtotal
+        cat_totals[cat] = cat_totals.get(cat, 0.0) + subtotal
+        lines.append({
+            "item": it,
+            "category": cat,
+            "basic_price": basic_local,
+            "qty": qty,
+            "subtotal": subtotal,
+        })
+    return render_template(
+        "bom_basic_prices.html",
+        user=current_user(),
+        bom=bom, lines=lines,
+        grand_basic=grand_basic, cat_totals=cat_totals,
+        currency=_bcur, fx_rate=_brate,
         rates_as_of=_CURRENCY_RATES_AS_OF,
     )
 
