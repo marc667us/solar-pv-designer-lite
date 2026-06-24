@@ -36,9 +36,46 @@
         <i class="bi bi-lock-fill me-1"></i>Internal rate build-up
       </a>
     {% endif %}
-    <button onclick="window.print()" class="btn btn-warning fw-bold btn-sm">
-      <i class="bi bi-printer-fill me-1"></i>Print / Save as PDF
+    <a href="{{ url_for('boms_boq_xlsx', bom_id=bom.id) }}" class="btn btn-success btn-sm">
+      <i class="bi bi-file-earmark-excel me-1"></i>Excel
+    </a>
+    <a href="{{ url_for('boms_boq_pdf', bom_id=bom.id) }}" class="btn btn-danger btn-sm">
+      <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+    </a>
+    <button type="button" class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#emailBomModal">
+      <i class="bi bi-envelope me-1"></i>Email
     </button>
+    <button onclick="window.print()" class="btn btn-warning fw-bold btn-sm">
+      <i class="bi bi-printer-fill me-1"></i>Print
+    </button>
+  </div>
+</div>
+
+<!-- Email cost-estimate modal -->
+<div class="modal fade" id="emailBomModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:#13132a;color:#e0e0f0;border:1px solid #1e1e3a">
+      <form method="POST" action="{{ url_for('boms_boq_email', bom_id=bom.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="modal-header" style="border-bottom:1px solid #1e1e3a">
+          <h6 class="modal-title fw-bold text-info"><i class="bi bi-envelope me-1"></i>Email cost estimate &mdash; {{ bom.title }}</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-secondary small">Attaches BOTH the A4-formatted PDF and the Excel workbook.</p>
+          <label class="form-label small text-secondary">Recipient email</label>
+          <input class="form-control mb-2" name="to_email" type="email" placeholder="recipient@example.com" required>
+          <label class="form-label small text-secondary">Subject (optional)</label>
+          <input class="form-control mb-2" name="subject" placeholder="Cost Estimate &mdash; {{ bom.title }}">
+          <label class="form-label small text-secondary">Body (optional)</label>
+          <textarea class="form-control" name="body" rows="3" placeholder="Please find attached the cost estimate."></textarea>
+        </div>
+        <div class="modal-footer" style="border-top:1px solid #1e1e3a">
+          <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-info btn-sm fw-bold"><i class="bi bi-send me-1"></i>Send</button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 
