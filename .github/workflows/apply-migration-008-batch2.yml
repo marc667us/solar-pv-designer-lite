@@ -1,0 +1,231 @@
+# Apply migrations/008_rls_batch2.sql to live Postgres.
+#
+# Extends M1.6 RLS to 6 more tenant-owned tables flagged by the
+# 2026-06-25 tenant inventory:
+#
+#   marketplace_bom_rates            (per-BOM rate buildup)
+#   marketplace_price_sheet_items    (price-sheet line items)
+#   equipment_catalog_quotes         (vendor quotes against catalog items)
+#   equipment_catalog_price_history  (price update history)
+#   marketplace_audit_log            (marketplace admin action audit)
+#   boq_user_item_overrides          (per-user BOQ rate overrides)
+#
+# This migration:
+#   * Adds tenant_id UUID (nullable) to all 6 tables.
+#   * Backfills via parent BOM / parent price sheet / direct user_id.
+#   * Enables RLS + creates a parallel-run-safe <table>_tenant_isolation
+#     policy on each table.
+#
+# Production safety:
+#   * Migration file is idempotent (ADD COLUMN IF NOT EXISTS, DROP POLICY
+#     IF EXISTS before CREATE POLICY, etc.).
+#   * RLS policies carry parallel-run NULL escapes so legacy callsites
+#     keep returning rows until M3.1 fully threads tenant_id through.
+#   * Pre-flight verifies migration 003 already landed (so the helper
+#     functions referenced by the backfill exist).
+#   * Default mode is DRY-RUN. Re-run with `-f confirm=BATCH2_RLS_APPLY`
+#     to commit.
+#
+# Rollback: a previous run's "before" counts are printed in the log. To
+# roll back: psql against the same DB with `ALTER TABLE <t> DISABLE ROW
+# LEVEL SECURITY; DROP POLICY <t>_tenant_isolation ON <t>; ALTER TABLE
+# <t> DROP COLUMN tenant_id;` for each of the 6 tables.
+
+name: Apply Migration 008 (Batch 2 RLS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type BATCH2_RLS_APPLY to commit migration 008 to live Postgres."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "BATCH2_RLS_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- migration 008 will be committed to live Postgres ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- migration 008 will be parsed + previewed only ==="
+            echo "Re-run with -f confirm=BATCH2_RLS_APPLY to commit."
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/008_rls_batch2.sql
+          echo "OK: migrations/008_rls_batch2.sql present"
+          wc -l migrations/008_rls_batch2.sql
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- migration 003 helpers present
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          HELPER_COUNT=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM pg_proc WHERE proname IN ('current_tenant_id','_phase4_user_to_tenant')")
+          if [ "$HELPER_COUNT" -lt "2" ]; then
+            echo "::error::Pre-flight failed: migration 003 helpers missing ($HELPER_COUNT found)."
+            echo "Apply migration 003 first via the Apply Keycloak Migrations workflow."
+            exit 1
+          fi
+          echo "OK: migration 003 helpers present (current_tenant_id + _phase4_user_to_tenant)."
+
+      - name: Pre-flight -- count current batch-2 rows
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          echo "--- row counts BEFORE migration ---"
+          for t in marketplace_bom_rates marketplace_price_sheet_items equipment_catalog_quotes equipment_catalog_price_history marketplace_audit_log boq_user_item_overrides; do
+            COUNT=$(psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM $t" 2>/dev/null || echo "(table missing)")
+            printf "  %-40s %s\n" "$t:" "$COUNT"
+          done
+
+      - name: Show migration overview
+        run: |
+          echo "--- migrations/008_rls_batch2.sql ---"
+          grep -E "^-- (PART|=)" migrations/008_rls_batch2.sql | head -30
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The SQL below WOULD have been applied. Nothing was."
+          echo "================================================================"
+          head -60 migrations/008_rls_batch2.sql
+
+      - name: Apply migration 008 (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/008_rls_batch2.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/008_rls_batch2.sql
+          echo "OK: migration 008 applied."
+
+      - name: Verify post-apply -- columns
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- expect: 6 tables now carry tenant_id ---"
+          COLS=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT table_name FROM information_schema.columns
+             WHERE column_name='tenant_id' AND table_schema='public'
+               AND table_name IN ('marketplace_bom_rates','marketplace_price_sheet_items',
+                                   'equipment_catalog_quotes','equipment_catalog_price_history',
+                                   'marketplace_audit_log','boq_user_item_overrides')
+             ORDER BY table_name")
+          echo "$COLS"
+          N=$(echo "$COLS" | grep -c .)
+          if [ "$N" -lt "6" ]; then
+            echo "::error::expected 6 tenant_id columns, found $N"
+            exit 1
+          fi
+          echo "OK: 6 tenant_id columns confirmed."
+
+      - name: Verify post-apply -- RLS policies
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- expect: 6 batch-2 _tenant_isolation policies ---"
+          POLICIES=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT tablename || ':' || policyname FROM pg_policies
+             WHERE policyname IN (
+               'marketplace_bom_rates_tenant_isolation',
+               'marketplace_price_sheet_items_tenant_isolation',
+               'equipment_catalog_quotes_tenant_isolation',
+               'equipment_catalog_price_history_tenant_isolation',
+               'marketplace_audit_log_tenant_isolation',
+               'boq_user_item_overrides_tenant_isolation'
+             )
+             ORDER BY tablename")
+          echo "$POLICIES"
+          N=$(echo "$POLICIES" | grep -c .)
+          if [ "$N" -lt "6" ]; then
+            echo "::error::expected 6 RLS policies, found $N"
+            exit 1
+          fi
+          echo "OK: 6 RLS policies confirmed."
+
+      - name: Verify post-apply -- backfill coverage
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- unbackfilled (tenant_id IS NULL) counts ---"
+          for t in marketplace_bom_rates marketplace_price_sheet_items equipment_catalog_quotes equipment_catalog_price_history marketplace_audit_log boq_user_item_overrides; do
+            COUNT=$(psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM $t WHERE tenant_id IS NULL" 2>/dev/null || echo "?")
+            printf "  %-40s %s\n" "$t:" "$COUNT"
+          done
+          echo "(Non-zero is OK on the parallel-run flavour -- the policy"
+          echo " tolerates NULL. Rows with recorded_by=0 / set_by_user_id=0"
+          echo " stay NULL because there's no user to derive a tenant from."
+          echo " Watch this trend to zero before Phase 7's FORCE RLS cutover.)"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " M1.6 BATCH 2 COMPLETE -- 6 more tables now RLS-enforced."
+            echo "================================================================"
+            echo " Parallel-run NULL escapes are still in effect; legacy"
+            echo " callsites continue to read every row. M3.1 must thread"
+            echo " tenant_id into the INSERT/UPDATE callsites + Phase 7"
+            echo " migration will tighten to FORCE RLS."
+            echo ""
+            echo " KNOWN GAP: marketplace_boms + marketplace_price_sheets"
+            echo " (the parents of bom_rates / sheet_items) are still RLS-open."
+            echo " Pick them up in a follow-up batch."
+          else
+            echo "DRY-RUN -- no Render changes. Re-run with confirm=BATCH2_RLS_APPLY to commit."
+          fi
