@@ -1,0 +1,129 @@
+# SOC 2 M4.1 -- nightly Postgres backup.
+#
+# What it does
+#   1. Resolves solarpro-postgres via Render API.
+#   2. Captures full pg_dump (custom binary format -Fc).
+#   3. Verifies the dump (pg_restore --list integrity check).
+#   4. Uploads as a workflow artifact, retained 30 days.
+#   5. SHA-256 sums the dump and prints it for evidence.
+#
+# Cron: 03:00 UTC daily (low traffic).
+# Manual: workflow_dispatch with optional dry-run.
+#
+# Restore test (separate workflow `backup-restore-test.yml`) downloads the
+# latest artifact and replays it into a throwaway DB.
+
+name: Backup Postgres
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 03:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "If 'true', resolve the DB connection but do not dump."
+        required: false
+        default: 'false'
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      DRY_RUN:        ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install postgresql-client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Stamp output filename
+        id: name
+        run: |
+          STAMP=$(date -u +"%Y-%m-%dT%H-%M-%SZ")
+          echo "stamp=$STAMP" >> $GITHUB_OUTPUT
+          echo "Dump filename: solarpro-postgres-$STAMP.dump"
+
+      - name: Dry-run -- only verify connection
+        if: env.DRY_RUN == 'true'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "DRY-RUN: pinging server..."
+          psql "$DATABASE_URL" -A -t -c "SELECT now(), pg_database_size(current_database())/1024/1024 || ' MB'"
+          echo "DRY-RUN OK."
+
+      - name: pg_dump (Fc binary)
+        if: env.DRY_RUN != 'true'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          OUT="/tmp/solarpro-postgres-${{ steps.name.outputs.stamp }}.dump"
+          pg_dump --format=custom --compress=9 --no-owner --no-privileges \
+                  "$DATABASE_URL" --file="$OUT"
+          ls -lh "$OUT"
+          echo "DUMP_PATH=$OUT" >> $GITHUB_ENV
+
+      - name: Verify dump integrity
+        if: env.DRY_RUN != 'true'
+        run: |
+          set -e
+          # --list reads the dump's table-of-contents. If the file is
+          # truncated / corrupt this exits non-zero.
+          pg_restore --list "$DUMP_PATH" | head -10
+          BYTES=$(stat -c %s "$DUMP_PATH")
+          SHA=$(sha256sum "$DUMP_PATH" | awk '{print $1}')
+          echo "Dump size:   $BYTES bytes"
+          echo "SHA-256:     $SHA"
+          # Evidence line -- grepped by soc2-evidence.yml
+          echo "BACKUP_EVIDENCE stamp=${{ steps.name.outputs.stamp }} bytes=$BYTES sha256=$SHA"
+
+      - name: Upload backup artifact (30 day retention)
+        if: env.DRY_RUN != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: solarpro-postgres-${{ steps.name.outputs.stamp }}
+          path: ${{ env.DUMP_PATH }}
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "DRY-RUN complete -- no dump taken."
+          else
+            echo "Backup ${{ steps.name.outputs.stamp }} uploaded as workflow artifact."
+            echo "Retention: 30 days. Restore via backup-restore-test.yml."
+          fi

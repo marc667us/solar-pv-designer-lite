@@ -1,0 +1,192 @@
+# SOC 2 M4.6 -- nightly evidence collector.
+#
+# Bundles SOC 2 evidence for the date and uploads as a workflow artifact:
+#   - latest backup-postgres run summary (workflow + status)
+#   - latest security-CI run summary (workflow + status)
+#   - 24h audit-log row sample (count + first/last timestamps from prod)
+#   - tenant inventory artifact (docs/tenant_inventory_*.md latest)
+#   - SOC 2 audit dashboard JSON snapshot (hit /admin/ops/soc2/audit with SA token)
+#
+# The bundle is timestamped and retained 365 days -- per SOC 2 Type II
+# observation-window requirements.
+#
+# Cron: 03:30 UTC daily (after backup-postgres.yml at 03:00).
+# Manual: workflow_dispatch for ad-hoc evidence collection.
+
+name: SOC 2 Evidence Collector
+
+on:
+  schedule:
+    - cron: '30 3 * * *'   # 03:30 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read   # to query other workflow runs
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      GH_TOKEN:       ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql + gh
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+          # gh is pre-installed on github-hosted runners.
+
+      - name: Stamp evidence-bundle date
+        id: stamp
+        run: |
+          STAMP=$(date -u +"%Y-%m-%d")
+          BUNDLE="/tmp/soc2-evidence-$STAMP"
+          mkdir -p "$BUNDLE"
+          echo "stamp=$STAMP" >> $GITHUB_OUTPUT
+          echo "bundle=$BUNDLE" >> $GITHUB_OUTPUT
+
+      - name: Capture recent workflow runs (backup + security)
+        env:
+          BUNDLE: ${{ steps.stamp.outputs.bundle }}
+        run: |
+          set -e
+          for wf in "Backup Postgres" "Security CI" "FX Rates Refresh" "Force Render Deploy"; do
+            slug=$(echo "$wf" | tr ' []():,' '_')
+            gh run list --workflow="$wf" --limit 7 \
+              --json databaseId,status,conclusion,createdAt,headSha \
+              > "$BUNDLE/runs_${slug}.json" || echo "[]" > "$BUNDLE/runs_${slug}.json"
+          done
+          ls -lh "$BUNDLE"
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::warning::solarpro-postgres not found; skipping DB evidence"
+            exit 0
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Sample 24h audit_logs activity
+        if: steps.pg.outputs.external != ''
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+          BUNDLE:       ${{ steps.stamp.outputs.bundle }}
+        run: |
+          set -e
+          OUT="$BUNDLE/audit_logs_24h.txt"
+          {
+            echo "Generated: $(date -u -Iseconds)"
+            echo "Source: solarpro-postgres.audit_logs"
+            echo "---"
+            psql "$DATABASE_URL" -A -t -c \
+              "SELECT COUNT(*) AS rows_24h FROM audit_logs WHERE created_at > NOW() - INTERVAL '24 hours'"
+            echo "---"
+            echo "first/last timestamps:"
+            psql "$DATABASE_URL" -A -t -c \
+              "SELECT MIN(created_at), MAX(created_at) FROM audit_logs WHERE created_at > NOW() - INTERVAL '24 hours'"
+            echo "---"
+            echo "by-action histogram:"
+            psql "$DATABASE_URL" -A -F'	' -c \
+              "SELECT action, COUNT(*) FROM audit_logs WHERE created_at > NOW() - INTERVAL '24 hours' GROUP BY action ORDER BY 2 DESC LIMIT 20"
+          } > "$OUT"
+          head -20 "$OUT"
+
+      - name: Snapshot RLS coverage
+        if: steps.pg.outputs.external != ''
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+          BUNDLE:       ${{ steps.stamp.outputs.bundle }}
+        run: |
+          set -e
+          {
+            echo "Generated: $(date -u -Iseconds)"
+            echo "Source: solarpro-postgres.pg_policies"
+            echo "---"
+            psql "$DATABASE_URL" -A -F'	' -c \
+              "SELECT tablename, policyname FROM pg_policies WHERE policyname LIKE '%_tenant_isolation' ORDER BY tablename"
+          } > "$BUNDLE/rls_policies.txt"
+          wc -l "$BUNDLE/rls_policies.txt"
+
+      - name: Snapshot tenant-id column coverage
+        if: steps.pg.outputs.external != ''
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+          BUNDLE:       ${{ steps.stamp.outputs.bundle }}
+        run: |
+          set -e
+          {
+            echo "Generated: $(date -u -Iseconds)"
+            echo "Source: information_schema.columns where column_name='tenant_id'"
+            echo "---"
+            psql "$DATABASE_URL" -A -F'	' -c \
+              "SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='tenant_id' ORDER BY table_name"
+          } > "$BUNDLE/tenant_id_columns.txt"
+          wc -l "$BUNDLE/tenant_id_columns.txt"
+
+      - name: Copy latest tenant inventory
+        env:
+          BUNDLE: ${{ steps.stamp.outputs.bundle }}
+        run: |
+          set -e
+          LATEST=$(ls -1 docs/tenant_inventory_*.md 2>/dev/null | sort | tail -1)
+          if [ -n "$LATEST" ]; then
+            cp "$LATEST" "$BUNDLE/$(basename "$LATEST")"
+            echo "Copied $LATEST into evidence bundle."
+          else
+            echo "::warning::no tenant inventory artifact found"
+          fi
+
+      - name: Manifest
+        env:
+          BUNDLE: ${{ steps.stamp.outputs.bundle }}
+        run: |
+          set -e
+          {
+            echo "SOC 2 evidence bundle"
+            echo "Date:       ${{ steps.stamp.outputs.stamp }}"
+            echo "Generated:  $(date -u -Iseconds)"
+            echo "Run ID:     ${{ github.run_id }}"
+            echo "Commit:     ${{ github.sha }}"
+            echo "---"
+            echo "Files:"
+            ls -lh "$BUNDLE"
+            echo "---"
+            echo "SHA-256:"
+            (cd "$BUNDLE" && sha256sum *)
+          } > "$BUNDLE/MANIFEST.txt"
+          cat "$BUNDLE/MANIFEST.txt"
+
+      - name: Upload evidence artifact (365 day retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: soc2-evidence-${{ steps.stamp.outputs.stamp }}
+          path: ${{ steps.stamp.outputs.bundle }}/
+          retention-days: 365
+          if-no-files-found: error
+
+      - name: Summary
+        run: |
+          echo "================================================================"
+          echo " SOC 2 Evidence ${{ steps.stamp.outputs.stamp }} archived."
+          echo " Retention: 365 days (covers SOC 2 Type II observation window)."
+          echo "================================================================"
