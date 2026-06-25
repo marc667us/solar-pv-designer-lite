@@ -21048,46 +21048,28 @@ def boq_section_add_item(pid, bid, fid, bill_no, letter):
     if not unit:
         unit = "No."
 
-    # 2026-06-24 v2 spec-aligned. Read supply build-up sub-pcts +
-    # install build-up amounts; compute supply_amt + install_amt.
-    def _num_cap(name, lo, hi, default=0.0):
+    # 2026-06-24 v5: simple Supply%/Install% pickers replace the detailed
+    # build-up sub-fields. Each dropdown is range-capped on the client;
+    # server clamps to the same range for safety.
+    def _pick(name, lo, hi, default):
         raw = (f.get(name) or "").strip()
         if not raw:
-            return float(default), True
+            return float(default)
         try:
-            v = float(raw)
+            return max(float(lo), min(float(hi), float(raw)))
         except (TypeError, ValueError):
-            return float(default), False
-        return v, (lo <= v <= hi)
-    # Supply build-up sub-pcts (defaults per spec: 3/1/1/5).
-    fr_pct, ok_fr = _num_cap("freight_pct",    0.0, 10.0, 3.0)
-    hd_pct, ok_hd = _num_cap("handling_pct",   0.0,  5.0, 1.0)
-    ins_pct, ok_in = _num_cap("insurance_pct", 0.0,  5.0, 1.0)
-    ws_pct, ok_ws = _num_cap("wastage_pct",    0.0, 15.0, 5.0)
-    # Install build-up amounts (currency). No caps, just >=0.
-    def _amt(name):
-        raw = (f.get(name) or "").strip()
-        if not raw:
-            return 0.0
-        try:
-            return max(0.0, float(raw))
-        except (TypeError, ValueError):
-            return 0.0
-    lab_amt = _amt("labour_amt")
-    tools_amt = _amt("tools_amt")
-    eq_amt    = _amt("equipment_amt")
-    test_amt  = _amt("testing_amt")
-    sup_amt   = _amt("supervision_amt")
-    # Tax / contingency / overhead / profit percentages.
-    oh,  ok_o = _num_cap("overhead_pct",    0.0, 20.0, 15.0)
-    prf, ok_p = _num_cap("profit_pct",      0.0, 30.0, 15.0)
-    cnt, ok_c = _num_cap("contingency_pct", 0.0, 15.0,  0.0)
-    vat, ok_v = _num_cap("vat_pct",         0.0, 50.0,  0.0)
-    if not (ok_fr and ok_hd and ok_in and ok_ws and ok_o and ok_p and ok_c and ok_v):
-        flash("Out-of-range percent: Freight 0-10, Handling 0-5, Insurance 0-5, Wastage 0-15, OH 0-20, Profit 0-30, Cont 0-15, VAT 0-50.", "warning")
-        return redirect(_section_loop_url(pid, bid, fid, bill_no, letter, title, bill_name, subsec))
-    supply  = basic * (1.0 + (fr_pct + hd_pct + ins_pct + ws_pct) / 100.0)
-    install = lab_amt + tools_amt + eq_amt + test_amt + sup_amt
+            return float(default)
+    supply_pct  = _pick("supply_pct",      0.0, 15.0, 10.0)
+    install_pct = _pick("install_pct",     0.0, 25.0, 15.0)
+    oh          = _pick("overhead_pct",    0.0, 20.0, 15.0)
+    prf         = _pick("profit_pct",      0.0, 30.0, 15.0)
+    cnt         = _pick("contingency_pct", 0.0, 15.0,  0.0)
+    vat         = _pick("vat_pct",         0.0, 50.0,  0.0)
+    # Sub-field vars kept zero (no longer collected from form).
+    fr_pct = hd_pct = ins_pct = ws_pct = 0.0
+    lab_amt = tools_amt = eq_amt = test_amt = sup_amt = 0.0
+    supply  = basic * (1.0 + supply_pct  / 100.0)
+    install = basic * (install_pct / 100.0)
     final_rate = _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat)
     total = qty * final_rate
     if final_rate <= 0:
@@ -23249,46 +23231,28 @@ def boq_floor_item_edit(pid, bid, fid, iid):
             basic = max(0.0, float(f.get("basic_price") or 0))
         except ValueError:
             basic = 0.0
-        # 2026-06-24 v2 spec-aligned. Supply build-up sub-pcts +
-        # install build-up amounts -> compute supply_amt + install_amt.
-        def _num_cap(name, lo, hi, default=0.0):
+        # 2026-06-24 v5: simple Supply%/Install% pickers.
+        def _pick(name, lo, hi, default):
             raw = (f.get(name) or "").strip()
             if not raw:
-                return float(default), True
+                return float(default)
             try:
-                v = float(raw)
+                return max(float(lo), min(float(hi), float(raw)))
             except (TypeError, ValueError):
-                return float(default), False
-            return v, (lo <= v <= hi)
-        def _amt(name):
-            raw = (f.get(name) or "").strip()
-            if not raw:
-                return 0.0
-            try:
-                return max(0.0, float(raw))
-            except (TypeError, ValueError):
-                return 0.0
-        fr_pct, ok_fr = _num_cap("freight_pct",    0.0, 10.0, 3.0)
-        hd_pct, ok_hd = _num_cap("handling_pct",   0.0,  5.0, 1.0)
-        ins_pct, ok_in = _num_cap("insurance_pct", 0.0,  5.0, 1.0)
-        ws_pct, ok_ws = _num_cap("wastage_pct",    0.0, 15.0, 5.0)
-        lab_amt   = _amt("labour_amt")
-        tools_amt = _amt("tools_amt")
-        eq_amt    = _amt("equipment_amt")
-        test_amt  = _amt("testing_amt")
-        sup_amt   = _amt("supervision_amt")
-        oh,  ok_o = _num_cap("overhead_pct",    0.0, 20.0, 15.0)
-        prf, ok_p = _num_cap("profit_pct",      0.0, 30.0, 15.0)
-        cnt, ok_c = _num_cap("contingency_pct", 0.0, 15.0,  0.0)
-        vat, ok_v = _num_cap("vat_pct",         0.0, 50.0,  0.0)
+                return float(default)
+        supply_pct  = _pick("supply_pct",      0.0, 15.0, 10.0)
+        install_pct = _pick("install_pct",     0.0, 25.0, 15.0)
+        oh          = _pick("overhead_pct",    0.0, 20.0, 15.0)
+        prf         = _pick("profit_pct",      0.0, 30.0, 15.0)
+        cnt         = _pick("contingency_pct", 0.0, 15.0,  0.0)
+        vat         = _pick("vat_pct",         0.0, 50.0,  0.0)
+        fr_pct = hd_pct = ins_pct = ws_pct = 0.0
+        lab_amt = tools_amt = eq_amt = test_amt = sup_amt = 0.0
         if not desc or qty <= 0 or basic <= 0:
             flash("Description, qty and basic price are all required.", "warning")
             return redirect(url_for("boq_floor_item_edit", pid=pid, bid=bid, fid=fid, iid=iid))
-        if not (ok_fr and ok_hd and ok_in and ok_ws and ok_o and ok_p and ok_c and ok_v):
-            flash("Out-of-range percent: Freight 0-10, Handling 0-5, Insurance 0-5, Wastage 0-15, OH 0-20, Profit 0-30, Cont 0-15, VAT 0-50.", "warning")
-            return redirect(url_for("boq_floor_item_edit", pid=pid, bid=bid, fid=fid, iid=iid))
-        supply  = basic * (1.0 + (fr_pct + hd_pct + ins_pct + ws_pct) / 100.0)
-        install = lab_amt + tools_amt + eq_amt + test_amt + sup_amt
+        supply  = basic * (1.0 + supply_pct  / 100.0)
+        install = basic * (install_pct / 100.0)
         final_rate = _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat)
         total = qty * final_rate
         with get_db() as c:

@@ -35,7 +35,7 @@
       </div>
       <div class="col-md-3">
         <label class="form-label small text-secondary">Qty *</label>
-        <input type="number" step="0.01" min="0.01" class="form-control" name="qty" value="{{ item.qty }}" required>
+        <input type="number" step="1" min="1" class="form-control" name="qty" value="{{ item.qty|int }}" required>
       </div>
       <div class="col-md-3">
         <label class="form-label small text-secondary">Basic Rate *</label>
@@ -48,83 +48,79 @@
 
       <div class="col-md-12 mt-3">
         <div class="text-warning small fw-bold">
-          <i class="bi bi-truck me-1"></i>Supply Rate build-up
-          <span class="text-secondary fw-normal">(percentages of Basic &mdash; sums into Supply Amount)</span>
+          <i class="bi bi-sliders me-1"></i>Rate build-up <span class="text-secondary fw-normal">(pick percentages in the allowed range)</span>
         </div>
-      </div>
-      <div class="col-md-3">
-        <label class="form-label small text-secondary">Freight % <span class="text-secondary">(0&ndash;10, default 3)</span></label>
-        <input type="number" step="0.1" min="0" max="10" class="form-control" name="freight_pct" value="{{ '%.2f'|format(item.bu_freight if item.bu_freight is defined and item.bu_freight is not none else 3.0) }}">
-      </div>
-      <div class="col-md-3">
-        <label class="form-label small text-secondary">Handling % <span class="text-secondary">(0&ndash;5, default 1)</span></label>
-        <input type="number" step="0.1" min="0" max="5" class="form-control" name="handling_pct" value="{{ '%.2f'|format(item.bu_handling if item.bu_handling is defined and item.bu_handling is not none else 1.0) }}">
-      </div>
-      <div class="col-md-3">
-        <label class="form-label small text-secondary">Insurance % <span class="text-secondary">(0&ndash;5, default 1)</span></label>
-        <input type="number" step="0.1" min="0" max="5" class="form-control" name="insurance_pct" value="{{ '%.2f'|format(item.bu_insurance if item.bu_insurance is defined and item.bu_insurance is not none else 1.0) }}">
-      </div>
-      <div class="col-md-3">
-        <label class="form-label small text-secondary">Wastage % <span class="text-secondary">(0&ndash;15, default 5)</span></label>
-        <input type="number" step="0.1" min="0" max="15" class="form-control" name="wastage_pct" value="{{ '%.2f'|format(item.bu_wastage if item.bu_wastage is defined and item.bu_wastage is not none else 5.0) }}">
       </div>
 
-      <div class="col-md-12 mt-3">
-        <div class="text-warning small fw-bold">
-          <i class="bi bi-tools me-1"></i>Install Rate build-up
-          <span class="text-secondary fw-normal">(currency amounts per unit &mdash; sums into Install Amount)</span>
-        </div>
+      {# 2026-06-24 v5: simple % dropdowns instead of the 9-field build-up.
+         User picks Supply / Install / OH / Profit (+ optional VAT, Cont)
+         each within its valid range. Engine derives currency amounts. #}
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">Supply rate % <span class="text-secondary">(0&ndash;15)</span></label>
+        <select class="form-select" name="supply_pct">
+          {% set _sup = (item.bu_freight or 0) + (item.bu_handling or 0) + (item.bu_insurance or 0) + (item.bu_wastage or 0) %}
+          {% set _sup = _sup if _sup > 0 else 10 %}
+          {% for v in [0,2,4,6,8,10,12,14,15] %}
+          <option value="{{ v }}" {% if (_sup|int) == v %}selected{% endif %}>{{ v }}%</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="col-md-3">
-        <label class="form-label small text-secondary">Labour</label>
-        <input type="number" step="0.01" min="0" class="form-control" name="labour_amt" value="{{ '%.2f'|format(item.bu_labour or 0) }}" placeholder="0.00">
-      </div>
-      <div class="col-md-2">
-        <label class="form-label small text-secondary">Tools</label>
-        <input type="number" step="0.01" min="0" class="form-control" name="tools_amt" value="{{ '%.2f'|format(item.bu_tools or 0) }}" placeholder="0.00">
-      </div>
-      <div class="col-md-2">
-        <label class="form-label small text-secondary">Equipment</label>
-        <input type="number" step="0.01" min="0" class="form-control" name="equipment_amt" value="{{ '%.2f'|format(item.bu_equipment or 0) }}" placeholder="0.00">
-      </div>
-      <div class="col-md-2">
-        <label class="form-label small text-secondary">Testing</label>
-        <input type="number" step="0.01" min="0" class="form-control" name="testing_amt" value="{{ '%.2f'|format(item.bu_testing or 0) }}" placeholder="0.00">
+        <label class="form-label small text-secondary">Install rate % <span class="text-secondary">(0&ndash;25)</span></label>
+        <select class="form-select" name="install_pct">
+          {% set _bp_now = (item.bu_basic or 0) %}
+          {% set _inst = ((item.bu_install or 0) / _bp_now * 100) if _bp_now else 15 %}
+          {% set _inst = _inst if _inst > 0 else 15 %}
+          {% for v in [0,5,10,15,20,25] %}
+          <option value="{{ v }}" {% if (_inst|int) == v %}selected{% endif %}>{{ v }}%</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="col-md-3">
-        <label class="form-label small text-secondary">Supervision</label>
-        <input type="number" step="0.01" min="0" class="form-control" name="supervision_amt" value="{{ '%.2f'|format(item.bu_supervision or 0) }}" placeholder="0.00">
-      </div>
-
-      <div class="col-md-12 mt-3">
-        <div class="text-warning small fw-bold">
-          <i class="bi bi-graph-up-arrow me-1"></i>Markup (applied to Prime = Supply + Install)
-        </div>
-      </div>
-      <div class="col-md-3">
-        <label class="form-label small text-secondary">Overhead % <span class="text-secondary">(0&ndash;20, default 15)</span></label>
-        <input type="number" step="0.1" min="0" max="20" class="form-control" name="overhead_pct" value="{{ '%.2f'|format(item.bu_oh if item.bu_oh is defined and item.bu_oh is not none else 15.0) }}">
+        <label class="form-label small text-secondary">Overhead % <span class="text-secondary">(0&ndash;20)</span></label>
+        <select class="form-select" name="overhead_pct">
+          {% set _oh = (item.bu_oh if item.bu_oh is defined and item.bu_oh is not none else 15) %}
+          {% for v in [0,5,10,12,15,18,20] %}
+          <option value="{{ v }}" {% if (_oh|int) == v %}selected{% endif %}>{{ v }}%</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="col-md-3">
-        <label class="form-label small text-secondary">Profit % <span class="text-secondary">(0&ndash;30, default 15)</span></label>
-        <input type="number" step="0.1" min="0" max="30" class="form-control" name="profit_pct" value="{{ '%.2f'|format(item.bu_profit if item.bu_profit is defined and item.bu_profit is not none else 15.0) }}">
+        <label class="form-label small text-secondary">Profit % <span class="text-secondary">(0&ndash;30)</span></label>
+        <select class="form-select" name="profit_pct">
+          {% set _prf = (item.bu_profit if item.bu_profit is defined and item.bu_profit is not none else 15) %}
+          {% for v in [0,5,10,15,20,25,30] %}
+          <option value="{{ v }}" {% if (_prf|int) == v %}selected{% endif %}>{{ v }}%</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="col-md-3">
         <label class="form-label small text-secondary">Contingency % <span class="text-secondary">(0&ndash;15, optional)</span></label>
-        <input type="number" step="0.1" min="0" max="15" class="form-control" name="contingency_pct" value="{{ '%.2f'|format(item.bu_cont or 0) }}">
+        <select class="form-select" name="contingency_pct">
+          {% set _cnt = (item.bu_cont or 0) %}
+          {% for v in [0,3,5,8,10,12,15] %}
+          <option value="{{ v }}" {% if (_cnt|int) == v %}selected{% endif %}>{{ v }}%</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="col-md-3">
         <label class="form-label small text-secondary">VAT % <span class="text-secondary">(0&ndash;50, optional)</span></label>
-        <input type="number" step="0.1" min="0" max="50" class="form-control" name="vat_pct" value="{{ '%.2f'|format(item.bu_vat or 0) }}">
+        <select class="form-select" name="vat_pct">
+          {% set _vat = (item.bu_vat or 0) %}
+          {% for v in [0,5,10,12,15,18,20,25,50] %}
+          <option value="{{ v }}" {% if (_vat|int) == v %}selected{% endif %}>{{ v }}%</option>
+          {% endfor %}
+        </select>
       </div>
 
       <div class="col-md-12 mt-2">
         <div class="small text-secondary" style="border-left:3px solid var(--solar-gold);padding-left:10px;line-height:1.4">
-          <strong>Spec formula:</strong>
-          Supply = Basic + Basic&times;(Freight+Handling+Insurance+Wastage)/100;
-          Install = Labour + Tools + Equipment + Testing + Supervision;
+          <strong>Formula:</strong>
+          Supply = Basic&times;(1 + Supply%/100);
+          Install = Basic&times;(Install%/100);
           Prime = Supply + Install;
-          Total = Prime + Prime&times;OH/100 + (Prime+OH)&times;Profit/100 + (Subtotal)&times;Cont/100 + (Subtotal+Cont)&times;VAT/100.
+          Subtotal = Prime + Prime&times;OH/100 + (Prime+OH)&times;Profit/100;
+          Total = Subtotal + Subtotal&times;Cont/100 + (Subtotal+Cont)&times;VAT/100.
         </div>
       </div>
     </div>
