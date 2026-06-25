@@ -1,0 +1,267 @@
+# Daily FX-rates refresh.
+#
+# Pulls live USD-base rates from open.er-api.com (free, no key) and updates
+# the FX_<CODE>_PER_USD env vars + FX_RATES_AS_OF on Render so the catalogue
+# never shows quotes more than ~1 day stale.
+#
+# Watched currencies match _CURRENCY_RATES_FROM_USD in web_app.py:
+#   EUR  GBP  GHS  NGN  KES  ZAR  XOF  ZMW
+#
+# Safety guards (per feedback_workflow_dry_run_gate.md):
+#   * Default for workflow_dispatch is DRYRUN (no Render write).
+#   * Cron path auto-applies but only if every safety guard passes:
+#       - Source API timestamp is < 36 h old (rejects stale feeds).
+#       - Each new rate stays within +/-15% of the value already on Render
+#         (rejects fat-fingered rates / temporary feed glitches).
+#       - At least one currency has > 0.5% drift (otherwise: no-op, exit 0).
+#   * Manual dispatch supports:
+#       - confirm = "" / "DRYRUN"  -> preview only, no write
+#       - confirm = "APPLY"        -> write if guards pass
+#       - confirm = "FORCE"        -> write even if guards trip (escape hatch)
+#
+# Render env writes use the project's standard GET-merge-PUT pattern (same as
+# paystack-rotate-to-live.yml) so every other env var is preserved verbatim.
+# A redeploy is triggered after a successful write.
+#
+# Rollback: a previous run's "before" rates are printed in the workflow log.
+# Set them back manually via dashboard.render.com -> Environment if needed.
+
+name: FX Rates Refresh
+
+on:
+  schedule:
+    # 06:00 UTC daily -- after most African business hours start, before
+    # quote-heavy traffic peaks.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'DRYRUN (default) | APPLY (write if guards pass) | FORCE (bypass guards)'
+        required: false
+        default: 'DRYRUN'
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      CONFIRM:           ${{ inputs.confirm }}
+    steps:
+      - name: Resolve mode
+        run: |
+          # Cron path: behave as APPLY (guards still gate the write).
+          # Manual path: honour the input (DRYRUN | APPLY | FORCE).
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            MODE=apply
+            FORCE=0
+          else
+            case "$CONFIRM" in
+              APPLY) MODE=apply; FORCE=0 ;;
+              FORCE) MODE=apply; FORCE=1 ;;
+              *)     MODE=dryrun; FORCE=0 ;;
+            esac
+          fi
+          echo "MODE=$MODE" >> $GITHUB_ENV
+          echo "FORCE=$FORCE" >> $GITHUB_ENV
+          echo "=== mode: $MODE (force=$FORCE) ==="
+
+      - name: Pull live rates from open.er-api.com
+        run: |
+          set -e
+          curl -fsS "https://open.er-api.com/v6/latest/USD" -o /tmp/fx_live.json
+          jq -e '.result == "success"' /tmp/fx_live.json > /dev/null || {
+            echo "::error::FX API did not return success"; cat /tmp/fx_live.json; exit 1; }
+          # Print provider + timestamp so the workflow log records the source.
+          jq -r '"source: " + .provider + "  as_of: " + (.time_last_update_utc // (.date // "unknown"))' /tmp/fx_live.json
+
+      - name: Verify feed freshness (< 36 h)
+        if: env.FORCE != '1'
+        run: |
+          set -e
+          # The API returns time_last_update_unix as epoch seconds (UTC).
+          LAST=$(jq -r '.time_last_update_unix' /tmp/fx_live.json)
+          NOW=$(date -u +%s)
+          AGE=$((NOW - LAST))
+          MAX=$((36 * 3600))
+          echo "Feed age: $AGE seconds (max $MAX)"
+          if [ "$AGE" -gt "$MAX" ]; then
+            echo "::error::FX feed is stale (>${MAX}s). Refusing to apply. Re-run with confirm=FORCE to override."
+            exit 1
+          fi
+
+      - name: Fetch current Render env vars
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars?limit=100" \
+            -o /tmp/env_current.json
+          NCOUNT=$(jq 'length' /tmp/env_current.json)
+          echo "Render currently holds $NCOUNT env vars."
+
+      - name: Compute deltas + apply guards
+        id: plan
+        run: |
+          set -e
+          python3 - <<'PY'
+          import json, os, sys
+          live = json.load(open("/tmp/fx_live.json"))["rates"]
+          env_doc = json.load(open("/tmp/env_current.json"))
+          current = {e["envVar"]["key"]: e["envVar"]["value"] for e in env_doc}
+
+          # Code defaults from web_app.py (kept here so the workflow is
+          # self-contained -- update both sides if you add a currency).
+          CODE_DEFAULTS = {
+              "EUR": 0.88, "GBP": 0.76, "GHS": 11.2,
+              "NGN": 1370.0, "KES": 129.0, "ZAR": 16.6,
+              "XOF": 580.0, "ZMW": 18.0,
+          }
+          MAX_MOVE_PCT = 15.0   # data-quality guard
+          DRIFT_THRESHOLD = 0.5 # below this, treat as no-op
+
+          # Rounding rules per currency: keep precision sensible for ops
+          # eyeballing -- 2dp for sub-1 rates, 1dp for everything else.
+          def round_rate(code, v):
+              return round(v, 2) if v < 1 else round(v, 1)
+
+          rows = []
+          force = os.environ.get("FORCE") == "1"
+          guard_failures = []
+          any_drift = False
+
+          for code, default in CODE_DEFAULTS.items():
+              if code not in live:
+                  guard_failures.append(f"{code}: missing from feed")
+                  continue
+              new = round_rate(code, float(live[code]))
+              env_key = f"FX_{code}_PER_USD"
+              old_str = current.get(env_key, "")
+              try:
+                  old = float(old_str) if old_str else default
+              except ValueError:
+                  old = default
+              drift_pct = abs(new - old) / old * 100.0 if old else 100.0
+              if drift_pct > DRIFT_THRESHOLD:
+                  any_drift = True
+              if drift_pct > MAX_MOVE_PCT and not force:
+                  guard_failures.append(
+                      f"{code}: {old} -> {new} ({drift_pct:.1f}%) exceeds {MAX_MOVE_PCT}% guard"
+                  )
+              rows.append({"code": code, "env": env_key, "old": old,
+                           "new": new, "drift_pct": drift_pct})
+
+          # Print plan table
+          print(f"{'CCY':>4}  {'OLD':>10}  {'NEW':>10}  {'DRIFT%':>8}")
+          print("-" * 40)
+          for r in rows:
+              print(f"{r['code']:>4}  {r['old']:>10}  {r['new']:>10}  {r['drift_pct']:>7.2f}")
+          print()
+
+          plan = {"rows": rows, "any_drift": any_drift,
+                  "guard_failures": guard_failures}
+          json.dump(plan, open("/tmp/fx_plan.json", "w"))
+
+          if guard_failures:
+              print("::error::Data-quality guard tripped:")
+              for f in guard_failures:
+                  print(f"  - {f}")
+              if not force:
+                  print("Re-run with confirm=FORCE to bypass the guard.")
+                  sys.exit(1)
+
+          if not any_drift:
+              print(f"All rates within {DRIFT_THRESHOLD}% of current Render env. No-op.")
+              # Mark "skip apply" by writing an empty merged set sentinel.
+              json.dump({"skip": True}, open("/tmp/fx_apply_decision.json", "w"))
+          else:
+              json.dump({"skip": False}, open("/tmp/fx_apply_decision.json", "w"))
+          PY
+
+      - name: Build merged env-var set
+        if: env.MODE == 'apply'
+        run: |
+          set -e
+          if jq -e '.skip == true' /tmp/fx_apply_decision.json >/dev/null; then
+            echo "No drift detected; skipping merge + write."
+            echo "SKIP_APPLY=1" >> $GITHUB_ENV
+            exit 0
+          fi
+          # Build a JSON array of {key,value} from the live rates plus
+          # FX_RATES_AS_OF=today, then merge with the current Render env
+          # (overwriting only the FX_* keys, leaving everything else verbatim).
+          TODAY="$(date -u +%F)"
+          jq --arg today "$TODAY" --slurpfile plan /tmp/fx_plan.json '
+            ($plan[0].rows
+              | map({key: .env, value: (.new|tostring)})) as $fx_new
+            | $fx_new + [{key: "FX_RATES_AS_OF", value: $today}] as $patches
+            | ($patches | map({(.key): .value}) | add) as $patch_map
+            | [.[] | .envVar | {key, value}]
+            | map(if ($patch_map | has(.key)) then .value = $patch_map[.key] else . end)
+            | . as $merged
+            | reduce ($patches[]) as $p (
+                $merged;
+                if any(.[]; .key == $p.key) then . else . + [$p] end)
+          ' /tmp/env_current.json > /tmp/env_merged.json
+          NCOUNT=$(jq 'length' /tmp/env_merged.json)
+          echo "Merged set has $NCOUNT env vars (was $(jq 'length' /tmp/env_current.json))."
+
+      - name: PUT merged env-var set
+        if: env.MODE == 'apply' && env.SKIP_APPLY != '1'
+        run: |
+          set -e
+          curl -fsS -X PUT \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data-binary "@/tmp/env_merged.json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars" \
+            | jq 'length as $n | "Render confirmed \($n) env vars set."'
+
+      - name: Trigger redeploy
+        if: env.MODE == 'apply' && env.SKIP_APPLY != '1'
+        id: deploy
+        run: |
+          set -e
+          DEPLOY=$(curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}' \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys")
+          DEPLOY_ID=$(echo "$DEPLOY" | jq -r '.id')
+          echo "Render deploy id: $DEPLOY_ID"
+          echo "id=$DEPLOY_ID" >> $GITHUB_OUTPUT
+
+      - name: Wait for deploy live (up to 4 min)
+        if: env.MODE == 'apply' && env.SKIP_APPLY != '1'
+        env:
+          DEPLOY_ID: ${{ steps.deploy.outputs.id }}
+        run: |
+          set -e
+          for i in $(seq 1 16); do
+            STATUS=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$DEPLOY_ID" \
+              | jq -r '.status')
+            echo "[$i/16] deploy status: $STATUS"
+            case "$STATUS" in
+              live)            exit 0 ;;
+              build_failed|deactivated|canceled|update_failed)
+                echo "::error::deploy failed: $STATUS"; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::warning::deploy did not reach 'live' in 4 min (env was updated; check Render dashboard)"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo ""
+          if [ "$MODE" = "dryrun" ]; then
+            echo "DRYRUN -- no Render changes. Re-run with confirm=APPLY to commit."
+          elif [ "$SKIP_APPLY" = "1" ]; then
+            echo "APPLY -- no drift; Render env left untouched."
+          else
+            echo "APPLY -- Render env updated + redeploy triggered."
+          fi
