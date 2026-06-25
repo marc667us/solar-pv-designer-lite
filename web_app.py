@@ -20807,8 +20807,16 @@ def _boq_safe_rate(basic, supply, install, oh, prf, cnt=0, vat=0):
     b = max(0.0, float(basic or 0))
     s = max(0.0, float(supply or 0))
     if s <= 0:
-        s = b  # supply defaults to basic when no delivery extras provided
+        # 2026-06-24 v4 (standard-BOQ default): when no Supply build-up
+        # sub-fields were provided, default to basic + 10% delivery
+        # extras (Freight 3 + Handling 1 + Insurance 1 + Wastage 5).
+        s = b * 1.10 if b > 0 else b
     i = max(0.0, float(install or 0))
+    if i <= 0 and b > 0:
+        # 2026-06-24 v4 (standard-BOQ default): when no Install
+        # build-up amounts were provided, default Install Rate to
+        # 15% of basic so the BOQ never shows a blank labour line.
+        i = b * 0.15
     op = max(0.0, min(20.0, float(oh  or 0)))
     pp = max(0.0, min(30.0, float(prf or 0)))
     cp = max(0.0, min(15.0, float(cnt or 0)))

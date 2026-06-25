@@ -53,14 +53,14 @@ check("breakdown profit = 4.13",     abs(bd["profit_amount"] - 4.13) < 0.01,
 check("breakdown final = 31.67",     abs(bd["final_built_up_rate"] - 31.67) < 0.01,
       f"got {bd['final_built_up_rate']:.4f}")
 
-# Supply defaults to basic when 0
+# Supply defaults to basic*1.10 when 0 (v4 standard-BOQ default).
 total_no_supply = web_app._boq_safe_rate(15, 0, 7.00, 15, 15, 0, 0)
-expected = (15 + 7) * (1 + 0.15) * (1 + 0.15)
-# Wait: Prime = 22, OH = 22*0.15 = 3.30, Profit = (22+3.30)*0.15 = 3.795, Total = 22+3.30+3.795 = 29.095
-expected_no_extras = 22 + 3.30 + 3.795
-check("supply=0 defaults to basic, total = 29.10",
-      abs(total_no_supply - expected_no_extras) < 0.01,
-      f"got {total_no_supply:.4f}")
+# v4: s -> 15*1.10 = 16.50; i stays 7.00 (>0); Prime=23.50; OH=23.50*0.15=3.525;
+#     Profit=(23.50+3.525)*0.15=4.05375; Total=23.50+3.525+4.05375=31.07875
+expected_v4 = 23.50 + 3.525 + 4.05375
+check("supply=0 -> default basic*1.10, total ~= 31.08",
+      abs(total_no_supply - expected_v4) < 0.01,
+      f"got {total_no_supply:.4f}, expected {expected_v4:.4f}")
 
 # Contingency + VAT (Ghana 12.5%)
 total_with_vat = web_app._boq_safe_rate(15, 16.95, 7.00, 15, 15, 5, 12.5)
@@ -73,11 +73,12 @@ check("with Cont 5 + VAT 12.5: 37.42",
       abs(total_with_vat - expected_vat) < 0.01,
       f"got {total_with_vat:.4f}, expected {expected_vat:.4f}")
 
-# Caps clamp: OH=99 -> 20, Profit=99 -> 30
+# Caps clamp: OH=99 -> 20, Profit=99 -> 30.
+# v4: install=0 -> defaults to 100*0.15=15. Prime=100+15=115;
+#     OH=115*0.20=23; Profit=(115+23)*0.30=41.4; Total=115+23+41.4=179.4
 total_clamped = web_app._boq_safe_rate(100, 100, 0, 99, 99, 0, 0)
-# Prime=100, OH=100*0.20=20, Profit=(100+20)*0.30=36, Total=100+20+36=156
-check("OH/Profit clamped to 20/30: 156",
-      abs(total_clamped - 156.0) < 0.01,
+check("OH/Profit clamped 20/30, install default applies: 179.4",
+      abs(total_clamped - 179.4) < 0.01,
       f"got {total_clamped:.4f}")
 
 print("\n[regression] still callable with 7-arg legacy signature")

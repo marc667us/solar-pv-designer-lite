@@ -177,6 +177,13 @@
           {% endif %}
 
           {% set grand.v = grand.v + (r.total_amount or 0) %}
+          {# 2026-06-24 v4: standard-BOQ fallback so Supply / Install columns
+             always show meaningful amounts even on legacy rows that were
+             zeroed by the migration. Supply defaults to basic + 10% delivery
+             extras; Install defaults to 15% of basic. #}
+          {% set _bp = (r.basic_price or 0) %}
+          {% set _sr = (r.supply_rate or (_bp * 1.10) or 0) %}
+          {% set _ir = (r.install_rate or (_bp * 0.15) or 0) %}
           {% if internal %}
           <tr>
             <td class="text-warning fw-bold">{{ r.item_no_display or r.item_no or loop.index }}</td>
@@ -186,9 +193,9 @@
             </td>
             <td class="text-end">{{ (r.qty or 0)|fmt }}</td>
             <td class="small">{{ r.unit }}</td>
-            <td class="text-end col-rate">{{ (r.basic_price or 0)|money }}</td>
-            <td class="text-end col-rate">{{ (r.supply_rate or 0)|money }}</td>
-            <td class="text-end col-rate">{{ (r.install_rate or 0)|money }}</td>
+            <td class="text-end col-rate">{{ _bp|money }}</td>
+            <td class="text-end col-rate">{{ _sr|money }}</td>
+            <td class="text-end col-rate">{{ _ir|money }}</td>
             <td class="text-end">{{ (r.overhead_pct or 0)|fmt(1) }}%</td>
             <td class="text-end">{{ (r.profit_pct or 0)|fmt(1) }}%</td>
             <td class="text-end">{{ (r.contingency_pct or 0)|fmt(1) }}%</td>
@@ -205,9 +212,9 @@
             </td>
             <td class="text-end">{{ (r.qty or 0)|fmt }}</td>
             <td class="small">{{ r.unit }}</td>
-            <td class="text-end col-rate">{{ (r.basic_price or 0)|money }}</td>
-            <td class="text-end col-rate">{{ (r.supply_rate or r.basic_price or 0)|money }}</td>
-            <td class="text-end col-rate">{{ (r.install_rate or 0)|money }}</td>
+            <td class="text-end col-rate">{{ _bp|money }}</td>
+            <td class="text-end col-rate">{{ _sr|money }}</td>
+            <td class="text-end col-rate">{{ _ir|money }}</td>
             <td class="text-end col-rate">{{ (r.final_built_up_rate or 0)|money }}</td>
             <td class="text-end col-amt fw-bold text-warning">{{ (r.total_amount or 0)|money }}</td>
           </tr>
