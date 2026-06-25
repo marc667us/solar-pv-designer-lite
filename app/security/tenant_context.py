@@ -241,14 +241,117 @@ def register_error_handler(app) -> None:
         return jsonify(error="MISSING_TENANT_CONTEXT", reason=str(e)), 403
 
 
+# ── SOC 2 M1.7 — request hooks (observability, not enforcement) ─────────
+#
+# These hooks let us prove to a SOC 2 auditor that every tenant-scoped
+# request either had a verified JWT context (RLS will enforce) or has a
+# logged audit signal saying "this path was tenant-scoped but ran without
+# context". The signal feeds the M2.6 route-coverage metric in the SOC 2
+# audit dashboard.
+#
+# Today this is OBSERVABILITY-ONLY -- we don't 401 the request even on a
+# miss, because the legacy @admin_required path doesn't populate g.kc_ctx
+# and turning enforcement on would break every legacy admin route. The
+# next milestone (full @require_role coverage) gates the hard enforcement.
+
+TENANT_PATH_PREFIXES = (
+    "/admin",
+    "/dashboard",
+    "/projects",
+    "/boq-projects",
+    "/account",
+    "/settings",
+    "/billing",
+    "/myproject",
+    "/procurement",
+    "/bidders",
+    "/reports",
+    "/files",
+    "/api/admin",
+    "/api/errors",
+    "/api/projects",
+    "/api/boq",
+)
+
+# Public exceptions whose path happens to start with a tenant prefix but
+# carries no tenant data. Add to this list with care.
+TENANT_PATH_EXCEPTIONS = (
+    "/admin/login",      # admin login form (legacy)
+    "/api/admin/health", # liveness only
+)
+
+
+def is_tenant_scoped_path(path: str) -> bool:
+    """Conservative path-prefix classifier. Returns True iff the path is
+    expected to read or write tenant-owned data."""
+    if not path:
+        return False
+    if path in TENANT_PATH_EXCEPTIONS:
+        return False
+    return path.startswith(TENANT_PATH_PREFIXES)
+
+
+def register_tenant_request_hooks(app) -> None:
+    """Wire two hooks on the Flask app:
+
+      before_request: tag g.tenant_scoped (bool) + g.tenant_ctx_present (bool)
+      after_request : if tenant_scoped AND not tenant_ctx_present AND response
+                       is a 2xx (i.e. the handler ran), emit a structured
+                       audit-trail warning.
+
+    Idempotent across calls (only the first wins; subsequent calls log a
+    warning and bail).
+    """
+    if getattr(app, "_tenant_hooks_registered", False):
+        log.debug("register_tenant_request_hooks called twice; skipping.")
+        return
+    app._tenant_hooks_registered = True
+
+    @app.before_request
+    def _tag_tenant_scope():
+        try:
+            g.tenant_scoped = is_tenant_scoped_path(request.path)
+            ctx = getattr(g, "kc_ctx", None)
+            g.tenant_ctx_present = bool(ctx and getattr(ctx, "tenant_id", None))
+        except Exception:
+            # Never fail a request because the audit tag failed.
+            pass
+
+    @app.after_request
+    def _emit_missing_ctx_signal(response):
+        try:
+            if (getattr(g, "tenant_scoped", False)
+                and not getattr(g, "tenant_ctx_present", False)
+                and 200 <= response.status_code < 400):
+                # Structured audit signal. The SOC 2 audit dashboard's
+                # route-coverage check + the error_logs viewer let an
+                # auditor grep for these.
+                log.warning(
+                    "M1.7 TENANT_SCOPED_NO_CTX path=%s method=%s status=%s "
+                    "remote=%s user_agent=%s",
+                    request.path,
+                    request.method,
+                    response.status_code,
+                    request.remote_addr,
+                    (request.headers.get("User-Agent") or "")[:120],
+                )
+        except Exception:
+            pass
+        return response
+
+
 __all__ = [
     "MissingTenantContextError",
+    "TENANT_PATH_EXCEPTIONS",
+    "TENANT_PATH_PREFIXES",
     "apply_tenant_guc",
     "clear_tenant_guc",
     "current_tenant_id",
     "current_user_is_service_account",
     "current_user_sub",
     "get_request_context",
+    "is_tenant_scoped_path",
     "register_error_handler",
+    "register_tenant_request_hooks",
     "require_tenant_context",
 ]

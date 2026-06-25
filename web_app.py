@@ -28,7 +28,8 @@ from app.security.decorators import (
 from app.security.tenant_context import (
     register_error_handler as _kc_register_tenant_error_handler,
     apply_tenant_guc as _kc_apply_tenant_guc,
-)  # Phase 4: tenant context bridge
+    register_tenant_request_hooks as _kc_register_tenant_hooks,
+)  # Phase 4: tenant context bridge + M1.7 request hooks
 from app.auth import register_oidc as _kc_register_oidc  # Phase 5: OIDC Blueprint
 
 # Structured logging (tenant-aware JSON logs)
@@ -74,6 +75,12 @@ app.config.update(
 # Phase 4: turn MissingTenantContextError into a 403 JSON response.
 # No-op in production until tenant-scoped routes call require_tenant_context().
 _kc_register_tenant_error_handler(app)
+
+# SOC 2 M1.7 (2026-06-25): tag every request with tenant_scoped + tenant_ctx_present
+# and emit an audit-trail warning when a tenant-scoped path runs without ctx.
+# Pure observability today -- the hard 401 enforcement waits for full
+# @require_role coverage across legacy admin routes.
+_kc_register_tenant_hooks(app)
 
 # Phase 5: mount /auth/login, /auth/callback, /auth/logout, /auth/refresh.
 # All four routes fall back to /login?legacy=1 when KEYCLOAK_ENABLED is unset,
@@ -27709,6 +27716,18 @@ def _soc2_check_error_tracking():
         return {"status": "fail", "detail": f"error_logs unreachable: {str(e)[:80]}"}
 
 
+def _soc2_check_tenant_request_hooks():
+    """M1.7: register_tenant_request_hooks must be wired so every request
+    is tagged with tenant_scoped + tenant_ctx_present."""
+    try:
+        from flask import current_app
+        if getattr(current_app, "_tenant_hooks_registered", False):
+            return {"status": "pass", "detail": "before/after_request hooks armed"}
+        return {"status": "fail", "detail": "register_tenant_request_hooks not called at app init"}
+    except Exception as e:
+        return {"status": "fail", "detail": f"check failed: {str(e)[:80]}"}
+
+
 _SOC2_CHECKS = [
     ("M1.1  KEYCLOAK_ENABLED flag retired",            _soc2_check_kc_flag_retired),
     ("M1.1  KEYCLOAK_ISSUER configured",               _soc2_check_kc_issuer_configured),
@@ -27720,6 +27739,7 @@ _SOC2_CHECKS = [
     ("M3.10 Security test suite present",              _soc2_check_security_tests_present),
     ("M3.7  Security CI workflow",                     _soc2_check_security_ci),
     ("M3.5  Error tracking present",                   _soc2_check_error_tracking),
+    ("M1.7  Tenant request hooks armed",               _soc2_check_tenant_request_hooks),
     ("M4.1  Backup workflow present",                  _soc2_check_backup_workflow),
     ("M4.5  Policy docs present",                      _soc2_check_policy_docs_present),
     ("M4.6  Evidence collector workflow",              _soc2_check_evidence_collector),

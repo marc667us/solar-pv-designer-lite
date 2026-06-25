@@ -243,6 +243,18 @@ def _soc2_check_error_tracking():
         return {"status": "fail", "detail": f"error_logs unreachable: {str(e)[:80]}"}
 
 
+def _soc2_check_tenant_request_hooks():
+    """M1.7: register_tenant_request_hooks must be wired so every request
+    is tagged with tenant_scoped + tenant_ctx_present."""
+    try:
+        from flask import current_app
+        if getattr(current_app, "_tenant_hooks_registered", False):
+            return {"status": "pass", "detail": "before/after_request hooks armed"}
+        return {"status": "fail", "detail": "register_tenant_request_hooks not called at app init"}
+    except Exception as e:
+        return {"status": "fail", "detail": f"check failed: {str(e)[:80]}"}
+
+
 _SOC2_CHECKS = [
     ("M1.1  KEYCLOAK_ENABLED flag retired",            _soc2_check_kc_flag_retired),
     ("M1.1  KEYCLOAK_ISSUER configured",               _soc2_check_kc_issuer_configured),
@@ -254,6 +266,7 @@ _SOC2_CHECKS = [
     ("M3.10 Security test suite present",              _soc2_check_security_tests_present),
     ("M3.7  Security CI workflow",                     _soc2_check_security_ci),
     ("M3.5  Error tracking present",                   _soc2_check_error_tracking),
+    ("M1.7  Tenant request hooks armed",               _soc2_check_tenant_request_hooks),
     ("M4.1  Backup workflow present",                  _soc2_check_backup_workflow),
     ("M4.5  Policy docs present",                      _soc2_check_policy_docs_present),
     ("M4.6  Evidence collector workflow",              _soc2_check_evidence_collector),

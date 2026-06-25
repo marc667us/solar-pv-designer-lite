@@ -215,6 +215,63 @@ def test_apply_tenant_guc_runs_even_with_env_unset(monkeypatch, flask_app):
     assert len(conn.calls) == 2
 
 
+# ── SOC 2 M1.7 -- request-hook observability ────────────────────────────
+
+def test_is_tenant_scoped_path_classifier():
+    """The path-prefix classifier must pull /admin, /api/admin, etc. into
+    the tenant-scoped bucket and leave public paths out."""
+    assert tc.is_tenant_scoped_path("/admin/users") is True
+    assert tc.is_tenant_scoped_path("/admin") is True
+    assert tc.is_tenant_scoped_path("/api/admin/foo") is True
+    assert tc.is_tenant_scoped_path("/api/errors/recent") is True
+    assert tc.is_tenant_scoped_path("/boq-projects/123") is True
+    assert tc.is_tenant_scoped_path("/dashboard") is True
+    # Public surfaces:
+    assert tc.is_tenant_scoped_path("/") is False
+    assert tc.is_tenant_scoped_path("/api/ping") is False
+    assert tc.is_tenant_scoped_path("/marketplace") is False
+    assert tc.is_tenant_scoped_path("/login") is False
+    # Documented exception:
+    assert tc.is_tenant_scoped_path("/api/admin/health") is False
+
+
+def test_register_tenant_request_hooks_tags_g():
+    """Hook must populate g.tenant_scoped + g.tenant_ctx_present on every
+    request without raising, and remain idempotent on double-registration."""
+    from flask import Flask, g, jsonify
+    app = Flask(__name__)
+    app.secret_key = "test"
+    tc.register_tenant_request_hooks(app)
+    # Idempotency
+    tc.register_tenant_request_hooks(app)
+
+    @app.route("/admin/anything")
+    def _stub():
+        return jsonify(
+            tenant_scoped=g.tenant_scoped,
+            tenant_ctx_present=g.tenant_ctx_present,
+        )
+
+    @app.route("/api/ping")
+    def _public():
+        return jsonify(
+            tenant_scoped=g.tenant_scoped,
+            tenant_ctx_present=g.tenant_ctx_present,
+        )
+
+    with app.test_client() as c:
+        r = c.get("/admin/anything")
+        assert r.status_code == 200
+        body = r.get_json()
+        assert body["tenant_scoped"] is True
+        assert body["tenant_ctx_present"] is False
+
+        r2 = c.get("/api/ping")
+        body2 = r2.get_json()
+        assert body2["tenant_scoped"] is False
+        assert body2["tenant_ctx_present"] is False
+
+
 def test_apply_tenant_guc_noop_on_sqlite_shaped_conn(monkeypatch, flask_app):
     monkeypatch.setenv("KEYCLOAK_ENABLED", "true")
     sqlite_like = MagicMock()
