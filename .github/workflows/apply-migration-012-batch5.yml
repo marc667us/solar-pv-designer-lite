@@ -1,0 +1,231 @@
+# Apply migrations/012_rls_batch5.sql to live Postgres.
+#
+# Extends M1.6 RLS to 12 more tables (mostly global / platform).
+# Per owner directive 2026-06-25 (batch 4 follow-up): total table
+# coverage > conceptual purity. 10 of 12 tables get column + policy
+# with NULL tenant_id by design.
+#
+# Same shape as 007 / 008 / 009 / 010 / 011 BUT with a dynamic table
+# count: we count batch tables that actually exist on live PG and
+# verify each is covered, instead of hardcoding "expected = 12".
+# Adopts the lesson from batch 4's shading_history surprise.
+#
+# Default mode is DRY-RUN. Re-run with `-f confirm=BATCH5_RLS_APPLY`.
+
+name: Apply Migration 012 (Batch 5 RLS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type BATCH5_RLS_APPLY to commit migration 012 to live Postgres."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+      BATCH5_TABLES:  "referrals beta_feedback beta_signups monitor_alerts monitor_state newsletter_subscribers upgrade_codes login_failures product_brands product_categories admin_settings appliances"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "BATCH5_RLS_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- migration 012 will be committed to live Postgres ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- migration 012 will be parsed + previewed only ==="
+            echo "Re-run with -f confirm=BATCH5_RLS_APPLY to commit."
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/012_rls_batch5.sql
+          echo "OK: migrations/012_rls_batch5.sql present"
+          wc -l migrations/012_rls_batch5.sql
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- migration 003 helpers present
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          HELPER_COUNT=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM pg_proc WHERE proname IN ('current_tenant_id','_phase4_user_to_tenant')")
+          if [ "$HELPER_COUNT" -lt "2" ]; then
+            echo "::error::Pre-flight failed: migration 003 helpers missing ($HELPER_COUNT found)."
+            exit 1
+          fi
+          echo "OK: migration 003 helpers present (current_tenant_id + _phase4_user_to_tenant)."
+
+      - name: Pre-flight -- count current batch-5 rows + which tables exist
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          echo "--- row counts BEFORE migration ---"
+          EXPECTED=0
+          for t in $BATCH5_TABLES; do
+            COUNT=$(psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM $t" 2>/dev/null || echo "MISSING")
+            if [ "$COUNT" = "MISSING" ]; then
+              printf "  %-30s %s\n" "$t:" "(table missing -- lazy-created)"
+            else
+              printf "  %-30s %s\n" "$t:" "$COUNT"
+              EXPECTED=$((EXPECTED + 1))
+            fi
+          done
+          echo "Expected tenant_id columns + policies after apply: $EXPECTED / 12 batch tables"
+          echo "EXPECTED_TABLES=$EXPECTED" >> $GITHUB_ENV
+
+      - name: Show migration overview
+        run: |
+          echo "--- migrations/012_rls_batch5.sql ---"
+          grep -E "^-- (PART|=)" migrations/012_rls_batch5.sql | head -30
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The SQL below WOULD have been applied. Nothing was."
+          echo "================================================================"
+          head -60 migrations/012_rls_batch5.sql
+
+      - name: Apply migration 012 (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/012_rls_batch5.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/012_rls_batch5.sql
+          echo "OK: migration 012 applied."
+
+      - name: Verify post-apply -- columns
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- expect: $EXPECTED_TABLES batch-5 tables now carry tenant_id ---"
+          COLS=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT table_name FROM information_schema.columns
+             WHERE column_name='tenant_id' AND table_schema='public'
+               AND table_name IN ('referrals','beta_feedback','beta_signups',
+                                   'monitor_alerts','monitor_state','newsletter_subscribers',
+                                   'upgrade_codes','login_failures',
+                                   'product_brands','product_categories',
+                                   'admin_settings','appliances')
+             ORDER BY table_name")
+          echo "$COLS"
+          N=$(echo "$COLS" | grep -c .)
+          if [ "$N" -lt "$EXPECTED_TABLES" ]; then
+            echo "::error::expected $EXPECTED_TABLES tenant_id columns, found $N"
+            exit 1
+          fi
+          echo "OK: $N/$EXPECTED_TABLES tenant_id columns confirmed (of 12 batch members)."
+
+      - name: Verify post-apply -- RLS policies
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- expect: $EXPECTED_TABLES batch-5 _tenant_isolation policies ---"
+          POLICIES=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT tablename || ':' || policyname FROM pg_policies
+             WHERE policyname IN (
+               'referrals_tenant_isolation',
+               'beta_feedback_tenant_isolation',
+               'beta_signups_tenant_isolation',
+               'monitor_alerts_tenant_isolation',
+               'monitor_state_tenant_isolation',
+               'newsletter_subscribers_tenant_isolation',
+               'upgrade_codes_tenant_isolation',
+               'login_failures_tenant_isolation',
+               'product_brands_tenant_isolation',
+               'product_categories_tenant_isolation',
+               'admin_settings_tenant_isolation',
+               'appliances_tenant_isolation'
+             )
+             ORDER BY tablename")
+          echo "$POLICIES"
+          N=$(echo "$POLICIES" | grep -c .)
+          if [ "$N" -lt "$EXPECTED_TABLES" ]; then
+            echo "::error::expected $EXPECTED_TABLES RLS policies, found $N"
+            exit 1
+          fi
+          echo "OK: $N/$EXPECTED_TABLES RLS policies confirmed (of 12 batch members)."
+
+      - name: Verify post-apply -- backfill coverage
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- unbackfilled (tenant_id IS NULL) counts ---"
+          echo "  [user-owned: referrals should be zero; beta_feedback may have NULLs from anonymous submitters]"
+          for t in referrals beta_feedback; do
+            COUNT=$(psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM $t WHERE tenant_id IS NULL" 2>/dev/null || echo "(table missing)")
+            printf "    %-30s %s\n" "$t:" "$COUNT"
+          done
+          echo "  [global, NULL by design -- expect == row count]"
+          for t in beta_signups monitor_alerts monitor_state newsletter_subscribers upgrade_codes login_failures product_brands product_categories admin_settings appliances; do
+            COUNT=$(psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM $t WHERE tenant_id IS NULL" 2>/dev/null || echo "(table missing)")
+            printf "    %-30s %s\n" "$t:" "$COUNT"
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " M1.6 BATCH 5 COMPLETE -- $EXPECTED_TABLES more tables RLS-enforced."
+            echo "================================================================"
+            echo " 2 user-owned: referrals (via referrer_id), beta_feedback (partial)"
+            echo " 10 global (NULL by design): beta_signups, monitor_alerts,"
+            echo "   monitor_state, newsletter_subscribers, upgrade_codes,"
+            echo "   login_failures, product_brands, product_categories,"
+            echo "   admin_settings, appliances"
+            echo ""
+            echo " Phase 7 follow-up applies to ALL 10 global tables (see batch 4"
+            echo " for documented options). DO NOT remove the parallel-run NULL"
+            echo " escape on these tables before the alternative is in place."
+          else
+            echo "DRY-RUN -- no Render changes. Re-run with confirm=BATCH5_RLS_APPLY to commit."
+          fi
