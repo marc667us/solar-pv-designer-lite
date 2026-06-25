@@ -1,0 +1,217 @@
+# Apply migrations/011_rls_batch4.sql to live Postgres.
+#
+# Extends M1.6 RLS to 9 more tables (mixed ownership). Per owner
+# directive 2026-06-25: total coverage > conceptual purity. The 5
+# global tables (assessment_requests, installers, news_posts, leads,
+# helpline_learned_kb) get the column + policy added but tenant_id
+# stays NULL on every row -- their data is intentionally
+# tenant-agnostic. Phase 7 will need an explicit global-table policy.
+#
+# Same shape as 007 / 008 / 009 / 010:
+#   * Idempotent migration file.
+#   * Parallel-run policy with NULL escape.
+#   * Pre-flight verifies migration 003 helpers exist.
+#   * Default mode is DRY-RUN. Re-run with `-f confirm=BATCH4_RLS_APPLY`.
+
+name: Apply Migration 011 (Batch 4 RLS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type BATCH4_RLS_APPLY to commit migration 011 to live Postgres."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "BATCH4_RLS_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- migration 011 will be committed to live Postgres ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- migration 011 will be parsed + previewed only ==="
+            echo "Re-run with -f confirm=BATCH4_RLS_APPLY to commit."
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/011_rls_batch4.sql
+          echo "OK: migrations/011_rls_batch4.sql present"
+          wc -l migrations/011_rls_batch4.sql
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- migration 003 helpers present
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          HELPER_COUNT=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM pg_proc WHERE proname IN ('current_tenant_id','_phase4_user_to_tenant')")
+          if [ "$HELPER_COUNT" -lt "2" ]; then
+            echo "::error::Pre-flight failed: migration 003 helpers missing ($HELPER_COUNT found)."
+            exit 1
+          fi
+          echo "OK: migration 003 helpers present (current_tenant_id + _phase4_user_to_tenant)."
+
+      - name: Pre-flight -- count current batch-4 rows
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          echo "--- row counts BEFORE migration ---"
+          for t in tickets ticket_replies email_logs shading_history assessment_requests installers news_posts leads helpline_learned_kb; do
+            COUNT=$(psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM $t" 2>/dev/null || echo "(table missing)")
+            printf "  %-30s %s\n" "$t:" "$COUNT"
+          done
+
+      - name: Show migration overview
+        run: |
+          echo "--- migrations/011_rls_batch4.sql ---"
+          grep -E "^-- (PART|=)" migrations/011_rls_batch4.sql | head -30
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The SQL below WOULD have been applied. Nothing was."
+          echo "================================================================"
+          head -60 migrations/011_rls_batch4.sql
+
+      - name: Apply migration 011 (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/011_rls_batch4.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/011_rls_batch4.sql
+          echo "OK: migration 011 applied."
+
+      - name: Verify post-apply -- columns
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- expect: 9 tables now carry tenant_id ---"
+          COLS=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT table_name FROM information_schema.columns
+             WHERE column_name='tenant_id' AND table_schema='public'
+               AND table_name IN ('tickets','ticket_replies','email_logs','shading_history',
+                                   'assessment_requests','installers','news_posts','leads',
+                                   'helpline_learned_kb')
+             ORDER BY table_name")
+          echo "$COLS"
+          N=$(echo "$COLS" | grep -c .)
+          if [ "$N" -lt "9" ]; then
+            echo "::error::expected 9 tenant_id columns, found $N"
+            exit 1
+          fi
+          echo "OK: 9 tenant_id columns confirmed."
+
+      - name: Verify post-apply -- RLS policies
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- expect: 9 batch-4 _tenant_isolation policies ---"
+          POLICIES=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT tablename || ':' || policyname FROM pg_policies
+             WHERE policyname IN (
+               'tickets_tenant_isolation',
+               'ticket_replies_tenant_isolation',
+               'email_logs_tenant_isolation',
+               'shading_history_tenant_isolation',
+               'assessment_requests_tenant_isolation',
+               'installers_tenant_isolation',
+               'news_posts_tenant_isolation',
+               'leads_tenant_isolation',
+               'helpline_learned_kb_tenant_isolation'
+             )
+             ORDER BY tablename")
+          echo "$POLICIES"
+          N=$(echo "$POLICIES" | grep -c .)
+          if [ "$N" -lt "9" ]; then
+            echo "::error::expected 9 RLS policies, found $N"
+            exit 1
+          fi
+          echo "OK: 9 RLS policies confirmed."
+
+      - name: Verify post-apply -- backfill coverage
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- unbackfilled (tenant_id IS NULL) counts ---"
+          echo "  [user-owned, expect zero]"
+          for t in tickets ticket_replies email_logs shading_history; do
+            COUNT=$(psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM $t WHERE tenant_id IS NULL" 2>/dev/null || echo "?")
+            printf "    %-30s %s\n" "$t:" "$COUNT"
+          done
+          echo "  [global, NULL by design -- expect == row count]"
+          for t in assessment_requests installers news_posts leads helpline_learned_kb; do
+            COUNT=$(psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM $t WHERE tenant_id IS NULL" 2>/dev/null || echo "?")
+            printf "    %-30s %s\n" "$t:" "$COUNT"
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " M1.6 BATCH 4 COMPLETE -- 9 more tables now RLS-enforced."
+            echo "================================================================"
+            echo " 4 user-owned: tickets, ticket_replies, email_logs, shading_history"
+            echo " 5 global (NULL by design): assessment_requests, installers,"
+            echo "   news_posts, leads, helpline_learned_kb"
+            echo ""
+            echo " Phase 7 FOLLOW-UP: the 5 global tables need an explicit"
+            echo " global-table policy before strict RLS is enabled, OR they"
+            echo " will become invisible to every tenant. Options documented"
+            echo " in the migration header."
+          else
+            echo "DRY-RUN -- no Render changes. Re-run with confirm=BATCH4_RLS_APPLY to commit."
+          fi
