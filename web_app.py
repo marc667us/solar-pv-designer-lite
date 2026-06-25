@@ -18977,17 +18977,18 @@ def _fx_rate(code, default):
 _CURRENCY_RATES_FROM_USD = {
     # Indicative rates — overridable via FX_<CODE>_PER_USD env vars.
     # Customers see a disclaimer so they know to verify before quoting.
+    # Refreshed 2026-06-25 from open.er-api.com (sensible 1-2 dp rounding).
     "USD": 1.0,
-    "EUR": _fx_rate("EUR", 0.93),
-    "GBP": _fx_rate("GBP", 0.79),
-    "GHS": _fx_rate("GHS", 14.5),
-    "NGN": _fx_rate("NGN", 1550.0),
-    "KES": _fx_rate("KES", 130.0),
-    "ZAR": _fx_rate("ZAR", 18.5),
-    "XOF": _fx_rate("XOF", 610.0),
-    "ZMW": _fx_rate("ZMW", 24.0),
+    "EUR": _fx_rate("EUR", 0.88),
+    "GBP": _fx_rate("GBP", 0.76),
+    "GHS": _fx_rate("GHS", 11.2),
+    "NGN": _fx_rate("NGN", 1370.0),
+    "KES": _fx_rate("KES", 129.0),
+    "ZAR": _fx_rate("ZAR", 16.6),
+    "XOF": _fx_rate("XOF", 580.0),
+    "ZMW": _fx_rate("ZMW", 18.0),
 }
-_CURRENCY_RATES_AS_OF = os.environ.get("FX_RATES_AS_OF", "2026-06-18")
+_CURRENCY_RATES_AS_OF = os.environ.get("FX_RATES_AS_OF", "2026-06-25")
 
 
 def _convert_from_usd(price_usd: float, currency: str) -> float:
