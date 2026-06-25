@@ -89,6 +89,33 @@ def _make_token_response(
 # KEYCLOAK_ENABLED no longer exists as a kill-switch. OIDC routes always
 # execute the real flow. The legacy `/login?legacy=1` fallback is gone.
 
+def test_legacy_logout_delegates_to_oidc_logout(monkeypatch):
+    """SOC 2 M1.8 (2026-06-25): the legacy /logout entry point must
+    redirect to /auth/logout so Keycloak's end-session call + RT cookie
+    wipe + Flask session.clear all run. Without that delegation the KC
+    session and the solarpro_rt cookie stay alive after a user 'logs
+    out' (Codex finding 2026-06-25, MEDIUM)."""
+    monkeypatch.setenv("KEYCLOAK_ENABLED", "true")
+    app = Flask(__name__)
+    app.secret_key = "test"
+    register_oidc(app)
+
+    # Mirror web_app.py:1945-1969 in miniature: the legacy /logout
+    # purges drafts (we stub it out here) then 302s to oidc.auth_logout.
+    from flask import session, redirect, url_for
+    @app.route("/logout")
+    def legacy_logout():
+        session.clear()
+        return redirect(url_for("oidc.auth_logout"))
+
+    with app.test_client() as c:
+        _seed_session(c, user_id=42)
+        r = c.get("/logout", follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers["Location"].endswith("/auth/logout"), \
+            f"expected redirect to /auth/logout, got {r.headers['Location']}"
+
+
 def test_logout_with_env_unset_still_clears_session(monkeypatch):
     """Session-clearing on logout has no env dependency -- it works
     regardless of the retired KEYCLOAK_ENABLED env."""

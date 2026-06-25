@@ -1944,15 +1944,27 @@ def login():
 
 @app.route("/logout")
 def logout():
+    """Legacy logout entry point. As of SOC 2 M1.8 (2026-06-25) this
+    delegates to /auth/logout so Keycloak's end-session + refresh-token
+    revocation + RT cookie wipe all run. Without that delegation the
+    Keycloak session and the RT cookie stayed valid even after the
+    Flask session cleared (Codex review 2026-06-25, MEDIUM)."""
     uid = session.get("user_id")
     if uid:
-        # Purge draft/incomplete projects — only completed (stage='results') persist
-        with get_db() as _db:
-            _db.execute(
-                "DELETE FROM projects WHERE user_id=? AND stage NOT IN ('results')",
-                (uid,))
+        # Business-specific cleanup: drop draft/incomplete projects.
+        # Only completed (stage='results') rows persist past logout.
+        try:
+            with get_db() as _db:
+                _db.execute(
+                    "DELETE FROM projects WHERE user_id=? AND stage NOT IN ('results')",
+                    (uid,))
+        except Exception:
+            # Best-effort -- never block logout on a DB hiccup.
+            pass
+    # Belt-and-braces: clear local state in case the client drops the
+    # redirect. /auth/logout will clear again, idempotently.
     session.clear()
-    return redirect(url_for("landing"))
+    return redirect(url_for("oidc.auth_logout"))
 
 
 # ─── Password Reset ───────────────────────────────────────────────────────────
