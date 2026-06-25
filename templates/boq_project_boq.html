@@ -92,14 +92,26 @@
   {% if rows %}
     {% set ns = namespace(prev_bid=None, prev_fid=None, prev_bill=None, prev_sec=None, prev_sub=None) %}
     <style>
-      .boq-table { color:#e0e0f0; font-size:13px; }
+      .boq-table { color:#e0e0f0; font-size:13px; width:100%; table-layout:auto; }
       .boq-table .text-end { white-space: nowrap; }
-      .boq-table th.col-amt, .boq-table td.col-amt { min-width: 120px; white-space: nowrap; padding-right: 12px; }
-      .boq-table th.col-rate, .boq-table td.col-rate { min-width: 100px; white-space: nowrap; }
-      @media print { .boq-table { font-size: 11px; } }
+      .boq-table th.col-amt, .boq-table td.col-amt { min-width: 150px; white-space: nowrap; padding-right: 18px !important; }
+      .boq-table th.col-rate, .boq-table td.col-rate { min-width: 95px; white-space: nowrap; }
+      /* Override .solar-card's default overflow so the table-responsive
+         can scroll horizontally + show its scrollbar on the page. */
+      .boq-wrap.solar-card { overflow-x: auto !important; padding: 12px; }
+      .boq-wrap .table-responsive { overflow-x: auto; }
+      /* Internal view has 13 cols -- tighten cells slightly so the Amount column has room. */
+      .boq-table.internal th, .boq-table.internal td { padding: 4px 6px; font-size: 12px; }
+      @media print {
+        .boq-table { font-size: 10.5px; table-layout: auto; }
+        .boq-table th.col-amt, .boq-table td.col-amt { min-width: 90px; padding-right: 8px !important; white-space: nowrap; }
+        .boq-table th.col-rate, .boq-table td.col-rate { min-width: 70px; white-space: nowrap; }
+        .boq-wrap.solar-card { overflow: visible !important; padding: 0; }
+        .boq-wrap .table-responsive { overflow: visible !important; }
+      }
     </style>
-    <div class="table-responsive">
-    <table class="table align-middle boq-table">
+    <div class="table-responsive boq-wrap">
+    <table class="table align-middle boq-table{% if internal %} internal{% endif %}">
       <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
         {% if internal %}
         <tr>
