@@ -49,7 +49,7 @@
         <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
           <tr>
             <th style="width:30px"><input type="checkbox" onclick="document.querySelectorAll('.s-chk').forEach(e=>e.checked=this.checked)"></th>
-            <th>Company</th><th>Country</th><th>Owner account</th><th>Categories</th><th>Submitted</th><th class="text-end">Actions</th>
+            <th>Company</th><th>Country</th><th>Submitted by</th><th>Categories</th><th>Sent at</th><th class="text-end" style="min-width:280px">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -58,10 +58,21 @@
             <td><input class="s-chk" type="checkbox" name="supplier_ids" value="{{ s.id }}"></td>
             <td><strong>{{ s.name }}</strong>{% if s.website %}<div class="text-secondary small">{{ s.website }}</div>{% endif %}</td>
             <td class="small">{{ s.country or '—' }}</td>
-            <td class="small text-secondary">{{ s.owner_username or '—' }}{% if s.owner_email %}<div>{{ s.owner_email }}</div>{% endif %}</td>
+            <td class="small">
+              {% if s.owner_email %}
+                <a href="mailto:{{ s.owner_email }}" class="text-info text-decoration-none"><i class="bi bi-envelope me-1"></i>{{ s.owner_email }}</a>
+                {% if s.owner_username %}<div class="text-secondary" style="font-size:10px">@{{ s.owner_username }}</div>{% endif %}
+              {% elif s.owner_username %}
+                @{{ s.owner_username }}
+              {% else %}
+                <span class="text-secondary">—</span>
+              {% endif %}
+            </td>
             <td class="small text-secondary">{{ s.categories or '—' }}</td>
-            <td class="small text-secondary">{{ s.created_at }}</td>
-            <td class="text-end">
+            <td class="small text-secondary" style="white-space:nowrap">{{ s.created_at }}</td>
+            <td class="text-end" style="white-space:nowrap">
+              <a class="btn btn-outline-info btn-sm" href="{{ url_for('admin_marketplace_supplier_edit', sid=s.id) }}" title="Edit supplier details"><i class="bi bi-pencil"></i> Edit</a>
+              <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('marketplace_public') }}?supplier={{ s.id }}" target="_blank" title="Open public listings filtered by this supplier"><i class="bi bi-box-arrow-up-right"></i> Open</a>
               <form method="POST" action="{{ url_for('admin_marketplace_approve_supplier', sid=s.id) }}" style="display:inline">
                 <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
                 <button class="btn btn-success btn-sm"><i class="bi bi-check2"></i> Approve</button>
@@ -101,19 +112,42 @@
         <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
           <tr>
             <th style="width:30px"><input type="checkbox" onclick="document.querySelectorAll('.p-chk').forEach(e=>e.checked=this.checked)"></th>
-            <th>Product</th><th>Supplier</th><th>Category</th><th>Spec</th><th class="text-end">Price</th><th class="text-end">Actions</th>
+            <th>Product</th>
+            <th>Submitted by</th>
+            <th>Supplier / Category</th>
+            <th>Spec</th>
+            <th class="text-end">Price</th>
+            <th>Sent at</th>
+            <th class="text-end" style="min-width:320px">Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for p in products %}
+          {% set _submitter_email = (p['submitter_email'] if 'submitter_email' in p.keys() else '') %}
+          {% set _submitter_user  = (p['submitter_username'] if 'submitter_username' in p.keys() else '') %}
           <tr>
             <td><input class="p-chk" type="checkbox" name="product_ids" value="{{ p.id }}"></td>
             <td><strong>{{ p.name }}</strong>{% if p.brand or p.model %}<div class="text-secondary small">{{ p.brand }}{% if p.model %} · {{ p.model }}{% endif %}</div>{% endif %}</td>
-            <td class="small">{{ p.supplier_name or '—' }}</td>
-            <td class="small text-secondary">{{ p.category_name or '—' }}{% if p.subcategory %}<div>{{ p.subcategory }}</div>{% endif %}</td>
-            <td class="small text-secondary" style="max-width:300px">{{ p.spec or '—' }}</td>
-            <td class="text-end fw-bold text-warning">USD {{ (p.price_usd or 0)|money }} <span class="text-secondary small">/ {{ p.unit }}</span></td>
-            <td class="text-end">
+            <td class="small">
+              {% if _submitter_email %}
+                <a href="mailto:{{ _submitter_email }}" class="text-info text-decoration-none"><i class="bi bi-envelope me-1"></i>{{ _submitter_email }}</a>
+                {% if _submitter_user %}<div class="text-secondary" style="font-size:10px">@{{ _submitter_user }}</div>{% endif %}
+              {% elif _submitter_user %}
+                @{{ _submitter_user }}
+              {% else %}
+                <span class="text-secondary">—</span>
+              {% endif %}
+            </td>
+            <td class="small">
+              {{ p.supplier_name or '—' }}
+              <div class="text-secondary" style="font-size:10px">{{ p.category_name or 'Uncategorised' }}{% if p.subcategory %} · {{ p.subcategory }}{% endif %}</div>
+            </td>
+            <td class="small text-secondary" style="max-width:240px">{{ p.spec or '—' }}</td>
+            <td class="text-end fw-bold text-warning" style="white-space:nowrap">USD {{ (p.price_usd or 0)|money }}<div class="text-secondary small">/ {{ p.unit }}</div></td>
+            <td class="small text-secondary" style="white-space:nowrap">{{ p.created_at }}</td>
+            <td class="text-end" style="white-space:nowrap">
+              <a class="btn btn-outline-info btn-sm" href="{{ url_for('admin_marketplace_product_edit', pid=p.id) }}" title="Edit this product"><i class="bi bi-pencil"></i> Edit</a>
+              <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('marketplace_product_detail', pid=p.id) }}?preview=1" target="_blank" title="Open the public product detail page"><i class="bi bi-box-arrow-up-right"></i> Open</a>
               <form method="POST" action="{{ url_for('admin_marketplace_approve_product', pid=p.id) }}" style="display:inline">
                 <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
                 <button class="btn btn-success btn-sm"><i class="bi bi-check2"></i> Approve</button>

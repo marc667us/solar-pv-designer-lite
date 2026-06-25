@@ -15389,11 +15389,16 @@ def admin_marketplace_pending():
             "WHERE s.is_verified=0 AND s.is_active=1 "
             "ORDER BY s.created_at DESC LIMIT 100"
         ).fetchall()
+        # 2026-06-24: products query now JOINs to users via submitted_by_user_id
+        # so the pending queue can show "Submitted by <email>".
         sql = (
-            "SELECT ec.*, s.name AS supplier_name, pc.name AS category_name "
+            "SELECT ec.*, s.name AS supplier_name, pc.name AS category_name, "
+            "       su.username AS submitter_username, "
+            "       su.email AS submitter_email "
             "FROM equipment_catalog ec "
             "LEFT JOIN suppliers s ON s.id=ec.supplier_id "
             "LEFT JOIN product_categories pc ON pc.id=ec.category_id "
+            "LEFT JOIN users su ON su.id=ec.submitted_by_user_id "
             "WHERE ec.is_verified=0 AND ec.is_active=1 "
         )
         args = []
@@ -15408,7 +15413,29 @@ def admin_marketplace_pending():
             like = f"%{q.lower()}%"
             args.extend([like, like, like, like])
         sql += "ORDER BY ec.created_at DESC LIMIT 200"
-        products = c.execute(sql, args).fetchall()
+        try:
+            products = c.execute(sql, args).fetchall()
+        except Exception:
+            # Pre-migration DB: submitted_by_user_id not present. Retry
+            # the legacy query without the JOIN.
+            sql2 = (
+                "SELECT ec.*, s.name AS supplier_name, pc.name AS category_name "
+                "FROM equipment_catalog ec "
+                "LEFT JOIN suppliers s ON s.id=ec.supplier_id "
+                "LEFT JOIN product_categories pc ON pc.id=ec.category_id "
+                "WHERE ec.is_verified=0 AND ec.is_active=1 "
+            )
+            args2 = []
+            if cat_id:
+                sql2 += "AND ec.category_id=? "
+                args2.append(cat_id)
+            if q:
+                sql2 += ("AND (LOWER(ec.name) LIKE ? OR LOWER(ec.brand) LIKE ? "
+                         "     OR LOWER(ec.model) LIKE ? OR LOWER(s.name) LIKE ?) ")
+                like2 = f"%{q.lower()}%"
+                args2.extend([like2, like2, like2, like2])
+            sql2 += "ORDER BY ec.created_at DESC LIMIT 200"
+            products = c.execute(sql2, args2).fetchall()
         categories = c.execute(
             "SELECT id, name FROM product_categories WHERE is_active=1 "
             "ORDER BY display_order"
