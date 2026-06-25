@@ -25,13 +25,10 @@ appropriate HTTP code:
     wrong scope           -> 403 FORBIDDEN_SCOPE
     tenant mismatch       -> 403 TENANT_MISMATCH
 
-KEYCLOAK_ENABLED env feature flag:
-    Until phase 7 cuts production over, the flag stays unset and these
-    decorators raise no errors -- they pass through, so old
-    @login_required and @admin_required keep working. This is the
-    parallel-run model described in plan §4.3.
-
-    To enable the new auth, set KEYCLOAK_ENABLED=true.
+KEYCLOAK_ENABLED env feature flag (RETIRED 2026-06-25 — SOC 2 M1.1):
+    Keycloak is now the only authentication path. _keycloak_enabled()
+    is hard-wired to True so every decorator enforces JWT + role + tenant
+    on every request. The env var is ignored.
 """
 
 from __future__ import annotations
@@ -50,13 +47,14 @@ from .keycloak_middleware import (
 )
 
 
-KEYCLOAK_ENABLED_ENV = "KEYCLOAK_ENABLED"
+KEYCLOAK_ENABLED_ENV = "KEYCLOAK_ENABLED"  # retired flag, kept for back-compat imports
 
 
 def _keycloak_enabled() -> bool:
-    """The migration's master switch. When false, every decorator is a
-    no-op pass-through so the old auth stack keeps working unchanged."""
-    return os.environ.get(KEYCLOAK_ENABLED_ENV, "").lower() in ("1", "true", "yes", "on")
+    """Retired 2026-06-25 (SOC 2 M1.1). Keycloak is now mandatory; this
+    helper always returns True so every decorator enforces auth on every
+    request. The env var is no longer consulted."""
+    return True
 
 
 def get_request_context() -> RequestContext | None:

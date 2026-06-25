@@ -89,9 +89,9 @@ oidc_bp = Blueprint("oidc", __name__, url_prefix="/auth")
 # ── Config helpers ──────────────────────────────────────────────────────
 
 def _keycloak_enabled() -> bool:
-    return os.environ.get("KEYCLOAK_ENABLED", "").lower() in (
-        "1", "true", "yes", "on",
-    )
+    """Retired 2026-06-25 (SOC 2 M1.1). Always True — Keycloak is the
+    only auth path; OIDC routes always execute the real flow."""
+    return True
 
 
 def _issuer() -> str:

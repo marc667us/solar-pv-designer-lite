@@ -123,13 +123,25 @@ def _stub_verify(monkeypatch, claims: dict):
     )
 
 
-# ── Feature-flag pass-through (the parallel-run model) ───────────────────
+# ── Feature flag retired (SOC 2 M1.1, 2026-06-25) ────────────────────────
+# KEYCLOAK_ENABLED no longer exists as a kill-switch. Decorators always
+# enforce. The two tests below pin the new contract.
 
-def test_feature_flag_off_passes_through(client):
-    """With KEYCLOAK_ENABLED unset, decorators don't reject -- they let
-    the old @login_required / @admin_required stack handle it."""
-    resp = client.get("/protected/role")  # no Authorization header
-    assert resp.status_code == 200  # the view ran -- pass-through
+def test_feature_flag_retired_enforces_without_env(client, monkeypatch):
+    """SOC 2 M1.1: even with KEYCLOAK_ENABLED unset, the decorator must
+    reject an anonymous request. The env var is no longer consulted."""
+    monkeypatch.delenv("KEYCLOAK_ENABLED", raising=False)
+    resp = client.get("/protected/role")
+    assert resp.status_code == 401
+    assert resp.get_json()["error"] == "MISSING_BEARER"
+
+
+def test_feature_flag_retired_env_false_still_enforces(client, monkeypatch):
+    """SOC 2 M1.1: explicit KEYCLOAK_ENABLED=false must NOT disable auth."""
+    monkeypatch.setenv("KEYCLOAK_ENABLED", "false")
+    resp = client.get("/protected/role")
+    assert resp.status_code == 401
+    assert resp.get_json()["error"] == "MISSING_BEARER"
 
 
 # ── require_jwt ──────────────────────────────────────────────────────────

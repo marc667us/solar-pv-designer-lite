@@ -51,9 +51,9 @@ DEFAULT_TIMEOUT = 10.0
 
 
 def _keycloak_enabled() -> bool:
-    return os.environ.get("KEYCLOAK_ENABLED", "").lower() in (
-        "1", "true", "yes", "on",
-    )
+    """Retired 2026-06-25 (SOC 2 M1.1). Always True — internal SA calls
+    always attach a Bearer token; no parallel-run fallback."""
+    return True
 
 
 def agent_request(

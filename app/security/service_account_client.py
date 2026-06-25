@@ -109,11 +109,9 @@ class _CacheEntry:
 
 
 def _keycloak_enabled() -> bool:
-    """Parallel-run master switch. When false the broker hands back
-    None and callers stay on the legacy auth path."""
-    return os.environ.get(KEYCLOAK_ENABLED_ENV, "").lower() in (
-        "1", "true", "yes", "on",
-    )
+    """Retired 2026-06-25 (SOC 2 M1.1). Always True — every service-account
+    call now requires a real KC token; no parallel-run fallback."""
+    return True
 
 
 def _env_key_for(client_id: str) -> str:

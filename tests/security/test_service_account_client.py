@@ -66,20 +66,20 @@ def _ok_response(token: str = "ey.fake.token", expires_in: int = 300):
     return resp
 
 
-# ── Parallel-run short-circuit ───────────────────────────────────────────
+# ── Feature flag retired (SOC 2 M1.1, 2026-06-25) ───────────────────────
+# The "KEYCLOAK_ENABLED off -> return None" short-circuit is gone. The
+# broker now always tries to fetch a token regardless of the env var.
+# Coverage of the new contract is provided by test_happy_path_fetches_*.
 
-def test_returns_none_when_keycloak_disabled(monkeypatch):
+
+def test_env_unset_still_fetches_token(monkeypatch):
+    """SOC 2 M1.1: even with KEYCLOAK_ENABLED unset, the broker must
+    obtain a real SA token (or raise) -- no anonymous fallback."""
     monkeypatch.delenv("KEYCLOAK_ENABLED", raising=False)
-    with patch("app.security.service_account_client.requests.post") as p:
-        assert sac.get_service_account_token(CATALOGUE) is None
-        assert not p.called
-
-
-def test_returns_none_when_keycloak_flag_false(monkeypatch):
-    monkeypatch.setenv("KEYCLOAK_ENABLED", "false")
-    with patch("app.security.service_account_client.requests.post") as p:
-        assert sac.get_service_account_token(CATALOGUE) is None
-        assert not p.called
+    with patch("app.security.service_account_client.requests.post",
+               return_value=_ok_response(token="env-unset.tok")) as p:
+        assert sac.get_service_account_token(CATALOGUE) == "env-unset.tok"
+        p.assert_called_once()
 
 
 # ── Input validation ─────────────────────────────────────────────────────
@@ -276,9 +276,12 @@ def test_authorization_header_happy_path():
         assert sac.authorization_header(CATALOGUE) == {"Authorization": "Bearer abc"}
 
 
-def test_authorization_header_disabled_returns_none(monkeypatch):
+def test_authorization_header_env_unset_still_fetches(monkeypatch):
+    """SOC 2 M1.1: helper must mint a Bearer even with env unset."""
     monkeypatch.delenv("KEYCLOAK_ENABLED", raising=False)
-    assert sac.authorization_header(CATALOGUE) is None
+    with patch("app.security.service_account_client.requests.post",
+               return_value=_ok_response(token="abc")):
+        assert sac.authorization_header(CATALOGUE) == {"Authorization": "Bearer abc"}
 
 
 # ── Allowlist completeness ───────────────────────────────────────────────

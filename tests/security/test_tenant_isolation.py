@@ -106,11 +106,14 @@ def test_current_user_is_service_account_reads_ctx(flask_app):
 
 # ── require_tenant_context: parallel-run short-circuit ──────────────────
 
-def test_require_tenant_passes_through_when_kc_disabled(monkeypatch, flask_app):
+def test_require_tenant_enforces_even_with_env_unset(monkeypatch, flask_app):
+    """SOC 2 M1.1 (2026-06-25): KEYCLOAK_ENABLED is retired. Tenant
+    isolation must be enforced regardless of the env var -- the
+    legacy "returns empty string when KC off" path is gone."""
     monkeypatch.delenv("KEYCLOAK_ENABLED", raising=False)
     with flask_app.test_request_context("/needs-tenant"):
-        # No ctx, KC disabled -> returns "" (legacy auth handles isolation).
-        assert tc.require_tenant_context() == ""
+        with pytest.raises(tc.MissingTenantContextError):
+            tc.require_tenant_context()
 
 
 def test_require_tenant_returns_id_when_present(monkeypatch, flask_app):
@@ -201,13 +204,15 @@ def test_apply_tenant_guc_writes_two_set_configs(monkeypatch, flask_app):
     assert conn.calls[1][1] == ("u-99",)
 
 
-def test_apply_tenant_guc_noop_when_kc_disabled(monkeypatch, flask_app):
+def test_apply_tenant_guc_runs_even_with_env_unset(monkeypatch, flask_app):
+    """SOC 2 M1.1 (2026-06-25): with the env flag retired, apply_tenant_guc
+    must still set the GUCs whenever a request ctx carries a tenant_id."""
     monkeypatch.delenv("KEYCLOAK_ENABLED", raising=False)
     conn = _FakePgConn()
     with flask_app.test_request_context("/peek"):
-        g.kc_ctx = _make_ctx(tenant_id="t-99")
-        assert tc.apply_tenant_guc(conn) is False
-    assert conn.calls == []
+        g.kc_ctx = _make_ctx(tenant_id="t-99", user_id="u-99")
+        assert tc.apply_tenant_guc(conn) is True
+    assert len(conn.calls) == 2
 
 
 def test_apply_tenant_guc_noop_on_sqlite_shaped_conn(monkeypatch, flask_app):

@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Errors — SolarPro Admin{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h2 class="fw-bold mb-0">
+        <i class="bi bi-bug-fill text-danger me-2"></i>Error Tracking
+      </h2>
+      <p class="text-muted small mb-0">
+        Captured uncaught exceptions across the app.
+        {% if sentry_enabled %}
+          <span class="badge bg-success ms-2">Sentry connected</span>
+        {% else %}
+          <span class="badge bg-secondary ms-2">Sentry off (set SENTRY_DSN)</span>
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin_operations') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Opcenter
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter chips -->
+  <div class="mb-3">
+    <a href="?status=all"     class="btn btn-sm {% if status_filter == 'all' %}btn-light{% else %}btn-outline-light{% endif %}">All</a>
+    <a href="?status=open"    class="btn btn-sm {% if status_filter == 'open' %}btn-danger{% else %}btn-outline-danger{% endif %}">Open</a>
+    <a href="?status=resolved" class="btn btn-sm {% if status_filter == 'resolved' %}btn-success{% else %}btn-outline-success{% endif %}">Resolved</a>
+    {% if fp_filter %}
+      <a href="?status={{ status_filter }}" class="btn btn-sm btn-warning ms-2">
+        <i class="bi bi-funnel-fill me-1"></i>{{ fp_filter }} ✕
+      </a>
+    {% endif %}
+  </div>
+
+  <!-- Grouped (top fingerprints) -->
+  <div class="card bg-dark border-secondary mb-4">
+    <div class="card-header"><strong>Top error groups</strong> <small class="text-muted">— click count to filter</small></div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Route</th>
+            <th class="text-end">Hits</th>
+            <th>Last seen</th>
+            <th>Fingerprint</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for g in grouped %}
+          <tr>
+            <td class="text-danger fw-semibold">{{ g.error_type }}</td>
+            <td class="font-monospace small">{{ g.route }}</td>
+            <td class="text-end">
+              <a href="?fp={{ g.fingerprint }}&status={{ status_filter }}" class="badge bg-danger text-decoration-none">{{ g.hits }}</a>
+            </td>
+            <td class="small text-muted">{{ g.last_seen }}</td>
+            <td class="small font-monospace text-muted">{{ g.fingerprint }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="text-center text-muted py-4">No errors yet — that's a good sign.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Recent (flat) -->
+  <div class="card bg-dark border-secondary">
+    <div class="card-header">
+      <strong>Recent errors</strong>
+      <small class="text-muted">(latest {{ limit }})</small>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>When</th>
+            <th>Status</th>
+            <th>Method</th>
+            <th>Route</th>
+            <th>Type</th>
+            <th>Message</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+          <tr {% if r.resolved %}class="text-muted"{% endif %}>
+            <td><a href="{{ url_for('admin_error_detail', error_id=r.id) }}" class="text-info">{{ r.id }}</a></td>
+            <td class="small">{{ r.created_at }}</td>
+            <td>
+              {% if r.status and r.status >= 500 %}
+                <span class="badge bg-danger">{{ r.status }}</span>
+              {% elif r.status and r.status >= 400 %}
+                <span class="badge bg-warning text-dark">{{ r.status }}</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ r.status or '?' }}</span>
+              {% endif %}
+            </td>
+            <td class="font-monospace small">{{ r.method }}</td>
+            <td class="font-monospace small">{{ r.route }}</td>
+            <td class="text-danger small">{{ r.error_type }}</td>
+            <td class="small">{{ r.error_message[:140] }}{% if r.error_message|length > 140 %}…{% endif %}</td>
+            <td>
+              {% if not r.resolved %}
+                <form method="post" action="{{ url_for('admin_error_resolve', error_id=r.id) }}" class="d-inline">
+                  <input type="hidden" name="_csrf" value="{{ session.get('_csrf','') }}">
+                  <button type="submit" class="btn btn-sm btn-outline-success" title="Mark resolved">
+                    <i class="bi bi-check2"></i>
+                  </button>
+                </form>
+              {% else %}
+                <span class="badge bg-success">resolved</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="8" class="text-center text-muted py-4">No errors matching the filter.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

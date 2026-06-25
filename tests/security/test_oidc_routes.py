@@ -85,31 +85,13 @@ def _make_token_response(
     return resp
 
 
-# ── Parallel-run pass-through ───────────────────────────────────────────
+# ── Feature flag retired (SOC 2 M1.1, 2026-06-25) ───────────────────────
+# KEYCLOAK_ENABLED no longer exists as a kill-switch. OIDC routes always
+# execute the real flow. The legacy `/login?legacy=1` fallback is gone.
 
-def test_login_kc_off_falls_back_to_legacy(monkeypatch):
-    monkeypatch.delenv("KEYCLOAK_ENABLED", raising=False)
-    app = Flask(__name__)
-    app.secret_key = "test"
-    register_oidc(app)
-    with app.test_client() as c:
-        r = c.get("/auth/login", follow_redirects=False)
-        assert r.status_code == 302
-        assert r.headers["Location"].endswith("/login?legacy=1")
-
-
-def test_callback_kc_off_falls_back_to_legacy(monkeypatch):
-    monkeypatch.delenv("KEYCLOAK_ENABLED", raising=False)
-    app = Flask(__name__)
-    app.secret_key = "test"
-    register_oidc(app)
-    with app.test_client() as c:
-        r = c.get("/auth/callback?code=x&state=y", follow_redirects=False)
-        assert r.status_code == 302
-        assert r.headers["Location"].endswith("/login?legacy=1")
-
-
-def test_logout_kc_off_clears_session_and_redirects(monkeypatch):
+def test_logout_with_env_unset_still_clears_session(monkeypatch):
+    """Session-clearing on logout has no env dependency -- it works
+    regardless of the retired KEYCLOAK_ENABLED env."""
     monkeypatch.delenv("KEYCLOAK_ENABLED", raising=False)
     app = Flask(__name__)
     app.secret_key = "test"
@@ -120,16 +102,6 @@ def test_logout_kc_off_clears_session_and_redirects(monkeypatch):
         assert r.status_code == 302
         with c.session_transaction() as s:
             assert "user" not in s
-
-
-def test_refresh_kc_off_503(monkeypatch):
-    monkeypatch.delenv("KEYCLOAK_ENABLED", raising=False)
-    app = Flask(__name__)
-    app.secret_key = "test"
-    register_oidc(app)
-    with app.test_client() as c:
-        r = c.post("/auth/refresh")
-        assert r.status_code == 503
 
 
 # ── /auth/login ──────────────────────────────────────────────────────────

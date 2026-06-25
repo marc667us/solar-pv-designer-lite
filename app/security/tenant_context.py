@@ -62,13 +62,14 @@ from .keycloak_middleware import RequestContext
 log = logging.getLogger(__name__)
 
 
-KEYCLOAK_ENABLED_ENV = "KEYCLOAK_ENABLED"
+KEYCLOAK_ENABLED_ENV = "KEYCLOAK_ENABLED"  # retired flag, kept for back-compat imports
 
 
 def _keycloak_enabled() -> bool:
-    return os.environ.get(KEYCLOAK_ENABLED_ENV, "").lower() in (
-        "1", "true", "yes", "on",
-    )
+    """Retired 2026-06-25 (SOC 2 M1.1). Always True — Keycloak is the
+    only auth path. RLS GUCs are set on every request that carries a
+    verified JWT context."""
+    return True
 
 
 # ── Public read helpers (route handlers + repositories use these) ───────

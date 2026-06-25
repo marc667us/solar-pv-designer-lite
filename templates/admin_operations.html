@@ -140,6 +140,15 @@
         <button class="btn btn-sm btn-outline-danger" onclick="runSecurityAudit()">
           <i class="bi bi-shield-check me-1"></i>Run Security Audit
         </button>
+        <button class="btn btn-sm btn-success" onclick="runSoc2Audit()">
+          <i class="bi bi-shield-fill-check me-1"></i>Run SOC 2 Audit
+        </button>
+        <a href="/admin/soc2/report" target="_blank" class="btn btn-sm btn-outline-success">
+          <i class="bi bi-file-earmark-text me-1"></i>View Full SOC 2 Report
+        </a>
+        <a href="/admin/errors" class="btn btn-sm btn-outline-warning">
+          <i class="bi bi-bug-fill me-1"></i>View Error Tracker
+        </a>
         <button class="btn btn-sm btn-outline-warning" onclick="checkTenantIsolation()">
           <i class="bi bi-diagram-3 me-1"></i>Check Tenant Isolation
         </button>
@@ -605,6 +614,22 @@ async function refreshAllStatus() {
 
 function runSecurityAudit() {
   apiPost('/admin/ops/security/audit').then(d => showResult('securityResult', d)).catch(e => showResult('securityResult', {error: e.message}, true));
+}
+function runSoc2Audit() {
+  apiPost('/admin/ops/soc2/audit').then(d => {
+    // Render the audit as a compact summary inline in the security result
+    // pane, then surface a link to the full report.
+    var lines = [];
+    lines.push('SOC 2 readiness score: ' + d.score + '%');
+    lines.push('  PASS: ' + d.counts.pass + '  WARN: ' + d.counts.warn + '  FAIL: ' + d.counts.fail);
+    lines.push('');
+    (d.findings || []).forEach(function(f) {
+      lines.push('[' + (f.status || '?').toUpperCase() + '] ' + f.label + ' -- ' + (f.detail || ''));
+    });
+    lines.push('');
+    lines.push('Full report: /admin/soc2/report');
+    showResult('securityResult', lines.join('\n'));
+  }).catch(e => showResult('securityResult', {error: e.message}, true));
 }
 function checkTenantIsolation() {
   apiGet('/admin/ops/security/tenant-isolation').then(d => showResult('securityResult', d)).catch(e => showResult('securityResult', {error: e.message}, true));

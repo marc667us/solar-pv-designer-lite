@@ -41,13 +41,18 @@ def _ok_token():
     return resp
 
 
-def test_kc_off_issues_request_without_authorization(monkeypatch):
+def test_env_unset_still_attaches_bearer(monkeypatch):
+    """SOC 2 M1.1 (2026-06-25): KEYCLOAK_ENABLED is retired. Even when
+    the env var is absent, internal calls must obtain and attach a SA
+    token -- there is no anonymous fall-through any more."""
     monkeypatch.delenv("KEYCLOAK_ENABLED", raising=False)
-    with patch("app.auth.internal_calls.requests.request") as req:
+    with patch("app.security.service_account_client.requests.post",
+               return_value=_ok_token()), \
+         patch("app.auth.internal_calls.requests.request") as req:
         req.return_value = MagicMock(status_code=200)
         ic.agent_get(CATALOGUE, "http://localhost/api/x")
         sent_headers = req.call_args.kwargs.get("headers", {})
-        assert "Authorization" not in sent_headers
+        assert sent_headers["Authorization"].startswith("Bearer ")
 
 
 def test_kc_on_attaches_bearer():

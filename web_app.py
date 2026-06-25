@@ -1757,13 +1757,10 @@ def landing_page2():
 @app.route("/register", methods=["GET", "POST"])
 @limiter.limit("10 per hour")
 def register():
-    # Phase 7 Keycloak guard: when KEYCLOAK_ENABLED is truthy and the
-    # marc667us escape hatch (?legacy=1) is absent, bounce GET /register
-    # to the OIDC blueprint so users land on the Keycloak registration
-    # page. POST handling is untouched so the legacy form keeps working.
-    if request.method in ("GET", "POST") \
-        and os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
-        and (request.args.get("legacy") != "1" and request.form.get("legacy") != "1"):
+    # SOC 2 M1.1 (2026-06-25): Keycloak is now the only auth path.
+    # All methods unconditionally route to the OIDC blueprint -- no env
+    # check, no ?legacy=1 escape. The legacy form below is dead code.
+    if request.method in ("GET", "POST"):
         _kc_next = request.args.get("next")
         if _kc_next:
             return redirect(url_for("oidc.auth_register", next=_kc_next))
@@ -1883,13 +1880,10 @@ def verify_email(token):
 @app.route("/login", methods=["GET", "POST"])
 @limiter.limit("20 per hour")
 def login():
-    # Phase 7 Keycloak guard: when KEYCLOAK_ENABLED is truthy and the
-    # marc667us escape hatch (?legacy=1) is absent, bounce GET /login
-    # to the OIDC blueprint so users land on the Keycloak login page.
-    # POST handling is untouched so the legacy form keeps working.
-    if request.method in ("GET", "POST") \
-        and os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
-        and (request.args.get("legacy") != "1" and request.form.get("legacy") != "1"):
+    # SOC 2 M1.1 (2026-06-25): Keycloak is now the only auth path.
+    # All methods unconditionally route to the OIDC blueprint -- no env
+    # check, no ?legacy=1 escape. The legacy form below is dead code.
+    if request.method in ("GET", "POST"):
         _kc_next = request.args.get("next")
         if _kc_next:
             return redirect(url_for("oidc.auth_login", next=_kc_next))
@@ -1966,10 +1960,9 @@ def logout():
 @app.route("/forgot-password", methods=["GET", "POST"])
 @limiter.limit("5 per hour")
 def forgot_password():
-    if os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
-        and (request.args.get("legacy") != "1" and request.form.get("legacy") != "1"):
-        flash("Password reset is now managed by the SolarPro identity service. Use the \"Forgot password?\" link on the login page.", "info")
-        return redirect(url_for("oidc.auth_login"))
+    # SOC 2 M1.1 (2026-06-25): Keycloak owns password reset. Always redirect.
+    flash("Password reset is now managed by the SolarPro identity service. Use the \"Forgot password?\" link on the login page.", "info")
+    return redirect(url_for("oidc.auth_login"))
     if request.method == "POST":
         csrf_protect()
         email = request.form.get("email", "").strip().lower()
@@ -2015,10 +2008,9 @@ def forgot_password():
 
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
-    if os.environ.get("KEYCLOAK_ENABLED", "").lower() in ("1", "true", "yes", "on") \
-        and (request.args.get("legacy") != "1" and request.form.get("legacy") != "1"):
-        flash("Password reset is now managed by the SolarPro identity service. Use the \"Forgot password?\" link on the login page.", "info")
-        return redirect(url_for("oidc.auth_login"))
+    # SOC 2 M1.1 (2026-06-25): Keycloak owns password reset. Always redirect.
+    flash("Password reset is now managed by the SolarPro identity service. Use the \"Forgot password?\" link on the login page.", "info")
+    return redirect(url_for("oidc.auth_login"))
     with get_db() as c:
         rec = c.execute(
             "SELECT * FROM password_reset_tokens WHERE token=? AND used=0",
@@ -9115,6 +9107,11 @@ def err_uncaught(e):
     try:
         import traceback as _tb
         app.logger.error("UNCAUGHT " + request.method + " " + request.path + chr(10) + _tb.format_exc())
+    except Exception:
+        pass
+    # SOC 2 M3.5: capture to structured error_logs table + optional Sentry.
+    try:
+        _record_error(e)  # defined in the error-tracking block below
     except Exception:
         pass
     # Werkzeug HTTPException -- honour its status code.
@@ -27453,6 +27450,655 @@ except Exception as _e_cpr:
         app.logger.warning('catalogue-pricing routes failed to register: %s', _e_cpr)
     except Exception:
         pass
+
+# ─── SOC 2 readiness audit ───────────────────────────────────────────────
+# Added 2026-06-25 as part of SOC 2 M1.1 + M4.7 (audit dashboard seed).
+# Walks the LIVE app + database and returns a concrete findings report:
+#   * Keycloak flag retirement (M1.1)
+#   * Phase B migration applied (M1.3)
+#   * RLS coverage % (M1.6)
+#   * Tenant-column coverage % (M3.1)
+#   * Audit-log activity (proves logging works) (M3.1, M3.2)
+#   * Security test count (M3.10)
+#   * Policy doc count (M4.5)
+#   * Backups / DR / pen-test / evidence collector — placeholders that
+#     surface "not yet implemented" until the matching milestone closes.
+# Two endpoints:
+#   POST /admin/ops/soc2/audit  -> JSON for the opcenter AJAX panel
+#   GET  /admin/soc2/report     -> full HTML report page (printable)
+
+
+def _soc2_check_kc_flag_retired():
+    """M1.1: the KEYCLOAK_ENABLED kill-switch must be hard-wired True."""
+    try:
+        from app.security.decorators import _keycloak_enabled as _dec
+        from app.security.tenant_context import _keycloak_enabled as _tc
+        from app.security.service_account_client import _keycloak_enabled as _sa
+        from app.auth.oidc_routes import _keycloak_enabled as _oidc
+        from app.auth.internal_calls import _keycloak_enabled as _ic
+        helpers = (_dec, _tc, _sa, _oidc, _ic)
+        all_true = all(h() for h in helpers)
+        return {
+            "status": "pass" if all_true else "fail",
+            "detail": f"{sum(1 for h in helpers if h())}/{len(helpers)} _keycloak_enabled() helpers return True",
+        }
+    except Exception as e:
+        return {"status": "fail", "detail": f"import error: {str(e)[:80]}"}
+
+
+def _soc2_check_kc_issuer_configured():
+    """OIDC requires a configured issuer for any flow to work."""
+    iss = os.environ.get("KEYCLOAK_ISSUER", "").strip()
+    if iss:
+        return {"status": "pass", "detail": f"issuer set ({iss[:60]})"}
+    return {"status": "fail", "detail": "KEYCLOAK_ISSUER env unset"}
+
+
+def _soc2_check_phase_b_migration():
+    """M1.3: bcrypt column dropped from users table."""
+    try:
+        with get_db() as c:
+            row = c.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='users' AND column_name='password_hash'"
+            ).fetchone()
+            if row is None:
+                return {"status": "pass", "detail": "users.password_hash dropped"}
+            return {
+                "status": "warn",
+                "detail": "users.password_hash still present (Phase B migration not yet applied; ETA >= 2026-06-30)",
+            }
+    except Exception as e:
+        # Probably SQLite (no information_schema) — try a PRAGMA
+        try:
+            with get_db() as c:
+                cols = c.execute("PRAGMA table_info(users)").fetchall()
+                has = any(r[1] == "password_hash" for r in cols)
+                return {
+                    "status": "warn" if has else "pass",
+                    "detail": "users.password_hash " + ("present (SQLite dev DB)" if has else "absent"),
+                }
+        except Exception as e2:
+            return {"status": "warn", "detail": f"introspection failed: {str(e2)[:80]}"}
+
+
+def _soc2_check_rls_coverage():
+    """M1.6: count tenant_isolation policies in pg_policies."""
+    try:
+        with get_db() as c:
+            row = c.execute(
+                "SELECT COUNT(*) FROM pg_policies "
+                "WHERE policyname LIKE '%_tenant_isolation' OR policyname LIKE '%tenant_policy%'"
+            ).fetchone()
+            n = (row[0] if row else 0) or 0
+            if n >= 14:
+                return {"status": "pass", "detail": f"{n} RLS policies present"}
+            if n > 0:
+                return {"status": "warn", "detail": f"only {n} RLS policies (expand to every tenant table — M1.6)"}
+            return {"status": "fail", "detail": "no RLS policies found (SQLite dev DB or Phase 4 migration not applied)"}
+    except Exception as e:
+        return {"status": "warn", "detail": f"pg_policies introspection failed (likely SQLite): {str(e)[:60]}"}
+
+
+def _soc2_check_tenant_column_coverage():
+    """% of multi-tenant tables that carry tenant_id."""
+    try:
+        with get_db() as c:
+            # Postgres path
+            rows = c.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema='public' AND table_type='BASE TABLE'"
+            ).fetchall()
+            tables = [r[0] for r in rows]
+            with_tid = c.execute(
+                "SELECT DISTINCT table_name FROM information_schema.columns "
+                "WHERE table_schema='public' AND column_name='tenant_id'"
+            ).fetchall()
+            with_tid = {r[0] for r in with_tid}
+        total = len(tables) or 1
+        present = len(with_tid)
+        pct = round(100.0 * present / total, 1)
+        status = "pass" if pct >= 90 else ("warn" if pct >= 50 else "fail")
+        return {"status": status, "detail": f"{present}/{total} tables carry tenant_id ({pct}%)"}
+    except Exception as e:
+        return {"status": "warn", "detail": f"introspection failed (likely SQLite): {str(e)[:60]}"}
+
+
+def _soc2_check_audit_log_activity():
+    """M3.1: audit_logs table receives writes in the last 24h."""
+    try:
+        with get_db() as c:
+            row = c.execute("SELECT COUNT(*) FROM audit_logs").fetchone()
+            total = (row[0] if row else 0) or 0
+            row = c.execute(
+                "SELECT COUNT(*) FROM audit_logs WHERE created_at > (NOW() - INTERVAL '24 hours')"
+            ).fetchone() if total else None
+            recent = (row[0] if row else 0) or 0
+        if total == 0:
+            return {"status": "fail", "detail": "audit_logs table empty"}
+        if recent == 0:
+            return {"status": "warn", "detail": f"{total} total rows but 0 in last 24h"}
+        return {"status": "pass", "detail": f"{recent} rows in last 24h (lifetime {total})"}
+    except Exception as e:
+        # SQLite fallback (no NOW())
+        try:
+            with get_db() as c:
+                row = c.execute("SELECT COUNT(*) FROM audit_logs").fetchone()
+                total = (row[0] if row else 0) or 0
+            return {"status": "warn", "detail": f"{total} total rows (SQLite -- no time filter)"}
+        except Exception:
+            return {"status": "fail", "detail": f"audit_logs missing: {str(e)[:60]}"}
+
+
+def _soc2_check_route_decorator_coverage():
+    """% of /admin and /api/* routes that have a role/jwt decorator.
+
+    Heuristic: walk web_app.py source (the only module that defines these
+    routes) and count `@app.route("/admin"... | "/api/"...)` declarations
+    where the immediately preceding block contains at least one known auth
+    decorator. Runtime __wrapped__ chains are unreliable because the
+    project's decorators don't all use functools.wraps.
+    """
+    try:
+        path = os.path.join(os.path.dirname(__file__), "web_app.py")
+        with open(path, "rb") as f:
+            src = f.read().decode("utf-8", errors="ignore")
+        import re
+        route_re = re.compile(
+            r"@app\.route\(\s*[\"']/(admin|api)([\"'/])",
+        )
+        auth_markers = (
+            "@require_role", "@require_jwt", "@require_any_role",
+            "@require_scope", "@require_service_account",
+            "@admin_required", "@login_required", "@require_tenant_match",
+        )
+        total = 0
+        decorated = 0
+        for m in route_re.finditer(src):
+            total += 1
+            # Look back up to 6 lines for a known auth marker
+            line_start = src.rfind("\n", 0, m.start())
+            window = src[max(0, line_start - 600):m.start()]
+            if any(mk in window for mk in auth_markers):
+                decorated += 1
+        if total == 0:
+            return {"status": "warn", "detail": "no /admin or /api routes found in source"}
+        pct = round(100.0 * decorated / total, 1)
+        status = "pass" if pct >= 95 else ("warn" if pct >= 70 else "fail")
+        return {
+            "status": status,
+            "detail": f"{decorated}/{total} /admin + /api route declarations have an auth decorator ({pct}%)",
+        }
+    except Exception as e:
+        return {"status": "warn", "detail": f"route walk failed: {str(e)[:80]}"}
+
+
+def _soc2_check_security_tests_present():
+    """M3.10: tests/security/ folder populated."""
+    import glob
+    files = glob.glob(os.path.join(os.path.dirname(__file__), "tests", "security", "test_*.py"))
+    n = len(files)
+    if n >= 8:
+        return {"status": "pass", "detail": f"{n} security test files"}
+    if n >= 3:
+        return {"status": "warn", "detail": f"only {n} security test files (target >= 8)"}
+    return {"status": "fail", "detail": "no security tests found"}
+
+
+def _soc2_check_policy_docs_present():
+    """M4.5: docs/policies/*.md formal policies."""
+    import glob
+    files = glob.glob(os.path.join(os.path.dirname(__file__), "docs", "policies", "*.md"))
+    n = len(files)
+    if n >= 12:
+        return {"status": "pass", "detail": f"{n} policy documents"}
+    if n > 0:
+        return {"status": "warn", "detail": f"{n}/12 policy documents (M4.5 not yet complete)"}
+    return {"status": "fail", "detail": "no policy docs yet (M4.5 pending)"}
+
+
+def _soc2_check_backup_workflow():
+    """M4.1: backup workflow present."""
+    p = os.path.join(os.path.dirname(__file__), ".github", "workflows", "backup-postgres.yml")
+    if os.path.exists(p):
+        return {"status": "pass", "detail": "backup-postgres.yml present"}
+    return {"status": "fail", "detail": "no backup workflow (M4.1 pending)"}
+
+
+def _soc2_check_evidence_collector():
+    """M4.6: nightly evidence collector workflow."""
+    p = os.path.join(os.path.dirname(__file__), ".github", "workflows", "soc2-evidence.yml")
+    if os.path.exists(p):
+        return {"status": "pass", "detail": "soc2-evidence.yml present"}
+    return {"status": "fail", "detail": "no evidence collector workflow (M4.6 pending)"}
+
+
+def _soc2_check_security_ci():
+    """M3.7: dedicated security CI workflow with semgrep/trivy/etc."""
+    p = os.path.join(os.path.dirname(__file__), ".github", "workflows", "security.yml")
+    if os.path.exists(p):
+        return {"status": "pass", "detail": "security.yml present"}
+    return {"status": "fail", "detail": "no security scanner workflow (M3.7 pending)"}
+
+
+def _soc2_check_error_tracking():
+    """M3.5: error_logs table exists; bonus pass if SENTRY_DSN set."""
+    try:
+        with get_db() as c:
+            row = c.execute("SELECT COUNT(*) FROM error_logs").fetchone()
+            n = (row[0] if row else 0) or 0
+        sentry = bool((os.environ.get("SENTRY_DSN") or "").strip())
+        if sentry:
+            return {"status": "pass", "detail": f"local capture ({n} rows) + Sentry/GlitchTip connected"}
+        if n >= 0:  # table reachable
+            return {"status": "warn", "detail": f"local capture only ({n} rows) -- set SENTRY_DSN to push to Sentry/GlitchTip"}
+    except Exception as e:
+        return {"status": "fail", "detail": f"error_logs unreachable: {str(e)[:80]}"}
+
+
+_SOC2_CHECKS = [
+    ("M1.1  KEYCLOAK_ENABLED flag retired",            _soc2_check_kc_flag_retired),
+    ("M1.1  KEYCLOAK_ISSUER configured",               _soc2_check_kc_issuer_configured),
+    ("M1.3  Phase B migration applied",                _soc2_check_phase_b_migration),
+    ("M1.6  RLS policies cover tenant tables",         _soc2_check_rls_coverage),
+    ("M3.1  Tables carry tenant_id column",            _soc2_check_tenant_column_coverage),
+    ("M3.1  audit_logs receives writes (24h)",         _soc2_check_audit_log_activity),
+    ("M2.6  /admin + /api routes carry auth decorator", _soc2_check_route_decorator_coverage),
+    ("M3.10 Security test suite present",              _soc2_check_security_tests_present),
+    ("M3.7  Security CI workflow",                     _soc2_check_security_ci),
+    ("M3.5  Error tracking present",                   _soc2_check_error_tracking),
+    ("M4.1  Backup workflow present",                  _soc2_check_backup_workflow),
+    ("M4.5  Policy docs present",                      _soc2_check_policy_docs_present),
+    ("M4.6  Evidence collector workflow",              _soc2_check_evidence_collector),
+]
+
+
+def _run_soc2_audit():
+    """Run every SOC 2 check, return a structured result.
+
+    Each check is wrapped so one failure can never abort the whole audit.
+    Scoring: pass=1.0, warn=0.5, fail=0. The overall score is the mean.
+    """
+    findings = []
+    score_sum = 0.0
+    weight = {"pass": 1.0, "warn": 0.5, "fail": 0.0}
+    for label, fn in _SOC2_CHECKS:
+        try:
+            result = fn() or {"status": "fail", "detail": "no result"}
+        except Exception as e:
+            result = {"status": "fail", "detail": f"check raised: {str(e)[:80]}"}
+        findings.append({"label": label, **result})
+        score_sum += weight.get(result.get("status"), 0.0)
+    score = round(100.0 * score_sum / len(_SOC2_CHECKS), 1)
+    counts = {"pass": 0, "warn": 0, "fail": 0}
+    for f in findings:
+        counts[f.get("status", "fail")] = counts.get(f.get("status", "fail"), 0) + 1
+    return {
+        "score": score,
+        "counts": counts,
+        "findings": findings,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "version": "1.0 (M1.1 baseline)",
+    }
+
+
+@app.route("/admin/ops/soc2/audit", methods=["POST"])
+@admin_required
+def admin_ops_soc2_audit():
+    """POST endpoint for the opcenter's "Run SOC 2 Audit" button.
+
+    Returns JSON with the readiness score + per-check findings. Designed
+    to be cheap (under 1s) so it can be re-run from the UI as code lands.
+    """
+    csrf_protect()
+    report = _run_soc2_audit()
+    try:
+        log_audit(action="soc2_audit_run",
+                  user_id=session.get("user_id"),
+                  status="pass",
+                  details=f"score={report['score']} counts={report['counts']}")
+    except Exception:
+        pass
+    return jsonify(report)
+
+
+@app.route("/admin/soc2/report")
+@admin_required
+def admin_soc2_report():
+    """Full HTML readiness report. Printable / shareable with auditors."""
+    report = _run_soc2_audit()
+    try:
+        log_audit(action="soc2_report_view",
+                  user_id=session.get("user_id"),
+                  status="pass")
+    except Exception:
+        pass
+    return render_template("soc2_report.html", report=report)
+
+
+
+# ─── Error tracking + reporting (SOC 2 M3.3 + M3.5) ──────────────────────
+# Added 2026-06-25. Two layers:
+#
+#   1. Always-on local capture.  Every uncaught exception lands in the
+#      error_logs table with: request_id, route, method, status, exc type,
+#      exc message, stack trace, ip, user_agent, fingerprint (hash for grouping),
+#      user_id, tenant_id, resolved flag.  No external dependency required.
+#
+#   2. Optional Sentry / GlitchTip push.  If SENTRY_DSN is set, the same
+#      exception is also pushed to Sentry via the sentry-sdk Flask integration.
+#      The sdk is imported lazily; missing package is non-fatal.
+#
+# Admin viewer at /admin/errors (list + filter) and /admin/errors/<id> (detail).
+# Hooked into the SOC 2 audit (M3.5 Error tracker present check).
+#
+# The existing @app.errorhandler(Exception) at the err_uncaught function is
+# extended (Pattern A patch) to also call _record_error(e) before rendering
+# the friendly error page, so the user-facing behaviour is unchanged.
+
+import hashlib as _hash_mod
+import traceback as _tb_mod
+
+
+# Module-level singleton flag so _maybe_init_sentry() runs once per process.
+_SENTRY_INITIALIZED = False
+
+
+def _maybe_init_sentry():
+    """Best-effort Sentry initialisation. Gated on SENTRY_DSN; safe if the
+    package isn't installed."""
+    global _SENTRY_INITIALIZED
+    if _SENTRY_INITIALIZED:
+        return
+    _SENTRY_INITIALIZED = True  # one shot, even on failure
+    dsn = (os.environ.get("SENTRY_DSN") or "").strip()
+    if not dsn:
+        return
+    try:
+        import sentry_sdk  # type: ignore
+        from sentry_sdk.integrations.flask import FlaskIntegration  # type: ignore
+        sentry_sdk.init(
+            dsn=dsn,
+            integrations=[FlaskIntegration()],
+            traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.0")),
+            send_default_pii=False,
+            environment=os.environ.get("APP_ENV", "production"),
+            release=os.environ.get("APP_VERSION", "unknown"),
+        )
+    except Exception as _e:
+        try:
+            app.logger.warning("Sentry init skipped: %s", _e)
+        except Exception:
+            pass
+
+
+def _ensure_error_logs_table(conn):
+    """Idempotent create — works on Postgres and SQLite."""
+    try:
+        # Postgres-shaped
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS error_logs (
+                id           SERIAL PRIMARY KEY,
+                created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                request_id   TEXT,
+                route        TEXT,
+                method       TEXT,
+                status       INTEGER,
+                error_type   TEXT,
+                error_message TEXT,
+                stack_trace  TEXT,
+                ip_address   TEXT,
+                user_agent   TEXT,
+                user_id      INTEGER,
+                tenant_id    TEXT,
+                fingerprint  TEXT,
+                resolved     BOOLEAN NOT NULL DEFAULT FALSE
+            )
+        """)
+    except Exception:
+        # SQLite fallback (no SERIAL, no BOOLEAN)
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS error_logs (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    request_id   TEXT,
+                    route        TEXT,
+                    method       TEXT,
+                    status       INTEGER,
+                    error_type   TEXT,
+                    error_message TEXT,
+                    stack_trace  TEXT,
+                    ip_address   TEXT,
+                    user_agent   TEXT,
+                    user_id      INTEGER,
+                    tenant_id    TEXT,
+                    fingerprint  TEXT,
+                    resolved     INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+        except Exception:
+            pass
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_error_logs_created ON error_logs(created_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_error_logs_fingerprint ON error_logs(fingerprint)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_error_logs_resolved ON error_logs(resolved)")
+    except Exception:
+        pass
+
+
+def _error_fingerprint(error_type, error_message, route):
+    """Stable grouping key — same exception type + route = same fingerprint.
+    Used so the viewer can collapse repeated errors."""
+    raw = f"{error_type}|{route}|{(error_message or '')[:120]}"
+    return _hash_mod.sha1(raw.encode("utf-8", errors="ignore")).hexdigest()[:16]
+
+
+def _record_error(exc, status=500):
+    """Write one row to error_logs and (optionally) push to Sentry.
+
+    Wraps every step in try/except so a logging failure can never escalate
+    a 500 into a worse user-facing failure.
+    """
+    _maybe_init_sentry()
+
+    try:
+        error_type = exc.__class__.__name__
+        error_message = str(exc)[:1024]
+        stack_trace = _tb_mod.format_exc()[:8192]
+        try:
+            route = request.path
+            method = request.method
+            ua = (request.headers.get("User-Agent") or "")[:300]
+            try:
+                ip = _get_real_ip()
+            except Exception:
+                ip = request.remote_addr or ""
+        except Exception:
+            route = method = ua = ip = ""
+        try:
+            user_id = session.get("user_id")
+        except Exception:
+            user_id = None
+        try:
+            ctx = getattr(g, "kc_ctx", None)
+            tenant_id = ctx.tenant_id if ctx else None
+        except Exception:
+            tenant_id = None
+        try:
+            request_id = getattr(g, "request_id", None) or ""
+        except Exception:
+            request_id = ""
+        fingerprint = _error_fingerprint(error_type, error_message, route)
+
+        with get_db() as c:
+            _ensure_error_logs_table(c)
+            c.execute(
+                "INSERT INTO error_logs (request_id, route, method, status, "
+                "error_type, error_message, stack_trace, ip_address, user_agent, "
+                "user_id, tenant_id, fingerprint) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (request_id, route, method, status, error_type, error_message,
+                 stack_trace, ip, ua, user_id, tenant_id, fingerprint),
+            )
+    except Exception as _e:
+        try:
+            app.logger.error("error_logs write failed: %s", _e)
+        except Exception:
+            pass
+
+    # Optional Sentry push (sentry_sdk auto-captures Flask exceptions when
+    # init succeeded; the manual call is harmless and works without the
+    # FlaskIntegration if the user installed only the bare sentry-sdk).
+    try:
+        import sentry_sdk  # type: ignore
+        sentry_sdk.capture_exception(exc)
+    except Exception:
+        pass
+
+
+@app.route("/admin/errors")
+@admin_required
+def admin_errors_list():
+    """Grouped + recent error log viewer."""
+    status_filter = request.args.get("status")  # "open" | "resolved" | None
+    fp_filter = request.args.get("fp") or ""
+    limit = max(1, min(int(request.args.get("limit", "100") or 100), 500))
+
+    rows = []
+    grouped = []
+    try:
+        with get_db() as c:
+            _ensure_error_logs_table(c)
+            where = []
+            params = []
+            if status_filter == "open":
+                where.append("(resolved=0 OR resolved=FALSE)")
+            elif status_filter == "resolved":
+                where.append("(resolved=1 OR resolved=TRUE)")
+            if fp_filter:
+                where.append("fingerprint = ?")
+                params.append(fp_filter)
+            where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+
+            rows = c.execute(
+                "SELECT id, created_at, route, method, status, error_type, "
+                "error_message, fingerprint, resolved, user_id, tenant_id "
+                "FROM error_logs " + where_sql + " ORDER BY id DESC LIMIT ?",
+                tuple(params) + (limit,),
+            ).fetchall()
+
+            grouped = c.execute(
+                "SELECT fingerprint, error_type, route, COUNT(*) AS hits, "
+                "MAX(created_at) AS last_seen "
+                "FROM error_logs " + where_sql + " "
+                "GROUP BY fingerprint, error_type, route "
+                "ORDER BY hits DESC LIMIT 25",
+                tuple(params),
+            ).fetchall()
+    except Exception as e:
+        try:
+            app.logger.warning("admin_errors_list failed: %s", e)
+        except Exception:
+            pass
+
+    return render_template(
+        "admin_errors.html",
+        rows=[dict(r) for r in rows] if rows else [],
+        grouped=[dict(r) for r in grouped] if grouped else [],
+        status_filter=status_filter or "all",
+        fp_filter=fp_filter,
+        limit=limit,
+        sentry_enabled=bool((os.environ.get("SENTRY_DSN") or "").strip()),
+    )
+
+
+@app.route("/admin/errors/<int:error_id>")
+@admin_required
+def admin_error_detail(error_id):
+    row = None
+    try:
+        with get_db() as c:
+            _ensure_error_logs_table(c)
+            r = c.execute(
+                "SELECT * FROM error_logs WHERE id=?", (error_id,)
+            ).fetchone()
+            row = dict(r) if r else None
+    except Exception:
+        row = None
+    if not row:
+        flash("Error record not found.", "warning")
+        return redirect(url_for("admin_errors_list"))
+    return render_template("admin_error_detail.html", row=row)
+
+
+@app.route("/admin/errors/<int:error_id>/resolve", methods=["POST"])
+@admin_required
+def admin_error_resolve(error_id):
+    csrf_protect()
+    try:
+        with get_db() as c:
+            _ensure_error_logs_table(c)
+            # Postgres uses TRUE/FALSE; SQLite uses 1/0. Both accept "1".
+            c.execute("UPDATE error_logs SET resolved=1 WHERE id=?", (error_id,))
+        try:
+            log_audit(action="error_resolved",
+                      user_id=session.get("user_id"),
+                      status="pass",
+                      details=f"error_id={error_id}")
+        except Exception:
+            pass
+        flash(f"Error #{error_id} marked resolved.", "success")
+    except Exception as e:
+        flash(f"Could not mark resolved: {e}", "danger")
+    return redirect(url_for("admin_errors_list"))
+
+
+@app.route("/api/errors/recent")
+@admin_required
+def api_errors_recent():
+    """JSON feed for dashboard widgets."""
+    try:
+        with get_db() as c:
+            _ensure_error_logs_table(c)
+            try:
+                # Postgres path
+                total24 = c.execute(
+                    "SELECT COUNT(*) FROM error_logs "
+                    "WHERE created_at > (NOW() - INTERVAL '24 hours')"
+                ).fetchone()[0]
+            except Exception:
+                # SQLite fallback
+                total24 = c.execute(
+                    "SELECT COUNT(*) FROM error_logs "
+                    "WHERE created_at > datetime('now', '-1 day')"
+                ).fetchone()[0]
+            try:
+                open_count = c.execute(
+                    "SELECT COUNT(*) FROM error_logs WHERE resolved=0 OR resolved=FALSE"
+                ).fetchone()[0]
+            except Exception:
+                open_count = c.execute(
+                    "SELECT COUNT(*) FROM error_logs WHERE resolved=0"
+                ).fetchone()[0]
+            recent = c.execute(
+                "SELECT id, created_at, route, error_type, error_message "
+                "FROM error_logs ORDER BY id DESC LIMIT 10"
+            ).fetchall()
+        return jsonify({
+            "open": open_count,
+            "last_24h": total24,
+            "recent": [dict(r) for r in recent] if recent else [],
+            "sentry_enabled": bool((os.environ.get("SENTRY_DSN") or "").strip()),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)[:200]}), 500
+
+
+# Initialise Sentry early so any uncaught exception during init still bubbles up.
+_maybe_init_sentry()
+
+
 
 if __name__ == "__main__":
     init_db()
