@@ -258,6 +258,21 @@
         "name": "api_service_account",
         "description": "Umbrella role for backend agents / jobs (client credentials only).",
         "composite": false
+      },
+      {
+        "name": "read_only",
+        "description": "View-only access for auditors / external reviewers. No mutations.",
+        "composite": false
+      },
+      {
+        "name": "ai_agent",
+        "description": "Umbrella role for ADK/LLM agents acting on behalf of a user (must inherit caller's permissions).",
+        "composite": false
+      },
+      {
+        "name": "background_worker",
+        "description": "Celery/RQ/cron worker identity. Allowed to enqueue + process jobs only.",
+        "composite": false
       }
     ]
   },
@@ -487,7 +502,7 @@
     },
     {
       "clientId": "solarpro-mobile",
-      "name": "SolarPro Mobile (React Native \u2014 future)",
+      "name": "SolarPro Mobile (React Native — future)",
       "description": "Public OIDC client for the native mobile app. PKCE enforced. Deep-link callback.",
       "enabled": true,
       "publicClient": true,
@@ -569,7 +584,7 @@
     },
     {
       "clientId": "solarpro-catalogue-agent",
-      "name": "AI Agent \u2014 Catalogue",
+      "name": "AI Agent — Catalogue",
       "description": "Reads supplier catalogues, suggests product updates. Forbidden: approve final updates.",
       "enabled": true,
       "publicClient": false,
@@ -585,7 +600,7 @@
     },
     {
       "clientId": "solarpro-tender-agent",
-      "name": "AI Agent \u2014 Tender",
+      "name": "AI Agent — Tender",
       "description": "Hunts tender opportunities, drafts RFQ replies. Forbidden: publish without human approval.",
       "enabled": true,
       "publicClient": false,
@@ -600,7 +615,7 @@
     },
     {
       "clientId": "solarpro-report-agent",
-      "name": "AI Agent \u2014 Report",
+      "name": "AI Agent — Report",
       "description": "Generates PV / shading / proposal reports. Forbidden: modify design.",
       "enabled": true,
       "publicClient": false,
@@ -615,7 +630,7 @@
     },
     {
       "clientId": "solarpro-email-agent",
-      "name": "AI Agent \u2014 Email",
+      "name": "AI Agent — Email",
       "description": "Sends transactional emails. Forbidden: attach PII without sanitisation.",
       "enabled": true,
       "publicClient": false,
@@ -630,7 +645,7 @@
     },
     {
       "clientId": "solarpro-payment-agent",
-      "name": "AI Agent \u2014 Payment",
+      "name": "AI Agent — Payment",
       "description": "Reconciles Paystack / Stripe webhooks. Forbidden: issue refunds without admin approval.",
       "enabled": true,
       "publicClient": false,

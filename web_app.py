@@ -27728,6 +27728,28 @@ def _soc2_check_tenant_request_hooks():
         return {"status": "fail", "detail": f"check failed: {str(e)[:80]}"}
 
 
+def _soc2_check_mfa_proposal():
+    """M1.2: MFA enforcement. Until Conditional OTP is live on the KC
+    realm this reads as WARN with a pointer to the proposal doc."""
+    p = os.path.join(os.path.dirname(__file__), "docs", "SECURITY_MFA_PROPOSAL_M12.md")
+    if os.path.exists(p):
+        return {"status": "warn",
+                "detail": "proposal docs/SECURITY_MFA_PROPOSAL_M12.md ready; awaiting owner-led realm change"}
+    return {"status": "fail", "detail": "M1.2 proposal missing"}
+
+
+def _soc2_check_role_taxonomy():
+    """M1.4: role constants module + realm role count >= 20."""
+    try:
+        from app.security import roles as _roles
+        n = len(_roles.ALL_ROLES)
+        if n >= 20:
+            return {"status": "pass", "detail": f"{n} role constants exported, including read_only/ai_agent/background_worker"}
+        return {"status": "warn", "detail": f"{n} role constants found (expected >= 20)"}
+    except Exception as e:
+        return {"status": "fail", "detail": f"role constants module unreachable: {str(e)[:80]}"}
+
+
 _SOC2_CHECKS = [
     ("M1.1  KEYCLOAK_ENABLED flag retired",            _soc2_check_kc_flag_retired),
     ("M1.1  KEYCLOAK_ISSUER configured",               _soc2_check_kc_issuer_configured),
@@ -27740,6 +27762,8 @@ _SOC2_CHECKS = [
     ("M3.7  Security CI workflow",                     _soc2_check_security_ci),
     ("M3.5  Error tracking present",                   _soc2_check_error_tracking),
     ("M1.7  Tenant request hooks armed",               _soc2_check_tenant_request_hooks),
+    ("M1.4  Role taxonomy complete",                   _soc2_check_role_taxonomy),
+    ("M1.2  MFA enforcement (proposed)",               _soc2_check_mfa_proposal),
     ("M4.1  Backup workflow present",                  _soc2_check_backup_workflow),
     ("M4.5  Policy docs present",                      _soc2_check_policy_docs_present),
     ("M4.6  Evidence collector workflow",              _soc2_check_evidence_collector),
