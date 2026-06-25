@@ -341,6 +341,33 @@ _PG_CREATE_TABLES = [
     "ALTER TABLE boq_floor_items ADD COLUMN IF NOT EXISTS subsection_label VARCHAR(20) DEFAULT ''",
     "ALTER TABLE boq_floor_items ADD COLUMN IF NOT EXISTS item_no_display VARCHAR(8) DEFAULT ''",
     "ALTER TABLE boq_floors      ADD COLUMN IF NOT EXISTS contingency_pct REAL DEFAULT 10",
+
+    # 2026-06-25 SOC 2 M1.6 -- tenant_id columns. The dedicated migration
+    # (migrations/007_rls_boq_hierarchy.sql) handles backfill + RLS policies
+    # on Postgres; the ALTERs below cover fresh DBs that haven't run it yet.
+    "ALTER TABLE boq_projects           ADD COLUMN IF NOT EXISTS tenant_id UUID",
+    "ALTER TABLE boq_buildings          ADD COLUMN IF NOT EXISTS tenant_id UUID",
+    "ALTER TABLE boq_floors             ADD COLUMN IF NOT EXISTS tenant_id UUID",
+    "ALTER TABLE boq_floor_items        ADD COLUMN IF NOT EXISTS tenant_id UUID",
+    "ALTER TABLE boq_floor_rate_buildup ADD COLUMN IF NOT EXISTS tenant_id UUID",
+    "ALTER TABLE boq_audit_log          ADD COLUMN IF NOT EXISTS tenant_id UUID",
+    "CREATE INDEX IF NOT EXISTS idx_boq_projects_tenant           ON boq_projects(tenant_id)",
+    "CREATE INDEX IF NOT EXISTS idx_boq_buildings_tenant          ON boq_buildings(tenant_id)",
+    "CREATE INDEX IF NOT EXISTS idx_boq_floors_tenant             ON boq_floors(tenant_id)",
+    "CREATE INDEX IF NOT EXISTS idx_boq_floor_items_tenant        ON boq_floor_items(tenant_id)",
+    "CREATE INDEX IF NOT EXISTS idx_boq_floor_rate_buildup_tenant ON boq_floor_rate_buildup(tenant_id)",
+    "CREATE INDEX IF NOT EXISTS idx_boq_audit_log_tenant          ON boq_audit_log(tenant_id)",
+]
+
+
+# 2026-06-25 SOC 2 M1.6 -- SQLite mirror. SQLite stores UUIDs as TEXT.
+_SQLITE_ALTERS_BOQ_TENANT = [
+    "ALTER TABLE boq_projects           ADD COLUMN tenant_id TEXT",
+    "ALTER TABLE boq_buildings          ADD COLUMN tenant_id TEXT",
+    "ALTER TABLE boq_floors             ADD COLUMN tenant_id TEXT",
+    "ALTER TABLE boq_floor_items        ADD COLUMN tenant_id TEXT",
+    "ALTER TABLE boq_floor_rate_buildup ADD COLUMN tenant_id TEXT",
+    "ALTER TABLE boq_audit_log          ADD COLUMN tenant_id TEXT",
 ]
 
 
@@ -384,6 +411,7 @@ def ensure_boq_hierarchy_schema(get_db_fn) -> None:
         _try_each(c, _SQLITE_ALTERS_CATALOG)
         _try_each(c, _SQLITE_ALTERS_BOM_RATES)
         _try_each(c, _SQLITE_ALTERS_FLOOR_BILLS)
+        _try_each(c, _SQLITE_ALTERS_BOQ_TENANT)
     _BOQ_SCHEMA_DONE["sqlite"] = True
 
 
