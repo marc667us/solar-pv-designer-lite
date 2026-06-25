@@ -72,6 +72,51 @@ def monkeypatch_session(request):
     mp.undo()
 
 
+# ── SOC 2 M1.1 fallout helpers (2026-06-25) ──────────────────────────────
+# After M1.1 the legacy /login + /register POST paths unconditionally
+# redirect to Keycloak. Tests that used to POST to /login then read
+# session["user_id"] now have to bypass that flow: insert the testuser
+# directly into the temp DB + seed session keys via session_transaction
+# (the same trick tests/security/ uses).
+
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_testuser(app_client, tmp_db):
+    """Insert testuser into the temp DB so auth-gated tests have a real
+    `users` row to log in as. Replaces the old test_register_and_login
+    flow which exercised the bcrypt POST path (closed by M1.1)."""
+    conn = sqlite3.connect(tmp_db)
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO users "
+            "(username, email, password_hash, email_verified, plan, is_admin, name) "
+            "VALUES (?, ?, '', 1, 'free', 0, ?)",
+            ("testuser", "test@example.com", "Test User"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return "testuser"
+
+
+def _seed_login(client, tmp_db, username="testuser"):
+    """Stand-in for the retired POST /login flow. Reads the user_id out
+    of the temp DB and writes the session keys the legacy app code
+    expects (mirroring what oidc_routes.py does on KC callback)."""
+    conn = sqlite3.connect(tmp_db)
+    try:
+        row = conn.execute(
+            "SELECT id FROM users WHERE LOWER(username)=?",
+            (username.lower(),),
+        ).fetchone()
+        uid = row[0] if row else None
+    finally:
+        conn.close()
+    with client.session_transaction() as s:
+        s["user_id"] = uid
+        s["username"] = username
+    return uid
+
+
 # ── Helper: get a fresh CSRF token from a form page ───────────────────────────
 
 def _csrf(client, path="/register"):
@@ -91,51 +136,54 @@ def _csrf(client, path="/register"):
 
 class TestAuth:
 
-    def test_register_page_loads(self, app_client):
-        resp = app_client.get("/register")
-        assert resp.status_code == 200
-        assert b"Register" in resp.data or b"register" in resp.data
+    def test_register_page_redirects_to_kc(self, app_client):
+        """SOC 2 M1.1 (2026-06-25): /register now unconditionally 302s to
+        the OIDC blueprint (`/auth/register`). The legacy form is dead."""
+        resp = app_client.get("/register", follow_redirects=False)
+        assert resp.status_code in (301, 302, 303)
+        loc = resp.headers.get("Location", "")
+        assert "/auth/register" in loc or "/auth/login" in loc
 
-    def test_login_page_loads(self, app_client):
-        resp = app_client.get("/login")
-        assert resp.status_code == 200
+    def test_login_page_redirects_to_kc(self, app_client):
+        """SOC 2 M1.1: /login 302 to /auth/login."""
+        resp = app_client.get("/login", follow_redirects=False)
+        assert resp.status_code in (301, 302, 303)
+        loc = resp.headers.get("Location", "")
+        assert "/auth/login" in loc
 
+    @pytest.mark.xfail(reason="SOC 2 M1.1 (2026-06-25): legacy POST /login is closed; KC owns auth. The bcrypt form path is dead.", strict=True)
     def test_register_and_login(self, app_client, tmp_db):
         csrf = _csrf(app_client, "/register")
-        resp = app_client.post("/register", data={
+        app_client.post("/register", data={
             "_csrf":        csrf,
-            "username":     "testuser",
-            "email":        "test@example.com",
+            "username":     "newuser",
+            "email":        "new@example.com",
             "password":     "TestPass123!",
-            "name":         "Test User",
-            "company":      "Test Co",
-            "country":      "Ghana",
             "terms_agreed": "on",
         }, follow_redirects=False)
-        # Bypass the email-verification gate (commit 17e40ee) by flipping the flag in the temp DB.
-        _verify_user_in_db(tmp_db, "testuser")
-        # Now log in and confirm we land on the dashboard.
+        # Was: POST /login then assert dashboard. Now /register and /login
+        # 302 to KC so neither call ever reaches the legacy handler.
         csrf = _csrf(app_client, "/login")
         resp = app_client.post("/login", data={
             "_csrf":    csrf,
-            "username": "testuser",
+            "username": "newuser",
             "password": "TestPass123!",
         }, follow_redirects=True)
-        assert resp.status_code == 200
-        assert b"dashboard" in resp.data.lower() or b"Dashboard" in resp.data
+        assert b"dashboard" in resp.data.lower()
 
+    @pytest.mark.xfail(reason="SOC 2 M1.1: legacy POST /register closed.", strict=True)
     def test_duplicate_register_fails(self, app_client):
         csrf = _csrf(app_client, "/register")
         resp = app_client.post("/register", data={
             "_csrf":        csrf,
-            "username":     "testuser",        # already exists from above
+            "username":     "testuser",
             "email":        "other@example.com",
             "password":     "AnotherPass123!",
             "terms_agreed": "on",
         }, follow_redirects=True)
-        assert resp.status_code == 200
-        assert b"already" in resp.data.lower() or b"registered" in resp.data.lower()
+        assert b"already" in resp.data.lower()
 
+    @pytest.mark.xfail(reason="SOC 2 M1.1: legacy POST /login closed; bad-password handling moved to KC.", strict=True)
     def test_login_wrong_password(self, app_client):
         csrf = _csrf(app_client, "/login")
         resp = app_client.post("/login", data={
@@ -143,9 +191,9 @@ class TestAuth:
             "username": "testuser",
             "password": "WrongPassword!",
         }, follow_redirects=True)
-        assert resp.status_code == 200
-        assert b"Invalid" in resp.data or b"invalid" in resp.data or b"incorrect" in resp.data.lower()
+        assert b"invalid" in resp.data.lower()
 
+    @pytest.mark.xfail(reason="SOC 2 M1.1: legacy POST /login closed; auth is via OIDC PKCE only.", strict=True)
     def test_login_success(self, app_client):
         csrf = _csrf(app_client, "/login")
         resp = app_client.post("/login", data={
@@ -153,8 +201,7 @@ class TestAuth:
             "username": "testuser",
             "password": "TestPass123!",
         }, follow_redirects=True)
-        assert resp.status_code == 200
-        assert b"dashboard" in resp.data.lower() or b"Dashboard" in resp.data
+        assert b"dashboard" in resp.data.lower()
 
 
 # ── Public page tests ─────────────────────────────────────────────────────────
@@ -169,11 +216,16 @@ class TestPublicPages:
         resp = app_client.get("/platform")
         assert resp.status_code == 200
 
-    def test_forgot_password_page(self, app_client):
-        resp = app_client.get("/forgot-password")
-        assert resp.status_code == 200
+    def test_forgot_password_redirects_to_kc(self, app_client):
+        """SOC 2 M1.1: password reset is owned by Keycloak; the legacy
+        /forgot-password handler unconditionally 302s to /auth/login."""
+        resp = app_client.get("/forgot-password", follow_redirects=False)
+        assert resp.status_code in (301, 302, 303)
+        assert "/auth/login" in resp.headers.get("Location", "")
 
-    def test_upgrade_page_loads(self, app_client):
+    def test_upgrade_page_loads(self, app_client, tmp_db):
+        # /upgrade is login-gated; seed the session directly.
+        _seed_login(app_client, tmp_db)
         resp = app_client.get("/upgrade")
         assert resp.status_code == 200
 
@@ -181,14 +233,14 @@ class TestPublicPages:
 # ── Dashboard / auth-gated pages ─────────────────────────────────────────────
 
 class TestAuthGated:
-    """These tests run after the testuser is logged-in from TestAuth."""
+    """Auth-gated pages. Each test seeds session["user_id"] directly via
+    the temp DB -- the legacy /login POST path is closed (SOC 2 M1.1)."""
+
+    @pytest.fixture(autouse=True)
+    def _login(self, app_client, tmp_db):
+        _seed_login(app_client, tmp_db)
 
     def test_dashboard_accessible_when_logged_in(self, app_client):
-        # Log in first
-        csrf = _csrf(app_client, "/login")
-        app_client.post("/login", data={
-            "_csrf": csrf, "username": "testuser", "password": "TestPass123!"
-        })
         resp = app_client.get("/dashboard")
         assert resp.status_code == 200
 
@@ -217,11 +269,16 @@ class TestAuthGated:
         assert resp.status_code == 200
 
     def test_unauthenticated_redirects_to_login(self, app_client):
-        # Log out first
+        # M1.8: legacy /logout funnels through /auth/logout.
         app_client.get("/logout")
+        with app_client.session_transaction() as s:
+            s.clear()
         resp = app_client.get("/dashboard", follow_redirects=False)
         assert resp.status_code in (302, 303)
-        assert "/login" in resp.headers.get("Location", "")
+        # First hop is /login (legacy login_required) which then 302s to KC.
+        # Either /login or /auth/login in Location is acceptable.
+        loc = resp.headers.get("Location", "")
+        assert "/login" in loc or "/auth/login" in loc
 
 
 # ── Project creation flow ─────────────────────────────────────────────────────
@@ -229,11 +286,9 @@ class TestAuthGated:
 class TestProjectFlow:
 
     @pytest.fixture(autouse=True)
-    def login(self, app_client):
-        csrf = _csrf(app_client, "/login")
-        app_client.post("/login", data={
-            "_csrf": csrf, "username": "testuser", "password": "TestPass123!"
-        })
+    def login(self, app_client, tmp_db):
+        # SOC 2 M1.1: legacy POST /login closed; seed session directly.
+        _seed_login(app_client, tmp_db)
 
     def test_new_project_page_loads(self, app_client):
         resp = app_client.get("/project/new")
@@ -272,13 +327,9 @@ class TestAPIEndpoints:
         resp = app_client.get("/api/regions/UnknownCountryXYZ")
         assert resp.status_code == 400
 
-    def test_solar_data_api(self, app_client):
-        # /api/solar is login-gated; log in first, then call with a known region
-        csrf = _csrf(app_client, "/login")
-        app_client.post("/login", data={
-            "_csrf": csrf, "username": "testuser", "password": "TestPass123!"
-        })
-        # Get a real region for Ghana from the regions API
+    def test_solar_data_api(self, app_client, tmp_db):
+        # /api/solar is login-gated; seed session directly (SOC 2 M1.1).
+        _seed_login(app_client, tmp_db)
         reg_resp = app_client.get("/api/regions/Ghana")
         regions = json.loads(reg_resp.data)
         region = regions[0] if regions else "Accra"
@@ -358,11 +409,9 @@ class TestCalculationEngine:
 class TestSettings:
 
     @pytest.fixture(autouse=True)
-    def login(self, app_client):
-        csrf = _csrf(app_client, "/login")
-        app_client.post("/login", data={
-            "_csrf": csrf, "username": "testuser", "password": "TestPass123!"
-        })
+    def login(self, app_client, tmp_db):
+        # SOC 2 M1.1: legacy POST /login closed; seed session directly.
+        _seed_login(app_client, tmp_db)
 
     def test_settings_save_org(self, app_client):
         csrf = _csrf(app_client, "/settings")
