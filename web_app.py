@@ -26409,8 +26409,18 @@ def _bump_last_seen():
     UPDATE on a fresh DB doesn't silently fail."""
     try:
         uid = session.get("user_id")
+        kc_username = None
         if not uid:
-            return
+            # SOC 2 M1.1 fallout: KC users whose preferred_username
+            # didn't resolve to a SOLAR users row leave session["user_id"]
+            # empty -- their online dot stayed grey. Fall back to the KC
+            # preferred_username / email so last_seen still bumps.
+            _kc_user = session.get("user") or {}
+            kc_username = (_kc_user.get("preferred_username")
+                           or _kc_user.get("email")
+                           or "").strip().lower()
+            if not kc_username:
+                return
         # Eager column init -- one-time per process.
         if not _USERS_LAST_SEEN_READY["v"]:
             try: _ensure_users_last_seen()
@@ -26425,23 +26435,25 @@ def _bump_last_seen():
         if now_ts - last_write < _LAST_SEEN_WRITE_GAP:
             return
         session["_ls_w"] = now_ts
-        # Best-effort write; never raises.
+        # Best-effort write; never raises. If uid is missing we fall
+        # back to matching by KC preferred_username / email.
+        if uid:
+            _sql = "UPDATE users SET last_seen=CURRENT_TIMESTAMP WHERE id=?"
+            _params = (uid,)
+        else:
+            _sql = ("UPDATE users SET last_seen=CURRENT_TIMESTAMP "
+                    "WHERE LOWER(username)=? OR LOWER(email)=?")
+            _params = (kc_username, kc_username)
         try:
             with get_db() as c:
-                c.execute(
-                    "UPDATE users SET last_seen=CURRENT_TIMESTAMP WHERE id=?",
-                    (uid,),
-                )
+                c.execute(_sql, _params)
         except Exception:
             try: _ensure_users_last_seen()
             except Exception: pass
             # Retry the update after the column was just added.
             try:
                 with get_db() as c:
-                    c.execute(
-                        "UPDATE users SET last_seen=CURRENT_TIMESTAMP WHERE id=?",
-                        (uid,),
-                    )
+                    c.execute(_sql, _params)
             except Exception:
                 pass
     except Exception:
@@ -26451,15 +26463,32 @@ def _bump_last_seen():
 @app.route("/admin/users/refresh-online", methods=["POST"])
 def admin_users_refresh_online():
     """Force-update the current session's last_seen + return to /admin/users.
-    Useful when the throttle hasn't fired yet for the calling admin."""
-    if "user_id" not in session:
+    Useful when the throttle hasn't fired yet for the calling admin.
+
+    2026-06-25 SOC 2 M1.1 fallout: KC users whose preferred_username
+    didn't resolve to a SOLAR users row by exact case leave
+    session["user_id"] empty -- fall back to KC preferred_username
+    / email so the explicit refresh still works."""
+    uid = session.get("user_id")
+    _kc_user = session.get("user") or {}
+    kc_username = (_kc_user.get("preferred_username")
+                   or _kc_user.get("email")
+                   or "").strip().lower()
+    if not uid and not kc_username:
         return redirect(url_for("login"))
     try:
         with get_db() as c:
-            c.execute(
-                "UPDATE users SET last_seen=CURRENT_TIMESTAMP WHERE id=?",
-                (session["user_id"],),
-            )
+            if uid:
+                c.execute(
+                    "UPDATE users SET last_seen=CURRENT_TIMESTAMP WHERE id=?",
+                    (uid,),
+                )
+            else:
+                c.execute(
+                    "UPDATE users SET last_seen=CURRENT_TIMESTAMP "
+                    "WHERE LOWER(username)=? OR LOWER(email)=?",
+                    (kc_username, kc_username),
+                )
         try: session.pop("_ls_w", None)
         except Exception: pass
         flash("Your online status was refreshed.", "info")
