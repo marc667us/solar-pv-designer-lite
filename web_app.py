@@ -25276,7 +25276,8 @@ def admin_opportunities():
     """List solar opportunities pulled from public tender RSS feeds.
     Filterable by country, type, source. Far simpler + more reliable than
     the deep-crawl prospecting agent."""
-    if not (current_user() and current_user().is_admin):
+    _u = current_user()
+    if not (_u and (_u["is_admin"] if "is_admin" in _u.keys() else False)):
         from flask import abort as _abort
         return _abort(404)
     force = request.args.get("refresh") == "1"
@@ -25321,7 +25322,8 @@ def admin_opportunity_add_to_leads(src_url):
     """One-click: copy a RSS-listed opportunity into the existing leads
     table so the owner can work it through the same pipeline as
     crawler-found leads."""
-    if not (current_user() and current_user().is_admin):
+    _u = current_user()
+    if not (_u and (_u["is_admin"] if "is_admin" in _u.keys() else False)):
         from flask import abort as _abort
         return _abort(404)
     csrf_protect()
