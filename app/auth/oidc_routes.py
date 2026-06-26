@@ -73,7 +73,7 @@ from urllib.parse import urlencode, urljoin
 
 import requests
 from flask import (
-    Blueprint, current_app, jsonify, make_response, redirect,
+    Blueprint, current_app, flash, jsonify, make_response, redirect,
     request, session, url_for,
 )
 
@@ -254,6 +254,48 @@ def auth_register():
     return redirect(f"{_registrations_url()}?{urlencode(params)}")
 
 
+def _oidc_fail_redirect(code: str, reason: str = "", status_hint: int = 0):
+    """Hard reset on OIDC callback failure.
+
+    The previous behaviour returned JSON 400/502, which left the user
+    staring at a raw error string and -- worse -- let them hit BACK to
+    replay the stale KC URL, retriggering the same failure or worse,
+    landing on a half-authed page from bfcache. This helper:
+
+      * `session.clear()` wipes every server-side session key so no
+        partial OIDC state survives (no `_kc_state`, no leftover
+        `user`, no leftover access_token).
+      * Cache-Control + Pragma + Expires headers stop the browser
+        from restoring the failure URL from disk cache or bfcache.
+      * `flash()` surfaces a user-readable explanation on the next
+        page they see.
+      * `redirect(url_for("oidc.auth_login"))` lands them on a fresh
+        OIDC flow with a new state + verifier.
+
+    `status_hint` is logged for grep convenience; the wire response is
+    always 302 so the back-button bypass cannot happen.
+    """
+    msg = f"OIDC failure: {code}"
+    if reason:
+        msg += f" -- {reason}"
+    if status_hint:
+        msg += f" (would-be status {status_hint})"
+    log.warning(msg)
+
+    session.clear()
+
+    try:
+        flash(f"Sign-in didn't complete ({code}). Please try again.", "error")
+    except RuntimeError:
+        pass
+
+    resp = redirect(url_for("oidc.auth_login"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
+
 @oidc_bp.route("/callback", methods=["GET"])
 def auth_callback():
     """Token exchange + session/cookie set."""
@@ -262,13 +304,12 @@ def auth_callback():
 
     err = request.args.get("error")
     if err:
-        log.warning("OIDC error response from Keycloak: %s", err)
-        return jsonify(error="OIDC_ERROR", reason=err), 400
+        return _oidc_fail_redirect("OIDC_ERROR", reason=err, status_hint=400)
 
     code = request.args.get("code", "").strip()
     state = request.args.get("state", "").strip()
     if not code or not state:
-        return jsonify(error="OIDC_MISSING_CODE_OR_STATE"), 400
+        return _oidc_fail_redirect("OIDC_MISSING_CODE_OR_STATE", status_hint=400)
 
     expected_state = session.pop("_kc_state", None)
     expected_nonce = session.pop("_kc_nonce", None)
@@ -276,11 +317,13 @@ def auth_callback():
     next_url = session.pop("_kc_next", "/dashboard")
 
     if not expected_state or state != expected_state:
-        log.warning("OIDC state mismatch: url=%r session=%r", state, expected_state)
-        return jsonify(error="OIDC_STATE_MISMATCH"), 400
+        return _oidc_fail_redirect(
+            "OIDC_STATE_MISMATCH",
+            reason=f"url={state!r} session={expected_state!r}",
+            status_hint=400,
+        )
     if not verifier:
-        log.warning("OIDC verifier missing from session; aborting.")
-        return jsonify(error="OIDC_VERIFIER_MISSING"), 400
+        return _oidc_fail_redirect("OIDC_VERIFIER_MISSING", status_hint=400)
 
     # Token exchange. Public client; no client_secret. PKCE proves the
     # request originated from the same browser that started the flow.
@@ -298,24 +341,25 @@ def auth_callback():
             timeout=5.0,
         )
     except requests.RequestException as e:
-        log.error("OIDC token exchange network error: %s", e)
-        return jsonify(error="OIDC_TOKEN_NETWORK", reason=str(e)), 502
+        return _oidc_fail_redirect("OIDC_TOKEN_NETWORK", reason=str(e), status_hint=502)
 
     if resp.status_code != 200:
-        log.warning("OIDC token exchange %s: %s", resp.status_code, resp.text[:300])
-        return jsonify(error="OIDC_TOKEN_FAILED",
-                       status=resp.status_code, body=resp.text[:300]), 400
+        return _oidc_fail_redirect(
+            "OIDC_TOKEN_FAILED",
+            reason=f"status={resp.status_code} body={resp.text[:200]!r}",
+            status_hint=400,
+        )
 
     try:
         payload = resp.json()
     except ValueError:
-        return jsonify(error="OIDC_TOKEN_NONJSON"), 502
+        return _oidc_fail_redirect("OIDC_TOKEN_NONJSON", status_hint=502)
 
     access_token = payload.get("access_token")
     refresh_token = payload.get("refresh_token")
     id_token = payload.get("id_token")
     if not access_token or not refresh_token or not id_token:
-        return jsonify(error="OIDC_TOKEN_INCOMPLETE"), 502
+        return _oidc_fail_redirect("OIDC_TOKEN_INCOMPLETE", status_hint=502)
 
     # Verify id_token signature + nonce. Use the existing middleware
     # so JWKS caching + issuer/audience checks are consistent across
@@ -326,13 +370,14 @@ def auth_callback():
         claims = verify_jwt(id_token, audience=_client_id(),
                             access_token=access_token)
     except JWTError as e:
-        log.warning("OIDC id_token failed verification: %s", e)
-        return jsonify(error="OIDC_ID_TOKEN_INVALID", reason=str(e)), 400
+        return _oidc_fail_redirect("OIDC_ID_TOKEN_INVALID", reason=str(e), status_hint=400)
 
     if expected_nonce and claims.get("nonce") != expected_nonce:
-        log.warning("OIDC nonce mismatch (session=%r token=%r)",
-                    expected_nonce, claims.get("nonce"))
-        return jsonify(error="OIDC_NONCE_MISMATCH"), 400
+        return _oidc_fail_redirect(
+            "OIDC_NONCE_MISMATCH",
+            reason=f"session={expected_nonce!r} token={claims.get('nonce')!r}",
+            status_hint=400,
+        )
 
     # Hydrate Flask session with the bits the UI needs. Per plan §11.3
     # the access token lives in memory (server-side session) but never

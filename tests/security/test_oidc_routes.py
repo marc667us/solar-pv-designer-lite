@@ -175,27 +175,35 @@ def test_login_503_when_issuer_unset(monkeypatch, flask_app):
 
 # ── /auth/callback ──────────────────────────────────────────────────────
 
+def _assert_oidc_fail_redirect(r):
+    """All callback failure paths must hard-reset the user back to
+    /auth/login with no-store caching so the back button can't replay
+    a half-authed state. Reusable assertion to keep tests focused."""
+    assert r.status_code == 302, f"expected 302, got {r.status_code}"
+    loc = r.headers.get("Location", "")
+    assert loc.endswith("/auth/login"), f"expected redirect to /auth/login, got {loc!r}"
+    cc = r.headers.get("Cache-Control", "")
+    assert "no-store" in cc, f"expected Cache-Control no-store, got {cc!r}"
+
+
 def test_callback_rejects_state_mismatch(flask_app):
     with flask_app.test_client() as c:
         _seed_session(c, _kc_state="EXPECTED", _kc_verifier="v", _kc_nonce="n")
         r = c.get("/auth/callback?code=abc&state=WRONG")
-        assert r.status_code == 400
-        assert r.get_json()["error"] == "OIDC_STATE_MISMATCH"
+        _assert_oidc_fail_redirect(r)
 
 
 def test_callback_rejects_missing_code(flask_app):
     with flask_app.test_client() as c:
         _seed_session(c, _kc_state="S", _kc_verifier="v", _kc_nonce="n")
         r = c.get("/auth/callback?state=S")
-        assert r.status_code == 400
-        assert r.get_json()["error"] == "OIDC_MISSING_CODE_OR_STATE"
+        _assert_oidc_fail_redirect(r)
 
 
 def test_callback_rejects_keycloak_error_response(flask_app):
     with flask_app.test_client() as c:
         r = c.get("/auth/callback?error=access_denied&error_description=user_aborted")
-        assert r.status_code == 400
-        assert r.get_json()["error"] == "OIDC_ERROR"
+        _assert_oidc_fail_redirect(r)
 
 
 def test_callback_wraps_network_failure(flask_app):
@@ -204,8 +212,7 @@ def test_callback_wraps_network_failure(flask_app):
         with patch("app.auth.oidc_routes.requests.post",
                    side_effect=requests.ConnectionError("no route")):
             r = c.get("/auth/callback?code=abc&state=S")
-        assert r.status_code == 502
-        assert r.get_json()["error"] == "OIDC_TOKEN_NETWORK"
+        _assert_oidc_fail_redirect(r)
 
 
 def test_callback_4xx_response(flask_app):
@@ -214,8 +221,7 @@ def test_callback_4xx_response(flask_app):
         _seed_session(c, _kc_state="S", _kc_verifier="v", _kc_nonce="n")
         with patch("app.auth.oidc_routes.requests.post", return_value=bad):
             r = c.get("/auth/callback?code=abc&state=S")
-        assert r.status_code == 400
-        assert r.get_json()["error"] == "OIDC_TOKEN_FAILED"
+        _assert_oidc_fail_redirect(r)
 
 
 def test_callback_rejects_nonce_mismatch(flask_app):
@@ -229,8 +235,7 @@ def test_callback_rejects_nonce_mismatch(flask_app):
              patch("app.auth.oidc_routes.verify_jwt",
                    return_value={"sub": "u", "nonce": "WRONG"}):
             r = c.get("/auth/callback?code=abc&state=S")
-        assert r.status_code == 400
-        assert r.get_json()["error"] == "OIDC_NONCE_MISMATCH"
+        _assert_oidc_fail_redirect(r)
 
 
 def test_callback_rejects_invalid_id_token(flask_app):
@@ -242,8 +247,26 @@ def test_callback_rejects_invalid_id_token(flask_app):
              patch("app.auth.oidc_routes.verify_jwt",
                    side_effect=JWTError("bad signature")):
             r = c.get("/auth/callback?code=abc&state=S")
-        assert r.status_code == 400
-        assert r.get_json()["error"] == "OIDC_ID_TOKEN_INVALID"
+        _assert_oidc_fail_redirect(r)
+
+
+def test_callback_failure_clears_session(flask_app):
+    """Back-button bypass guard: after a failed callback, the session
+    must be empty so a half-authed state can't survive into the next
+    request. The redirect lands on /auth/login which will seed fresh
+    _kc_state/_kc_verifier values."""
+    with flask_app.test_client() as c:
+        _seed_session(c,
+                      _kc_state="EXPECTED",
+                      _kc_verifier="v",
+                      _kc_nonce="n",
+                      _kc_next="/admin/secret")
+        c.get("/auth/callback?code=abc&state=WRONG")
+        with c.session_transaction() as sess:
+            # Every OIDC bookkeeping key must be wiped.
+            for key in ("_kc_state", "_kc_verifier", "_kc_nonce",
+                        "_kc_next", "access_token", "user", "user_id"):
+                assert key not in sess, f"session still carries {key!r}"
 
 
 def test_callback_happy_path(flask_app):
