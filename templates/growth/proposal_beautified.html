@@ -21,8 +21,9 @@
       <div>
         <div class="small text-warning">SolarPro Proposal · Project {{ project['id'] }}</div>
         <h1 class="mt-2 mb-1">{{ project['name'] }}</h1>
-        {% if data.get('location_label') %}
-        <div class="opacity-75"><i class="bi bi-geo-alt"></i> {{ data['location_label'] }}</div>
+        {% set _loc = data.get('location_label') or data.get('location') or data.get('country') %}
+        {% if _loc %}
+        <div class="opacity-75"><i class="bi bi-geo-alt"></i> {{ _loc }}</div>
         {% endif %}
       </div>
       {% if inst.get('logo_url') %}
@@ -31,18 +32,26 @@
     </div>
   </section>
 
+  {# SolarPro real schema (web_app.py:3116): results.pv_kw + results.economics.{annual_sav, payback, irr_pct, roi_pct} #}
+  {% set _eco = (results.get('economics') or {}) %}
+  {% set _pv  = results.get('pv_kw') or results.get('pv_size_kw') or results.get('system_kw') or 0 %}
+  {% set _sav = _eco.get('annual_sav') or results.get('annual_savings_usd') or results.get('annual_savings') or 0 %}
+  {% set _pb  = _eco.get('payback') or results.get('payback_years') or results.get('payback') or 0 %}
+  {% set _roi = _eco.get('roi_pct') or _eco.get('irr_pct') or results.get('roi_pct') or results.get('irr_pct') or 0 %}
+  {% set _sym = data.get('symbol') or data.get('currency','USD') %}
+
   <div class="row g-3 mt-2">
     <div class="col-md-3"><div class="pb-card pb-metric">
-      <div class="v">{{ '%.2f'|format(results.get('pv_size_kw') or results.get('system_kw') or 0) }} kW</div>
+      <div class="v">{{ '%.2f'|format(_pv|float) }} kW</div>
       <div class="k">System size</div></div></div>
     <div class="col-md-3"><div class="pb-card pb-metric">
-      <div class="v">{{ data.get('currency','USD') }} {{ '{:,.0f}'.format((results.get('annual_savings_usd') or results.get('annual_savings') or 0)|float) }}</div>
+      <div class="v">{{ _sym }} {{ '{:,.0f}'.format(_sav|float) }}</div>
       <div class="k">Year-1 savings</div></div></div>
     <div class="col-md-3"><div class="pb-card pb-metric">
-      <div class="v">{{ '%.1f'|format(results.get('payback_years') or 0) }} yr</div>
+      <div class="v">{{ '%.1f'|format(_pb|float) }} yr</div>
       <div class="k">Payback</div></div></div>
     <div class="col-md-3"><div class="pb-card pb-metric">
-      <div class="v">{{ '%.0f'|format(results.get('roi_pct') or results.get('irr_pct') or 0) }}%</div>
+      <div class="v">{{ '%.0f'|format(_roi|float) }}%</div>
       <div class="k">25-yr ROI</div></div></div>
   </div>
 
@@ -56,12 +65,13 @@
           maximise self-consumption and reduce grid spend across a 25-year horizon.
           {% endif %}
         </p>
-        {% if results.get('boq') %}
+        {# Real schema: results.num_panels + results.inv_kw + results.bat_kwh + results.boq_grand #}
+        {% if results.get('num_panels') or results.get('inv_kw') or results.get('bat_kwh') %}
         <h6 class="mt-3">BOQ at a glance</h6>
         <ul class="small mb-0">
-          {% if results['boq'].get('modules_qty') %}<li>{{ results['boq']['modules_qty'] }} PV modules</li>{% endif %}
-          {% if results['boq'].get('inverter_kw') %}<li>{{ results['boq']['inverter_kw'] }} kW inverter capacity</li>{% endif %}
-          {% if results['boq'].get('battery_kwh') %}<li>{{ results['boq']['battery_kwh'] }} kWh battery storage</li>{% endif %}
+          {% if results.get('num_panels') %}<li>{{ results['num_panels'] }} PV modules</li>{% endif %}
+          {% if results.get('inv_kw') %}<li>{{ '%.1f'|format(results['inv_kw']|float) }} kW inverter capacity</li>{% endif %}
+          {% if results.get('bat_kwh') %}<li>{{ '%.1f'|format(results['bat_kwh']|float) }} kWh battery storage</li>{% endif %}
         </ul>
         {% endif %}
       </div>

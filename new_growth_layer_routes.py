@@ -233,23 +233,50 @@ def _gen_share_slug():
 
 def _safe_card_payload(project_row, asset_type):
     """Extract SAFE-TO-PUBLISH fields from project.data_json.
-    NEVER include: rate_buildup, supplier_private_prices, internal_notes,
-    admin info, or full BOQ pricing. Privacy guardrail per spec §20."""
+    Uses SolarPro's real schema (web_app.py:3116):
+        results.pv_kw, results.num_panels, results.bat_kwh, results.inv_kw,
+        results.daily_kwh, results.economics.{annual_sav, payback,
+        total_local, ...}, results.boq_rows, results.boq_grand.
+    NEVER includes: rate_buildup, supplier_private_prices, internal_notes,
+    admin info, or full BOQ pricing. Privacy guardrail per spec §20.
+    # # growth-payload-fix-real-schema-applied
+    """
     try:
         data = _gl_json.loads(project_row["data_json"] or "{}")
     except Exception:
         data = {}
     results = data.get("results") or {}
-    project_name = project_row["name"] if "name" in project_row.keys() else "Solar project"
-    location = (data.get("location_label") or data.get("country")
+    eco = results.get("economics") or {}
+    project_name = (project_row["name"] if "name" in project_row.keys()
+                    else "Solar project")
+    # Location lives at top of data, not inside results
+    location = (data.get("location") or data.get("country")
+                or data.get("location_label")
                 or (data.get("location") or {}).get("label", "")
-                or "")[:80]
-    currency = (data.get("currency") or "USD")[:6]
-    pv_kw = (results.get("pv_size_kw") or results.get("system_kw")
-             or results.get("pv_kw") or 0)
-    annual_savings = (results.get("annual_savings_usd")
+                or "")
+    if isinstance(location, dict):
+        location = location.get("label", "") or ""
+    location = str(location)[:80]
+    # Currency: prefer the symbol the user picked; else 3-letter code
+    currency = (data.get("symbol") or data.get("currency") or "USD")
+    currency = str(currency)[:6]
+
+    # Real schema: results.pv_kw (legacy fallbacks for old projects)
+    pv_kw = (results.get("pv_kw") or results.get("pv_size_kw")
+             or results.get("system_kw") or 0)
+    # Annual savings live INSIDE economics as `annual_sav`
+    annual_savings = (eco.get("annual_sav")
+                      or results.get("annual_savings_usd")
                       or results.get("annual_savings") or 0)
-    payback = results.get("payback_years") or results.get("payback") or 0
+    # Payback INSIDE economics as `payback`
+    payback = (eco.get("payback")
+               or results.get("payback_years")
+               or results.get("payback") or 0)
+    try: payback = float(payback)
+    except Exception: payback = 0
+    if payback != payback or payback == float("inf"):  # NaN / inf guard
+        payback = 0
+
     if asset_type == "solar_savings_card":
         return {
             "project_name": project_name, "location": location,
@@ -259,9 +286,15 @@ def _safe_card_payload(project_row, asset_type):
             "currency": currency,
         }
     if asset_type == "energy_score_card":
+        # Energy-independence not directly stored; estimate from system type.
+        system_type = (data.get("system_type", "") or "").lower()
+        default_score = (95 if "off-grid" in system_type or "off grid" in system_type
+                         else 70 if "hybrid" in system_type
+                         else 35)
         score = (results.get("energy_independence_score")
                  or results.get("self_sufficiency_pct")
-                 or results.get("solar_fraction_pct") or 0)
+                 or results.get("solar_fraction_pct")
+                 or default_score)
         return {
             "project_name": project_name, "location": location,
             "energy_score": round(float(score or 0), 0),
@@ -269,13 +302,12 @@ def _safe_card_payload(project_row, asset_type):
             "daily_kwh": round(float(results.get("daily_kwh") or 0), 1),
         }
     if asset_type == "boq_summary_card":
-        boq = results.get("boq") or {}
         return {
             "project_name": project_name, "location": location,
             "system_size_kw": round(float(pv_kw or 0), 2),
-            "module_count": int(boq.get("modules_qty") or boq.get("module_qty") or 0),
-            "battery_kwh": round(float(boq.get("battery_kwh") or 0), 1),
-            "inverter_kw": round(float(boq.get("inverter_kw") or 0), 1),
+            "module_count": int(results.get("num_panels") or 0),
+            "battery_kwh": round(float(results.get("bat_kwh") or 0), 1),
+            "inverter_kw": round(float(results.get("inv_kw") or 0), 1),
             # NO unit prices, NO supplier names, NO rate buildup.
         }
     if asset_type == "proposal_preview":
@@ -294,7 +326,6 @@ def _safe_card_payload(project_row, asset_type):
             "currency": currency,
         }
     return {"project_name": project_name, "location": location}
-
 
 def _growth_resolve_user_referral_code(u):
     """Return the user's referral code, generating one if missing.
