@@ -26672,15 +26672,22 @@ def _online_users(window_secs=None):
     try:
         with get_db() as c:
             if is_pg:
+                # users.last_seen is stored as TEXT (`ALTER TABLE users
+                # ADD COLUMN last_seen TEXT`); the cast to timestamp is
+                # mandatory or PG raises "operator does not exist:
+                # timestamp with time zone - text" and the route's
+                # try/except eats the failure -> every user renders
+                # offline. Bug surfaced 2026-06-26 via the diag-online-dot
+                # workflow.
                 rows = c.execute(
                     "SELECT id, username, COALESCE(name,'') AS name, "
                     "       COALESCE(role,'') AS role, COALESCE(plan,'') AS plan, "
                     "       last_seen, "
-                    "       EXTRACT(EPOCH FROM (NOW() - last_seen))::INT AS since_seconds "
+                    "       EXTRACT(EPOCH FROM (NOW() - last_seen::timestamp))::INT AS since_seconds "
                     "FROM users "
                     "WHERE last_seen IS NOT NULL "
-                    "  AND last_seen >= (NOW() - INTERVAL '%s seconds') "
-                    "ORDER BY last_seen DESC LIMIT 100" % int(window_secs)
+                    "  AND last_seen::timestamp >= (NOW() - INTERVAL '%s seconds') "
+                    "ORDER BY last_seen::timestamp DESC LIMIT 100" % int(window_secs)
                 ).fetchall()
             else:
                 rows = c.execute(

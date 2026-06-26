@@ -52,9 +52,9 @@ jobs:
             SELECT id, username, email,
                    last_seen,
                    CASE WHEN last_seen IS NULL THEN 'never'
-                        ELSE (EXTRACT(EPOCH FROM (NOW() - last_seen))::INT)::TEXT END AS seconds_since,
+                        ELSE (EXTRACT(EPOCH FROM (NOW() - last_seen::timestamp))::INT)::TEXT END AS seconds_since,
                    CASE WHEN last_seen IS NOT NULL
-                        AND last_seen >= (NOW() - INTERVAL '300 seconds')
+                        AND last_seen::timestamp >= (NOW() - INTERVAL '300 seconds')
                         THEN 'YES' ELSE 'no' END AS inside_5min_window
               FROM users
              ORDER BY (last_seen IS NULL), last_seen DESC NULLS LAST
@@ -64,7 +64,7 @@ jobs:
           NULL_N=$(psql "$DATABASE_URL" -A -t -c \
             "SELECT COUNT(*) FROM users WHERE last_seen IS NULL")
           ALIVE_N=$(psql "$DATABASE_URL" -A -t -c \
-            "SELECT COUNT(*) FROM users WHERE last_seen IS NOT NULL AND last_seen >= (NOW() - INTERVAL '300 seconds')")
+            "SELECT COUNT(*) FROM users WHERE last_seen IS NOT NULL AND last_seen::timestamp >= (NOW() - INTERVAL '300 seconds')")
           ALL_N=$(psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM users")
           echo "  NULL last_seen      : $NULL_N / $ALL_N"
           echo "  Online (<=5 min)    : $ALIVE_N / $ALL_N"
