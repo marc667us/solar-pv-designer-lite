@@ -13,12 +13,47 @@
       Click a row to open the project.
     </div>
   </div>
-  <div class="text-end">
+  <div class="text-end d-flex align-items-center gap-2 flex-wrap justify-content-end">
     <span class="badge"
           style="background:rgba(34,197,94,.18);color:#22c55e;
                  border:1px solid rgba(34,197,94,.45);font-size:11px">
       {{ rows|length }} result{{ '' if rows|length == 1 else 's' }}
     </span>
+    {# Batch-delete: wipes every shading_history row owned by the
+       calling user in one shot. Double-confirm in JS + audit-logged
+       server-side. Owner ask 2026-06-26: "bring back the red button
+       that batch delete[s] existing project history". #}
+    {% if rows %}
+    <form method="POST"
+          action="{{ url_for('myproject_clear_history') }}"
+          onsubmit="return confirmMyProjectBatchDelete(this, {{ rows|length }})"
+          style="margin:0">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="confirm" id="myProjectBatchConfirm" value="">
+      <button type="submit" class="btn btn-sm btn-outline-danger fw-bold">
+        <i class="bi bi-trash3-fill me-1"></i>
+        Delete All History
+      </button>
+    </form>
+    <script>
+    /* Two-step confirm so accidental clicks cannot wipe months of saved runs. */
+    function confirmMyProjectBatchDelete(form, total) {
+      if (total <= 0) { alert('Nothing to delete.'); return false; }
+      var msg = 'PERMANENTLY DELETE ALL ' + total + ' saved result(s)?\n\n' +
+                'This wipes every row in your shading-history table.\n' +
+                'There is no undo.\n\n' +
+                'Type DELETE in the next prompt to confirm.';
+      if (!confirm(msg)) return false;
+      var typed = prompt('Type DELETE (capitals) to wipe ' + total + ' result(s):');
+      if (typed !== 'DELETE') {
+        alert('Not confirmed -- nothing deleted.');
+        return false;
+      }
+      document.getElementById('myProjectBatchConfirm').value = 'DELETE';
+      return true;
+    }
+    </script>
+    {% endif %}
   </div>
 </div>
 

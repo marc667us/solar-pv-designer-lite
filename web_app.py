@@ -14021,6 +14021,68 @@ def myproject_list():
                            bucket_choices=bucket_choices)
 
 
+@app.route("/myproject/clear-history", methods=["POST"])
+@login_required
+@limiter.limit("5 per hour")
+def myproject_clear_history():
+    """Wipe every shading_history row owned by the calling user in
+    a single SQL. Powers the red batch-delete button on /myproject.
+
+    Guards (defence-in-depth, mirrors admin_agent_leads_batch_delete):
+      * @login_required
+      * csrf_protect()
+      * rate-limited 5/hr to slow accidental loops
+      * explicit confirm field must be the literal string DELETE
+        (template forces a 2-step JS confirm before setting it)
+      * audit_logs row with action=myproject_history_batch_delete
+    """
+    csrf_protect()
+    if (request.form.get("confirm") or "").strip() != "DELETE":
+        flash("Delete not confirmed.", "warning")
+        return redirect(url_for("myproject_list"))
+    uid = session.get("user_id") or 0
+    deleted = 0
+    try:
+        with get_db() as c:
+            try:
+                deleted = c.execute(
+                    "SELECT COUNT(*) FROM shading_history WHERE user_id=?",
+                    (uid,),
+                ).fetchone()[0] or 0
+            except Exception:
+                deleted = 0
+            try:
+                c.execute(
+                    "DELETE FROM shading_history WHERE user_id=?",
+                    (uid,),
+                )
+            except Exception as _del_err:
+                try:
+                    app.logger.warning("myproject_clear_history delete failed: %s", _del_err)
+                except Exception:
+                    pass
+                flash("Could not delete history right now. Please try again.", "danger")
+                return redirect(url_for("myproject_list"))
+            try:
+                c.execute(
+                    "INSERT INTO audit_logs (user_id, username, action, "
+                    "ip_address, details) VALUES (?,?,?,?,?)",
+                    (uid, session.get("username", ""),
+                     "myproject_history_batch_delete", _get_real_ip(),
+                     f"deleted={deleted}"))
+            except Exception:
+                pass
+    except Exception as e:
+        try:
+            app.logger.warning("myproject_clear_history outer error: %s", e)
+        except Exception:
+            pass
+        flash("Could not delete history right now. Please try again.", "danger")
+        return redirect(url_for("myproject_list"))
+    flash(f"Deleted {deleted} result-history row(s).", "success")
+    return redirect(url_for("myproject_list"))
+
+
 # ─── Routes — Public Electrical Marketplace ───────────────────────────────────
 # Magnet feature: free public browse of electrical products + prices + suppliers.
 # Anonymous visitors see prices and supplier names; action buttons (RFQ, compare,
