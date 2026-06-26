@@ -1,0 +1,160 @@
+# Full E2E proof that /admin/agent/run produces real solar prospects
+# after the Google News RSS + href/url key fix.
+#
+# Logs in as admin via KC (uses SOLARPRO_ADMIN_PASSWORD GH secret —
+# already synced into KC by `Sync KC Seed Passwords`), submits the
+# prospecting form, parses the response, asserts >= 1 prospect with a
+# non-empty source_url.
+
+name: Diag Deep-Crawl Agent E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      country:
+        description: "Country to prospect (default: Ghana)"
+        required: false
+        default: "Ghana"
+      sector:
+        description: "Sector (default: Commercial)"
+        required: false
+        default: "Commercial"
+
+permissions: { contents: read }
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SOLAR_BASE: https://solarpro.aiappinvent.com
+      ADMIN_EMAIL: support@aiappinvent.com
+      ADMIN_PASSWORD: ${{ secrets.SOLARPRO_ADMIN_PASSWORD }}
+      AGENT_COUNTRY: ${{ inputs.country }}
+      AGENT_SECTOR:  ${{ inputs.sector }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install --quiet playwright
+      - run: python -m playwright install --with-deps chromium
+
+      - name: Drive /admin/agent/run via Playwright + KC
+        run: |
+          python3 <<'PY'
+          import os, re, sys, time, json
+          from playwright.sync_api import sync_playwright
+
+          BASE  = os.environ["SOLAR_BASE"]
+          EMAIL = os.environ["ADMIN_EMAIL"]
+          PW    = os.environ["ADMIN_PASSWORD"]
+          COUNTRY = os.environ.get("AGENT_COUNTRY") or "Ghana"
+          SECTOR  = os.environ.get("AGENT_SECTOR")  or "Commercial"
+
+          with sync_playwright() as pw:
+              browser = pw.chromium.launch()
+              ctx = browser.new_context()
+              page = ctx.new_page()
+              page.set_default_timeout(30000)
+
+              # 1) KC OIDC PKCE login
+              print(f"[1/4] login as {EMAIL} ...")
+              page.goto(f"{BASE}/login", wait_until="domcontentloaded", timeout=30000)
+              page.wait_for_selector("input#username", timeout=20000)
+              page.fill("input#username", EMAIL)
+              page.fill("input#password", PW)
+              page.click("button#kc-login")
+              page.wait_for_url(
+                  lambda u: u.startswith(BASE) and "/login" not in u and "/auth/" not in u,
+                  timeout=45000,
+              )
+              print(f"  landed: {page.url}")
+
+              # 2) GET /admin/agent to harvest CSRF token from the form
+              print("[2/4] fetch /admin/agent (CSRF) ...")
+              r = page.goto(f"{BASE}/admin/agent",
+                            wait_until="domcontentloaded", timeout=30000)
+              if r is None or r.status != 200:
+                  print(f"  FAIL: /admin/agent returned {r.status if r else 'no resp'}")
+                  print(f"  body snippet: {page.content()[:600]}")
+                  browser.close(); sys.exit(2)
+              try:
+                  csrf = page.eval_on_selector(
+                      "input[name='_csrf']", "el => el.value")
+              except Exception:
+                  # fallback to a meta tag if the page uses one
+                  try:
+                      csrf = page.eval_on_selector(
+                          "meta[name='csrf-token']", "el => el.content")
+                  except Exception:
+                      csrf = ""
+              if not csrf:
+                  print("  FAIL: could not find CSRF token on /admin/agent")
+                  browser.close(); sys.exit(3)
+              print(f"  csrf: {csrf[:8]}...")
+
+              # 3) POST /admin/agent/run via Playwright's auth'd request client
+              print(f"[3/4] POST /admin/agent/run (country={COUNTRY}, sector={SECTOR}, count=8) ...")
+              t0 = time.time()
+              resp = page.request.post(
+                  f"{BASE}/admin/agent/run",
+                  form={
+                      "_csrf": csrf,
+                      "country": COUNTRY,
+                      "sector": SECTOR,
+                      "system_kw": "10-100",
+                      "budget": "$5,000-$100,000",
+                      "focus": "",
+                      "count": "8",
+                  },
+                  headers={"X-CSRF-Token": csrf},
+                  timeout=240000,  # full pipeline: 11 queries + 12 page-fetches + LLM
+              )
+              dt = time.time() - t0
+              print(f"  status={resp.status} in {dt:.1f}s")
+
+              # 4) Parse + report
+              try:
+                  body = resp.json()
+              except Exception:
+                  body = {"raw": resp.text()[:800]}
+
+              if not isinstance(body, dict):
+                  print(f"  FAIL: response not a JSON dict: {body!r}")
+                  browser.close(); sys.exit(4)
+
+              ok        = body.get("ok")
+              prospects = body.get("prospects") or []
+              err       = body.get("search_error")
+              ai_prov   = body.get("ai_provider") or body.get("provider") or "?"
+
+              print()
+              print("=== RESPONSE ===")
+              print(f"  ok            = {ok}")
+              print(f"  prospects     = {len(prospects)}")
+              print(f"  search_error  = {err}")
+              print(f"  ai_provider   = {ai_prov}")
+              if 'raw' in body:
+                  print(f"  raw           = {body['raw'][:400]}")
+              print()
+              print("=== Top 8 prospects ===")
+              for i, p in enumerate(prospects[:8], 1):
+                  t   = p.get("type", "?")
+                  pri = p.get("priority", "?")
+                  org = (p.get("company_name") or "?")[:30]
+                  loc = (p.get("location") or "?")[:25]
+                  url_ok = "Y" if p.get("source_url") else "n"
+                  pitch = (p.get("pitch") or p.get("source_title")
+                           or p.get("source_snippet") or "?")[:70]
+                  print(f"  #{i} [{t:6s}/{pri:6s} url={url_ok}] {org:30s} {loc:25s} {pitch}")
+
+              # PASS criteria:
+              #   - ok == True
+              #   - >= 1 prospect with a non-empty source_url
+              with_url = sum(1 for p in prospects if p.get("source_url"))
+              ok_overall = bool(ok) and with_url >= 1
+
+              browser.close()
+              print()
+              print(f"{'PASS' if ok_overall else 'FAIL'}: ok={ok}  prospects={len(prospects)}  with_url={with_url}")
+              sys.exit(0 if ok_overall else 1)
+          PY
