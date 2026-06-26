@@ -171,6 +171,15 @@
           {% endif %}
         </td>
         <td style="padding:10px 8px">
+          {# Mirror the inline dot from the username column so the
+             email row also carries the live online indicator. #}
+          {% set _is_on_email = (online_ids is defined and u.id in online_ids) %}
+          <span class="me-1" title="{{ 'Online now' if _is_on_email else 'Offline' }}"
+                style="display:inline-block;width:8px;height:8px;border-radius:50%;
+                       background:{{ '#16a34a' if _is_on_email else '#5a5a82' }};
+                       border:1px solid {{ '#0f6b2e' if _is_on_email else '#444466' }};
+                       {{ 'box-shadow:0 0 6px #16a34a;' if _is_on_email else '' }}
+                       vertical-align:middle"></span>
           <a href="mailto:{{ u.email }}" class="text-info text-decoration-none" style="font-size:11px">{{ u.email }}</a>
         </td>
         <td class="text-secondary" style="font-size:11px">{{ u.country or '—' }}</td>
