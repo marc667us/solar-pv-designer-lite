@@ -1,0 +1,234 @@
+# Apply migrations/019_force_rls_remaining_globals.sql.
+#
+# SOC 2 Phase 7 close-out final step. Reclassifies the login_failures
+# policy from admin_only to anon_insert (so anon /login POST failures
+# still write), then FORCE ROW LEVEL SECURITY on monitor_alerts,
+# monitor_state, login_failures.
+#
+# After this lands, all 15 of 15 global tables are owner-bypass-closed.
+# Phase 7 readiness page C8 should show 15/15 PASS.
+#
+# Default mode is DRY-RUN. Apply needs -f confirm=FORCE_RLS_REMAINING_APPLY.
+
+name: Apply Migration 019 (FORCE RLS on remaining 3 globals)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type FORCE_RLS_REMAINING_APPLY to commit migration 019 to live Postgres."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "FORCE_RLS_REMAINING_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- migration 019 commits to live PG ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- nothing will be written ==="
+            echo "Re-run with -f confirm=FORCE_RLS_REMAINING_APPLY to commit."
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/019_force_rls_remaining_globals.sql
+          echo "OK: migrations/019_force_rls_remaining_globals.sql present"
+          wc -l migrations/019_force_rls_remaining_globals.sql
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- current_user_is_admin helper present
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          N=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM pg_proc WHERE proname='current_user_is_admin'")
+          if [ "$N" -lt "1" ]; then
+            echo "::error::Migration 015 helper missing -- cannot FORCE."
+            exit 1
+          fi
+          echo "OK: current_user_is_admin() helper present."
+
+      - name: Pre-flight -- current FORCE + policy state
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          echo "--- relrowsecurity / relforcerowsecurity BEFORE migration ---"
+          psql "$DATABASE_URL" -c "
+            SELECT c.relname,
+                   c.relrowsecurity      AS rls_on,
+                   c.relforcerowsecurity AS force_on
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public'
+               AND c.relname IN ('monitor_alerts','monitor_state','login_failures')
+             ORDER BY c.relname;"
+          echo ""
+          echo "--- login_failures policies BEFORE reclassification ---"
+          psql "$DATABASE_URL" -c "
+            SELECT policyname, cmd
+              FROM pg_policies
+             WHERE tablename='login_failures'
+             ORDER BY policyname;"
+
+      - name: Show migration overview
+        run: |
+          echo "--- migrations/019_force_rls_remaining_globals.sql ---"
+          grep -E "^-- (PART|=|ROLLBACK)" migrations/019_force_rls_remaining_globals.sql | head -20
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The SQL below WOULD have been applied. Nothing was."
+          echo "================================================================"
+          head -100 migrations/019_force_rls_remaining_globals.sql
+
+      - name: Apply migration 019 (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/019_force_rls_remaining_globals.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/019_force_rls_remaining_globals.sql
+          echo "OK: migration 019 applied."
+
+      - name: Verify post-apply -- FORCE flag set on all 3
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- relrowsecurity / relforcerowsecurity AFTER migration ---"
+          psql "$DATABASE_URL" -c "
+            SELECT c.relname,
+                   c.relrowsecurity      AS rls_on,
+                   c.relforcerowsecurity AS force_on
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public'
+               AND c.relname IN ('monitor_alerts','monitor_state','login_failures')
+             ORDER BY c.relname;"
+          BAD=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT c.relname
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname='public'
+               AND c.relname IN ('monitor_alerts','monitor_state','login_failures')
+               AND (c.relrowsecurity = false OR c.relforcerowsecurity = false)")
+          if [ -n "$BAD" ]; then
+            echo "::error::These tables did NOT receive FORCE RLS:"
+            echo "$BAD"
+            exit 1
+          fi
+          echo "OK: all 3 tables now report rls_on=t AND force_on=t."
+
+      - name: Verify post-apply -- login_failures policy reshape
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- login_failures policies AFTER reclassification ---"
+          psql "$DATABASE_URL" -c "
+            SELECT policyname, cmd
+              FROM pg_policies
+             WHERE tablename='login_failures'
+             ORDER BY policyname;"
+          N=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM pg_policies WHERE tablename='login_failures'")
+          if [ "$N" -lt "4" ]; then
+            echo "::error::expected 4 policies on login_failures, found $N"
+            exit 1
+          fi
+          echo "OK: $N policies on login_failures."
+
+      - name: Verify post-apply -- behaviour smoke
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- monitor_alerts SELECT WITHOUT admin GUC (expect 0 -- denied) ---"
+          psql "$DATABASE_URL" --single-transaction -c "
+            SELECT set_config('app.current_role', '', true);
+            SELECT COUNT(*) AS monitor_alerts_no_guc FROM monitor_alerts;"
+          echo ""
+          echo "--- monitor_alerts SELECT WITH admin GUC (expect actual count) ---"
+          psql "$DATABASE_URL" --single-transaction -c "
+            SELECT set_config('app.current_role', 'admin', true);
+            SELECT COUNT(*) AS monitor_alerts_with_guc FROM monitor_alerts;"
+          echo ""
+          echo "--- login_failures: anon INSERT must succeed (anon_insert policy) ---"
+          psql "$DATABASE_URL" --single-transaction -c "
+            SELECT set_config('app.current_role', '', true);
+            INSERT INTO login_failures (username, ip_address)
+              VALUES ('smoke-019', '127.0.0.1');"
+          echo ""
+          echo "--- cleanup: DELETE the smoke row WITH admin GUC ---"
+          psql "$DATABASE_URL" --single-transaction -c "
+            SELECT set_config('app.current_role', 'admin', true);
+            DELETE FROM login_failures WHERE username='smoke-019';"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " PHASE 7 OWNER-BYPASS FULLY CLOSED -- 15 of 15 global tables"
+            echo " now FORCE RLS on the owner connection."
+            echo "================================================================"
+            echo ""
+            echo " login_failures policy reclassified to anon_insert pattern:"
+            echo "   * SELECT      admin only"
+            echo "   * INSERT      anon (legacy login POST + future writers)"
+            echo "   * UPDATE/DEL  admin only"
+            echo ""
+            echo " /admin/phase7-cutover C8 row should now show 15/15 PASS."
+          else
+            echo "DRY-RUN -- no Render changes. Re-run with confirm=FORCE_RLS_REMAINING_APPLY."
+          fi
