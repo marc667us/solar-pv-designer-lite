@@ -1,0 +1,86 @@
+# One-shot: prove the deep-crawl agent's search backend returns real solar
+# items after the Google News RSS swap. Runs the SAME 11 queries the live
+# agent runs (the loc default is Ghana — matching the agent's default), so
+# this is the closest live-proof we can produce without an admin session.
+name: Diag Deep-Crawl Search
+
+on: { workflow_dispatch: {} }
+
+permissions: { contents: read }
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install --quiet ddgs
+      - run: |
+          python3 << 'PY'
+          import sys, time, json
+          sys.path.insert(0, ".")
+          from api_manager import api
+
+          # Mirror the exact queries the live agent runs for loc="Ghana"
+          loc, loc_q = "Ghana", '"Ghana"'
+          sector_q = "commercial"
+          focus_q  = f"solar PV {sector_q}"
+          UN_PORTALS = "site:ungm.org OR site:devex.com OR site:reliefweb.int OR site:dgmarket.com OR site:tendersinfo.com"
+          DFI_PORTALS = "site:worldbank.org OR site:afdb.org OR site:ifc.org OR site:esmap.org OR site:geapp.org"
+          AFRICA_PORTALS = "site:africatenders.com OR site:tendersontime.com OR site:globaltenders.com OR site:ecreee.org"
+          queries = [
+              f'"tender for" solar installation {loc_q} 2026 2027',
+              f'"invitation to bid" solar PV {loc_q} 2026 2027',
+              f'"request for proposals" solar {loc_q} 2026 2027',
+              f'"expression of interest" solar {loc_q} installation 2026 2027',
+              f'({UN_PORTALS}) solar {loc_q} tender OR RFP 2026 2027',
+              f'({DFI_PORTALS}) solar {loc_q} tender OR "invitation to bid" 2026 2027',
+              f'({AFRICA_PORTALS}) solar {loc_q} tender OR RFP 2026 2027',
+              f'{loc_q} {sector_q} solar "supply and install" tender OR RFP 2026 2027',
+              f'site:facebook.com {loc_q} solar "looking for installer" OR "need solar" 2026',
+              f'site:linkedin.com {loc_q} solar contractor OR seeking OR tender 2026',
+              f'{loc_q} {focus_q} solar procurement OR bid OR tender 2026 2027',
+          ]
+          all_results = []
+          per_query = []
+          t_total = time.time()
+          for i, q in enumerate(queries, 1):
+              t0 = time.time()
+              try:
+                  hits = api.search.query(q, max_results=15)
+              except Exception as e:
+                  hits = []
+                  print(f"  Q{i} EXCEPTION: {e}")
+              dt = time.time() - t0
+              per_query.append((q[:70], len(hits), dt))
+              all_results.extend(hits)
+              # Confirm shape: every hit MUST have a non-empty `url`
+              for h in hits:
+                  if not h.get("url"):
+                      print(f"  [BUG] empty url in hit: title={h.get('title','')[:60]!r}")
+          print(f"\nQUERY-BY-QUERY ({time.time()-t_total:.1f}s total):")
+          for (q, n, dt) in per_query:
+              print(f"  {n:3d} hits in {dt:5.1f}s  ::  {q}")
+          # De-dup by url
+          seen = set(); uniq = []
+          for r in all_results:
+              u = (r.get("url") or "").strip()
+              if not u or u in seen: continue
+              seen.add(u); uniq.append(r)
+          print(f"\nAGGREGATE: {len(all_results)} raw  ->  {len(uniq)} unique")
+          print()
+          print("=== Sample of first 20 unique items the live agent would see ===")
+          for r in uniq[:20]:
+              has_url = "Y" if r.get("url") else "n"
+              print(f"  [url={has_url}] {r['title'][:110]}")
+          # PASS criteria: at least 30 unique items, every hit has a url
+          empties = sum(1 for r in all_results if not r.get("url"))
+          status = (
+              "PASS" if (len(uniq) >= 30 and empties == 0)
+              else "FAIL"
+          )
+          print(f"\n{status}: unique={len(uniq)} empty_url_hits={empties}")
+          sys.exit(0 if status == "PASS" else 1)
+          PY
