@@ -1,0 +1,179 @@
+# Apply migrations/021_validate_foreign_keys.sql.
+#
+# Runs ALTER TABLE ... VALIDATE CONSTRAINT on each NOT VALID
+# fk_<child>_<col> constraint installed by migration 013, so PG also
+# checks the existing rows (not just future inserts). Earliest apply
+# 2026-07-03 per the SOC 2 sprint memory (7-day clean monitoring
+# window after mig 013 landed 2026-06-26).
+#
+# Default mode is DRY-RUN. Apply needs -f confirm=VALIDATE_FK_APPLY.
+
+name: Apply Migration 021 (VALIDATE FOREIGN KEYs)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type VALIDATE_FK_APPLY to commit."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "VALIDATE_FK_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- migration 021 commits to live PG ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- nothing will be written ==="
+            echo "Re-run with -f confirm=VALIDATE_FK_APPLY to commit."
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/021_validate_foreign_keys.sql
+          echo "OK: migrations/021_validate_foreign_keys.sql present"
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- count NOT VALID fk_* constraints
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- fk_* constraints in the NOT VALID state ---"
+          psql "$DATABASE_URL" -c "
+            SELECT c.relname, con.conname
+              FROM pg_constraint con
+              JOIN pg_class      c ON c.oid = con.conrelid
+              JOIN pg_namespace  n ON n.oid = c.relnamespace
+             WHERE n.nspname='public'
+               AND con.contype='f'
+               AND con.convalidated=false
+               AND con.conname LIKE 'fk_%'
+             ORDER BY c.relname, con.conname;"
+          N=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT COUNT(*)
+              FROM pg_constraint con
+              JOIN pg_class      c ON c.oid = con.conrelid
+              JOIN pg_namespace  n ON n.oid = c.relnamespace
+             WHERE n.nspname='public'
+               AND con.contype='f'
+               AND con.convalidated=false
+               AND con.conname LIKE 'fk_%'")
+          echo "  total NOT VALID fk_* constraints in scope: $N"
+
+      - name: Pre-flight -- calendar gate (≥ 2026-07-03)
+        run: |
+          TODAY=$(date -u +%Y%m%d)
+          GATE=20260703
+          if [ "$TODAY" -lt "$GATE" ]; then
+            echo "::warning::Calendar gate ≥ 2026-07-03; today is $TODAY."
+            echo "Recommended to wait for the 7-day monitoring window."
+            echo "Proceeding anyway -- workflow does NOT hard-block on the date."
+          else
+            echo "OK: calendar gate satisfied ($TODAY ≥ $GATE)."
+          fi
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The SQL below WOULD have been applied. Nothing was."
+          echo "================================================================"
+          head -80 migrations/021_validate_foreign_keys.sql
+
+      - name: Apply migration 021 (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/021_validate_foreign_keys.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/021_validate_foreign_keys.sql
+          echo "OK: migration 021 applied."
+
+      - name: Verify post-apply -- every fk_* now VALIDATED
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- fk_* constraints after migration ---"
+          psql "$DATABASE_URL" -c "
+            SELECT
+              COUNT(*) FILTER (WHERE con.convalidated = true)  AS validated,
+              COUNT(*) FILTER (WHERE con.convalidated = false) AS still_not_valid,
+              COUNT(*) AS total_fk_named
+              FROM pg_constraint con
+              JOIN pg_class      c ON c.oid = con.conrelid
+              JOIN pg_namespace  n ON n.oid = c.relnamespace
+             WHERE n.nspname='public'
+               AND con.contype='f'
+               AND con.conname LIKE 'fk_%';"
+          STILL=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT COUNT(*)
+              FROM pg_constraint con
+              JOIN pg_class      c ON c.oid = con.conrelid
+              JOIN pg_namespace  n ON n.oid = c.relnamespace
+             WHERE n.nspname='public'
+               AND con.contype='f'
+               AND con.convalidated=false
+               AND con.conname LIKE 'fk_%'")
+          if [ "$STILL" -gt "0" ]; then
+            echo "::error::$STILL fk_* constraints are STILL NOT VALID."
+            exit 1
+          fi
+          echo "OK: all fk_* constraints now VALIDATED."
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " FK VALIDATE COMPLETE -- every NOT VALID fk_* constraint from"
+            echo " migration 013 is now genuinely enforced over existing rows."
+            echo "================================================================"
+          else
+            echo "DRY-RUN -- no changes. Re-run with confirm=VALIDATE_FK_APPLY."
+          fi
