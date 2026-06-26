@@ -1,0 +1,252 @@
+# Apply migrations/018_force_rls_globals.sql to live Postgres.
+#
+# SOC 2 Phase 7 close-out. ALTER TABLE FORCE ROW LEVEL SECURITY on 12
+# of the 15 global tables so RLS finally applies to the DB owner
+# connection too (which is what the SolarPro app actually uses).
+#
+# Pre-conditions enforced by the migration itself (PART 1 DO-block
+# RAISEs EXCEPTION) AND by this workflow's pre-flight: every forced
+# table must carry a *_global_* strict policy. Without that, FORCE
+# turns into a hard deny.
+#
+# SKIPPED tables (writers run OUTSIDE a request context, so the
+# M3.4-wired role GUC isn't set when they fire):
+#   * monitor_alerts  -- background monitor cron writes
+#   * monitor_state   -- background monitor cron writes
+#   * login_failures  -- legacy /login POST writes before auth context exists
+#
+# Default mode is DRY-RUN. Apply needs -f confirm=FORCE_RLS_APPLY.
+
+name: Apply Migration 018 (FORCE RLS on 12 global tables)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type FORCE_RLS_APPLY to commit migration 018 to live Postgres."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "FORCE_RLS_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- FORCE ROW LEVEL SECURITY commits to live PG ==="
+            echo ""
+            echo "  After this lands, the SolarPro app's DB owner connection"
+            echo "  is gated by the strict policies on the 12 forced tables."
+            echo "  Every admin SELECT must arrive with app.current_role='admin'"
+            echo "  set on the connection (M3.4 apply_tenant_guc does this on"
+            echo "  every authenticated request)."
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- migration 018 will be parsed + previewed only ==="
+            echo "Re-run with -f confirm=FORCE_RLS_APPLY to commit."
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/018_force_rls_globals.sql
+          echo "OK: migrations/018_force_rls_globals.sql present"
+          wc -l migrations/018_force_rls_globals.sql
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- every forced table carries a strict policy
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          MISSING=$(psql "$DATABASE_URL" -A -t -c "
+            WITH wanted(t) AS (VALUES
+              ('installers'),('news_posts'),('helpline_learned_kb'),
+              ('product_brands'),('product_categories'),('appliances'),
+              ('assessment_requests'),('leads'),('beta_signups'),
+              ('newsletter_subscribers'),
+              ('upgrade_codes'),('admin_settings'))
+            SELECT t FROM wanted
+             WHERE EXISTS (SELECT 1 FROM information_schema.tables
+                             WHERE table_schema='public' AND table_name=wanted.t)
+               AND NOT EXISTS (
+                 SELECT 1 FROM pg_policies
+                  WHERE schemaname='public' AND tablename=wanted.t
+                    AND policyname LIKE '%_global_%'
+               )")
+          if [ -n "$MISSING" ]; then
+            echo "::error::These forced tables lack a *_global_* strict policy:"
+            echo "$MISSING"
+            echo ""
+            echo "Migration 015 must be fully applied first."
+            exit 1
+          fi
+          echo "OK: every forced table carries a strict policy."
+
+      - name: Pre-flight -- current FORCE state per table
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          echo "--- relrowsecurity / relforcerowsecurity BEFORE migration ---"
+          psql "$DATABASE_URL" -c "
+            SELECT c.relname,
+                   c.relrowsecurity      AS rls_on,
+                   c.relforcerowsecurity AS force_on
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public'
+               AND c.relname IN (
+                 'installers','news_posts','helpline_learned_kb',
+                 'product_brands','product_categories','appliances',
+                 'assessment_requests','leads','beta_signups','newsletter_subscribers',
+                 'upgrade_codes','admin_settings')
+             ORDER BY c.relname;"
+
+      - name: Show migration overview
+        run: |
+          echo "--- migrations/018_force_rls_globals.sql ---"
+          grep -E "^-- (PART|=|ROLLBACK)" migrations/018_force_rls_globals.sql | head -20
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The SQL below WOULD have been applied. Nothing was."
+          echo "================================================================"
+          head -80 migrations/018_force_rls_globals.sql
+
+      - name: Apply migration 018 (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/018_force_rls_globals.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/018_force_rls_globals.sql
+          echo "OK: migration 018 applied."
+
+      - name: Verify post-apply -- FORCE flag set on all 12 tables
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- relrowsecurity / relforcerowsecurity AFTER migration ---"
+          psql "$DATABASE_URL" -c "
+            SELECT c.relname,
+                   c.relrowsecurity      AS rls_on,
+                   c.relforcerowsecurity AS force_on
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public'
+               AND c.relname IN (
+                 'installers','news_posts','helpline_learned_kb',
+                 'product_brands','product_categories','appliances',
+                 'assessment_requests','leads','beta_signups','newsletter_subscribers',
+                 'upgrade_codes','admin_settings')
+             ORDER BY c.relname;"
+          # Hard assertion: every row must report rls_on=t AND force_on=t.
+          BAD=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT c.relname
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname='public'
+               AND c.relname IN (
+                 'installers','news_posts','helpline_learned_kb',
+                 'product_brands','product_categories','appliances',
+                 'assessment_requests','leads','beta_signups','newsletter_subscribers',
+                 'upgrade_codes','admin_settings')
+               AND (c.relrowsecurity = false OR c.relforcerowsecurity = false)")
+          if [ -n "$BAD" ]; then
+            echo "::error::These tables did NOT receive FORCE RLS:"
+            echo "$BAD"
+            exit 1
+          fi
+          echo "OK: every forced table now reports rls_on=t AND force_on=t."
+
+      - name: Verify post-apply -- behaviour smoke (BEGIN/COMMIT wrapped)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- admin_settings WITHOUT app.current_role='admin' ---"
+          echo "(expect 0 -- FORCE + admin_all policy denies SELECT)"
+          psql "$DATABASE_URL" --single-transaction -c "
+            SELECT set_config('app.current_role', '', true);
+            SELECT COUNT(*) AS admin_settings_no_guc FROM admin_settings;"
+          echo ""
+          echo "--- admin_settings WITH app.current_role='admin' ---"
+          echo "(expect actual row count -- admin_all policy admits)"
+          psql "$DATABASE_URL" --single-transaction -c "
+            SELECT set_config('app.current_role', 'admin', true);
+            SELECT COUNT(*) AS admin_settings_with_guc FROM admin_settings;"
+          echo ""
+          echo "--- product_brands (public_read) WITHOUT GUC ---"
+          echo "(expect actual row count -- public_read policy admits true)"
+          psql "$DATABASE_URL" --single-transaction -c "
+            SELECT set_config('app.current_role', '', true);
+            SELECT COUNT(*) AS product_brands_no_guc FROM product_brands;"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " PHASE 7 OWNER-BYPASS CLOSE-OUT (12 of 15)."
+            echo " RLS now enforces on the DB owner connection for:"
+            echo "   public_read   (6): installers, news_posts, helpline_learned_kb,"
+            echo "                       product_brands, product_categories, appliances"
+            echo "   anon_insert   (4): assessment_requests, leads, beta_signups,"
+            echo "                       newsletter_subscribers"
+            echo "   admin_only    (2): upgrade_codes, admin_settings"
+            echo "================================================================"
+            echo ""
+            echo " REMAINING 3 of 15 (writer-side fix needed before FORCE):"
+            echo "   * monitor_alerts -- background monitor cron writes"
+            echo "   * monitor_state  -- background monitor cron writes"
+            echo "   * login_failures -- legacy /login POST writes before auth"
+            echo ""
+            echo " /admin/phase7-cutover readiness page will show 12/15 FORCE on"
+            echo " the new C8 row."
+          else
+            echo "DRY-RUN -- no Render changes. Re-run with confirm=FORCE_RLS_APPLY."
+          fi

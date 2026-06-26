@@ -28303,6 +28303,59 @@ def _phase7_check_role_guc_publishing():
     return {"status": "fail", "detail": "apply_tenant_guc does NOT publish app.current_role -- strict policies will deny all admins"}
 
 
+def _phase7_check_force_rls_coverage():
+    """Phase 7 close-out: count the 15 global tables that carry
+    FORCE ROW LEVEL SECURITY. Without FORCE the DB owner role
+    bypasses RLS, so the strict policies installed by migration 015
+    are no-ops on the app's connection.
+
+    Target: 12/15 (migration 018) -- the 3 background-writer tables
+    monitor_alerts / monitor_state / login_failures stay UN-FORCED
+    until their writer code grows a `SET app.current_role` step."""
+    global_tables = (
+        "installers", "news_posts", "helpline_learned_kb",
+        "product_brands", "product_categories", "appliances",
+        "assessment_requests", "leads", "beta_signups", "newsletter_subscribers",
+        "monitor_alerts", "monitor_state", "upgrade_codes",
+        "admin_settings", "login_failures",
+    )
+    try:
+        with get_db() as c:
+            n = c.execute(
+                "SELECT COUNT(*) FROM pg_class c "
+                "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "WHERE n.nspname='public' "
+                "  AND c.relname = ANY(%s::text[]) "
+                "  AND c.relrowsecurity = true "
+                "  AND c.relforcerowsecurity = true" if False else
+                "SELECT COUNT(*) FROM pg_class c "
+                "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "WHERE n.nspname='public' "
+                "  AND c.relname IN ("
+                "    'installers','news_posts','helpline_learned_kb',"
+                "    'product_brands','product_categories','appliances',"
+                "    'assessment_requests','leads','beta_signups','newsletter_subscribers',"
+                "    'monitor_alerts','monitor_state','upgrade_codes',"
+                "    'admin_settings','login_failures') "
+                "  AND c.relrowsecurity = true "
+                "  AND c.relforcerowsecurity = true"
+            ).fetchone()[0] or 0
+    except Exception as e:
+        return {"status": "warn", "detail": f"probe failed (SQLite local?): {str(e)[:60]}"}
+    total = len(global_tables)
+    if n >= total:
+        return {"status": "pass",
+                "detail": f"{n}/{total} globals carry FORCE RLS -- owner bypass fully closed"}
+    if n >= 12:
+        return {"status": "warn",
+                "detail": f"{n}/{total} carry FORCE RLS -- 3 background-writer tables outstanding"}
+    if n > 0:
+        return {"status": "warn",
+                "detail": f"only {n}/{total} carry FORCE RLS -- apply migration 018"}
+    return {"status": "fail",
+            "detail": f"no global tables carry FORCE RLS -- owner role bypasses every policy"}
+
+
 _PHASE7_CHECKS = [
     ("C1  Migration 015 applied (strict global policies live)",     _phase7_check_migration_015),
     ("C2  Migration 016 applied (audit chain columns)",             _phase7_check_migration_016),
@@ -28311,6 +28364,7 @@ _PHASE7_CHECKS = [
     ("C5  All 15 global tables carry strict policies",              _phase7_check_global_strict_policies),
     ("C6  app.current_role GUC published by tenant_context",        _phase7_check_role_guc_publishing),
     ("C7  No direct INSERT INTO audit_logs in app code",            _phase7_check_no_direct_audit_inserts),
+    ("C8  FORCE RLS on global tables (owner-bypass close-out)",     _phase7_check_force_rls_coverage),
 ]
 
 
