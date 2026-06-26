@@ -1,0 +1,123 @@
+# Sync the 3 new realm roles from keycloak/render/realm-prod.json into
+# the live KC realm so the @require_role(...) decorators recognise them
+# at runtime.
+#
+# Roles added by realm-prod.json but not yet on live:
+#   read_only          -- view-only auditor / external reviewer
+#   ai_agent           -- ADK/LLM agents acting on behalf of a user
+#   background_worker  -- celery/RQ/cron worker identity
+#
+# Idempotent: 409 from KC means the role already exists; treated as OK.
+
+name: Sync KC Realm Roles (3 new roles)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type SYNC_KC_ROLES to commit."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      KEYCLOAK_ISSUER:              ${{ secrets.KEYCLOAK_ISSUER }}
+      KC_BOOTSTRAP_ADMIN_PASSWORD:  ${{ secrets.KC_BOOTSTRAP_ADMIN_PASSWORD }}
+      CONFIRM:                      ${{ inputs.confirm }}
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install --quiet requests
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "SYNC_KC_ROLES" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- 3 roles will be POSTed to live KC ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- nothing will be POSTed ==="
+            echo "Re-run with -f confirm=SYNC_KC_ROLES to commit."
+          fi
+
+      - name: Auth + roll the roles
+        run: |
+          python3 << 'PY'
+          import os, json, requests, sys
+
+          BASE = os.environ['KEYCLOAK_ISSUER'].rsplit('/realms/', 1)[0]
+          ADM = os.environ['KC_BOOTSTRAP_ADMIN_PASSWORD']
+          MODE = os.environ.get('MODE', 'dryrun')
+
+          tok = requests.post(
+              f"{BASE}/realms/master/protocol/openid-connect/token",
+              data={"client_id":"admin-cli","grant_type":"password",
+                    "username":"admin","password":ADM},
+              timeout=10).json()["access_token"]
+          H = {"Authorization": f"Bearer {tok}", "Content-Type":"application/json"}
+
+          # Show current realm roles (filter to the candidates we care about).
+          existing = requests.get(
+              f"{BASE}/admin/realms/solarpro/roles?max=500",
+              headers=H, timeout=10).json()
+          present = {r["name"] for r in existing}
+          print(f"existing realm roles: {len(present)}")
+          for r in sorted(present):
+              print(f"  - {r}")
+
+          # The 3 roles we want, with descriptions matching realm-prod.json.
+          targets = [
+              {"name": "read_only",
+               "description": "View-only access for auditors / external reviewers. No mutations.",
+               "composite": False},
+              {"name": "ai_agent",
+               "description": "Umbrella role for ADK/LLM agents acting on behalf of a user (must inherit caller's permissions).",
+               "composite": False},
+              {"name": "background_worker",
+               "description": "Celery/RQ/cron worker identity. Allowed to enqueue + process jobs only.",
+               "composite": False},
+          ]
+
+          print()
+          print("=" * 60)
+          to_add  = [t for t in targets if t["name"] not in present]
+          already = [t for t in targets if t["name"] in present]
+          print(f"already present: {[t['name'] for t in already]}")
+          print(f"will add:        {[t['name'] for t in to_add]}")
+          print("=" * 60)
+
+          if MODE != 'apply':
+              print()
+              print("DRY-RUN -- not POSTing. Re-run with confirm=SYNC_KC_ROLES.")
+              sys.exit(0)
+
+          for role in to_add:
+              r = requests.post(
+                  f"{BASE}/admin/realms/solarpro/roles",
+                  headers=H, json=role, timeout=10)
+              if r.status_code in (201, 204):
+                  print(f"  + created: {role['name']}")
+              elif r.status_code == 409:
+                  print(f"  = already exists (409): {role['name']}")
+              else:
+                  print(f"  ! failed: {role['name']} -> HTTP {r.status_code} {r.text[:200]}")
+                  sys.exit(1)
+
+          # Verify post-apply.
+          recheck = requests.get(
+              f"{BASE}/admin/realms/solarpro/roles?max=500",
+              headers=H, timeout=10).json()
+          final = {r["name"] for r in recheck}
+          missing = [t["name"] for t in targets if t["name"] not in final]
+          if missing:
+              print(f"::error::Verify failed -- still missing: {missing}")
+              sys.exit(1)
+          print()
+          print(f"OK: all 3 target roles confirmed on live KC ({len(final)} total).")
+          PY
