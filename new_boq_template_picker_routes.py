@@ -228,6 +228,7 @@ def boq_template_save(pid, bid, fid, slug):
 def _boq_project_rows_grouped(pid: int):
     """Pull every line item across every building+floor in the project,
     grouped Building -> Floor -> Bill -> Section. Used by the 3 exports."""
+    t_clause, t_params = _boq_tenant_clause(alias="i")
     with get_db() as c:
         rows = c.execute(
             "SELECT i.*, b.building_name, b.building_code, b.primary_purpose, "
@@ -240,11 +241,11 @@ def _boq_project_rows_grouped(pid: int):
             "JOIN boq_buildings b ON b.id=i.building_id "
             "JOIN boq_floors    f ON f.id=i.floor_id "
             "LEFT JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
-            "WHERE i.project_id=? "
+            "WHERE i.project_id=?" + t_clause + " "
             "ORDER BY b.id, f.floor_level, COALESCE(i.bill_no,0), "
             "         COALESCE(i.section_letter,''), "
             "         COALESCE(NULLIF(i.item_no_display,''),'0'), i.id",
-            (pid,),
+            (pid,) + t_params,
         ).fetchall()
     return rows
 

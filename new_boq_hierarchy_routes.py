@@ -77,12 +77,35 @@ def _boq_ensure_schema():
             pass
 
 
+def _boq_tenant_clause(alias: str = ""):
+    """Return (sql_fragment, params_tuple) to AND tenant_id onto a BOQ
+    query. SOC 2 M3.1 defence in depth on top of migrations 003 + 007
+    RLS so a request that bypasses RLS (admin GUC, future cross-tenant
+    report code) still cannot read a neighbour tenant's BOQ rows.
+    Admits `tenant_id IS NULL` for parallel-run safety; Phase 7 cutover
+    drops that escape.
+
+    Imported lazily because this source file gets injected into
+    web_app.py via Pattern B; the helper itself lives in the injected
+    block and reuses the _kc_current_tenant_id alias that web_app.py
+    imports at module load."""
+    try:
+        tid = _kc_current_tenant_id()  # noqa: F821 -- web_app.py provides this
+    except Exception:
+        tid = None
+    if not tid:
+        return "", ()
+    col = f"{alias}.tenant_id" if alias else "tenant_id"
+    return f" AND ({col} IS NULL OR {col} = ?)", (tid,)
+
+
 def _boq_project_owned_or_404(pid: int, uid: int):
     _boq_ensure_schema()
+    t_clause, t_params = _boq_tenant_clause()
     with get_db() as c:
         row = c.execute(
-            "SELECT * FROM boq_projects WHERE id=? AND user_id=?",
-            (pid, uid),
+            "SELECT * FROM boq_projects WHERE id=? AND user_id=?" + t_clause,
+            (pid, uid) + t_params,
         ).fetchone()
     if not row:
         abort(404)
@@ -90,10 +113,11 @@ def _boq_project_owned_or_404(pid: int, uid: int):
 
 
 def _boq_building_owned_or_404(bid: int, pid: int):
+    t_clause, t_params = _boq_tenant_clause()
     with get_db() as c:
         row = c.execute(
-            "SELECT * FROM boq_buildings WHERE id=? AND project_id=?",
-            (bid, pid),
+            "SELECT * FROM boq_buildings WHERE id=? AND project_id=?" + t_clause,
+            (bid, pid) + t_params,
         ).fetchone()
     if not row:
         abort(404)
@@ -101,10 +125,11 @@ def _boq_building_owned_or_404(bid: int, pid: int):
 
 
 def _boq_floor_owned_or_404(fid: int, bid: int):
+    t_clause, t_params = _boq_tenant_clause()
     with get_db() as c:
         row = c.execute(
-            "SELECT * FROM boq_floors WHERE id=? AND building_id=?",
-            (fid, bid),
+            "SELECT * FROM boq_floors WHERE id=? AND building_id=?" + t_clause,
+            (fid, bid) + t_params,
         ).fetchone()
     if not row:
         abort(404)

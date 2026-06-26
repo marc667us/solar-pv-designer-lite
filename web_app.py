@@ -29,7 +29,8 @@ from app.security.tenant_context import (
     register_error_handler as _kc_register_tenant_error_handler,
     apply_tenant_guc as _kc_apply_tenant_guc,
     register_tenant_request_hooks as _kc_register_tenant_hooks,
-)  # Phase 4: tenant context bridge + M1.7 request hooks
+    current_tenant_id as _kc_current_tenant_id,
+)  # Phase 4: tenant context bridge + M1.7 request hooks + M3.1 tenant filter
 from app.auth import register_oidc as _kc_register_oidc  # Phase 5: OIDC Blueprint
 
 # Structured logging (tenant-aware JSON logs)
@@ -20038,6 +20039,30 @@ def _boq_ensure_schema():
             pass
 
 
+def _boq_tenant_clause(alias: str = ""):
+    """Return (sql_fragment, params_tuple) to AND tenant_id onto a BOQ
+    query. SOC 2 M3.1 defence in depth on top of migrations 003 + 007
+    RLS so even a request that somehow bypasses RLS (admin-bypass GUC,
+    future cross-tenant report code) cannot read a neighbour tenant's
+    BOQ rows. Empty clause when no JWT tenant ctx (parallel-run safe).
+
+    Admits `tenant_id IS NULL` so legacy rows (pre-007 backfill window)
+    and any future caller that doesn't set tenant_id at INSERT still
+    surface. Phase 7 cutover will need to drop the NULL escape AND
+    ensure every BOQ INSERT writes tenant_id.
+
+    Pass `alias` (e.g. "i") for queries that JOIN multiple BOQ tables;
+    qualifies the column to avoid ambiguity."""
+    try:
+        tid = _kc_current_tenant_id()
+    except Exception:
+        tid = None
+    if not tid:
+        return "", ()
+    col = f"{alias}.tenant_id" if alias else "tenant_id"
+    return f" AND ({col} IS NULL OR {col} = ?)", (tid,)
+
+
 def _boq_project_owned_or_404(pid: int, uid: int):
     # 2026-06-24: lazy one-shot migration of legacy rate-buildup rows.
     try:
@@ -20045,10 +20070,11 @@ def _boq_project_owned_or_404(pid: int, uid: int):
     except Exception:
         pass
     _boq_ensure_schema()
+    t_clause, t_params = _boq_tenant_clause()
     with get_db() as c:
         row = c.execute(
-            "SELECT * FROM boq_projects WHERE id=? AND user_id=?",
-            (pid, uid),
+            "SELECT * FROM boq_projects WHERE id=? AND user_id=?" + t_clause,
+            (pid, uid) + t_params,
         ).fetchone()
     if not row:
         abort(404)
@@ -20056,10 +20082,11 @@ def _boq_project_owned_or_404(pid: int, uid: int):
 
 
 def _boq_building_owned_or_404(bid: int, pid: int):
+    t_clause, t_params = _boq_tenant_clause()
     with get_db() as c:
         row = c.execute(
-            "SELECT * FROM boq_buildings WHERE id=? AND project_id=?",
-            (bid, pid),
+            "SELECT * FROM boq_buildings WHERE id=? AND project_id=?" + t_clause,
+            (bid, pid) + t_params,
         ).fetchone()
     if not row:
         abort(404)
@@ -20067,10 +20094,11 @@ def _boq_building_owned_or_404(bid: int, pid: int):
 
 
 def _boq_floor_owned_or_404(fid: int, bid: int):
+    t_clause, t_params = _boq_tenant_clause()
     with get_db() as c:
         row = c.execute(
-            "SELECT * FROM boq_floors WHERE id=? AND building_id=?",
-            (fid, bid),
+            "SELECT * FROM boq_floors WHERE id=? AND building_id=?" + t_clause,
+            (fid, bid) + t_params,
         ).fetchone()
     if not row:
         abort(404)
@@ -20497,6 +20525,7 @@ def boq_project_boq(pid):
     uid = session["user_id"]
     project = _boq_project_owned_or_404(pid, uid)
     internal_view = bool(request.args.get("view") == "internal")
+    t_clause, t_params = _boq_tenant_clause(alias="i")
     with get_db() as c:
         rows = c.execute(
             "SELECT i.*, b.building_name, b.building_code, b.primary_purpose, "
@@ -20507,11 +20536,11 @@ def boq_project_boq(pid):
             "JOIN boq_buildings b ON b.id=i.building_id "
             "JOIN boq_floors    f ON f.id=i.floor_id "
             "LEFT JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
-            "WHERE i.project_id=? "
+            "WHERE i.project_id=?" + t_clause + " "
             "ORDER BY b.id, f.floor_level, COALESCE(i.bill_no,0), "
             "         COALESCE(i.section_letter,''), "
             "         COALESCE(NULLIF(i.item_no_display,''),'0'), i.id",
-            (pid,),
+            (pid,) + t_params,
         ).fetchall()
     if internal_view:
         try:
@@ -21996,6 +22025,7 @@ def boq_template_save(pid, bid, fid, slug):
 def _boq_project_rows_grouped(pid: int):
     """Pull every line item across every building+floor in the project,
     grouped Building -> Floor -> Bill -> Section. Used by the 3 exports."""
+    t_clause, t_params = _boq_tenant_clause(alias="i")
     with get_db() as c:
         rows = c.execute(
             "SELECT i.*, b.building_name, b.building_code, b.primary_purpose, "
@@ -22008,11 +22038,11 @@ def _boq_project_rows_grouped(pid: int):
             "JOIN boq_buildings b ON b.id=i.building_id "
             "JOIN boq_floors    f ON f.id=i.floor_id "
             "LEFT JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
-            "WHERE i.project_id=? "
+            "WHERE i.project_id=?" + t_clause + " "
             "ORDER BY b.id, f.floor_level, COALESCE(i.bill_no,0), "
             "         COALESCE(i.section_letter,''), "
             "         COALESCE(NULLIF(i.item_no_display,''),'0'), i.id",
-            (pid,),
+            (pid,) + t_params,
         ).fetchall()
     return rows
 
