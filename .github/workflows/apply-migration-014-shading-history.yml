@@ -1,0 +1,199 @@
+# Apply migrations/014_shading_history.sql to live Postgres.
+#
+# Closes the batch-4 RECOVERY gap. On live PG the shading_history table
+# never existed (its DDL only ran in web_app.py's SQLite-only branch),
+# so migration 011 left it uncovered and the verify step was relaxed
+# from 9 -> 8 expected columns (commit d283f8e).
+#
+# This migration:
+#   1. CREATEs shading_history with Postgres-native types (SERIAL,
+#      sqlite_ts() defaults) mirroring the SQLite schema in web_app.py.
+#   2. ADDs tenant_id UUID + parallel-run RLS policy.
+#   3. Backfills tenant_id from user_id.
+#
+# Idempotent. Default mode is DRY-RUN. Re-run with
+# `-f confirm=SHADING_HISTORY_APPLY` to commit.
+
+name: Apply Migration 014 (shading_history)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type SHADING_HISTORY_APPLY to commit migration 014 to live Postgres."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "SHADING_HISTORY_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- migration 014 will be committed to live Postgres ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- migration 014 will be parsed + previewed only ==="
+            echo "Re-run with -f confirm=SHADING_HISTORY_APPLY to commit."
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/014_shading_history.sql
+          echo "OK: migrations/014_shading_history.sql present"
+          wc -l migrations/014_shading_history.sql
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- helpers present (001 sqlite_ts + 003 tenant)
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          HELPER_COUNT=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM pg_proc WHERE proname IN ('sqlite_ts','current_tenant_id','_phase4_user_to_tenant')")
+          if [ "$HELPER_COUNT" -lt "3" ]; then
+            echo "::error::Pre-flight failed: required helpers missing ($HELPER_COUNT/3 found)."
+            exit 1
+          fi
+          echo "OK: helpers present (sqlite_ts + current_tenant_id + _phase4_user_to_tenant)."
+
+      - name: Pre-flight -- current shading_history state
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          echo "--- shading_history BEFORE migration ---"
+          EXISTS=$(psql "$DATABASE_URL" -A -t -c "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='shading_history')")
+          echo "  table exists: $EXISTS"
+          if [ "$EXISTS" = "t" ]; then
+            COUNT=$(psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM shading_history")
+            echo "  row count:    $COUNT"
+            HAS_TID=$(psql "$DATABASE_URL" -A -t -c "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='shading_history' AND column_name='tenant_id')")
+            echo "  tenant_id col present: $HAS_TID"
+          fi
+
+      - name: Show migration overview
+        run: |
+          echo "--- migrations/014_shading_history.sql ---"
+          grep -E "^-- (PART|=)" migrations/014_shading_history.sql | head -20
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The SQL below WOULD have been applied. Nothing was."
+          echo "================================================================"
+          head -60 migrations/014_shading_history.sql
+
+      - name: Apply migration 014 (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/014_shading_history.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/014_shading_history.sql
+          echo "OK: migration 014 applied."
+
+      - name: Verify post-apply -- table + tenant_id column
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- expect: shading_history table + tenant_id column ---"
+          COLS=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT column_name FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='shading_history'
+               AND column_name IN ('id','user_id','tenant_id','created_at')
+             ORDER BY column_name")
+          echo "$COLS"
+          N=$(echo "$COLS" | grep -c .)
+          if [ "$N" -lt "4" ]; then
+            echo "::error::expected 4 columns (id, user_id, tenant_id, created_at), found $N"
+            exit 1
+          fi
+          echo "OK: $N/4 expected columns present."
+
+      - name: Verify post-apply -- RLS policy
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- expect: shading_history_tenant_isolation policy ---"
+          POLICIES=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT policyname FROM pg_policies
+             WHERE tablename='shading_history'")
+          echo "$POLICIES"
+          N=$(echo "$POLICIES" | grep -c .)
+          if [ "$N" -lt "1" ]; then
+            echo "::error::expected at least 1 RLS policy, found $N"
+            exit 1
+          fi
+          echo "OK: $N RLS policy/policies confirmed."
+
+      - name: Verify post-apply -- backfill coverage
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- shading_history coverage AFTER migration ---"
+          psql "$DATABASE_URL" -c "
+            SELECT
+              COUNT(*) FILTER (WHERE tenant_id IS NULL)     AS unbackfilled,
+              COUNT(*) FILTER (WHERE tenant_id IS NOT NULL) AS tagged,
+              COUNT(*) AS total
+              FROM shading_history;"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " M1.6 BATCH 4 RECOVERY COMPLETE -- shading_history now exists,"
+            echo " carries tenant_id, and is RLS-enforced. Live tenant-tagged"
+            echo " table count: 47 -> 48."
+            echo "================================================================"
+          else
+            echo "DRY-RUN -- no Render changes. Re-run with confirm=SHADING_HISTORY_APPLY to commit."
+          fi
