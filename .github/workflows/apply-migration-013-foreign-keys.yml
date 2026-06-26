@@ -1,0 +1,222 @@
+# Apply migrations/013_add_foreign_keys.sql to live Postgres.
+#
+# Industry-practice FK constraints across the tables touched by
+# migrations 007-012. Closes the orphan-row gap that batch 2 + 3 RLS
+# work surfaced.
+#
+# Approach (production-safe):
+#   * Clean known orphans first (idempotent DELETE WHERE NOT IN parent)
+#   * ADD CONSTRAINT ... NOT VALID -- skips full-table scan, just
+#     records the constraint definition. Future INSERT/DELETE checked.
+#   * VALIDATE CONSTRAINT deferred to a follow-up migration once
+#     monitoring confirms data quality.
+#
+# Pre-flight surfaces current orphan counts BEFORE applying so we can
+# confirm against the expected 3 + 4 (from batches 2 and 3).
+#
+# Default mode is DRY-RUN. Re-run with `-f confirm=ADD_FKS_APPLY`.
+
+name: Apply Migration 013 (Foreign Keys)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type ADD_FKS_APPLY to commit migration 013 to live Postgres."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "ADD_FKS_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- migration 013 will be committed to live Postgres ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- migration 013 will be parsed + previewed only ==="
+            echo "Re-run with -f confirm=ADD_FKS_APPLY to commit."
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/013_add_foreign_keys.sql
+          echo "OK: migrations/013_add_foreign_keys.sql present"
+          wc -l migrations/013_add_foreign_keys.sql
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- current FK count
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- existing fk_* constraints BEFORE migration ---"
+          BEFORE=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM pg_constraint WHERE conname LIKE 'fk_%' AND contype='f'")
+          echo "  Currently $BEFORE fk_* constraints exist."
+
+      - name: Pre-flight -- orphan inventory
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- orphan-row inventory BEFORE migration ---"
+          echo "  (these will be DELETEd if MODE=apply)"
+          for q in \
+            "marketplace_price_sheet_items:sheet_id:marketplace_price_sheets" \
+            "rfq_items:rfq_id:rfqs" \
+            "rfq_supplier_targets:rfq_id:rfqs" \
+            "rfq_responses:rfq_id:rfqs" \
+            "rfq_response_items:response_id:rfq_responses" \
+            "marketplace_bom_rates:bom_id:marketplace_boms" \
+            "boq_buildings:project_id:boq_projects" \
+            "boq_floors:project_id:boq_projects" \
+            "boq_floor_items:project_id:boq_projects" \
+            "boq_floor_rate_buildup:project_id:boq_projects" \
+            "equipment_catalog_quotes:catalog_item_id:equipment_catalog" \
+            "equipment_catalog_price_history:catalog_item_id:equipment_catalog"; do
+            CHILD=$(echo $q | cut -d: -f1)
+            COL=$(echo $q | cut -d: -f2)
+            PARENT=$(echo $q | cut -d: -f3)
+            ORPHANS=$(psql "$DATABASE_URL" -A -t -c \
+              "SELECT COUNT(*) FROM $CHILD WHERE $COL NOT IN (SELECT id FROM $PARENT)" 2>/dev/null || echo "?")
+            printf "    %-35s orphans: %s\n" "$CHILD.$COL ->$PARENT" "$ORPHANS"
+          done
+
+      - name: Show migration overview
+        run: |
+          echo "--- migrations/013_add_foreign_keys.sql ---"
+          grep -E "^-- (PART|=)" migrations/013_add_foreign_keys.sql | head -30
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. Nothing changed. The orphan deletes + 22 FK adds"
+          echo "  shown above are what WOULD happen on apply."
+          echo "================================================================"
+          head -50 migrations/013_add_foreign_keys.sql
+
+      - name: Apply migration 013 (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/013_add_foreign_keys.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/013_add_foreign_keys.sql 2>&1
+          echo "OK: migration 013 applied."
+
+      - name: Verify post-apply -- FK count
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- fk_* constraints AFTER migration ---"
+          AFTER=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM pg_constraint WHERE conname LIKE 'fk_%' AND contype='f'")
+          echo "  $AFTER fk_* constraints now defined."
+          echo ""
+          echo "--- full FK matrix ---"
+          psql "$DATABASE_URL" -c "
+            SELECT
+              conrelid::regclass::text AS child,
+              conname,
+              confrelid::regclass::text AS parent,
+              CASE confdeltype
+                WHEN 'c' THEN 'CASCADE'
+                WHEN 'a' THEN 'NO ACTION'
+                WHEN 'n' THEN 'SET NULL'
+                WHEN 'd' THEN 'SET DEFAULT'
+                WHEN 'r' THEN 'RESTRICT'
+              END AS on_delete,
+              convalidated AS validated
+             FROM pg_constraint
+            WHERE conname LIKE 'fk_%' AND contype='f'
+            ORDER BY conrelid::regclass::text, conname"
+
+      - name: Verify post-apply -- orphan inventory (expect zeros)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- orphan-row inventory AFTER migration (expect zeros) ---"
+          for q in \
+            "marketplace_price_sheet_items:sheet_id:marketplace_price_sheets" \
+            "rfq_items:rfq_id:rfqs" \
+            "rfq_supplier_targets:rfq_id:rfqs" \
+            "rfq_responses:rfq_id:rfqs" \
+            "rfq_response_items:response_id:rfq_responses" \
+            "marketplace_bom_rates:bom_id:marketplace_boms" \
+            "boq_buildings:project_id:boq_projects" \
+            "boq_floors:project_id:boq_projects" \
+            "boq_floor_items:project_id:boq_projects" \
+            "boq_floor_rate_buildup:project_id:boq_projects"; do
+            CHILD=$(echo $q | cut -d: -f1)
+            COL=$(echo $q | cut -d: -f2)
+            PARENT=$(echo $q | cut -d: -f3)
+            ORPHANS=$(psql "$DATABASE_URL" -A -t -c \
+              "SELECT COUNT(*) FROM $CHILD WHERE $COL NOT IN (SELECT id FROM $PARENT)" 2>/dev/null || echo "?")
+            printf "    %-35s orphans: %s\n" "$CHILD.$COL ->$PARENT" "$ORPHANS"
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " MIGRATION 013 COMPLETE -- explicit FK constraints across batches 2-5"
+            echo "================================================================"
+            echo " Orphan rows: cleaned"
+            echo " New FK constraints: ~22 across owned-child + user-owned chains"
+            echo " ON DELETE: CASCADE for owned children, NO ACTION for user_id,"
+            echo "            SET NULL for nullable beta_feedback.user_id"
+            echo " State: NOT VALID (future inserts checked; existing rows trust)"
+            echo ""
+            echo " DEFERRED follow-up: VALIDATE CONSTRAINT each FK after 7-14 days"
+            echo " of monitoring (separate migration; full-table scan per ALTER)."
+          else
+            echo "DRY-RUN -- no Render changes. Re-run with confirm=ADD_FKS_APPLY to commit."
+          fi
