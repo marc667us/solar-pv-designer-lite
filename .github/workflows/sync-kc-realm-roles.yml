@@ -59,13 +59,13 @@ jobs:
               f"{BASE}/realms/master/protocol/openid-connect/token",
               data={"client_id":"admin-cli","grant_type":"password",
                     "username":"admin","password":ADM},
-              timeout=10).json()["access_token"]
+              timeout=60).json()["access_token"]
           H = {"Authorization": f"Bearer {tok}", "Content-Type":"application/json"}
 
           # Show current realm roles (filter to the candidates we care about).
           existing = requests.get(
               f"{BASE}/admin/realms/solarpro/roles?max=500",
-              headers=H, timeout=10).json()
+              headers=H, timeout=60).json()
           present = {r["name"] for r in existing}
           print(f"existing realm roles: {len(present)}")
           for r in sorted(present):
@@ -100,7 +100,7 @@ jobs:
           for role in to_add:
               r = requests.post(
                   f"{BASE}/admin/realms/solarpro/roles",
-                  headers=H, json=role, timeout=10)
+                  headers=H, json=role, timeout=60)
               if r.status_code in (201, 204):
                   print(f"  + created: {role['name']}")
               elif r.status_code == 409:
@@ -112,7 +112,7 @@ jobs:
           # Verify post-apply.
           recheck = requests.get(
               f"{BASE}/admin/realms/solarpro/roles?max=500",
-              headers=H, timeout=10).json()
+              headers=H, timeout=60).json()
           final = {r["name"] for r in recheck}
           missing = [t["name"] for t in targets if t["name"] not in final]
           if missing:
