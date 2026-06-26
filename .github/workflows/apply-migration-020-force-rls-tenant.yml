@@ -1,0 +1,239 @@
+# Apply migrations/020_force_rls_tenant_tables.sql.
+#
+# SOC 2 Phase 7 close-out -- tenant-scoped tables. For every tenant
+# table that carries a *_tenant_isolation policy (excluding the 15
+# globals already handled by 015/017/018/019), widens the policy to
+# admit `current_user_is_admin()` so cross-tenant admin views keep
+# working, then FORCE ROW LEVEL SECURITY so the owner-bypass closes.
+#
+# After this lands, every tenant table on live PG is owner-bypass
+# closed AND admin views still see across tenants.
+#
+# Default mode is DRY-RUN. Apply needs -f confirm=TENANT_FORCE_APPLY.
+
+name: Apply Migration 020 (FORCE RLS on tenant tables)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type TENANT_FORCE_APPLY to commit migration 020 to live Postgres."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "TENANT_FORCE_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- migration 020 commits to live PG ==="
+            echo ""
+            echo "  After this lands, every authenticated request that touches"
+            echo "  a tenant-scoped table goes through RLS. Tenant users see"
+            echo "  their own tenant + NULL rows; platform admins see everything"
+            echo "  via the new admin clause."
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- nothing will be written ==="
+            echo "Re-run with -f confirm=TENANT_FORCE_APPLY to commit."
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/020_force_rls_tenant_tables.sql
+          echo "OK: migrations/020_force_rls_tenant_tables.sql present"
+          wc -l migrations/020_force_rls_tenant_tables.sql
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- current_user_is_admin helper present
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          N=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM pg_proc WHERE proname='current_user_is_admin'")
+          if [ "$N" -lt "1" ]; then
+            echo "::error::Migration 015 helper missing -- cannot FORCE."
+            exit 1
+          fi
+          echo "OK: current_user_is_admin() helper present."
+
+      - name: Pre-flight -- count tenant tables in scope
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- tables with *_tenant_isolation policy, excluding 15 globals ---"
+          psql "$DATABASE_URL" -c "
+            SELECT DISTINCT tablename
+              FROM pg_policies
+             WHERE schemaname='public'
+               AND policyname LIKE '%_tenant_isolation'
+               AND tablename NOT IN (
+                 'installers','news_posts','helpline_learned_kb',
+                 'product_brands','product_categories','appliances',
+                 'assessment_requests','leads','beta_signups','newsletter_subscribers',
+                 'monitor_alerts','monitor_state','upgrade_codes',
+                 'admin_settings','login_failures')
+             ORDER BY tablename;"
+          N=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT COUNT(DISTINCT tablename)
+              FROM pg_policies
+             WHERE schemaname='public'
+               AND policyname LIKE '%_tenant_isolation'
+               AND tablename NOT IN (
+                 'installers','news_posts','helpline_learned_kb',
+                 'product_brands','product_categories','appliances',
+                 'assessment_requests','leads','beta_signups','newsletter_subscribers',
+                 'monitor_alerts','monitor_state','upgrade_codes',
+                 'admin_settings','login_failures')")
+          echo "  total tenant tables in scope: $N"
+
+      - name: Show migration overview
+        run: |
+          echo "--- migrations/020_force_rls_tenant_tables.sql ---"
+          grep -E "^-- (PART|=|ROLLBACK)" migrations/020_force_rls_tenant_tables.sql | head -20
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The SQL below WOULD have been applied. Nothing was."
+          echo "================================================================"
+          head -120 migrations/020_force_rls_tenant_tables.sql
+
+      - name: Apply migration 020 (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/020_force_rls_tenant_tables.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/020_force_rls_tenant_tables.sql
+          echo "OK: migration 020 applied."
+
+      - name: Verify post-apply -- FORCE count on tenant tables
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- tenant tables now FORCE-RLS-enabled ---"
+          psql "$DATABASE_URL" -c "
+            SELECT c.relname,
+                   c.relrowsecurity      AS rls_on,
+                   c.relforcerowsecurity AS force_on
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname='public'
+               AND c.relrowsecurity = true
+               AND c.relforcerowsecurity = true
+               AND c.relname NOT IN (
+                 'installers','news_posts','helpline_learned_kb',
+                 'product_brands','product_categories','appliances',
+                 'assessment_requests','leads','beta_signups','newsletter_subscribers',
+                 'monitor_alerts','monitor_state','upgrade_codes',
+                 'admin_settings','login_failures')
+             ORDER BY c.relname;"
+          N=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT COUNT(*)
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname='public'
+               AND c.relrowsecurity = true
+               AND c.relforcerowsecurity = true
+               AND c.relname NOT IN (
+                 'installers','news_posts','helpline_learned_kb',
+                 'product_brands','product_categories','appliances',
+                 'assessment_requests','leads','beta_signups','newsletter_subscribers',
+                 'monitor_alerts','monitor_state','upgrade_codes',
+                 'admin_settings','login_failures')")
+          echo "OK: $N tenant tables now FORCE-RLS."
+
+      - name: Verify post-apply -- behaviour smoke (3 paths)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "=========== PATH 1: no GUC -> NULL escape admits ==========="
+          psql "$DATABASE_URL" --single-transaction -c "
+            SELECT set_config('app.current_tenant', '', true);
+            SELECT set_config('app.current_role',   '', true);
+            SELECT COUNT(*) AS projects_no_guc FROM projects;"
+          echo ""
+          echo "=========== PATH 2: tenant GUC set -> filtered ==========="
+          echo "(expect rows matching THAT tenant + NULL-tagged rows only)"
+          psql "$DATABASE_URL" --single-transaction -c "
+            SELECT set_config('app.current_tenant',
+              '11111111-1111-1111-1111-111111111111', true);
+            SELECT set_config('app.current_role',   '', true);
+            SELECT COUNT(*) AS projects_some_tenant FROM projects;"
+          echo ""
+          echo "=========== PATH 3: admin GUC set -> sees everything ==========="
+          echo "(expect actual full count -- admin escape clause admits)"
+          psql "$DATABASE_URL" --single-transaction -c "
+            SELECT set_config('app.current_tenant',
+              'ffffffff-ffff-ffff-ffff-ffffffffffff', true);
+            SELECT set_config('app.current_role', 'admin', true);
+            SELECT COUNT(*) AS projects_admin FROM projects;"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " TENANT-TABLE OWNER-BYPASS CLOSED."
+            echo " Every tenant-scoped RLS table now FORCE-enforces on the app's"
+            echo " owner connection. Admin escape clause preserves cross-tenant"
+            echo " admin views."
+            echo "================================================================"
+            echo ""
+            echo " FOLLOW-UP (Phase B cutover, future migration):"
+            echo "   * Drop the NULL escape + admin clause"
+            echo "   * Require every INSERT to set tenant_id from session"
+            echo "   * Then real tenant isolation kicks in for non-admin"
+            echo "     authenticated requests."
+          else
+            echo "DRY-RUN -- no Render changes. Re-run with confirm=TENANT_FORCE_APPLY."
+          fi
