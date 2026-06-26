@@ -32,6 +32,10 @@ from app.security.tenant_context import (
     current_tenant_id as _kc_current_tenant_id,
 )  # Phase 4: tenant context bridge + M1.7 request hooks + M3.1 tenant filter
 from app.auth import register_oidc as _kc_register_oidc  # Phase 5: OIDC Blueprint
+from app.observability import (
+    register_request_hooks as _obs_register_request_hooks,
+    scrape_endpoint        as _obs_scrape_endpoint,
+)  # SOC 2 M3.4: Prometheus /metrics + per-request latency + status counters
 
 # Structured logging (tenant-aware JSON logs)
 try:
@@ -87,6 +91,11 @@ _kc_register_tenant_hooks(app)
 # All four routes fall back to /login?legacy=1 when KEYCLOAK_ENABLED is unset,
 # so this is safe to deploy long before the cutover.
 _kc_register_oidc(app)
+
+# SOC 2 M3.4: Prometheus /metrics endpoint + per-request latency + status
+# counters. Bearer-gated via METRICS_BEARER env; fail-closed when env unset.
+_obs_register_request_hooks(app)
+_obs_scrape_endpoint(app)
 
 # ─── Rate limiter ──────────────────────────────────────────────────────────────
 def _get_real_ip():
@@ -28076,6 +28085,34 @@ def _soc2_check_audit_chain():
             "detail": f"{verified}/{total} rows verified; chain head id={result.get('last_chained_id')}"}
 
 
+def _soc2_check_observability_stack():
+    """M3.4: Prometheus /metrics + Loki + Grafana provisioning.
+
+    PASS when prometheus_client is importable, the app.observability
+    module is wired, and the self-hosted docker-compose stack is
+    checked into the repo. The remote stack health is monitored by
+    Prometheus itself (so the dashboard reports its own liveness via
+    the Grafana panel)."""
+    try:
+        import prometheus_client  # noqa: F401
+    except Exception:
+        return {"status": "fail", "detail": "prometheus_client not importable"}
+    try:
+        from app import observability as _obs
+        _ = (_obs.METRICS, _obs.refresh_gauges)
+    except Exception as e:
+        return {"status": "fail", "detail": f"app.observability unreachable: {str(e)[:60]}"}
+    compose = os.path.join(os.path.dirname(__file__), "infra", "observability", "docker-compose.yml")
+    if not os.path.exists(compose):
+        return {"status": "warn", "detail": "app side wired but infra/observability/ missing"}
+    bearer_set = bool((os.environ.get("METRICS_BEARER") or "").strip())
+    if not bearer_set:
+        return {"status": "warn",
+                "detail": "metrics + stack in place; METRICS_BEARER unset on this env (set in production)"}
+    return {"status": "pass",
+            "detail": "/metrics gated by METRICS_BEARER; infra/observability/ checked in"}
+
+
 _SOC2_CHECKS = [
     ("M1.1  KEYCLOAK_ENABLED flag retired",            _soc2_check_kc_flag_retired),
     ("M1.1  KEYCLOAK_ISSUER configured",               _soc2_check_kc_issuer_configured),
@@ -28084,6 +28121,7 @@ _SOC2_CHECKS = [
     ("M3.1  Tables carry tenant_id column",            _soc2_check_tenant_column_coverage),
     ("M3.1  audit_logs receives writes (24h)",         _soc2_check_audit_log_activity),
     ("M3.2  audit_logs hash chain intact",              _soc2_check_audit_chain),
+    ("M3.4  Prometheus + Loki + Grafana wired",         _soc2_check_observability_stack),
     ("M2.6  /admin + /api routes carry auth decorator", _soc2_check_route_decorator_coverage),
     ("M3.10 Security test suite present",              _soc2_check_security_tests_present),
     ("M3.7  Security CI workflow",                     _soc2_check_security_ci),

@@ -21,3 +21,8 @@ psycopg2-binary>=2.9.9
 # cryptography for RS256 verification.
 python-jose[cryptography]>=3.3.0
 
+# SOC 2 M3.4 observability -- Prometheus client for /metrics exposure
+# (counters / histograms / gauges). FOSS (Apache-2.0). The library is
+# stateless; metrics live in module-global registries reset per process.
+prometheus-client>=0.20.0
+

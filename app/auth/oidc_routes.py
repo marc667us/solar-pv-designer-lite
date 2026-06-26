@@ -282,6 +282,13 @@ def _oidc_fail_redirect(code: str, reason: str = "", status_hint: int = 0):
         msg += f" (would-be status {status_hint})"
     log.warning(msg)
 
+    # SOC 2 M3.4: bump the Prometheus counter so Grafana shows the spike.
+    try:
+        from app.observability import oidc_failures_total
+        oidc_failures_total.labels(reason=code).inc()
+    except Exception:
+        pass
+
     session.clear()
 
     try:

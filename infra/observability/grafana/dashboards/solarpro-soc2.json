@@ -1,0 +1,130 @@
+{
+  "title": "SolarPro SOC 2 Observability",
+  "uid": "solarpro-soc2",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["solarpro", "soc2", "m3.4"],
+  "timezone": "browser",
+  "time": {"from": "now-6h", "to": "now"},
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "HTTP request rate by status class",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "sum by (status_class) (rate(solarpro_http_requests_total[1m]))",
+         "legendFormat": "{{status_class}}"}
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Request latency (p50 / p95 / p99)",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le) (rate(solarpro_http_request_duration_seconds_bucket[5m])))", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(solarpro_http_request_duration_seconds_bucket[5m])))", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.99, sum by (le) (rate(solarpro_http_request_duration_seconds_bucket[5m])))", "legendFormat": "p99"}
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Audit chain status",
+      "gridPos": {"x": 0, "y": 8, "w": 6, "h": 6},
+      "targets": [
+        {"expr": "solarpro_audit_chain_first_break_id"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"-1": {"text": "OK -- no break", "color": "green"}}}
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 0}
+            ]
+          }
+        }
+      },
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Audit chain coverage",
+      "gridPos": {"x": 6, "y": 8, "w": 6, "h": 6},
+      "targets": [
+        {"expr": "solarpro_audit_chain_unchained_rows",  "legendFormat": "unchained"},
+        {"expr": "solarpro_audit_chain_total_rows",       "legendFormat": "total"}
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "RLS-enforced tables",
+      "gridPos": {"x": 12, "y": 8, "w": 6, "h": 6},
+      "targets": [{"expr": "solarpro_rls_tables_count"}],
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Error logs (last 24h)",
+      "gridPos": {"x": 18, "y": 8, "w": 6, "h": 6},
+      "targets": [{"expr": "solarpro_error_logs_recent_total"}],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "red", "value": 50}
+            ]
+          }
+        }
+      },
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "OIDC callback failure rate by reason",
+      "gridPos": {"x": 0, "y": 14, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "sum by (reason) (rate(solarpro_oidc_failures_total[5m]))",
+         "legendFormat": "{{reason}}"}
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Audit writes rate by action",
+      "gridPos": {"x": 12, "y": 14, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "sum by (action) (rate(solarpro_audit_writes_total[5m]))",
+         "legendFormat": "{{action}}"}
+      ],
+      "datasource": {"type": "prometheus", "uid": "prometheus"}
+    },
+    {
+      "id": 9,
+      "type": "logs",
+      "title": "Live structured logs (Loki)",
+      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 10},
+      "targets": [
+        {"expr": "{service=\"solarpro\"} | json", "refId": "A"}
+      ],
+      "datasource": {"type": "loki", "uid": "loki"}
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+# SOC 2 M3.4 -- self-hosted Prometheus + Loki + Grafana stack.
+#
+# All three are FOSS (Apache-2.0 / AGPL-3.0 for Loki/Grafana, Apache-2.0
+# for Prometheus), aligning with the Solar Project Execution Directive's
+# Free/Open-Source Stack Rule.
+#
+# Usage (operator side, NOT bundled into the Render deploy):
+#
+#   1. Pick a host with Docker + a reachable IP/DNS name.
+#   2. Copy this `infra/observability/` directory to the host.
+#   3. Edit .env (see .env.example) with:
+#        SOLARPRO_METRICS_BEARER  (same 32+ hex value as Render's METRICS_BEARER)
+#        SOLARPRO_BASE_URL        (e.g. https://solarpro.aiappinvent.com)
+#        GRAFANA_ADMIN_PASSWORD   (long random; you'll log in as admin)
+#   4. `docker compose up -d` -> Prometheus on :9090, Loki on :3100,
+#      Grafana on :3000 with the Solar dashboard pre-provisioned.
+#
+# Render side: ensure METRICS_BEARER is set on the Solar service env.
+# Once you can `curl -H "Authorization: Bearer $TOKEN" $BASE/metrics`
+# and get a Prometheus text response, the scrape config below will
+# light up Grafana.
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    container_name: solarpro-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    environment:
+      - SOLARPRO_METRICS_BEARER=${SOLARPRO_METRICS_BEARER}
+      - SOLARPRO_BASE_URL=${SOLARPRO_BASE_URL}
+
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: solarpro-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/loki-config.yml
+
+  promtail:
+    # Promtail ships structured JSON log lines from a host file (or
+    # from the Render shipping endpoint via Vector if you prefer).
+    # The config below ships from a host-mounted file: /var/log/solarpro.log
+    # which is what the operator pipes Render logs to (Render dashboard
+    # -> "Stream logs" -> save to file -> rsync to this host).
+    image: grafana/promtail:3.4.2
+    container_name: solarpro-promtail
+    restart: unless-stopped
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/log/solarpro:/var/log/solarpro:ro
+    command: -config.file=/etc/promtail/promtail-config.yml
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: solarpro-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+
+volumes:
+  prometheus-data:
+  loki-data:
+  grafana-data:

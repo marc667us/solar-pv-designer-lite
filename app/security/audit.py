@@ -349,6 +349,13 @@ def write_audit_event(
                     (payload["user_id"], payload["username"], payload["action"],
                      payload["ip_address"], merged),
                 )
+        # SOC 2 M3.4: bump the Prometheus counter so Grafana shows
+        # the write rate (per action) without re-reading audit_logs.
+        try:
+            from app.observability import audit_writes_total
+            audit_writes_total.labels(action=action).inc()
+        except Exception:
+            pass
         return True
     except Exception as e:
         log.warning("audit: INSERT failed (%s); %s dropped.", e, action)

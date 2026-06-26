@@ -1,0 +1,45 @@
+# Promtail config: tails the structured JSON log file produced by
+# `logging_config/structured_logger.py` and ships to Loki.
+#
+# The Solar app emits one JSON line per significant event:
+#   {"ts": "...", "level": "...", "module": "...", "action": "...",
+#    "tenant_id": "...", "user_id": "...", "ip": "...", ...}
+#
+# The pipeline stage below parses each line as JSON and promotes the
+# `action`, `module`, `level`, `tenant_id` fields to Loki labels so
+# Grafana can filter on them in LogQL without doing JSON parsing at
+# query time.
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: solarpro-structured-logs
+    static_configs:
+      - targets: ["localhost"]
+        labels:
+          service: solarpro
+          stream: structured
+          __path__: /var/log/solarpro/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: ts
+            level: level
+            module: module
+            action: action
+            tenant_id: tenant_id
+      - labels:
+          level:
+          module:
+          action:
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano

@@ -1,0 +1,39 @@
+# Prometheus scrape config for the Solar app.
+#
+# The `solarpro` job hits the bearer-gated /metrics endpoint on the
+# live Render service. Bearer + base URL come from the .env file via
+# docker-compose env expansion -- the file_sd refresh below picks them
+# up on container start.
+
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    cluster: solarpro-prod
+    region: render
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: solarpro
+    metrics_path: /metrics
+    scheme: https
+    # The `bearer_token` field reads SOLARPRO_METRICS_BEARER from the
+    # environment Prometheus was started with. With docker-compose
+    # that's the value from .env, exported via `environment:` in
+    # docker-compose.yml.
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/metrics-bearer
+    static_configs:
+      - targets: ["solarpro.aiappinvent.com"]
+        labels:
+          service: solarpro
+          env: production
+
+  # Loki gets a tiny self-scrape so we can dashboard its health.
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
