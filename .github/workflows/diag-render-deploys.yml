@@ -1,0 +1,41 @@
+name: Diag Render recent deploys
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+    steps:
+      - name: List recent deploys + force a new one
+        run: |
+          set -e
+          echo "--- 5 most recent deploys on solarpro-global ---"
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?limit=5" \
+            -o /tmp/deploys.json
+          python3 -c "
+          import json
+          d = json.load(open('/tmp/deploys.json'))
+          rows = d if isinstance(d, list) else []
+          for item in rows:
+              dep = item.get('deploy', item) if isinstance(item, dict) else {}
+              print(f\"  {dep.get('id','-'):28} status={dep.get('status','-'):12} finished={dep.get('finishedAt','-')}\")
+          "
+          echo ""
+          echo "--- triggering a fresh deploy NOW ---"
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            -d '{"clearCache":"do_not_clear"}' \
+            -o /tmp/new.json
+          NEW=$(python3 -c "import json; print(json.load(open('/tmp/new.json')).get('id',''))")
+          echo "  triggered: $NEW"
