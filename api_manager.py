@@ -751,12 +751,71 @@ class _PaymentClient:
 # ── Search Client ─────────────────────────────────────────────────────────────
 
 class _SearchClient:
-    """DuckDuckGo search with 6-hour cache. Returns stale cache on failure."""
+    """Multi-source web search with 6-hour cache. Returns stale cache on failure.
+
+    Primary backend: Google News RSS (no API key, real journalism, current
+    procurement signal, far more reliable than scraping HTML SERPs).
+    Fallback: DuckDuckGo HTML via ddgs. DDG has been heavily rate-limiting
+    scrapers so we only reach for it when Google News is empty.
+
+    Return shape (stable contract): list of {title, url, body} dicts.
+    """
 
     TTL = 21600  # 6 hours
 
+    # Google News blocks scraper UAs with an empty 200. Must look like a browser.
+    _BROWSER_UA = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+    )
+
     def __init__(self, store: _Store):
         self._s = store
+
+    # ─── Google News RSS backend ────────────────────────────────────────────
+    def _gnews(self, q, max_results):
+        """Hit news.google.com RSS for a query. Returns up to max_results dicts.
+        Google News doesn't honour `site:` filters reliably -- it indexes news
+        articles ABOUT a site rather than searching it, which is usually what
+        we want for procurement prospecting anyway."""
+        import urllib.parse, urllib.request
+        import xml.etree.ElementTree as _ET, re as _re
+        url = (
+            "https://news.google.com/rss/search?q="
+            + urllib.parse.quote_plus(q)
+            + "&hl=en-US&gl=US&ceid=US:en"
+        )
+        req = urllib.request.Request(url, headers={
+            "User-Agent": self._BROWSER_UA,
+            "Accept": "application/rss+xml,application/xml,text/xml",
+        })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read()
+        root = _ET.fromstring(body)
+        channel = root.find("channel") or root
+        out = []
+        for it in channel.findall("item"):
+            raw_title = (it.findtext("title") or "").strip()
+            link = (it.findtext("link") or "").strip()
+            desc = _re.sub(r"<[^>]+>", " ", it.findtext("description") or "")
+            desc = _re.sub(r"\s+", " ", desc).strip()
+            # Strip the " - Publisher" suffix that news.google appends.
+            title = raw_title.rsplit(" - ", 1)[0] if " - " in raw_title else raw_title
+            out.append({"title": title, "url": link, "body": desc[:600]})
+            if len(out) >= max_results:
+                break
+        return out
+
+    # ─── DDG fallback ───────────────────────────────────────────────────────
+    def _ddg(self, q, max_results, region):
+        from ddgs import DDGS
+        results = []
+        with DDGS() as d:
+            for r in d.text(q, region=region, max_results=max_results):
+                results.append({"title": r.get("title",""),
+                                "url":   r.get("href",""),
+                                "body":  r.get("body","")})
+        return results
 
     def query(self, q, max_results=10, region="wt-wt"):
         """Returns list of {title, url, body} dicts. Never raises."""
@@ -764,15 +823,21 @@ class _SearchClient:
         cached = self._s.get(ckey)
         if cached is not None:
             return cached
+        # ── Try Google News first ──
         t = time.time()
         try:
-            from ddgs import DDGS
-            results = []
-            with DDGS() as d:
-                for r in d.text(q, region=region, max_results=max_results):
-                    results.append({"title": r.get("title",""),
-                                    "url":   r.get("href",""),
-                                    "body":  r.get("body","")})
+            results = self._gnews(q, max_results)
+            self._s.log("gnews", "search", "ok", (time.time()-t)*1000)
+            if results:
+                self._s.set(ckey, results, self.TTL, "gnews")
+                return results
+        except Exception as e:
+            self._s.log("gnews", "search", "error", (time.time()-t)*1000, str(e))
+            logger.warning("google news search failed: %s", e)
+        # ── DDG fallback ──
+        t = time.time()
+        try:
+            results = self._ddg(q, max_results, region)
             self._s.log("ddgs", "search", "ok", (time.time()-t)*1000)
             if results:
                 self._s.set(ckey, results, self.TTL, "ddgs")

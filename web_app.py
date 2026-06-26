@@ -9577,7 +9577,8 @@ def admin_agent_run():
             return ' '.join(p._chunks)[:6000]
 
         def _fetch_page(r):
-            url = r.get("href", "")
+            # # growth-href-url-fix-applied
+            url = r.get("url") or r.get("href", "")
             # Skip social/job — require login or are dynamic
             if any(d in url for d in SOCIAL_DOMAINS + JOB_DOMAINS):
                 return r
