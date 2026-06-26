@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Phase 7 Cutover Readiness — SolarPro Admin{% endblock %}
+{% block extra_head %}
+<style>
+  .p7-cover {
+    background: linear-gradient(135deg, #0b2545 0%, #1e3a8a 50%, #7c2d12 100%);
+    color: #fff; border-radius: 12px; padding: 28px 32px; margin-bottom: 24px;
+  }
+  .p7-cover h1 { font-size: 1.9rem; font-weight: 800; letter-spacing: 0.5px; margin: 0 0 6px; }
+  .p7-cover .meta { font-size: 0.92rem; opacity: 0.9; }
+  .p7-banner-pass { background: #064e3b !important; color: #6ee7b7 !important; }
+  .p7-banner-warn { background: #78350f !important; color: #fcd34d !important; }
+  .p7-banner-fail { background: #7f1d1d !important; color: #fca5a5 !important; }
+  .p7-section { background: #11161f; border: 1px solid #1f2937;
+                border-radius: 10px; padding: 22px 24px; margin-bottom: 22px; }
+  .p7-section h2 { color: #fbbf24; font-size: 1.15rem;
+                   border-bottom: 2px solid #b45309; padding-bottom: 6px; margin-bottom: 14px; }
+  .p7-section p, .p7-section li { color: #d1d5db; font-size: 0.92rem; line-height: 1.55; }
+  .p7-chip { display: inline-block; padding: 3px 9px; border-radius: 12px;
+             font-size: 0.78rem; font-weight: 700; letter-spacing: 0.3px; }
+  .chip-pass { background: #064e3b; color: #6ee7b7; }
+  .chip-warn { background: #78350f; color: #fcd34d; }
+  .chip-fail { background: #7f1d1d; color: #fca5a5; }
+  table.p7-checks { width: 100%; border-collapse: collapse; }
+  table.p7-checks th { background: #1e3a5f; color: #fff; padding: 9px 12px; font-size: 0.85rem; text-align: left; }
+  table.p7-checks td { color: #e5e7eb; padding: 9px 12px; border-bottom: 1px solid #1f2937; vertical-align: top; }
+  table.p7-checks tr:last-child td { border-bottom: none; }
+  table.p7-checks code { color: #93c5fd; background: #0a0a14; padding: 1px 6px; border-radius: 4px; }
+  .p7-action { margin-top: 14px; font-size: 0.92rem; color: #d1d5db; }
+  .p7-action code { color: #fbbf24; background: #0a0a14; padding: 2px 8px; border-radius: 4px; }
+</style>
+{% endblock %}
+{% block content %}
+
+<div class="p7-cover">
+  <h1>SOC 2 Phase 7 Cutover Readiness</h1>
+  <div class="meta">
+    Strict-RLS cutover prerequisites for the 15 global tables.
+    Page is read-only — migration 017 (DROP parallel-run policies) ships as a
+    separate dry-run-gated workflow because policy drops are irreversible.
+  </div>
+</div>
+
+{% set banner_class = 'p7-banner-' + report.overall %}
+<div class="p7-section {{ banner_class }}" style="border: none">
+  <h2 style="color: inherit; border-bottom-color: rgba(255,255,255,.35); margin-top: 0">
+    Overall:
+    {% if report.overall == 'pass' %}READY — every prerequisite passes
+    {% elif report.overall == 'warn' %}NOT YET — warnings present, no hard fail
+    {% else %}BLOCKED — at least one prerequisite fails
+    {% endif %}
+  </h2>
+  <p style="margin: 0; color: inherit">
+    {{ report.counts.pass }} pass &middot;
+    {{ report.counts.warn }} warn &middot;
+    {{ report.counts.fail }} fail
+    out of {{ report.findings|length }} checks.
+  </p>
+</div>
+
+<div class="p7-section">
+  <h2>Prerequisite checks</h2>
+  <table class="p7-checks">
+    <thead><tr><th style="width: 92px">Status</th><th>Check</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for f in report.findings %}
+      <tr>
+        <td>
+          <span class="p7-chip chip-{{ f.status }}">{{ f.status|upper }}</span>
+        </td>
+        <td>{{ f.label }}</td>
+        <td>{{ f.detail }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="p7-section">
+  <h2>What Phase 7 cutover does</h2>
+  <p>
+    The 15 global tables (product catalog, monitor state, anonymous webforms,
+    admin settings, etc.) carry two policies today:
+  </p>
+  <ul>
+    <li>
+      <code>&lt;table&gt;_tenant_isolation</code> &mdash; the parallel-run
+      policy. Admits any row whose <code>tenant_id</code> is <code>NULL</code>
+      OR matches the request's tenant GUC.
+    </li>
+    <li>
+      <code>&lt;table&gt;_global_&lt;intent&gt;</code> &mdash; the strict
+      policy added by migration 015. Public-read tables admit any SELECT,
+      anon-insert tables admit any INSERT, admin-only tables require the
+      <code>app.current_role = 'admin'</code> GUC.
+    </li>
+  </ul>
+  <p>
+    Phase 7 cutover drops the parallel-run policy on each of the 15 global
+    tables. From that point on the strict policies alone decide who can see
+    or modify a row. The app keeps working because the strict policies
+    deliberately mirror the access patterns each table needs.
+  </p>
+</div>
+
+<div class="p7-section">
+  <h2>Cutover migration (not yet shipped)</h2>
+  <p>
+    Once every check above is <strong>PASS</strong>, the operator drafts
+    <code>migrations/017_phase7_drop_parallel_run.sql</code> with a
+    <code>DROP POLICY &lt;table&gt;_tenant_isolation ON &lt;table&gt;</code>
+    statement per global table, wraps it in a workflow with the standard
+    dry-run gate, runs the dry-run, then commits with
+    <code>confirm=PHASE7_DROP_PARALLEL</code>.
+  </p>
+  <p class="p7-action">
+    <strong>What is NOT on this page:</strong> a button that runs the cutover.
+    Policy drops cannot be undone without a separate restore migration; the
+    cutover stays a manual, audited workflow trigger.
+  </p>
+</div>
+
+<div class="p7-section">
+  <h2>Refresh + share</h2>
+  <p>
+    Reload the page to re-run every check. Findings are also recorded
+    via <code>log_audit(action=phase7_readiness_view)</code> so an auditor
+    can see when readiness was last evaluated.
+  </p>
+</div>
+
+{% endblock %}

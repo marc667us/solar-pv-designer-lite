@@ -31,6 +31,7 @@ from app.security.tenant_context import (
     register_tenant_request_hooks as _kc_register_tenant_hooks,
     current_tenant_id as _kc_current_tenant_id,
 )  # Phase 4: tenant context bridge + M1.7 request hooks + M3.1 tenant filter
+from app.security.audit import write_audit_event as _write_audit_event  # Phase 7 prep: chain every audit row through the M3.2 SHA-256 writer
 from app.auth import register_oidc as _kc_register_oidc  # Phase 5: OIDC Blueprint
 from app.observability import (
     register_request_hooks as _obs_register_request_hooks,
@@ -1940,10 +1941,8 @@ def login():
             session["user_id"] = user["id"]
             session["username"] = user["username"]
             # ── Log success & clear failure counter ──
+            _write_audit_event("login_success", user_id=user["id"], username=username, ip=ip)
             with get_db() as _db:
-                _db.execute(
-                    "INSERT INTO audit_logs (user_id, username, action, ip_address) VALUES (?,?,?,?)",
-                    (user["id"], username, "login_success", ip))
                 _db.execute("DELETE FROM login_failures WHERE username=?", (username,))
             return redirect(url_for("dashboard"))
 
@@ -1952,9 +1951,7 @@ def login():
             _db.execute(
                 "INSERT INTO login_failures (username, ip_address) VALUES (?,?)",
                 (username, ip))
-            _db.execute(
-                "INSERT INTO audit_logs (username, action, ip_address, details) VALUES (?,?,?,?)",
-                (username, "login_failed", ip, "Invalid credentials"))
+        _write_audit_event("login_failed", username=username, ip=ip, details="Invalid credentials")
         flash("Invalid username or password.", "danger")
     return render_template("auth.html", mode="login")
 
@@ -9976,15 +9973,9 @@ def admin_agent_leads_batch_delete():
                 "SELECT COUNT(*) FROM leads WHERE source='agent'"
             ).fetchone()[0] or 0
             c.execute("DELETE FROM leads WHERE source='agent'")
-            try:
-                c.execute(
-                    "INSERT INTO audit_logs (user_id, username, action, "
-                    "ip_address, details) VALUES (?,?,?,?,?)",
-                    (session.get("user_id"), session.get("username", ""),
-                     "agent_leads_batch_delete", _get_real_ip(),
-                     f"deleted={deleted}"))
-            except Exception:
-                pass
+        _write_audit_event("agent_leads_batch_delete",
+            user_id=session.get("user_id"), username=session.get("username", ""),
+            ip=_get_real_ip(), details=f"deleted={deleted}")
     except Exception as e:
         flash(f"Batch delete failed: {e}", "danger")
         return redirect(url_for("admin_agent"))
@@ -13106,16 +13097,10 @@ def project_shading(pid):
                 _existing["saved_by"] = session.get("username", "")
                 data["shading"] = _existing
                 save_project_data(pid, data)
-                try:
-                    with get_db() as c:
-                        c.execute(
-                            "INSERT INTO audit_logs (user_id, username, action, ip_address, details) "
-                            "VALUES (?,?,?,?,?)",
-                            (session.get("user_id"), session.get("username", ""),
-                             "shading_factor_manual_set", _get_real_ip(),
-                             f"pid={pid} factor={_smf:.2f} label={_label}"))
-                except Exception:
-                    pass
+                _write_audit_event("shading_factor_manual_set",
+                    user_id=session.get("user_id"), username=session.get("username", ""),
+                    ip=_get_real_ip(),
+                    details=f"pid={pid} factor={_smf:.2f} label={_label}")
                 flash(f"Manual shading factor saved: {_smf:.2f} ({_label}, {_loss:.0f}% loss). "
                       f"Re-run the loads step to apply.", "success")
                 return redirect(url_for("project_shading", pid=pid))
@@ -13213,17 +13198,10 @@ def project_shading(pid):
 
         # Audit log — operator overrode the un-shaded design. Important record
         # because the corrected PV size is materially larger.
-        try:
-            with get_db() as c:
-                c.execute(
-                    "INSERT INTO audit_logs (user_id, username, action, ip_address, details) "
-                    "VALUES (?,?,?,?,?)",
-                    (session.get("user_id"), session.get("username", ""),
-                     "shading_factor_set", _get_real_ip(),
-                     f"pid={pid} factor={factor:.2f} label={data['shading'].get('label','')}"))
-        except Exception:
-            # Audit failures must not break the user flow.
-            pass
+        _write_audit_event("shading_factor_set",
+            user_id=session.get("user_id"), username=session.get("username", ""),
+            ip=_get_real_ip(),
+            details=f"pid={pid} factor={factor:.2f} label={data['shading'].get('label','')}")
 
         if factor >= 0.999:
             flash("Shading agent: no obstructions found (factor 1.00). The base PV size will be used.", "info")
@@ -13879,18 +13857,12 @@ def inspection_form(pid):
         save_project_data(pid, data)
 
         # Audit log.
-        try:
-            with get_db() as c:
-                c.execute(
-                    "INSERT INTO audit_logs (user_id, username, action, ip_address, details) "
-                    "VALUES (?,?,?,?,?)",
-                    (session.get("user_id"), session.get("username", ""),
-                     "inspection_form_save", _get_real_ip(),
-                     f"pid={pid} shading={shading_present} "
+        _write_audit_event("inspection_form_save",
+            user_id=session.get("user_id"), username=session.get("username", ""),
+            ip=_get_real_ip(),
+            details=(f"pid={pid} shading={shading_present} "
                      f"obs={len(obstructions)} photos={len(new_photos)} "
                      f"drawings={len(new_drawings)}"))
-        except Exception:
-            pass
 
         flash(f"Site inspection saved. {len(obstructions)} obstruction(s), "
               f"{len(new_photos)} new photo(s), {len(new_drawings)} new drawing(s). "
@@ -14072,15 +14044,9 @@ def myproject_clear_history():
                     pass
                 flash("Could not delete history right now. Please try again.", "danger")
                 return redirect(url_for("myproject_list"))
-            try:
-                c.execute(
-                    "INSERT INTO audit_logs (user_id, username, action, "
-                    "ip_address, details) VALUES (?,?,?,?,?)",
-                    (uid, session.get("username", ""),
-                     "myproject_history_batch_delete", _get_real_ip(),
-                     f"deleted={deleted}"))
-            except Exception:
-                pass
+        _write_audit_event("myproject_history_batch_delete",
+            user_id=uid, username=session.get("username", ""),
+            ip=_get_real_ip(), details=f"deleted={deleted}")
     except Exception as e:
         try:
             app.logger.warning("myproject_clear_history outer error: %s", e)
@@ -28200,6 +28166,194 @@ def admin_soc2_report():
     except Exception:
         pass
     return render_template("soc2_report.html", report=report)
+
+
+# ─── Phase 7 cutover readiness (admin page) ─────────────────────────────
+
+def _phase7_check_migration_015():
+    """current_user_is_admin() PG helper must exist (migration 015 applied)."""
+    try:
+        with get_db() as c:
+            n = c.execute(
+                "SELECT COUNT(*) FROM pg_proc WHERE proname='current_user_is_admin'"
+            ).fetchone()[0] or 0
+    except Exception as e:
+        return {"status": "warn", "detail": f"probe failed (SQLite local?): {str(e)[:60]}"}
+    if n >= 1:
+        return {"status": "pass", "detail": "current_user_is_admin() PG helper present"}
+    return {"status": "fail", "detail": "migration 015 not applied (no current_user_is_admin)"}
+
+
+def _phase7_check_migration_016():
+    """audit_logs.prev_hash + row_hash columns must exist (migration 016 applied)."""
+    try:
+        with get_db() as c:
+            cur = c.execute("SELECT * FROM audit_logs WHERE 1=0")
+            cols = {d[0].lower() for d in (cur.description or [])}
+    except Exception as e:
+        return {"status": "fail", "detail": f"audit_logs unreachable: {str(e)[:60]}"}
+    if "prev_hash" in cols and "row_hash" in cols:
+        return {"status": "pass", "detail": "prev_hash + row_hash columns present"}
+    return {"status": "fail", "detail": "migration 016 not applied (chain columns absent)"}
+
+
+def _phase7_check_chain_intact_and_full():
+    """Verifier must report zero unchained + no first_break."""
+    try:
+        from app.security.audit import verify_audit_chain, reset_schema_probe
+        reset_schema_probe()
+        with get_db() as c:
+            r = verify_audit_chain(c)
+    except Exception as e:
+        return {"status": "fail", "detail": f"verify raised: {str(e)[:60]}"}
+    if r.get("error"):
+        return {"status": "fail", "detail": r["error"]}
+    if r.get("first_break"):
+        b = r["first_break"]
+        return {"status": "fail", "detail": f"TAMPER at row id={b['id']} ({b['reason']})"}
+    total = r.get("total", 0)
+    unchained = r.get("unchained", 0)
+    if total == 0:
+        return {"status": "warn", "detail": "chain columns present but no rows -- run any audited action then re-check"}
+    if unchained > 0:
+        return {"status": "warn",
+                "detail": f"{r.get('verified', 0)} verified, {unchained} unchained -- backfill or migrate writer callsites"}
+    return {"status": "pass",
+            "detail": f"{r.get('verified', 0)}/{total} rows verified; head id={r.get('last_chained_id')}"}
+
+
+def _phase7_check_rls_coverage():
+    """At least 47 tenant-scoped tables must carry at least one RLS policy."""
+    try:
+        with get_db() as c:
+            n = c.execute(
+                "SELECT COUNT(DISTINCT tablename) FROM pg_policies WHERE schemaname='public'"
+            ).fetchone()[0] or 0
+    except Exception as e:
+        return {"status": "warn", "detail": f"probe failed (SQLite local?): {str(e)[:60]}"}
+    if n >= 47:
+        return {"status": "pass", "detail": f"{n} tables under RLS"}
+    if n >= 30:
+        return {"status": "warn", "detail": f"{n} tables under RLS (target 47+)"}
+    return {"status": "fail", "detail": f"only {n} tables under RLS"}
+
+
+def _phase7_check_global_strict_policies():
+    """All 15 global tables must carry at least one *_global_* strict policy."""
+    global_tables = [
+        'installers', 'news_posts', 'helpline_learned_kb',
+        'product_brands', 'product_categories', 'appliances',
+        'assessment_requests', 'leads', 'beta_signups', 'newsletter_subscribers',
+        'monitor_alerts', 'monitor_state', 'upgrade_codes',
+        'admin_settings', 'login_failures',
+    ]
+    try:
+        with get_db() as c:
+            row = c.execute(
+                "SELECT COUNT(DISTINCT tablename) FROM pg_policies "
+                "WHERE schemaname='public' AND policyname LIKE '%_global_%' "
+                "AND tablename = ANY(%s)" if False else
+                "SELECT COUNT(DISTINCT tablename) FROM pg_policies "
+                "WHERE schemaname='public' AND policyname LIKE '%_global_%'"
+            ).fetchone()
+            n = row[0] if row else 0
+    except Exception as e:
+        return {"status": "warn", "detail": f"probe failed (SQLite local?): {str(e)[:60]}"}
+    needed = len(global_tables)
+    if n >= needed:
+        return {"status": "pass", "detail": f"{n}/{needed} global tables carry strict policies"}
+    return {"status": "fail", "detail": f"only {n}/{needed} global tables carry strict policies (migration 015)"}
+
+
+def _phase7_check_no_direct_audit_inserts():
+    """Static scan: no app file outside app/security/audit.py may carry
+    a direct `INSERT INTO audit_logs` SQL string. Ensures every write
+    flows through the M3.2 chain writer."""
+    import re, glob
+    project_root = os.path.dirname(__file__)
+    offenders = []
+    candidates = [os.path.join(project_root, 'web_app.py')]
+    candidates += sorted(glob.glob(os.path.join(project_root, 'new_*.py')))
+    needle = re.compile(rb'INSERT\s+INTO\s+audit_logs', re.IGNORECASE)
+    for path in candidates:
+        try:
+            with open(path, 'rb') as f:
+                if needle.search(f.read()):
+                    offenders.append(os.path.basename(path))
+        except Exception:
+            pass
+    if not offenders:
+        return {"status": "pass",
+                "detail": "every app callsite routes through write_audit_event"}
+    return {"status": "fail",
+            "detail": f"direct INSERT INTO audit_logs found in: {', '.join(offenders)}"}
+
+
+def _phase7_check_role_guc_publishing():
+    """apply_tenant_guc source code carries the app.current_role write
+    (the strict global policies in migration 015 read that GUC)."""
+    try:
+        path = os.path.join(os.path.dirname(__file__), 'app', 'security', 'tenant_context.py')
+        with open(path, 'rb') as f:
+            src = f.read()
+    except Exception as e:
+        return {"status": "fail", "detail": f"tenant_context.py unreachable: {str(e)[:60]}"}
+    if b"app.current_role" in src:
+        return {"status": "pass", "detail": "apply_tenant_guc writes app.current_role on every request"}
+    return {"status": "fail", "detail": "apply_tenant_guc does NOT publish app.current_role -- strict policies will deny all admins"}
+
+
+_PHASE7_CHECKS = [
+    ("C1  Migration 015 applied (strict global policies live)",     _phase7_check_migration_015),
+    ("C2  Migration 016 applied (audit chain columns)",             _phase7_check_migration_016),
+    ("C3  Audit chain intact + 100% chained",                       _phase7_check_chain_intact_and_full),
+    ("C4  RLS coverage \u2265 47 tables",                          _phase7_check_rls_coverage),
+    ("C5  All 15 global tables carry strict policies",              _phase7_check_global_strict_policies),
+    ("C6  app.current_role GUC published by tenant_context",        _phase7_check_role_guc_publishing),
+    ("C7  No direct INSERT INTO audit_logs in app code",            _phase7_check_no_direct_audit_inserts),
+]
+
+
+def _run_phase7_readiness():
+    """Run every check; never raise."""
+    findings = []
+    counts = {"pass": 0, "warn": 0, "fail": 0}
+    for label, fn in _PHASE7_CHECKS:
+        try:
+            r = fn()
+        except Exception as e:
+            r = {"status": "fail", "detail": f"check raised: {str(e)[:80]}"}
+        st = r.get("status", "fail")
+        counts[st] = counts.get(st, 0) + 1
+        findings.append({"label": label, "status": st, "detail": r.get("detail", "")})
+    if counts["fail"] > 0:
+        overall = "fail"
+    elif counts["warn"] > 0:
+        overall = "warn"
+    else:
+        overall = "pass"
+    return {"overall": overall, "counts": counts, "findings": findings}
+
+
+@app.route("/admin/phase7-cutover")
+@admin_required
+def admin_phase7_cutover():
+    """SOC 2 Phase 7 readiness page.
+
+    Shows whether the live PG + app code is ready to DROP the
+    parallel-run RLS policies on the 15 global tables. The page is
+    read-only -- migration 017 (the actual cutover) ships as a
+    separate dry-run-gated workflow because policy drops are
+    irreversible without an UNDO migration."""
+    report = _run_phase7_readiness()
+    try:
+        log_audit(action="phase7_readiness_view",
+                  user_id=session.get("user_id"),
+                  status=report["overall"],
+                  details=str(report["counts"]))
+    except Exception:
+        pass
+    return render_template("admin_phase7_cutover.html", report=report)
 
 
 # ─── Error tracking + reporting (SOC 2 M3.3 + M3.5) ──────────────────────

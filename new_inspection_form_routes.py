@@ -243,17 +243,18 @@ def inspection_form(pid):
 
         save_project_data(pid, data)
 
-        # Audit log.
+        # Audit log via the M3.2 SHA-256 chain writer.
         try:
-            with get_db() as c:
-                c.execute(
-                    "INSERT INTO audit_logs (user_id, username, action, ip_address, details) "
-                    "VALUES (?,?,?,?,?)",
-                    (session.get("user_id"), session.get("username", ""),
-                     "inspection_form_save", _get_real_ip(),
-                     f"pid={pid} shading={shading_present} "
-                     f"obs={len(obstructions)} photos={len(new_photos)} "
-                     f"drawings={len(new_drawings)}"))
+            from app.security.audit import write_audit_event as _write_audit_event
+            _write_audit_event(
+                "inspection_form_save",
+                user_id=session.get("user_id"),
+                username=session.get("username", ""),
+                ip=_get_real_ip(),
+                details=(f"pid={pid} shading={shading_present} "
+                         f"obs={len(obstructions)} photos={len(new_photos)} "
+                         f"drawings={len(new_drawings)}"),
+            )
         except Exception:
             pass
 
