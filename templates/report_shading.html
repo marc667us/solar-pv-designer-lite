@@ -38,7 +38,8 @@
      class="btn btn-sm btn-success">
     <i class="bi bi-envelope me-1"></i>Email this report
   </a>
-  <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-info">
+  <a href="{{ url_for('growth_share_composer', pid=project.id) }}" class="btn btn-sm" data-growth-share="1" style="background:#f59e0b;color:#0f0f22;border:0;font-weight:700" title="Share this report as a card"><i class="bi bi-share-fill me-1"></i>Share</a>
+    <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-info">
     <i class="bi bi-printer me-1"></i>Print
   </button>
 </div>
