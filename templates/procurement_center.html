@@ -132,14 +132,18 @@
                 <i class="bi bi-file-earmark-text me-1"></i>Literature
               </a>
               {% else %}
-              <span class="text-warning" style="opacity:.85"><i class="bi bi-file-earmark-text me-1"></i>Literature: —</span>
+              <a href="https://www.google.com/search?q={{ ((p.brand or '') ~ ' ' ~ (p.model or p.name or '') ~ ' brochure literature filetype:pdf')|urlencode }}" target="_blank" rel="noopener nofollow" class="text-warning text-decoration-none" onclick="event.stopPropagation();" title="Search Google for the brand brochure / catalog PDF">
+                <i class="bi bi-file-earmark-text me-1"></i>Literature: search
+              </a>
               {% endif %}
               {% if p.datasheet_url %}
               <a href="{{ url_for('marketplace_product_doc_redirect', pid=p.id, kind='datasheet') }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" onclick="event.stopPropagation();" title="Opens via SolarPro reachability check">
                 <i class="bi bi-file-earmark-pdf me-1"></i>Datasheet
               </a>
               {% else %}
-              <span class="text-warning" style="opacity:.85"><i class="bi bi-file-earmark-pdf me-1"></i>Datasheet: —</span>
+              <a href="https://www.google.com/search?q={{ ((p.brand or '') ~ ' ' ~ (p.model or p.name or '') ~ ' datasheet specification filetype:pdf')|urlencode }}" target="_blank" rel="noopener nofollow" class="text-warning text-decoration-none" onclick="event.stopPropagation();" title="Search Google for the manufacturer datasheet PDF">
+                <i class="bi bi-file-earmark-pdf me-1"></i>Datasheet: search
+              </a>
               {% endif %}
             </div>
             <div class="d-flex align-items-center justify-content-between mt-2 pt-2" style="border-top:1px solid #1e1e3a">
