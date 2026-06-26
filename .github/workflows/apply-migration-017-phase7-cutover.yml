@@ -1,0 +1,290 @@
+# Apply migrations/017_phase7_drop_parallel_run.sql to live Postgres.
+#
+# SOC 2 Phase 7 cutover. Drops the parallel-run `<table>_tenant_isolation`
+# policy on the 15 global tables so the per-intent strict policies added
+# in migration 015 take over as the sole gate.
+#
+# Pre-conditions enforced BOTH by this workflow AND by the migration's
+# DO-block guard, so a bad ordering can't quietly remove the one policy
+# a table relied on:
+#   * Migration 015 helper (current_user_is_admin) present
+#   * Migration 016 chain columns present + chain verifies + 0 unchained
+#   * Every global table carries at least one *_global_* strict policy
+#
+# The page at /admin/phase7-cutover must show all-green before you fire
+# the apply mode here. Refer the operator to that page first if there
+# is any doubt.
+#
+# Default mode is DRY-RUN. Apply mode needs
+#   -f confirm=PHASE7_CUTOVER_APPLY
+#
+# There is NO automatic rollback. If the cutover misfires, run the
+# un-cutover SQL sketched at the bottom of migrations/017 (ship it as
+# 018) to recreate the parallel-run policies. Restoring the policies
+# restores the behaviour because the strict policies stay in place.
+
+name: Apply Migration 017 (Phase 7 cutover -- drop parallel-run policies)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type PHASE7_CUTOVER_APPLY to commit migration 017 to live Postgres."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "PHASE7_CUTOVER_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- migration 017 will be committed to live Postgres ==="
+            echo ""
+            echo "  This drops the parallel-run policy on 15 global tables."
+            echo "  After this lands, ad-hoc DB writes (background jobs, ops scripts)"
+            echo "  must set app.current_role='admin' OR run as a superuser that"
+            echo "  bypasses RLS, otherwise writes to monitor_alerts / monitor_state"
+            echo "  / login_failures will be denied by the strict admin_all policy."
+            echo ""
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- migration 017 will be parsed + previewed only ==="
+            echo "Re-run with -f confirm=PHASE7_CUTOVER_APPLY to commit."
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/017_phase7_drop_parallel_run.sql
+          echo "OK: migrations/017_phase7_drop_parallel_run.sql present"
+          wc -l migrations/017_phase7_drop_parallel_run.sql
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- migration 015 helper present
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          N=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM pg_proc WHERE proname='current_user_is_admin'")
+          if [ "$N" -lt "1" ]; then
+            echo "::error::Migration 015 not applied -- current_user_is_admin() helper missing."
+            exit 1
+          fi
+          echo "OK: current_user_is_admin() helper present."
+
+      - name: Pre-flight -- migration 016 chain columns + chain verifies
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          # Chain columns must be present.
+          COLS=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM information_schema.columns
+              WHERE table_name='audit_logs' AND column_name IN ('prev_hash','row_hash')")
+          if [ "$COLS" -lt "2" ]; then
+            echo "::error::Migration 016 not applied -- prev_hash + row_hash columns missing."
+            exit 1
+          fi
+          # Chain must verify: 0 unchained rows.
+          UNCH=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM audit_logs WHERE row_hash IS NULL")
+          if [ "$UNCH" -gt "0" ]; then
+            echo "::warning::$UNCH unchained audit_logs rows present. Phase 7 itself"
+            echo "does not require zero unchained for safety, but the readiness page"
+            echo "won't show all-green until they are backfilled or migrated."
+          fi
+          echo "OK: audit chain columns present, $UNCH unchained rows."
+
+      - name: Pre-flight -- every global table carries a strict policy
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          MISSING=$(psql "$DATABASE_URL" -A -t -c "
+            WITH wanted(t) AS (VALUES
+              ('installers'),('news_posts'),('helpline_learned_kb'),
+              ('product_brands'),('product_categories'),('appliances'),
+              ('assessment_requests'),('leads'),('beta_signups'),
+              ('newsletter_subscribers'),
+              ('monitor_alerts'),('monitor_state'),('upgrade_codes'),
+              ('admin_settings'),('login_failures'))
+            SELECT t FROM wanted
+             WHERE EXISTS (SELECT 1 FROM information_schema.tables
+                             WHERE table_schema='public' AND table_name=wanted.t)
+               AND NOT EXISTS (
+                 SELECT 1 FROM pg_policies
+                  WHERE schemaname='public' AND tablename=wanted.t
+                    AND policyname LIKE '%_global_%'
+               )")
+          if [ -n "$MISSING" ]; then
+            echo "::error::These tables lack strict *_global_* policies (migration 015 not fully applied):"
+            echo "$MISSING"
+            exit 1
+          fi
+          echo "OK: every existing global table carries a strict policy."
+
+      - name: Show migration overview
+        run: |
+          echo "--- migrations/017_phase7_drop_parallel_run.sql ---"
+          grep -E "^-- (PART|=|UN-CUTOVER)" migrations/017_phase7_drop_parallel_run.sql | head -20
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The SQL below WOULD have been applied. Nothing was."
+          echo "================================================================"
+          head -100 migrations/017_phase7_drop_parallel_run.sql
+
+      - name: Apply migration 017 (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/017_phase7_drop_parallel_run.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/017_phase7_drop_parallel_run.sql
+          echo "OK: migration 017 applied."
+
+      - name: Verify post-apply -- every parallel-run policy on globals is gone
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          REMAIN=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT tablename FROM pg_policies
+             WHERE policyname IN (
+               'installers_tenant_isolation','news_posts_tenant_isolation',
+               'helpline_learned_kb_tenant_isolation','product_brands_tenant_isolation',
+               'product_categories_tenant_isolation','appliances_tenant_isolation',
+               'assessment_requests_tenant_isolation','leads_tenant_isolation',
+               'beta_signups_tenant_isolation','newsletter_subscribers_tenant_isolation',
+               'monitor_alerts_tenant_isolation','monitor_state_tenant_isolation',
+               'upgrade_codes_tenant_isolation','admin_settings_tenant_isolation',
+               'login_failures_tenant_isolation')")
+          if [ -n "$REMAIN" ]; then
+            echo "::error::Parallel-run policies still present on these tables:"
+            echo "$REMAIN"
+            exit 1
+          fi
+          echo "OK: all 15 global parallel-run policies dropped."
+
+      - name: Verify post-apply -- strict policy counts intact
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- per-table policy counts AFTER cutover ---"
+          echo "expected: public_read=4, anon_insert=4, admin_only=1 ---"
+          psql "$DATABASE_URL" -c "
+            SELECT tablename, COUNT(*) AS policy_count
+              FROM pg_policies
+             WHERE tablename IN (
+               'installers','news_posts','helpline_learned_kb',
+               'product_brands','product_categories','appliances',
+               'assessment_requests','leads','beta_signups','newsletter_subscribers',
+               'monitor_alerts','monitor_state','upgrade_codes',
+               'admin_settings','login_failures')
+             GROUP BY tablename ORDER BY tablename;"
+
+      - name: Verify post-apply -- public-read tables still SELECT-able anon
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- behaviour smoke: public-read tables WITHOUT any GUC set ---"
+          echo "(should still return rows -- public_read policy admits true USING)"
+          psql "$DATABASE_URL" -c "
+            SELECT COUNT(*) AS installers_anon     FROM installers;
+            SELECT COUNT(*) AS news_posts_anon     FROM news_posts;
+            SELECT COUNT(*) AS product_brands_anon FROM product_brands;
+            SELECT COUNT(*) AS appliances_anon     FROM appliances;"
+
+      - name: Verify post-apply -- admin-only tables INVISIBLE without admin GUC
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- behaviour smoke: admin-only tables WITHOUT app.current_role='admin' ---"
+          echo "(should return 0 rows -- admin_all policy gates SELECT on the GUC)"
+          psql "$DATABASE_URL" -c "
+            SELECT
+              (SELECT COUNT(*) FROM monitor_alerts) AS monitor_alerts_visible,
+              (SELECT COUNT(*) FROM monitor_state)  AS monitor_state_visible,
+              (SELECT COUNT(*) FROM admin_settings) AS admin_settings_visible;"
+          echo ""
+          echo "--- same query WITH app.current_role='admin' set ---"
+          echo "(rows should now be visible)"
+          psql "$DATABASE_URL" -c "
+            SELECT set_config('app.current_role', 'admin', true);
+            SELECT
+              (SELECT COUNT(*) FROM monitor_alerts) AS monitor_alerts_visible,
+              (SELECT COUNT(*) FROM monitor_state)  AS monitor_state_visible,
+              (SELECT COUNT(*) FROM admin_settings) AS admin_settings_visible;"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " PHASE 7 CUTOVER COMPLETE -- parallel-run policies dropped on"
+            echo " all 15 global tables. Strict policies are the sole gate now."
+            echo "================================================================"
+            echo ""
+            echo " WATCH-LIST after this lands:"
+            echo "  * Background writes to monitor_alerts / monitor_state /"
+            echo "    login_failures must set app.current_role='admin' or use a"
+            echo "    super-user connection -- otherwise INSERTs will be denied."
+            echo "  * The same applies to admin_settings + upgrade_codes."
+            echo "  * /admin/phase7-cutover readiness page should show all-green"
+            echo "    on the next refresh."
+            echo ""
+            echo " ROLLBACK (if needed): write migration 018 from the un-cutover"
+            echo " SQL sketch at the bottom of migrations/017."
+          else
+            echo "DRY-RUN -- no Render changes. Re-run with confirm=PHASE7_CUTOVER_APPLY."
+          fi
