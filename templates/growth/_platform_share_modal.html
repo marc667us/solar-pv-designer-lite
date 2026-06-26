@@ -1,0 +1,131 @@
+{# Site-wide "Share SolarPro" modal — included once from base.html.
+   Logged-in users get ?ref=<their code> appended so the existing /r/<code>
+   referral cookie + signup attribution path fires. Anonymous visitors share
+   a clean URL. No server endpoint needed — all share intents open in a
+   new window and the QR is rendered client-side.
+
+   Trigger this modal from anywhere with:
+     <button data-bs-toggle="modal" data-bs-target="#platformShareModal">…</button>
+#}
+<div class="modal fade" id="platformShareModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content" style="background:#0f0f22;border:1px solid #1e1e3a">
+      <div class="modal-header" style="border-bottom:1px solid #1e1e3a">
+        <h5 class="modal-title text-warning">
+          <i class="bi bi-megaphone-fill me-2"></i>Share SolarPro Global
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-3">
+          Send the platform to a colleague, contractor, or installer. Everyone
+          you refer gets a free solar estimate{% if user %} and you earn referral
+          credit (referral code <code class="text-warning">{{ user.referral_code or 'will be issued' }}</code>){% endif %}.
+        </p>
+
+        <div class="row g-3">
+          <div class="col-md-7">
+            <label class="form-label small text-secondary">Share link</label>
+            <div class="input-group input-group-sm mb-3">
+              <input id="psm-url" class="form-control" readonly
+                     style="background:#080816;border:1px solid #1e1e3a;color:#f0f0f8">
+              <button class="btn btn-outline-warning" type="button" onclick="psmCopy()">
+                <i class="bi bi-clipboard"></i> Copy
+              </button>
+            </div>
+
+            <label class="form-label small text-secondary">Share to</label>
+            <div class="d-grid gap-2">
+              <button class="btn fw-bold text-start" style="background:#25D366;color:#0a0a18;border:0"
+                      onclick="psmShare('whatsapp')">
+                <i class="bi bi-whatsapp me-2"></i>WhatsApp
+                <span class="float-end small opacity-75">opens phone or web app</span>
+              </button>
+              <button class="btn fw-bold text-start" style="background:#1877F2;color:#fff;border:0"
+                      onclick="psmShare('facebook')">
+                <i class="bi bi-facebook me-2"></i>Facebook
+              </button>
+              <button class="btn fw-bold text-start" style="background:#0A66C2;color:#fff;border:0"
+                      onclick="psmShare('linkedin')">
+                <i class="bi bi-linkedin me-2"></i>LinkedIn
+              </button>
+              <button class="btn fw-bold text-start" style="background:#0a0a18;color:#fff;border:1px solid #2a2a5a"
+                      onclick="psmShare('x')">
+                <i class="bi bi-twitter-x me-2"></i>X (Twitter)
+              </button>
+              <button class="btn fw-bold text-start" style="background:#ea580c;color:#fff;border:0"
+                      onclick="psmShare('email')">
+                <i class="bi bi-envelope-fill me-2"></i>Email
+              </button>
+            </div>
+          </div>
+
+          <div class="col-md-5 text-center">
+            <label class="form-label small text-secondary">Or scan to share</label>
+            <div id="psm-qr" style="display:inline-block;background:#fff;padding:8px;border-radius:8px"></div>
+            <p class="text-secondary small mt-2 mb-0">
+              SolarPro Global<br>
+              <span class="text-warning">solarpro.aiappinvent.com</span>
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer d-flex justify-content-between" style="border-top:1px solid #1e1e3a">
+        <span class="small text-secondary">
+          <i class="bi bi-shield-check me-1 text-success"></i>
+          Designed with SolarPro · Create yours free
+        </span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"
+        crossorigin="anonymous"></script>
+<script>
+(function(){
+  // Build the share URL once — uses host_url so it works on any deploy.
+  const HOST = "{{ request.host_url.rstrip('/') if request else 'https://solarpro.aiappinvent.com' }}";
+  const REF  = "{{ (user.referral_code if user else '') or '' }}";
+  const SHARE_URL = HOST + (REF ? ("/r/" + REF) : "/");
+  const SHARE_TEXT = "Design solar PV systems online — free estimate, instant BOQ, automated tender alerts. Try SolarPro Global.";
+
+  function renderOnce(){
+    const inp = document.getElementById("psm-url");
+    if (inp && !inp.value) inp.value = SHARE_URL;
+    const wrap = document.getElementById("psm-qr");
+    if (wrap && !wrap.innerHTML){
+      const qr = qrcode(0, "M"); qr.addData(SHARE_URL); qr.make();
+      wrap.innerHTML = qr.createImgTag(4, 6);
+    }
+  }
+  document.addEventListener("DOMContentLoaded", function(){
+    const m = document.getElementById("platformShareModal");
+    if (m) m.addEventListener("show.bs.modal", renderOnce);
+  });
+
+  window.psmCopy = function(){
+    const inp = document.getElementById("psm-url");
+    inp.select(); inp.setSelectionRange(0, 9999);
+    try { navigator.clipboard.writeText(inp.value); } catch(e){ document.execCommand("copy"); }
+    const btn = inp.nextElementSibling;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check2"></i> Copied';
+    setTimeout(()=>{ btn.innerHTML = orig; }, 1500);
+  };
+
+  window.psmShare = function(channel){
+    const u = encodeURIComponent(SHARE_URL + "?src=" + channel);
+    const t = encodeURIComponent(SHARE_TEXT);
+    let win = "";
+    if (channel === "whatsapp")  win = "https://wa.me/?text=" + t + "%20" + u;
+    if (channel === "facebook")  win = "https://www.facebook.com/sharer/sharer.php?u=" + u;
+    if (channel === "linkedin")  win = "https://www.linkedin.com/sharing/share-offsite/?url=" + u;
+    if (channel === "x")         win = "https://twitter.com/intent/tweet?url=" + u + "&text=" + t;
+    if (channel === "email")     win = "mailto:?subject=" + encodeURIComponent("SolarPro Global — free solar estimate")
+                                       + "&body=" + t + "%0A%0A" + decodeURIComponent(u);
+    if (win) window.open(win, "_blank", "noopener,width=720,height=620");
+  };
+})();
+</script>

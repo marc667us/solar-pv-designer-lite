@@ -388,12 +388,27 @@
             <span class="badge ms-1" style="background:rgba(34,197,94,.18);color:#22c55e;font-size:9px;font-weight:700">FREE</span>
           </a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#" data-bs-toggle="modal"
+             data-bs-target="#platformShareModal" data-platform-share="1"
+             title="Share SolarPro">
+            <i class="bi bi-megaphone-fill me-1 text-warning"></i>Share
+          </a>
+        </li>
         {% endif %}
       </ul>
 
       <ul class="navbar-nav ms-auto align-items-center gap-1">
 
         {% if user %}
+
+        <li class="nav-item">
+          <a class="nav-link" href="#" data-bs-toggle="modal"
+             data-bs-target="#platformShareModal" data-platform-share="1"
+             title="Share SolarPro with a colleague">
+            <i class="bi bi-megaphone-fill me-1 text-warning"></i>Share
+          </a>
+        </li>
 
         {# Helper macro — marks nav-link active when on matching endpoint #}
         {% set ep = request.endpoint or '' %}
@@ -1096,5 +1111,8 @@ document.querySelectorAll('.solar-toast').forEach(function(t){
 })();
 </script>
 {% endif %}
+
+<!-- Growth Layer: site-wide Share-SolarPro modal -->
+{% include "growth/_platform_share_modal.html" ignore missing %}
 </body>
 </html>
