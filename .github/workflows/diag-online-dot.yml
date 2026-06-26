@@ -1,0 +1,70 @@
+# One-shot diag: surface the live `last_seen` state for the operator's
+# row (and any neighbours) so we can tell whether the green dot is
+# missing because (a) last_seen is NULL / stale, or (b) the row exists
+# but the template renderer didn't include it in online_ids.
+
+name: Diag Online Dot (last_seen state)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: last_seen state per user
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          echo "--- users.last_seen (NULL or set) ---"
+          psql "$DATABASE_URL" -c "
+            SELECT id, username, email,
+                   last_seen,
+                   CASE WHEN last_seen IS NULL THEN 'never'
+                        ELSE (EXTRACT(EPOCH FROM (NOW() - last_seen))::INT)::TEXT END AS seconds_since,
+                   CASE WHEN last_seen IS NOT NULL
+                        AND last_seen >= (NOW() - INTERVAL '300 seconds')
+                        THEN 'YES' ELSE 'no' END AS inside_5min_window
+              FROM users
+             ORDER BY (last_seen IS NULL), last_seen DESC NULLS LAST
+             LIMIT 30;"
+          echo ""
+          echo "--- users with last_seen NULL ---"
+          NULL_N=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM users WHERE last_seen IS NULL")
+          ALIVE_N=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM users WHERE last_seen IS NOT NULL AND last_seen >= (NOW() - INTERVAL '300 seconds')")
+          ALL_N=$(psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM users")
+          echo "  NULL last_seen      : $NULL_N / $ALL_N"
+          echo "  Online (<=5 min)    : $ALIVE_N / $ALL_N"
