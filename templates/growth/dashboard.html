@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container my-4">
+  <div class="d-flex align-items-center mb-3">
+    <h2 class="mb-0">Growth Dashboard</h2>
+    <span class="badge text-bg-warning ms-2">Zero-Cost</span>
+  </div>
+  <p class="text-secondary">
+    Shareable cards you've created, public visits, captured leads, and pipeline
+    movement. Browser-rendered exports keep operating costs near zero.
+  </p>
+
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="card text-center"><div class="card-body">
+        <div id="d-cards" class="h3 mb-0">—</div>
+        <div class="small text-secondary">Share cards</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card text-center"><div class="card-body">
+        <div id="d-visits" class="h3 mb-0">—</div>
+        <div class="small text-secondary">Public visits</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card text-center"><div class="card-body">
+        <div id="d-leads" class="h3 mb-0">—</div>
+        <div class="small text-secondary">Leads captured</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card text-center"><div class="card-body">
+        <div id="d-conv" class="h3 mb-0">—</div>
+        <div class="small text-secondary">Visit → lead</div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-6">
+      <div class="card"><div class="card-header">Leads by source</div>
+        <ul id="d-by-source" class="list-group list-group-flush small">
+          <li class="list-group-item text-secondary">Loading…</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card"><div class="card-header">Pipeline stages</div>
+        <ul id="d-pipeline" class="list-group list-group-flush small">
+          <li class="list-group-item text-secondary">Loading…</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>My share assets</span>
+      <span class="small text-secondary">Top 50</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>#</th><th>Type</th><th>Title</th><th>Slug</th>
+            <th>Created</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in my_assets %}
+          <tr id="row-{{ a['id'] }}">
+            <td>{{ a['id'] }}</td>
+            <td><span class="small">{{ a['asset_type']|replace('_',' ')|title }}</span></td>
+            <td>{{ a['title'] }}</td>
+            <td><a href="/s/{{ a['share_slug'] }}" target="_blank" rel="noopener">/s/{{ a['share_slug'] }}</a></td>
+            <td class="small text-secondary">{{ a['created_at'] }}</td>
+            <td>
+              {% if a['revoked_at'] %}
+              <span class="badge text-bg-danger">Revoked</span>
+              {% else %}
+              <span class="badge text-bg-success">Live</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              {% if not a['revoked_at'] %}
+              <button class="btn btn-sm btn-outline-danger"
+                      onclick="growthRevoke({{ a['id'] }})">Revoke</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="text-center text-secondary py-4">
+            No share assets yet. Open any project and click
+            <i class="bi bi-share-fill"></i> Share.
+          </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const CSRF = "{{ csrf_token() }}";
+  fetch("/api/growth/dashboard").then(r=>r.json()).then(j=>{
+    document.getElementById("d-cards").textContent  = j.total_share_assets ?? 0;
+    document.getElementById("d-visits").textContent = j.total_visits ?? 0;
+    document.getElementById("d-leads").textContent  = j.total_leads ?? 0;
+    document.getElementById("d-conv").textContent   = (j.conversion_pct ?? 0) + "%";
+    const byS = document.getElementById("d-by-source");
+    byS.innerHTML = "";
+    (j.leads_by_source||[]).forEach(r=>{
+      const li = document.createElement("li");
+      li.className = "list-group-item d-flex justify-content-between";
+      li.innerHTML = `<span>${r.s}</span><span class="text-secondary">${r.n}</span>`;
+      byS.appendChild(li);
+    });
+    if (!(j.leads_by_source||[]).length) {
+      byS.innerHTML = '<li class="list-group-item text-secondary">No leads yet — share a card to start.</li>';
+    }
+    const pp = document.getElementById("d-pipeline");
+    pp.innerHTML = "";
+    (j.pipeline_counts||[]).forEach(r=>{
+      const li = document.createElement("li");
+      li.className = "list-group-item d-flex justify-content-between";
+      li.innerHTML = `<span>${r.s}</span><span class="text-secondary">${r.n}</span>`;
+      pp.appendChild(li);
+    });
+    if (!(j.pipeline_counts||[]).length) {
+      pp.innerHTML = '<li class="list-group-item text-secondary">No pipeline movement yet.</li>';
+    }
+  }).catch(()=>{});
+
+  window.growthRevoke = async function(id){
+    if (!confirm("Revoke this share asset? The public URL will return 410.")) return;
+    const res = await fetch("/api/growth/share-assets/"+id+"/revoke", {
+      method:"POST", headers:{"X-CSRF-Token": CSRF}
+    });
+    if (res.ok) location.reload();
+  };
+})();
+</script>
+{% endblock %}

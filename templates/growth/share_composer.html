@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container my-4">
+  <div class="d-flex align-items-center mb-3">
+    <h2 class="mb-0">Share this project</h2>
+    <span class="badge text-bg-warning ms-2">Growth Layer</span>
+  </div>
+  <p class="text-secondary">
+    Generate a beautiful, shareable card from {{ project['name'] }}. Cards are
+    rendered in your browser, exported as PNG/PDF, and include a QR code that
+    sends visitors to a public preview page tied to your referral code.
+  </p>
+
+  <div class="row g-3">
+    <div class="col-lg-5">
+      <div class="card mb-3">
+        <div class="card-header">Choose a card type</div>
+        <div class="list-group list-group-flush">
+          <label class="list-group-item d-flex gap-2 align-items-center">
+            <input type="radio" name="asset_type" value="solar_savings_card" checked>
+            <div>
+              <div class="fw-semibold">Solar Savings Card</div>
+              <div class="small text-secondary">System size, annual savings, payback</div>
+            </div>
+          </label>
+          <label class="list-group-item d-flex gap-2 align-items-center">
+            <input type="radio" name="asset_type" value="energy_score_card">
+            <div>
+              <div class="fw-semibold">Energy Independence Score</div>
+              <div class="small text-secondary">% self-sufficiency, daily kWh</div>
+            </div>
+          </label>
+          <label class="list-group-item d-flex gap-2 align-items-center">
+            <input type="radio" name="asset_type" value="boq_summary_card">
+            <div>
+              <div class="fw-semibold">BOQ Summary Card</div>
+              <div class="small text-secondary">Quantities only — no unit prices</div>
+            </div>
+          </label>
+          <label class="list-group-item d-flex gap-2 align-items-center">
+            <input type="radio" name="asset_type" value="proposal_preview">
+            <div>
+              <div class="fw-semibold">Proposal Preview</div>
+              <div class="small text-secondary">High-level summary + payback</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-header">Options</div>
+        <div class="card-body">
+          <label class="form-label small">Campaign tag (optional)</label>
+          <input id="g-campaign" class="form-control form-control-sm mb-2"
+                 placeholder="e.g. accra-launch-2026-06" maxlength="60">
+          <label class="form-label small">Visibility</label>
+          <select id="g-visibility" class="form-select form-select-sm">
+            <option value="public">Public (anyone with the link)</option>
+            <option value="private">Private (you only)</option>
+          </select>
+        </div>
+      </div>
+
+      <button id="g-generate" type="button"
+              class="btn btn-warning w-100 fw-semibold">
+        Generate share card
+      </button>
+    </div>
+
+    <div class="col-lg-7">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>Live preview</span>
+          <span class="small text-secondary">Browser-rendered · zero-cost</span>
+        </div>
+        <div class="card-body bg-light">
+          <div id="g-card-wrap" style="display:flex;justify-content:center">
+            <div id="g-card" class="growth-card">
+              <div class="growth-card__brand">SolarPro Global</div>
+              <div class="growth-card__title">{{ project['name'] }}</div>
+              <div class="growth-card__body">
+                Click <b>Generate share card</b> to render a live preview.
+              </div>
+              <div class="growth-card__footer">
+                <div class="growth-card__cta">Create your free solar estimate</div>
+                <div class="growth-card__wm">Designed with SolarPro · Create yours free</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="g-result" class="card mt-3 d-none">
+        <div class="card-header">Share this card</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-7">
+              <label class="form-label small">Public share URL</label>
+              <div class="input-group input-group-sm mb-2">
+                <input id="g-share-url" class="form-control" readonly>
+                <button class="btn btn-outline-secondary" type="button"
+                        onclick="navigator.clipboard.writeText(document.getElementById('g-share-url').value)">Copy</button>
+              </div>
+              <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-sm btn-outline-success"
+                        onclick="growthShare('whatsapp')">WhatsApp</button>
+                <button class="btn btn-sm btn-outline-primary"
+                        onclick="growthShare('facebook')">Facebook</button>
+                <button class="btn btn-sm btn-outline-primary"
+                        onclick="growthShare('linkedin')">LinkedIn</button>
+                <button class="btn btn-sm btn-outline-dark"
+                        onclick="growthShare('x')">X</button>
+                <button class="btn btn-sm btn-outline-secondary"
+                        onclick="growthExportPng()">Download PNG</button>
+                <button class="btn btn-sm btn-outline-secondary"
+                        onclick="growthExportPdf()">Download PDF</button>
+              </div>
+              <div class="small text-secondary mt-2">
+                Visit attribution is captured automatically via your referral code
+                <code>{{ referral_code }}</code>.
+              </div>
+            </div>
+            <div class="col-md-5 text-center">
+              <div id="g-qr" style="display:inline-block"></div>
+              <div class="small text-secondary">Scan with phone camera</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<style>
+  .growth-card {
+    width: 540px; max-width: 100%;
+    aspect-ratio: 1.91 / 1;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #f59e0b 140%);
+    color: #fff; border-radius: 18px; padding: 28px 30px;
+    box-shadow: 0 10px 36px rgba(15,23,42,.25);
+    display: flex; flex-direction: column; justify-content: space-between;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .growth-card__brand { font-size: 12px; letter-spacing: 2px; opacity: .8; }
+  .growth-card__title { font-size: 22px; font-weight: 700; margin-top: 4px; line-height: 1.15; }
+  .growth-card__body  { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 10px 0; }
+  .growth-card__metric { display: flex; flex-direction: column; }
+  .growth-card__metric .v { font-size: 28px; font-weight: 800; color: #fde68a; }
+  .growth-card__metric .k { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; opacity: .8; }
+  .growth-card__footer { display: flex; justify-content: space-between; align-items: end; }
+  .growth-card__cta { background: #f59e0b; color: #0f172a; font-weight: 700;
+    padding: 6px 12px; border-radius: 999px; font-size: 12px; }
+  .growth-card__wm  { font-size: 10px; opacity: .65; }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"
+        crossorigin="anonymous"></script>
+
+<script>
+(function(){
+  const PROJECT_ID = {{ project['id'] }};
+  const CSRF       = "{{ csrf_token() }}";
+  let SHARE_URL    = "";
+  let ASSET_ID     = 0;
+
+  function pickType(){
+    const r = document.querySelector('input[name="asset_type"]:checked');
+    return r ? r.value : "solar_savings_card";
+  }
+
+  function renderCard(type, payload){
+    const fmt = (v) => (v == null ? "—" : v);
+    const money = (v) => (v == null ? "—" : Number(v).toLocaleString());
+    let title = payload.project_name || "Solar project";
+    let body = "";
+    if (type === "solar_savings_card") {
+      body = `
+        <div class="growth-card__metric"><span class="v">${fmt(payload.system_size_kw)} kW</span><span class="k">System size</span></div>
+        <div class="growth-card__metric"><span class="v">${payload.currency||'USD'} ${money(payload.annual_savings)}</span><span class="k">Annual savings</span></div>
+        <div class="growth-card__metric"><span class="v">${fmt(payload.payback_years)} yr</span><span class="k">Payback</span></div>
+        <div class="growth-card__metric"><span class="v" style="font-size:14px">${fmt(payload.location)}</span><span class="k">Location</span></div>`;
+    } else if (type === "energy_score_card") {
+      body = `
+        <div class="growth-card__metric"><span class="v">${fmt(payload.energy_score)}%</span><span class="k">Energy independence</span></div>
+        <div class="growth-card__metric"><span class="v">${fmt(payload.system_size_kw)} kW</span><span class="k">System size</span></div>
+        <div class="growth-card__metric"><span class="v">${fmt(payload.daily_kwh)} kWh</span><span class="k">Daily energy</span></div>
+        <div class="growth-card__metric"><span class="v" style="font-size:14px">${fmt(payload.location)}</span><span class="k">Location</span></div>`;
+    } else if (type === "boq_summary_card") {
+      body = `
+        <div class="growth-card__metric"><span class="v">${fmt(payload.module_count)}</span><span class="k">PV modules</span></div>
+        <div class="growth-card__metric"><span class="v">${fmt(payload.system_size_kw)} kW</span><span class="k">PV size</span></div>
+        <div class="growth-card__metric"><span class="v">${fmt(payload.inverter_kw)} kW</span><span class="k">Inverter</span></div>
+        <div class="growth-card__metric"><span class="v">${fmt(payload.battery_kwh)} kWh</span><span class="k">Battery</span></div>`;
+    } else {
+      body = `
+        <div class="growth-card__metric"><span class="v">${fmt(payload.system_size_kw)} kW</span><span class="k">PV size</span></div>
+        <div class="growth-card__metric"><span class="v">${payload.currency||'USD'} ${money(payload.annual_savings)}</span><span class="k">Year-1 savings</span></div>
+        <div class="growth-card__metric"><span class="v">${fmt(payload.payback_years)} yr</span><span class="k">Payback</span></div>
+        <div class="growth-card__metric"><span class="v" style="font-size:14px">${fmt(payload.location)}</span><span class="k">Location</span></div>`;
+    }
+    const cta = type === "boq_summary_card" ? "Generate your BOQ"
+              : type === "energy_score_card" ? "See your energy score"
+              : "See your savings in 60 seconds";
+    document.getElementById("g-card").innerHTML =
+       `<div class="growth-card__brand">SolarPro Global</div>
+        <div class="growth-card__title">${title}</div>
+        <div class="growth-card__body">${body}</div>
+        <div class="growth-card__footer">
+          <div class="growth-card__cta">${cta}</div>
+          <div class="growth-card__wm">Designed with SolarPro · Create yours free</div>
+        </div>`;
+  }
+
+  function renderQR(url){
+    const qr = qrcode(0, "M"); qr.addData(url); qr.make();
+    document.getElementById("g-qr").innerHTML = qr.createImgTag(4, 8);
+  }
+
+  async function generate(){
+    const type = pickType();
+    const camp = (document.getElementById("g-campaign").value || "").trim();
+    const vis  = document.getElementById("g-visibility").value || "public";
+    const res = await fetch("/api/growth/share-assets", {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF},
+      body: JSON.stringify({
+        asset_type: type, project_id: PROJECT_ID,
+        campaign_id: camp, visibility: vis
+      })
+    });
+    if (!res.ok) { alert("Could not create share asset"); return; }
+    const data = await res.json();
+    SHARE_URL = data.share_url + "?src=qr";
+    ASSET_ID  = data.id;
+    renderCard(type, data.payload);
+    document.getElementById("g-share-url").value = data.share_url;
+    renderQR(SHARE_URL);
+    document.getElementById("g-result").classList.remove("d-none");
+  }
+
+  window.growthShare = function(channel){
+    if (!SHARE_URL) return;
+    fetch("/api/growth/share-assets/"+ASSET_ID+"/event", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({event_type:"shared", channel: channel})
+    }).catch(()=>{});
+    const u = encodeURIComponent(SHARE_URL.replace("?src=qr","?src="+channel));
+    const t = encodeURIComponent("Check out my solar estimate from SolarPro Global");
+    let win = "";
+    if (channel==="whatsapp") win = "https://wa.me/?text="+t+"%20"+u;
+    if (channel==="facebook") win = "https://www.facebook.com/sharer/sharer.php?u="+u;
+    if (channel==="linkedin") win = "https://www.linkedin.com/sharing/share-offsite/?url="+u;
+    if (channel==="x")        win = "https://twitter.com/intent/tweet?url="+u+"&text="+t;
+    if (win) window.open(win, "_blank", "noopener");
+  };
+
+  window.growthExportPng = async function(){
+    const node = document.getElementById("g-card");
+    const canvas = await html2canvas(node, {scale: 2, backgroundColor: null});
+    const a = document.createElement("a");
+    a.href = canvas.toDataURL("image/png");
+    a.download = "solarpro-share-"+(ASSET_ID||"card")+".png";
+    a.click();
+  };
+
+  window.growthExportPdf = async function(){
+    const node = document.getElementById("g-card");
+    const canvas = await html2canvas(node, {scale: 2, backgroundColor: null});
+    const img = canvas.toDataURL("image/png");
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({orientation:"landscape", unit:"pt", format:[600,320]});
+    pdf.addImage(img, "PNG", 0, 0, 600, 320);
+    pdf.save("solarpro-share-"+(ASSET_ID||"card")+".pdf");
+  };
+
+  document.getElementById("g-generate").addEventListener("click", generate);
+})();
+</script>
+{% endblock %}

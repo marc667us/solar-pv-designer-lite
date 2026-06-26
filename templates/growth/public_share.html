@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ asset['title'] }} · SolarPro</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"
+      integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM"
+      crossorigin="anonymous">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+  body { background: #0f172a; color: #f1f5f9; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; min-height:100vh; }
+  .ps-hero { background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #f59e0b 140%);
+    padding: 36px 28px 28px; border-radius: 0 0 28px 28px; }
+  .ps-brand { font-size: 11px; letter-spacing: 2px; opacity: .8; }
+  .ps-title { font-size: 28px; font-weight: 800; margin-top: 2px; }
+  .ps-sub   { opacity: .8; }
+  .ps-metric { background: rgba(255,255,255,.06); border-radius: 14px; padding: 16px;
+    display:flex; flex-direction:column; height:100%; }
+  .ps-metric .v { font-size: 28px; font-weight: 800; color: #fde68a; }
+  .ps-metric .k { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; opacity: .8; }
+  .ps-card { background:#fff; color:#0f172a; border-radius: 16px; padding: 24px; }
+  .ps-cta  { background: #f59e0b; color: #0f172a; font-weight: 700; padding: 10px 18px;
+    border-radius: 999px; display:inline-block; }
+  .ps-wm   { font-size: 11px; opacity: .65; }
+  .ps-footer { background:#020617; padding: 22px; text-align:center; margin-top: 36px; }
+  .ps-attrib { font-size: 12px; opacity: .7; }
+</style>
+</head>
+<body>
+
+<section class="ps-hero">
+  <div class="container">
+    <div class="ps-brand">SOLARPRO GLOBAL · SHARED RESULT</div>
+    <div class="ps-title">{{ asset['title'] }}</div>
+    {% if payload.get('location') %}
+    <div class="ps-sub"><i class="bi bi-geo-alt"></i> {{ payload['location'] }}</div>
+    {% endif %}
+    <div class="mt-3 d-flex gap-2 flex-wrap">
+      {% if asset['referral_code'] %}
+      <span class="badge text-bg-light">Referred by code {{ asset['referral_code'] }}</span>
+      {% endif %}
+      {% if asset['asset_type'] %}
+      <span class="badge text-bg-warning">{{ asset['asset_type']|replace('_',' ')|title }}</span>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<div class="container my-4">
+  <div class="row g-3">
+    {% if asset['asset_type'] == 'solar_savings_card' %}
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('system_size_kw','—') }} kW</span><span class="k">System size</span></div></div>
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('currency','USD') }} {{ '{:,.0f}'.format(payload.get('annual_savings',0)|float) }}</span><span class="k">Annual savings</span></div></div>
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('payback_years','—') }} yr</span><span class="k">Payback</span></div></div>
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v" style="font-size:16px">{{ payload.get('location','—') }}</span><span class="k">Location</span></div></div>
+    {% elif asset['asset_type'] == 'energy_score_card' %}
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('energy_score','—') }}%</span><span class="k">Energy independence</span></div></div>
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('system_size_kw','—') }} kW</span><span class="k">PV size</span></div></div>
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('daily_kwh','—') }} kWh</span><span class="k">Daily energy</span></div></div>
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v" style="font-size:16px">{{ payload.get('location','—') }}</span><span class="k">Location</span></div></div>
+    {% elif asset['asset_type'] == 'boq_summary_card' %}
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('module_count','—') }}</span><span class="k">PV modules</span></div></div>
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('system_size_kw','—') }} kW</span><span class="k">PV size</span></div></div>
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('inverter_kw','—') }} kW</span><span class="k">Inverter</span></div></div>
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('battery_kwh','—') }} kWh</span><span class="k">Battery</span></div></div>
+    {% else %}
+      <div class="col-12">
+        <div class="ps-card">
+          <h5>Project summary</h5>
+          <p class="text-secondary mb-0">{{ asset['summary'] or 'A solar project shared from SolarPro Global.' }}</p>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Lead Capture Form (Module 5) -->
+  <div class="ps-card mt-4">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-7">
+        <h4 class="mb-1">Get a free solar estimate for your site</h4>
+        <p class="text-secondary mb-3">
+          We'll send you a sizing + savings estimate. No spam — just one
+          follow-up to confirm your needs.
+        </p>
+
+        <form id="g-lead-form" class="row g-2">
+          <div class="col-md-6"><input name="name" class="form-control" placeholder="Your name *" required maxlength="120"></div>
+          <div class="col-md-6"><input name="phone" class="form-control" placeholder="Phone number *" required maxlength="40"></div>
+          <div class="col-md-6"><input name="email" type="email" class="form-control" placeholder="Email (optional)" maxlength="120"></div>
+          <div class="col-md-6"><input name="location" class="form-control" placeholder="Location / city" maxlength="120" value="{{ payload.get('location','') }}"></div>
+          <div class="col-md-6">
+            <select name="interest" class="form-select">
+              <option value="Residential Solar">Residential Solar</option>
+              <option value="Commercial Solar">Commercial Solar</option>
+              <option value="BOQ / Estimating">BOQ / Estimating</option>
+              <option value="Supplier Marketplace">Supplier Marketplace</option>
+              <option value="Installer Service">Installer Service</option>
+              <option value="Electrical Marketplace">Electrical Marketplace</option>
+              <option value="Proposal Inquiry">Proposal Inquiry</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <select name="preferred_contact" class="form-select">
+              <option value="phone">Call me</option>
+              <option value="whatsapp">WhatsApp me</option>
+              <option value="email">Email me</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-check">
+              <input type="checkbox" name="consent" class="form-check-input">
+              <span class="form-check-label small">
+                I agree to be contacted about my solar estimate. No marketing without consent.
+              </span>
+            </label>
+          </div>
+          <div class="col-12 d-grid">
+            <button type="submit" class="btn btn-warning fw-semibold">
+              Get my free estimate
+            </button>
+          </div>
+        </form>
+        <div id="g-lead-status" class="small mt-2"></div>
+      </div>
+      <div class="col-md-5 text-center">
+        <div class="ps-cta">Create yours free</div>
+        <p class="text-secondary small mt-3 mb-1">Or jump straight in:</p>
+        <a href="/" class="btn btn-outline-secondary btn-sm m-1" data-cta="create-estimate"
+           onclick="growthCta('create_estimate')">Create my free solar estimate</a>
+        <a href="/marketplace" class="btn btn-outline-secondary btn-sm m-1" data-cta="marketplace"
+           onclick="growthCta('view_marketplace')">View Marketplace</a>
+        <a href="/upgrade" class="btn btn-outline-secondary btn-sm m-1" data-cta="trial"
+           onclick="growthCta('start_trial')">Start free trial</a>
+      </div>
+    </div>
+  </div>
+
+  <p class="text-center mt-4 ps-wm">
+    Designed with SolarPro Global · Powered by zero-cost AI Growth Layer
+  </p>
+</div>
+
+<footer class="ps-footer">
+  <div class="container">
+    <div>SolarPro Global · solarpro.aiappinvent.com</div>
+    <div class="ps-attrib mt-1">
+      Public share · no internal pricing, rate build-up, or supplier private data is exposed.
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  const SLUG = "{{ asset['share_slug'] }}";
+  const AID  = {{ asset['id'] }};
+  const REF  = "{{ asset['referral_code'] }}";
+  const CSRF = "{{ csrf_token() }}";
+
+  document.getElementById("g-lead-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target);
+    const body = Object.fromEntries(fd.entries());
+    body.consent = !!body.consent;
+    body.share_slug = SLUG;
+    body.referral_code = REF;
+    const status = document.getElementById("g-lead-status");
+    status.textContent = "Sending…";
+    try {
+      const res = await fetch("/api/growth/lead-capture", {
+        method:"POST",
+        headers:{"Content-Type":"application/json", "X-CSRF-Token": CSRF},
+        body: JSON.stringify(body)
+      });
+      const j = await res.json();
+      if (!res.ok || !j.ok) { status.textContent = j.error || "Could not submit."; status.className="small mt-2 text-danger"; return; }
+      status.innerHTML = "Thanks! Your free estimate is being prepared. We'll be in touch within 24 hours.";
+      status.className = "small mt-2 text-success";
+      ev.target.reset();
+    } catch (e) {
+      status.textContent = "Network error.";
+      status.className = "small mt-2 text-danger";
+    }
+  });
+
+  window.growthCta = function(cta){
+    fetch("/api/growth/share-assets/"+AID+"/event", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({event_type:"cta_clicked", cta: cta, src:"{{ src }}"})
+    }).catch(()=>{});
+  };
+})();
+</script>
+
+</body>
+</html>

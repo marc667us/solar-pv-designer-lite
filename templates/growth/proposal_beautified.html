@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+{% set inst = data.get('installer') or {} %}
+{% set brand = inst.get('brand_color') or '#f59e0b' %}
+<style>
+  .pb-hero { background: linear-gradient(135deg,#0f172a,#1e293b 60%,{{ brand }} 150%);
+    color:#fff; padding: 44px 28px; border-radius: 16px; }
+  .pb-hero h1 { font-weight: 800; }
+  .pb-card { background: #fff; border-radius: 14px; padding: 22px; box-shadow: 0 2px 12px rgba(0,0,0,.04); }
+  .pb-metric .v { font-size: 30px; font-weight: 800; color: {{ brand }}; }
+  .pb-metric .k { font-size: 11px; text-transform: uppercase; letter-spacing: 1.4px; color: #64748b; }
+  .pb-installer { border-left: 4px solid {{ brand }}; padding-left: 12px; }
+  .pb-cta { background: {{ brand }}; color: #0f172a; font-weight: 700;
+    padding: 12px 22px; border-radius: 999px; display:inline-block; }
+  .pb-attrib { font-size: 11px; color: #94a3b8; }
+</style>
+
+<div class="container my-3">
+  <section class="pb-hero">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+      <div>
+        <div class="small text-warning">SolarPro Proposal · Project {{ project['id'] }}</div>
+        <h1 class="mt-2 mb-1">{{ project['name'] }}</h1>
+        {% if data.get('location_label') %}
+        <div class="opacity-75"><i class="bi bi-geo-alt"></i> {{ data['location_label'] }}</div>
+        {% endif %}
+      </div>
+      {% if inst.get('logo_url') %}
+      <img src="{{ inst['logo_url'] }}" alt="{{ inst.get('company') }}" style="max-height:64px;background:#fff;padding:6px;border-radius:6px">
+      {% endif %}
+    </div>
+  </section>
+
+  <div class="row g-3 mt-2">
+    <div class="col-md-3"><div class="pb-card pb-metric">
+      <div class="v">{{ '%.2f'|format(results.get('pv_size_kw') or results.get('system_kw') or 0) }} kW</div>
+      <div class="k">System size</div></div></div>
+    <div class="col-md-3"><div class="pb-card pb-metric">
+      <div class="v">{{ data.get('currency','USD') }} {{ '{:,.0f}'.format((results.get('annual_savings_usd') or results.get('annual_savings') or 0)|float) }}</div>
+      <div class="k">Year-1 savings</div></div></div>
+    <div class="col-md-3"><div class="pb-card pb-metric">
+      <div class="v">{{ '%.1f'|format(results.get('payback_years') or 0) }} yr</div>
+      <div class="k">Payback</div></div></div>
+    <div class="col-md-3"><div class="pb-card pb-metric">
+      <div class="v">{{ '%.0f'|format(results.get('roi_pct') or results.get('irr_pct') or 0) }}%</div>
+      <div class="k">25-yr ROI</div></div></div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-md-7">
+      <div class="pb-card">
+        <h5>Project summary</h5>
+        <p class="text-secondary mb-2">
+          {% if results.get('summary') %}{{ results['summary'] }}{% else %}
+          A turnkey solar PV system designed for {{ project['name'] }}, sized to
+          maximise self-consumption and reduce grid spend across a 25-year horizon.
+          {% endif %}
+        </p>
+        {% if results.get('boq') %}
+        <h6 class="mt-3">BOQ at a glance</h6>
+        <ul class="small mb-0">
+          {% if results['boq'].get('modules_qty') %}<li>{{ results['boq']['modules_qty'] }} PV modules</li>{% endif %}
+          {% if results['boq'].get('inverter_kw') %}<li>{{ results['boq']['inverter_kw'] }} kW inverter capacity</li>{% endif %}
+          {% if results['boq'].get('battery_kwh') %}<li>{{ results['boq']['battery_kwh'] }} kWh battery storage</li>{% endif %}
+        </ul>
+        {% endif %}
+      </div>
+      <div class="pb-card mt-3">
+        <h5>3D shading preview</h5>
+        <a href="/project/{{ project['id'] }}/report/shading" class="text-decoration-none">
+          <div style="background:#0f172a;color:#fff;border-radius:10px;padding:40px;text-align:center">
+            Open interactive shading model →
+          </div>
+        </a>
+      </div>
+    </div>
+    <div class="col-md-5">
+      {% if inst.get('company') or inst.get('phone') %}
+      <div class="pb-card pb-installer">
+        <div class="small text-secondary">INSTALLER</div>
+        <div class="h5 mb-1">{{ inst.get('company','Your installer') }}</div>
+        {% if inst.get('phone') %}<div class="small"><i class="bi bi-telephone"></i> {{ inst['phone'] }}</div>{% endif %}
+        {% if inst.get('whatsapp') %}<div class="small"><i class="bi bi-whatsapp"></i> {{ inst['whatsapp'] }}</div>{% endif %}
+        {% if inst.get('email') %}<div class="small"><i class="bi bi-envelope"></i> {{ inst['email'] }}</div>{% endif %}
+      </div>
+      {% endif %}
+      <div class="pb-card mt-3 text-center">
+        <a href="#" class="pb-cta">Approve proposal</a>
+        <div class="mt-2"><a href="#" class="btn btn-sm btn-outline-secondary">Request changes</a></div>
+        <div class="mt-3"><a href="/share/{{ project['id'] }}" class="btn btn-sm btn-warning fw-semibold">
+          <i class="bi bi-share-fill"></i> Share this proposal
+        </a></div>
+      </div>
+      <p class="pb-attrib text-center mt-2">Powered by SolarPro Global</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

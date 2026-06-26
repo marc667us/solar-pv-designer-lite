@@ -35,10 +35,10 @@ Thumbs.db
 *.bak_*
 *.bak.*
 
-# Local curl / smoke-test artifacts
-_check.html
-public_*.html
-upgrade_rendered.html
+# Local curl / smoke-test artifacts (repo root only, not templates/)
+/_check.html
+/public_*.html
+/upgrade_rendered.html
 
 # Vault data + audit (created by docker-compose.vault.yml; sensitive)
 vault-data/
