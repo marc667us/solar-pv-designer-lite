@@ -183,11 +183,21 @@ def apply_tenant_guc(conn) -> bool:
 
     tenant_id = current_tenant_id()
     user_sub = current_user_sub()
+    ctx = get_request_context()
 
     # Empty string is a valid GUC value — Postgres treats it as "unset"
     # and `current_tenant_id()` in SQL returns NULL, so RLS denies.
     tenant_value = tenant_id or ""
     user_value = user_sub or ""
+
+    # SOC 2 Phase-7-prep (migration 015): also publish a coarse role
+    # signal so `current_user_is_admin()` in PG can evaluate the
+    # global-table strict policies. Any of the three platform admin
+    # roles collapse to the single 'admin' sentinel; everything else is
+    # empty. Keeping the SQL helper simple lets the role taxonomy evolve
+    # without touching the policies.
+    _ADMIN_ROLES = {"platform_super_admin", "marketplace_admin", "tenant_admin"}
+    role_value = "admin" if (ctx and _ADMIN_ROLES.intersection(ctx.roles or ())) else ""
 
     try:
         # set_config returns the value set; we don't read it back.
@@ -198,6 +208,10 @@ def apply_tenant_guc(conn) -> bool:
         conn.execute(
             "SELECT set_config('app.current_user', ?, true)",
             (user_value,),
+        )
+        conn.execute(
+            "SELECT set_config('app.current_role', ?, true)",
+            (role_value,),
         )
     except Exception as e:
         # GUC write failure is a hard error — without it RLS won't know
@@ -220,6 +234,7 @@ def clear_tenant_guc(conn) -> None:
     try:
         conn.execute("SELECT set_config('app.current_tenant', '', true)")
         conn.execute("SELECT set_config('app.current_user', '', true)")
+        conn.execute("SELECT set_config('app.current_role', '', true)")
     except Exception as e:
         log.warning("Failed to clear tenant GUC (non-fatal): %s", e)
 

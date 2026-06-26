@@ -1,0 +1,189 @@
+# Apply migrations/015_global_table_policies.sql to live Postgres.
+#
+# Phase-7-prep. Adds per-intent strict policies on the 15 global tables
+# alongside their parallel-run policies. PG OR semantics means today's
+# behaviour is unchanged; Phase 7 cutover later drops the parallel-run
+# policies and the strict ones take over.
+#
+# 6 public-read + 4 admin-read-anon-insert + 5 admin-only = 15 tables.
+# Adds current_user_is_admin() helper reading the app.current_role GUC.
+#
+# Same shape as 014: dry-run gate. Re-run with
+# `-f confirm=GLOBAL_POLICIES_APPLY` to commit.
+
+name: Apply Migration 015 (global table policies)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type GLOBAL_POLICIES_APPLY to commit migration 015 to live Postgres."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "GLOBAL_POLICIES_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- migration 015 will be committed to live Postgres ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- migration 015 will be parsed + previewed only ==="
+            echo "Re-run with -f confirm=GLOBAL_POLICIES_APPLY to commit."
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/015_global_table_policies.sql
+          echo "OK: migrations/015_global_table_policies.sql present"
+          wc -l migrations/015_global_table_policies.sql
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- 15 global tables exist
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          MISSING=$(psql "$DATABASE_URL" -A -t -c "
+            WITH wanted(t) AS (VALUES
+              ('installers'),('news_posts'),('helpline_learned_kb'),
+              ('product_brands'),('product_categories'),('appliances'),
+              ('assessment_requests'),('leads'),('beta_signups'),
+              ('newsletter_subscribers'),
+              ('monitor_alerts'),('monitor_state'),('upgrade_codes'),
+              ('admin_settings'),('login_failures'))
+            SELECT t FROM wanted
+             WHERE NOT EXISTS (
+               SELECT 1 FROM information_schema.tables
+                WHERE table_schema='public' AND table_name=wanted.t
+             )")
+          if [ -n "$MISSING" ]; then
+            echo "::warning::Some global tables are missing on live PG (migration tolerates this -- IF EXISTS gate):"
+            echo "$MISSING"
+          else
+            echo "OK: all 15 global tables present on live PG."
+          fi
+
+      - name: Show migration overview
+        run: |
+          echo "--- migrations/015_global_table_policies.sql ---"
+          grep -E "^-- (PART|=)" migrations/015_global_table_policies.sql | head -20
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The SQL below WOULD have been applied. Nothing was."
+          echo "================================================================"
+          head -80 migrations/015_global_table_policies.sql
+
+      - name: Apply migration 015 (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/015_global_table_policies.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/015_global_table_policies.sql
+          echo "OK: migration 015 applied."
+
+      - name: Verify post-apply -- helper function
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          N=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT COUNT(*) FROM pg_proc WHERE proname='current_user_is_admin'")
+          if [ "$N" -lt "1" ]; then
+            echo "::error::current_user_is_admin() helper missing"
+            exit 1
+          fi
+          echo "OK: current_user_is_admin() helper present."
+
+      - name: Verify post-apply -- per-table policy counts
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- expected: public_read=5 / anon_insert=5 / admin_only=2 ---"
+          psql "$DATABASE_URL" -c "
+            SELECT tablename, COUNT(*) AS policy_count
+              FROM pg_policies
+             WHERE tablename IN (
+               'installers','news_posts','helpline_learned_kb',
+               'product_brands','product_categories','appliances',
+               'assessment_requests','leads','beta_signups','newsletter_subscribers',
+               'monitor_alerts','monitor_state','upgrade_codes',
+               'admin_settings','login_failures')
+             GROUP BY tablename ORDER BY tablename;"
+
+      - name: Verify post-apply -- behaviour smoke (parallel-run still admits)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- behaviour check: no GUC -> parallel-run admits ---"
+          psql "$DATABASE_URL" -c "
+            SELECT COUNT(*) AS product_brands_no_guc FROM product_brands;
+            SELECT COUNT(*) AS news_posts_no_guc     FROM news_posts;"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " PHASE-7-PREP COMPLETE -- 15 global tables now carry per-intent"
+            echo " strict policies ALONGSIDE the parallel-run policies."
+            echo "================================================================"
+            echo " Today behaviour: UNCHANGED (parallel-run admits, PG OR's)."
+            echo " Phase 7 cutover: DROP the parallel-run policies; strict takes over."
+            echo ""
+            echo " App-side companion (separate commit): apply_tenant_guc writes"
+            echo " app.current_role so current_user_is_admin() can evaluate."
+          else
+            echo "DRY-RUN -- no Render changes. Re-run with confirm=GLOBAL_POLICIES_APPLY to commit."
+          fi

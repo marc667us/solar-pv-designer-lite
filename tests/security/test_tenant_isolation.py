@@ -38,6 +38,7 @@ def _make_ctx(
     user_id: str = "user-sub-1",
     is_service_account: bool = False,
     azp: str | None = None,
+    roles: tuple[str, ...] = (),
 ) -> RequestContext:
     """Build a synthetic RequestContext for the test app's `g.kc_ctx`."""
     return RequestContext(
@@ -45,7 +46,7 @@ def _make_ctx(
         tenant_id=tenant_id,
         tenant_name=None,
         user_type=None,
-        roles=(),
+        roles=roles,
         scopes=(),
         supplier_id=None,
         engineering_company_id=None,
@@ -191,17 +192,20 @@ _FakePgConn.__qualname__ = "_PgConnAdapter"
 _FakePgConn.__name__ = "_PgConnAdapter"
 
 
-def test_apply_tenant_guc_writes_two_set_configs(monkeypatch, flask_app):
+def test_apply_tenant_guc_writes_three_set_configs(monkeypatch, flask_app):
     monkeypatch.setenv("KEYCLOAK_ENABLED", "true")
     conn = _FakePgConn()
     with flask_app.test_request_context("/peek"):
         g.kc_ctx = _make_ctx(tenant_id="t-99", user_id="u-99")
         assert tc.apply_tenant_guc(conn) is True
-    assert len(conn.calls) == 2
+    assert len(conn.calls) == 3
     assert "app.current_tenant" in conn.calls[0][0]
     assert conn.calls[0][1] == ("t-99",)
     assert "app.current_user" in conn.calls[1][0]
     assert conn.calls[1][1] == ("u-99",)
+    assert "app.current_role" in conn.calls[2][0]
+    # No admin role on this ctx -> empty string GUC value.
+    assert conn.calls[2][1] == ("",)
 
 
 def test_apply_tenant_guc_runs_even_with_env_unset(monkeypatch, flask_app):
@@ -212,7 +216,30 @@ def test_apply_tenant_guc_runs_even_with_env_unset(monkeypatch, flask_app):
     with flask_app.test_request_context("/peek"):
         g.kc_ctx = _make_ctx(tenant_id="t-99", user_id="u-99")
         assert tc.apply_tenant_guc(conn) is True
-    assert len(conn.calls) == 2
+    assert len(conn.calls) == 3
+
+
+def test_apply_tenant_guc_maps_admin_role_to_admin_guc(monkeypatch, flask_app):
+    """SOC 2 Phase-7-prep (migration 015): any of the three platform
+    admin roles collapse to the 'admin' sentinel that the PG helper
+    `current_user_is_admin()` checks. Non-admin roles remain ''."""
+    monkeypatch.setenv("KEYCLOAK_ENABLED", "true")
+    for role in ("platform_super_admin", "marketplace_admin", "tenant_admin"):
+        conn = _FakePgConn()
+        with flask_app.test_request_context("/peek"):
+            g.kc_ctx = _make_ctx(tenant_id="t-99", roles=(role,))
+            tc.apply_tenant_guc(conn)
+        assert conn.calls[2][0].endswith(
+            "set_config('app.current_role', ?, true)"
+        ), f"role={role}: wrong SQL"
+        assert conn.calls[2][1] == ("admin",), f"role={role}: not collapsed to 'admin'"
+
+    # Non-admin role -> empty string (i.e. helper returns FALSE).
+    conn = _FakePgConn()
+    with flask_app.test_request_context("/peek"):
+        g.kc_ctx = _make_ctx(tenant_id="t-99", roles=("supplier_user",))
+        tc.apply_tenant_guc(conn)
+    assert conn.calls[2][1] == ("",)
 
 
 # ── SOC 2 M1.7 -- request-hook observability ────────────────────────────
@@ -293,6 +320,7 @@ def test_apply_tenant_guc_sends_empty_string_when_tenant_missing(monkeypatch, fl
         tc.apply_tenant_guc(conn)
     assert conn.calls[0][1] == ("",)        # tenant_id missing -> ''
     assert conn.calls[1][1] == ("u-9",)
+    assert conn.calls[2][1] == ("",)        # no admin role -> ''
 
 
 def test_apply_tenant_guc_propagates_db_error(monkeypatch, flask_app):
@@ -312,14 +340,15 @@ def test_apply_tenant_guc_propagates_db_error(monkeypatch, flask_app):
             tc.apply_tenant_guc(_Boom())
 
 
-def test_clear_tenant_guc_resets_both(monkeypatch, flask_app):
+def test_clear_tenant_guc_resets_all_three(monkeypatch, flask_app):
     monkeypatch.setenv("KEYCLOAK_ENABLED", "true")
     conn = _FakePgConn()
     with flask_app.test_request_context("/peek"):
         tc.clear_tenant_guc(conn)
-    assert len(conn.calls) == 2
+    assert len(conn.calls) == 3
     assert conn.calls[0][0].endswith("set_config('app.current_tenant', '', true)")
     assert conn.calls[1][0].endswith("set_config('app.current_user', '', true)")
+    assert conn.calls[2][0].endswith("set_config('app.current_role', '', true)")
 
 
 def test_clear_tenant_guc_noop_on_sqlite():
