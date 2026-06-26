@@ -1,19 +1,79 @@
 {% extends "base.html" %}
 {% block title %}SOC 2 Readiness Report — SolarPro Admin{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  .soc2-cover {
+    background: linear-gradient(135deg, #0b2545 0%, #1e3a8a 60%, #b45309 100%);
+    color: #fff; border-radius: 12px; padding: 28px 32px; margin-bottom: 24px;
+  }
+  .soc2-cover h1 { font-size: 1.9rem; font-weight: 800; letter-spacing: 0.5px; }
+  .soc2-cover .meta { font-size: 0.9rem; opacity: 0.85; }
+  .soc2-section { background: #11161f; border: 1px solid #1f2937;
+                  border-radius: 10px; padding: 22px 24px; margin-bottom: 22px; }
+  .soc2-section h2 { color: #fbbf24; font-size: 1.2rem;
+                     border-bottom: 2px solid #b45309; padding-bottom: 6px;
+                     margin-bottom: 12px; }
+  .soc2-section h3 { color: #93c5fd; font-size: 1.0rem; margin-top: 14px; }
+  .soc2-section p, .soc2-section li { color: #d1d5db; font-size: 0.92rem; line-height: 1.55; }
+  .soc2-gauge { position: relative; width: 220px; height: 220px; margin: 0 auto; }
+  .soc2-gauge-value { position: absolute; inset: 0;
+                      display: flex; align-items: center; justify-content: center;
+                      font-size: 2.6rem; font-weight: 800; }
+  .soc2-chip { display: inline-block; padding: 3px 9px; border-radius: 12px;
+               font-size: 0.78rem; font-weight: 700; letter-spacing: 0.3px; }
+  .chip-pass { background: #064e3b; color: #6ee7b7; }
+  .chip-warn { background: #78350f; color: #fcd34d; }
+  .chip-fail { background: #7f1d1d; color: #fca5a5; }
+  .soc2-section table { background: transparent; }
+  .soc2-section table th { background: #1e3a5f; color: #fff; }
+  .soc2-section table td { color: #e5e7eb; }
+  .soc2-footer-note { font-size: 0.8rem; color: #9ca3af; margin-top: 18px; }
+  @media print {
+    .no-print { display: none !important; }
+    .soc2-section, .soc2-cover { break-inside: avoid; page-break-inside: avoid; }
+    .soc2-section { background: #fff !important; color: #111 !important; border-color: #ccc; }
+    .soc2-section p, .soc2-section li { color: #1f2937 !important; }
+    .soc2-section h2 { color: #b45309 !important; }
+    .soc2-cover { background: #fff !important; color: #111 !important; border: 2px solid #b45309; }
+  }
+</style>
+{% endblock %}
 {% block content %}
 <div class="container py-4">
 
-  <div class="d-flex align-items-center justify-content-between mb-3">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="no-print">
+        {% for cat, msg in messages %}
+          <div class="alert alert-{{ 'danger' if cat == 'error' else cat }} alert-dismissible fade show" role="alert">
+            {{ msg }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- Toolbar -->
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 no-print">
     <div>
-      <h2 class="fw-bold mb-0">
-        <i class="bi bi-shield-fill-check text-success me-2"></i>
-        SOC 2 Type II — Readiness Report
+      <h2 class="fw-bold mb-0 d-flex align-items-center">
+        <i class="bi bi-shield-fill-check text-warning me-2"></i>
+        SOC 2 Readiness Report
       </h2>
       <p class="text-muted mb-0 small">
-        Generated {{ report.generated_at }} · audit engine {{ report.version }}
+        Generated {{ report.generated_at }} · audit engine v{{ report.version }}
       </p>
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('admin_soc2_report_pdf') }}" class="btn btn-warning btn-sm">
+        <i class="bi bi-file-pdf me-1"></i>Download PDF
+      </a>
+      <button type="button" class="btn btn-outline-light btn-sm"
+              data-bs-toggle="modal" data-bs-target="#soc2EmailModal">
+        <i class="bi bi-envelope me-1"></i>Email report
+      </button>
       <button class="btn btn-outline-light btn-sm" onclick="window.print()">
         <i class="bi bi-printer me-1"></i>Print
       </button>
@@ -23,46 +83,232 @@
     </div>
   </div>
 
-  <!-- Score card -->
-  <div class="card bg-dark border-success mb-4">
-    <div class="card-body text-center">
-      <div class="display-3 fw-bold
-        {% if report.score >= 80 %}text-success
-        {% elif report.score >= 50 %}text-warning
-        {% else %}text-danger{% endif %}">
-        {{ report.score }}%
-      </div>
-      <div class="text-muted">Overall readiness score</div>
-      <div class="mt-3">
-        <span class="badge bg-success me-2">{{ report.counts.pass }} pass</span>
-        <span class="badge bg-warning text-dark me-2">{{ report.counts.warn }} warn</span>
-        <span class="badge bg-danger">{{ report.counts.fail }} fail</span>
+  <!-- Email modal -->
+  <div class="modal fade no-print" id="soc2EmailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content bg-dark text-light border-secondary">
+        <form method="POST" action="{{ url_for('admin_soc2_report_email') }}">
+          <input type="hidden" name="_csrf" value="{{ session.get('_csrf','') }}">
+          <div class="modal-header border-secondary">
+            <h5 class="modal-title">
+              <i class="bi bi-envelope me-2"></i>Email SOC 2 readiness report
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <label for="soc2EmailTo" class="form-label">Recipient email</label>
+            <input type="email" required class="form-control" id="soc2EmailTo" name="to"
+                   placeholder="auditor@example.com" maxlength="200">
+            <div class="form-text text-muted">
+              The full PDF report (Sections I-V, all {{ report.findings|length }} findings) will be attached.
+            </div>
+          </div>
+          <div class="modal-footer border-secondary">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-warning btn-sm">
+              <i class="bi bi-send me-1"></i>Send
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
 
-  <!-- Findings table -->
-  <div class="card bg-dark border-secondary mb-4">
-    <div class="card-header"><strong>Findings</strong></div>
+  <!-- ════════════ COVER ════════════ -->
+  <div class="soc2-cover">
+    <div class="row align-items-center g-3">
+      <div class="col-md-7">
+        <div class="meta mb-1">SOC 2 READINESS REPORT</div>
+        <h1>SolarPro Global Platform</h1>
+        <div class="meta">Internal Readiness Assessment (Pre-Audit)</div>
+        <div class="meta">Reporting period: point-in-time as of {{ report.generated_at }}</div>
+        <div class="meta mt-3">
+          Trust Services Categories covered: <strong>Security (CC), Availability (A1), Confidentiality (C1)</strong>
+        </div>
+        <div class="meta">Prepared by: Internal SOC 2 Compliance Function</div>
+      </div>
+      <div class="col-md-5 text-center">
+        <div class="soc2-gauge">
+          <canvas id="gaugeChart"></canvas>
+          <div class="soc2-gauge-value
+            {% if report.score >= 80 %}text-success
+            {% elif report.score >= 50 %}text-warning
+            {% else %}text-danger{% endif %}">
+            {{ report.score }}%
+          </div>
+        </div>
+        <div class="mt-2">
+          <span class="soc2-chip chip-pass">{{ report.counts.pass }} pass</span>
+          <span class="soc2-chip chip-warn">{{ report.counts.warn }} warn</span>
+          <span class="soc2-chip chip-fail">{{ report.counts.fail }} fail</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════ INFOGRAPHIC ROW ════════════ -->
+  <div class="row g-3 mb-3">
+    <div class="col-md-4">
+      <div class="soc2-section h-100">
+        <h3 class="mb-2 small text-uppercase text-muted">Control distribution</h3>
+        <canvas id="donutChart" style="max-height: 220px;"></canvas>
+      </div>
+    </div>
+    <div class="col-md-8">
+      <div class="soc2-section h-100">
+        <h3 class="mb-2 small text-uppercase text-muted">Findings by milestone</h3>
+        <canvas id="barChart" style="max-height: 220px;"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════ SECTION I — Management's Assertion ════════════ -->
+  <div class="soc2-section">
+    <h2>I. Management's Assertion</h2>
+    <p>Management of SolarPro Global is responsible for designing, implementing, and operating
+       the controls described in this report to provide reasonable assurance that the service
+       commitments to user entities and the applicable Trust Services Criteria (Security, Availability,
+       Confidentiality) are met. The criteria selected are the AICPA Trust Services Criteria (2017).</p>
+    <p>Based on the controls described and tested in Sections III and IV, management asserts the
+       controls were <strong>suitably designed</strong> as of the reporting date. Operating effectiveness
+       over a 6+ month period will be established by an external Service Auditor in a future Type II
+       engagement.</p>
+  </div>
+
+  <!-- ════════════ SECTION II — System Description ════════════ -->
+  <div class="soc2-section">
+    <h2>II. Description of the Service Organization's System</h2>
+
+    <h3>A. Services provided</h3>
+    <p>SolarPro Global is a SaaS platform supporting engineering design of residential/commercial/industrial PV solar
+       systems, BOM/BOQ generation with hierarchical project/building/floor structures, a multi-vendor
+       Marketplace + RFQ workflow, multi-tenant project workspaces with role-based access (admin / owner /
+       technical / sales / supplier / procurement specialist), and proposal generation.</p>
+
+    <h3>B. Principal service commitments</h3>
+    <ul>
+      <li><strong>Confidentiality</strong> of customer designs, BOMs, BOQs, and pricing intelligence within the tenant boundary.</li>
+      <li><strong>Availability</strong> of the SaaS platform during reasonable business hours.</li>
+      <li><strong>Integrity</strong> of engineering calculations, financial computations, and audit trails.</li>
+      <li><strong>Compliance</strong> with applicable contractual data-protection obligations.</li>
+    </ul>
+
+    <h3>C. System components</h3>
+    <div class="row g-2">
+      <div class="col-md-6">
+        <strong>Infrastructure</strong>
+        <ul>
+          <li>Compute: Render PaaS (prod)</li>
+          <li>Database: Render-managed PostgreSQL; SQLite (dev only)</li>
+          <li>IdP: Keycloak at auth.aiappinvent.com</li>
+          <li>CDN/DNS: Cloudflare</li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <strong>Software</strong>
+        <ul>
+          <li>Python 3.12 + Flask + Waitress / Gunicorn</li>
+          <li>Authlib OIDC client; PyJWT; JWKS cached</li>
+          <li>psycopg2; Postgres RLS on tenant tables</li>
+          <li>markdown-pdf for documents; Brevo for email</li>
+          <li>GitHub Actions security CI (semgrep, pip-audit, bandit, gitleaks)</li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <strong>People</strong>
+        <ul>
+          <li>Service Org Owner (founder; CEO equivalent)</li>
+          <li>Software Engineering function</li>
+          <li>Internal SOC 2 Compliance function</li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <strong>Procedures</strong>
+        <ul>
+          <li>Change mgmt via Git PRs + security CI</li>
+          <li>Production migrations gated by confirm-tokens</li>
+          <li>Access mgmt via Keycloak realm roles</li>
+          <li>Backups: nightly pg_dump 03:00 UTC</li>
+          <li>Evidence collection: nightly 03:30 UTC</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>D. Boundaries</h3>
+    <p>In scope: SolarPro Flask app, Render-managed Postgres, Keycloak IdP, GitHub repo + workflows.
+       <em>Carved out (subservice orgs):</em> Render PaaS, Brevo, Paystack, Stripe, Cloudflare, OpenRouter / Ollama / GitHub Models inference.</p>
+
+    <h3>E. Identified risks &amp; mitigations</h3>
     <div class="table-responsive">
-      <table class="table table-dark table-hover mb-0 align-middle">
+      <table class="table table-sm">
+        <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+        <tbody>
+          <tr><td>Unauthorized cross-tenant data access</td>
+              <td>Postgres RLS; <code>tenant_id</code> on tenant-owned tables; M1.7 tenant-context hooks</td></tr>
+          <tr><td>Authentication compromise</td>
+              <td>Keycloak OIDC + PKCE S256; 14-day rollback workflow; MFA proposal drafted</td></tr>
+          <tr><td>Data integrity / orphan rows</td>
+              <td>FOREIGN KEY constraints across owned-child + user-owned chains (migration 013)</td></tr>
+          <tr><td>Data loss</td>
+              <td>Nightly pg_dump backup (M4.1); 30-day artefact retention</td></tr>
+          <tr><td>Vendor compromise</td>
+              <td>semgrep + pip-audit + bandit + gitleaks on every push</td></tr>
+          <tr><td>Service outage</td>
+              <td>Render auto-restart; <code>/api/health/*</code> for external uptime monitoring</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>F. Complementary user entity controls</h3>
+    <ul>
+      <li>Establish strong-password + MFA practices on the Keycloak account.</li>
+      <li>Recertify role assignments for the organization periodically.</li>
+      <li>Promptly notify SolarPro support of suspected unauthorized access.</li>
+      <li>Logically separate production and test workspaces.</li>
+    </ul>
+  </div>
+
+  <!-- ════════════ SECTION III — TSC ════════════ -->
+  <div class="soc2-section">
+    <h2>III. Trust Services Categories Covered</h2>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>Category</th><th>Symbol</th><th>In scope</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Security (Common Criteria)</td><td>CC1-CC9</td><td><span class="soc2-chip chip-pass">YES</span></td><td>Primary focus</td></tr>
+          <tr><td>Availability</td><td>A1.1-A1.3</td><td><span class="soc2-chip chip-warn">PARTIAL</span></td><td>A1.2 backups covered; A1.3 capacity planning pending</td></tr>
+          <tr><td>Confidentiality</td><td>C1.1-C1.2</td><td><span class="soc2-chip chip-pass">YES</span></td><td>RLS + tenant isolation</td></tr>
+          <tr><td>Processing Integrity</td><td>PI1.x</td><td><span class="soc2-chip chip-fail">NO</span></td><td>Deferred</td></tr>
+          <tr><td>Privacy</td><td>P1-P8</td><td><span class="soc2-chip chip-fail">NO</span></td><td>Deferred</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ════════════ SECTION IV — Controls + Test Results ════════════ -->
+  <div class="soc2-section">
+    <h2>IV. Description of Controls and Test Results</h2>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
         <thead>
           <tr>
-            <th style="width: 8%">Status</th>
-            <th style="width: 32%">Control</th>
+            <th style="width: 5%">#</th>
+            <th style="width: 8%">Result</th>
+            <th style="width: 38%">Control</th>
             <th>Detail</th>
           </tr>
         </thead>
         <tbody>
         {% for f in report.findings %}
           <tr>
+            <td class="text-muted">{{ loop.index }}</td>
             <td>
               {% if f.status == 'pass' %}
-                <span class="badge bg-success">PASS</span>
+                <span class="soc2-chip chip-pass">PASS</span>
               {% elif f.status == 'warn' %}
-                <span class="badge bg-warning text-dark">WARN</span>
+                <span class="soc2-chip chip-warn">WARN</span>
               {% else %}
-                <span class="badge bg-danger">FAIL</span>
+                <span class="soc2-chip chip-fail">FAIL</span>
               {% endif %}
             </td>
             <td class="fw-semibold">{{ f.label }}</td>
@@ -74,11 +320,122 @@
     </div>
   </div>
 
-  <div class="text-muted small">
-    This report is generated by live introspection of the running app + database.
-    It is NOT a substitute for an external audit — it is an internal readiness
-    signal mapped to <code>docs/SOC2_IMPLEMENTATION_PLAN.md</code>.
+  <!-- ════════════ SECTION V — Other Information ════════════ -->
+  <div class="soc2-section">
+    <h2>V. Other Information Provided by Management</h2>
+    <h3>Known limitations</h3>
+    <ol>
+      <li><strong>Self-assessment only.</strong> Generated by automated introspection; an external Service Auditor (SSAE 18) is required for attestation. Target: Q1 2027 (Type I) → Q3 2027 (Type II, 6-month observation window).</li>
+      <li><strong>Point-in-time view.</strong> Describes controls at this moment, not a period of operation. SOC 2 Type II requires demonstrated operating effectiveness over 6-12 months.</li>
+      <li><strong>Parallel-run RLS.</strong> Production policies currently include a <code>tenant_id IS NULL</code> escape for gradual rollout. Phase 7 cutover will FORCE ROW LEVEL SECURITY after operational confirmation.</li>
+      <li><strong>Subservice carve-out.</strong> Excludes controls operated by Render, Brevo, Paystack, Stripe, Cloudflare. User entities should review those providers' SOC 2 reports directly.</li>
+    </ol>
+    <h3>Engagement contact</h3>
+    <p>Management contact: <a href="mailto:support@aiappinvent.com">support@aiappinvent.com</a><br>
+       Security incident reporting: <code>SECURITY</code>-prefixed subject to the same address.</p>
   </div>
 
+  <p class="soc2-footer-note">
+    Report generated {{ report.generated_at }} by <code>/admin/soc2/report</code> (audit engine v{{ report.version }}).
+    This page mirrors the PDF (Download button at top); the PDF is also the artifact attached when
+    Email Report is used.
+  </p>
+
 </div>
+
+<script>
+(function() {
+  const passed = {{ report.counts.pass }};
+  const warned = {{ report.counts.warn }};
+  const failed = {{ report.counts.fail }};
+  const score  = {{ report.score }};
+
+  // ── Gauge ──────────────────────────────────────────────────────
+  new Chart(document.getElementById('gaugeChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Score', 'Remaining'],
+      datasets: [{
+        data: [score, Math.max(0, 100 - score)],
+        backgroundColor: [
+          score >= 80 ? '#22c55e' : (score >= 50 ? '#f59e0b' : '#ef4444'),
+          '#1f2937'
+        ],
+        borderWidth: 0,
+        cutout: '78%',
+        circumference: 360,
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      animation: { duration: 800 },
+    }
+  });
+
+  // ── Donut ──────────────────────────────────────────────────────
+  new Chart(document.getElementById('donutChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Pass', 'Warn', 'Fail'],
+      datasets: [{
+        data: [passed, warned, failed],
+        backgroundColor: ['#22c55e', '#f59e0b', '#ef4444'],
+        borderColor: '#0b1220',
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#d1d5db', font: { size: 11 } } },
+      }
+    }
+  });
+
+  // ── Bar (findings grouped by milestone prefix M1 / M2 / M3 / M4 / Other) ──
+  const findings = [
+    {% for f in report.findings %}
+      { label: {{ f.label|tojson }}, status: {{ f.status|tojson }} }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ];
+  function milestonePrefix(label) {
+    const m = label.match(/^M(\d+)\./);
+    return m ? ('M' + m[1]) : 'Other';
+  }
+  const groups = {};
+  findings.forEach(f => {
+    const k = milestonePrefix(f.label);
+    if (!groups[k]) groups[k] = { pass: 0, warn: 0, fail: 0 };
+    groups[k][f.status] = (groups[k][f.status] || 0) + 1;
+  });
+  const labels = Object.keys(groups).sort();
+  const passData = labels.map(k => groups[k].pass || 0);
+  const warnData = labels.map(k => groups[k].warn || 0);
+  const failData = labels.map(k => groups[k].fail || 0);
+
+  new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Pass', data: passData, backgroundColor: '#22c55e' },
+        { label: 'Warn', data: warnData, backgroundColor: '#f59e0b' },
+        { label: 'Fail', data: failData, backgroundColor: '#ef4444' },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, ticks: { color: '#d1d5db' }, grid: { color: '#1f2937' } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: '#d1d5db', precision: 0 }, grid: { color: '#1f2937' } }
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#d1d5db', font: { size: 11 } } },
+      }
+    }
+  });
+})();
+</script>
 {% endblock %}
