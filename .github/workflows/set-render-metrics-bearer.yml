@@ -1,0 +1,195 @@
+# Set METRICS_BEARER on the Render Solar service env, non-destructively.
+#
+# SOC 2 M3.4 prerequisite: with METRICS_BEARER unset, /metrics fails
+# closed (401) and Prometheus can't scrape. This workflow flips that
+# switch.
+#
+# NON-DESTRUCTIVE: uses the per-key PUT endpoint
+#   PUT /v1/services/{id}/env-vars/METRICS_BEARER
+# NOT the bulk replace endpoint
+#   PUT /v1/services/{id}/env-vars   (would wipe KC_HOSTNAME etc.)
+#
+# Default mode is DRY-RUN. Re-run with `-f confirm=SET_METRICS_BEARER`
+# to commit.
+#
+# Operator pre-step (one-time):
+#   python -c "import secrets; print(secrets.token_hex(32))"
+#   gh secret set METRICS_BEARER --body "<that hex string>"
+#
+# Then trigger:
+#   gh workflow run "Set Render METRICS_BEARER" -f confirm=SET_METRICS_BEARER
+#
+# After it lands, copy the same hex value into your observability host:
+#   infra/observability/secrets/metrics-bearer
+# so Prometheus scrapes with the matching credential.
+
+name: Set Render METRICS_BEARER
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type SET_METRICS_BEARER to commit."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      METRICS_BEARER:    ${{ secrets.METRICS_BEARER }}
+      CONFIRM:           ${{ inputs.confirm }}
+    steps:
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "SET_METRICS_BEARER" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- METRICS_BEARER will be written to Render env ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- nothing will be written ==="
+            echo "Re-run with -f confirm=SET_METRICS_BEARER to commit."
+          fi
+
+      - name: Verify METRICS_BEARER GH secret is present
+        run: |
+          if [ -z "$METRICS_BEARER" ]; then
+            echo "::error::METRICS_BEARER GH secret is not set."
+            echo ""
+            echo "One-time bootstrap:"
+            echo "  python -c \"import secrets; print(secrets.token_hex(32))\""
+            echo "  gh secret set METRICS_BEARER --body \"<that hex>\""
+            echo ""
+            echo "Then re-run this workflow."
+            exit 1
+          fi
+          LEN=${#METRICS_BEARER}
+          echo "OK: METRICS_BEARER GH secret present (length=$LEN)."
+          if [ "$LEN" -lt 32 ]; then
+            echo "::warning::METRICS_BEARER is only $LEN chars; recommend >= 64 (32 hex bytes)."
+          fi
+
+      - name: Verify Render API key + service id
+        run: |
+          if [ -z "$RENDER_API_KEY" ]; then
+            echo "::error::RENDER_API_KEY GH secret not set."; exit 1
+          fi
+          if [ -z "$RENDER_SERVICE_ID" ]; then
+            echo "::error::RENDER_SERVICE_ID GH secret not set."; exit 1
+          fi
+          echo "OK: Render API + service id secrets present."
+
+      - name: Pre-flight -- check whether METRICS_BEARER is already set on Render
+        run: |
+          set -e
+          STATUS=$(curl -s -o /tmp/preflight.json -w "%{http_code}" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/METRICS_BEARER")
+          echo "GET /env-vars/METRICS_BEARER -> HTTP $STATUS"
+          if [ "$STATUS" = "200" ]; then
+            echo "  Pre-state: METRICS_BEARER already exists on Render env (will be OVERWRITTEN)."
+          elif [ "$STATUS" = "404" ]; then
+            echo "  Pre-state: METRICS_BEARER not present yet -- workflow will CREATE it."
+          else
+            echo "::warning::Unexpected pre-flight status $STATUS; continuing anyway."
+            head -c 400 /tmp/preflight.json || true
+          fi
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The single-key PUT would be:"
+          echo "    PUT https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/METRICS_BEARER"
+          echo "    body: {\"value\": <redacted>}  (length=${#METRICS_BEARER})"
+          echo ""
+          echo "  After the write a deploy would be triggered so the app reads"
+          echo "  the new env on next boot. No other env vars are touched."
+          echo "================================================================"
+
+      - name: Apply -- single-key PUT (non-destructive)
+        if: env.MODE == 'apply'
+        run: |
+          set -e
+          # jq builds the JSON body so the secret never appears on the curl
+          # command line (avoids shell-escaping bugs + ps-aux leakage).
+          BODY=$(jq -nc --arg v "$METRICS_BEARER" '{value: $v}')
+          RESPONSE=$(curl -fsS -X PUT \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/METRICS_BEARER" \
+            -d "$BODY")
+          # Render returns either {"envVar": {...}} OR the envVar inline
+          # depending on API version -- accept both.
+          KEY=$(python3 -c "
+          import json, sys
+          d = json.loads(sys.argv[1])
+          ev = d.get('envVar') if isinstance(d, dict) and 'envVar' in d else d
+          print((ev or {}).get('key', '') if isinstance(ev, dict) else '')
+          " "$RESPONSE")
+          if [ "$KEY" = "METRICS_BEARER" ]; then
+            echo "OK: METRICS_BEARER set on Render service env (non-destructive single-key PUT)."
+          else
+            echo "::error::Unexpected response from Render. Raw (first 400 chars):"
+            echo "$RESPONSE" | head -c 400
+            exit 1
+          fi
+
+      - name: Verify post-apply -- env var key exists
+        if: env.MODE == 'apply'
+        run: |
+          set -e
+          STATUS=$(curl -s -o /tmp/post.json -w "%{http_code}" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars/METRICS_BEARER")
+          if [ "$STATUS" = "200" ]; then
+            echo "OK: METRICS_BEARER GET returns 200 (value not printed)."
+          else
+            echo "::error::Post-apply GET returned $STATUS"
+            head -c 400 /tmp/post.json || true
+            exit 1
+          fi
+
+      - name: Trigger deploy so the app reads the new env
+        if: env.MODE == 'apply'
+        run: |
+          set -e
+          DEPLOY=$(curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            -d '{"clearCache":"do_not_clear"}')
+          DEPLOY_ID=$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('id',''))" "$DEPLOY")
+          if [ -n "$DEPLOY_ID" ]; then
+            echo "OK: Render deploy triggered (id=$DEPLOY_ID). App will pick up METRICS_BEARER on next boot."
+          else
+            echo "::warning::Deploy trigger returned no id. Raw:"
+            echo "$DEPLOY" | head -c 400
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " METRICS_BEARER LIVE on Render."
+            echo "================================================================"
+            echo " Next steps for the observability host:"
+            echo "   mkdir -p infra/observability/secrets"
+            echo "   echo -n \"\$METRICS_BEARER\" > infra/observability/secrets/metrics-bearer"
+            echo "   docker compose -f infra/observability/docker-compose.yml up -d"
+            echo ""
+            echo " Verify on Render (after redeploy lands, ~1-2 min):"
+            echo "   curl -H \"Authorization: Bearer <token>\" https://solarpro.aiappinvent.com/metrics | head -20"
+            echo ""
+            echo " SOC 2 dashboard check 'M3.4 Prometheus + Loki + Grafana wired'"
+            echo " should flip from WARN -> PASS once /metrics returns 200."
+          else
+            echo "DRY-RUN -- no Render changes. Re-run with confirm=SET_METRICS_BEARER to commit."
+          fi
