@@ -135,12 +135,14 @@
             <div>
               <div class="fw-bold" style="color:#e0e0f0">
                 {% set _is_on_inline = (online_ids is defined and u.id in online_ids) %}
-                {# 2026-06-24: deeper green + larger dot + multi-layer glow so the indicator is unmistakable on dark theme. #}
+                {# 2026-06-24: deeper green + larger dot + multi-layer glow so the indicator is unmistakable on dark theme.
+                   2026-06-26: bump the offline grey to a lighter shade with a subtle outer ring so the dot is visible
+                   on EVERY row, not just the online ones. Owner ask: "must show for every user". #}
                 <span class="me-1" title="{{ 'Online now' if _is_on_inline else 'Offline' }}"
                       style="display:inline-block;width:12px;height:12px;border-radius:50%;
-                             background:{{ '#16a34a' if _is_on_inline else '#5a5a82' }};
-                             border:2px solid {{ '#0f6b2e' if _is_on_inline else '#444466' }};
-                             {{ 'box-shadow:0 0 8px 2px #16a34a, 0 0 14px 1px #22c55e88;' if _is_on_inline else '' }}
+                             background:{{ '#16a34a' if _is_on_inline else '#8a8ab8' }};
+                             border:2px solid {{ '#0f6b2e' if _is_on_inline else '#5a5a82' }};
+                             {% if _is_on_inline %}box-shadow:0 0 8px 2px #16a34a, 0 0 14px 1px #22c55e88;{% else %}box-shadow:0 0 0 2px rgba(138,138,184,.18);{% endif %}
                              vertical-align:middle"></span>
                 {{ u.username }}
                 {% if u.is_admin %}
@@ -172,13 +174,16 @@
         </td>
         <td style="padding:10px 8px">
           {# Mirror the inline dot from the username column so the
-             email row also carries the live online indicator. #}
+             email row also carries the live online indicator. Owner ask
+             2026-06-26: the dot must be visible on EVERY user, online or
+             offline -- bumped the grey to a lighter shade with a subtle
+             ring so it's never invisible. #}
           {% set _is_on_email = (online_ids is defined and u.id in online_ids) %}
           <span class="me-1" title="{{ 'Online now' if _is_on_email else 'Offline' }}"
-                style="display:inline-block;width:8px;height:8px;border-radius:50%;
-                       background:{{ '#16a34a' if _is_on_email else '#5a5a82' }};
-                       border:1px solid {{ '#0f6b2e' if _is_on_email else '#444466' }};
-                       {{ 'box-shadow:0 0 6px #16a34a;' if _is_on_email else '' }}
+                style="display:inline-block;width:9px;height:9px;border-radius:50%;
+                       background:{{ '#16a34a' if _is_on_email else '#8a8ab8' }};
+                       border:1px solid {{ '#0f6b2e' if _is_on_email else '#5a5a82' }};
+                       {% if _is_on_email %}box-shadow:0 0 6px #16a34a;{% else %}box-shadow:0 0 0 2px rgba(138,138,184,.18);{% endif %}
                        vertical-align:middle"></span>
           <a href="mailto:{{ u.email }}" class="text-info text-decoration-none" style="font-size:11px">{{ u.email }}</a>
         </td>
