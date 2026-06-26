@@ -114,26 +114,124 @@ limiter = Limiter(
 )
 
 # ─── Security headers (applied after every response) ──────────────────────────
+# SOC 2 hardening 2026-06-26 -- tightened CSP + HSTS / COOP / CORP /
+# Permissions-Policy; opt-in CORS via CORS_ALLOWED_ORIGINS env (comma-list);
+# CSP violation reporter at POST /api/csp-report.
+
+_KC_ORIGIN     = (os.environ.get("KEYCLOAK_ORIGIN") or "https://auth.aiappinvent.com").rstrip("/")
+_CORS_ALLOWED  = tuple(
+    o.strip().rstrip("/") for o in (os.environ.get("CORS_ALLOWED_ORIGINS") or "").split(",")
+    if o.strip()
+)
+
+def _build_csp() -> str:
+    """Compose the Content-Security-Policy string. The KC origin needs
+    both `form-action` (legacy POST flows) and `connect-src` (OIDC token
+    exchange). The CDN allowlist matches the existing template includes;
+    moving off 'unsafe-inline' is a separate refactor (every inline script
+    needs a nonce)."""
+    parts = [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://js.stripe.com https://cdnjs.cloudflare.com",
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+        "font-src 'self' data: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+        "img-src 'self' data: https: blob:",
+        f"connect-src 'self' {_KC_ORIGIN}",
+        "frame-src https://js.stripe.com",
+        "object-src 'none'",
+        "base-uri 'self'",
+        f"form-action 'self' {_KC_ORIGIN}",
+        "frame-ancestors 'none'",
+        "upgrade-insecure-requests",
+        "report-uri /api/csp-report",
+    ]
+    return "; ".join(parts)
+
+_CSP_STRING = _build_csp()
+
+
 @app.after_request
 def set_security_headers(resp):
-    resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["X-Frame-Options"]        = "SAMEORIGIN"
-    resp.headers["X-XSS-Protection"]       = "1; mode=block"
-    resp.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
-    resp.headers["Cache-Control"]          = "no-store, no-cache, must-revalidate"
-    resp.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://js.stripe.com https://cdnjs.cloudflare.com; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-        "font-src 'self' data: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-        "img-src 'self' data: https: blob:; "
-        "connect-src 'self'; "
-        "frame-src https://js.stripe.com; "
-        "object-src 'none';"
-    )
+    resp.headers["X-Content-Type-Options"]  = "nosniff"
+    resp.headers["X-Frame-Options"]         = "DENY"
+    resp.headers["X-XSS-Protection"]        = "1; mode=block"
+    resp.headers["Referrer-Policy"]         = "strict-origin-when-cross-origin"
+    # Cache-Control: keep no-store for app responses; let /static/ pass
+    # through so versioned assets can be cached by the browser.
+    if not request.path.startswith("/static/"):
+        resp.headers["Cache-Control"]       = "no-store, no-cache, must-revalidate"
+    resp.headers["Content-Security-Policy"] = _CSP_STRING
+
+    # SOC 2 hardening additions.
+    resp.headers["Strict-Transport-Security"]    = "max-age=31536000; includeSubDomains"
+    resp.headers["Permissions-Policy"]           = "geolocation=(), camera=(), microphone=(), payment=(self)"
+    resp.headers["Cross-Origin-Opener-Policy"]   = "same-origin"
+    resp.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+
+    # Opt-in CORS. With CORS_ALLOWED_ORIGINS empty, no Access-Control-Allow-*
+    # is emitted -- the response is same-origin only (default browser policy).
+    # When the env carries a comma-separated allowlist AND the incoming Origin
+    # matches, the response carries the matching ACAO + Vary so caches stay correct.
+    origin = request.headers.get("Origin", "").rstrip("/")
+    if origin and origin in _CORS_ALLOWED:
+        resp.headers["Access-Control-Allow-Origin"]      = origin
+        resp.headers["Access-Control-Allow-Methods"]     = "GET, POST, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"]     = "Authorization, Content-Type, X-CSRF-Token"
+        resp.headers["Access-Control-Allow-Credentials"] = "true"
+        resp.headers["Access-Control-Max-Age"]           = "600"
+        resp.headers["Vary"] = "Origin"
+
     return resp
 
+
+@app.before_request
+def _handle_cors_preflight():
+    """Short-circuit CORS OPTIONS preflights with 204 + the headers that
+    set_security_headers attaches. Without this Flask would 405 unknown
+    OPTIONS routes and the browser would refuse the actual request."""
+    if request.method != "OPTIONS":
+        return None
+    origin = request.headers.get("Origin", "").rstrip("/")
+    if not origin or origin not in _CORS_ALLOWED:
+        return None
+    # The after_request hook will stamp Access-Control-Allow-* + Vary.
+    from flask import make_response as _mk
+    return _mk("", 204)
+
 # ─── CSRF protection ───────────────────────────────────────────────────────────
+
+@app.route("/api/csp-report", methods=["POST"])
+@limiter.limit("60 per minute")
+def csp_violation_report():
+    """Browser CSP violation receiver. Logged via write_audit_event so
+    the M3.2 SHA-256 chain captures the violation alongside everything
+    else. 204 No Content per the CSP spec."""
+    raw = request.get_data(cache=False, as_text=True) or ""
+    try:
+        import json as _json
+        body = _json.loads(raw) if raw else {}
+    except Exception:
+        body = {}
+    rep = (body.get("csp-report") if isinstance(body, dict) else None) or body or {}
+    try:
+        _write_audit_event(
+            "csp_violation",
+            ip=_get_real_ip(),
+            details={
+                "blocked_uri":         (rep.get("blocked-uri") or "")[:200],
+                "document_uri":        (rep.get("document-uri") or "")[:200],
+                "violated_directive":  (rep.get("violated-directive") or "")[:120],
+                "effective_directive": (rep.get("effective-directive") or "")[:120],
+                "source_file":         (rep.get("source-file") or "")[:200],
+                "line_number":         rep.get("line-number"),
+                "user_agent":          (request.headers.get("User-Agent") or "")[:200],
+            },
+        )
+    except Exception:
+        pass
+    return ("", 204)
+
+
 def generate_csrf():
     if "_csrf" not in session:
         session["_csrf"] = secrets.token_hex(24)
