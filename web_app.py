@@ -28037,6 +28037,45 @@ def _soc2_check_csrf_protection():
         return {"status": "fail", "detail": f"check failed: {str(e)[:80]}"}
 
 
+def _soc2_check_audit_chain():
+    """M3.2: SHA-256 chain over audit_logs rows so any row edit
+    or deletion is detectable.
+
+    pass: every chained row recomputes to its stored row_hash AND
+          every prev_hash links the previous row's row_hash.
+    warn: chain columns present but some rows have NULL row_hash
+          (legacy pre-016 rows -- backfill pending).
+    fail: tamper detected OR chain columns missing (migration 016
+          not applied yet)."""
+    try:
+        from app.security.audit import verify_audit_chain, reset_schema_probe
+        reset_schema_probe()
+        with get_db() as c:
+            result = verify_audit_chain(c)
+    except Exception as e:
+        return {"status": "fail", "detail": f"chain check raised: {str(e)[:80]}"}
+
+    if result.get("error"):
+        return {"status": "fail", "detail": result["error"]}
+    if result.get("first_break"):
+        b = result["first_break"]
+        return {"status": "fail",
+                "detail": f"TAMPER at row id={b['id']} ({b['reason']})"}
+    total = result.get("total", 0)
+    verified = result.get("verified", 0)
+    unchained = result.get("unchained", 0)
+    if total == 0:
+        return {"status": "pass", "detail": "chain columns present; no rows to verify yet"}
+    if unchained > 0 and verified == 0:
+        return {"status": "warn",
+                "detail": f"all {unchained} row(s) unchained -- migration 016 not yet backfilled"}
+    if unchained > 0:
+        return {"status": "warn",
+                "detail": f"{verified} verified, {unchained} unchained (legacy) -- backfill remainder"}
+    return {"status": "pass",
+            "detail": f"{verified}/{total} rows verified; chain head id={result.get('last_chained_id')}"}
+
+
 _SOC2_CHECKS = [
     ("M1.1  KEYCLOAK_ENABLED flag retired",            _soc2_check_kc_flag_retired),
     ("M1.1  KEYCLOAK_ISSUER configured",               _soc2_check_kc_issuer_configured),
@@ -28044,6 +28083,7 @@ _SOC2_CHECKS = [
     ("M1.6  RLS policies cover tenant tables",         _soc2_check_rls_coverage),
     ("M3.1  Tables carry tenant_id column",            _soc2_check_tenant_column_coverage),
     ("M3.1  audit_logs receives writes (24h)",         _soc2_check_audit_log_activity),
+    ("M3.2  audit_logs hash chain intact",              _soc2_check_audit_chain),
     ("M2.6  /admin + /api routes carry auth decorator", _soc2_check_route_decorator_coverage),
     ("M3.10 Security test suite present",              _soc2_check_security_tests_present),
     ("M3.7  Security CI workflow",                     _soc2_check_security_ci),
@@ -28813,6 +28853,35 @@ def admin_soc2_report_email():
         flash(f"Email send may have failed (provider returned no success). Check logs.", "warning")
     return redirect(url_for("admin_soc2_report"))
 
+
+
+
+@app.route("/admin/soc2/audit-chain")
+@admin_required
+def admin_soc2_audit_chain():
+    """SOC 2 M3.2 -- on-demand chain walk for the audit dashboard.
+    Returns JSON so the dashboard's Chart.js card can render it; ?html=1
+    returns a small status page for direct browser inspection."""
+    try:
+        from app.security.audit import verify_audit_chain, reset_schema_probe
+        reset_schema_probe()
+        with get_db() as c:
+            result = verify_audit_chain(c)
+    except Exception as e:
+        return jsonify(error=f"chain check failed: {str(e)[:120]}"), 500
+    if request.args.get("html"):
+        body = (
+            f"<h3>SOC 2 M3.2 audit chain status</h3>"
+            f"<pre style='background:#0a0a14;color:#e6e6f5;padding:1rem;border-radius:6px'>"
+            f"total      = {result.get('total')}\n"
+            f"verified   = {result.get('verified')}\n"
+            f"unchained  = {result.get('unchained')}\n"
+            f"first_break= {result.get('first_break')}\n"
+            f"head_id    = {result.get('last_chained_id')}\n"
+            f"</pre>"
+        )
+        return body
+    return jsonify(result)
 
 if __name__ == "__main__":
     init_db()

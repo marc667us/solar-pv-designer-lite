@@ -1,0 +1,195 @@
+# Apply migrations/016_audit_log_hash_chain.sql to live Postgres.
+#
+# SOC 2 M3.2. Adds prev_hash + row_hash columns to audit_logs and
+# backfills the SHA-256 chain in id ASC order. Idempotent: re-running
+# resumes from the last hashed row.
+#
+# Default mode is DRY-RUN. Re-run with `-f confirm=AUDIT_CHAIN_APPLY`
+# to commit.
+
+name: Apply Migration 016 (audit chain)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type AUDIT_CHAIN_APPLY to commit migration 016 to live Postgres."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "AUDIT_CHAIN_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- migration 016 will be committed to live Postgres ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- migration 016 will be parsed + previewed only ==="
+            echo "Re-run with -f confirm=AUDIT_CHAIN_APPLY to commit."
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/016_audit_log_hash_chain.sql
+          echo "OK: migrations/016_audit_log_hash_chain.sql present"
+          wc -l migrations/016_audit_log_hash_chain.sql
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- audit_logs row count + column probe
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- audit_logs BEFORE migration ---"
+          TOTAL=$(psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM audit_logs")
+          echo "  total rows: $TOTAL"
+          for col in tenant_id agent_id prev_hash row_hash; do
+            EXISTS=$(psql "$DATABASE_URL" -A -t -c \
+              "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='audit_logs' AND column_name='$col')")
+            printf "  column %-12s present: %s\n" "$col" "$EXISTS"
+          done
+
+      - name: Show migration overview
+        run: |
+          echo "--- migrations/016_audit_log_hash_chain.sql ---"
+          grep -E "^-- (PART|=)" migrations/016_audit_log_hash_chain.sql | head -20
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The SQL below WOULD have been applied. Nothing was."
+          echo "================================================================"
+          head -80 migrations/016_audit_log_hash_chain.sql
+
+      - name: Apply migration 016 (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/016_audit_log_hash_chain.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/016_audit_log_hash_chain.sql
+          echo "OK: migration 016 applied."
+
+      - name: Verify post-apply -- columns + helper functions
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- expected: prev_hash + row_hash columns + 2 helper functions ---"
+          COLS=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT column_name FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='audit_logs'
+               AND column_name IN ('prev_hash','row_hash')
+             ORDER BY column_name")
+          echo "$COLS"
+          N=$(echo "$COLS" | grep -c .)
+          if [ "$N" -lt "2" ]; then
+            echo "::error::expected prev_hash + row_hash columns, found $N"
+            exit 1
+          fi
+          FNS=$(psql "$DATABASE_URL" -A -t -c \
+            "SELECT proname FROM pg_proc WHERE proname IN ('_audit_canonical_content','_audit_row_hash') ORDER BY proname")
+          echo "$FNS"
+          F=$(echo "$FNS" | grep -c .)
+          if [ "$F" -lt "2" ]; then
+            echo "::error::expected 2 helper functions, found $F"
+            exit 1
+          fi
+          echo "OK: chain schema in place."
+
+      - name: Verify post-apply -- backfill coverage
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- chain coverage ---"
+          psql "$DATABASE_URL" -c "
+            SELECT
+              COUNT(*) FILTER (WHERE row_hash IS NULL)     AS unchained,
+              COUNT(*) FILTER (WHERE row_hash IS NOT NULL) AS chained,
+              COUNT(*) AS total
+              FROM audit_logs;"
+
+      - name: Verify post-apply -- chain internal consistency (sample)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- spot-check first 10 rows: stored vs recomputed row_hash ---"
+          psql "$DATABASE_URL" -c "
+            WITH chain AS (
+              SELECT id, prev_hash, row_hash,
+                     _audit_canonical_content(
+                       user_id, username, action, ip_address, details, created_at,
+                       CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                                          WHERE table_name='audit_logs' AND column_name='tenant_id')
+                            THEN tenant_id END,
+                       CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                                          WHERE table_name='audit_logs' AND column_name='agent_id')
+                            THEN agent_id END
+                     ) AS content
+                FROM audit_logs WHERE row_hash IS NOT NULL ORDER BY id ASC LIMIT 10
+            )
+            SELECT id, (row_hash = _audit_row_hash(prev_hash, content)) AS chain_ok
+              FROM chain;"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " M3.2 COMPLETE -- audit_logs now carries a SHA-256 chain."
+            echo "================================================================"
+            echo " Tamper-detection invariant: editing any row breaks its own"
+            echo " row_hash AND every subsequent row's prev_hash reference."
+            echo " Verifier: /admin/soc2/audit-chain (admin-only)"
+            echo " Dashboard: SOC 2 check 'M3.2 audit_logs hash chain intact'"
+          else
+            echo "DRY-RUN -- no Render changes. Re-run with confirm=AUDIT_CHAIN_APPLY to commit."
+          fi

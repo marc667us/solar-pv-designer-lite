@@ -50,12 +50,55 @@ sensitive admin actions still land in `audit_logs`.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 
 log = logging.getLogger(__name__)
+
+
+GENESIS_HASH = "GENESIS"
+
+
+def _canonical_audit_content(
+    user_id: Optional[int],
+    username: str,
+    action: str,
+    ip_address: str,
+    details: str,
+    created_at: str,
+    tenant_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
+) -> str:
+    """Deterministic pipe-joined serialisation of a single audit_logs
+    row, matched bit-for-bit by migrations/016_audit_log_hash_chain.sql.
+
+    COALESCE-to-empty so NULL and '' hash identically (legacy rows have
+    a mix of both for username / ip_address / details). The Python side
+    and PG side MUST agree on this format -- if they diverge, the
+    verifier flags every row as tampered.
+    """
+    return "|".join([
+        str(user_id) if user_id is not None else "",
+        username or "",
+        action or "",
+        ip_address or "",
+        details or "",
+        created_at or "",
+        str(tenant_id) if tenant_id else "",
+        agent_id or "",
+    ])
+
+
+def _sha256_chain_hash(prev_hash: Optional[str], content: str) -> str:
+    """sha256((prev_hash or GENESIS) || '|' || content) as hex.
+
+    Matches PG-side `_audit_row_hash(prev, content)`. Used both at
+    INSERT (writer) and during chain verification."""
+    seed = (prev_hash if prev_hash else GENESIS_HASH) + "|" + content
+    return hashlib.sha256(seed.encode("utf-8")).hexdigest()
 
 
 # Sentinel set in the test suite to capture writes without touching a
@@ -94,31 +137,97 @@ def _resolve_get_db():
         return None
 
 
-def _table_has_phase6_columns(conn) -> bool:
-    """Probe whether audit_logs has the Phase 6 tenant_id + agent_id
-    columns. The probe runs once per process via a module cache."""
-    global _PHASE6_COLS
-    if _PHASE6_COLS is not None:
-        return _PHASE6_COLS
+def _probe_audit_columns(conn) -> dict:
+    """Probe audit_logs column presence; cached per process. Re-probed
+    after `reset_schema_probe()` (called from migration apply paths)."""
+    global _AUDIT_COLS
+    if _AUDIT_COLS is not None:
+        return _AUDIT_COLS
+    cols: set[str] = set()
     try:
-        cur = conn.execute(
-            "SELECT * FROM audit_logs WHERE 1=0"
-        )
+        cur = conn.execute("SELECT * FROM audit_logs WHERE 1=0")
         cols = {d[0].lower() for d in (cur.description or [])}
-        _PHASE6_COLS = ("tenant_id" in cols) and ("agent_id" in cols)
     except Exception:
-        _PHASE6_COLS = False
-    return _PHASE6_COLS
+        cols = set()
+    _AUDIT_COLS = {
+        "tenant_id": "tenant_id" in cols,
+        "agent_id":  "agent_id" in cols,
+        "prev_hash": "prev_hash" in cols,
+        "row_hash":  "row_hash" in cols,
+    }
+    return _AUDIT_COLS
 
 
-_PHASE6_COLS: Optional[bool] = None
+def _table_has_phase6_columns(conn) -> bool:
+    """Back-compat alias retained for callers in the migration probe
+    code path. New code should use _probe_audit_columns()."""
+    probe = _probe_audit_columns(conn)
+    return probe["tenant_id"] and probe["agent_id"]
+
+
+_AUDIT_COLS: Optional[dict] = None
 
 
 def reset_schema_probe() -> None:
-    """Tests + migration runs call this after applying 004 so the
-    column probe is recomputed."""
-    global _PHASE6_COLS
-    _PHASE6_COLS = None
+    """Tests + migration runs call this after applying 004 / 016 so
+    the column probe is recomputed."""
+    global _AUDIT_COLS
+    _AUDIT_COLS = None
+
+
+def _now_audit_ts() -> str:
+    """Return `YYYY-MM-DD HH:MM:SS` UTC string. Matches sqlite_ts() in
+    migrations/001 so PG-side and app-side hash content agree."""
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _read_last_row_hash(conn) -> str:
+    """SELECT the row_hash of the highest-id audit_logs row; returns
+    GENESIS sentinel when the table is empty or the column doesn't
+    exist yet. Wraps any read failure to GENESIS so an audit write is
+    never blocked by a chain probe error."""
+    try:
+        cur = conn.execute(
+            "SELECT row_hash FROM audit_logs "
+            "WHERE row_hash IS NOT NULL "
+            "ORDER BY id DESC LIMIT 1"
+        )
+        row = cur.fetchone()
+        if row:
+            value = row[0] if not hasattr(row, "keys") else row["row_hash"]
+            if value:
+                return value
+    except Exception as e:
+        log.debug("audit: chain head read failed (%s); using GENESIS.", e)
+    return GENESIS_HASH
+
+
+def _compute_chain_for_insert(
+    conn,
+    *,
+    user_id: Optional[int],
+    username: str,
+    action: str,
+    ip_address: str,
+    details: str,
+    tenant_id: Optional[str],
+    agent_id: Optional[str],
+) -> Tuple[str, str, str]:
+    """Return (prev_hash, row_hash, created_at_iso) for a row about to
+    be INSERTed. Reads the current chain head, computes the canonical
+    content, returns both hashes plus the explicit created_at the
+    caller must pass so PG-default-driven timestamps don't fork from
+    the hash content."""
+    created_at = _now_audit_ts()
+    prev_hash = _read_last_row_hash(conn)
+    content = _canonical_audit_content(
+        user_id=user_id, username=username, action=action,
+        ip_address=ip_address, details=details, created_at=created_at,
+        tenant_id=tenant_id, agent_id=agent_id,
+    )
+    row_hash = _sha256_chain_hash(prev_hash, content)
+    return prev_hash, row_hash, created_at
 
 
 def write_audit_event(
@@ -168,7 +277,52 @@ def write_audit_event(
 
     try:
         with conn:
-            if _table_has_phase6_columns(conn):
+            probe = _probe_audit_columns(conn)
+            has_phase6 = probe["tenant_id"] and probe["agent_id"]
+            has_chain  = probe["prev_hash"] and probe["row_hash"]
+
+            if has_chain:
+                # SOC 2 M3.2: SHA-256 chain. Compute prev_hash from the
+                # current chain head + canonical content (including a
+                # Python-side created_at so PG's default doesn't fork
+                # the hash content).
+                prev_hash, row_hash, created_at = _compute_chain_for_insert(
+                    conn,
+                    user_id=payload["user_id"], username=payload["username"],
+                    action=payload["action"], ip_address=payload["ip_address"],
+                    details=payload["details"],
+                    tenant_id=payload["tenant_id"] if has_phase6 else None,
+                    agent_id=payload["agent_id"] if has_phase6 else None,
+                )
+                if has_phase6:
+                    conn.execute(
+                        "INSERT INTO audit_logs "
+                        "(user_id, username, action, ip_address, details, "
+                        " tenant_id, agent_id, created_at, prev_hash, row_hash) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (payload["user_id"], payload["username"], payload["action"],
+                         payload["ip_address"], payload["details"],
+                         payload["tenant_id"], payload["agent_id"],
+                         created_at, prev_hash, row_hash),
+                    )
+                else:
+                    merged = payload["details"]
+                    if payload["tenant_id"] or payload["agent_id"]:
+                        merged = _stringify_details({
+                            "details": payload["details"],
+                            "tenant_id": payload["tenant_id"],
+                            "agent_id": payload["agent_id"],
+                        })
+                    conn.execute(
+                        "INSERT INTO audit_logs "
+                        "(user_id, username, action, ip_address, details, "
+                        " created_at, prev_hash, row_hash) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (payload["user_id"], payload["username"], payload["action"],
+                         payload["ip_address"], merged,
+                         created_at, prev_hash, row_hash),
+                    )
+            elif has_phase6:
                 conn.execute(
                     "INSERT INTO audit_logs "
                     "(user_id, username, action, ip_address, details, "
@@ -252,12 +406,135 @@ def audit_permission_denied(
     )
 
 
+# ── SOC 2 M3.2 -- chain verifier ────────────────────────────────────────
+
+def verify_audit_chain(conn, *, limit: Optional[int] = None) -> dict:
+    """Walk audit_logs in id ASC order, recompute each row_hash, and
+    return a summary that the SOC 2 dashboard + admin route render.
+
+    Returns:
+      {
+        "total":         int,           -- rows examined
+        "verified":      int,           -- rows whose stored row_hash matched
+        "unchained":     int,           -- rows with NULL row_hash (legacy)
+        "first_break":   {              -- None if no break detected
+            "id":           int,
+            "reason":       str,
+            "expected":     str,
+            "stored":       str,
+        } | None,
+        "last_chained_id": int | None,  -- highest id that verified clean
+      }
+
+    Reasons emitted on a break:
+      * 'tamper_row_hash_mismatch' -- stored row_hash != sha256(prev||content)
+      * 'tamper_prev_hash_mismatch' -- row.prev_hash != prior row.row_hash
+    """
+    probe = _probe_audit_columns(conn)
+    has_phase6 = probe["tenant_id"] and probe["agent_id"]
+    has_chain  = probe["prev_hash"] and probe["row_hash"]
+    if not has_chain:
+        return {
+            "total": 0, "verified": 0, "unchained": 0,
+            "first_break": None, "last_chained_id": None,
+            "error": "audit_logs missing prev_hash/row_hash columns "
+                     "(migration 016 not applied)",
+        }
+
+    cols_select = ("id, user_id, username, action, ip_address, details, "
+                   "created_at, prev_hash, row_hash")
+    if has_phase6:
+        cols_select += ", tenant_id, agent_id"
+
+    sql = f"SELECT {cols_select} FROM audit_logs ORDER BY id ASC"
+    if limit:
+        sql += f" LIMIT {int(limit)}"
+    cur = conn.execute(sql)
+    rows = cur.fetchall()
+
+    total = len(rows)
+    verified = 0
+    unchained = 0
+    prev_row_hash = GENESIS_HASH
+    first_break = None
+    last_chained_id = None
+
+    for r in rows:
+        try:
+            row_id     = r["id"]
+            stored_row = r["row_hash"]
+            stored_prev = r["prev_hash"]
+        except Exception:
+            row_id = r[0]; stored_row = r[8]; stored_prev = r[7]
+
+        if not stored_row:
+            unchained += 1
+            continue
+
+        try:
+            user_id    = r["user_id"]
+            username   = r["username"] or ""
+            action     = r["action"] or ""
+            ip_address = r["ip_address"] or ""
+            details    = r["details"] or ""
+            created_at = r["created_at"] or ""
+            tenant_id  = r["tenant_id"] if has_phase6 else None
+            agent_id   = r["agent_id"]  if has_phase6 else None
+        except Exception:
+            user_id = r[1]; username = r[2] or ""; action = r[3] or ""
+            ip_address = r[4] or ""; details = r[5] or ""; created_at = r[6] or ""
+            tenant_id = r[9] if has_phase6 else None
+            agent_id  = r[10] if has_phase6 else None
+
+        content = _canonical_audit_content(
+            user_id=user_id, username=username, action=action,
+            ip_address=ip_address, details=details, created_at=created_at,
+            tenant_id=tenant_id, agent_id=agent_id,
+        )
+        expected_row_hash = _sha256_chain_hash(stored_prev, content)
+
+        if first_break is None and expected_row_hash != stored_row:
+            first_break = {
+                "id": row_id,
+                "reason": "tamper_row_hash_mismatch",
+                "expected": expected_row_hash,
+                "stored": stored_row,
+            }
+            continue
+
+        expected_prev = prev_row_hash if prev_row_hash else GENESIS_HASH
+        stored_prev_compare = stored_prev if stored_prev else GENESIS_HASH
+        if first_break is None and stored_prev_compare != expected_prev:
+            first_break = {
+                "id": row_id,
+                "reason": "tamper_prev_hash_mismatch",
+                "expected": expected_prev,
+                "stored": stored_prev_compare,
+            }
+            continue
+
+        if first_break is None:
+            verified += 1
+            last_chained_id = row_id
+            prev_row_hash = stored_row
+
+    return {
+        "total": total,
+        "verified": verified,
+        "unchained": unchained,
+        "first_break": first_break,
+        "last_chained_id": last_chained_id,
+    }
+
+
 __all__ = [
+    "GENESIS_HASH",
     "audit_login_failed",
     "audit_login_success",
     "audit_logout",
     "audit_permission_denied",
     "reset_schema_probe",
     "set_test_sink",
+    "verify_audit_chain",
     "write_audit_event",
 ]
