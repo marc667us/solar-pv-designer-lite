@@ -14636,6 +14636,13 @@ def _ensure_marketplace_tables():
             c.execute("ALTER TABLE equipment_catalog ADD COLUMN image_url TEXT DEFAULT ''")
         if "is_public_visible" not in cols:
             c.execute("ALTER TABLE equipment_catalog ADD COLUMN is_public_visible INTEGER DEFAULT 1")
+        # 2026-06-27 (Item B) -- voltage/frequency/standards for country-grid compliance
+        if "voltage_v" not in cols:
+            c.execute("ALTER TABLE equipment_catalog ADD COLUMN voltage_v REAL DEFAULT 0")
+        if "frequency_hz" not in cols:
+            c.execute("ALTER TABLE equipment_catalog ADD COLUMN frequency_hz REAL DEFAULT 0")
+        if "compliance_standards" not in cols:
+            c.execute("ALTER TABLE equipment_catalog ADD COLUMN compliance_standards TEXT DEFAULT ''")
         # Upsert categories -- INSERT OR IGNORE so adding a new entry to
         # _MARKETPLACE_CATEGORIES lands in pre-existing databases too.
         # Original seed-once-when-empty pattern silently skipped new entries.
@@ -14838,6 +14845,16 @@ def _backfill_marketplace_samples_for_empty_categories(c):
                 def fetchall(self_inner): return []
             return _Dummy()
     _seed_marketplace_samples(_FilteredConn(c, empty_codes))
+
+
+def _safe_float(v, default=0.0):
+    """Tolerant float parse. Returns default on empty / unparseable."""
+    if v is None or v == "":
+        return default
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
 
 
 def _safe_int(v, default=0):
@@ -15384,11 +15401,13 @@ def supplier_product_add():
             "SELECT name FROM product_categories WHERE id=?", (cat_id,)
         ).fetchone()
         cat_label = cat_row["name"] if cat_row else ""
+        # Item B (2026-06-27): include voltage_v / frequency_hz / compliance_standards
+        # so suppliers can declare grid compatibility up-front.
         c.execute(
             "INSERT INTO equipment_catalog (category, name, brand, model, spec, unit, "
             "price_usd, supplier_id, lead_time_days, category_id, subcategory, "
-            "is_public_visible, is_verified) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "is_public_visible, is_verified, voltage_v, frequency_hz, compliance_standards) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 cat_label,
                 name,
@@ -15403,6 +15422,9 @@ def supplier_product_add():
                 (f.get("subcategory") or "").strip(),
                 1 if s["is_verified"] else 0,  # publicly visible only if supplier is verified
                 0,  # new products start unverified; admin or LLM agent approves
+                _safe_float(f.get("voltage_v"), 0),
+                _safe_float(f.get("frequency_hz"), 0),
+                (f.get("compliance_standards") or "").strip(),
             ),
         )
     flash(f"Added '{name}'. It will appear on the public marketplace after admin verification.", "success")
@@ -17783,6 +17805,10 @@ def _ensure_marketplace_schema_postgres():
         "ALTER TABLE equipment_catalog ADD COLUMN IF NOT EXISTS image_url VARCHAR(500) DEFAULT ''",
         "ALTER TABLE equipment_catalog ADD COLUMN IF NOT EXISTS is_public_visible INTEGER DEFAULT 1",
         "ALTER TABLE equipment_catalog ADD COLUMN IF NOT EXISTS is_verified INTEGER DEFAULT 1",
+        # 2026-06-27 (Item B) -- voltage/frequency/standards for country-grid compliance
+        "ALTER TABLE equipment_catalog ADD COLUMN IF NOT EXISTS voltage_v NUMERIC DEFAULT 0",
+        "ALTER TABLE equipment_catalog ADD COLUMN IF NOT EXISTS frequency_hz NUMERIC DEFAULT 0",
+        "ALTER TABLE equipment_catalog ADD COLUMN IF NOT EXISTS compliance_standards TEXT DEFAULT ''",
 
         # Slice 2 — extend users + suppliers
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(40) DEFAULT ''",
@@ -18499,6 +18525,7 @@ def admin_marketplace_product_edit(pid):
             "UPDATE equipment_catalog SET name=?, brand=?, model=?, spec=?, "
             "unit=?, price_usd=?, supplier_id=?, lead_time_days=?, "
             "category_id=?, category=?, subcategory=?, "
+            "voltage_v=?, frequency_hz=?, compliance_standards=?, "
             "is_verified=?, is_public_visible=?, is_active=? "
             "WHERE id=?",
             (
@@ -18512,6 +18539,9 @@ def admin_marketplace_product_edit(pid):
                 _safe_int(f.get("lead_time_days"), 30),
                 cat_id, cat_label,
                 (f.get("subcategory") or "").strip(),
+                _safe_float(f.get("voltage_v"), 0),
+                _safe_float(f.get("frequency_hz"), 0),
+                (f.get("compliance_standards") or "").strip(),
                 1 if f.get("is_verified") else 0,
                 1 if f.get("is_public_visible") else 0,
                 1 if f.get("is_active") else 0,
@@ -19827,6 +19857,7 @@ def supplier_product_edit(pid):
             "  name=?, brand=?, model=?, spec=?, unit=?, "
             "  price_usd=?, lead_time_days=?, "
             "  category_id=?, category=?, subcategory=?, "
+            "  voltage_v=?, frequency_hz=?, compliance_standards=?, "
             "  is_verified=0 "
             "WHERE id=? AND supplier_id=?",
             (
@@ -19840,6 +19871,9 @@ def supplier_product_edit(pid):
                 cat_id,
                 cat_label,
                 (f.get("subcategory") or "").strip(),
+                _safe_float(f.get("voltage_v"), 0),
+                _safe_float(f.get("frequency_hz"), 0),
+                (f.get("compliance_standards") or "").strip(),
                 pid,
                 s["id"],
             ),
