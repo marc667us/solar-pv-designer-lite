@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — SolarPro Global{% endblock %}
+
+{% block extra_head %}
+<style>
+.guide-wrap{max-width:840px;margin:0 auto;padding:20px 16px 40px;color:#e0e0f0}
+@media (min-width:768px){.guide-wrap{padding:32px 24px 56px}}
+
+.guide-h{font-size:clamp(1.5rem,4vw,2.3rem);font-weight:900;letter-spacing:-.02em;
+  background:linear-gradient(135deg,#f2f2fd 20%,#fbbf24 55%,#3b82f6);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.guide-sub{color:#9090b8;font-size:13px;margin-top:4px}
+
+.guide-toolbar{
+  display:flex;flex-wrap:wrap;gap:8px;
+  background:#0f0f22;border:1px solid #1e1e3a;border-radius:12px;
+  padding:10px 12px;margin:14px 0 18px;align-items:center;
+  position:sticky;top:62px;z-index:5;backdrop-filter:blur(8px);
+}
+.guide-toolbar .lbl{font-size:10.5px;color:#6868a0;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-right:auto}
+
+.tb-btn{
+  background:linear-gradient(135deg,#fbbf24,#d97706);color:#0a0a1c;
+  border:0;border-radius:8px;padding:8px 14px;font-weight:800;font-size:12.5px;
+  display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  box-shadow:0 8px 22px -8px rgba(245,158,11,.5);
+}
+.tb-btn:hover{filter:brightness(1.05);color:#0a0a1c;text-decoration:none}
+.tb-btn:disabled{opacity:.5;cursor:not-allowed}
+.tb-btn.ghost{background:transparent;color:#fbbf24;border:1px solid #fbbf2455;box-shadow:none}
+.tb-btn.ghost:hover{background:rgba(251,191,36,.10);color:#fbbf24}
+
+.tb-rate{
+  display:inline-flex;align-items:center;gap:6px;
+  background:#0a0a14;border:1px solid #1e1e3a;border-radius:8px;padding:6px 10px;color:#9090b8;font-size:12px;font-weight:600;
+}
+.tb-rate input[type=range]{width:90px;accent-color:#fbbf24}
+
+.guide-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+.guide-tab{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:7px 13px;border-radius:999px;
+  background:#0f0f22;border:1px solid #1e1e3a;color:#9090b8;
+  font-size:12px;font-weight:700;text-decoration:none;
+  transition:.15s;
+}
+.guide-tab:hover{border-color:#fbbf2444;color:#e0e0f0}
+.guide-tab.active{background:linear-gradient(135deg,rgba(251,191,36,.18),rgba(251,191,36,.06));
+  border-color:#fbbf2477;color:#fbbf24}
+
+.guide-video{
+  background:#0a0a14;border:1px solid #1e1e3a;border-radius:14px;
+  padding:14px;margin-bottom:18px;
+}
+.guide-video .lbl{font-size:10.5px;color:#22c55e;font-weight:800;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
+.guide-video-embed{position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:10px;background:#000}
+.guide-video-embed iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0}
+
+#guide-body{
+  background:#0a0a14;border:1px solid #1e1e3a;border-radius:14px;
+  padding:22px;line-height:1.65;font-size:14.5px;color:#dcdcef;
+}
+@media (max-width:580px){#guide-body{padding:16px;font-size:13.5px}}
+
+#guide-body h1{font-size:1.6rem;color:#fbbf24;margin:0 0 10px;letter-spacing:-.01em;font-weight:900}
+#guide-body h2{font-size:1.15rem;color:#fbbf24;margin:22px 0 8px;border-bottom:1px solid #1e1e3a;padding-bottom:6px;letter-spacing:-.005em}
+#guide-body h3{font-size:1rem;color:#c0c0e0;margin:14px 0 6px}
+#guide-body p{margin:8px 0}
+#guide-body strong{color:#fbbf24;font-weight:700}
+#guide-body code{background:#1e1e3a;color:#a5b4fc;padding:1px 6px;border-radius:4px;font-size:12.5px}
+#guide-body a{color:#fbbf24}
+#guide-body ul,#guide-body ol{margin:6px 0 12px;padding-left:22px}
+#guide-body li{margin:3px 0}
+#guide-body table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px;background:#0f0f22;border-radius:6px;overflow:hidden}
+#guide-body th{background:#1e1e3a;color:#fbbf24;padding:8px;text-align:left}
+#guide-body td{border-top:1px solid #1e1e3a;padding:7px 8px;color:#c0c0e0}
+#guide-body blockquote{background:rgba(34,197,94,.06);border-left:3px solid #22c55e;padding:10px 14px;margin:10px 0;border-radius:6px}
+
+.speak-highlight{background:rgba(251,191,36,.18);border-radius:3px;transition:background .15s}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="guide-wrap">
+
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+    <div>
+      <div style="font-size:11px;color:#fbbf24;font-weight:800;letter-spacing:1.4px;text-transform:uppercase">
+        SolarPro Guides
+      </div>
+      <h1 class="guide-h mt-1 mb-0">{{ title }}</h1>
+      <div class="guide-sub">Read · Listen · Download PDF{% if video_url %} · Watch{% endif %}</div>
+    </div>
+  </div>
+
+  {# ── Tabs between the 3 guides ── #}
+  <div class="guide-tabs">
+    {% for s, lbl, ic in [
+      ('quick',     '3-min Quick',         'bi-lightning-charge-fill'),
+      ('full-user', 'Full User Guide',     'bi-book-half'),
+      ('technical', 'Full Technical Guide','bi-cpu-fill'),
+    ] %}
+    <a href="{{ url_for('guides_view', slug=s) }}"
+       class="guide-tab {% if slug == s %}active{% endif %}">
+      <i class="bi {{ ic }}"></i>{{ lbl }}
+    </a>
+    {% endfor %}
+  </div>
+
+  {# ── Sticky toolbar: Listen + PDF + Stop + Rate ── #}
+  <div class="guide-toolbar">
+    <span class="lbl">Controls</span>
+    <button id="g-listen" type="button" class="tb-btn"><i class="bi bi-play-circle-fill"></i><span>Listen</span></button>
+    <button id="g-pause"  type="button" class="tb-btn ghost" style="display:none"><i class="bi bi-pause-circle-fill"></i>Pause</button>
+    <button id="g-stop"   type="button" class="tb-btn ghost" style="display:none"><i class="bi bi-stop-circle-fill"></i>Stop</button>
+    <label class="tb-rate" title="Speech rate"><i class="bi bi-speedometer2"></i>
+      <input id="g-rate" type="range" min="0.7" max="1.6" step="0.1" value="1.0">
+      <span id="g-rate-val">1.0x</span>
+    </label>
+    <a href="{{ url_for('guides_pdf', slug=slug) }}" class="tb-btn ghost"
+       title="Download as PDF">
+      <i class="bi bi-file-earmark-pdf-fill"></i>PDF
+    </a>
+  </div>
+
+  {# ── Optional embedded video (owner-supplied via GUIDE_VIDEO_URL_<SLUG> env) ── #}
+  {% if video_url %}
+  <div class="guide-video">
+    <div class="lbl"><i class="bi bi-camera-video-fill me-1"></i>Video walkthrough</div>
+    <div class="guide-video-embed">
+      {% if 'youtube.com' in video_url or 'youtu.be' in video_url %}
+        {# normalise to embed form #}
+        {% set vid = video_url.split('v=')[-1].split('&')[0] if 'youtube.com' in video_url else video_url.split('/')[-1] %}
+        <iframe src="https://www.youtube.com/embed/{{ vid }}" allowfullscreen></iframe>
+      {% elif 'loom.com' in video_url %}
+        <iframe src="{{ video_url.replace('/share/', '/embed/') }}" allowfullscreen></iframe>
+      {% else %}
+        <iframe src="{{ video_url }}" allowfullscreen></iframe>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="guide-video" style="border-color:#2e2e4a">
+    <div class="lbl" style="color:#9090b8"><i class="bi bi-camera-video me-1"></i>Video walkthrough — coming soon</div>
+    <div class="text-secondary" style="font-size:12.5px;line-height:1.55">
+      A recorded screen walkthrough will appear here once available. Use <strong style="color:#fbbf24">Listen</strong>
+      above for the audio version of this guide in the meantime.
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Rendered markdown body (rendered client-side via marked) ── #}
+  <article id="guide-body" data-md="{{ markdown|e }}">
+    <div style="color:#9090b8;font-style:italic">Loading guide…</div>
+  </article>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"
+        crossorigin="anonymous"></script>
+<script>
+(function(){
+  // ── Render the markdown body ──
+  const body = document.getElementById('guide-body');
+  const md   = body.getAttribute('data-md') || '';
+  if (window.marked && md) {
+    body.innerHTML = window.marked.parse(md);
+  } else {
+    // Fallback: show raw text in a <pre> so the page is still usable if CDN fails.
+    body.innerHTML = '<pre style="white-space:pre-wrap;color:#dcdcef;font-family:inherit">' + md.replace(/</g, '&lt;') + '</pre>';
+  }
+
+  const supports = ('speechSynthesis' in window);
+  const btnListen = document.getElementById('g-listen');
+  const btnPause  = document.getElementById('g-pause');
+  const btnStop   = document.getElementById('g-stop');
+  const rate      = document.getElementById('g-rate');
+  const rateVal   = document.getElementById('g-rate-val');
+  const body      = document.getElementById('guide-body');
+
+  if (!supports) {
+    btnListen.disabled = true;
+    btnListen.title = "Browser doesn't support speech synthesis";
+    btnListen.innerHTML = '<i class="bi bi-volume-mute"></i>Listen (unsupported)';
+    return;
+  }
+
+  rate.addEventListener('input', () => {
+    rateVal.textContent = parseFloat(rate.value).toFixed(1) + 'x';
+    // If currently speaking, restart at the new rate.
+    if (window.speechSynthesis.speaking) {
+      _stopAndRestart();
+    }
+  });
+
+  let _utterances = [];   // queued chunks
+  let _idx = 0;
+  let _curr = null;
+
+  function _gatherChunks(){
+    // Split the body into utterance-sized pieces — one per heading/paragraph/list-item/table-row.
+    // Keeps each chunk under ~200 words so SpeechSynthesis doesn't time out and the
+    // pause/resume + restart-on-rate-change flow stays responsive.
+    const sel = body.querySelectorAll('h1, h2, h3, p, li, blockquote');
+    const out = [];
+    sel.forEach(el => {
+      const txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (txt.length < 2) return;
+      out.push({el, txt});
+    });
+    return out;
+  }
+
+  function _stopAndRestart(){
+    const wasIdx = _idx;
+    window.speechSynthesis.cancel();
+    setTimeout(() => _playFrom(wasIdx), 60);
+  }
+
+  function _highlight(el){
+    document.querySelectorAll('.speak-highlight').forEach(n => n.classList.remove('speak-highlight'));
+    if (el) {
+      el.classList.add('speak-highlight');
+      el.scrollIntoView({behavior:'smooth', block:'center'});
+    }
+  }
+
+  function _playFrom(start){
+    if (!_utterances.length) _utterances = _gatherChunks();
+    const r = parseFloat(rate.value) || 1.0;
+    _idx = start || 0;
+    _step(r);
+    btnListen.querySelector('span').textContent = 'Listening';
+    btnPause.style.display = 'inline-flex';
+    btnStop.style.display  = 'inline-flex';
+  }
+
+  function _step(r){
+    if (_idx >= _utterances.length) {
+      // Finished.
+      _highlight(null);
+      btnListen.querySelector('span').textContent = 'Listen';
+      btnPause.style.display = 'none';
+      btnStop.style.display  = 'none';
+      _curr = null;
+      return;
+    }
+    const chunk = _utterances[_idx];
+    _highlight(chunk.el);
+    const u = new SpeechSynthesisUtterance(chunk.txt);
+    u.rate = r;
+    u.pitch = 1.0;
+    u.volume = 1.0;
+    u.onend = () => {
+      _idx++;
+      _step(r);
+    };
+    u.onerror = () => {
+      _idx++;
+      _step(r);
+    };
+    _curr = u;
+    window.speechSynthesis.speak(u);
+  }
+
+  btnListen.addEventListener('click', () => {
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+      return;
+    }
+    if (window.speechSynthesis.speaking) return;
+    _utterances = _gatherChunks();
+    _playFrom(0);
+  });
+
+  btnPause.addEventListener('click', () => {
+    if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+      window.speechSynthesis.pause();
+      btnListen.querySelector('span').textContent = 'Resume';
+    } else if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+      btnListen.querySelector('span').textContent = 'Listening';
+    }
+  });
+
+  btnStop.addEventListener('click', () => {
+    window.speechSynthesis.cancel();
+    _idx = 0;
+    _curr = null;
+    _highlight(null);
+    btnListen.querySelector('span').textContent = 'Listen';
+    btnPause.style.display = 'none';
+    btnStop.style.display  = 'none';
+  });
+
+  // Auto-play when ?listen=1 was on the URL
+  {% if listen_autoplay %}
+  setTimeout(() => btnListen.click(), 400);
+  {% endif %}
+
+  // If the user navigates away, stop speaking
+  window.addEventListener('beforeunload', () => window.speechSynthesis.cancel());
+})();
+</script>
+{% endblock %}
