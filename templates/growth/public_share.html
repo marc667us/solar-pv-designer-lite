@@ -64,6 +64,13 @@
       <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('system_size_kw','—') }} kW</span><span class="k">PV size</span></div></div>
       <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('inverter_kw','—') }} kW</span><span class="k">Inverter</span></div></div>
       <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('battery_kwh','—') }} kWh</span><span class="k">Battery</span></div></div>
+    {% elif asset['asset_type'] in ('proposal_preview', 'roof_before_after_card') %}
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('system_size_kw','—') }} kW</span><span class="k">System size</span></div></div>
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('currency','USD') }} {{ '{:,.0f}'.format(payload.get('annual_savings',0)|float) }}</span><span class="k">Year-1 savings</span></div></div>
+      {% if payload.get('payback_years') is not none %}
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v">{{ payload.get('payback_years','—') }} yr</span><span class="k">Payback</span></div></div>
+      {% endif %}
+      <div class="col-6 col-md-3"><div class="ps-metric"><span class="v" style="font-size:16px">{{ payload.get('location','—') }}</span><span class="k">Location</span></div></div>
     {% else %}
       <div class="col-12">
         <div class="ps-card">

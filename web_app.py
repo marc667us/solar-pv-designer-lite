@@ -19,6 +19,10 @@ from config.global_solar_data import (GLOBAL_DATA, get_countries, get_regions,
                                       get_solar_data, temp_derating)
 from calculation.ac_cable_sizing import size_all_cables
 from api_manager import api as _api
+try:
+    import country_compliance as _country_compliance
+except Exception:
+    _country_compliance = None
 import secrets_broker as _sb  # Phase 1: audit + tier + Vault-ready secret reads
 from app.security.decorators import (
     require_role,
@@ -7103,7 +7107,30 @@ def assistant_chat():
           "no problem","that's all","that's fine","i'm fine","im fine","i'm good","im good",
           "never mind","nevermind","bye","goodbye","cheers","appreciate","that is all"],
          "Great, glad I could help! Feel free to ask any time if you have more questions. ðŸ˜Š"),
-        # Monitoring/alarms before project (both mention "dashboard")
+        # kb-growth-marketplace-2026-06-27
+        # --GROWTH LAYER (Share button + /growth dashboard + /s/<slug>) --
+        (["share","whatsapp","facebook","linkedin","twitter","social","qr code","share link","share button","share to","post on"],
+         "Two ways to share. (1) PER PROJECT: open any project -> Results page -> click the gold **Share** button -> pick a card type (Solar Savings, Energy Score, BOQ Summary, Proposal Preview) -> click Generate -> get a public share URL + QR code. Buttons for WhatsApp/Facebook/LinkedIn/X are right there. (2) PLATFORM: click the **Share** megaphone in the navbar (visible to everyone) -> opens a modal with WhatsApp/Facebook/LinkedIn/X/Email + QR. Logged-in users get their referral code baked in automatically."),
+        (["growth","growth dashboard","share dashboard","viral","share asset"],
+         "The **Growth Dashboard** is at /growth. It shows: share cards you have created, public visits to those cards, leads captured from them, visit-to-lead conversion %, and the pipeline-stage distribution. You can revoke any share asset from this page -- the public URL then returns 410."),
+        (["referral","ref code","invite","credit","earn","reward"],
+         "Every account has an 8-character referral code. Share your link from /referrals -- visitors get a 30-day cookie, signups credit you in the referrals table. You earn 20% credit per paid referral; new users get 20% off their first paid month. The platform Share button in the navbar automatically uses your code when you are logged in."),
+        # --MARKETPLACE + PROCUREMENT --
+        (["marketplace","supplier","supplier portal","product catalog","catalogue","product catalogue","equipment catalog","brand"],
+         "The **Marketplace** at /marketplace is FREE to browse for anyone (no signup). 21 categories (PV modules, inverters, batteries, cables, switchgear, structures, sockets, lighting, BMS, power systems with RMU/UPS/Generators, etc.), 437+ products across 140+ brands with live supplier pricing. Suppliers can self-register at /supplier/register and manage products at /supplier/products. Admins verify submissions at /admin/marketplace/pending."),
+        (["procurement","procurement center","price sheet","bom","cost estimate","boq","bill of quantities","quotation"],
+         "**Procurement Center** at /procurement-center is a checkbox-grid picker. Tick the products you want, choose a currency (USD/EUR/GBP/GHS/NGN/KES/...), pick a document type: Basic Price Sheet (reference list), BOM (Bill of Materials / Cost Estimate), or BOQ (Bill of Quantities for tender submission). Saved documents live at /price-sheets, /boms, and /boq-projects respectively. BOM and BOQ include cost roll-up; Basic Price Sheet is qty=1 reference only."),
+        (["rfq","rfqs","request for quote","request for quotation","quote request","tender request"],
+         "Create an **RFQ** at /rfqs/new. Pick the products + quantities + delivery deadline + budget, choose the suppliers to invite. They respond in their /supplier/rfqs/inbox. You see all responses at /rfqs/<id>. Suppliers are auto-suggested based on your BOQ catalogue."),
+        (["proposal","proposal beautified","co-brand","installer logo","client proposal","branded proposal"],
+         "Two proposal surfaces. The standard report at /project/<id>/report/proposal is the engineering-grade document. The **beautified, co-brandable** version is at /project/<id>/proposal/beautified -- it picks up installer logo, brand colour, contact details for a polished client-facing handover. Use the Share button at the top of either to send to clients."),
+        # --PROSPECTING (admin) --
+        (["opportunities","solar opportunities","rfp listing","tender feed","find tenders","procurement notice"],
+         "Admins: /admin/opportunities lists live solar RFPs/RFQs/IPPs pulled from Google News across 8 procurement-language queries (500+ items typical). Filter by country / type / source. Click **Add to leads** to copy an opportunity into the CRM. Add ?refresh=1 to bust the 1-hour cache."),
+        # --KEYCLOAK AUTH --
+        (["keycloak","kc","oidc","sso","auth.aiappinvent","auth redirect","login redirect"],
+         "Login redirects to **Keycloak** at auth.aiappinvent.com -- that is expected. Use the email + password you set when you registered. KC uses email-as-username (search by EMAIL in the KC admin console, not by username). Forgot password = click \"Forgot password\" on the KC login form."),
+                # Monitoring/alarms before project (both mention "dashboard")
         (["maintenance","service","fault","alarm","monitoring","alert"],
          "For installed systems: check the **Monitoring** section in your project. Red alerts = critical fault (check inverter display and battery status). Amber = warning (low battery, high temp). For recurring faults, raise a support ticket and our technical team will assist."),
         # Assessment & design guidance
@@ -16547,7 +16574,7 @@ def _bom_totals(items) -> dict:
 
 # ──────────────────────── BOM list / new ─────────────────────────────────
 
-def _boq_compliance_check(items, lines):
+def _boq_compliance_check(items, lines, project_country=None):
     """Compliance Review Agent (lite) -- maps BOQ items against the
     taxonomy registries and surfaces issues the brief's Compliance
     Review Agent calls out: missing specs, missing prices, missing
@@ -16616,6 +16643,18 @@ def _boq_compliance_check(items, lines):
                     "line_no": idx,
                     "message": f"Unit {actual!r} differs from category default {expected!r}.",
                 })
+    # country-compliance-wired-2026-06-27
+    if project_country and _country_compliance is not None:
+        try:
+            for f in _country_compliance.compliance_findings_for_lines(
+                    items, lines, project_country):
+                findings.append({
+                    "severity": f["severity"],
+                    "line_no":  f["line_no"],
+                    "message":  f["message"],
+                })
+        except Exception:
+            pass
     severity_rank = {"high": 0, "medium": 1, "low": 2}
     findings.sort(key=lambda f: (severity_rank.get(f["severity"], 99), f["line_no"]))
     return findings
@@ -17473,7 +17512,15 @@ def boms_boq(bom_id):
     _bcur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
     _brate = _CURRENCY_RATES_FROM_USD.get(_bcur, 1.0)
     totals = _bom_totals_with_rates(items, bom_rates, fx_rate=_brate)
-    compliance_findings = _boq_compliance_check(items, totals.get("lines", []))
+    _pc = (request.args.get("country") or "").strip()
+    if not _pc:
+        try:
+            _u = current_user()
+            _pc = (_u["country"] if _u and "country" in _u.keys() else "") or ""
+        except Exception:
+            _pc = ""
+    compliance_findings = _boq_compliance_check(items, totals.get("lines", []),
+                                                 project_country=_pc or None)
     can_view_buildup = True
     internal_view = bool(request.args.get("view") == "internal" and can_view_buildup)
     if internal_view:
@@ -17508,7 +17555,15 @@ def boms_rate_buildup(bom_id):
     _bcur = (bom["currency"] if "currency" in bom.keys() and bom["currency"] else "GHS")
     _brate = _CURRENCY_RATES_FROM_USD.get(_bcur, 1.0)
     totals = _bom_totals_with_rates(items, bom_rates, fx_rate=_brate)
-    compliance_findings = _boq_compliance_check(items, totals.get("lines", []))
+    _pc = (request.args.get("country") or "").strip()
+    if not _pc:
+        try:
+            _u = current_user()
+            _pc = (_u["country"] if _u and "country" in _u.keys() else "") or ""
+        except Exception:
+            _pc = ""
+    compliance_findings = _boq_compliance_check(items, totals.get("lines", []),
+                                                 project_country=_pc or None)
     try:
         from new_boq_hierarchy_schema import boq_audit
         boq_audit(get_db, uid, "boq_buildup_viewed", "marketplace_bom", bom_id)
