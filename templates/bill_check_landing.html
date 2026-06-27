@@ -1,548 +1,420 @@
 {% extends "base.html" %}
-{% block title %}Your bill already funds solar — just not yours yet | SolarPro Global{% endblock %}
+{% block title %}Check My Electricity Bill — PURC Q2 2026 audit | SolarPro Global{% endblock %}
 
-{% block head %}
+{% block extra_head %}
 <style>
-  /* ─── Premium SaaS palette ─── */
-  :root{
-    --bc-amber:#fbbf24;
-    --bc-amber-soft:#fde68a;
-    --bc-coral:#fb923c;
-    --bc-mint:#34d399;
-    --bc-indigo:#a5b4fc;
-    --bc-rose:#fb7185;
-    --bc-ink:#070918;
-    --bc-paper:#0c0f24;
-    --bc-paper-hi:#11142e;
-    --bc-line:rgba(255,255,255,.07);
-    --bc-line-hi:rgba(255,255,255,.12);
-    --bc-text:#ecedf6;
-    --bc-text-2:#c5c8da;
-    --bc-mute:#8a8fa8;
-    --bc-dim:#5a5f78;
-  }
+/* Inherit landing.html design vocabulary so /bill-check feels like the same site */
+.hero-bg{background:radial-gradient(ellipse 90% 70% at 50% 0%,rgba(245,158,11,.1) 0%,transparent 65%)}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.12);
+  border:1px solid rgba(245,158,11,.3);color:#f59e0b;padding:5px 16px;border-radius:20px;
+  font-size:12px;font-weight:700;letter-spacing:.3px;margin-bottom:20px}
+.hero-badge .live-dot{width:6px;height:6px;border-radius:50%;background:#f59e0b;
+  box-shadow:0 0 8px #f59e0b;animation:bc-pulse 2.2s ease-in-out infinite}
+@keyframes bc-pulse{0%,100%{opacity:.55;transform:scale(.9)}50%{opacity:1;transform:scale(1)}}
 
-  /* ─── Hero canvas — one soft gradient, lots of breath ─── */
-  .bc-hero{
-    position:relative;
-    padding:64px 0 40px;
-    overflow:hidden;
-    background:
-      radial-gradient(ellipse 90% 60% at 50% -15%, rgba(251,191,36,.07) 0%, transparent 60%),
-      linear-gradient(180deg, rgba(255,255,255,.01) 0%, transparent 40%);
-  }
-  @media (min-width:768px){
-    .bc-hero{padding:88px 0 48px}
-  }
+.workflow-step{background:#0a0a14;border:1px solid #1e1e3a;border-radius:16px;padding:24px;
+  position:relative;transition:.2s;text-align:left}
+.workflow-step:hover{border-color:#f59e0b44;transform:translateY(-3px)}
+.workflow-arrow{color:#f59e0b;font-size:22px;padding:0 8px;align-self:center;flex-shrink:0}
 
-  /* ─── Eyebrow chip — minimal, single accent color ─── */
-  .bc-eyebrow{
-    display:inline-flex;align-items:center;gap:8px;
-    padding:5px 12px;border-radius:999px;
-    background:rgba(251,191,36,.08);
-    border:1px solid rgba(251,191,36,.22);
-    color:var(--bc-amber);
-    font-size:10px;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;
-  }
-  .bc-eyebrow .dot{
-    width:6px;height:6px;border-radius:50%;background:var(--bc-amber);
-    box-shadow:0 0 10px var(--bc-amber);
-    animation:bc-pulse 2.2s cubic-bezier(.4,0,.6,1) infinite;
-  }
-  @keyframes bc-pulse{
-    0%{opacity:.55;transform:scale(.85)}
-    50%{opacity:1;transform:scale(1)}
-    100%{opacity:.55;transform:scale(.85)}
-  }
+.faq-item{border-bottom:1px solid #1e1e3a;padding:16px 0}
+.faq-item:last-child{border-bottom:none}
+.faq-q{font-weight:700;font-size:14px;cursor:pointer;display:flex;justify-content:space-between;
+  align-items:center;color:#e2e2f0;list-style:none}
+.faq-q:hover{color:var(--solar-gold)}
+.faq-q::-webkit-details-marker{display:none}
+.faq-q::after{content:"+";color:var(--solar-gold);font-weight:400;font-size:18px;transition:.2s}
+.faq-item[open] .faq-q::after{content:"−"}
+.faq-a{font-size:13px;color:#8888b8;margin-top:8px;line-height:1.7}
+.section-label{font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
+  color:#f59e0b;margin-bottom:8px}
+.gradient-divider{height:1px;background:linear-gradient(90deg,transparent,#1e1e3a 20%,#2e2e5a 50%,#1e1e3a 80%,transparent);margin:56px 0}
+@keyframes pulse-gold-bc{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4)}70%{box-shadow:0 0 0 12px rgba(245,158,11,0)}}
+.pulse-cta{animation:pulse-gold-bc 2s infinite}
 
-  /* ─── Display heading — large, single-color, tight tracking ─── */
-  h1.bc-h1{
-    font-size:clamp(1.8rem, 4vw, 3rem);
-    font-weight:700;
-    line-height:1.06;
-    letter-spacing:-.025em;
-    color:var(--bc-text);
-    margin:22px auto 14px;
-    max-width:780px;
-  }
-  h1.bc-h1 .bc-grad{
-    background:linear-gradient(135deg, var(--bc-amber-soft) 0%, var(--bc-amber) 50%, var(--bc-coral) 100%);
-    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-  }
-  .bc-sub{
-    font-size:clamp(.95rem, 1.4vw, 1.06rem);
-    color:var(--bc-mute);
-    line-height:1.55;
-    max-width:560px;
-    margin:0 auto 32px;
-    font-weight:400;
-  }
+/* ─── Live demo card — uses the same workflow-step base look ─── */
+.bc-demo{
+  max-width:680px;margin:8px auto 0;
+  background:linear-gradient(180deg,#0a0a14 0%,#080816 100%);
+  border:1px solid #1e1e3a;border-radius:18px;padding:28px;
+  position:relative;
+  box-shadow:0 28px 70px -28px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.03);
+  text-align:left;
+}
+.bc-demo::before{
+  content:"";position:absolute;inset:0;border-radius:18px;pointer-events:none;
+  background:linear-gradient(135deg,rgba(245,158,11,.10) 0%, transparent 30%, rgba(34,197,94,.06) 100%);
+  opacity:.5;
+}
+@media (max-width:520px){.bc-demo{padding:22px 18px;border-radius:14px}}
 
-  /* ─── Live demo card — glassy, generous whitespace, soft shadow ─── */
-  .bc-demo{
-    position:relative;
-    max-width:620px;margin:0 auto;
-    background:linear-gradient(180deg, rgba(17,20,46,.85) 0%, rgba(11,13,32,.92) 100%);
-    border:1px solid var(--bc-line);
-    border-radius:20px;
-    padding:28px 28px 24px;
-    backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
-    box-shadow:
-      0 32px 80px -28px rgba(0,0,0,.75),
-      0 1px 0 rgba(255,255,255,.04) inset;
-    text-align:left;
-  }
-  @media (max-width:480px){
-    .bc-demo{padding:22px 20px 20px;border-radius:16px}
-  }
+.bc-demo-hd{
+  position:relative;
+  display:flex;justify-content:space-between;align-items:center;
+  padding-bottom:18px;border-bottom:1px solid #1e1e3a;margin-bottom:20px;gap:10px;flex-wrap:wrap;
+}
+.bc-demo-label{display:inline-flex;align-items:center;gap:7px;
+  font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#9090b8}
+.bc-demo-label i{font-size:12px;color:#f59e0b}
+.bc-demo-tag{
+  font-size:10px;font-weight:700;letter-spacing:.4px;color:#f59e0b;
+  background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.30);
+  padding:3px 10px;border-radius:999px;
+}
 
-  /* Card header strip — minimal */
-  .bc-demo-hd{
-    display:flex;justify-content:space-between;align-items:center;
-    padding-bottom:18px;
-    border-bottom:1px solid var(--bc-line);
-    margin-bottom:20px;
-    gap:10px;flex-wrap:wrap;
-  }
-  .bc-demo-label{
-    display:inline-flex;align-items:center;gap:7px;
-    font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
-    color:var(--bc-mute);
-  }
-  .bc-demo-tag{
-    font-size:10px;font-weight:600;letter-spacing:.4px;
-    color:var(--bc-amber);
-    background:rgba(251,191,36,.08);
-    border:1px solid rgba(251,191,36,.22);
-    padding:3px 10px;border-radius:999px;
-  }
+.bc-type-row{position:relative;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:22px}
+.bc-type-chip{
+  background:#0f0f22;border:1px solid #1e1e3a;color:#9090b8;
+  border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;
+  display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  transition:border-color .15s, background .15s, color .15s, transform .15s;
+}
+.bc-type-chip i{font-size:12px;opacity:.7}
+.bc-type-chip:hover{border-color:#f59e0b44;color:#e2e2f0;transform:translateY(-1px)}
+.bc-type-chip.active{
+  background:linear-gradient(135deg,rgba(245,158,11,.18),rgba(245,158,11,.08));
+  border-color:rgba(245,158,11,.55);color:#f59e0b;
+}
+.bc-type-chip.active i{opacity:1;color:#f59e0b}
 
-  /* ─── Building-type chips — outline by default, fill on active ─── */
-  .bc-type-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:22px}
-  .bc-type-chip{
-    background:transparent;
-    border:1px solid var(--bc-line-hi);
-    color:var(--bc-text-2);
-    border-radius:8px;
-    padding:7px 12px;
-    font-size:11.5px;font-weight:600;
-    display:inline-flex;align-items:center;gap:6px;
-    cursor:pointer;
-    transition:border-color .15s, background .15s, color .15s, transform .15s;
-  }
-  .bc-type-chip i{font-size:12px;opacity:.7}
-  .bc-type-chip:hover{
-    border-color:rgba(251,191,36,.45);
-    color:var(--bc-text);
-  }
-  .bc-type-chip.active{
-    background:rgba(251,191,36,.10);
-    border-color:rgba(251,191,36,.55);
-    color:var(--bc-amber);
-  }
-  .bc-type-chip.active i{opacity:1;color:var(--bc-amber)}
+.bc-amount-label{
+  position:relative;display:block;text-align:center;
+  font-size:10.5px;color:#6868a0;font-weight:700;
+  letter-spacing:1.4px;text-transform:uppercase;
+}
+.bc-amount-row{
+  position:relative;
+  display:flex;align-items:baseline;justify-content:center;gap:6px;padding:10px 0 14px;
+}
+.bc-amount-prefix{font-size:14px;font-weight:700;color:#6868a0;letter-spacing:.5px}
+.bc-amount-input{
+  background:transparent;border:0;outline:none;
+  color:#e2e2f0;font-weight:900;font-size:42px;line-height:1;
+  width:230px;text-align:center;font-variant-numeric:tabular-nums;
+  letter-spacing:-.025em;padding:0;
+  background:linear-gradient(135deg,#f2f2fd 20%,var(--solar-gold) 55%,var(--solar-blue));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.bc-amount-input::-webkit-outer-spin-button,
+.bc-amount-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.bc-amount-input[type=number]{-moz-appearance:textfield}
 
-  /* ─── Amount block — premium number input ─── */
-  .bc-amount-row{
-    display:flex;align-items:baseline;justify-content:center;gap:6px;
-    padding:14px 0;
-  }
-  .bc-amount-label{
-    display:block;text-align:center;
-    font-size:10.5px;color:var(--bc-mute);font-weight:600;
-    letter-spacing:1.4px;text-transform:uppercase;
-    margin-bottom:0;
-  }
-  .bc-amount-prefix{
-    font-size:14px;font-weight:600;color:var(--bc-mute);
-    letter-spacing:.5px;
-  }
-  .bc-amount-input{
-    background:transparent;border:0;outline:none;
-    color:var(--bc-text);font-weight:700;font-size:36px;line-height:1;
-    width:200px;text-align:center;font-variant-numeric:tabular-nums;
-    letter-spacing:-.02em;padding:0;
-  }
-  .bc-amount-input::-webkit-outer-spin-button,
-  .bc-amount-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-  .bc-amount-input[type=number]{-moz-appearance:textfield}
+.bc-slider-wrap{position:relative;display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.bc-slider-end{font-size:10.5px;color:#6868a0;font-weight:600;font-variant-numeric:tabular-nums;flex-shrink:0;letter-spacing:.4px}
+.bc-slider{
+  flex:1;-webkit-appearance:none;appearance:none;
+  height:5px;border-radius:2.5px;
+  background:linear-gradient(90deg,#f59e0b 0%,#f59e0b 0%,#1e1e3a 0%,#1e1e3a 100%);
+  outline:none;cursor:pointer;
+}
+.bc-slider::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;
+  background:linear-gradient(135deg,#fbbf24,#d97706);
+  border:3px solid #0a0a14;
+  box-shadow:0 0 0 1px rgba(245,158,11,.55), 0 6px 16px -3px rgba(245,158,11,.55);
+  cursor:grab;
+}
+.bc-slider::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.08)}
+.bc-slider::-moz-range-thumb{width:20px;height:20px;border-radius:50%;
+  background:linear-gradient(135deg,#fbbf24,#d97706);border:3px solid #0a0a14;cursor:grab}
 
-  /* ─── Slider — clean rail + amber thumb ─── */
-  .bc-slider-wrap{display:flex;align-items:center;gap:12px;margin-bottom:24px}
-  .bc-slider-end{font-size:10.5px;color:var(--bc-dim);font-weight:500;font-variant-numeric:tabular-nums;flex-shrink:0;letter-spacing:.4px}
-  .bc-slider{
-    flex:1;-webkit-appearance:none;appearance:none;
-    height:4px;border-radius:2px;
-    background:linear-gradient(90deg, rgba(251,191,36,.6) 0%, var(--bc-line-hi) 0%);
-    outline:none;cursor:pointer;
-  }
-  .bc-slider::-webkit-slider-thumb{
-    -webkit-appearance:none;appearance:none;
-    width:18px;height:18px;border-radius:50%;
-    background:var(--bc-amber);
-    border:3px solid var(--bc-paper);
-    box-shadow:0 0 0 1px rgba(251,191,36,.6), 0 4px 14px -2px rgba(251,191,36,.5);
-    cursor:grab;
-  }
-  .bc-slider::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.1)}
-  .bc-slider::-moz-range-thumb{
-    width:18px;height:18px;border-radius:50%;
-    background:var(--bc-amber);border:3px solid var(--bc-paper);
-    cursor:grab;
-  }
+/* ─── 3 outcome cards — workflow-step look, smaller ─── */
+.bc-bars-grid{position:relative;display:grid;grid-template-columns:1fr;gap:10px;margin-top:6px}
+@media (min-width:560px){.bc-bars-grid{grid-template-columns:repeat(3,1fr)}}
 
-  /* ─── 3 outcome cards — clean, monochrome, single tonal hint ─── */
-  .bc-bars-grid{
-    display:grid;grid-template-columns:1fr;gap:10px;margin-top:6px;
-  }
-  @media (min-width:560px){.bc-bars-grid{grid-template-columns:repeat(3,1fr)}}
+.bc-bar-card{
+  background:#0f0f22;border:1px solid #1e1e3a;border-radius:12px;
+  padding:14px;transition:border-color .2s, transform .2s;
+}
+.bc-bar-card:hover{border-color:#2e2e5a;transform:translateY(-2px)}
+.bc-bar-card .lbl{
+  font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:#6868a0;font-weight:700;
+  display:flex;align-items:center;gap:5px;
+}
+.bc-bar-card .lbl i{font-size:10px}
+.bc-bar-card.tone-now    .lbl i{color:#fb7185}
+.bc-bar-card.tone-during .lbl i{color:#a78bfa}
+.bc-bar-card.tone-after  .lbl i{color:#22c55e}
+.bc-bar-card .amt{font-size:22px;font-weight:900;line-height:1.1;margin-top:5px;
+  color:#e2e2f0;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.bc-bar-card .tag{font-size:10.5px;color:#6868a0;margin-top:4px}
 
-  .bc-bar-card{
-    padding:14px 14px 12px;
-    border-radius:10px;
-    background:rgba(255,255,255,.02);
-    border:1px solid var(--bc-line);
-    transition:border-color .2s, transform .2s;
-  }
-  .bc-bar-card:hover{border-color:var(--bc-line-hi);transform:translateY(-1px)}
+.bc-bar{height:3px;border-radius:1.5px;background:rgba(255,255,255,.04);overflow:hidden;margin-top:10px}
+.bc-bar > span{display:block;height:100%;border-radius:1.5px;transition:width .4s cubic-bezier(.2,.7,.3,1)}
+.bc-bar.rose  > span{background:#fb7185}
+.bc-bar.split{display:flex;gap:1px;background:transparent}
+.bc-bar.split > span{display:block;height:100%;transition:flex .4s cubic-bezier(.2,.7,.3,1)}
+.bc-bar.split .residual{background:#a78bfa}
+.bc-bar.split .loan    {background:#22c55e}
+.bc-bar.mint > span{background:#22c55e}
 
-  .bc-bar-card .lbl{
-    font-size:9.5px;letter-spacing:1px;text-transform:uppercase;
-    color:var(--bc-mute);font-weight:700;
-    display:flex;align-items:center;gap:5px;
-  }
-  .bc-bar-card .lbl i{font-size:11px}
-  .bc-bar-card.tone-now    .lbl i{color:var(--bc-rose)}
-  .bc-bar-card.tone-during .lbl i{color:var(--bc-indigo)}
-  .bc-bar-card.tone-after  .lbl i{color:var(--bc-mint)}
+.bc-bar-card .amt.bc-flash{animation:bc-flash .35s ease-out}
+@keyframes bc-flash{0%{color:#f59e0b}100%{color:#e2e2f0}}
 
-  .bc-bar-card .amt{
-    font-size:20px;font-weight:700;line-height:1.1;margin-top:4px;
-    color:var(--bc-text);font-variant-numeric:tabular-nums;letter-spacing:-.02em;
-  }
-  .bc-bar-card .tag{
-    font-size:10px;color:var(--bc-dim);margin-top:3px;letter-spacing:.2px;
-  }
+.bc-callout{
+  position:relative;
+  margin-top:22px;padding:16px 18px;border-radius:12px;
+  background:linear-gradient(135deg,rgba(34,197,94,.08) 0%,rgba(245,158,11,.06) 100%);
+  border:1px solid rgba(34,197,94,.20);
+  font-size:13.5px;color:#dcdcef;line-height:1.6;
+}
+.bc-callout .num{color:#f59e0b;font-weight:900;font-variant-numeric:tabular-nums}
+.bc-callout strong{color:#22c55e;font-weight:700}
 
-  /* Compact progress bars at the bottom of each outcome card */
-  .bc-bar{height:3px;border-radius:1.5px;background:rgba(255,255,255,.04);overflow:hidden;margin-top:10px}
-  .bc-bar > span{display:block;height:100%;border-radius:1.5px;transition:width .4s cubic-bezier(.2,.7,.3,1)}
-  .bc-bar.rose  > span{background:var(--bc-rose)}
-  .bc-bar.split{display:flex;gap:1px;background:transparent}
-  .bc-bar.split > span{display:block;height:100%;transition:flex .4s cubic-bezier(.2,.7,.3,1)}
-  .bc-bar.split .residual{background:var(--bc-indigo)}
-  .bc-bar.split .loan    {background:var(--bc-mint)}
-  .bc-bar.mint > span{background:var(--bc-mint)}
+/* Trust strip below CTA */
+.bc-trust-row{
+  display:flex;justify-content:center;align-items:center;gap:24px;
+  margin-top:18px;flex-wrap:wrap;
+}
+.bc-trust{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#9090b8}
+.bc-trust i{font-size:13px;color:#f59e0b}
 
-  /* Soft callout — single-line, italic-free */
-  .bc-callout{
-    margin-top:20px;padding:14px 16px;
-    border-radius:10px;
-    background:linear-gradient(135deg, rgba(52,211,153,.06) 0%, rgba(251,191,36,.04) 100%);
-    border:1px solid rgba(52,211,153,.18);
-    font-size:13px;color:var(--bc-text-2);line-height:1.55;
-  }
-  .bc-callout .num{color:var(--bc-amber);font-weight:700;font-variant-numeric:tabular-nums}
-  .bc-callout strong{color:var(--bc-mint);font-weight:600}
+/* Step numbered badge inside workflow-step */
+.bc-step-num{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;border-radius:10px;
+  background:linear-gradient(135deg,rgba(245,158,11,.20),rgba(245,158,11,.06));
+  border:1px solid rgba(245,158,11,.35);
+  color:#f59e0b;font-weight:900;font-size:14px;margin-bottom:14px;
+}
 
-  /* Card flash on slider drag */
-  .bc-bar-card .amt.bc-flash{animation:bc-flash .35s ease-out}
-  @keyframes bc-flash{
-    0%  {color:var(--bc-amber)}
-    100%{color:var(--bc-text)}
-  }
-
-  /* ─── CTA buttons — premium ─── */
-  .bc-cta-primary{
-    background:linear-gradient(135deg, var(--bc-amber) 0%, var(--bc-coral) 100%);
-    color:#15101a;border:0;
-    font-weight:700;
-    padding:13px 28px;
-    border-radius:10px;
-    font-size:14px;letter-spacing:.1px;
-    box-shadow:
-      0 16px 36px -10px rgba(251,146,60,.55),
-      inset 0 1px 0 rgba(255,255,255,.32);
-    transition:transform .18s cubic-bezier(.2,.7,.3,1), box-shadow .18s;
-    cursor:pointer;
-    display:inline-flex;align-items:center;gap:8px;
-  }
-  .bc-cta-primary:hover{
-    transform:translateY(-1px);
-    box-shadow:0 22px 46px -12px rgba(251,146,60,.70), inset 0 1px 0 rgba(255,255,255,.36);
-    color:#0a0612;
-  }
-  .bc-cta-primary:active{transform:translateY(0) scale(.99)}
-  .bc-cta-row{margin-top:24px;text-align:center}
-
-  /* Trust strip below CTA — minimal */
-  .bc-trust-row{
-    display:flex;justify-content:center;align-items:center;gap:18px;
-    margin-top:18px;flex-wrap:wrap;
-  }
-  .bc-trust{
-    display:inline-flex;align-items:center;gap:6px;
-    font-size:11px;color:var(--bc-mute);
-  }
-  .bc-trust i{font-size:13px;color:var(--bc-amber);opacity:.85}
-
-  /* ─── 3-step rail — minimalist ─── */
-  .bc-steps{
-    margin:64px auto 0;max-width:880px;padding:0 16px;
-  }
-  .bc-steps-grid{
-    display:grid;grid-template-columns:1fr;gap:14px;
-  }
-  @media (min-width:640px){.bc-steps-grid{grid-template-columns:repeat(3,1fr)}}
-
-  .bc-step{
-    padding:20px;
-    border-radius:14px;
-    background:rgba(255,255,255,.02);
-    border:1px solid var(--bc-line);
-    transition:border-color .15s, background .15s;
-  }
-  .bc-step:hover{border-color:var(--bc-line-hi);background:rgba(255,255,255,.03)}
-  .bc-step-num{
-    display:inline-flex;align-items:center;justify-content:center;
-    width:28px;height:28px;border-radius:50%;
-    background:rgba(251,191,36,.10);
-    color:var(--bc-amber);
-    font-weight:700;font-size:12.5px;
-    margin-bottom:12px;
-  }
-  .bc-step-title{
-    font-size:14px;font-weight:600;color:var(--bc-text);
-    margin-bottom:5px;letter-spacing:-.005em;
-  }
-  .bc-step-body{
-    font-size:12.5px;color:var(--bc-mute);line-height:1.6;
-  }
-
-  /* ─── FAQ — minimal, single-divider ─── */
-  .bc-faq-section{
-    margin:64px auto 0;max-width:720px;padding:0 16px;
-  }
-  .bc-faq-h{
-    font-size:18px;font-weight:600;color:var(--bc-text);
-    text-align:center;margin-bottom:24px;letter-spacing:-.01em;
-  }
-  .bc-faq{border-top:1px solid var(--bc-line)}
-  .bc-faq:last-of-type{border-bottom:1px solid var(--bc-line)}
-  .bc-faq summary{
-    list-style:none;cursor:pointer;
-    padding:18px 4px;
-    color:var(--bc-text);font-size:14px;font-weight:500;
-    display:flex;justify-content:space-between;align-items:center;
-    transition:color .15s;
-  }
-  .bc-faq summary:hover{color:var(--bc-amber)}
-  .bc-faq summary::-webkit-details-marker{display:none}
-  .bc-faq summary::after{
-    content:"+";color:var(--bc-mute);
-    font-size:18px;font-weight:400;line-height:1;
-    transition:transform .2s, color .15s;
-  }
-  .bc-faq[open] summary::after{content:"−";color:var(--bc-amber)}
-  .bc-faq p{
-    padding:0 4px 18px;color:var(--bc-text-2);font-size:13px;line-height:1.65;margin:0;
-  }
-  .bc-faq strong{color:var(--bc-amber-soft);font-weight:600}
-
-  /* ─── Final CTA section ─── */
-  .bc-final{
-    margin:64px auto 56px;text-align:center;padding:0 16px;
-  }
-  .bc-final-src{
-    margin-top:14px;font-size:11px;color:var(--bc-dim);
-  }
-  .bc-final-src a{color:var(--bc-mute);text-decoration:none;transition:color .15s}
-  .bc-final-src a:hover{color:var(--bc-amber)}
-
-  /* Friend-prefilled chip */
-  .bc-friend-chip{
-    display:inline-flex;align-items:center;gap:7px;
-    padding:6px 14px;border-radius:999px;
-    background:rgba(52,211,153,.07);border:1px solid rgba(52,211,153,.25);
-    color:var(--bc-mint);font-size:11.5px;font-weight:500;
-    margin-bottom:18px;
-  }
+.bc-friend-chip{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:6px 14px;border-radius:999px;
+  background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);
+  color:#22c55e;font-size:12px;font-weight:600;margin-bottom:18px;
+}
 </style>
 {% endblock %}
 
 {% block content %}
 
 {# ════════════════════════════════════════════════════════════════ HERO ═══ #}
-<section class="bc-hero">
-  <div class="container text-center" style="max-width:980px;position:relative;z-index:1">
+<div class="hero-bg text-center py-5 mb-4">
 
-    <div class="bc-eyebrow"><span class="dot"></span>60-second bill audit · PURC Q2 2026</div>
+  <div class="hero-badge">
+    <span class="live-dot"></span>60-Second Bill Audit · PURC Q2 2026
+  </div>
 
-    <h1 class="bc-h1">
-      Your bill already funds solar.<br>
-      <span class="bc-grad">Just not yours — yet.</span>
-    </h1>
+  <h1 class="fw-black mb-3" style="font-size:clamp(2rem,5vw,3.4rem);letter-spacing:-.5px;
+    background:linear-gradient(135deg,#f2f2fd 20%,var(--solar-gold) 55%,var(--solar-blue));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.15">
+    Your bill already funds<br>solar — just not<br>yours yet.
+  </h1>
+  <p class="lead text-secondary mb-4 mx-auto" style="max-width:620px;font-size:1.05rem;line-height:1.7">
+    Drop your monthly bill in and we'll show you <strong style="color:#f59e0b">exactly how much
+    of it could repay a solar loan</strong> — and how much it permanently drops once that loan is done.
+  </p>
 
-    <p class="bc-sub">
-      Drop your monthly bill in and we'll show you exactly how much of it could
-      repay a solar loan — and how much it permanently drops once that loan is done.
-    </p>
+  {% if prefill %}
+    <div class="bc-friend-chip"><i class="bi bi-people-fill"></i>A friend prefilled this for you.</div>
+  {% endif %}
 
-    {% if prefill %}
-      <div class="bc-friend-chip">
-        <i class="bi bi-people-fill"></i>A friend prefilled this for you.
-      </div>
-    {% endif %}
+  {# ───────────────────────────────── LIVE DEMO CARD ─── #}
+  <div class="bc-demo" id="bcDemo">
 
-    {# ───────────────────────────────── LIVE DEMO CARD ─── #}
-    <div class="bc-demo" id="bcDemo">
-
-      <div class="bc-demo-hd">
-        <div class="bc-demo-label"><i class="bi bi-sliders"></i>Live model · drag to test</div>
-        <div class="bc-demo-tag" id="bcCatLabel">Residential · PURC Q2 2026</div>
-      </div>
-
-      {# Building-type chips #}
-      <div class="bc-type-row" role="tablist" aria-label="Customer category">
-        <button type="button" class="bc-type-chip active" data-bc-type="home" aria-pressed="true">
-          <i class="bi bi-house-door-fill"></i>Home
-        </button>
-        <button type="button" class="bc-type-chip" data-bc-type="lifeline" aria-pressed="false">
-          <i class="bi bi-lightbulb"></i>Lifeline
-        </button>
-        <button type="button" class="bc-type-chip" data-bc-type="shop" aria-pressed="false">
-          <i class="bi bi-shop"></i>Shop / Office
-        </button>
-        <button type="button" class="bc-type-chip" data-bc-type="slt" aria-pressed="false">
-          <i class="bi bi-building"></i>Industry / SLT
-        </button>
-      </div>
-
-      <div class="bc-amount-label">Your monthly bill</div>
-      <div class="bc-amount-row">
-        <span class="bc-amount-prefix">GHS</span>
-        <input id="bcLandingBillNum" class="bc-amount-input" type="number" min="0" step="50" value="4200" aria-label="Monthly bill amount in GHS">
-      </div>
-
-      <div class="bc-slider-wrap">
-        <span class="bc-slider-end">50</span>
-        <input id="bcLandingBill" class="bc-slider" type="range" min="50" max="20000" step="50" value="4200" aria-label="Bill amount slider">
-        <span class="bc-slider-end">20k</span>
-      </div>
-
-      {# 3-card outcome strip #}
-      <div class="bc-bars-grid">
-        <div class="bc-bar-card tone-now">
-          <div class="lbl"><i class="bi bi-circle-fill"></i>Today</div>
-          <div class="amt" id="bcVal1">GHS 4,200</div>
-          <div class="tag">100% grid bill</div>
-          <div class="bc-bar rose"><span style="width:100%"></span></div>
-        </div>
-        <div class="bc-bar-card tone-during">
-          <div class="lbl"><i class="bi bi-circle-fill"></i>During loan (~<span id="bcLoanYrs">5</span>y)</div>
-          <div class="amt" id="bcVal2">GHS 3,037</div>
-          <div class="tag">Residual bill + loan payment</div>
-          <div class="bc-bar split">
-            <span class="residual" id="bcSplitResidual" style="flex:50"></span>
-            <span class="loan"     id="bcSplitLoan"     style="flex:22"></span>
-          </div>
-        </div>
-        <div class="bc-bar-card tone-after">
-          <div class="lbl"><i class="bi bi-circle-fill"></i>After loan · forever</div>
-          <div class="amt" id="bcVal3">GHS 2,100</div>
-          <div class="tag" id="bcDropTag">−50% permanent drop</div>
-          <div class="bc-bar mint"><span id="bcAfterFill" style="width:50%"></span></div>
-        </div>
-      </div>
-
-      <div class="bc-callout" id="bcCallout">
-        Pay <span class="num">GHS 937</span>/mo of your bill toward a
-        <span class="num">5.0 kWp</span> solar loan
-        — after <span class="num">5 yrs</span> your bill drops
-        <span class="num">50%</span> forever.
-      </div>
-
-      <div class="bc-cta-row">
-        <button type="button" class="bc-cta-primary" data-bs-toggle="modal" data-bs-target="#billCheckModal">
-          <i class="bi bi-receipt-cutoff"></i>Open Full Tool
-        </button>
-      </div>
-
-    </div>{# /bc-demo #}
-
-    <div class="bc-trust-row">
-      <span class="bc-trust"><i class="bi bi-shield-check"></i>PURC Q2 2026 rates</span>
-      <span class="bc-trust"><i class="bi bi-eye-slash"></i>No signup</span>
-      <span class="bc-trust"><i class="bi bi-file-earmark-pdf"></i>PDF report</span>
-      <span class="bc-trust"><i class="bi bi-people"></i>Share with friends</span>
+    <div class="bc-demo-hd">
+      <div class="bc-demo-label"><i class="bi bi-sliders"></i>Live model · drag to test</div>
+      <div class="bc-demo-tag" id="bcCatLabel">Residential · PURC Q2 2026</div>
     </div>
 
+    <div class="bc-type-row" role="tablist" aria-label="Customer category">
+      <button type="button" class="bc-type-chip active" data-bc-type="home" aria-pressed="true">
+        <i class="bi bi-house-door-fill"></i>Home
+      </button>
+      <button type="button" class="bc-type-chip" data-bc-type="lifeline" aria-pressed="false">
+        <i class="bi bi-lightbulb"></i>Lifeline
+      </button>
+      <button type="button" class="bc-type-chip" data-bc-type="shop" aria-pressed="false">
+        <i class="bi bi-shop"></i>Shop / Office
+      </button>
+      <button type="button" class="bc-type-chip" data-bc-type="slt" aria-pressed="false">
+        <i class="bi bi-building"></i>Industry / SLT
+      </button>
+    </div>
+
+    <div class="bc-amount-label">Your monthly bill</div>
+    <div class="bc-amount-row">
+      <span class="bc-amount-prefix">GHS</span>
+      <input id="bcLandingBillNum" class="bc-amount-input" type="number" min="0" step="50" value="4200"
+             aria-label="Monthly bill amount in GHS">
+    </div>
+
+    <div class="bc-slider-wrap">
+      <span class="bc-slider-end">50</span>
+      <input id="bcLandingBill" class="bc-slider" type="range" min="50" max="20000" step="50" value="4200"
+             aria-label="Bill amount slider">
+      <span class="bc-slider-end">20k</span>
+    </div>
+
+    <div class="bc-bars-grid">
+      <div class="bc-bar-card tone-now">
+        <div class="lbl"><i class="bi bi-circle-fill"></i>Today</div>
+        <div class="amt" id="bcVal1">GHS 4,200</div>
+        <div class="tag">100% grid bill</div>
+        <div class="bc-bar rose"><span style="width:100%"></span></div>
+      </div>
+      <div class="bc-bar-card tone-during">
+        <div class="lbl"><i class="bi bi-circle-fill"></i>During loan (~<span id="bcLoanYrs">5</span>y)</div>
+        <div class="amt" id="bcVal2">GHS 3,037</div>
+        <div class="tag">Residual bill + loan payment</div>
+        <div class="bc-bar split">
+          <span class="residual" id="bcSplitResidual" style="flex:50"></span>
+          <span class="loan"     id="bcSplitLoan"     style="flex:22"></span>
+        </div>
+      </div>
+      <div class="bc-bar-card tone-after">
+        <div class="lbl"><i class="bi bi-circle-fill"></i>After loan · forever</div>
+        <div class="amt" id="bcVal3">GHS 2,100</div>
+        <div class="tag" id="bcDropTag">−50% permanent drop</div>
+        <div class="bc-bar mint"><span id="bcAfterFill" style="width:50%"></span></div>
+      </div>
+    </div>
+
+    <div class="bc-callout" id="bcCallout">
+      Pay <span class="num">GHS 937</span>/mo of your bill toward a
+      <span class="num">5.0 kWp</span> solar loan
+      — after <span class="num">5 yrs</span> your bill drops
+      <span class="num">50%</span> forever.
+    </div>
+
+    <div class="text-center mt-4" style="position:relative">
+      <button type="button" class="btn btn-lg px-5 fw-bold pulse-cta"
+              data-bs-toggle="modal" data-bs-target="#billCheckModal"
+              style="background:linear-gradient(135deg,#fbbf24,#d97706);border:none;color:#0a0a1c;
+                     box-shadow:0 14px 30px -10px rgba(245,158,11,.55), inset 0 1px 0 rgba(255,255,255,.25)">
+        <i class="bi bi-receipt-cutoff me-2"></i>Open Full Tool
+        <span style="font-size:10px;font-weight:700;background:#0a0a1c;color:#fbbf24;
+                     padding:2px 7px;border-radius:999px;margin-left:8px;letter-spacing:1px">FREE</span>
+      </button>
+    </div>
+
+  </div>{# /bc-demo #}
+
+  <div class="bc-trust-row">
+    <span class="bc-trust"><i class="bi bi-shield-check"></i>PURC Q2 2026 rates</span>
+    <span class="bc-trust"><i class="bi bi-eye-slash"></i>No signup</span>
+    <span class="bc-trust"><i class="bi bi-file-earmark-pdf"></i>PDF report</span>
+    <span class="bc-trust"><i class="bi bi-people"></i>Share with friends</span>
   </div>
-</section>
+
+</div>
+
+<div class="gradient-divider"></div>
 
 {# ════════════════════════════════════════════ HOW IT WORKS ═══ #}
-<section class="bc-steps">
-  <div class="bc-steps-grid">
-    <div class="bc-step">
-      <div class="bc-step-num">1</div>
-      <div class="bc-step-title">Enter your bill</div>
-      <div class="bc-step-body">Just the GHS amount and your meter category. We use the live PURC tariff to back-derive your kWh.</div>
+<div class="container" style="max-width:1100px">
+  <div class="text-center mb-4">
+    <div class="section-label">3-step audit</div>
+    <h2 class="fw-black" style="font-size:clamp(1.5rem,3vw,2.1rem);color:#e2e2f0;letter-spacing:-.3px">
+      Bill in. Funding model out. <span style="color:var(--solar-gold)">Sixty seconds.</span>
+    </h2>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-4">
+      <div class="workflow-step h-100">
+        <div class="bc-step-num">1</div>
+        <h5 class="fw-black mb-2" style="color:#e2e2f0;font-size:16px">Enter your bill</h5>
+        <p class="text-secondary mb-0" style="font-size:13px;line-height:1.6">
+          Just the GHS amount and your meter category. We use the live PURC tariff to back-derive your kWh.
+        </p>
+      </div>
     </div>
-    <div class="bc-step">
-      <div class="bc-step-num">2</div>
-      <div class="bc-step-title">See the funding model</div>
-      <div class="bc-step-body">Three numbers: what you pay today, what you'd pay during a solar loan, and what you'd pay after.</div>
+    <div class="col-md-4">
+      <div class="workflow-step h-100">
+        <div class="bc-step-num">2</div>
+        <h5 class="fw-black mb-2" style="color:#e2e2f0;font-size:16px">See the funding model</h5>
+        <p class="text-secondary mb-0" style="font-size:13px;line-height:1.6">
+          Three numbers — what you pay today, what you'd pay during a solar loan, and what you'd pay after.
+        </p>
+      </div>
     </div>
-    <div class="bc-step">
-      <div class="bc-step-num">3</div>
-      <div class="bc-step-title">Export &amp; share</div>
-      <div class="bc-step-body">Download a PDF report, email it to yourself, or invite friends with the numbers prefilled.</div>
+    <div class="col-md-4">
+      <div class="workflow-step h-100">
+        <div class="bc-step-num">3</div>
+        <h5 class="fw-black mb-2" style="color:#e2e2f0;font-size:16px">Export &amp; share</h5>
+        <p class="text-secondary mb-0" style="font-size:13px;line-height:1.6">
+          Download a PDF, email it to yourself, or invite friends with the numbers prefilled.
+        </p>
+      </div>
     </div>
   </div>
-</section>
+</div>
+
+<div class="gradient-divider"></div>
 
 {# ═══════════════════════════════════════════════════════════ FAQ ═══ #}
-<section class="bc-faq-section">
-  <div class="bc-faq-h">Common questions</div>
+<div class="container" style="max-width:720px">
+  <div class="text-center mb-4">
+    <div class="section-label">Common questions</div>
+    <h2 class="fw-black" style="font-size:clamp(1.5rem,3vw,2.1rem);color:#e2e2f0;letter-spacing:-.3px">
+      Frequently asked
+    </h2>
+  </div>
 
-  <details class="bc-faq">
-    <summary>Is the tariff accurate?</summary>
-    <p>Yes. Live <strong>PURC Q2 2026</strong> rates, effective 01-04-2026. Twelve customer categories covered. We update each quarter as PURC issues new schedules.</p>
+  <details class="faq-item">
+    <summary class="faq-q">Is the tariff accurate?</summary>
+    <div class="faq-a">
+      Yes. Live <strong style="color:var(--solar-gold)">PURC Q2 2026</strong> rates, effective 01-04-2026.
+      Twelve customer categories covered. We update each quarter as PURC issues new schedules.
+    </div>
   </details>
 
-  <details class="bc-faq">
-    <summary>What about levies and VAT?</summary>
-    <p>We compare the <strong>energy charge plus service</strong>. Levies typically add ~17.5% on top — we show the gap so you can match it to your receipt.</p>
+  <details class="faq-item">
+    <summary class="faq-q">What about levies and VAT?</summary>
+    <div class="faq-a">
+      We compare the <strong style="color:var(--solar-gold)">energy charge plus service</strong>.
+      Levies typically add ~17.5% on top — we show the gap so you can match it to your receipt.
+    </div>
   </details>
 
-  <details class="bc-faq">
-    <summary>Can I share my result with someone?</summary>
-    <p>Yes — <strong>copy link</strong>, <strong>email me</strong>, or <strong>invite friends</strong>. They open the tool with your numbers prefilled.</p>
+  <details class="faq-item">
+    <summary class="faq-q">Can I share my result with someone?</summary>
+    <div class="faq-a">
+      Yes — <strong style="color:var(--solar-gold)">copy link</strong>,
+      <strong style="color:var(--solar-gold)">email me</strong>, or
+      <strong style="color:var(--solar-gold)">invite friends</strong>. They open the tool with your numbers prefilled.
+    </div>
   </details>
 
-  <details class="bc-faq">
-    <summary>Does this require sign-up?</summary>
-    <p>No. The audit + PDF report are free and anonymous. Sign up only if you want the result saved to a SolarPro project so an installer can pick it up.</p>
+  <details class="faq-item">
+    <summary class="faq-q">Does this require sign-up?</summary>
+    <div class="faq-a">
+      No. The audit + PDF report are free and anonymous. Sign up only if you want the result saved to a
+      SolarPro project so an installer can pick it up.
+    </div>
   </details>
-</section>
+</div>
+
+<div class="gradient-divider"></div>
 
 {# ════════════════════════════════════════════════════ FINAL CTA ═══ #}
-<section class="bc-final">
-  <button type="button" class="bc-cta-primary" data-bs-toggle="modal" data-bs-target="#billCheckModal">
-    <i class="bi bi-lightning-charge-fill"></i>Open Full Tool
+<div class="container text-center mb-5" style="max-width:760px">
+  <h2 class="fw-black mb-3" style="font-size:clamp(1.4rem,2.6vw,1.9rem);color:#e2e2f0;letter-spacing:-.3px">
+    Ready to see your number?
+  </h2>
+  <p class="text-secondary mb-4" style="font-size:14px;max-width:480px;margin:0 auto">
+    Free, anonymous, takes about a minute. The full tool will email you a PDF report when you're done.
+  </p>
+  <button type="button" class="btn btn-lg px-5 fw-bold pulse-cta"
+          data-bs-toggle="modal" data-bs-target="#billCheckModal"
+          style="background:linear-gradient(135deg,#fbbf24,#d97706);border:none;color:#0a0a1c;
+                 box-shadow:0 14px 30px -10px rgba(245,158,11,.55), inset 0 1px 0 rgba(255,255,255,.25)">
+    <i class="bi bi-lightning-charge-fill me-2"></i>Open Full Tool
   </button>
-  <div class="bc-final-src">
-    <a href="https://www.purc.com.gh/attachment/288818-20260313090334.pdf" target="_blank" rel="noopener">
+  <div class="mt-3" style="font-size:11px;color:#6868a0">
+    <a href="https://www.purc.com.gh/attachment/288818-20260313090334.pdf"
+       target="_blank" rel="noopener" style="color:var(--solar-gold);text-decoration:none">
       PURC Q2 2026 source <i class="bi bi-box-arrow-up-right"></i>
     </a>
   </div>
-</section>
+</div>
 
 {# ═══════════════════════════════════════════ LIVE DEMO JS ═══ #}
 <script>
 (function(){
-  // Effective rates are server-injected from GHANA_PURC_TARIFFS (see _bc_landing_types)
-  // so the slider stays in lock-step with the Python source on PURC quarterly updates.
+  // Effective rates server-injected from GHANA_PURC_TARIFFS via _bc_landing_types.
   const SERVER_TYPES = {{ bc_types|tojson if bc_types is defined else 'null' }};
   const TYPES = SERVER_TYPES || {
     home:     {label:"Residential · Standard", effRate:2.20},
@@ -557,7 +429,6 @@
   };
 
   let currentType = "home";
-
   const fmtGHS = (v) => "GHS " + Math.round(v).toLocaleString();
 
   function compute(bill){
@@ -575,18 +446,12 @@
     const monthlySave = bill * CONST.target_pct;
     const residual = Math.max(0, bill - monthlySave);
     const combined = residual + loanPmt;
-    const portionPct = bill > 0 ? (loanPmt / bill * 100) : 0;
     const dropPct = bill > 0 ? (monthlySave / bill * 100) : 0;
-    return {bill, kwh, recKwp, sysCost, loanPmt, monthlySave, residual, combined, portionPct, dropPct};
+    return {bill, kwh, recKwp, sysCost, loanPmt, monthlySave, residual, combined, dropPct};
   }
 
   const $ = (sel) => document.querySelector(sel);
-
-  function flash(el){
-    el.classList.remove("bc-flash");
-    void el.offsetWidth;
-    el.classList.add("bc-flash");
-  }
+  function flash(el){ el.classList.remove("bc-flash"); void el.offsetWidth; el.classList.add("bc-flash"); }
   function setAmt(sel, text){
     const el = $(sel);
     if (el.textContent !== text) { el.textContent = text; flash(el); }
@@ -607,11 +472,11 @@
     const afterPct = Math.min(100, splitResidual);
     $("#bcAfterFill").style.width = afterPct.toFixed(1) + "%";
 
-    // Visual fill of the slider rail itself
+    // Slider rail fill
     const slider = $("#bcLandingBill");
     if (slider) {
       const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
-      slider.style.background = `linear-gradient(90deg, var(--bc-amber) 0%, var(--bc-amber) ${pct}%, var(--bc-line-hi) ${pct}%, var(--bc-line-hi) 100%)`;
+      slider.style.background = `linear-gradient(90deg, #f59e0b 0%, #f59e0b ${pct}%, #1e1e3a ${pct}%, #1e1e3a 100%)`;
     }
 
     const co = $("#bcCallout");
@@ -634,10 +499,7 @@
     }
   }
 
-  function tick(v){
-    const r = compute(parseFloat(v) || 0);
-    render(r);
-  }
+  function tick(v){ render(compute(parseFloat(v) || 0)); }
 
   const slider = $("#bcLandingBill");
   const num    = $("#bcLandingBillNum");
@@ -660,7 +522,7 @@
 
   tick(slider.value);
 
-  // ───── share-token prefill (when arriving from an invite) ──────
+  // ── share-token prefill ──
   window.BILL_CHECK_PREFILL = {{ prefill|tojson }};
   document.addEventListener("DOMContentLoaded", function(){
     const p = window.BILL_CHECK_PREFILL || {};
