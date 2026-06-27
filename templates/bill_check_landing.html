@@ -45,13 +45,6 @@
     font-size:9.5px;font-weight:800;letter-spacing:1.6px;
     text-transform:uppercase;color:var(--bc-amber);
   }
-  /* Tone variants — all forced gold per design rule */
-  .bc-pill-mint, .bc-pill-violet{
-    background:rgba(251,191,36,.10);
-    border-color:rgba(251,191,36,.35);
-    color:var(--bc-amber);
-  }
-
   /* Editorial headline — clean, solid colors, weight contrast */
   h1.bc-h1{
     font-size:clamp(.95rem, 1.5vw, 1.2rem);
@@ -319,14 +312,6 @@
     color:var(--bc-gold-hi);
     box-shadow:0 8px 18px -8px rgba(251,191,36,.30);
   }
-  /* Force tone variants to gold too */
-  .bc-step-pill.tone-mint, .bc-step-pill.tone-violet{
-    background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.35);color:var(--bc-amber);
-  }
-  .bc-step-pill.tone-mint:hover, .bc-step-pill.tone-violet:hover{
-    background:rgba(251,191,36,.16);border-color:rgba(251,191,36,.65);color:var(--bc-gold-hi);
-    box-shadow:0 8px 18px -8px rgba(251,191,36,.30);
-  }
   .bc-arrow-sep{color:var(--bc-amber);font-size:10px;line-height:1;opacity:.7}
 
   .bc-step-num{
@@ -336,12 +321,6 @@
     background:linear-gradient(135deg, var(--bc-amber), var(--bc-coral));
     box-shadow:0 3px 8px -2px rgba(251,146,60,.5), inset 0 1px 0 rgba(255,255,255,.25);
   }
-  /* All step numbers gold — override tone variants */
-  .bc-step-num.tone-mint, .bc-step-num.tone-violet{
-    background:linear-gradient(135deg, var(--bc-amber), var(--bc-coral));
-    box-shadow:0 3px 8px -2px rgba(251,146,60,.5), inset 0 1px 0 rgba(255,255,255,.25);
-  }
-
   /* Live pulse — gentle UX cue that the demo updates as you drag */
   .bc-live-dot{
     width:6px;height:6px;border-radius:50%;background:var(--bc-mint);
@@ -537,7 +516,7 @@
 {# ════════════════════════════════════════════════════════════════ FAQ ═══ #}
 <section class="container py-3" style="max-width:680px">
   <div class="text-center mb-2">
-    <div class="bc-pill bc-pill-violet"><i class="bi bi-patch-question"></i> FAQ</div>
+    <div class="bc-pill"><i class="bi bi-patch-question"></i> FAQ</div>
   </div>
 
   <details class="bc-faq">
@@ -573,12 +552,14 @@
 <script>
 (function(){
   // Inline PURC math — duplicates server _bc_funding_model for instant feedback.
-  // Per-building-type tariff effective-rates and labels (PURC Q2 2026).
-  const TYPES = {
-    home:     {label:"Residential · Standard",  effRate:2.20,   svcLifeline:false},
-    lifeline: {label:"Residential · Lifeline",  effRate:0.869,  svcLifeline:true },
-    shop:     {label:"Non-Residential",          effRate:1.97,   svcLifeline:false},
-    slt:      {label:"Special Load · LV",        effRate:2.3211, svcLifeline:false},
+  // Effective rates are server-injected from GHANA_PURC_TARIFFS (see _bc_landing_types)
+  // so the slider stays in lock-step with the Python source on PURC quarterly updates.
+  const SERVER_TYPES = {{ bc_types|tojson if bc_types is defined else 'null' }};
+  const TYPES = SERVER_TYPES || {
+    home:     {label:"Residential · Standard",  effRate:2.20  },
+    lifeline: {label:"Residential · Lifeline",  effRate:0.869 },
+    shop:     {label:"Non-Residential",          effRate:1.97  },
+    slt:      {label:"Special Load · LV",        effRate:2.3211},
   };
 
   const CONST = {

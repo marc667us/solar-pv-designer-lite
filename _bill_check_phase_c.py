@@ -292,16 +292,44 @@ def _bc_share_url(payload):
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
+def _bc_landing_types():
+    """Resolve the 4 building-type effective rates from the live PURC dict.
+
+    Why: the demo JS used to hardcode effRate constants (home 2.20, lifeline 0.869,
+    shop 1.97, slt 2.3211). When PURC issues a new quarterly review those constants
+    silently desync from GHANA_PURC_TARIFFS. Resolving them server-side per request
+    means one source of truth.
+
+    home → blended rate for a typical >300 kWh non-lifeline household (weight std/hi 1/3 : 2/3 over a ~600 kWh bill).
+    lifeline → flat lifeline rate.
+    shop → Non-Residential Standard 0-300 band.
+    slt → Special Load LV rate.
+    """
+    t = GHANA_PURC_TARIFFS
+    std = t.get("Residential Standard (0-300 kWh/month)", {}).get("rate_ghc", 1.9688)
+    hi  = t.get("Residential High Use (>300 kWh/month)",  {}).get("rate_ghc", 2.6015)
+    home_blend = (std * 1 + hi * 2) / 3.0
+    return {
+        "home":     {"label": "Residential · Standard", "effRate": round(home_blend, 4)},
+        "lifeline": {"label": "Residential · Lifeline", "effRate": t.get("Residential Lifeline (≤ 30 kWh/month)", {}).get("rate_ghc", 0.869)},
+        "shop":     {"label": "Non-Residential",        "effRate": t.get("Non-Residential Standard (0-300 kWh/month)", {}).get("rate_ghc", 1.7775)},
+        "slt":      {"label": "Special Load · LV",      "effRate": t.get("Special Load - LV (hospitals, schools)", {}).get("rate_ghc", 2.3211)},
+    }
+
+
 @app.route("/bill-check")
 @limiter.limit("60 per minute")
 def bill_check_landing():
     """Public landing page for the bill-check tool. Accepts ?b=<token> to prefill."""
     token = request.args.get("b", "")
     prefill = _bc_share_payload_decode(token) if token else {}
-    return render_template("bill_check_landing.html",
-                           user=current_user(),
-                           prefill=prefill,
-                           prefill_token=token)
+    resp = make_response(render_template("bill_check_landing.html",
+                                          user=current_user(),
+                                          prefill=prefill,
+                                          prefill_token=token,
+                                          bc_types=_bc_landing_types()))
+    resp.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
+    return resp
 
 
 @app.route("/api/bill-check/report.pdf", methods=["POST"])
