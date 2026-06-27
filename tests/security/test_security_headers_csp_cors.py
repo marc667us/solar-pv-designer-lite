@@ -77,7 +77,7 @@ def test_security_hardening_headers_stamped(web_app_client):
     assert "max-age=31536000" in r.headers.get("Strict-Transport-Security", "")
     assert "includeSubDomains" in r.headers.get("Strict-Transport-Security", "")
     assert "geolocation=()" in r.headers.get("Permissions-Policy", "")
-    assert r.headers.get("Cross-Origin-Opener-Policy") == "same-origin"
+    assert r.headers.get("Cross-Origin-Opener-Policy") == "same-origin-allow-popups"
     assert r.headers.get("Cross-Origin-Resource-Policy") == "same-origin"
 
 
