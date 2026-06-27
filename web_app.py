@@ -9690,15 +9690,18 @@ def admin_agent_run():
     try:
         # -- api_manager search (DuckDuckGo + 6h cache + stale fallback) --
         _raw_results = []
+        _per_query_counts = []
         for q in queries:
             try:
                 _hits = _api.search.query(q, max_results=15)
+                _per_query_counts.append({"q": q[:120], "n": len(_hits or [])})
                 _raw_results.extend(_hits)
-            except Exception:
-                pass
+            except Exception as _se:
+                _per_query_counts.append({"q": q[:120], "n": 0, "err": str(_se)[:120]})
         search_results = _raw_results[:50]
     except Exception as e:
         search_error = str(e)
+        _per_query_counts = []
 
     # ── Step 1.5: Fetch actual page content for each candidate ───────────────────
     # Search snippets are only 200-400 chars — not enough to confirm a real tender.
@@ -10192,12 +10195,24 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
             })
         return jsonify({"ok": True, "prospects": prospects,
                         "source": "web_search", "result_count": len(search_results),
-                        "ai_error": _ai_error if '_ai_error' in dir() else None})
+                        "ai_error": _ai_error if '_ai_error' in dir() else None,
+                        "diagnostics": {
+                            "queries_run":  len(queries),
+                            "raw_hits":     len(_raw_results),
+                            "after_filter": len(search_results),
+                            "ai_provider_errors": _provider_errors if '_provider_errors' in dir() else [],
+                            "per_query":    _per_query_counts[:11],
+                        }})
 
     # ── Step 4: Last resort — inform user search failed ─────────────────────────
     return jsonify({"ok": False,
-                    "error": f"Web search returned no results. {search_error or ''} "
-                             "Try different search criteria, refine the country/sector, or try again in a few minutes (free LLM tier may be throttled)."})
+                    "error": f"Web search returned no results across {len(queries)} queries. " + (search_error or "") + "\nLikely causes: free DuckDuckGo/Google News rate-limiting the Render IP, or filters too narrow. Try again in a few minutes, broaden the country/sector, or hit /admin/agent/ping-providers to verify the AI chain is alive.",
+                    "diagnostics": {
+                        "queries_run":  len(queries),
+                        "raw_hits":     0,
+                        "per_query":    _per_query_counts[:11] if '_per_query_counts' in dir() else [],
+                        "search_error": search_error,
+                    }})
 
 
 @app.route("/admin/agent/ping-providers", methods=["GET"])

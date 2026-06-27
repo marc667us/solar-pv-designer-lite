@@ -164,12 +164,17 @@
             <span class="badge" style="background:rgba(22,163,74,.22);color:#16a34a;padding:4px 9px;font-weight:700;border:1px solid #16a34a55">
               <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#16a34a;border:1px solid #0f6b2e;box-shadow:0 0 6px #16a34a;margin-right:5px"></span>Online
             </span>
-            <div class="text-secondary" style="font-size:10px;margin-top:2px">{{ _since }}s ago</div>
+            <div class="text-success" style="font-size:10.5px;margin-top:3px;font-weight:600" title="Currently active — last server hit">
+              <i class="bi bi-broadcast me-1"></i>active {{ _since }}s ago
+            </div>
           {% else %}
             <span class="badge" style="background:rgba(120,120,160,.18);color:#9090c0;padding:4px 9px;font-weight:700">
               <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#5a5a82;border:1px solid #444466;margin-right:5px"></span>Offline
             </span>
-            {% if u.last_seen %}<div class="text-secondary" style="font-size:10px;margin-top:2px" title="Last seen">last: {{ u.last_seen[:16] }}</div>{% endif %}
+            <div class="text-secondary" style="font-size:10.5px;margin-top:3px" title="Last time this user was seen online">
+              <i class="bi bi-clock-history me-1"></i>last seen
+              {% if u.last_seen %}<span style="color:#c0c0e0;font-weight:600">{{ u.last_seen[:16]|replace('T',' ') }}</span>{% else %}<span style="color:#6868a0">never</span>{% endif %}
+            </div>
           {% endif %}
         </td>
         <td style="padding:10px 8px">
