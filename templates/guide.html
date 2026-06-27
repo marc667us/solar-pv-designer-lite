@@ -125,7 +125,7 @@
 
   {# ── Optional embedded video (owner-supplied via GUIDE_VIDEO_URL_<SLUG> env) ── #}
   {% if video_url %}
-  <div class="guide-video">
+  <div id="video" class="guide-video">
     <div class="lbl"><i class="bi bi-camera-video-fill me-1"></i>Video walkthrough</div>
     <div class="guide-video-embed">
       {% if 'youtube.com' in video_url or 'youtu.be' in video_url %}
@@ -140,7 +140,7 @@
     </div>
   </div>
   {% else %}
-  <div class="guide-video" style="border-color:#2e2e4a">
+  <div id="video" class="guide-video" style="border-color:#2e2e4a">
     <div class="lbl" style="color:#9090b8"><i class="bi bi-camera-video me-1"></i>Video walkthrough — coming soon</div>
     <div class="text-secondary" style="font-size:12.5px;line-height:1.55">
       A recorded screen walkthrough will appear here once available. Use <strong style="color:#fbbf24">Listen</strong>
