@@ -178,6 +178,8 @@
       <div>Peak Load: <strong id="tot_peak">0.0 kW</strong></div>
       <span style="color:#4a4a7a;font-size:11px">↑ Input to the solar sizing engine</span>
     </div>
+    <!-- Shared appliance dropdown for every row's name input -->
+    <datalist id="applianceLibrary"></datalist>
   </div>
 
   <!-- ── CALCULATE BUTTON ───────────────────────────────────────────────────── -->
@@ -325,6 +327,74 @@
 
 {% block scripts %}
 <script>
+// Appliance library — used by the per-row "Appliance / Load" dropdown.
+// Each entry sets a sensible default watts when the user picks the name.
+// Sorted alphabetically; users can still type a custom name (free text allowed
+// via <datalist>) and the watts field stays editable.
+const APPLIANCE_LIBRARY = [
+  {name:"Admin AC",             watts:1200},
+  {name:"Air Compressor",       watts:2200},
+  {name:"Air Conditioner",      watts:1500},
+  {name:"Alarm System",         watts:30  },
+  {name:"Battery Charger",      watts:100 },
+  {name:"Blender",              watts:300 },
+  {name:"Borehole Pump",        watts:1500},
+  {name:"CCTV System",          watts:50  },
+  {name:"Ceiling Fan",          watts:80  },
+  {name:"Classroom Lighting",   watts:200 },
+  {name:"Coffee Maker",         watts:900 },
+  {name:"Cold Room",            watts:3500},
+  {name:"Computers",            watts:300 },
+  {name:"Computers / Laptops",  watts:150 },
+  {name:"Computers / POS",      watts:200 },
+  {name:"Conveyor Belt",        watts:2000},
+  {name:"Desk Lamp",            watts:15  },
+  {name:"Dishwasher",           watts:1200},
+  {name:"Drill",                watts:700 },
+  {name:"EV Charger",           watts:7000},
+  {name:"Electric Stove",       watts:2200},
+  {name:"Exhaust Fan",          watts:120 },
+  {name:"Freezer",              watts:300 },
+  {name:"Game Console",         watts:150 },
+  {name:"Gate Motor",           watts:200 },
+  {name:"Grinder",              watts:600 },
+  {name:"Hair Dryer",           watts:1500},
+  {name:"Inverter Charger",     watts:50  },
+  {name:"Iron (Clothes)",       watts:1500},
+  {name:"Kettle",               watts:2000},
+  {name:"Kitchen Equipment",    watts:3000},
+  {name:"LED Lighting",         watts:60  },
+  {name:"LED Office Lighting",  watts:200 },
+  {name:"Laptop",               watts:60  },
+  {name:"Lathe",                watts:3000},
+  {name:"Lighting (general)",   watts:500 },
+  {name:"Medical Equipment",    watts:2000},
+  {name:"Microwave",            watts:1000},
+  {name:"Phone Charging",       watts:30  },
+  {name:"Printer / Copier",     watts:400 },
+  {name:"Production Machinery", watts:5000},
+  {name:"Projectors",           watts:300 },
+  {name:"Refrigerator",         watts:150 },
+  {name:"Rice Cooker",          watts:700 },
+  {name:"Room AC",              watts:1200},
+  {name:"Room Lighting",        watts:100 },
+  {name:"Set-Top Box",          watts:15  },
+  {name:"Sewing Machine",       watts:200 },
+  {name:"Solar Water Heater",   watts:3000},
+  {name:"Sound System",         watts:150 },
+  {name:"Standing Fan",         watts:60  },
+  {name:"TV / Entertainment",   watts:100 },
+  {name:"Toaster",              watts:1200},
+  {name:"Tube Light",           watts:40  },
+  {name:"Vacuum Cleaner",       watts:1400},
+  {name:"Ward Lighting",        watts:500 },
+  {name:"Washing Machine",      watts:500 },
+  {name:"Water Pump",           watts:750 },
+  {name:"Welder",               watts:3500},
+  {name:"Wifi Router",          watts:10  },
+  {name:"Other (type custom)",  watts:0   },
+];
+
 const PRESETS = {
   residential:[
     {name:"LED Lighting",        watts:60,  qty:6,  hours:6,  df:0.75},
@@ -367,7 +437,35 @@ const PRESETS = {
   ],
 };
 
+// Populate the shared appliance dropdown once on page load.
+function _populateApplianceLibrary(){
+  const dl = document.getElementById('applianceLibrary');
+  if (!dl) return;
+  dl.innerHTML = APPLIANCE_LIBRARY.map(a =>
+    `<option value="${a.name}"${a.watts > 0 ? ` data-watts="${a.watts}"` : ''}>${a.watts > 0 ? '~' + a.watts + ' W' : ''}</option>`
+  ).join('');
+}
+
+// When the user picks (or types) an appliance from the dropdown, auto-fill
+// the watts cell if it's currently 0 or unset. Doesn't clobber a watts value
+// the user has already entered for that row.
+function applianceChosen(input){
+  const tr = input.closest('tr');
+  if (!tr) return;
+  const wInput = tr.querySelector('[data-f="watts"]');
+  if (!wInput) return;
+  const picked = (input.value || '').trim().toLowerCase();
+  if (!picked) return;
+  const match = APPLIANCE_LIBRARY.find(a => a.name.toLowerCase() === picked);
+  if (!match || match.watts <= 0) return;
+  const current = parseFloat(wInput.value || 0);
+  if (current > 0) return;  // user already typed watts — don't overwrite
+  wInput.value = match.watts;
+  if (typeof recalcTotals === 'function') recalcTotals();
+}
+
 window.addEventListener('DOMContentLoaded', () => {
+  _populateApplianceLibrary();
   loadPreset('residential');
   document.getElementById('f_country').addEventListener('change', function() {
     const country = this.value;
@@ -427,7 +525,7 @@ function addRow(data) {
   const tr = document.createElement('tr');
   tr.id = 'row_' + id;
   tr.innerHTML = `
-    <td><input type="text"   class="form-control" value="${data.name||''}" placeholder="Appliance name"></td>
+    <td><input type="text"   class="form-control" value="${data.name||''}" list="applianceLibrary" placeholder="Type or pick an appliance" oninput="applianceChosen(this)" onchange="applianceChosen(this)"></td>
     <td><input type="number" class="form-control ldinput" data-f="watts"         value="${data.watts||0}"  min="0"  step="1"   onchange="recalcTotals()"></td>
     <td><input type="number" class="form-control ldinput" data-f="qty"           value="${data.qty||1}"    min="1"  step="1"   onchange="recalcTotals()"></td>
     <td><input type="number" class="form-control ldinput" data-f="hours"         value="${data.hours||0}"  min="0"  max="24" step="0.5" onchange="recalcTotals()"></td>
