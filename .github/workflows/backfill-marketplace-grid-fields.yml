@@ -73,6 +73,23 @@ jobs:
           echo "::add-mask::$EXT"
           echo "external=$EXT" >> $GITHUB_OUTPUT
 
+      - name: Install psql (for idempotent ALTERs)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Ensure target columns exist (idempotent, runs in both modes)
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          ALTER TABLE equipment_catalog ADD COLUMN IF NOT EXISTS voltage_v NUMERIC DEFAULT 0;
+          ALTER TABLE equipment_catalog ADD COLUMN IF NOT EXISTS frequency_hz NUMERIC DEFAULT 0;
+          ALTER TABLE equipment_catalog ADD COLUMN IF NOT EXISTS compliance_standards TEXT DEFAULT '';
+          SQL
+          echo "OK: columns present"
+
       - name: Run back-fill (dry-run preview)
         if: env.MODE == 'dryrun'
         env:
