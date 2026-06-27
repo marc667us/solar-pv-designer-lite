@@ -1,0 +1,86 @@
+# Bulk back-fill voltage_v / frequency_hz / compliance_standards on
+# equipment_catalog by parsing the existing spec / name free text.
+#
+# DRY-RUN by default. Pass -f confirm=APPLY to commit. Follows the
+# feedback-workflow-dry-run-gate convention.
+
+name: Back-fill Marketplace Grid Fields
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type APPLY to commit."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install psycopg2
+        run: pip install --quiet "psycopg2-binary==2.9.9"
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- UPDATEs will be committed ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- no rows will be written ==="
+            echo "Re-run with -f confirm=APPLY to commit."
+          fi
+
+      - name: Resolve solarpro-postgres URL
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found via Render API"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          if [ -z "$EXT" ]; then
+            echo "::error::externalConnectionString missing"; exit 1
+          fi
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Run back-fill (dry-run preview)
+        if: env.MODE == 'dryrun'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: python scripts/backfill_marketplace_grid_fields.py
+
+      - name: Run back-fill (apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: python scripts/backfill_marketplace_grid_fields.py --apply
