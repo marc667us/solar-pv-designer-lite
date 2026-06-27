@@ -78,7 +78,8 @@ app.config.update(
     TEMPLATES_AUTO_RELOAD  = True,
     SESSION_COOKIE_HTTPONLY= True,
     SESSION_COOKIE_SAMESITE= "Lax",
-    SESSION_COOKIE_SECURE  = False,   # works over both http and https tunnels
+    # safari-ios-cookie-coop-fix-2026-06-27
+    SESSION_COOKIE_SECURE  = bool(os.environ.get("RENDER") or os.environ.get("FORCE_HTTPS_COOKIES")),  # Safari iOS 17+ ITP purges non-Secure cookies on HTTPS
     PERMANENT_SESSION_LIFETIME = timedelta(hours=8),
 )
 
@@ -169,7 +170,7 @@ def set_security_headers(resp):
     # SOC 2 hardening additions.
     resp.headers["Strict-Transport-Security"]    = "max-age=31536000; includeSubDomains"
     resp.headers["Permissions-Policy"]           = "geolocation=(), camera=(), microphone=(), payment=(self)"
-    resp.headers["Cross-Origin-Opener-Policy"]   = "same-origin"
+    resp.headers["Cross-Origin-Opener-Policy"]   = "same-origin-allow-popups"  # safari-ios-cookie-coop-fix-2026-06-27
     resp.headers["Cross-Origin-Resource-Policy"] = "same-origin"
 
     # Opt-in CORS. With CORS_ALLOWED_ORIGINS empty, no Access-Control-Allow-*
