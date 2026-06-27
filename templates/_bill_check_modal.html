@@ -304,7 +304,7 @@
       <div class="modal-footer border-secondary">
         <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Close</button>
         <a class="btn btn-outline-warning btn-sm" data-bc-action="design"
-           href="{% if bc_project_id %}{{ url_for('location', pid=bc_project_id) }}{% else %}{{ url_for('landing') }}#assess{% endif %}">
+           href="{% if bc_project_id %}{{ url_for('project_location', pid=bc_project_id) }}{% else %}{{ url_for('landing') }}#assess{% endif %}">
           <i class="bi bi-tools"></i> Design Solar System
         </a>
         {% if bc_project_id %}
