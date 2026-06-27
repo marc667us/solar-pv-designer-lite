@@ -6988,9 +6988,9 @@ If nothing worth extracting, return {{"learned":[]}}"""
 
 _ASSISTANT_SYSTEM = """You are Helpline -- the AI customer engagement, assessment, and technical support agent for SolarPro Global. Mission: guide, engage, support, and convert prospects into real solar projects.
 
-# helpline-prompt-2026-06-26-feature-aware
+# helpline-prompt-2026-06-27-feature-aware
 
-=== CURRENT PLATFORM (2026-06-26) ===
+=== CURRENT PLATFORM (2026-06-27) ===
 
 Live URL: https://solarpro.aiappinvent.com (Render + Postgres).
 Tagline: "Find Solar Tenders. Design the System. Win the Contract."
@@ -7026,6 +7026,37 @@ Viral hooks that turn projects into shareable cards:
   Site-wide Share button (megaphone icon, navbar + landing hero, visible to anyone): one-click WhatsApp/Facebook/LinkedIn/X/email/QR of the platform itself. Logged-in users get their referral code baked in automatically.
 
 Every report page (/project/<pid>/report/pv, /report/boq, /report/cable, /report/economic, /report/energy, /report/installation, /report/inspection, /report/proposal, /report/shading) and the Results page now has a gold Share button next to Print.
+
+=== CHECK MY BILL (since 2026-06-27, anonymous) ===
+
+/bill-check -- public landing page. FREE, no signup, ~60 seconds. User enters their monthly bill in GHS, picks a customer category (Home / Lifeline / Shop / Industry), and the tool back-derives kWh from the **live PURC Q2 2026 tariff** (effective 2026-04-01, 12 customer categories including Residential Lifeline, Standard, High Use, Non-Residential, Special Load LV/MV/MV-2/HV, Industrial LV/HV, EV Charging). Hero shows 3 outcomes side-by-side: today's bill, during a 5-yr solar loan, after loan. PDF download / email-me / invite-friends / copy-share-link all anonymous. Logged-in users can also save the result onto a SolarPro project. The shareable URL takes a ?b=<base64> param that prefills the modal.
+
+=== MARKETPLACE COUNTRY COMPLIANCE (since 2026-06-27) ===
+
+/marketplace now has a **country picker** (next to the currency selector). The selection drives a per-card **compliance badge**: green 'GH compliant' if no findings; amber 'GH * checks' for medium-severity gaps; red 'GH * issues' for high-severity blockers; violet 'GH * notes' for low-severity hints. The check reads each product's voltage_v / frequency_hz / compliance_standards columns plus the spec text against the COUNTRY_GRID_PROFILES profile (24 countries supported). Hover any badge to see the first 4 findings as a tooltip.
+
+Suppliers declare **Voltage (V)**, **Frequency (Hz)**, and **Compliance standards** on every product (green 'Grid compatibility' band on the supplier add/edit form). Admins can retro-edit at /admin/marketplace/products/<id>/edit. A back-fill job has already populated 78 of 439 live products from the existing free-text spec.
+
+=== SHARE COMPOSER -- 7 CARD TYPES (since 2026-06-27) ===
+
+Original 4: Solar Savings, Energy Score, BOQ Summary, Proposal Preview.
+New 3 from item C:
+  Installer Achievement -- modules + inverter + battery + installer_name + completion_year. For installers showing off completed projects.
+  Supplier Product -- system_size_kw + currency + savings + supplier_name + product_name + product_spec. For suppliers promoting a marketplace product on a real install.
+  Roof Before-After -- size + savings + location. Side-by-side hook image.
+Each generates a PNG + PDF + share URL + QR code. Per-type CTAs ('Get a quote from this installer', 'Buy this on the SolarPro marketplace', 'Get yours installed').
+
+=== APPLIANCE DROPDOWN ON /assess (since 2026-06-27) ===
+
+The Appliance / Load name field is now a 60-entry autocomplete dropdown (LED Lighting, Refrigerator, Air Conditioner, EV Charger, Borehole Pump, Welder, Kitchen Equipment, ...). Picking an appliance auto-fills the Watts column with a typical value -- but only when Watts is currently 0, never overwriting a value the user already typed. Users can still type a custom name -- the dropdown is autocomplete-style, not strict.
+
+=== SALES VIEW: LANDING ASSESSMENTS -> DESIGN (since 2026-06-27) ===
+
+When a homepage lead submits the Free Solar Site Assessment modal, /assess/quick saves it to assessment_requests with pipeline_stage='assessment_submitted'. The 12 most recent show on /admin/sales in a 'Recent Assessment Requests' section above the Lead Pipeline funnel. Each row has a gold 'Open Design Card' button that routes to /project/from-assessment/<ref> -- creates a project pre-filled with the assessment's name/phone/country/region/building details, advances the pipeline to 'assessment_reviewed', then drops the operator at /project/<pid>/location to run the full design (location -> shading -> loads -> results). The same button is on /admin/assessments next to Save.
+
+=== PROSPECTING DIAGNOSTICS (since 2026-06-27) ===
+
+If the Prospecting Agent ever falls back to template extraction (source: 'web_search' instead of 'web+openrouter'), admins can hit **GET /admin/agent/ping-providers** for a JSON probe. It tests each free OpenRouter model + Ollama + GitHub Models with a 1-token 'OK' prompt and reports per-provider ok / reply / error. The any_ok flag tells you at a glance whether the chain is alive. Use it to identify exactly which key needs rotation.
 
 === PROSPECTING (admin only) ===
 
@@ -7154,7 +7185,29 @@ def assistant_chat():
          "Two proposal surfaces. The standard report at /project/<id>/report/proposal is the engineering-grade document. The **beautified, co-brandable** version is at /project/<id>/proposal/beautified -- it picks up installer logo, brand colour, contact details for a polished client-facing handover. Use the Share button at the top of either to send to clients."),
         # --PROSPECTING (admin) --
         (["opportunities","solar opportunities","rfp listing","tender feed","find tenders","procurement notice"],
-         "Admins: /admin/opportunities lists live solar RFPs/RFQs/IPPs pulled from Google News across 8 procurement-language queries (500+ items typical). Filter by country / type / source. Click **Add to leads** to copy an opportunity into the CRM. Add ?refresh=1 to bust the 1-hour cache."),
+         "Admins: /admin/opportunities lists live solar RFPs/RFQs/IPPs pulled from Google News across 8 procurement-language queries (500+ items typical). Filter by country / type / source. Each row has 3 actions: **See full details** (eye icon, opens modal with the full body), **Open source page** (external link), **Add to leads** (single-row CRM). The header has a **Save all to CRM** button that bulk-saves every visible opportunity to leads with gnews:url as the dedup key. Add ?refresh=1 to bust the 1-hour cache."),
+        # --BILL CHECK (2026-06-27) --
+        (["bill check","check my bill","check now","my bill","ecg bill","purc","tariff audit","bill audit","electricity bill","electricity tariff"],
+         "**Check My Bill** is at /bill-check (FREE, no signup, ~60 seconds). Enter your monthly ECG bill in GHS, pick a customer category (Home / Lifeline / Shop / Industry), and the tool back-derives your kWh from the live **PURC Q2 2026 tariff** (effective 2026-04-01, 12 customer categories). Shows three numbers: what you pay today, during a 5-year solar loan, and after. Download a PDF report, email it to yourself, or invite friends with your numbers prefilled."),
+        (["bill check share","bill check pdf","bill check email","invite friends","share bill check"],
+         "From the Check My Bill modal: **Download PDF** (anonymous, no project needed), **Email me a copy** (delivered via Resend/Brevo), **Invite friends** (sends the prefilled tool to people you nominate), or **Copy share link** (base64-encoded payload in the ?b= param). Logged-in users can also **Save to project** to pin it to a SolarPro design project."),
+        # --MARKETPLACE COUNTRY COMPLIANCE (2026-06-27) --
+        (["country picker","country compliance","compliance badge","grid compatibility","ok compliant","fail compliant","warn compliant"],
+         "On /marketplace the **country picker** (next to the currency selector) drives a per-card **compliance badge**: green 'GH compliant' (no findings) / amber 'GH * checks' (medium severity) / red 'GH * issues' (high severity) / violet 'GH * notes' (low severity). The check uses each product's declared voltage_v / frequency_hz / compliance_standards columns plus the spec text against the country-grid profile. Hover the badge to see the first 4 findings."),
+        (["voltage v","voltage_v","frequency hz","frequency_hz","compliance standards","grid voltage","grid frequency","iec standard"],
+         "Suppliers can declare **Voltage (V)**, **Frequency (Hz)**, and **Compliance standards** on every product (the green 'Grid compatibility' band on the supplier add/edit form). Empty values are OK -- but the per-country compliance badge on /marketplace will have less to work with. Admins can edit these at /admin/marketplace/products/<id>/edit. A back-fill workflow has already populated 78 of 439 products from the free-text spec."),
+        # --COMPOSER NEW CARD TYPES (2026-06-27) --
+        (["share card","installer achievement","supplier product card","roof before after","before after","installer card","supplier card","achievement card"],
+         "The **Share Composer** (project Results page > gold Share button) now has 7 card types. Original 4: Solar Savings, Energy Score, BOQ Summary, Proposal Preview. New 3: **Installer Achievement** (modules + inverter + battery + your contractor name + completion year -- for installers showing off completed projects), **Supplier Product** (showcases a marketplace product on a real install -- supplier name + product name + 1-line spec), **Roof Before-After** (side-by-side hook + size + savings + location). Each generates a PNG/PDF + share link + QR code."),
+        # --SALES VIEW + OPEN DESIGN CARD (2026-06-27) --
+        (["open design card","design card","from assessment","assessment to project","sales assessment view","convert assessment","assessment intake"],
+         "When a lead submits the **Free Solar Site Assessment** modal on the homepage, it lands in the `assessment_requests` table. Sales operators see the 12 most recent submissions in a 'Recent Assessment Requests' section at the top of /admin/sales. The gold **Open Design Card** button on each row routes to /project/from-assessment/<ref> which creates a new project pre-filled with the assessment's name/phone/country/region/building details, then drops you at /project/<pid>/location to run the full design (location -> shading -> loads -> results). Pipeline auto-advances to 'assessment_reviewed' on click."),
+        # --APPLIANCE DROPDOWN (2026-06-27) --
+        (["appliance dropdown","appliance list","pick appliance","appliance name","appliance library"],
+         "On /assess the per-row **Appliance / Load** name field is a dropdown of 60 common appliances (LED Lighting, Refrigerator, Air Conditioner, EV Charger, Borehole Pump, Welder, Kitchen Equipment, etc.). Picking one auto-fills the **Watts** column with a typical value -- but it never overwrites a value you have already typed. You can also type a custom name (the dropdown is autocomplete-style, not strict)."),
+        # --PROSPECTING AI DIAGNOSTICS (2026-06-27) --
+        (["prospecting ai","prospecting failed","ai failed","provider status","openrouter status","ollama status","github models","ping providers","ai diagnostic"],
+         "Admins can hit GET /admin/agent/ping-providers (JSON) to test every AI provider with a tiny 'OK' prompt. The endpoint returns {ok, reply} per OpenRouter free model + Ollama + GitHub Models, plus an `any_ok` flag. If the prospecting agent falls back to template extraction (source: 'web_search' instead of 'web+openrouter'), this endpoint tells you exactly which provider 4xxed / timed out so the owner can rotate the right key."),
         # --KEYCLOAK AUTH --
         (["keycloak","kc","oidc","sso","auth.aiappinvent","auth redirect","login redirect"],
          "Login redirects to **Keycloak** at auth.aiappinvent.com -- that is expected. Use the email + password you set when you registered. KC uses email-as-username (search by EMAIL in the KC admin console, not by username). Forgot password = click \"Forgot password\" on the KC login form."),
