@@ -142,35 +142,37 @@
           </details>
 
           {# ──── Funding model — hero card ──── #}
-          <div class="card text-bg-warning mb-3" data-bc-funding-card>
-            <div class="card-body py-3">
-              <div class="small fw-bold text-uppercase" style="letter-spacing:1px;opacity:0.85">
+          <div class="card text-bg-warning mb-3" data-bc-funding-card
+               style="--funding-ink:#0a0a14">
+            <div class="card-body py-3" style="color:var(--funding-ink)">
+              <div class="small fw-bold text-uppercase" style="letter-spacing:1px;opacity:0.85;color:var(--funding-ink)">
                 The Pitch
               </div>
-              <p class="mb-3 mt-1" data-bc-pitch style="font-weight:600;line-height:1.45">—</p>
+              <p class="mb-3 mt-1" data-bc-pitch style="font-weight:600;line-height:1.45;color:var(--funding-ink)">—</p>
 
-              <table class="table table-sm mb-0" style="background:transparent;color:inherit">
+              <table class="table table-sm mb-0"
+                     style="background:transparent;color:var(--funding-ink);--bs-table-color:var(--funding-ink);--bs-table-bg:transparent;--bs-table-border-color:rgba(10,10,20,.25)">
                 <thead style="background:#1e1e3a;color:#fbbf24">
                   <tr><th></th><th class="text-end">Today</th><th class="text-end">During loan</th><th class="text-end">After loan</th></tr>
                 </thead>
-                <tbody>
+                <tbody style="color:var(--funding-ink)">
                   <tr>
-                    <th scope="row">Grid bill</th>
-                    <td class="text-end" data-bc-f-bill-today>—</td>
-                    <td class="text-end" data-bc-f-bill-during>—</td>
-                    <td class="text-end" data-bc-f-bill-after>—</td>
+                    <th scope="row" style="color:var(--funding-ink);background:transparent">Grid bill</th>
+                    <td class="text-end" style="color:var(--funding-ink);background:transparent" data-bc-f-bill-today>—</td>
+                    <td class="text-end" style="color:var(--funding-ink);background:transparent" data-bc-f-bill-during>—</td>
+                    <td class="text-end" style="color:var(--funding-ink);background:transparent" data-bc-f-bill-after>—</td>
                   </tr>
                   <tr>
-                    <th scope="row">Solar loan</th>
-                    <td class="text-end text-muted">—</td>
-                    <td class="text-end" data-bc-f-loan>—</td>
-                    <td class="text-end text-muted">—</td>
+                    <th scope="row" style="color:var(--funding-ink);background:transparent">Solar loan</th>
+                    <td class="text-end" style="color:rgba(10,10,20,.55);background:transparent">—</td>
+                    <td class="text-end" style="color:var(--funding-ink);background:transparent" data-bc-f-loan>—</td>
+                    <td class="text-end" style="color:rgba(10,10,20,.55);background:transparent">—</td>
                   </tr>
                   <tr style="border-top:2px solid #1e1e3a">
-                    <th scope="row"><strong>Total outlay</strong></th>
-                    <td class="text-end" data-bc-f-out-today>—</td>
-                    <td class="text-end" data-bc-f-out-during>—</td>
-                    <td class="text-end" data-bc-f-out-after>—</td>
+                    <th scope="row" style="color:var(--funding-ink);background:transparent"><strong>Total outlay</strong></th>
+                    <td class="text-end" style="color:var(--funding-ink);background:transparent;font-weight:700" data-bc-f-out-today>—</td>
+                    <td class="text-end" style="color:var(--funding-ink);background:transparent;font-weight:700" data-bc-f-out-during>—</td>
+                    <td class="text-end" style="color:var(--funding-ink);background:transparent;font-weight:700" data-bc-f-out-after>—</td>
                   </tr>
                 </tbody>
               </table>
