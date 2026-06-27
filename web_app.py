@@ -8282,6 +8282,13 @@ def admin_sales():
             "FROM users GROUP BY mo ORDER BY mo DESC LIMIT 6").fetchall()
         assess_count   = c.execute("SELECT COUNT(*) FROM assessment_requests").fetchone()[0]
         assess_open    = c.execute("SELECT COUNT(*) FROM assessment_requests WHERE status='open'").fetchone()[0]
+        # Item: surface recent assess submissions inline on /admin/sales (2026-06-27)
+        recent_assessments = c.execute(
+            "SELECT id, assessment_ref, name, phone, country, region, "
+            "       building_type, building_desc, pipeline_stage, status, created_at "
+            "  FROM assessment_requests "
+            " ORDER BY created_at DESC LIMIT 12"
+        ).fetchall()
         installers_pending = c.execute("SELECT COUNT(*) FROM installers WHERE status='pending'").fetchone()[0]
         pipeline_won   = c.execute("SELECT COUNT(*) FROM leads WHERE pipeline_stage='won'").fetchone()[0]
         pipeline_total = c.execute("SELECT COUNT(*) FROM leads").fetchone()[0]
@@ -8302,6 +8309,7 @@ def admin_sales():
                            monthly_signups=monthly_signups,
                            assess_count=assess_count, assess_open=assess_open,
                            installers_pending=installers_pending,
+                           recent_assessments=recent_assessments,
                            pipeline_dist=pipeline_dist, conv=conv)
 
 

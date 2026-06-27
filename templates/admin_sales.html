@@ -43,6 +43,71 @@
   {% endfor %}
 </div>
 
+<!-- ── Recent Assessment Requests (from landing-page intake) ──
+     Direct shortcut into full design + shading so the salesperson
+     can convert a lead into a real project in one click. -->
+{% if recent_assessments %}
+<div class="solar-card p-4 mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div class="section-head mb-0">
+      <i class="bi bi-clipboard2-check-fill me-1" style="color:#22c55e"></i>Recent Assessment Requests
+      <span class="badge ms-1" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44;font-size:11px;font-weight:600">
+        {{ assess_open }} open
+      </span>
+    </div>
+    <a href="{{ url_for('admin_assessments') }}" class="btn btn-sm btn-outline-light">
+      View all <i class="bi bi-arrow-right ms-1"></i>
+    </a>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="table table-sm table-dark mb-0" style="font-size:12.5px">
+      <thead style="color:#9090c0;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px">
+        <tr>
+          <th>Ref</th>
+          <th>Name</th>
+          <th>Contact</th>
+          <th>Building</th>
+          <th>Location</th>
+          <th>Stage</th>
+          <th>Created</th>
+          <th class="text-end"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in recent_assessments %}
+        <tr>
+          <td style="font-family:monospace;color:#fbbf24">{{ r.assessment_ref or ('A-' ~ r.id) }}</td>
+          <td>{{ r.name or '—' }}</td>
+          <td class="small">
+            {% if r.phone %}<i class="bi bi-telephone me-1" style="color:#22c55e"></i>{{ r.phone }}{% endif %}
+          </td>
+          <td class="small">{{ (r.building_type or '—')|title }}{% if r.building_desc %} <span class="text-secondary">· {{ r.building_desc[:40] }}{% if r.building_desc|length > 40 %}…{% endif %}</span>{% endif %}</td>
+          <td class="small">{{ r.country or '—' }}{% if r.region %} · {{ r.region }}{% endif %}</td>
+          <td>
+            {% set _stage_clr = {'assessment_submitted':'#0ea5e9','assessment_reviewed':'#a78bfa','qualified':'#22c55e','proposal_sent':'#f59e0b','won':'#4ade80','lost':'#f87171'}.get(r.pipeline_stage, '#9090c0') %}
+            <span class="badge" style="background:rgba(255,255,255,.05);color:{{ _stage_clr }};border:1px solid {{ _stage_clr }}55;font-size:10.5px">
+              {{ (r.pipeline_stage or 'new')|replace('_',' ') }}
+            </span>
+          </td>
+          <td class="small text-secondary">{{ r.created_at[:16] if r.created_at else '' }}</td>
+          <td class="text-end" style="white-space:nowrap">
+            {% if r.assessment_ref %}
+            <a href="{{ url_for('project_from_assessment', ref=r.assessment_ref) }}"
+               class="btn btn-sm fw-bold"
+               title="Create a project pre-filled with this assessment, then run full design + shading"
+               style="background:linear-gradient(135deg,#fbbf24,#d97706);color:#0a0a1c;border:0;font-size:11.5px">
+              <i class="bi bi-clipboard2-data me-1"></i>Open Design Card
+            </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <!-- Lead pipeline + Plan distribution + Monthly signups -->
 <div class="row g-4 mb-4">
 

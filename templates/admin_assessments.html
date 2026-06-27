@@ -132,6 +132,15 @@
             </select>
           </div>
           <button type="submit" class="btn btn-sm btn-solar">Save</button>
+          {# Open this assessment into a full design (location → shading → loads → results) #}
+          {% if r.assessment_ref %}
+          <a href="{{ url_for('project_from_assessment', ref=r.assessment_ref) }}"
+             class="btn btn-sm fw-bold"
+             title="Create a project pre-filled with this assessment, then run full design + shading"
+             style="background:linear-gradient(135deg,#fbbf24,#d97706);color:#0a0a1c;border:0;align-self:flex-end">
+            <i class="bi bi-clipboard2-data me-1"></i>Open Design Card
+          </a>
+          {% endif %}
         </form>
 
         <form method="post" class="d-inline mt-1"
