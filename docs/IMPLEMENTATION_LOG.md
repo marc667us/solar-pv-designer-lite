@@ -1838,3 +1838,77 @@ The deep-crawl `POST /admin/agent/run` route is unchanged but now:
 ## Next Recommended Step
 Pick up at: **move the deep-crawl prospecting agent to a GitHub Actions cron** so AI-found opportunities show up in `/admin/opportunities` alongside the RSS-found ones. Suggested cron: every 6 hours, write to Postgres `solar_opportunities_crawled` table, `/admin/opportunities` reads from BOTH sources.
 
+
+
+---
+
+# Implementation Log Entry
+Date: 2026-06-26 evening -> 2026-06-27 early hours
+Task: Zero-Cost AI Growth Layer + Marketplace geo-compliance + Helpline / Prospecting / Safari fixes
+Status: SHIPPED + live verified
+
+## Objective
+Ship the Zero-Cost AI Growth Layer (Documents/pvsolar1/viralsolar 1.txt brief) INSIDE the existing Flask app, then resolve every owner-reported live bug: empty share-card values, helpline AI giving generic contact-engineer replies, prospecting agent returning trash, Safari iOS blocking the mobile experience, and the marketplace having no country-aware equipment-standards check.
+
+## Files Changed (master 855b9b1 -> b39a17b)
+
+### New
+- new_growth_layer_routes.py  (645 lines, 10 routes)
+- patch_add_growth_layer_routes.py, patch_growth_share_buttons.py, patch_growth_platform_share_button.py, patch_growth_share_payload_fix.py, patch_helpline_assistant_prompt.py, patch_helpline_kb_new_features.py, patch_wire_country_compliance.py, patch_agent_fix_url_key.py  (8 byte-level patches)
+- country_compliance.py  (24 country grid profiles)
+- templates/growth/share_composer.html, public_share.html, public_share_revoked.html, public_share_expired.html, dashboard.html, proposal_beautified.html, _platform_share_modal.html  (7 templates)
+- .github/workflows/backfill-growth-share-payloads.yml, diag-deep-crawl-search.yml, diag-deep-crawl-agent-e2e.yml, diag-live-3-checks.yml  (4 GH Actions diagnostics)
+
+### Modified
+- web_app.py  (growth routes spliced; Share buttons on 10 templates; _safe_card_payload schema fix; _ASSISTANT_SYSTEM rewritten; KB +10 entries; country_compliance import + _boq_compliance_check signature + 2 callers; SESSION_COOKIE_SECURE env-gated; COOP=same-origin-allow-popups)
+- api_manager.py  (_SearchClient.query() now Google News RSS primary, DDG fallback; preserves {title,url,body} contract)
+- templates/base.html  (Growth nav entry + Share modal include + navbar Share button for anon + logged-in)
+- templates/landing.html  (hero Share Platform CTA)
+- templates/results.html + 9 templates/report_*.html  (gold Share button next to Print)
+- new_solar_opportunities.py  (Google News RSS multi-query, 514+ items)
+- .gitignore  (public_*.html scoped to repo root)
+
+## Database Changes
+- New tables (idempotent SQLite + Postgres): growth_share_assets, growth_share_events, growth_referrals, growth_activities
+- leads table extended with 11 columns
+- Backfill applied to 3 existing live share assets via GH Actions run 28272117959
+
+## API Changes
+10 new routes (GET /share/<pid>; POST /api/growth/share-assets{,/<id>{/revoke,/event}}; GET /s/<slug>; POST /api/growth/lead-capture; POST /api/growth/referral/record; GET /api/growth/dashboard; GET /growth; GET /project/<pid>/proposal/beautified). _boq_compliance_check signature: (items, lines, project_country=None).
+
+## Frontend Changes
+Navbar Share button (anon + logged-in megaphone). Landing hero Share Platform CTA. Results page gold Share strip. Every report page compact gold Share next to Print. Site-wide modal: WhatsApp + Facebook + LinkedIn + X + Email + Copy + client-side QR. /share/<pid> composer: live preview + html2canvas PNG + jsPDF + QR for 4 card types.
+
+## Security Changes
+- SESSION_COOKIE_SECURE env-gated (True on Render; False local). Stops Safari iOS 17+ ITP from purging the session cookie.
+- Cross-Origin-Opener-Policy relaxed from same-origin to same-origin-allow-popups so Share modal window.open() works on iOS Safari.
+- Privacy guardrail on Share payloads: _safe_card_payload blocks rate_buildup / private_prices / supplier_private.
+- All new POST endpoints CSRF-protected; public endpoints rate-limited.
+
+## Tests Added
+scratchpad/smoke_growth_layer_inproc.py (13/13 in-process). 4 GH Actions diagnostics workflows.
+
+## Documentation Updated
+This entry. Memory: project_solar_pv_session_2026-06-26_growth_layer.md (created earlier this session) + project_solar_pv_session_2026-06-26_27_full_session_close.md (NEW close pointer) + outstanding_work_schedule.md (NEW). MEMORY.md index updated.
+
+## What Was Completed
+1. Zero-Cost AI Growth Layer (8 modules + 10 routes + 7 templates + 4 diagnostics)
+2. Per-project Share button on Results + 9 reports
+3. Platform Share button (navbar + landing + modal)
+4. Share card real-schema fix (results.pv_kw + economics.annual_sav + economics.payback)
+5. Backfilled 3 live share assets (annual_savings 0 to 58,824; payback 0 to 4.9yr)
+6. Helpline AI rewritten + 10 new KB fallback entries
+7. /admin/opportunities now uses Google News (514+ real items, was returning humanitarian Appeal Updates)
+8. /admin/agent/run search backend + href/url fix (133+ items proven)
+9. country_compliance.py with 24 countries wired into BOQ Compliance Review
+10. Safari iOS fixes: Secure session cookie + COOP popup relaxation
+
+Live verified: Backfill (28272117959), Deep-Crawl Search (28270330330), Live 3-checks (28273512683), Force Render Deploy multiple.
+
+## What Remains -- see outstanding_work_schedule.md
+
+## Known Risks
+Free-text spec parsing for voltage/frequency is best-effort (future: structured columns). country_compliance.py unknown country -> default IEC 60364/230V/50Hz (silently skips USA/Brazil/Japan checks).
+
+## Next Recommended Step
+Open project_solar_pv_session_2026-06-26_27_full_session_close.md for the restart pointer.
