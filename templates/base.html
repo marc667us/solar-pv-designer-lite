@@ -396,6 +396,30 @@
           </a>
         </li>
         {% endif %}
+
+        {# Guides dropdown — visible to anonymous + logged-in users alike. #}
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if (ep or '') in ['guides_view','guides_pdf'] %}active{% endif %}"
+             href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"
+             title="User and technical guides — read, listen, or download as PDF">
+            <i class="bi bi-book-fill me-1" style="color:#22c55e"></i>Guides
+          </a>
+          <ul class="dropdown-menu" style="background:#0f0f22;border:1px solid #1e1e3a;min-width:240px">
+            <li><a class="dropdown-item" href="{{ url_for('guides_view', slug='quick') }}">
+              <i class="bi bi-lightning-charge-fill me-2" style="color:#fbbf24"></i>Quick Start <span class="text-secondary small">(~3 min)</span>
+            </a></li>
+            <li><a class="dropdown-item" href="{{ url_for('guides_view', slug='full-user') }}">
+              <i class="bi bi-book-half me-2" style="color:#22c55e"></i>Full User Guide
+            </a></li>
+            <li><a class="dropdown-item" href="{{ url_for('guides_view', slug='technical') }}">
+              <i class="bi bi-cpu-fill me-2" style="color:#a78bfa"></i>Full Technical Guide
+            </a></li>
+            <li><hr class="dropdown-divider" style="border-color:#1e1e3a"></li>
+            <li><a class="dropdown-item" href="{{ url_for('guides_view', slug='quick', listen=1) }}">
+              <i class="bi bi-volume-up-fill me-2 text-success"></i>Listen to Quick Guide
+            </a></li>
+          </ul>
+        </li>
       </ul>
 
       <ul class="navbar-nav ms-auto align-items-center gap-1">

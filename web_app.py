@@ -31859,12 +31859,12 @@ def guides_pdf(slug):
 
 # Legacy URL redirects so existing email links / bookmarks don't 404.
 @app.route("/support/user-guide")
-def _legacy_user_guide_redirect():
+def support_user_guide():
     return redirect(url_for("guides_view", slug="full-user"), code=301)
 
 
 @app.route("/support/user-guide/pdf")
-def _legacy_user_guide_pdf_redirect():
+def support_user_guide_pdf():
     return redirect(url_for("guides_pdf", slug="full-user"), code=301)
 
 
