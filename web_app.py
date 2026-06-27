@@ -7155,6 +7155,38 @@ def assistant_chat():
           "never mind","nevermind","bye","goodbye","cheers","appreciate","that is all"],
          "Great, glad I could help! Feel free to ask any time if you have more questions. ðŸ˜Š"),
         # kb-growth-marketplace-2026-06-27
+        # --BUYING INTENT (HIGHEST priority -- route shopping questions to
+        # the marketplace BEFORE the "panel" or "system" sizing entries
+        # grab them. Added 2026-06-27 after owner-reported false fallbacks). --
+        (["buy","purchase","sell","for sale","online store","online shop",
+          "where to find","where can i find","where do i find","where to buy",
+          "where can i buy","where do i buy","find supplier","supplier near",
+          "stockist","retailer","wholesaler","price list","price catalog",
+          "price catalogue","procure","sourcing","quotation request",
+          "compare price","do you sell","you sell","sell solar"],
+         "Browse SolarPro's free **Marketplace** at /marketplace (no signup) -- "
+         "437+ products across 21 categories (PV modules, inverters, batteries, "
+         "transformers, switchgear, cables, structures, BMS, RMU, UPS, generators, ...) "
+         "with live supplier pricing in 9 currencies. Tick what you need at "
+         "/procurement-center to build a Basic Price Sheet, BOM (Cost Estimate), "
+         "or BOQ. For formal quotes, create an **RFQ** at /rfqs/new and invite "
+         "suppliers. To SELL on SolarPro, go to /supplier/register; manage your "
+         "products at /supplier/products and respond to buyer RFQs at "
+         "/supplier/rfqs/inbox."),
+        # --SUPPLIER ONBOARDING (specific match before the generic "supplier"
+        # match in the marketplace KB entry) --
+        (["supplier register","supplier registration","be a supplier",
+          "become a supplier","i am a supplier","sell on solarpro",
+          "sell on the marketplace","add my products","list my products",
+          "supplier dashboard","supplier onboarding","supplier signup",
+          "supplier sign up","supplier sign-up"],
+         "To sell on SolarPro: go to **/supplier/register** -- a one-form "
+         "onboarding (company name, contact, country, products). After admin "
+         "verification (usually same-day), use **/supplier/dashboard** to "
+         "manage your store, **/supplier/products** to add products (with "
+         "Voltage / Frequency / Compliance Standards fields for the per-country "
+         "compliance badge), **/supplier/rfqs/inbox** to respond to buyer RFQs. "
+         "Bulk-upload existing products via CSV from /supplier/products."),
         # --GROWTH LAYER (Share button + /growth dashboard + /s/<slug>) --
         (["share","whatsapp","facebook","linkedin","twitter","social","qr code","share link","share button","share to","post on"],
          "Two ways to share. (1) PER PROJECT: open any project -> Results page -> click the gold **Share** button -> pick a card type (Solar Savings, Energy Score, BOQ Summary, Proposal Preview) -> click Generate -> get a public share URL + QR code. Buttons for WhatsApp/Facebook/LinkedIn/X are right there. (2) PLATFORM: click the **Share** megaphone in the navbar (visible to everyone) -> opens a modal with WhatsApp/Facebook/LinkedIn/X/Email + QR. Logged-in users get their referral code baked in automatically."),
