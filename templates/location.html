@@ -885,8 +885,8 @@ window.addEventListener('DOMContentLoaded',()=>{
 </script>
 
 {% set bc_project_id = project.id %}
-{% set bc_loads_json = (d.get('loads', []) | tojson) %}
-{% set bc_currency = d.get('currency', 'GHS') %}
-{% set bc_default_cat = d.get('purc_category') or 'Residential Standard (0-300 kWh/month)' %}
+{% set bc_loads_json = (project.data.get('loads', []) | tojson) %}
+{% set bc_currency = project.data.get('currency', 'GHS') %}
+{% set bc_default_cat = project.data.get('purc_category') or 'Residential Standard (0-300 kWh/month)' %}
 {% include "_bill_check_modal.html" %}
 {% endblock %}
