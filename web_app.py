@@ -25763,6 +25763,57 @@ def admin_opportunity_add_to_leads(src_url):
         flash(f"Could not add to leads: {e}", "warning")
     return redirect(url_for("admin_opportunities"))
 
+
+@app.route("/admin/opportunities/save-all-to-leads", methods=["POST"])
+@login_required
+def admin_opportunities_save_all_to_leads():
+    """Bulk-save: copy every opportunity that matches the current filter (country/type/source)
+    into the leads table. Owner-requested 2026-06-27."""
+    if not (current_user() and current_user().is_admin):
+        from flask import abort as _abort
+        return _abort(404)
+    csrf_protect()
+    f_country = (request.form.get("country") or "").strip()
+    f_type    = (request.form.get("type") or "").strip().upper()
+    f_source  = (request.form.get("source") or "").strip()
+    items = fetch_opportunities(force=False)
+    if f_country:
+        items = [i for i in items
+                 if f_country.lower() in (i.get("country") or "").lower()
+                 or f_country.lower() in (i.get("title") or "").lower()]
+    if f_type:
+        items = [i for i in items if i.get("type") == f_type]
+    if f_source:
+        items = [i for i in items
+                 if (i.get("source") or "").lower() == f_source.lower()]
+    saved, skipped = 0, 0
+    now_iso = datetime.utcnow().isoformat() + "Z"
+    try:
+        with get_db() as c:
+            for it in items:
+                src = "gnews:" + (it.get("source_url") or "")[:200]
+                # de-dup: skip if a lead with this exact source already exists
+                row = c.execute("SELECT id FROM leads WHERE source = ? LIMIT 1", (src,)).fetchone()
+                if row:
+                    skipped += 1
+                    continue
+                title = (it.get("title") or "")[:300]
+                body  = (it.get("body") or "")[:1000]
+                c.execute(
+                    "INSERT INTO leads (name, email, country, project_type, message, "
+                    "source, status, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                    (title[:120], "", it.get("country") or "",
+                     "solar-" + (it.get("type") or "").lower(),
+                     (title + " -- " + body)[:600], src, "new", now_iso),
+                )
+                saved += 1
+        flash(f"Saved {saved} new lead(s); {skipped} skipped as already in CRM.", "success")
+    except Exception as e:
+        try: app.logger.warning("save_all_to_leads failed: %s", e)
+        except Exception: pass
+        flash(f"Bulk save failed: {e}", "warning")
+    return redirect(url_for("admin_opportunities", country=f_country, type=f_type, source=f_source))
+
 # === END: solar_opportunities splice ===
 
 

@@ -9,9 +9,24 @@
       Cache age: {{ cache_age_sec }} s. {{ total_unfiltered }} item(s) in cache.
     </div>
   </div>
-  <a href="{{ url_for('admin_opportunities', refresh=1) }}" class="btn btn-warning btn-sm fw-bold">
-    <i class="bi bi-arrow-clockwise me-1"></i>Refresh now
-  </a>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if items %}
+    <form method="POST" action="{{ url_for('admin_opportunities_save_all_to_leads') }}" style="display:inline"
+          onsubmit="return confirm('Save all {{ items|length }} visible opportunit{{ 'ies' if items|length != 1 else 'y' }} to the CRM as leads?');">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="country" value="{{ active_country }}">
+      <input type="hidden" name="type" value="{{ active_type }}">
+      <input type="hidden" name="source" value="{{ active_source }}">
+      <button type="submit" class="btn btn-success btn-sm fw-bold">
+        <i class="bi bi-cloud-arrow-up-fill me-1"></i>Save all to CRM
+        <span class="badge bg-light text-success ms-1">{{ items|length }}</span>
+      </button>
+    </form>
+    {% endif %}
+    <a href="{{ url_for('admin_opportunities', refresh=1) }}" class="btn btn-warning btn-sm fw-bold">
+      <i class="bi bi-arrow-clockwise me-1"></i>Refresh now
+    </a>
+  </div>
 </div>
 
 {# ── Manual Search Helper ───────────────────────────────────────────── #}
@@ -120,6 +135,17 @@
         <td class="small text-secondary">{{ it.source }}</td>
         <td class="small text-secondary">{{ it.published[:16] }}</td>
         <td class="text-end" style="white-space:nowrap">
+          <button type="button" class="btn btn-outline-light btn-sm" title="See full details"
+                  data-bs-toggle="modal" data-bs-target="#oppDetailModal"
+                  data-opp-title="{{ it.title|e }}"
+                  data-opp-type="{{ it.type }}"
+                  data-opp-country="{{ it.country|e }}"
+                  data-opp-source="{{ it.source|e }}"
+                  data-opp-source-url="{{ it.source_url|e }}"
+                  data-opp-published="{{ it.published|e }}"
+                  data-opp-body="{{ it.body|e }}">
+            <i class="bi bi-eye"></i>
+          </button>
           <a href="{{ it.source_url }}" target="_blank" rel="noopener" class="btn btn-outline-warning btn-sm" title="Open source page">
             <i class="bi bi-box-arrow-up-right"></i>
           </a>
@@ -147,4 +173,51 @@
 </div>
 {% endif %}
 
+{# ── Detail modal — populated by JS from data-opp-* attributes ─────────── #}
+<div class="modal fade" id="oppDetailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content" style="background:#0c0f1e;border:1px solid rgba(245,158,11,.30);color:#e0e0f0">
+      <div class="modal-header" style="border-bottom:1px solid rgba(245,158,11,.20)">
+        <h6 class="modal-title fw-bold" id="oppDetailTitle" style="color:#fbbf24"></h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <span class="badge" id="oppDetailType" style="background:rgba(245,158,11,.14);color:#fbbf24;border:1px solid rgba(245,158,11,.45);font-size:11px"></span>
+          <span class="badge" id="oppDetailCountry" style="background:rgba(34,197,94,.10);color:#4ade80;border:1px solid rgba(34,197,94,.40);font-size:11px"></span>
+          <span class="badge" id="oppDetailSource" style="background:rgba(255,255,255,.05);color:#9090c0;border:1px solid rgba(167,139,250,.25);font-size:11px"></span>
+          <span class="badge" id="oppDetailPublished" style="background:rgba(255,255,255,.05);color:#9090c0;border:1px solid rgba(167,139,250,.25);font-size:11px"></span>
+        </div>
+        <div class="text-secondary mb-2" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">Full description</div>
+        <div id="oppDetailBody" style="font-size:13px;line-height:1.65;color:#dcdcef;white-space:pre-wrap"></div>
+      </div>
+      <div class="modal-footer" style="border-top:1px solid rgba(245,158,11,.20)">
+        <a id="oppDetailLink" href="#" target="_blank" rel="noopener" class="btn btn-warning btn-sm fw-bold">
+          <i class="bi bi-box-arrow-up-right me-1"></i>Open source page
+        </a>
+        <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var m = document.getElementById('oppDetailModal');
+  if (!m) return;
+  m.addEventListener('show.bs.modal', function(ev){
+    var b = ev.relatedTarget;
+    if (!b) return;
+    var pick = function(k){ return b.getAttribute('data-opp-'+k) || ''; };
+    document.getElementById('oppDetailTitle').textContent     = pick('title') || '(no title)';
+    document.getElementById('oppDetailType').textContent      = pick('type') || 'OTHER';
+    document.getElementById('oppDetailCountry').textContent   = pick('country') || '—';
+    document.getElementById('oppDetailSource').textContent    = pick('source') || '—';
+    document.getElementById('oppDetailPublished').textContent = pick('published') || '';
+    document.getElementById('oppDetailBody').textContent      = pick('body') || '(no description available — open the source page for full details)';
+    var link = document.getElementById('oppDetailLink');
+    link.href = pick('source-url') || '#';
+  });
+})();
+</script>
 {% endblock %}
