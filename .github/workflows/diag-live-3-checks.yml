@@ -1,0 +1,151 @@
+# Live verification of the three things shipped today:
+#   1. Share buttons -- platform Share (anon-visible) + backfilled per-
+#      project Share cards now show real values, not zero.
+#   2. Helpline AI -- ask Growth Layer / Marketplace / Procurement
+#      questions and confirm the new prompt answers instead of
+#      referring to engineers.
+#   3. Prospecting agent -- summarise the already-proven Diag Deep-Crawl
+#      Search result (133 items) since /admin/agent/run needs an admin
+#      session we don't have a clean way to mint from CI.
+#
+# Zero-cost: no paid APIs, just curl + requests against the public
+# surfaces of solarpro.aiappinvent.com.
+
+name: Diag Live (Share + Helpline + Prospecting)
+
+on: { workflow_dispatch: {} }
+
+permissions: { contents: read }
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SOLAR_BASE: https://solarpro.aiappinvent.com
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install --quiet requests
+
+      - name: 1) PLATFORM SHARE -- anon landing should expose the modal + nav button + hero CTA
+        run: |
+          set -e
+          curl -fsS "$SOLAR_BASE/" -o /tmp/landing.html
+          echo "  size: $(wc -c < /tmp/landing.html) bytes"
+          grep -c 'id="platformShareModal"'       /tmp/landing.html | xargs -I{} echo "  platformShareModal element  : {}"
+          grep -c 'data-platform-share="1"'        /tmp/landing.html | xargs -I{} echo "  data-platform-share=\"1\"   : {}"
+          grep -c 'Share Platform'                 /tmp/landing.html | xargs -I{} echo "  hero CTA 'Share Platform'    : {}"
+          grep -c 'megaphone-fill'                 /tmp/landing.html | xargs -I{} echo "  bi-megaphone-fill icon       : {}"
+
+      - name: 2) BACKFILLED SHARE CARDS -- public /s/<slug> should now show real values
+        run: |
+          set -e
+          for SLUG in mscqeejmf5 nazvpgygli aw5nkwlphf; do
+            curl -fsS "$SOLAR_BASE/s/$SLUG" -o /tmp/s.html
+            CODE=$(curl -sS -o /dev/null -w "%{http_code}" "$SOLAR_BASE/s/$SLUG")
+            SIZE=$(wc -c < /tmp/s.html)
+            # Spot the values we backfilled (annual_savings 58824, payback 4.9)
+            HAS_58824=$(grep -c '58,824\|58824'      /tmp/s.html || true)
+            HAS_PAYBACK=$(grep -c '4\.9 yr\|4\.9yr' /tmp/s.html || true)
+            HAS_KW=$(grep -c -E '[0-9]+\.[0-9]+ kW' /tmp/s.html || true)
+            HAS_LEADFORM=$(grep -c 'g-lead-form'    /tmp/s.html || true)
+            echo "  /s/$SLUG -> $CODE  ${SIZE}B  has-58824:$HAS_58824  has-4.9yr:$HAS_PAYBACK  has-kW:$HAS_KW  lead-form:$HAS_LEADFORM"
+          done
+
+      - name: 3) HELPLINE AI -- ask Growth Layer questions, confirm new prompt answers
+        run: |
+          python3 <<'PY'
+          import os, re, sys, json, requests, time
+          BASE = os.environ["SOLAR_BASE"]
+          s = requests.Session()
+          s.headers["User-Agent"] = "Mozilla/5.0 (helpline-check)"
+          # Seed a session + grab CSRF from landing
+          r = s.get(f"{BASE}/", timeout=30)
+          m = re.search(r'name=["\']_csrf["\']\s+value=["\']([a-f0-9]+)["\']', r.text)
+          if not m:
+              m = re.search(r'csrf_token\(\)\s*\)?\s*[\}\)]\s*[}"\']\s*([a-f0-9]+)', r.text)
+          # Try a more reliable way: hit any page with the {{ csrf_token() }} expansion
+          if not m:
+              # /referrals always renders; or just grab it from base.html via a known input
+              # Most pages put it in the chat-widget form
+              m = re.search(r'csrfToken\s*=\s*["\']([a-f0-9]+)["\']', r.text)
+          csrf = m.group(1) if m else ""
+          if not csrf:
+              # Fallback: hit /login (returns the auth page where _csrf may live)
+              r2 = s.get(f"{BASE}/api/csp-report", timeout=10)  # no-op; we just want the cookie set
+              # Try posting without CSRF and see what error we get
+              print("  WARN: could not extract _csrf from landing; trying without")
+          print(f"  csrf: {(csrf[:8]+'...') if csrf else '(none)'}")
+          print(f"  session cookies: {[c.name for c in s.cookies]}")
+
+          QUESTIONS = [
+              "How do I share a project to WhatsApp?",
+              "What is the Marketplace and how do I use the Procurement Center?",
+              "How does the prospecting agent at /admin/agent work?",
+              "What is the Growth Dashboard at /growth for?",
+              "How do I generate a co-branded proposal for my client?",
+          ]
+
+          REFER_PATTERNS = re.compile(
+              r"(refer (you )?to (an? )?engineer|escalate to|engineer (will|can)|not sure|"
+              r"don't know|don't have (that )?info|out of (my )?scope|"
+              r"unable to (help|answer))",
+              re.I,
+          )
+
+          KNOWLEDGE_HITS = {
+              "share": re.compile(r"/share/|Share button|growth_share|/growth|composer", re.I),
+              "marketplace/procurement": re.compile(r"/marketplace|/procurement|RFQ|BOM|BOQ|supplier", re.I),
+              "prospecting": re.compile(r"/admin/(agent|opportunities)|prospects|tender|RFP|Google News", re.I),
+              "growth dashboard": re.compile(r"/growth|share[- ]?cards|leads captured|conversion", re.I),
+              "proposal": re.compile(r"proposal[/ ]?beautif|co-?brand|installer logo|/project/.+/proposal", re.I),
+          }
+
+          n_ok, n_refer = 0, 0
+          for q in QUESTIONS:
+              payload = {"message": q, "history": []}
+              t0 = time.time()
+              r = s.post(f"{BASE}/api/assistant/chat",
+                         json=payload,
+                         headers={"X-CSRF-Token": csrf, "Content-Type": "application/json"},
+                         timeout=60)
+              dt = time.time() - t0
+              try:
+                  j = r.json()
+              except Exception:
+                  j = {"reply": r.text[:200]}
+              reply = (j.get("reply") or j.get("response") or j.get("message") or "")
+              if not reply:
+                  reply = str(j)[:300]
+              refers = bool(REFER_PATTERNS.search(reply))
+              # Find which knowledge area should have responded
+              area = None
+              for k, pat in KNOWLEDGE_HITS.items():
+                  if pat.search(q):
+                      area = k; break
+              area_hit = bool(KNOWLEDGE_HITS.get(area, re.compile("")).search(reply)) if area else False
+              ok = (not refers) and area_hit
+              n_ok += int(ok); n_refer += int(refers)
+              tag = "PASS" if ok else ("REFER" if refers else "WEAK")
+              print(f"\n  [{tag}] ({dt:.1f}s, status={r.status_code}) Q: {q}")
+              print(f"    A ({len(reply)} chars): {reply[:280]}")
+              if area and not area_hit:
+                  print(f"    NOTE: expected mention of {area} terms; not found in reply.")
+
+          print()
+          print(f"=== Helpline summary: {n_ok}/{len(QUESTIONS)} answered well, {n_refer} referred to engineer ===")
+          sys.exit(0 if n_ok >= 3 else 1)
+          PY
+
+      - name: 4) PROSPECTING AGENT -- summary
+        run: |
+          echo "Underlying search backend was independently proven in"
+          echo "  workflow run 28270330330 (Diag Deep-Crawl Search):"
+          echo "    PASS: unique=133 empty_url_hits=0"
+          echo "    Sample: Egypt 500 MW PV tender (BOO), Kuwait Al Dibdibah,"
+          echo "    Lebanon Nabad solar pumping ITB, JSW/Rays/Oriana BESS"
+          echo
+          echo "The full /admin/agent/run E2E hits a /dashboard <-> KC redirect"
+          echo "loop in the requests-based PKCE driver. Owner can verify in 30s:"
+          echo "  log in -> admin -> Prospecting Agent -> country=Ghana -> Run."
