@@ -1,221 +1,302 @@
 {% extends "base.html" %}
-{% block title %}Check My Electricity Bill — PURC Q2 2026 audit | SolarPro Global{% endblock %}
+{% block title %}Check My Bill — PURC Q2 2026 | SolarPro{% endblock %}
 
 {% block extra_head %}
 <style>
-/* Inherit landing.html design vocabulary so /bill-check feels like the same site */
-.hero-bg{background:radial-gradient(ellipse 90% 70% at 50% 0%,rgba(245,158,11,.1) 0%,transparent 65%)}
-.hero-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.12);
-  border:1px solid rgba(245,158,11,.3);color:#f59e0b;padding:5px 16px;border-radius:20px;
-  font-size:12px;font-weight:700;letter-spacing:.3px;margin-bottom:20px}
-.hero-badge .live-dot{width:6px;height:6px;border-radius:50%;background:#f59e0b;
-  box-shadow:0 0 8px #f59e0b;animation:bc-pulse 2.2s ease-in-out infinite}
-@keyframes bc-pulse{0%,100%{opacity:.55;transform:scale(.9)}50%{opacity:1;transform:scale(1)}}
+/* ─── MOBILE-FIRST COMPACT — designed for phone, scaled up cleanly to desktop ─── */
 
-.workflow-step{background:#0a0a14;border:1px solid #1e1e3a;border-radius:16px;padding:24px;
-  position:relative;transition:.2s;text-align:left}
-.workflow-step:hover{border-color:#f59e0b44;transform:translateY(-3px)}
-.workflow-arrow{color:#f59e0b;font-size:22px;padding:0 8px;align-self:center;flex-shrink:0}
-
-.faq-item{border-bottom:1px solid #1e1e3a;padding:16px 0}
-.faq-item:last-child{border-bottom:none}
-.faq-q{font-weight:700;font-size:14px;cursor:pointer;display:flex;justify-content:space-between;
-  align-items:center;color:#e2e2f0;list-style:none}
-.faq-q:hover{color:var(--solar-gold)}
-.faq-q::-webkit-details-marker{display:none}
-.faq-q::after{content:"+";color:var(--solar-gold);font-weight:400;font-size:18px;transition:.2s}
-.faq-item[open] .faq-q::after{content:"−"}
-.faq-a{font-size:13px;color:#8888b8;margin-top:8px;line-height:1.7}
-.section-label{font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
-  color:#f59e0b;margin-bottom:8px}
-.gradient-divider{height:1px;background:linear-gradient(90deg,transparent,#1e1e3a 20%,#2e2e5a 50%,#1e1e3a 80%,transparent);margin:56px 0}
-@keyframes pulse-gold-bc{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4)}70%{box-shadow:0 0 0 12px rgba(245,158,11,0)}}
-.pulse-cta{animation:pulse-gold-bc 2s infinite}
-
-/* ─── Live demo card — uses the same workflow-step base look ─── */
-.bc-demo{
-  max-width:680px;margin:8px auto 0;
-  background:linear-gradient(180deg,#0a0a14 0%,#080816 100%);
-  border:1px solid #1e1e3a;border-radius:18px;padding:28px;
-  position:relative;
-  box-shadow:0 28px 70px -28px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.03);
-  text-align:left;
+/* Canvas reset for landing surface */
+.bc-wrap{
+  --gold:#fbbf24;--gold-deep:#d97706;--green:#22c55e;
+  --rose:#fb7185;--violet:#a78bfa;--sky:#3b82f6;
+  --ink:#0a0a14;--card:#0f0f22;--border:#1e1e3a;
+  --text:#e2e2f0;--mute:#9090b8;--dim:#6868a0;
+  padding:12px 12px 18px;max-width:540px;margin:0 auto;
+  text-align:center;color:var(--text);
 }
-.bc-demo::before{
-  content:"";position:absolute;inset:0;border-radius:18px;pointer-events:none;
-  background:linear-gradient(135deg,rgba(245,158,11,.10) 0%, transparent 30%, rgba(34,197,94,.06) 100%);
-  opacity:.5;
-}
-@media (max-width:520px){.bc-demo{padding:22px 18px;border-radius:14px}}
+@media (min-width:768px){.bc-wrap{padding:20px 18px 32px;max-width:720px}}
 
-.bc-demo-hd{
+/* Mobile-style top mini-bar */
+.bc-topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:2px 2px 8px;font-size:11.5px;color:var(--mute);font-weight:600;
+}
+.bc-topbar .back{display:inline-flex;align-items:center;gap:5px;color:var(--gold);text-decoration:none}
+.bc-topbar .back:hover{color:#fbbf24}
+.bc-topbar .live{display:inline-flex;align-items:center;gap:5px}
+.bc-topbar .live .dot{width:6px;height:6px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 8px var(--green);animation:bc-pulse 2s ease-in-out infinite}
+@keyframes bc-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+
+/* Compact hero copy — single-line, centered */
+.bc-h1{
+  font-size:clamp(.95rem,3.6vw,1.55rem);
+  font-weight:900;line-height:1.15;letter-spacing:-.02em;
+  margin:4px 0 2px;color:var(--text);
+  text-align:center;
+  white-space:nowrap;
+}
+@media (max-width:340px){.bc-h1{font-size:clamp(.85rem,3.4vw,1.1rem)}}
+.bc-h1 .grad{
+  background:linear-gradient(135deg,#f2f2fd 20%,var(--gold) 55%,var(--sky));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.bc-sub{
+  font-size:12.5px;color:var(--mute);line-height:1.5;margin:0 0 10px;
+}
+.bc-friend{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:4px 11px;border-radius:999px;
+  background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);
+  color:var(--green);font-size:11px;font-weight:600;margin-bottom:8px;
+}
+
+/* The main interactive card — single column, generous touch targets */
+.bc-card{
+  background:linear-gradient(180deg,var(--card),#080816);
+  border:1px solid var(--border);border-radius:16px;
+  padding:14px 13px;text-align:left;
+  box-shadow:0 18px 50px -20px rgba(0,0,0,.55);
+  position:relative;overflow:hidden;
+}
+.bc-card::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(135deg,rgba(245,158,11,.07) 0%,transparent 40%);
+}
+@media (min-width:768px){.bc-card{padding:18px 18px}}
+
+.bc-card-hd{
   position:relative;
   display:flex;justify-content:space-between;align-items:center;
-  padding-bottom:18px;border-bottom:1px solid #1e1e3a;margin-bottom:20px;gap:10px;flex-wrap:wrap;
+  padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:10px;gap:8px;
 }
-.bc-demo-label{display:inline-flex;align-items:center;gap:7px;
-  font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#9090b8}
-.bc-demo-label i{font-size:12px;color:#f59e0b}
-.bc-demo-tag{
-  font-size:10px;font-weight:700;letter-spacing:.4px;color:#f59e0b;
+.bc-card-hd .lbl{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--mute);
+}
+.bc-card-hd .lbl i{font-size:11px;color:var(--gold)}
+.bc-card-hd .tag{
+  font-size:10px;font-weight:700;color:var(--gold);
   background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.30);
-  padding:3px 10px;border-radius:999px;
+  padding:3px 8px;border-radius:999px;letter-spacing:.3px;
 }
 
-.bc-type-row{position:relative;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:22px}
+/* Building-type chips — phone-friendly tap targets */
+.bc-type-row{
+  position:relative;
+  display:grid;grid-template-columns:repeat(2,1fr);gap:5px;margin-bottom:10px;
+}
+@media (min-width:480px){.bc-type-row{grid-template-columns:repeat(4,1fr)}}
 .bc-type-chip{
-  background:#0f0f22;border:1px solid #1e1e3a;color:#9090b8;
-  border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;
-  display:inline-flex;align-items:center;gap:6px;cursor:pointer;
-  transition:border-color .15s, background .15s, color .15s, transform .15s;
+  background:#0f0f22;border:1px solid var(--border);color:var(--mute);
+  border-radius:9px;padding:7px 6px;font-size:11.5px;font-weight:700;
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  min-height:36px;cursor:pointer;
+  transition:border-color .15s, background .15s, color .15s, transform .12s;
+  -webkit-tap-highlight-color:transparent;
 }
-.bc-type-chip i{font-size:12px;opacity:.7}
-.bc-type-chip:hover{border-color:#f59e0b44;color:#e2e2f0;transform:translateY(-1px)}
+.bc-type-chip i{font-size:13px;opacity:.7}
+.bc-type-chip:active{transform:scale(.97)}
 .bc-type-chip.active{
-  background:linear-gradient(135deg,rgba(245,158,11,.18),rgba(245,158,11,.08));
-  border-color:rgba(245,158,11,.55);color:#f59e0b;
+  background:linear-gradient(135deg,rgba(245,158,11,.18),rgba(245,158,11,.06));
+  border-color:rgba(245,158,11,.55);color:var(--gold);
 }
-.bc-type-chip.active i{opacity:1;color:#f59e0b}
+.bc-type-chip.active i{opacity:1;color:var(--gold)}
 
+/* GHS amount — big readable number, mobile-tap friendly */
 .bc-amount-label{
   position:relative;display:block;text-align:center;
-  font-size:10.5px;color:#6868a0;font-weight:700;
-  letter-spacing:1.4px;text-transform:uppercase;
+  font-size:10px;color:var(--dim);font-weight:700;letter-spacing:1.2px;text-transform:uppercase;
+  margin-bottom:2px;
 }
 .bc-amount-row{
   position:relative;
-  display:flex;align-items:baseline;justify-content:center;gap:6px;padding:10px 0 14px;
+  display:flex;align-items:baseline;justify-content:center;gap:5px;padding:2px 0 6px;
 }
-.bc-amount-prefix{font-size:14px;font-weight:700;color:#6868a0;letter-spacing:.5px}
+.bc-amount-prefix{font-size:13px;font-weight:700;color:var(--dim);letter-spacing:.5px}
 .bc-amount-input{
   background:transparent;border:0;outline:none;
-  color:#e2e2f0;font-weight:900;font-size:42px;line-height:1;
-  width:230px;text-align:center;font-variant-numeric:tabular-nums;
+  font-weight:900;font-size:clamp(28px, 10vw, 38px);line-height:1;
+  width:55vw;max-width:220px;text-align:center;font-variant-numeric:tabular-nums;
   letter-spacing:-.025em;padding:0;
-  background:linear-gradient(135deg,#f2f2fd 20%,var(--solar-gold) 55%,var(--solar-blue));
+  background:linear-gradient(135deg,#f2f2fd 20%,var(--gold) 55%,var(--sky));
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  -webkit-appearance:none;-moz-appearance:textfield;
 }
 .bc-amount-input::-webkit-outer-spin-button,
 .bc-amount-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.bc-amount-input[type=number]{-moz-appearance:textfield}
 
-.bc-slider-wrap{position:relative;display:flex;align-items:center;gap:12px;margin-bottom:22px}
-.bc-slider-end{font-size:10.5px;color:#6868a0;font-weight:600;font-variant-numeric:tabular-nums;flex-shrink:0;letter-spacing:.4px}
+/* Big native-feel slider */
+.bc-slider-wrap{position:relative;display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:2px 0}
+.bc-slider-end{font-size:10.5px;color:var(--dim);font-weight:600;font-variant-numeric:tabular-nums;flex-shrink:0}
 .bc-slider{
   flex:1;-webkit-appearance:none;appearance:none;
-  height:5px;border-radius:2.5px;
-  background:linear-gradient(90deg,#f59e0b 0%,#f59e0b 0%,#1e1e3a 0%,#1e1e3a 100%);
+  height:6px;border-radius:3px;
+  background:linear-gradient(90deg,var(--gold) 0%,var(--gold) 0%,var(--border) 0%,var(--border) 100%);
   outline:none;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
 }
 .bc-slider::-webkit-slider-thumb{
-  -webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;
+  -webkit-appearance:none;appearance:none;width:26px;height:26px;border-radius:50%;
   background:linear-gradient(135deg,#fbbf24,#d97706);
-  border:3px solid #0a0a14;
-  box-shadow:0 0 0 1px rgba(245,158,11,.55), 0 6px 16px -3px rgba(245,158,11,.55);
+  border:3px solid var(--ink);
+  box-shadow:0 0 0 1px rgba(245,158,11,.55), 0 6px 16px -3px rgba(245,158,11,.6);
   cursor:grab;
 }
 .bc-slider::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.08)}
-.bc-slider::-moz-range-thumb{width:20px;height:20px;border-radius:50%;
-  background:linear-gradient(135deg,#fbbf24,#d97706);border:3px solid #0a0a14;cursor:grab}
+.bc-slider::-moz-range-thumb{width:26px;height:26px;border-radius:50%;
+  background:linear-gradient(135deg,#fbbf24,#d97706);border:3px solid var(--ink);cursor:grab}
 
-/* ─── 3 outcome cards — workflow-step look, smaller ─── */
-.bc-bars-grid{position:relative;display:grid;grid-template-columns:1fr;gap:10px;margin-top:6px}
-@media (min-width:560px){.bc-bars-grid{grid-template-columns:repeat(3,1fr)}}
-
+/* 3 outcome cards — stacked on phone, row of 3 on desktop */
+.bc-bars-grid{position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:4px}
+@media (max-width:380px){.bc-bars-grid{grid-template-columns:1fr;gap:8px}}
 .bc-bar-card{
-  background:#0f0f22;border:1px solid #1e1e3a;border-radius:12px;
-  padding:14px;transition:border-color .2s, transform .2s;
+  background:#0f0f22;border:1px solid var(--border);border-radius:10px;
+  padding:10px 9px;transition:border-color .2s;
 }
-.bc-bar-card:hover{border-color:#2e2e5a;transform:translateY(-2px)}
 .bc-bar-card .lbl{
-  font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:#6868a0;font-weight:700;
-  display:flex;align-items:center;gap:5px;
+  font-size:8.5px;letter-spacing:.7px;text-transform:uppercase;color:var(--dim);font-weight:700;
+  display:flex;align-items:center;gap:4px;
 }
-.bc-bar-card .lbl i{font-size:10px}
-.bc-bar-card.tone-now    .lbl i{color:#fb7185}
-.bc-bar-card.tone-during .lbl i{color:#a78bfa}
-.bc-bar-card.tone-after  .lbl i{color:#22c55e}
-.bc-bar-card .amt{font-size:22px;font-weight:900;line-height:1.1;margin-top:5px;
-  color:#e2e2f0;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.bc-bar-card .tag{font-size:10.5px;color:#6868a0;margin-top:4px}
+.bc-bar-card .lbl i{font-size:9px}
+.bc-bar-card.tone-now    .lbl i{color:var(--rose)}
+.bc-bar-card.tone-during .lbl i{color:var(--violet)}
+.bc-bar-card.tone-after  .lbl i{color:var(--green)}
+.bc-bar-card .amt{
+  font-size:15px;font-weight:900;line-height:1.1;margin-top:3px;
+  color:var(--text);font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+}
+@media (min-width:480px){.bc-bar-card .amt{font-size:17px}}
+.bc-bar-card .tag{font-size:9.5px;color:var(--dim);margin-top:2px;line-height:1.3}
 
-.bc-bar{height:3px;border-radius:1.5px;background:rgba(255,255,255,.04);overflow:hidden;margin-top:10px}
+.bc-bar{height:3px;border-radius:1.5px;background:rgba(255,255,255,.04);overflow:hidden;margin-top:8px}
 .bc-bar > span{display:block;height:100%;border-radius:1.5px;transition:width .4s cubic-bezier(.2,.7,.3,1)}
-.bc-bar.rose  > span{background:#fb7185}
+.bc-bar.rose  > span{background:var(--rose)}
 .bc-bar.split{display:flex;gap:1px;background:transparent}
 .bc-bar.split > span{display:block;height:100%;transition:flex .4s cubic-bezier(.2,.7,.3,1)}
-.bc-bar.split .residual{background:#a78bfa}
-.bc-bar.split .loan    {background:#22c55e}
-.bc-bar.mint > span{background:#22c55e}
+.bc-bar.split .residual{background:var(--violet)}
+.bc-bar.split .loan    {background:var(--green)}
+.bc-bar.mint > span{background:var(--green)}
 
 .bc-bar-card .amt.bc-flash{animation:bc-flash .35s ease-out}
-@keyframes bc-flash{0%{color:#f59e0b}100%{color:#e2e2f0}}
+@keyframes bc-flash{0%{color:var(--gold)}100%{color:var(--text)}}
 
+/* Callout — compact, mobile-readable */
 .bc-callout{
-  position:relative;
-  margin-top:22px;padding:16px 18px;border-radius:12px;
-  background:linear-gradient(135deg,rgba(34,197,94,.08) 0%,rgba(245,158,11,.06) 100%);
-  border:1px solid rgba(34,197,94,.20);
-  font-size:13.5px;color:#dcdcef;line-height:1.6;
+  position:relative;margin-top:10px;padding:10px 12px;border-radius:10px;
+  background:linear-gradient(135deg,rgba(34,197,94,.07),rgba(245,158,11,.05));
+  border:1px solid rgba(34,197,94,.22);
+  font-size:12px;color:#dcdcef;line-height:1.5;
 }
-.bc-callout .num{color:#f59e0b;font-weight:900;font-variant-numeric:tabular-nums}
-.bc-callout strong{color:#22c55e;font-weight:700}
+.bc-callout .num{color:var(--gold);font-weight:900;font-variant-numeric:tabular-nums}
+.bc-callout strong{color:var(--green);font-weight:700}
 
-/* Trust strip below CTA */
+/* Full-width primary CTA on phone, big touch target */
+.bc-cta-full{
+  position:relative;display:block;width:100%;margin-top:12px;
+  background:linear-gradient(135deg,#fbbf24,#d97706);
+  color:#0a0a1c;font-weight:900;font-size:14px;letter-spacing:.2px;
+  border:0;border-radius:11px;padding:12px 16px;min-height:46px;
+  box-shadow:0 14px 30px -10px rgba(245,158,11,.55), inset 0 1px 0 rgba(255,255,255,.25);
+  cursor:pointer;-webkit-tap-highlight-color:transparent;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+}
+.bc-cta-full:active{transform:scale(.99)}
+.bc-cta-full .pill{
+  font-size:10px;font-weight:800;background:#0a0a1c;color:#fbbf24;
+  padding:2px 7px;border-radius:999px;letter-spacing:1px;
+}
+
+/* Trust chips — tight horizontal scroll on narrow screens */
 .bc-trust-row{
-  display:flex;justify-content:center;align-items:center;gap:24px;
-  margin-top:18px;flex-wrap:wrap;
+  display:flex;justify-content:center;align-items:center;gap:12px;
+  margin:8px 0 2px;flex-wrap:wrap;
 }
-.bc-trust{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#9090b8}
-.bc-trust i{font-size:13px;color:#f59e0b}
+.bc-trust{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--mute);font-weight:600}
+.bc-trust i{font-size:11px;color:var(--gold)}
 
-/* Step numbered badge inside workflow-step */
+/* Section separator inside the wrap */
+.bc-divider{
+  height:1px;width:80%;margin:14px auto;
+  background:linear-gradient(90deg,transparent,var(--border) 30%,#2e2e5a 50%,var(--border) 70%,transparent);
+}
+
+/* 3-step rail — compact */
+.bc-steps{margin-top:4px}
+.bc-step-row{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:10px 12px;border:1px solid var(--border);border-radius:11px;background:var(--card);
+  margin-bottom:5px;text-align:left;
+}
 .bc-step-num{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:34px;height:34px;border-radius:10px;
+  flex-shrink:0;width:28px;height:28px;border-radius:8px;
   background:linear-gradient(135deg,rgba(245,158,11,.20),rgba(245,158,11,.06));
   border:1px solid rgba(245,158,11,.35);
-  color:#f59e0b;font-weight:900;font-size:14px;margin-bottom:14px;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--gold);font-weight:900;font-size:12px;
 }
+.bc-step-body{flex:1;min-width:0}
+.bc-step-title{font-weight:800;font-size:13px;color:var(--text);margin-bottom:1px;letter-spacing:-.005em}
+.bc-step-text{font-size:11.5px;color:var(--mute);line-height:1.5;margin:0}
 
-.bc-friend-chip{
-  display:inline-flex;align-items:center;gap:7px;
-  padding:6px 14px;border-radius:999px;
-  background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.30);
-  color:#22c55e;font-size:12px;font-weight:600;margin-bottom:18px;
+/* FAQ — compact, full-tap-row */
+.bc-faq-h{
+  font-size:10.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
+  color:var(--gold);text-align:center;margin-bottom:3px;
 }
+.bc-faq-h2{
+  font-size:16px;font-weight:900;color:var(--text);text-align:center;
+  letter-spacing:-.01em;margin-bottom:8px;
+}
+.bc-faq{border-bottom:1px solid var(--border)}
+.bc-faq:first-of-type{border-top:1px solid var(--border)}
+.bc-faq summary{
+  list-style:none;cursor:pointer;
+  padding:10px 4px;color:var(--text);font-size:12.5px;font-weight:700;
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  -webkit-tap-highlight-color:transparent;
+}
+.bc-faq summary::-webkit-details-marker{display:none}
+.bc-faq summary::after{content:"+";color:var(--mute);font-size:17px;font-weight:400;line-height:1}
+.bc-faq[open] summary::after{content:"−";color:var(--gold)}
+.bc-faq p{padding:0 4px 10px;color:var(--mute);font-size:12px;line-height:1.55;margin:0;text-align:left}
+.bc-faq strong{color:var(--gold)}
+
+/* Final CTA section */
+.bc-final-h{font-size:16px;font-weight:900;color:var(--text);letter-spacing:-.01em;margin-bottom:3px}
+.bc-final-sub{font-size:12px;color:var(--mute);margin-bottom:10px;line-height:1.4}
+.bc-final-src{margin-top:8px;font-size:10.5px;color:var(--dim)}
+.bc-final-src a{color:var(--gold);text-decoration:none}
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="bc-wrap">
 
-{# ════════════════════════════════════════════════════════════════ HERO ═══ #}
-<div class="hero-bg text-center py-5 mb-4">
-
-  <div class="hero-badge">
-    <span class="live-dot"></span>60-Second Bill Audit · PURC Q2 2026
+  <!-- ─── Mobile top bar ─── -->
+  <div class="bc-topbar">
+    <a class="back" href="{{ url_for('landing') }}"><i class="bi bi-arrow-left"></i>Back</a>
+    <span class="live"><span class="dot"></span>Live · PURC Q2 2026</span>
   </div>
 
-  <h1 class="fw-black mb-3" style="font-size:clamp(2rem,5vw,3.4rem);letter-spacing:-.5px;
-    background:linear-gradient(135deg,#f2f2fd 20%,var(--solar-gold) 55%,var(--solar-blue));
-    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.15">
-    Your bill already funds<br>solar — just not<br>yours yet.
+  <!-- ─── Compact hero ─── -->
+  <h1 class="bc-h1">
+    Your bill funds <span class="grad">solar</span>. Just not yours yet.
   </h1>
-  <p class="lead text-secondary mb-4 mx-auto" style="max-width:620px;font-size:1.05rem;line-height:1.7">
-    Drop your monthly bill in and we'll show you <strong style="color:#f59e0b">exactly how much
-    of it could repay a solar loan</strong> — and how much it permanently drops once that loan is done.
+  <p class="bc-sub">
+    Drop your bill in. We'll show you what a solar loan would cost — and what you'd pay after.
   </p>
 
   {% if prefill %}
-    <div class="bc-friend-chip"><i class="bi bi-people-fill"></i>A friend prefilled this for you.</div>
+    <div class="bc-friend"><i class="bi bi-people-fill"></i>A friend prefilled this for you.</div>
   {% endif %}
 
-  {# ───────────────────────────────── LIVE DEMO CARD ─── #}
-  <div class="bc-demo" id="bcDemo">
+  <!-- ─── Interactive card ─── -->
+  <div class="bc-card" id="bcDemo">
 
-    <div class="bc-demo-hd">
-      <div class="bc-demo-label"><i class="bi bi-sliders"></i>Live model · drag to test</div>
-      <div class="bc-demo-tag" id="bcCatLabel">Residential · PURC Q2 2026</div>
+    <div class="bc-card-hd">
+      <span class="lbl"><i class="bi bi-sliders"></i>Drag to test</span>
+      <span class="tag" id="bcCatLabel">Residential</span>
     </div>
 
     <div class="bc-type-row" role="tablist" aria-label="Customer category">
@@ -226,10 +307,10 @@
         <i class="bi bi-lightbulb"></i>Lifeline
       </button>
       <button type="button" class="bc-type-chip" data-bc-type="shop" aria-pressed="false">
-        <i class="bi bi-shop"></i>Shop / Office
+        <i class="bi bi-shop"></i>Shop
       </button>
       <button type="button" class="bc-type-chip" data-bc-type="slt" aria-pressed="false">
-        <i class="bi bi-building"></i>Industry / SLT
+        <i class="bi bi-building"></i>Industry
       </button>
     </div>
 
@@ -237,7 +318,7 @@
     <div class="bc-amount-row">
       <span class="bc-amount-prefix">GHS</span>
       <input id="bcLandingBillNum" class="bc-amount-input" type="number" min="0" step="50" value="4200"
-             aria-label="Monthly bill amount in GHS">
+             inputmode="numeric" aria-label="Monthly bill amount in GHS">
     </div>
 
     <div class="bc-slider-wrap">
@@ -251,22 +332,22 @@
       <div class="bc-bar-card tone-now">
         <div class="lbl"><i class="bi bi-circle-fill"></i>Today</div>
         <div class="amt" id="bcVal1">GHS 4,200</div>
-        <div class="tag">100% grid bill</div>
+        <div class="tag">100% grid</div>
         <div class="bc-bar rose"><span style="width:100%"></span></div>
       </div>
       <div class="bc-bar-card tone-during">
-        <div class="lbl"><i class="bi bi-circle-fill"></i>During loan (~<span id="bcLoanYrs">5</span>y)</div>
+        <div class="lbl"><i class="bi bi-circle-fill"></i>During (~<span id="bcLoanYrs">5</span>y)</div>
         <div class="amt" id="bcVal2">GHS 3,037</div>
-        <div class="tag">Residual bill + loan payment</div>
+        <div class="tag">Bill + loan</div>
         <div class="bc-bar split">
           <span class="residual" id="bcSplitResidual" style="flex:50"></span>
           <span class="loan"     id="bcSplitLoan"     style="flex:22"></span>
         </div>
       </div>
       <div class="bc-bar-card tone-after">
-        <div class="lbl"><i class="bi bi-circle-fill"></i>After loan · forever</div>
+        <div class="lbl"><i class="bi bi-circle-fill"></i>After</div>
         <div class="amt" id="bcVal3">GHS 2,100</div>
-        <div class="tag" id="bcDropTag">−50% permanent drop</div>
+        <div class="tag" id="bcDropTag">−50% forever</div>
         <div class="bc-bar mint"><span id="bcAfterFill" style="width:50%"></span></div>
       </div>
     </div>
@@ -278,156 +359,98 @@
       <span class="num">50%</span> forever.
     </div>
 
-    <div class="text-center mt-4" style="position:relative">
-      <button type="button" class="btn btn-lg px-5 fw-bold pulse-cta"
-              data-bs-toggle="modal" data-bs-target="#billCheckModal"
-              style="background:linear-gradient(135deg,#fbbf24,#d97706);border:none;color:#0a0a1c;
-                     box-shadow:0 14px 30px -10px rgba(245,158,11,.55), inset 0 1px 0 rgba(255,255,255,.25)">
-        <i class="bi bi-receipt-cutoff me-2"></i>Open Full Tool
-        <span style="font-size:10px;font-weight:700;background:#0a0a1c;color:#fbbf24;
-                     padding:2px 7px;border-radius:999px;margin-left:8px;letter-spacing:1px">FREE</span>
-      </button>
-    </div>
+    <button type="button" class="bc-cta-full" data-bs-toggle="modal" data-bs-target="#billCheckModal">
+      <i class="bi bi-receipt-cutoff"></i>Open Full Tool
+      <span class="pill">FREE · 60s</span>
+    </button>
 
-  </div>{# /bc-demo #}
+  </div><!-- /bc-card -->
 
   <div class="bc-trust-row">
-    <span class="bc-trust"><i class="bi bi-shield-check"></i>PURC Q2 2026 rates</span>
+    <span class="bc-trust"><i class="bi bi-shield-check"></i>PURC Q2 2026</span>
     <span class="bc-trust"><i class="bi bi-eye-slash"></i>No signup</span>
-    <span class="bc-trust"><i class="bi bi-file-earmark-pdf"></i>PDF report</span>
-    <span class="bc-trust"><i class="bi bi-people"></i>Share with friends</span>
+    <span class="bc-trust"><i class="bi bi-file-earmark-pdf"></i>PDF</span>
+    <span class="bc-trust"><i class="bi bi-people"></i>Share</span>
   </div>
 
-</div>
+  <div class="bc-divider"></div>
 
-<div class="gradient-divider"></div>
-
-{# ════════════════════════════════════════════ HOW IT WORKS ═══ #}
-<div class="container" style="max-width:1100px">
-  <div class="text-center mb-4">
-    <div class="section-label">3-step audit</div>
-    <h2 class="fw-black" style="font-size:clamp(1.5rem,3vw,2.1rem);color:#e2e2f0;letter-spacing:-.3px">
-      Bill in. Funding model out. <span style="color:var(--solar-gold)">Sixty seconds.</span>
-    </h2>
-  </div>
-
-  <div class="row g-3">
-    <div class="col-md-4">
-      <div class="workflow-step h-100">
-        <div class="bc-step-num">1</div>
-        <h5 class="fw-black mb-2" style="color:#e2e2f0;font-size:16px">Enter your bill</h5>
-        <p class="text-secondary mb-0" style="font-size:13px;line-height:1.6">
-          Just the GHS amount and your meter category. We use the live PURC tariff to back-derive your kWh.
-        </p>
+  <!-- ─── How it works ─── -->
+  <div class="bc-steps">
+    <div class="bc-faq-h">3 steps</div>
+    <div class="bc-step-row">
+      <div class="bc-step-num">1</div>
+      <div class="bc-step-body">
+        <div class="bc-step-title">Enter your bill</div>
+        <p class="bc-step-text">GHS amount + meter category. We back-derive your kWh from the live PURC tariff.</p>
       </div>
     </div>
-    <div class="col-md-4">
-      <div class="workflow-step h-100">
-        <div class="bc-step-num">2</div>
-        <h5 class="fw-black mb-2" style="color:#e2e2f0;font-size:16px">See the funding model</h5>
-        <p class="text-secondary mb-0" style="font-size:13px;line-height:1.6">
-          Three numbers — what you pay today, what you'd pay during a solar loan, and what you'd pay after.
-        </p>
+    <div class="bc-step-row">
+      <div class="bc-step-num">2</div>
+      <div class="bc-step-body">
+        <div class="bc-step-title">See the funding model</div>
+        <p class="bc-step-text">Three numbers — today, during a solar loan, and after.</p>
       </div>
     </div>
-    <div class="col-md-4">
-      <div class="workflow-step h-100">
-        <div class="bc-step-num">3</div>
-        <h5 class="fw-black mb-2" style="color:#e2e2f0;font-size:16px">Export &amp; share</h5>
-        <p class="text-secondary mb-0" style="font-size:13px;line-height:1.6">
-          Download a PDF, email it to yourself, or invite friends with the numbers prefilled.
-        </p>
+    <div class="bc-step-row">
+      <div class="bc-step-num">3</div>
+      <div class="bc-step-body">
+        <div class="bc-step-title">Export &amp; share</div>
+        <p class="bc-step-text">PDF, email-to-self, or invite friends with your numbers prefilled.</p>
       </div>
     </div>
   </div>
-</div>
 
-<div class="gradient-divider"></div>
+  <div class="bc-divider"></div>
 
-{# ═══════════════════════════════════════════════════════════ FAQ ═══ #}
-<div class="container" style="max-width:720px">
-  <div class="text-center mb-4">
-    <div class="section-label">Common questions</div>
-    <h2 class="fw-black" style="font-size:clamp(1.5rem,3vw,2.1rem);color:#e2e2f0;letter-spacing:-.3px">
-      Frequently asked
-    </h2>
-  </div>
+  <!-- ─── FAQ ─── -->
+  <div class="bc-faq-h">FAQ</div>
+  <div class="bc-faq-h2">Quick answers</div>
 
-  <details class="faq-item">
-    <summary class="faq-q">Is the tariff accurate?</summary>
-    <div class="faq-a">
-      Yes. Live <strong style="color:var(--solar-gold)">PURC Q2 2026</strong> rates, effective 01-04-2026.
-      Twelve customer categories covered. We update each quarter as PURC issues new schedules.
-    </div>
+  <details class="bc-faq">
+    <summary>Is the tariff accurate?</summary>
+    <p>Live <strong>PURC Q2 2026</strong> rates, effective 01-04-2026. Twelve customer categories covered. Refreshed every quarter.</p>
+  </details>
+  <details class="bc-faq">
+    <summary>Levies &amp; VAT?</summary>
+    <p>We compare <strong>energy + service</strong>. Levies add ~17.5% on top — we show the gap so you can match it to your receipt.</p>
+  </details>
+  <details class="bc-faq">
+    <summary>Can I share my result?</summary>
+    <p>Yes — <strong>copy link</strong>, <strong>email me</strong>, or <strong>invite friends</strong>. They open the tool with your numbers prefilled.</p>
+  </details>
+  <details class="bc-faq">
+    <summary>Sign-up needed?</summary>
+    <p>No. The audit + PDF are free and anonymous. Sign up only if you want it saved to a project.</p>
   </details>
 
-  <details class="faq-item">
-    <summary class="faq-q">What about levies and VAT?</summary>
-    <div class="faq-a">
-      We compare the <strong style="color:var(--solar-gold)">energy charge plus service</strong>.
-      Levies typically add ~17.5% on top — we show the gap so you can match it to your receipt.
-    </div>
-  </details>
+  <div class="bc-divider"></div>
 
-  <details class="faq-item">
-    <summary class="faq-q">Can I share my result with someone?</summary>
-    <div class="faq-a">
-      Yes — <strong style="color:var(--solar-gold)">copy link</strong>,
-      <strong style="color:var(--solar-gold)">email me</strong>, or
-      <strong style="color:var(--solar-gold)">invite friends</strong>. They open the tool with your numbers prefilled.
-    </div>
-  </details>
-
-  <details class="faq-item">
-    <summary class="faq-q">Does this require sign-up?</summary>
-    <div class="faq-a">
-      No. The audit + PDF report are free and anonymous. Sign up only if you want the result saved to a
-      SolarPro project so an installer can pick it up.
-    </div>
-  </details>
-</div>
-
-<div class="gradient-divider"></div>
-
-{# ════════════════════════════════════════════════════ FINAL CTA ═══ #}
-<div class="container text-center mb-5" style="max-width:760px">
-  <h2 class="fw-black mb-3" style="font-size:clamp(1.4rem,2.6vw,1.9rem);color:#e2e2f0;letter-spacing:-.3px">
-    Ready to see your number?
-  </h2>
-  <p class="text-secondary mb-4" style="font-size:14px;max-width:480px;margin:0 auto">
-    Free, anonymous, takes about a minute. The full tool will email you a PDF report when you're done.
-  </p>
-  <button type="button" class="btn btn-lg px-5 fw-bold pulse-cta"
-          data-bs-toggle="modal" data-bs-target="#billCheckModal"
-          style="background:linear-gradient(135deg,#fbbf24,#d97706);border:none;color:#0a0a1c;
-                 box-shadow:0 14px 30px -10px rgba(245,158,11,.55), inset 0 1px 0 rgba(255,255,255,.25)">
-    <i class="bi bi-lightning-charge-fill me-2"></i>Open Full Tool
+  <!-- ─── Final CTA ─── -->
+  <div class="bc-final-h">Ready to see your number?</div>
+  <p class="bc-final-sub">Free, anonymous, ~60 seconds.</p>
+  <button type="button" class="bc-cta-full" data-bs-toggle="modal" data-bs-target="#billCheckModal">
+    <i class="bi bi-lightning-charge-fill"></i>Open Full Tool
   </button>
-  <div class="mt-3" style="font-size:11px;color:#6868a0">
-    <a href="https://www.purc.com.gh/attachment/288818-20260313090334.pdf"
-       target="_blank" rel="noopener" style="color:var(--solar-gold);text-decoration:none">
+  <div class="bc-final-src">
+    <a href="https://www.purc.com.gh/attachment/288818-20260313090334.pdf" target="_blank" rel="noopener">
       PURC Q2 2026 source <i class="bi bi-box-arrow-up-right"></i>
     </a>
   </div>
+
 </div>
 
-{# ═══════════════════════════════════════════ LIVE DEMO JS ═══ #}
+<!-- ─── Live demo JS ─── -->
 <script>
 (function(){
-  // Effective rates server-injected from GHANA_PURC_TARIFFS via _bc_landing_types.
   const SERVER_TYPES = {{ bc_types|tojson if bc_types is defined else 'null' }};
   const TYPES = SERVER_TYPES || {
-    home:     {label:"Residential · Standard", effRate:2.20},
-    lifeline: {label:"Residential · Lifeline", effRate:0.869},
-    shop:     {label:"Non-Residential",         effRate:1.97},
-    slt:      {label:"Special Load · LV",       effRate:2.3211},
+    home:     {label:"Residential", effRate:2.20},
+    lifeline: {label:"Lifeline",    effRate:0.869},
+    shop:     {label:"Shop",        effRate:1.97},
+    slt:      {label:"Industry",    effRate:2.3211},
   };
-
-  const CONST = {
-    target_pct:0.50, system_cost_per_kwp:8000, loan_years:5, loan_rate:0.22,
-    psh:5, sys_eff:0.80,
-  };
-
+  const CONST = {target_pct:0.50, system_cost_per_kwp:8000, loan_years:5, loan_rate:0.22, psh:5, sys_eff:0.80};
   let currentType = "home";
   const fmtGHS = (v) => "GHS " + Math.round(v).toLocaleString();
 
@@ -449,7 +472,6 @@
     const dropPct = bill > 0 ? (monthlySave / bill * 100) : 0;
     return {bill, kwh, recKwp, sysCost, loanPmt, monthlySave, residual, combined, dropPct};
   }
-
   const $ = (sel) => document.querySelector(sel);
   function flash(el){ el.classList.remove("bc-flash"); void el.offsetWidth; el.classList.add("bc-flash"); }
   function setAmt(sel, text){
@@ -460,25 +482,20 @@
     setAmt("#bcVal1", fmtGHS(r.bill));
     setAmt("#bcVal2", fmtGHS(r.combined));
     setAmt("#bcVal3", fmtGHS(r.residual));
-    $("#bcDropTag").textContent = `−${r.dropPct.toFixed(0)}% permanent drop`;
+    $("#bcDropTag").textContent = `−${r.dropPct.toFixed(0)}% forever`;
     $("#bcLoanYrs").textContent = String(CONST.loan_years);
     const tag = $("#bcCatLabel");
-    if (tag) tag.textContent = (TYPES[currentType] || TYPES.home).label + " · Q2 2026";
-
+    if (tag) tag.textContent = (TYPES[currentType] || TYPES.home).label;
     const splitResidual = (r.residual / r.bill) * 100 || 0;
     const splitLoan     = (r.loanPmt  / r.bill) * 100 || 0;
     $("#bcSplitResidual").style.flex = splitResidual.toFixed(1);
     $("#bcSplitLoan").style.flex     = splitLoan.toFixed(1);
-    const afterPct = Math.min(100, splitResidual);
-    $("#bcAfterFill").style.width = afterPct.toFixed(1) + "%";
-
-    // Slider rail fill
+    $("#bcAfterFill").style.width = Math.min(100, splitResidual).toFixed(1) + "%";
     const slider = $("#bcLandingBill");
     if (slider) {
       const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
-      slider.style.background = `linear-gradient(90deg, #f59e0b 0%, #f59e0b ${pct}%, #1e1e3a ${pct}%, #1e1e3a 100%)`;
+      slider.style.background = `linear-gradient(90deg,#fbbf24 0%,#fbbf24 ${pct}%,#1e1e3a ${pct}%,#1e1e3a 100%)`;
     }
-
     const co = $("#bcCallout");
     if (r.bill <= 0) {
       co.innerHTML = "Drag the slider to see your funding model.";
@@ -498,14 +515,11 @@
       );
     }
   }
-
   function tick(v){ render(compute(parseFloat(v) || 0)); }
-
   const slider = $("#bcLandingBill");
   const num    = $("#bcLandingBillNum");
   slider.addEventListener("input", e => { num.value = e.target.value; tick(e.target.value); });
   num.addEventListener("input",    e => { slider.value = e.target.value; tick(e.target.value); });
-
   document.querySelectorAll("[data-bc-type]").forEach(btn => {
     btn.addEventListener("click", () => {
       const t = btn.getAttribute("data-bc-type");
@@ -519,10 +533,9 @@
       tick(slider.value);
     });
   });
-
   tick(slider.value);
 
-  // ── share-token prefill ──
+  // share-token prefill
   window.BILL_CHECK_PREFILL = {{ prefill|tojson }};
   document.addEventListener("DOMContentLoaded", function(){
     const p = window.BILL_CHECK_PREFILL || {};
