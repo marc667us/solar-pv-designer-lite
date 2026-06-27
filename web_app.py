@@ -9809,11 +9809,17 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
             # ── 1. OpenRouter — free Llama (primary) ─────────────────────
             # Each model tried; on any error, continue to next model then next provider
             if or_key and raw is None:
+                # Free OpenRouter chain - refreshed 2026-06-27 after owner
+                # reported "prospecting AI failed". Added nvidia nemotron + qwen
+                # 72b at the front for quality; kept legacy llama/gemma as fallbacks.
                 _or_models = [
+                    "nvidia/llama-3.1-nemotron-70b-instruct:free",
+                    "meta-llama/llama-3.3-70b-instruct:free",
+                    "qwen/qwen-2.5-72b-instruct:free",
                     "meta-llama/llama-3.1-8b-instruct:free",
                     "google/gemma-2-9b-it:free",
                     "mistralai/mistral-7b-instruct:free",
-                    "meta-llama/llama-3.3-70b-instruct:free",
+                    "meta-llama/llama-3.2-3b-instruct:free",
                 ]
                 for _or_model in _or_models:
                     try:
@@ -10130,7 +10136,81 @@ Return up to {count} results. Return ONLY valid JSON, no markdown:
     # ── Step 4: Last resort — inform user search failed ─────────────────────────
     return jsonify({"ok": False,
                     "error": f"Web search returned no results. {search_error or ''} "
-                             "Try different search criteria or add an ANTHROPIC_API_KEY."})
+                             "Try different search criteria, refine the country/sector, or try again in a few minutes (free LLM tier may be throttled)."})
+
+
+@app.route("/admin/agent/ping-providers", methods=["GET"])
+@admin_required
+def admin_agent_ping_providers():
+    """Diagnostic: ping each AI provider with a tiny prompt; report which are alive.
+    Owner-requested 2026-06-27 to self-diagnose prospecting AI failures."""
+    import urllib.request as _ur_d, urllib.error as _ue_d, json as _json_d
+    or_key   = os.environ.get("OPENROUTER_API_KEY", "")
+    gh_token = os.environ.get("GITHUB_TOKEN", "")
+    ollama   = os.environ.get("OLLAMA_URL", "")
+    tiny     = "Reply with the single word OK."
+    out = {"checked_at": datetime.utcnow().isoformat() + "Z", "providers": []}
+    _models = [
+        "nvidia/llama-3.1-nemotron-70b-instruct:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "qwen/qwen-2.5-72b-instruct:free",
+        "meta-llama/llama-3.1-8b-instruct:free",
+        "google/gemma-2-9b-it:free",
+        "mistralai/mistral-7b-instruct:free",
+    ]
+    if or_key:
+        for m in _models:
+            try:
+                payload = _json_d.dumps({"model": m,
+                    "messages": [{"role": "user", "content": tiny}],
+                    "max_tokens": 8}).encode()
+                req = _ur_d.Request("https://openrouter.ai/api/v1/chat/completions",
+                    data=payload, headers={"Authorization": f"Bearer {or_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://solarpro.aiappinvent.com",
+                    "X-Title": "SolarPro Diag"})
+                with _ur_d.urlopen(req, timeout=15) as r:
+                    body = _json_d.loads(r.read())
+                    txt  = (body.get("choices",[{}])[0].get("message",{}).get("content") or "")[:40]
+                out["providers"].append({"name": "openrouter:" + m, "ok": True, "reply": txt})
+            except _ue_d.HTTPError as e:
+                out["providers"].append({"name": "openrouter:" + m, "ok": False,
+                    "error": "HTTP" + str(e.code) + ": " + (e.read().decode("utf-8", errors="ignore")[:120])})
+            except Exception as e:
+                out["providers"].append({"name": "openrouter:" + m, "ok": False, "error": str(e)[:160]})
+    else:
+        out["providers"].append({"name": "openrouter", "ok": False, "error": "OPENROUTER_API_KEY not set"})
+    if ollama:
+        try:
+            payload = _json_d.dumps({"model": os.environ.get("OLLAMA_MODEL","mistral"),
+                "messages": [{"role": "user", "content": tiny}], "stream": False}).encode()
+            req = _ur_d.Request(ollama.rstrip("/") + "/api/chat", data=payload,
+                headers={"Content-Type": "application/json"})
+            with _ur_d.urlopen(req, timeout=10) as r:
+                body = _json_d.loads(r.read())
+                txt = (body.get("message",{}).get("content") or "")[:40]
+            out["providers"].append({"name": "ollama", "ok": True, "reply": txt})
+        except Exception as e:
+            out["providers"].append({"name": "ollama", "ok": False, "error": str(e)[:160]})
+    else:
+        out["providers"].append({"name": "ollama", "ok": False, "error": "OLLAMA_URL not set"})
+    if gh_token:
+        try:
+            payload = _json_d.dumps({"model": "gpt-4.1-mini",
+                "messages": [{"role": "user", "content": tiny}], "max_tokens": 8}).encode()
+            req = _ur_d.Request("https://models.inference.ai.azure.com/chat/completions",
+                data=payload, headers={"Authorization": f"Bearer {gh_token}",
+                "Content-Type": "application/json", "Accept": "application/json"})
+            with _ur_d.urlopen(req, timeout=15) as r:
+                body = _json_d.loads(r.read())
+                txt = (body.get("choices",[{}])[0].get("message",{}).get("content") or "")[:40]
+            out["providers"].append({"name": "github_models:gpt-4.1-mini", "ok": True, "reply": txt})
+        except Exception as e:
+            out["providers"].append({"name": "github_models:gpt-4.1-mini", "ok": False, "error": str(e)[:160]})
+    else:
+        out["providers"].append({"name": "github_models", "ok": False, "error": "GITHUB_TOKEN not set"})
+    out["any_ok"] = any(p.get("ok") for p in out["providers"])
+    return jsonify(out)
 
 
 @app.route("/admin/agent/leads/batch-delete", methods=["POST"])
