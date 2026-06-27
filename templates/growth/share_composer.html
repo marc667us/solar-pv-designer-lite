@@ -44,6 +44,57 @@
               <div class="small text-secondary">High-level summary + payback</div>
             </div>
           </label>
+
+          {# Item C (2026-06-27): three new card types #}
+          <label class="list-group-item d-flex gap-2 align-items-center" style="border-top:2px solid var(--bs-warning-border-subtle,#facc15)">
+            <input type="radio" name="asset_type" value="installer_achievement_card">
+            <div>
+              <div class="fw-semibold">Installer Achievement <span class="badge text-bg-success ms-1" style="font-size:9px">FOR INSTALLERS</span></div>
+              <div class="small text-secondary">Show off a completed install — modules, inverter, battery, year</div>
+            </div>
+          </label>
+          <label class="list-group-item d-flex gap-2 align-items-center">
+            <input type="radio" name="asset_type" value="supplier_product_card">
+            <div>
+              <div class="fw-semibold">Supplier Product <span class="badge text-bg-info ms-1" style="font-size:9px">FOR SUPPLIERS</span></div>
+              <div class="small text-secondary">Promote a marketplace product alongside a real install</div>
+            </div>
+          </label>
+          <label class="list-group-item d-flex gap-2 align-items-center">
+            <input type="radio" name="asset_type" value="roof_before_after_card">
+            <div>
+              <div class="fw-semibold">Roof Before / After</div>
+              <div class="small text-secondary">Side-by-side roof shots + savings hook</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      {# Optional inputs for the installer / supplier cards.
+         The radios above show/hide these via the toggleExtras() handler. #}
+      <div class="card mb-3 d-none" id="extras-installer">
+        <div class="card-header">Installer details</div>
+        <div class="card-body">
+          <label class="form-label small">Installer / contractor name</label>
+          <input id="g-installer-name" class="form-control form-control-sm mb-2"
+                 placeholder="e.g. SolarPro Engineering Ltd" maxlength="80">
+          <label class="form-label small">Completion year</label>
+          <input id="g-completion-year" class="form-control form-control-sm" type="number"
+                 placeholder="2026" min="2000" max="2099">
+        </div>
+      </div>
+      <div class="card mb-3 d-none" id="extras-supplier">
+        <div class="card-header">Supplier product</div>
+        <div class="card-body">
+          <label class="form-label small">Supplier name</label>
+          <input id="g-supplier-name" class="form-control form-control-sm mb-2"
+                 placeholder="e.g. ABC Solar Wholesale" maxlength="80">
+          <label class="form-label small">Product name</label>
+          <input id="g-product-name" class="form-control form-control-sm mb-2"
+                 placeholder="e.g. JinkoSolar 550W Tiger Neo" maxlength="100">
+          <label class="form-label small">Product spec (one line)</label>
+          <input id="g-product-spec" class="form-control form-control-sm"
+                 placeholder="Mono PERC · 21.5% efficiency · IEC 61215" maxlength="160">
         </div>
       </div>
 
@@ -196,6 +247,30 @@
         <div class="growth-card__metric"><span class="v">${fmt(payload.system_size_kw)} kW</span><span class="k">PV size</span></div>
         <div class="growth-card__metric"><span class="v">${fmt(payload.inverter_kw)} kW</span><span class="k">Inverter</span></div>
         <div class="growth-card__metric"><span class="v">${fmt(payload.battery_kwh)} kWh</span><span class="k">Battery</span></div>`;
+    } else if (type === "installer_achievement_card") {
+      const yr  = payload.completion_year ? ' · ' + payload.completion_year : '';
+      const who = payload.installer_name ? `Installed by ${payload.installer_name}${yr}` : `Project completed${yr}`;
+      title = who;
+      body = `
+        <div class="growth-card__metric"><span class="v">${fmt(payload.system_size_kw)} kW</span><span class="k">PV size</span></div>
+        <div class="growth-card__metric"><span class="v">${fmt(payload.module_count)}</span><span class="k">PV modules</span></div>
+        <div class="growth-card__metric"><span class="v">${fmt(payload.inverter_kw)} kW</span><span class="k">Inverter</span></div>
+        <div class="growth-card__metric"><span class="v">${fmt(payload.battery_kwh)} kWh</span><span class="k">Battery</span></div>`;
+    } else if (type === "supplier_product_card") {
+      title = payload.product_name || payload.project_name || "Solar product";
+      const supp = payload.supplier_name ? `Supplied by ${payload.supplier_name}` : 'Solar component';
+      body = `
+        <div class="growth-card__metric" style="flex:1 1 100%"><span class="v" style="font-size:14px">${supp}</span><span class="k">Distributor</span></div>
+        <div class="growth-card__metric" style="flex:1 1 100%"><span class="v" style="font-size:13px;line-height:1.3">${fmt(payload.product_spec)}</span><span class="k">Spec</span></div>
+        <div class="growth-card__metric"><span class="v">${fmt(payload.system_size_kw)} kW</span><span class="k">Used on</span></div>
+        <div class="growth-card__metric"><span class="v">${payload.currency||'USD'} ${money(payload.annual_savings)}</span><span class="k">Year-1 savings</span></div>`;
+    } else if (type === "roof_before_after_card") {
+      title = payload.project_name || "Solar install";
+      body = `
+        <div class="growth-card__metric" style="flex:1 1 100%"><span class="v" style="font-size:14px">Before grid only · After solar + grid</span><span class="k">Site transformation</span></div>
+        <div class="growth-card__metric"><span class="v">${fmt(payload.system_size_kw)} kW</span><span class="k">Installed</span></div>
+        <div class="growth-card__metric"><span class="v">${payload.currency||'USD'} ${money(payload.annual_savings)}</span><span class="k">Year-1 savings</span></div>
+        <div class="growth-card__metric"><span class="v" style="font-size:14px">${fmt(payload.location)}</span><span class="k">Location</span></div>`;
     } else {
       body = `
         <div class="growth-card__metric"><span class="v">${fmt(payload.system_size_kw)} kW</span><span class="k">PV size</span></div>
@@ -205,6 +280,9 @@
     }
     const cta = type === "boq_summary_card" ? "Generate your BOQ"
               : type === "energy_score_card" ? "See your energy score"
+              : type === "installer_achievement_card" ? "Get a quote from this installer"
+              : type === "supplier_product_card" ? "Buy this on the SolarPro marketplace"
+              : type === "roof_before_after_card" ? "Get yours installed"
               : "See your savings in 60 seconds";
     document.getElementById("g-card").innerHTML =
        `<div class="growth-card__brand">SolarPro Global</div>
@@ -221,16 +299,37 @@
     document.getElementById("g-qr").innerHTML = qr.createImgTag(4, 8);
   }
 
+  // Toggle the installer/supplier extras panels in sync with the radio choice.
+  function toggleExtras(){
+    const type = pickType();
+    const inst = document.getElementById("extras-installer");
+    const supp = document.getElementById("extras-supplier");
+    if (inst) inst.classList.toggle("d-none", type !== "installer_achievement_card");
+    if (supp) supp.classList.toggle("d-none", type !== "supplier_product_card");
+  }
+  document.querySelectorAll('input[name="asset_type"]').forEach(r => r.addEventListener('change', toggleExtras));
+  toggleExtras();
+
   async function generate(){
     const type = pickType();
     const camp = (document.getElementById("g-campaign").value || "").trim();
     const vis  = document.getElementById("g-visibility").value || "public";
+    const extras = {};
+    if (type === "installer_achievement_card") {
+      extras.installer_name  = (document.getElementById("g-installer-name").value || "").trim();
+      extras.completion_year = (document.getElementById("g-completion-year").value || "").trim();
+    } else if (type === "supplier_product_card") {
+      extras.supplier_name = (document.getElementById("g-supplier-name").value || "").trim();
+      extras.product_name  = (document.getElementById("g-product-name").value || "").trim();
+      extras.product_spec  = (document.getElementById("g-product-spec").value || "").trim();
+    }
     const res = await fetch("/api/growth/share-assets", {
       method: "POST",
       headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF},
       body: JSON.stringify({
         asset_type: type, project_id: PROJECT_ID,
-        campaign_id: camp, visibility: vis
+        campaign_id: camp, visibility: vis,
+        ...extras
       })
     });
     if (!res.ok) { alert("Could not create share asset"); return; }

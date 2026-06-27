@@ -29961,6 +29961,29 @@ def _safe_card_payload(project_row, asset_type):
             "annual_savings": round(float(annual_savings or 0), 0),
             "currency": currency,
         }
+    # Item C (2026-06-27): installer / supplier card payloads
+    if asset_type == "installer_achievement_card":
+        return {
+            "project_name":   project_name,
+            "location":       location,
+            "system_size_kw": round(float(pv_kw or 0), 2),
+            "module_count":   int(results.get("num_panels") or 0),
+            "battery_kwh":    round(float(results.get("bat_kwh") or 0), 1),
+            "inverter_kw":    round(float(results.get("inv_kw") or 0), 1),
+            "installer_name": (data.get("installer_name") or data.get("contractor") or ""),
+            "completion_year": data.get("completion_year") or "",
+        }
+    if asset_type == "supplier_product_card":
+        return {
+            "project_name":   project_name,
+            "location":       location,
+            "system_size_kw": round(float(pv_kw or 0), 2),
+            "currency":       currency,
+            "annual_savings": round(float(annual_savings or 0), 0),
+            "supplier_name":  (data.get("supplier_name") or ""),
+            "product_name":   (data.get("product_name") or ""),
+            "product_spec":   (data.get("product_spec") or "")[:160],
+        }
     return {"project_name": project_name, "location": location}
 
 def _growth_resolve_user_referral_code(u):
@@ -30074,6 +30097,19 @@ def growth_create_share_asset():
         if not p:
             return jsonify({"error": "project not found"}), 404
         payload = _safe_card_payload(p, asset_type)
+        # Item C (2026-06-27): installer/supplier cards get user-supplied
+        # extras (installer_name, supplier_name, product_name, etc.) merged
+        # in. Strip the same blocked keys we strip from free-form payloads.
+        if asset_type == "installer_achievement_card":
+            for k in ("installer_name", "completion_year"):
+                v = (body.get(k) or "")
+                if isinstance(v, str): v = v[:80]
+                if v: payload[k] = v
+        elif asset_type == "supplier_product_card":
+            for k in ("supplier_name", "product_name", "product_spec"):
+                v = (body.get(k) or "")
+                if isinstance(v, str): v = v[:160 if k == "product_spec" else 100]
+                if v: payload[k] = v
         title = (payload.get("project_name") or title)[:200]
     else:
         # Free-form (installer / supplier achievement cards). Trust the
