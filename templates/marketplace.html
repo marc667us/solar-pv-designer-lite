@@ -79,6 +79,14 @@
         <input type="text" class="form-control" name="q" value="{{ q }}" placeholder="Search by name, brand, model, or spec..." style="background:#0a0a14;border-color:#1e1e3a;color:#fff">
       </div>
     </div>
+    {% if country_options %}
+    <select name="country" class="form-select" style="background:#0a0a14;border-color:#1e1e3a;color:#fff;max-width:170px"
+            title="Country grid profile drives the per-card compliance badge" onchange="this.form.submit()">
+      {% for code, prof in country_options.items()|sort %}
+      <option value="{{ code }}" {% if selected_country == code %}selected{% endif %}>{{ code }} · {{ prof.name|default(code) }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
     {% if currencies %}
     <select name="currency" class="form-select" style="background:#0a0a14;border-color:#1e1e3a;color:#fff;max-width:130px" onchange="this.form.submit()">
       {% for code in currencies %}
@@ -98,13 +106,13 @@
   </div>
   {% endif %}
   <div class="d-flex flex-wrap gap-2">
-    <a href="{{ url_for('marketplace_public', q=q or none, currency=currency or none) }}"
+    <a href="{{ url_for('marketplace_public', q=q or none, currency=currency or none, country=selected_country or none) }}"
        class="badge text-decoration-none px-3 py-2 {% if not selected_category %}bg-warning text-dark{% else %}bg-secondary text-white{% endif %}"
        style="font-size:12px;font-weight:600;border-radius:999px">
       <i class="bi bi-grid me-1"></i>All ({{ total_products }})
     </a>
     {% for cat in categories %}
-    <a href="{{ url_for('marketplace_public', cat=cat.id, q=q or none, currency=currency or none) }}"
+    <a href="{{ url_for('marketplace_public', cat=cat.id, q=q or none, currency=currency or none, country=selected_country or none) }}"
        class="badge text-decoration-none px-3 py-2 {% if selected_category and selected_category.id == cat.id %}bg-warning text-dark{% else %}bg-secondary text-white{% endif %}"
        style="font-size:12px;font-weight:600;border-radius:999px">
       <i class="{{ cat.icon }} me-1"></i>{{ cat.name }}
@@ -115,11 +123,11 @@
   {% if selected_category and subcategories_for_selected %}
   <div class="d-flex flex-wrap gap-1 mt-2" style="padding-left:8px">
     <span class="text-secondary small me-2 align-self-center">Filter by subcategory:</span>
-    <a href="{{ url_for('marketplace_public', cat=selected_category.id, q=q or none, currency=currency or none) }}"
+    <a href="{{ url_for('marketplace_public', cat=selected_category.id, q=q or none, currency=currency or none, country=selected_country or none) }}"
        class="badge text-decoration-none px-2 py-1 {% if not selected_subcategory %}bg-warning text-dark{% else %}bg-dark text-white{% endif %}"
        style="font-size:11px;border-radius:999px">All</a>
     {% for s in subcategories_for_selected %}
-    <a href="{{ url_for('marketplace_public', cat=selected_category.id, sub=s, q=q or none, currency=currency or none) }}"
+    <a href="{{ url_for('marketplace_public', cat=selected_category.id, sub=s, q=q or none, currency=currency or none, country=selected_country or none) }}"
        class="badge text-decoration-none px-2 py-1 {% if selected_subcategory == s %}bg-warning text-dark{% else %}bg-dark text-white{% endif %}"
        style="font-size:11px;border-radius:999px">{{ s }}</a>
     {% endfor %}
@@ -151,6 +159,23 @@
           <h6 class="fw-black mb-1 mt-1" style="line-height:1.2">{{ p.name }}</h6>
           {% if p.brand or p.model %}
           <div class="text-secondary small">{{ p.brand }}{% if p.model %} · {{ p.model }}{% endif %}</div>
+          {% endif %}
+          {% if p._compliance %}
+            {% set _c = p._compliance %}
+            {% if _c.status == 'ok' %}
+              {% set _bg = 'rgba(34,197,94,.10)' %}{% set _bd = 'rgba(34,197,94,.40)' %}{% set _fg = '#22c55e' %}{% set _icon = 'bi-shield-check' %}{% set _lbl = selected_country + ' compliant' %}
+            {% elif _c.status == 'warn' %}
+              {% set _bg = 'rgba(245,158,11,.10)' %}{% set _bd = 'rgba(245,158,11,.45)' %}{% set _fg = '#fbbf24' %}{% set _icon = 'bi-exclamation-triangle' %}{% set _lbl = selected_country + ' · ' + (_c.med|string) + ' check' + ('s' if _c.med != 1 else '') %}
+            {% elif _c.status == 'fail' %}
+              {% set _bg = 'rgba(239,68,68,.10)' %}{% set _bd = 'rgba(239,68,68,.45)' %}{% set _fg = '#fb7185' %}{% set _icon = 'bi-shield-exclamation' %}{% set _lbl = selected_country + ' · ' + (_c.high|string) + ' issue' + ('s' if _c.high != 1 else '') %}
+            {% else %}
+              {% set _bg = 'rgba(167,139,250,.08)' %}{% set _bd = 'rgba(167,139,250,.35)' %}{% set _fg = '#a78bfa' %}{% set _icon = 'bi-info-circle' %}{% set _lbl = selected_country + ' · ' + (_c.low|string) + ' note' + ('s' if _c.low != 1 else '') %}
+            {% endif %}
+            <div class="mt-1 d-inline-flex align-items-center"
+                 style="background:{{ _bg }};border:1px solid {{ _bd }};color:{{ _fg }};padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.3px;gap:4px"
+                 {% if _c.findings %}title="{% for f in _c.findings %}{{ f.severity|upper }}: {{ f.message }}{% if not loop.last %}&#10;{% endif %}{% endfor %}"{% endif %}>
+              <i class="bi {{ _icon }}"></i>{{ _lbl }}
+            </div>
           {% endif %}
         </div>
         <div class="text-end">
@@ -258,19 +283,19 @@
   </div>
   <div class="d-flex gap-2 flex-wrap">
     {% if page > 1 %}
-    <a href="{{ url_for('marketplace_public', page=page-1, cat=selected_category.id if selected_category else None, sub=selected_subcategory, q=q, currency=currency) }}" class="btn btn-outline-warning btn-sm"><i class="bi bi-chevron-left me-1"></i>Previous</a>
+    <a href="{{ url_for('marketplace_public', page=page-1, cat=selected_category.id if selected_category else None, sub=selected_subcategory, q=q, currency=currency, country=selected_country or none) }}" class="btn btn-outline-warning btn-sm"><i class="bi bi-chevron-left me-1"></i>Previous</a>
     {% endif %}
     {% for p in range(1, total_pages + 1) %}
       {% if p == page %}
       <span class="btn btn-warning fw-bold btn-sm">{{ p }}</span>
       {% elif p <= 3 or p > total_pages - 3 or (p >= page - 1 and p <= page + 1) %}
-      <a href="{{ url_for('marketplace_public', page=p, cat=selected_category.id if selected_category else None, sub=selected_subcategory, q=q, currency=currency) }}" class="btn btn-outline-light btn-sm">{{ p }}</a>
+      <a href="{{ url_for('marketplace_public', page=p, cat=selected_category.id if selected_category else None, sub=selected_subcategory, q=q, currency=currency, country=selected_country or none) }}" class="btn btn-outline-light btn-sm">{{ p }}</a>
       {% elif p == 4 or p == total_pages - 3 %}
       <span class="text-secondary small px-1">…</span>
       {% endif %}
     {% endfor %}
     {% if page < total_pages %}
-    <a href="{{ url_for('marketplace_public', page=page+1, cat=selected_category.id if selected_category else None, sub=selected_subcategory, q=q, currency=currency) }}" class="btn btn-outline-warning btn-sm">Next<i class="bi bi-chevron-right ms-1"></i></a>
+    <a href="{{ url_for('marketplace_public', page=page+1, cat=selected_category.id if selected_category else None, sub=selected_subcategory, q=q, currency=currency, country=selected_country or none) }}" class="btn btn-outline-warning btn-sm">Next<i class="bi bi-chevron-right ms-1"></i></a>
     {% endif %}
   </div>
 </div>
