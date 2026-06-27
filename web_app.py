@@ -14890,10 +14890,42 @@ def marketplace_public():
     if currency not in _CURRENCY_RATES_FROM_USD:
         currency = "GHS"
     rate = _CURRENCY_RATES_FROM_USD.get(currency, 1.0)
+    # marketplace-country-compliance-2026-06-27
+    # Country resolution: ?country= overrides; else user.country; else 'GH'.
+    _u_country = ""
+    try:
+        _u = current_user()
+        if _u and "country" in _u.keys():
+            _u_country = _u["country"] or ""
+    except Exception:
+        pass
+    selected_country = (request.args.get("country") or _u_country or "GH").strip()
     products_view = []
     for p in products:
         d = dict(p)
         d["price_in_currency"] = float(d.get("price_usd") or 0) * float(rate)
+        if _country_compliance is not None and selected_country:
+            try:
+                fs = _country_compliance.compliance_findings_for_product({
+                    "name":           d.get("name") or "",
+                    "spec":           d.get("spec") or "",
+                    "category_name":  d.get("category_name") or "",
+                }, selected_country)
+            except Exception:
+                fs = []
+            high = sum(1 for f in fs if f.get("severity") == "high")
+            med  = sum(1 for f in fs if f.get("severity") == "medium")
+            low  = sum(1 for f in fs if f.get("severity") == "low")
+            if high:    status = "fail"
+            elif med:   status = "warn"
+            elif low:   status = "info"
+            else:       status = "ok"
+            d["_compliance"] = {
+                "status":   status,
+                "count":    len(fs),
+                "findings": fs[:4],
+                "high":     high, "med": med, "low": low,
+            }
         products_view.append(d)
     # Group products by category for the category-sectioned grid view.
     # Preserves the display_order from the categories list (set above)
@@ -14937,6 +14969,9 @@ def marketplace_public():
         rates_as_of=_CURRENCY_RATES_AS_OF,
         page=_page, total_pages=_total_pages, products_per_page=_ppp,
         filter_count=_filter_count,
+        selected_country=selected_country,
+        country_options=(_country_compliance.COUNTRY_GRID_PROFILES
+                          if _country_compliance is not None else {}),
     )
     # Populate the 60-s anonymous response cache on the way out.
     if "user_id" not in session:
