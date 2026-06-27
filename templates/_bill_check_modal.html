@@ -1,0 +1,646 @@
+{# ---- Check My Electricity Bill — shared modal include ----
+   Host pages may pass:
+     bc_project_id  (int, optional)  — current project id, enables Save & PDF
+     bc_loads_json  (str, optional)  — JSON-encoded loads array
+     bc_currency    (str, default GHS)
+     bc_default_cat (str, default Residential Standard)
+   Otherwise defaults to anon flow (no Save/PDF buttons).
+#}
+{% set bc_project_id  = bc_project_id|default(0) %}
+{% set bc_loads_json  = bc_loads_json|default('[]') %}
+{% set bc_currency    = bc_currency|default('GHS') %}
+{% set bc_default_cat = bc_default_cat|default('Residential Standard (0-300 kWh/month)') %}
+
+<div class="modal fade" id="billCheckModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content bg-dark text-light border-warning">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title">
+          <i class="bi bi-lightning-charge-fill text-warning"></i>
+          Fund Solar From Your Bill
+          <small class="text-muted ms-2" style="font-size:0.7em;">PURC Q2 2026 · eff. 2026-04-01</small>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+
+        {# Step 1 — completeness gate #}
+        <div data-bc-step="completeness">
+          <h6 class="text-warning mb-2">Step 1 · Load completeness</h6>
+          <p class="small text-muted">Have you added all <em>active and regularly used</em> loads to this project?</p>
+          <div class="btn-group d-flex" role="group" aria-label="Load completeness">
+            <input type="radio" class="btn-check" name="bcCompleteness" id="bcCompYes" value="yes" autocomplete="off">
+            <label class="btn btn-outline-success" for="bcCompYes">Yes, all added</label>
+            <input type="radio" class="btn-check" name="bcCompleteness" id="bcCompUnsure" value="unsure" autocomplete="off" checked>
+            <label class="btn btn-outline-warning" for="bcCompUnsure">Not sure</label>
+            <input type="radio" class="btn-check" name="bcCompleteness" id="bcCompNo" value="no" autocomplete="off">
+            <label class="btn btn-outline-danger" for="bcCompNo">No, some are missing</label>
+          </div>
+          <div class="alert alert-warning mt-3 small d-none" data-bc-completeness-warn>
+            <strong>Your load list is incomplete.</strong> For an accurate funding model, add every
+            active load (AC, fridges, freezers, pumps, water heaters, security lights, outbuildings,
+            staff quarters, etc.) in the Assessment form. The values you enter there feed
+            <strong>both this Bill Check and the Solar Designer</strong> — do it once, use it twice.
+            <div class="d-flex gap-2 mt-2 flex-wrap">
+              <a href="{{ url_for('assessment_request') }}?return=bill-check"
+                 target="_blank" rel="noopener"
+                 class="btn btn-warning btn-sm fw-bold">
+                <i class="bi bi-clipboard2-plus me-1"></i>Open Assessment Form
+              </a>
+              <button type="button" class="btn btn-outline-warning btn-sm" data-bc-action="reuse-assess">
+                <i class="bi bi-arrow-clockwise me-1"></i>I&apos;ve added them — reload
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <hr class="border-secondary">
+
+        {# Step 2 — bill input #}
+        <div data-bc-step="bill">
+          <h6 class="text-warning mb-2">Step 2 · Your bill</h6>
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label small">Actual monthly bill ({{ bc_currency }})</label>
+              <input type="number" step="0.01" min="0" class="form-control" name="bcActualBill" placeholder="e.g. 4200">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Actual kWh on bill <span class="text-muted">(optional)</span></label>
+              <input type="number" step="0.01" min="0" class="form-control" name="bcActualKwh" placeholder="e.g. 1100">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Customer category</label>
+              <select class="form-select" name="bcCategory">
+                <option value="Residential Lifeline (≤ 30 kWh/month)">Residential Lifeline (≤ 30 kWh)</option>
+                <option value="Residential Standard (0-300 kWh/month)" selected>Residential — Standard / High Use</option>
+                <option value="Non-Residential Standard (0-300 kWh/month)">Non-Residential / Commercial</option>
+                <option value="Special Load - LV (hospitals, schools)">Special Load — LV (hospital, school)</option>
+                <option value="Special Load - MV (medium voltage)">Special Load — MV</option>
+                <option value="Special Load - MV-2 (medium voltage, large)">Special Load — MV-2</option>
+                <option value="Special Load - HV (large facilities)">Special Load — HV</option>
+                <option value="EV Charging Station">EV Charging Station</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Meter type</label>
+              <div class="btn-group d-flex" role="group">
+                <input type="radio" class="btn-check" name="bcMeter" id="bcMeterPre" value="prepaid" checked>
+                <label class="btn btn-outline-info" for="bcMeterPre">Prepaid</label>
+                <input type="radio" class="btn-check" name="bcMeter" id="bcMeterPost" value="postpaid">
+                <label class="btn btn-outline-info" for="bcMeterPost">Postpaid</label>
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label small">Target bill reduction</label>
+              <div class="btn-group d-flex" role="group">
+                {% for pct in [30, 50, 70, 90] %}
+                  <input type="radio" class="btn-check" name="bcTarget" id="bcT{{ pct }}" value="{{ pct }}" {% if pct == 50 %}checked{% endif %}>
+                  <label class="btn btn-outline-warning" for="bcT{{ pct }}">{{ pct }}%</label>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+          <div class="text-end mt-3">
+            <button type="button" class="btn btn-warning" data-bc-action="calculate">
+              <i class="bi bi-calculator"></i> Check My Bill
+            </button>
+          </div>
+        </div>
+
+        <hr class="border-secondary">
+
+        {# Step 3 — results #}
+        <div data-bc-step="results" class="d-none">
+          <h6 class="text-warning mb-2">Step 3 · Result</h6>
+
+          <div class="d-flex flex-wrap gap-2 mb-2">
+            <span class="badge bg-secondary" data-bc-cat>—</span>
+            <span class="badge" data-bc-confidence>—</span>
+            <span class="badge bg-info" data-bc-tariff-meta>—</span>
+          </div>
+
+          <div class="alert" data-bc-status role="alert">—</div>
+
+          <table class="table table-sm table-dark table-bordered">
+            <tbody>
+              <tr><th scope="row">Estimated monthly kWh</th><td data-bc-kwh>—</td></tr>
+              <tr><th scope="row">Expected PURC bill (energy + service)</th><td data-bc-expected>—</td></tr>
+              <tr><th scope="row">Actual bill</th><td data-bc-actual>—</td></tr>
+              <tr><th scope="row">Difference</th><td data-bc-diff>—</td></tr>
+              <tr><th scope="row">Effective tariff</th><td data-bc-eff>—</td></tr>
+            </tbody>
+          </table>
+
+          <details class="mb-3">
+            <summary class="small text-muted">PURC band breakdown</summary>
+            <table class="table table-sm table-dark table-bordered mt-2">
+              <thead><tr><th>Band</th><th class="text-end">kWh</th><th class="text-end">Rate</th><th class="text-end">Amount</th></tr></thead>
+              <tbody data-bc-bands></tbody>
+            </table>
+          </details>
+
+          {# ──── Funding model — hero card ──── #}
+          <div class="card text-bg-warning mb-3" data-bc-funding-card>
+            <div class="card-body py-3">
+              <div class="small fw-bold text-uppercase" style="letter-spacing:1px;opacity:0.85">
+                The Pitch
+              </div>
+              <p class="mb-3 mt-1" data-bc-pitch style="font-weight:600;line-height:1.45">—</p>
+
+              <table class="table table-sm mb-0" style="background:transparent;color:inherit">
+                <thead style="background:#1e1e3a;color:#fbbf24">
+                  <tr><th></th><th class="text-end">Today</th><th class="text-end">During loan</th><th class="text-end">After loan</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">Grid bill</th>
+                    <td class="text-end" data-bc-f-bill-today>—</td>
+                    <td class="text-end" data-bc-f-bill-during>—</td>
+                    <td class="text-end" data-bc-f-bill-after>—</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Solar loan</th>
+                    <td class="text-end text-muted">—</td>
+                    <td class="text-end" data-bc-f-loan>—</td>
+                    <td class="text-end text-muted">—</td>
+                  </tr>
+                  <tr style="border-top:2px solid #1e1e3a">
+                    <th scope="row"><strong>Total outlay</strong></th>
+                    <td class="text-end" data-bc-f-out-today>—</td>
+                    <td class="text-end" data-bc-f-out-during>—</td>
+                    <td class="text-end" data-bc-f-out-after>—</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {# ──── Solar system + loan controls ──── #}
+          <div class="card bg-dark border-info mb-3">
+            <div class="card-body">
+              <h6 class="text-info small mb-2">Loan inputs (tweak to retune the model)</h6>
+              <div class="row g-2">
+                <div class="col-sm-3">
+                  <label class="form-label small mb-0">Cost / kWp (GHS)</label>
+                  <input type="number" step="100" min="0" class="form-control form-control-sm" name="bcCostPerKwp" value="8000">
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small mb-0">Loan years</label>
+                  <input type="number" step="1" min="1" max="15" class="form-control form-control-sm" name="bcLoanYears" value="5">
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small mb-0">Interest %/yr</label>
+                  <input type="number" step="0.5" min="0" max="60" class="form-control form-control-sm" name="bcLoanRate" value="22">
+                </div>
+                <div class="col-sm-3 d-flex align-items-end">
+                  <button type="button" class="btn btn-info btn-sm w-100" data-bc-action="recalculate">
+                    <i class="bi bi-arrow-clockwise"></i> Recalculate
+                  </button>
+                </div>
+              </div>
+              <div class="row g-2 mt-2">
+                <div class="col-sm-4">
+                  <div class="small text-muted">Recommended size</div>
+                  <div><strong data-bc-kwp class="text-warning">—</strong> kWp</div>
+                </div>
+                <div class="col-sm-4">
+                  <div class="small text-muted">Monthly saving</div>
+                  <div><strong data-bc-saving class="text-warning">—</strong></div>
+                </div>
+                <div class="col-sm-4">
+                  <div class="small text-muted">Simple payback</div>
+                  <div><strong data-bc-payback class="text-warning">—</strong> years</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {# ──── Recommendations ──── #}
+          <div class="card bg-dark border-warning mb-3">
+            <div class="card-body py-3">
+              <h6 class="text-warning small mb-2"><i class="bi bi-list-check"></i> Recommendations</h6>
+              <ul class="mb-0 small" data-bc-recs></ul>
+            </div>
+          </div>
+
+          {# ──── Export + share row ──── #}
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            <button type="button" class="btn btn-outline-success btn-sm" data-bc-action="download-pdf">
+              <i class="bi bi-file-earmark-pdf"></i> Download PDF
+            </button>
+            <button type="button" class="btn btn-outline-info btn-sm" data-bc-action="toggle-email">
+              <i class="bi bi-envelope-paper"></i> Email me the report
+            </button>
+            <button type="button" class="btn btn-outline-warning btn-sm" data-bc-action="toggle-invite">
+              <i class="bi bi-people-fill"></i> Invite friends
+            </button>
+            <button type="button" class="btn btn-outline-light btn-sm ms-auto" data-bc-action="copy-share">
+              <i class="bi bi-link-45deg"></i> <span data-bc-copy-label>Copy share link</span>
+            </button>
+          </div>
+
+          {# ──── Email-me-the-report panel ──── #}
+          <div class="card bg-dark border-info mb-3 d-none" data-bc-email-panel>
+            <div class="card-body">
+              <h6 class="text-info small mb-2">Email this report to yourself</h6>
+              <p class="small text-muted mb-2">We&apos;ll attach the PDF and include a one-click link to forward to friends.</p>
+              <div class="row g-2">
+                <div class="col-sm-6"><input class="form-control form-control-sm" placeholder="Your name" name="bcEmailName"></div>
+                <div class="col-sm-6"><input class="form-control form-control-sm" placeholder="Your email *" type="email" name="bcEmailAddr"></div>
+              </div>
+              <div class="text-end mt-2">
+                <button type="button" class="btn btn-sm btn-info" data-bc-action="send-email">
+                  <i class="bi bi-send"></i> Send me the PDF
+                </button>
+              </div>
+              <div class="alert mt-2 mb-0 py-2 small d-none" data-bc-email-out></div>
+            </div>
+          </div>
+
+          {# ──── Invite-friends panel ──── #}
+          <div class="card bg-dark border-warning mb-3 d-none" data-bc-invite-panel>
+            <div class="card-body">
+              <h6 class="text-warning small mb-2">Invite friends to check their bill</h6>
+              <p class="small text-muted mb-2">Send up to 5 short invites — each friend gets a prefilled link, no signup required.</p>
+              <div class="row g-2">
+                <div class="col-sm-6"><input class="form-control form-control-sm" placeholder="Your name" name="bcInviteSenderName"></div>
+                <div class="col-sm-6"><input class="form-control form-control-sm" placeholder="Your email (optional)" type="email" name="bcInviteSenderEmail"></div>
+                <div class="col-12">
+                  <input class="form-control form-control-sm" placeholder="friend1@example.com, friend2@example.com" name="bcInviteList">
+                  <div class="small text-muted mt-1">Comma- or space-separated. Max 5.</div>
+                </div>
+              </div>
+              <div class="text-end mt-2">
+                <button type="button" class="btn btn-sm btn-warning" data-bc-action="send-invite">
+                  <i class="bi bi-megaphone"></i> Send invites
+                </button>
+              </div>
+              <div class="alert mt-2 mb-0 py-2 small d-none" data-bc-invite-out></div>
+            </div>
+          </div>
+
+          {# Original Save-to-project lead capture still useful for anon hot lead #}
+          {% if not bc_project_id %}
+          <details class="text-muted small">
+            <summary>Want an installer to follow up?</summary>
+            <div class="row g-2 mt-2">
+              <div class="col-sm-6"><input class="form-control form-control-sm" placeholder="Name *" name="bcLeadName"></div>
+              <div class="col-sm-6"><input class="form-control form-control-sm" placeholder="Email *" type="email" name="bcLeadEmail"></div>
+              <div class="col-sm-6"><input class="form-control form-control-sm" placeholder="Phone (optional)" name="bcLeadPhone"></div>
+              <div class="col-sm-6"><input class="form-control form-control-sm" placeholder="Country" name="bcLeadCountry" value="Ghana"></div>
+            </div>
+            <div class="text-end mt-2">
+              <button type="button" class="btn btn-sm btn-outline-warning" data-bc-action="lead">
+                <i class="bi bi-person-check"></i> Request a quote
+              </button>
+            </div>
+          </details>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Close</button>
+        <a class="btn btn-outline-warning btn-sm" data-bc-action="design"
+           href="{% if bc_project_id %}{{ url_for('location', pid=bc_project_id) }}{% else %}{{ url_for('landing') }}#assess{% endif %}">
+          <i class="bi bi-tools"></i> Design Solar System
+        </a>
+        {% if bc_project_id %}
+          <button type="button" class="btn btn-outline-info btn-sm" data-bc-action="save">
+            <i class="bi bi-save"></i> Save to project
+          </button>
+          <button type="button" class="btn btn-outline-success btn-sm" data-bc-action="report">
+            <i class="bi bi-file-earmark-pdf"></i> PDF report
+          </button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const CTX = {
+    projectId: {{ bc_project_id|tojson }},
+    loads:     {{ bc_loads_json|safe }},
+    currency:  {{ bc_currency|tojson }},
+    csrf:      {{ csrf_token()|tojson }},
+  };
+  const fmtMoney = (v) => (v == null) ? "—" : CTX.currency + " " + Number(v).toLocaleString(undefined,{maximumFractionDigits:2, minimumFractionDigits:2});
+  const fmtNum   = (v, d=2) => (v == null) ? "—" : Number(v).toLocaleString(undefined,{maximumFractionDigits:d, minimumFractionDigits:0});
+
+  function root() { return document.getElementById("billCheckModal"); }
+  function q(sel)  { return root().querySelector(sel); }
+  function qa(sel) { return root().querySelectorAll(sel); }
+
+  // ── Pull assess-form loads from localStorage on every modal open ───────
+  // The Assessment form (templates/assess.html) stores loads + daily kWh
+  // under "solarpro.billcheck.*" keys when the user calculates. We reuse them
+  // here so the Solar Designer and Bill Check share one load schedule.
+  function loadFromAssessStorage() {
+    try {
+      const raw = localStorage.getItem("solarpro.billcheck.loads");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length) {
+          CTX.loads = parsed;
+          CTX.loadsFromAssess = true;
+          // Auto-flip completeness to "yes" since the user has done the work
+          const yesEl = root().querySelector('input[name="bcCompleteness"][value="yes"]');
+          if (yesEl) yesEl.checked = true;
+          // Hide the warning
+          const warn = root().querySelector('[data-bc-completeness-warn]');
+          if (warn) warn.classList.add("d-none");
+          // Surface a confirmation banner inside step 1
+          const step1 = root().querySelector('[data-bc-step="completeness"]');
+          if (step1 && !root().querySelector('[data-bc-assess-banner]')) {
+            const div = document.createElement("div");
+            div.setAttribute("data-bc-assess-banner", "1");
+            div.className = "alert alert-success small mt-2 mb-0 py-2";
+            div.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i><strong>Loads loaded from your Assessment.</strong> The Solar Designer and Bill Check will both use them.';
+            step1.appendChild(div);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+  // Trigger on modal open + on first paint (in case modal already open)
+  document.addEventListener("DOMContentLoaded", loadFromAssessStorage);
+  root().addEventListener("show.bs.modal", loadFromAssessStorage);
+
+  function payload() {
+    const get = (sel) => (q(sel) || {}).value;
+    const cmp = (q('input[name="bcCompleteness"]:checked') || {}).value || "unsure";
+    return {
+      project_id:           CTX.projectId || null,
+      actual_bill:          parseFloat(get('input[name="bcActualBill"]')) || 0,
+      actual_kwh:           parseFloat(get('input[name="bcActualKwh"]')) || null,
+      category:             get('select[name="bcCategory"]') || "Residential Standard (0-300 kWh/month)",
+      meter_type:           (q('input[name="bcMeter"]:checked') || {}).value || "prepaid",
+      completeness:         cmp,
+      target_reduction_pct: parseFloat((q('input[name="bcTarget"]:checked') || {}).value) || 50,
+      system_cost_per_kwp:  parseFloat(get('input[name="bcCostPerKwp"]')) || 8000,
+      loan_years:           parseFloat(get('input[name="bcLoanYears"]')) || 5,
+      loan_interest_pct:    parseFloat(get('input[name="bcLoanRate"]')) || 22,
+      loads:                CTX.loads,
+    };
+  }
+
+  CTX.lastResult = null;
+
+  function showResults(r) {
+    CTX.lastResult = r;
+    q('[data-bc-step="results"]').classList.remove("d-none");
+
+    q('[data-bc-cat]').textContent = "Category: " + (r.expected.category_applied || "—");
+    const conf = (r.confidence || "medium");
+    const confEl = q('[data-bc-confidence]');
+    confEl.textContent = "Confidence: " + conf.toUpperCase();
+    confEl.className = "badge " + (conf === "high" ? "bg-success" : conf === "medium" ? "bg-warning text-dark" : "bg-danger");
+
+    q('[data-bc-tariff-meta]').textContent = "PURC " + (r.tariff_meta.quarter || "") + " · eff " + (r.tariff_meta.effective_from || "");
+
+    const status = q('[data-bc-status]');
+    status.className = "alert alert-" + (r.status_css || "secondary");
+    status.textContent = r.status_label;
+
+    q('[data-bc-kwh]').textContent      = fmtNum(r.energy.monthly_kwh) + " kWh / month";
+    q('[data-bc-expected]').textContent = fmtMoney(r.expected.total) + " (energy " + fmtMoney(r.expected.energy) + " + service " + fmtMoney(r.expected.service) + ")";
+    q('[data-bc-actual]').textContent   = r.actual_bill > 0 ? fmtMoney(r.actual_bill) : "—";
+    q('[data-bc-diff]').textContent     = (r.difference == null) ? "—" : fmtMoney(r.difference) + " (" + (r.difference_pct >= 0 ? "+" : "") + r.difference_pct.toFixed(2) + "%)";
+    q('[data-bc-eff]').textContent      = (r.effective_tariff == null) ? "—" : CTX.currency + " " + r.effective_tariff.toFixed(4) + "/kWh";
+
+    const bandsTbody = q('[data-bc-bands]');
+    bandsTbody.innerHTML = r.expected.bands.map(b =>
+      `<tr><td>${b.label}</td><td class="text-end">${fmtNum(b.kwh)}</td><td class="text-end">${b.rate.toFixed(4)}</td><td class="text-end">${fmtMoney(b.amount)}</td></tr>`
+    ).join("");
+
+    // ── funding card hero ──
+    const f = r.funding || {};
+    q('[data-bc-pitch]').textContent = f.headline_pitch || "—";
+    q('[data-bc-f-bill-today]').textContent  = fmtMoney(f.current_bill);
+    q('[data-bc-f-bill-during]').textContent = fmtMoney(f.residual_bill_during_loan);
+    q('[data-bc-f-bill-after]').textContent  = fmtMoney(f.post_loan_monthly_bill);
+    q('[data-bc-f-loan]').textContent        = fmtMoney(f.monthly_loan_payment);
+    q('[data-bc-f-out-today]').textContent   = fmtMoney(f.current_bill);
+    q('[data-bc-f-out-during]').textContent  = fmtMoney(f.combined_outlay);
+    q('[data-bc-f-out-after]').textContent   = fmtMoney(f.post_loan_monthly_bill);
+
+    // system + payback summary
+    q('[data-bc-kwp]').textContent     = r.solar.recommended_kwp ? r.solar.recommended_kwp.toFixed(1) : "—";
+    q('[data-bc-saving]').textContent  = fmtMoney(r.solar.estimated_monthly_saving);
+    q('[data-bc-payback]').textContent = (f.simple_payback_years || 0).toFixed(1);
+
+    // recommendations
+    const recsEl = q('[data-bc-recs]');
+    recsEl.innerHTML = (r.recommendations || []).map(t => `<li>${t}</li>`).join("");
+  }
+
+  async function postJSON(url, body) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {"Content-Type":"application/json", "X-CSRF-Token": CTX.csrf},
+      body: JSON.stringify(body),
+    });
+    return res;
+  }
+
+  async function calculate() {
+    const res = await postJSON("/api/bill-check", payload());
+    if (!res.ok) { alert("Bill check failed (" + res.status + ")"); return; }
+    const data = await res.json();
+    showResults(data);
+  }
+
+  async function save() {
+    if (!CTX.projectId) return;
+    const res = await postJSON(`/project/${CTX.projectId}/bill-check/save`, payload());
+    if (res.ok) {
+      const out = await res.json();
+      showResults(out.snapshot);
+      alert("Saved to project.");
+    } else {
+      alert("Save failed (" + res.status + ")");
+    }
+  }
+
+  async function report() {
+    if (!CTX.projectId) return;
+    const res = await fetch(`/project/${CTX.projectId}/bill-check/report.pdf`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json", "X-CSRF-Token": CTX.csrf},
+      body: JSON.stringify(payload()),
+    });
+    if (!res.ok) { alert("Report failed (" + res.status + ")"); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `bill_check_project_${CTX.projectId}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function lead() {
+    const get = (sel) => (q(sel) || {}).value;
+    const body = {
+      name:    get('input[name="bcLeadName"]'),
+      email:   get('input[name="bcLeadEmail"]'),
+      phone:   get('input[name="bcLeadPhone"]'),
+      country: get('input[name="bcLeadCountry"]'),
+      message: "Bill-check user requested installer quote.",
+    };
+    if (!body.name || !body.email) { alert("Name and email required."); return; }
+    const res = await postJSON("/api/bill-check/lead", body);
+    if (res.ok) {
+      alert("Thank you. We'll be in touch within 24 hours.");
+    } else {
+      alert("Could not submit. Try again or use /assess.");
+    }
+  }
+
+  function shareUrl() {
+    const p = payload();
+    // Build the same base64 the server builds (compact field set)
+    const safe = {
+      actual_bill:          p.actual_bill,
+      actual_kwh:           p.actual_kwh,
+      category:             p.category,
+      meter_type:           p.meter_type,
+      completeness:         p.completeness,
+      target_reduction_pct: p.target_reduction_pct,
+      system_cost_per_kwp:  p.system_cost_per_kwp,
+      loan_years:           p.loan_years,
+      loan_interest_pct:    p.loan_interest_pct,
+    };
+    const raw = JSON.stringify(safe);
+    // URL-safe base64
+    const b64 = btoa(unescape(encodeURIComponent(raw)))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    return `${location.origin}/bill-check?b=${b64}`;
+  }
+
+  async function downloadPdfAnon() {
+    const res = await fetch("/api/bill-check/report.pdf", {
+      method: "POST",
+      headers: {"Content-Type":"application/json", "X-CSRF-Token": CTX.csrf},
+      body: JSON.stringify(payload()),
+    });
+    if (!res.ok) { alert("PDF render failed (" + res.status + ")"); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "bill_check_report.pdf";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function sendEmail() {
+    const get = (sel) => (q(sel) || {}).value || "";
+    const body = Object.assign({}, payload(), {
+      email: get('input[name="bcEmailAddr"]'),
+      name:  get('input[name="bcEmailName"]'),
+    });
+    if (!body.email || !body.email.includes("@")) {
+      const out = q('[data-bc-email-out]');
+      out.className = "alert alert-warning mt-2 mb-0 py-2 small";
+      out.textContent = "Enter a valid email.";
+      out.classList.remove("d-none");
+      return;
+    }
+    const res = await postJSON("/api/bill-check/email", body);
+    const out = q('[data-bc-email-out]');
+    out.classList.remove("d-none");
+    if (res.ok) {
+      const j = await res.json();
+      out.className = "alert alert-success mt-2 mb-0 py-2 small";
+      out.innerHTML = `Sent to <strong>${body.email}</strong>. Forward the email or share <a href="${j.share_url}" class="text-warning">this link</a> with a friend.`;
+    } else {
+      let detail = "";
+      try { detail = (await res.json()).detail || ""; } catch(_){}
+      out.className = "alert alert-danger mt-2 mb-0 py-2 small";
+      out.textContent = "Could not send (" + res.status + "). " + detail;
+    }
+  }
+
+  async function sendInvite() {
+    const get = (sel) => (q(sel) || {}).value || "";
+    const list = get('input[name="bcInviteList"]');
+    const body = Object.assign({}, payload(), {
+      sender_name:  get('input[name="bcInviteSenderName"]'),
+      sender_email: get('input[name="bcInviteSenderEmail"]'),
+      recipients:   list,
+    });
+    const out = q('[data-bc-invite-out]');
+    out.classList.remove("d-none");
+    if (!list || !list.includes("@")) {
+      out.className = "alert alert-warning mt-2 mb-0 py-2 small";
+      out.textContent = "Enter at least one friend's email.";
+      return;
+    }
+    const res = await postJSON("/api/bill-check/invite", body);
+    if (res.ok) {
+      const j = await res.json();
+      out.className = "alert alert-success mt-2 mb-0 py-2 small";
+      out.innerHTML = `Invites sent to ${j.sent.length} friend(s)${j.failed.length ? ' (' + j.failed.length + ' failed)' : ''}. They'll see the same tool with your bill prefilled.`;
+    } else {
+      out.className = "alert alert-danger mt-2 mb-0 py-2 small";
+      out.textContent = "Could not send invites (" + res.status + ").";
+    }
+  }
+
+  async function copyShare() {
+    const url = shareUrl();
+    try {
+      await navigator.clipboard.writeText(url);
+      const lbl = q('[data-bc-copy-label]');
+      const old = lbl.textContent;
+      lbl.textContent = "Copied!";
+      setTimeout(() => { lbl.textContent = old; }, 1800);
+    } catch(_) {
+      prompt("Copy this link:", url);
+    }
+  }
+
+  document.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-bc-action]");
+    if (!t || !root().contains(t)) return;
+    const a = t.getAttribute("data-bc-action");
+    if (a === "calculate" || a === "recalculate") calculate();
+    else if (a === "save") save();
+    else if (a === "report") report();
+    else if (a === "lead") lead();
+    else if (a === "download-pdf") downloadPdfAnon();
+    else if (a === "send-email") sendEmail();
+    else if (a === "send-invite") sendInvite();
+    else if (a === "copy-share") copyShare();
+    else if (a === "toggle-email") q('[data-bc-email-panel]').classList.toggle("d-none");
+    else if (a === "toggle-invite") q('[data-bc-invite-panel]').classList.toggle("d-none");
+    else if (a === "reuse-assess") {
+      loadFromAssessStorage();
+      if (!CTX.loadsFromAssess) {
+        alert("No loads found yet. Open the Assessment form, add your loads, click Calculate, then come back.");
+      } else {
+        // Re-run calculate immediately so the user sees results with the new loads
+        calculate();
+      }
+    }
+    else if (a === "toggle-loan") {
+      const panel = q('[data-bc-loan-panel]');
+      if (panel) {
+        panel.classList.toggle("d-none");
+        if (!panel.classList.contains("d-none")) calculate();
+      }
+    }
+  });
+
+  document.addEventListener("change", (e) => {
+    if (!root().contains(e.target)) return;
+    if (e.target.name === "bcCompleteness") {
+      const warn = q('[data-bc-completeness-warn]');
+      warn.classList.toggle("d-none", e.target.value === "yes");
+    }
+  });
+})();
+</script>

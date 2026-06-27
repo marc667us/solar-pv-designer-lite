@@ -10,6 +10,9 @@
     <a href="{{ url_for('project_email', pid=project.id) }}" class="btn btn-info btn-sm"><i class="bi bi-envelope me-1"></i>Email</a>
     <a href="{{ url_for('export_excel', pid=project.id) }}" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel me-1"></i>Excel</a>
     <a href="{{ url_for('growth_share_composer', pid=project.id) }}" class="btn btn-sm" data-growth-share="1" style="background:#f59e0b;color:#0f0f22;border:0;font-weight:700" title="Share this report as a card"><i class="bi bi-share-fill me-1"></i>Share</a>
+    <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#billCheckModal" title="Audit ECG bill vs PURC Q2 2026 and refine ROI">
+      <i class="bi bi-receipt-cutoff me-1"></i>Check My Bill
+    </button>
     <button onclick="window.print()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer me-1"></i>Print</button>
   </div>
 </div>
@@ -232,4 +235,10 @@
   </div>
 </div>
 {% endif %}
+
+{% set bc_project_id = project.id %}
+{% set bc_loads_json = (d.get('loads', []) | tojson) %}
+{% set bc_currency = d.get('currency', 'GHS') %}
+{% set bc_default_cat = d.get('purc_category') or 'Residential Standard (0-300 kWh/month)' %}
+{% include "_bill_check_modal.html" %}
 {% endblock %}

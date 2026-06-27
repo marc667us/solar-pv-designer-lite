@@ -185,6 +185,10 @@
     <button class="calc-btn" id="calcBtn" onclick="runCalculation()">
       <i class="bi bi-lightning-charge-fill me-2"></i>Calculate My Solar System
     </button>
+    <button type="button" class="btn btn-outline-warning ms-2" data-bs-toggle="modal" data-bs-target="#billCheckModal"
+            title="Audit your ECG bill against PURC Q2 2026 tariff (no signup required)">
+      <i class="bi bi-receipt-cutoff me-1"></i>Check My Electricity Bill
+    </button>
     <div id="calcError" class="mt-3 text-danger text-center" style="font-size:13px;display:none"></div>
   </div>
 
@@ -314,6 +318,9 @@
   </div><!-- /results -->
 
 </div>
+
+{% include "_bill_check_modal.html" %}
+
 {% endblock %}
 
 {% block scripts %}
@@ -481,6 +488,16 @@ async function runCalculation() {
   if (!region)                     { showErr('Please select a region / city.'); return; }
   if (!loads.length)               { showErr('Please add at least one appliance with watts > 0.'); return; }
 
+  // Persist loads so the Bill Check tool can reuse them.
+  // The Solar Designer reads them via the /api/assess/design POST below.
+  try {
+    localStorage.setItem('solarpro.billcheck.loads', JSON.stringify(loads));
+    localStorage.setItem('solarpro.billcheck.country', country);
+    localStorage.setItem('solarpro.billcheck.region',  region);
+    localStorage.setItem('solarpro.billcheck.completeness', 'yes');
+    localStorage.setItem('solarpro.billcheck.savedAt', new Date().toISOString());
+  } catch(_) {}
+
   const btn = document.getElementById('calcBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-sm"></span>Calculating...';
@@ -493,6 +510,18 @@ async function runCalculation() {
     });
     const d = await resp.json();
     if (!d.ok) { showErr(d.error || 'Calculation failed. Please try again.'); return; }
+
+    // Make the computed daily kWh available to the Bill Check tool
+    try {
+      localStorage.setItem('solarpro.billcheck.daily_kwh', String(d.daily_kwh || 0));
+      // If the user came from the bill-check tool, offer to return.
+      if (new URL(location.href).searchParams.get('return') === 'bill-check') {
+        const back = document.createElement('div');
+        back.className = 'mt-3 text-center';
+        back.innerHTML = '<a class="btn btn-warning btn-sm fw-bold" href="/bill-check#open"><i class="bi bi-arrow-left-circle me-1"></i>Back to Bill Check (loads saved)</a>';
+        document.getElementById('resultsSection').appendChild(back);
+      }
+    } catch(_) {}
 
     const sym = d.symbol || '';
     const cur = d.currency || '';

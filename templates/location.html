@@ -444,6 +444,11 @@
           <i class="bi bi-arrow-right ms-2"></i>
         </button>
 
+        <button type="button" class="btn btn-outline-warning w-100 mt-2" data-bs-toggle="modal" data-bs-target="#billCheckModal"
+                title="Audit your bill vs PURC Q2 2026 — saves to this project">
+          <i class="bi bi-receipt-cutoff me-1"></i>Check My Electricity Bill
+        </button>
+
       </form>
     </div>
   </div>
@@ -878,4 +883,10 @@ window.addEventListener('DOMContentLoaded',()=>{
   }
 });
 </script>
+
+{% set bc_project_id = project.id %}
+{% set bc_loads_json = (d.get('loads', []) | tojson) %}
+{% set bc_currency = d.get('currency', 'GHS') %}
+{% set bc_default_cat = d.get('purc_category') or 'Residential Standard (0-300 kWh/month)' %}
+{% include "_bill_check_modal.html" %}
 {% endblock %}
