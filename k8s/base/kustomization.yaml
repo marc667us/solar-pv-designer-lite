@@ -1,0 +1,20 @@
+---
+# SolarPro Global — Base Kustomization
+# Lists every resource in this directory so overlays can reference `../base`
+# instead of individual files (`../base/foo.yaml`). Modern kustomize rejects
+# the file-list pattern as a load-restriction violation.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret-template.yaml
+  - backend-deployment.yaml
+  - backend-service.yaml
+  - redis-deployment.yaml
+  - celery-deployment.yaml
+  - ingress.yaml
+  - hpa.yaml
+  - network-policy.yaml

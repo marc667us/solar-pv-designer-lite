@@ -6,18 +6,22 @@ kind: Kustomization
 namespace: solar-dev
 
 resources:
-  - ../base/namespace.yaml
-  - ../base/configmap.yaml
-  - ../base/secret-template.yaml
-  - ../base/backend-deployment.yaml
-  - ../base/backend-service.yaml
-  - ../base/redis-deployment.yaml
-  - ../base/celery-deployment.yaml
-  - ../base/ingress.yaml
-  - ../base/network-policy.yaml
-  # NOTE: HPA not applied in dev (fixed replicas)
+  - ../base
+  # NOTE: HPA pulled from base but deleted in the patches block below
+  # so dev runs with fixed replicas.
 
 patches:
+  # Dev: drop the HPA — fixed-replica deployment is enough
+  - patch: |-
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: solarpro-backend-hpa
+    target:
+      kind: HorizontalPodAutoscaler
+      name: solarpro-backend-hpa
+
   - patch: |-
       - op: replace
         path: /spec/replicas

@@ -6,16 +6,7 @@ kind: Kustomization
 namespace: solar-staging
 
 resources:
-  - ../base/namespace.yaml
-  - ../base/configmap.yaml
-  - ../base/secret-template.yaml
-  - ../base/backend-deployment.yaml
-  - ../base/backend-service.yaml
-  - ../base/redis-deployment.yaml
-  - ../base/celery-deployment.yaml
-  - ../base/ingress.yaml
-  - ../base/hpa.yaml
-  - ../base/network-policy.yaml
+  - ../base
 
 patches:
   - patch: |-
