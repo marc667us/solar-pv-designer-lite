@@ -22524,9 +22524,23 @@ def boq_template_save(pid, bid, fid, slug):
                 basic = float(basic_s) if basic_s else float(basic_d)
             except ValueError:
                 basic = float(basic_d)
-            if not desc or qty <= 0 or basic <= 0:
+            if not desc or qty <= 0:
                 skipped += 1
                 continue
+            # Owner directive 2026-06-28: basic=0 placeholders OK; look up
+            # marketplace catalogue price by description match if missing.
+            if basic <= 0 and desc:
+                try:
+                    _row = c.execute(
+                        "SELECT price_usd FROM equipment_catalog "
+                        "WHERE LOWER(name) = LOWER(?) AND COALESCE(is_active,1)=1 "
+                        "ORDER BY id DESC LIMIT 1",
+                        (desc,),
+                    ).fetchone()
+                    if _row and _row["price_usd"]:
+                        basic = float(_row["price_usd"])
+                except Exception:
+                    pass
             # 2026-06-28 v3: compute supply_amount + install_amount via v3 helper.
             supply, install, final_rate = boq_rate_v3(
                 basic, supply_pct, install_pct, oh, prf, vat,
