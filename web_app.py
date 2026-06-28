@@ -21601,9 +21601,14 @@ def boq_section_loop(pid, bid, fid, bill_no, letter):
     # can see what's been added in the loop so far.
     with get_db() as c:
         items = c.execute(
-            "SELECT * FROM boq_floor_items "
-            "WHERE floor_id=? AND bill_no=? AND section_letter=? "
-            "ORDER BY id",
+            "SELECT i.*, "
+            "       b.basic_price AS bu_basic, "
+            "       b.supply_rate AS bu_supply, "
+            "       b.install_rate AS bu_install "
+            "FROM boq_floor_items i "
+            "LEFT JOIN boq_floor_rate_buildup b ON b.floor_item_id=i.id "
+            "WHERE i.floor_id=? AND i.bill_no=? AND i.section_letter=? "
+            "ORDER BY i.id",
             (fid, bill_no, letter),
         ).fetchall()
 
@@ -22151,9 +22156,14 @@ def boq_section_grid(pid, bid, fid, bill_no, letter):
     # leaving the page.
     with get_db() as c:
         existing = c.execute(
-            "SELECT * FROM boq_floor_items "
-            "WHERE floor_id=? AND bill_no=? AND section_letter=? "
-            "ORDER BY id",
+            "SELECT i.*, "
+            "       b.basic_price AS bu_basic, "
+            "       b.supply_rate AS bu_supply, "
+            "       b.install_rate AS bu_install "
+            "FROM boq_floor_items i "
+            "LEFT JOIN boq_floor_rate_buildup b ON b.floor_item_id=i.id "
+            "WHERE i.floor_id=? AND i.bill_no=? AND i.section_letter=? "
+            "ORDER BY i.id",
             (fid, bill_no, letter),
         ).fetchall()
     next_item_no = _boq_next_item_no(fid, bill_no, letter)
