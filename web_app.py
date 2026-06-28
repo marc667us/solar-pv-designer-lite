@@ -22075,14 +22075,15 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
             return 0.0
 
     oh, prf, cnt, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
+    vat_in_basic = 1 if f.get("vat_in_basic") else 0
 
     # Each row is posted with indexed keys: description[0], qty[0], ...
     descriptions = f.getlist("description[]")
     qtys         = f.getlist("qty[]")
     units        = f.getlist("unit[]")
     basics       = f.getlist("basic_price[]")
-    supplies     = f.getlist("supply_rate[]")
-    installs     = f.getlist("install_rate[]")
+    supplies     = f.getlist("supply_pct[]")
+    installs     = f.getlist("install_pct[]")
     specs        = f.getlist("specification[]")
     remarks_l    = f.getlist("remarks[]")
     # tick[] contains the row indices the owner checked. row_id[] is the
@@ -22138,11 +22139,14 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
                 skipped += 1
                 continue
 
-            # 2026-06-24 additive: supply/install are PERCENTAGES of basic.
-            # Section-grid bulk rows do not collect them, default to 0/0.
-            supply = max(0.0, min(15.0, float(supply_raw or 0)))
-            install = max(0.0, min(25.0, float(install_raw or 0)))
-            final_rate = _boq_safe_rate(basic, supply, install, oh, prf, 0, 0)
+            # 2026-06-28 v3: supply/install are PERCENTAGES of basic; compute
+            # supply_amount + install_amount + final_rate via v3 helper.
+            supply_pct  = max(0.0, min(100.0, float(supply_raw  or 0)))
+            install_pct = max(0.0, min(100.0, float(install_raw or 0)))
+            from boq_rate_v3 import boq_rate_v3
+            supply, install, final_rate = boq_rate_v3(
+                basic, supply_pct, install_pct, oh, prf, vat,
+                vat_in_basic=bool(vat_in_basic))
             total = qty * final_rate
             item_no_disp = str(next_no)
             next_no += 1
@@ -22164,10 +22168,11 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
             item_id = int(cur.lastrowid or 0)
             c.execute(
                 "INSERT INTO boq_floor_rate_buildup "
-                "(floor_item_id, project_id, user_id, basic_price, supply_rate, "
-                " install_rate, overhead_pct, profit_pct, contingency_pct, vat_pct, "
-                " final_built_up_rate, total_amount) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "(floor_item_id, project_id, user_id, basic_price, "
+                " supply_pct, install_pct, supply_rate, install_rate, "
+                " overhead_pct, profit_pct, contingency_pct, vat_pct, "
+                " vat_in_basic, final_built_up_rate, total_amount) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (item_id, pid, uid, basic,
                  supply_pct, install_pct, supply, install,
                  oh, prf, 0, vat, vat_in_basic, final_rate, total),
@@ -22331,6 +22336,11 @@ def boq_template_save(pid, bid, fid, slug):
         except (TypeError, ValueError):
             return 0.0
     oh, prf, cnt, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
+    # Rate engine v3 (2026-06-28): supply_pct + install_pct are PERCENTAGES.
+    supply_pct  = _pct("supply_default_pct")
+    install_pct = _pct("install_default_pct")
+    vat_in_basic = 1 if f.get("vat_in_basic") else 0
+    from boq_rate_v3 import boq_rate_v3
 
     ticked = set()
     for k in f.getlist("tick"):
@@ -22369,8 +22379,10 @@ def boq_template_save(pid, bid, fid, slug):
             if not desc or qty <= 0 or basic <= 0:
                 skipped += 1
                 continue
-            # 2026-06-24 additive: 0/0 percentages for template rows.
-            final_rate = _boq_safe_rate(basic, 0, 0, oh, prf, 0, 0)
+            # 2026-06-28 v3: compute supply_amount + install_amount via v3 helper.
+            supply, install, final_rate = boq_rate_v3(
+                basic, supply_pct, install_pct, oh, prf, vat,
+                vat_in_basic=bool(vat_in_basic))
             total = qty * final_rate
 
             key = (bill_no, sect_letter)
@@ -22396,10 +22408,11 @@ def boq_template_save(pid, bid, fid, slug):
             item_id = int(cur.lastrowid or 0)
             c.execute(
                 "INSERT INTO boq_floor_rate_buildup "
-                "(floor_item_id, project_id, user_id, basic_price, supply_rate, "
-                " install_rate, overhead_pct, profit_pct, contingency_pct, vat_pct, "
-                " final_built_up_rate, total_amount) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "(floor_item_id, project_id, user_id, basic_price, "
+                " supply_pct, install_pct, supply_rate, install_rate, "
+                " overhead_pct, profit_pct, contingency_pct, vat_pct, "
+                " vat_in_basic, final_built_up_rate, total_amount) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (item_id, pid, uid, basic,
                  supply_pct, install_pct, basic, 0,
                  oh, prf, 0, vat, vat_in_basic, final_rate, total),
@@ -22437,8 +22450,10 @@ def boq_template_save(pid, bid, fid, slug):
             sect_letter = (custom_sect[i] if i < len(custom_sect) else "Z").strip().upper()[:8] or "Z"
             sect_title = (custom_title[i] if i < len(custom_title) else "CUSTOM ITEMS").strip()[:160] or "CUSTOM ITEMS"
             bill_name = _boq_lookup_bill_name(bill_no) or "OTHER"
-            # 2026-06-24 additive: 0/0 percentages for template custom rows.
-            final_rate = _boq_safe_rate(basic, 0, 0, oh, prf, 0, 0)
+            # 2026-06-28 v3: compute supply_amount + install_amount via v3 helper.
+            supply, install, final_rate = boq_rate_v3(
+                basic, supply_pct, install_pct, oh, prf, vat,
+                vat_in_basic=bool(vat_in_basic))
             total = qty * final_rate
             key = (bill_no, sect_letter)
             if key not in next_no_cache:
@@ -22462,10 +22477,11 @@ def boq_template_save(pid, bid, fid, slug):
             item_id = int(cur.lastrowid or 0)
             c.execute(
                 "INSERT INTO boq_floor_rate_buildup "
-                "(floor_item_id, project_id, user_id, basic_price, supply_rate, "
-                " install_rate, overhead_pct, profit_pct, contingency_pct, vat_pct, "
-                " final_built_up_rate, total_amount) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "(floor_item_id, project_id, user_id, basic_price, "
+                " supply_pct, install_pct, supply_rate, install_rate, "
+                " overhead_pct, profit_pct, contingency_pct, vat_pct, "
+                " vat_in_basic, final_built_up_rate, total_amount) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (item_id, pid, uid, basic,
                  supply_pct, install_pct, basic, 0,
                  oh, prf, 0, vat, vat_in_basic, final_rate, total),
@@ -24216,9 +24232,9 @@ def boq_project_recalc(pid):
     with get_db() as c:
         rows = c.execute(
             "SELECT i.id AS item_id, i.qty, i.total_amount AS old_total, "
-            "       rb.basic_price, rb.supply_rate, rb.install_rate, "
+            "       rb.basic_price, rb.supply_pct, rb.install_pct, "
             "       rb.overhead_pct, rb.profit_pct, "
-            "       rb.contingency_pct, rb.vat_pct "
+            "       rb.vat_pct, rb.vat_in_basic "
             "FROM boq_floor_items i "
             "LEFT JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
             "WHERE i.project_id=?",
@@ -24228,12 +24244,12 @@ def boq_project_recalc(pid):
             qty = float(r["qty"] or 0)
             old_total = float(r["old_total"] or 0)
             old_grand += old_total
-            # 2026-06-24 v2 spec: supply/install are CURRENCY amounts.
-            # Pass contingency_pct + vat_pct from the stored row too.
+            # 2026-06-28 v3 spec: supply/install are PERCENTAGES; no contingency.
             new_rate = _boq_safe_rate(
-                r["basic_price"], r["supply_rate"], r["install_rate"],
+                r["basic_price"], r["supply_pct"], r["install_pct"],
                 r["overhead_pct"], r["profit_pct"],
-                r["contingency_pct"], r["vat_pct"],
+                0, r["vat_pct"],
+                vat_in_basic=bool(r["vat_in_basic"]),
             )
             new_total = qty * new_rate
             new_grand += new_total
@@ -31898,6 +31914,7 @@ def support_user_guide_pdf():
     return redirect(url_for("guides_pdf", slug="full-user"), code=301)
 
 
+
 # new_boq_wizard_routes.py
 # Multi-building BOQ wizard — one click instantiates a full project from
 # template picks. Replaces the click-by-click "new project -> new building
@@ -31954,10 +31971,10 @@ def boq_wizard_build():
             return 0.0
     oh   = _pct("overhead_pct")
     prf  = _pct("profit_pct")
-    cnt  = _pct("contingency_pct")
     vat  = _pct("vat_pct")
-    sup_default_pct = _pct("supply_default_pct")     # spec s13 default 0 (supply = basic)
-    ins_default_pct = _pct("install_default_pct")    # spec s13 default 0 (install = 0)
+    sup_default_pct = _pct("supply_default_pct")
+    ins_default_pct = _pct("install_default_pct")
+    vat_in_basic = 1 if f.get("vat_in_basic") else 0
 
     # Collect picks: per-template count.
     from new_boq_project_templates import _boq_template_list, _boq_template_get, _boq_template_iter_lines
@@ -32023,7 +32040,8 @@ def boq_wizard_build():
                 fid = int(cur2.lastrowid or 0)
 
             # Populate floor items from every template line. Pricing intentionally
-            # zero — owner edits after.
+            # zero -- owner edits after. Rate engine v3: supply/install are %s.
+            from boq_rate_v3 import boq_rate_v3
             next_no_cache = {}
             with get_db() as c:
                 for (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
@@ -32032,10 +32050,9 @@ def boq_wizard_build():
                     basic = float(basic_d or 0)
                     if not desc.strip():
                         continue
-                    # Apply default supply/install percent on top of basic.
-                    supply = basic * (1.0 + sup_default_pct / 100.0)
-                    install = basic * (ins_default_pct / 100.0)
-                    final_rate = _boq_compute_rate(basic, supply, install, oh, prf, cnt, vat)
+                    supply_amount, install_amount, final_rate = boq_rate_v3(
+                        basic, sup_default_pct, ins_default_pct,
+                        oh, prf, vat, vat_in_basic=bool(vat_in_basic))
                     total = qty * final_rate
 
                     key = (bill_no, sect_letter)
@@ -32061,12 +32078,14 @@ def boq_wizard_build():
                     item_id = int(cur.lastrowid or 0)
                     c.execute(
                         "INSERT INTO boq_floor_rate_buildup "
-                        "(floor_item_id, project_id, user_id, basic_price, supply_rate, "
-                        " install_rate, overhead_pct, profit_pct, contingency_pct, vat_pct, "
-                        " final_built_up_rate, total_amount) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                        (item_id, pid, uid, basic, supply, install,
-                         oh, prf, cnt, vat, final_rate, total),
+                        "(floor_item_id, project_id, user_id, basic_price, "
+                        " supply_pct, install_pct, supply_rate, install_rate, "
+                        " overhead_pct, profit_pct, contingency_pct, vat_pct, "
+                        " vat_in_basic, final_built_up_rate, total_amount) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (item_id, pid, uid, basic,
+                         sup_default_pct, ins_default_pct, supply_amount, install_amount,
+                         oh, prf, 0, vat, vat_in_basic, final_rate, total),
                     )
                     total_items += 1
             total_floors += 1
