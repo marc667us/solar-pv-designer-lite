@@ -372,12 +372,23 @@ def boq_floor_view(pid, bid, fid):
             "SELECT COALESCE(SUM(total_amount),0) AS g FROM boq_floor_items WHERE floor_id=?",
             (fid,),
         ).fetchone()
+    # 2026-06-28 owner directive: per-section editable heading + instructions
+    # overlay (defined alongside this route via new_boq_section_meta_route).
+    section_meta_map = {}
+    try:
+        _meta_map = globals().get("_boq_section_meta_map")
+        if _meta_map:
+            section_meta_map = _meta_map(fid)
+    except Exception:
+        section_meta_map = {}
+
     return render_template("boq_floor_view.html",
                            user=current_user(),
                            project=project, building=building, floor=floor,
                            items=items,
                            floor_subtotal=float(subtotal_row["g"] or 0) if subtotal_row else 0.0,
-                           sections=_BOQ_SECTIONS)
+                           sections=_BOQ_SECTIONS,
+                           section_meta_map=section_meta_map)
 
 
 @app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/items", methods=["POST"])

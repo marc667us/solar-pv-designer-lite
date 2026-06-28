@@ -296,6 +296,17 @@ def boq_section_grid(pid, bid, fid, bill_no, letter):
         ).fetchall()
     next_item_no = _boq_next_item_no(fid, bill_no, letter)
 
+    # 2026-06-28: per-section editable heading + instructions overlay.
+    section_meta_title = ""
+    section_meta_instructions = ""
+    try:
+        # Defined alongside this route in web_app.py once both modules splice.
+        _meta_get = globals().get("_boq_section_meta_get")
+        if _meta_get:
+            section_meta_title, section_meta_instructions = _meta_get(fid, bill_no, letter)
+    except Exception:
+        pass
+
     return render_template(
         "boq_floor_section_grid.html",
         user=current_user(),
@@ -307,6 +318,8 @@ def boq_section_grid(pid, bid, fid, bill_no, letter):
         rows=rows,                 # initial table rows
         existing=existing,
         next_item_no=next_item_no,
+        section_meta_title=section_meta_title,
+        section_meta_instructions=section_meta_instructions,
     )
 
 

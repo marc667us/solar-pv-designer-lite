@@ -30,6 +30,43 @@
   </a>
 </div>
 
+{# 2026-06-28: editable section heading + instructions per section. #}
+<form method="POST" action="{{ url_for('boq_section_meta_save', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill_no, letter=section_letter) }}" class="mb-3">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <input type="hidden" name="section_title" value="{{ section_title }}">
+  <input type="hidden" name="bill_name" value="{{ bill_name }}">
+  <input type="hidden" name="subsection_label" value="{{ subsection_label }}">
+  <div class="solar-card p-3" style="border-left:3px solid var(--solar-gold)">
+    <div class="text-warning fw-bold small mb-2" style="text-transform:uppercase;letter-spacing:1px">
+      <i class="bi bi-pencil-square me-1"></i>Section {{ section_letter }} heading &amp; instructions
+    </div>
+    <div class="row g-2">
+      <div class="col-md-12">
+        <label class="form-label small text-secondary mb-1">
+          Section heading <span class="text-secondary fst-italic">(overrides the template default; shown on Excel + PDF)</span>
+        </label>
+        <input name="custom_title" maxlength="300" class="form-control"
+               value="{{ section_meta_title or '' }}"
+               placeholder="{{ section_title }}"
+               style="font-size:15px;font-weight:600">
+      </div>
+      <div class="col-md-12">
+        <label class="form-label small text-secondary mb-1">
+          Section instructions <span class="text-secondary fst-italic">(rendered below the section heading)</span>
+        </label>
+        <textarea name="instructions" rows="2" maxlength="4000"
+                  class="form-control"
+                  placeholder="e.g. All MCBs must be Memshield Type B; cables to be Tropical Cable; supply only -- installation by client.">{{ section_meta_instructions or '' }}</textarea>
+      </div>
+    </div>
+    <div class="d-flex justify-content-end mt-2">
+      <button type="submit" class="btn btn-warning btn-sm fw-bold">
+        <i class="bi bi-save me-1"></i>Save section heading &amp; instructions
+      </button>
+    </div>
+  </div>
+</form>
+
 {# ─── Existing items already saved in this section ─────────────────── #}
 {% if existing %}
 <div class="solar-card p-3 mb-3">

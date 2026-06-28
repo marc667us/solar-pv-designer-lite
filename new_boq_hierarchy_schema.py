@@ -211,6 +211,18 @@ _SQLITE_ALTERS_RATE_V3 = [
     # 2026-06-28: per-project free-text instructions surfaced on overview +
     # rendered above the BOQ table on Excel / PDF exports.
     "ALTER TABLE boq_projects ADD COLUMN instructions TEXT DEFAULT ''",
+    # 2026-06-28 (3rd round): per-section editable heading + instructions.
+    """CREATE TABLE IF NOT EXISTS boq_section_meta (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        floor_id        INTEGER NOT NULL,
+        bill_no         INTEGER NOT NULL,
+        section_letter  TEXT NOT NULL,
+        custom_title    TEXT DEFAULT '',
+        instructions    TEXT DEFAULT '',
+        updated_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(floor_id, bill_no, section_letter)
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_boq_section_meta_floor ON boq_section_meta(floor_id, bill_no, section_letter)",
 ]
 
 
@@ -390,6 +402,18 @@ _PG_ALTERS_RATE_V3 = [
     "ALTER TABLE boq_floor_rate_buildup ADD COLUMN IF NOT EXISTS install_pct REAL DEFAULT 0",
     "ALTER TABLE boq_floor_rate_buildup ADD COLUMN IF NOT EXISTS vat_in_basic INTEGER DEFAULT 0",
     "ALTER TABLE boq_projects ADD COLUMN IF NOT EXISTS instructions TEXT DEFAULT ''",
+    # 2026-06-28 (3rd round): per-section editable heading + instructions.
+    """CREATE TABLE IF NOT EXISTS boq_section_meta (
+        id              SERIAL PRIMARY KEY,
+        floor_id        INTEGER NOT NULL,
+        bill_no         INTEGER NOT NULL,
+        section_letter  VARCHAR(8) NOT NULL,
+        custom_title    VARCHAR(300) DEFAULT '',
+        instructions    TEXT DEFAULT '',
+        updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(floor_id, bill_no, section_letter)
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_boq_section_meta_floor ON boq_section_meta(floor_id, bill_no, section_letter)",
 ]
 
 
