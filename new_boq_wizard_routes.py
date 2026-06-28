@@ -61,6 +61,12 @@ def boq_wizard_build():
 
     # Collect picks: per-template count.
     from new_boq_project_templates import _boq_template_list, _boq_template_get, _boq_template_iter_lines
+    # 2026-06-28 learning layer: pull overrides recorded from prior edits
+    # so the template auto-fills with the user's last-used values.
+    # _boq_template_lines_with_overrides is defined alongside this route in
+    # web_app.py once both modules splice; globals() lookup is the safe way
+    # to discover it without forcing a module import.
+    _wiover = globals().get("_boq_template_lines_with_overrides")
     all_templates = _boq_template_list()
 
     picks = []
@@ -124,11 +130,14 @@ def boq_wizard_build():
 
             # Populate floor items from every template line. Pricing intentionally
             # zero -- owner edits after. Rate engine v3: supply/install are %s.
+            # Override layer overlays the owner's last-used basic+unit+qty.
             from boq_rate_v3 import boq_rate_v3
+            line_iter = (_wiover(uid, tpl) if _wiover
+                         else _boq_template_iter_lines(tpl))
             next_no_cache = {}
             with get_db() as c:
                 for (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
-                     desc, unit, qty_d, basic_d, spec) in _boq_template_iter_lines(tpl):
+                     desc, unit, qty_d, basic_d, spec) in line_iter:
                     qty = float(qty_d or 0)
                     basic = float(basic_d or 0)
                     if not desc.strip():

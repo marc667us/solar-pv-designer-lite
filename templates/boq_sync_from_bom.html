@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Sync from BOM — {{ project.project_name }}{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('boq_projects_list') }}" class="text-warning">BOQ Projects</a> &middot;
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="text-warning">{{ project.project_name }}</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-arrow-down-up text-warning me-1"></i>Sync quantities from BOM</h5>
+    <div class="text-secondary small">Pick a BOM; the wizard matches each BOM line to a BOQ item by description and overwrites the BOQ qty.</div>
+  </div>
+</div>
+
+{% if not boms %}
+<div class="solar-card p-4 text-center text-secondary">
+  <i class="bi bi-folder2-open" style="font-size:36px"></i>
+  <p class="mt-2 mb-2">No BOMs found on your account yet.</p>
+  <a href="{{ url_for('bom_list') if 'bom_list' in app.view_functions else url_for('boq_project_overview', pid=project.id) }}" class="btn btn-outline-warning btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Back to project
+  </a>
+</div>
+{% else %}
+<form method="POST" action="{{ url_for('boq_project_sync_from_bom', pid=project.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="solar-card p-3">
+    <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:13px">
+      <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+        <tr><th style="width:50px">Pick</th><th>BOM title</th><th>Project</th><th>Client</th><th class="text-end">Lines</th><th>Updated</th></tr>
+      </thead>
+      <tbody>
+        {% for b in boms %}
+        <tr>
+          <td><input type="radio" name="bom_id" value="{{ b.id }}" {% if loop.first %}checked{% endif %} class="form-check-input"></td>
+          <td><strong>{{ b.title }}</strong></td>
+          <td class="text-secondary">{{ b.project_name or '-' }}</td>
+          <td class="text-secondary">{{ b.client_name or '-' }}</td>
+          <td class="text-end">{{ b.n_items }}</td>
+          <td class="text-secondary small">{{ b.updated_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="d-flex justify-content-end gap-2 mt-3">
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="btn btn-outline-secondary btn-sm">Cancel</a>
+      <button type="submit" class="btn btn-warning fw-bold btn-sm">
+        <i class="bi bi-arrow-down-up me-1"></i>Sync quantities from this BOM
+      </button>
+    </div>
+  </div>
+</form>
+{% endif %}
+
+{% endblock %}

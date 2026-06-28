@@ -208,6 +208,9 @@ _SQLITE_ALTERS_RATE_V3 = [
     "ALTER TABLE boq_floor_rate_buildup ADD COLUMN supply_pct REAL DEFAULT 0",
     "ALTER TABLE boq_floor_rate_buildup ADD COLUMN install_pct REAL DEFAULT 0",
     "ALTER TABLE boq_floor_rate_buildup ADD COLUMN vat_in_basic INTEGER DEFAULT 0",
+    # 2026-06-28: per-project free-text instructions surfaced on overview +
+    # rendered above the BOQ table on Excel / PDF exports.
+    "ALTER TABLE boq_projects ADD COLUMN instructions TEXT DEFAULT ''",
 ]
 
 
@@ -386,6 +389,7 @@ _PG_ALTERS_RATE_V3 = [
     "ALTER TABLE boq_floor_rate_buildup ADD COLUMN IF NOT EXISTS supply_pct REAL DEFAULT 0",
     "ALTER TABLE boq_floor_rate_buildup ADD COLUMN IF NOT EXISTS install_pct REAL DEFAULT 0",
     "ALTER TABLE boq_floor_rate_buildup ADD COLUMN IF NOT EXISTS vat_in_basic INTEGER DEFAULT 0",
+    "ALTER TABLE boq_projects ADD COLUMN IF NOT EXISTS instructions TEXT DEFAULT ''",
 ]
 
 

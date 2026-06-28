@@ -22610,10 +22610,16 @@ def boq_project_xlsx(pid):
     ws.merge_cells("A1:I1")
     ws["A2"] = f"Client : {project['client_name'] or '-'}"
     ws["A3"] = f"Location: {project['location'] or '-'}"
+    # 2026-06-28: free-text instructions render in A4 (merged across all cols).
+    if (project["instructions"] or "").strip():
+        ws["A4"] = "Instructions: " + str(project["instructions"]).strip()
+        ws["A4"].font = Font(italic=True, color="555555")
+        ws["A4"].alignment = Alignment(wrap_text=True, vertical="top")
+        ws.merge_cells("A4:I4")
 
     headers = ["Item", "Description", "Qty", "Unit", "Basic Price",
                "Supply Amount", "Install Amount", "Total Amount", "Line Amount"]
-    HROW = 5
+    HROW = 6
     for col, h in enumerate(headers, 1):
         c_ = ws.cell(row=HROW, column=col, value=h)
         c_.font = header_font; c_.fill = header_fill; c_.border = box
@@ -22736,6 +22742,10 @@ def _boq_project_markdown(pid: int) -> str:
         f"**Generated:** {project['updated_at']}",
         "",
     ]
+    _instr = (project["instructions"] or "").strip()
+    if _instr:
+        md.append("> **Instructions:** " + _instr.replace("\n", " "))
+        md.append("")
     prev = {"bid": None, "fid": None, "bill": None, "sec": None, "sub": None}
     for r in rows:
         if r["building_id"] != prev["bid"]:
@@ -23594,568 +23604,6 @@ def _boq_template_iter_lines(template: dict):
                 idx += 1
 
 
-# new_boq_edit_and_learn_routes.py
-# Two owner-driven additions:
-#
-#   A. Edit existing BOQ floor item -- per-row Edit button on floor view
-#      opens an in-place form that updates description / unit / qty /
-#      basic_price + remarks, recomputes final_built_up_rate + total_amount,
-#      and updates the linked boq_floor_rate_buildup row.
-#
-#   B. Learn from owner edits -- every time the owner saves an edit we
-#      store a (user_id, description_signature, unit, basic_price)
-#      override. The next time the same description appears in the
-#      section grid catalogue or a template, we use the owner's basic
-#      price + unit as the default (a 1-call personalisation layer
-#      around the static catalogues).
-
-
-_BOQ_USER_OVERRIDES_DDL_SQLITE = """
-CREATE TABLE IF NOT EXISTS boq_user_item_overrides (
-    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id            INTEGER NOT NULL,
-    description_key    TEXT NOT NULL,
-    unit               TEXT DEFAULT '',
-    basic_price        REAL DEFAULT 0,
-    last_description   TEXT DEFAULT '',
-    updated_at         TEXT DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, description_key)
-);
-CREATE INDEX IF NOT EXISTS idx_boq_user_overrides_user
-    ON boq_user_item_overrides(user_id);
-"""
-
-_BOQ_USER_OVERRIDES_DDL_PG = """
-CREATE TABLE IF NOT EXISTS boq_user_item_overrides (
-    id                 SERIAL PRIMARY KEY,
-    user_id            INTEGER NOT NULL,
-    description_key    VARCHAR(500) NOT NULL,
-    unit               VARCHAR(20) DEFAULT '',
-    basic_price        REAL DEFAULT 0,
-    last_description   VARCHAR(500) DEFAULT '',
-    updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, description_key)
-);
-CREATE INDEX IF NOT EXISTS idx_boq_user_overrides_user
-    ON boq_user_item_overrides(user_id);
-"""
-
-
-_BOQ_SPEC_COLS_DONE = {"v": False}
-
-def _boq_ensure_spec_buildup_columns():
-    """2026-06-24 v2 -- add 9 spec sub-fields to boq_floor_rate_buildup.
-    Idempotent on SQLite (try/except per ALTER) and Postgres (ADD COLUMN
-    IF NOT EXISTS supported by psycopg2)."""
-    if _BOQ_SPEC_COLS_DONE["v"]:
-        return
-    is_pg = bool(os.environ.get("DATABASE_URL"))
-    ddl = ("freight_pct", "handling_pct", "insurance_pct", "wastage_pct",
-           "labour_amt", "tools_amt", "equipment_amt", "testing_amt",
-           "supervision_amt")
-    for col in ddl:
-        stmt = ("ALTER TABLE boq_floor_rate_buildup ADD COLUMN "
-                + ("IF NOT EXISTS " if is_pg else "")
-                + col + " REAL DEFAULT 0")
-        try:
-            with get_db() as _c:
-                _c.execute(stmt)
-        except Exception:
-            pass
-    _BOQ_SPEC_COLS_DONE["v"] = True
-
-
-def _boq_ensure_overrides_table():
-    """Idempotent bootstrap. Same pattern as ensure_boq_hierarchy_schema."""
-    _boq_ensure_spec_buildup_columns()
-    try:
-        is_pg = bool(os.environ.get("DATABASE_URL"))
-        with get_db() as c:
-            if is_pg:
-                for stmt in _BOQ_USER_OVERRIDES_DDL_PG.strip().split(";"):
-                    s = stmt.strip()
-                    if s:
-                        try: c.execute(s)
-                        except Exception: pass
-            else:
-                c.executescript(_BOQ_USER_OVERRIDES_DDL_SQLITE)
-    except Exception:
-        pass
-
-
-def _boq_desc_key(desc: str) -> str:
-    """Description -> stable key. Lowercase, collapse whitespace, take
-    first 240 chars so 'Supply and install 6-way TPN MCB DB' matches the
-    same item across catalogue + template + edit variants."""
-    s = (desc or "").lower()
-    s = " ".join(s.split())
-    return s[:240]
-
-
-def _boq_record_override(uid: int, desc: str, unit: str, basic: float) -> None:
-    """Save / update the user's preferred unit + basic price for this
-    description. Non-raising."""
-    try:
-        _boq_ensure_overrides_table()
-        key = _boq_desc_key(desc)
-        if not key:
-            return
-        with get_db() as c:
-            c.execute(
-                "INSERT OR REPLACE INTO boq_user_item_overrides "
-                "(user_id, description_key, unit, basic_price, last_description) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (int(uid), key, (unit or "").strip()[:20],
-                 float(basic or 0), (desc or "").strip()[:500]),
-            )
-    except Exception:
-        pass
-
-
-def _boq_apply_overrides(uid: int, catalog_rows: list) -> list:
-    """Given a list of (desc, unit, basic) tuples (the section grid
-    catalogue), overlay the user's recorded overrides so the dropdown
-    defaults to the owner's last-used values."""
-    try:
-        _boq_ensure_overrides_table()
-        with get_db() as c:
-            rows = c.execute(
-                "SELECT description_key, unit, basic_price FROM boq_user_item_overrides "
-                "WHERE user_id=?",
-                (int(uid),),
-            ).fetchall()
-        by_key = {r["description_key"]: (r["unit"], r["basic_price"]) for r in rows}
-    except Exception:
-        return catalog_rows
-    out = []
-    for (desc, unit, basic) in catalog_rows:
-        key = _boq_desc_key(desc)
-        if key in by_key:
-            u, b = by_key[key]
-            out.append((desc, (u or unit), (float(b) if b else basic)))
-        else:
-            out.append((desc, unit, basic))
-    return out
-
-
-# ---- Edit existing item ---------------------------------------------------
-
-@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/items/<int:iid>/edit", methods=["GET", "POST"])
-@login_required
-def boq_floor_item_edit(pid, bid, fid, iid):
-    uid = session["user_id"]
-    project = _boq_project_owned_or_404(pid, uid)
-    building = _boq_building_owned_or_404(bid, pid)
-    floor = _boq_floor_owned_or_404(fid, bid)
-    with get_db() as c:
-        item = c.execute(
-            "SELECT i.*, rb.basic_price AS bu_basic, rb.supply_rate AS bu_supply, "
-            "       rb.install_rate AS bu_install, rb.overhead_pct AS bu_oh, "
-            "       rb.profit_pct AS bu_profit, rb.contingency_pct AS bu_cont, "
-            "       rb.vat_pct AS bu_vat, "
-            "       rb.freight_pct AS bu_freight, rb.handling_pct AS bu_handling, "
-            "       rb.insurance_pct AS bu_insurance, rb.wastage_pct AS bu_wastage, "
-            "       rb.labour_amt AS bu_labour, rb.tools_amt AS bu_tools, "
-            "       rb.equipment_amt AS bu_equipment, rb.testing_amt AS bu_testing, "
-            "       rb.supervision_amt AS bu_supervision "
-            "FROM boq_floor_items i "
-            "LEFT JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
-            "WHERE i.id=? AND i.floor_id=?",
-            (iid, fid),
-        ).fetchone()
-    if not item:
-        abort(404)
-
-    if request.method == "POST":
-        csrf_protect()
-        f = request.form
-        desc = (f.get("description") or "").strip()[:500]
-        unit = (f.get("unit") or "No.").strip()[:20]
-        spec = (f.get("specification") or "").strip()
-        remarks = (f.get("remarks") or "").strip()[:500]
-        try:
-            qty = max(0.0, float(f.get("qty") or 0))
-        except ValueError:
-            qty = 0.0
-        try:
-            basic = max(0.0, float(f.get("basic_price") or 0))
-        except ValueError:
-            basic = 0.0
-        # 2026-06-24 v5: simple Supply%/Install% pickers.
-        def _pick(name, lo, hi, default):
-            raw = (f.get(name) or "").strip()
-            if not raw:
-                return float(default)
-            try:
-                return max(float(lo), min(float(hi), float(raw)))
-            except (TypeError, ValueError):
-                return float(default)
-        supply_pct  = _pick("supply_pct",      0.0, 15.0, 10.0)
-        install_pct = _pick("install_pct",     0.0, 25.0, 15.0)
-        oh          = _pick("overhead_pct",    0.0, 20.0, 15.0)
-        prf         = _pick("profit_pct",      0.0, 30.0, 15.0)
-        cnt         = _pick("contingency_pct", 0.0, 15.0,  0.0)
-        vat         = _pick("vat_pct",         0.0, 50.0,  0.0)
-        fr_pct = hd_pct = ins_pct = ws_pct = 0.0
-        lab_amt = tools_amt = eq_amt = test_amt = sup_amt = 0.0
-        if not desc or qty <= 0 or basic <= 0:
-            flash("Description, qty and basic price are all required.", "warning")
-            return redirect(url_for("boq_floor_item_edit", pid=pid, bid=bid, fid=fid, iid=iid))
-        # Rate engine v3: pass percentages directly. vat_in_basic from form.
-        vat_in_basic = 1 if f.get("vat_in_basic") else 0
-        from boq_rate_v3 import boq_rate_v3
-        supply, install, final_rate = boq_rate_v3(
-            basic, supply_pct, install_pct, oh, prf, vat,
-            vat_in_basic=bool(vat_in_basic))
-        total = qty * final_rate
-        with get_db() as c:
-            c.execute(
-                "UPDATE boq_floor_items SET description=?, specification=?, "
-                "unit=?, qty=?, remarks=?, final_built_up_rate=?, total_amount=?, "
-                "updated_at=CURRENT_TIMESTAMP WHERE id=? AND floor_id=?",
-                (desc, spec, unit, qty, remarks, final_rate, total, iid, fid),
-            )
-            c.execute(
-                "UPDATE boq_floor_rate_buildup SET basic_price=?, "
-                "supply_pct=?, install_pct=?, supply_rate=?, install_rate=?, "
-                "overhead_pct=?, profit_pct=?, contingency_pct=?, "
-                "vat_pct=?, vat_in_basic=?, final_built_up_rate=?, total_amount=?, "
-                "updated_at=CURRENT_TIMESTAMP WHERE floor_item_id=?",
-                (basic, supply_pct, install_pct, supply, install,
-                 oh, prf, 0, vat, vat_in_basic, final_rate, total, iid),
-            )
-            try:
-                c.execute(
-                    "UPDATE boq_floor_rate_buildup SET freight_pct=?, "
-                    "handling_pct=?, insurance_pct=?, wastage_pct=?, "
-                    "labour_amt=?, tools_amt=?, equipment_amt=?, "
-                    "testing_amt=?, supervision_amt=? WHERE floor_item_id=?",
-                    (fr_pct, hd_pct, ins_pct, ws_pct,
-                     lab_amt, tools_amt, eq_amt, test_amt, sup_amt, iid),
-                )
-            except Exception:
-                pass  # Sub-field columns not migrated yet -- harmless.
-            c.execute("UPDATE boq_floors SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (fid,))
-        # LEARN: record the user's preferred unit + basic for this description.
-        _boq_record_override(uid, desc, unit, basic)
-        try:
-            from new_boq_hierarchy_schema import boq_audit
-            boq_audit(get_db, uid, "boq_floor_item_edited", "boq_floor_item", iid,
-                      f"rate={final_rate:.2f} total={total:.2f}")
-        except Exception:
-            pass
-        flash(f"Item updated. Future BOQs will default to {basic:.2f}/{unit} for this item.", "success")
-        return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
-
-    # GET -- render the edit form.
-    return render_template(
-        "boq_floor_item_edit.html",
-        user=current_user(),
-        project=project, building=building, floor=floor, item=item,
-    )
-
-
-# new_boq_data_v3.py
-# 2026-06-21 -- in-place patches to the v2 catalogue + templates after the
-# owner's walkthrough.
-#
-#   1. Section A (Switch Boards) brand: Memshield -> Eaton.
-#   2. Section B renamed "SUBFEEDER CABLES AND EARTHLEADS" -> "FEEDERS AND
-#      SUBFEEDERS" with the same items.
-#   3. Each section gets a `subheading` string -- the verb+brand instruction
-#      line the auditorium sample puts beneath the section letter heading.
-#
-# This runs after v2 is loaded into the module namespace, mutates the
-# already-defined _BOQ_PROJECT_TEMPLATES + _BOQ_SECTION_ITEM_CATALOG in
-# place, and re-binds the helpers. No new dict literal -- so the patch is
-# tiny and never drifts out of sync with v2's shape.
-
-
-# ---- Section-level subheading per Section TITLE -------------------------
-_BOQ_SECTION_SUBHEADINGS = {
-    "SWITCH BOARDS AND DISTRIBUTION BOARDS":
-        "Supply and install the following as Eaton or approved equal",
-    "FEEDERS AND SUBFEEDERS":
-        "Supply, lay and terminate as armoured or non-armoured cables of approved brands e.g. Tropical or Kable Metal",
-    "SUBFEEDER CABLES AND EARTHLEADS":
-        "Supply, lay and terminate as armoured or non-armoured cables of approved brands e.g. Tropical or Kable Metal",
-    "WIRING OF POINTS":
-        "Wire the following points in conduit/trunking as directed using PVC insulated copper cable",
-    "LUMINAIRES":
-        "Supply and fix the following luminaires as Philips or approved equal",
-    "ACCESSORIES":
-        "Supply and fix the following accessories as MK or approved equal",
-    "BONDING AND EARTHING":
-        "Supply, install and test the following bonding and earthing items",
-    "EARTH ELECTRODE NETWORK":
-        "Supply and install the earth electrode network",
-    "WIRING OF FIRE POINTS":
-        "Wire the following fire detection points using fire-resistant cable",
-    "FIRE PANEL AND ACCESSORIES":
-        "Supply, install, connect and commission as Hochiki or approved equal",
-    "DATA EQUIPMENT AND ACCESSORIES":
-        "Supply, install and commission as Cisco / Juniper or approved equal",
-    "VOICE EQUIPMENT AND ACCESSORIES":
-        "Supply, install and commission as Panasonic or approved equal",
-    "EQUIPMENT AND ACCESSORIES":
-        "Supply, install and commission as Panasonic / Hikvision or approved equal",
-    "SMALL SIGNAL IP NETWORK":
-        "Supply, install and commission small signal IP network equipment",
-    "NURSE CALL SYSTEM":
-        "Supply, install and commission Nurse Call system as approved equal",
-    "PRELIMINARY ITEMS":
-        "Allow for the following preliminary items",
-}
-
-
-def _boq_section_subheading(section_title: str) -> str:
-    """Return the brand/instruction subheading for a section title.
-    Falls back to '' if no mapping exists."""
-    if not section_title:
-        return ""
-    t = section_title.strip().upper()
-    return _BOQ_SECTION_SUBHEADINGS.get(t, "")
-
-
-# ---- Mutate the v2 templates dict in place ------------------------------
-try:
-    _tpls = _BOQ_PROJECT_TEMPLATES  # provided by v2 splice
-except NameError:
-    _tpls = None
-
-if _tpls is not None:
-    for _t in _tpls.values():
-        for _b in _t.get("bills", []):
-            for _s in _b.get("sections", []):
-                _letter = (_s.get("letter") or "").upper()
-                _title  = (_s.get("title")  or "").upper()
-                # Rename Section B title for Bill 2
-                if _letter == "B" and _b.get("no") == 2 and "SUBFEEDER" in _title:
-                    _s["title"] = "FEEDERS AND SUBFEEDERS"
-                # Swap Memshield -> Eaton in Section A items (Bill 2)
-                if _letter == "A" and _b.get("no") == 2:
-                    for _it in _s.get("items", []):
-                        _it["desc"] = _it["desc"].replace("Memshield", "Eaton")
-                # Attach subheading from the lookup map (uses possibly-renamed title)
-                _s["subheading"] = _boq_section_subheading(_s["title"])
-
-
-# ---- Mutate the v2 catalogue dict in place ------------------------------
-try:
-    _cat = _BOQ_SECTION_ITEM_CATALOG
-except NameError:
-    _cat = None
-
-if _cat is not None:
-    # 1. Memshield -> Eaton in SWITCH BOARDS section.
-    _sb = _cat.get("SWITCH BOARDS AND DISTRIBUTION BOARDS")
-    if _sb is not None:
-        _cat["SWITCH BOARDS AND DISTRIBUTION BOARDS"] = [
-            (d.replace("Memshield", "Eaton"), u, p) for (d, u, p) in _sb
-        ]
-    # 2. Alias FEEDERS AND SUBFEEDERS -> SUBFEEDER CABLES AND EARTHLEADS
-    _sub = _cat.get("SUBFEEDER CABLES AND EARTHLEADS")
-    if _sub is not None:
-        _cat["FEEDERS AND SUBFEEDERS"] = list(_sub)
-
-
-# ---- Override the catalogue lookup so the renamed section finds items ----
-try:
-    _orig_catalog_for_section = _boq_catalog_for_section
-except NameError:
-    _orig_catalog_for_section = None
-
-
-def _boq_catalog_for_section(section_title: str) -> list:  # type: ignore[no-redef]
-    if not section_title:
-        return []
-    s = section_title.strip()
-    if s in _BOQ_SECTION_ITEM_CATALOG:
-        return list(_BOQ_SECTION_ITEM_CATALOG[s])
-    s_up = s.upper()
-    if s_up in _BOQ_SECTION_ITEM_CATALOG:
-        return list(_BOQ_SECTION_ITEM_CATALOG[s_up])
-    # Map renamed section back to the original catalogue key as a fallback.
-    aliases = {
-        "FEEDERS AND SUBFEEDERS": "SUBFEEDER CABLES AND EARTHLEADS",
-        "SUBFEEDER CABLES AND EARTHLEADS": "FEEDERS AND SUBFEEDERS",
-    }
-    if s_up in aliases and aliases[s_up] in _BOQ_SECTION_ITEM_CATALOG:
-        return list(_BOQ_SECTION_ITEM_CATALOG[aliases[s_up]])
-    for key, items in _BOQ_SECTION_ITEM_CATALOG.items():
-        if s_up.startswith(key) or key.startswith(s_up):
-            return list(items)
-    return []
-
-
-# ---- Expose helpers as Jinja globals so templates can call them ---------
-try:
-    app.jinja_env.globals["boq_section_subheading"] = _boq_section_subheading
-    app.jinja_env.globals["boq_section_subheadings"] = _BOQ_SECTION_SUBHEADINGS
-except Exception:
-    pass
-
-
-# new_boq_data_v4.py
-# 2026-06-21 -- owner ask: every template's Bill 2 must have an
-# "EARTHING AND EARTH LEADS" section directly below FEEDERS AND
-# SUBFEEDERS. Single-core earth lead lines that previously rode along
-# Section B are moved into the new Section C, plus a handful of standard
-# earthing-component lines. The existing Sections C/D/E (Wiring,
-# Luminaires, Accessories) renumber to D/E/F.
-#
-# Same in-place mutation pattern as v3 -- runs after v3 has populated
-# _BOQ_PROJECT_TEMPLATES and _BOQ_SECTION_ITEM_CATALOG.
-
-
-def _it(desc, unit, qty, basic, spec=""):
-    return {"desc": desc, "unit": unit, "qty": qty, "basic": basic, "spec": spec}
-
-
-# Per-section earth lead items that should accompany the auditorium-style
-# main feeders. Index keyed by floor area scale (multiplier 0.4 = small
-# residence, 1.0 = office, 1.5 = auditorium).
-def _scaled_earth_items(scale: float = 1.0):
-    def q(n): return max(1, int(round(n * scale)))
-    return [
-        _it("Supply, lay and terminate 1c x 25mm2 PVC insulated copper cable as earth lead", "M",   q(25), 65),
-        _it("Supply, lay and terminate 1c x 16mm2 PVC insulated copper cable as earth lead", "M",   q(40), 42),
-        _it("Supply, lay and terminate 1c x 10mm2 PVC insulated copper cable as earth lead", "M",   q(40), 27),
-        _it("Supply, lay and terminate 1c x 6mm2 PVC insulated copper cable as earth lead",  "M",   q(30), 18),
-        _it("Supply and install 50mm x 6mm copper earth bar c/w mounting accessories",       "Nos.", q(2), 380),
-        _it("Supply and install earth tape clamp",                                            "Nos.", q(10),  45),
-        _it("Supply and install 35mm2 bare copper bonding tape",                              "M",   q(20), 120),
-    ]
-
-
-_EARTHING_SUBHEADING = (
-    "Supply, lay and terminate earth leads of approved brands "
-    "e.g. Tropical or Kable Metal -- c/w lugs, glands and cable markers"
-)
-
-
-def _is_earth_lead(desc: str) -> bool:
-    d = (desc or "").lower()
-    return (
-        "1c x" in d
-        and ("earth lead" in d or "earth jumper" in d)
-    )
-
-
-# ---- Mutate templates in place ------------------------------------------
-try:
-    _tpls = _BOQ_PROJECT_TEMPLATES
-except NameError:
-    _tpls = None
-
-
-def _renumber_sections_after(sections, start_letter: str) -> None:
-    """Renumber sections whose letter is >= start_letter by +1.
-    Stops at Z. Sections inserted with empty letter are ignored."""
-    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    if start_letter not in letters:
-        return
-    base = letters.index(start_letter)
-    # Walk backwards so we don't overwrite letters that will themselves move.
-    for s in reversed(sections):
-        L = (s.get("letter") or "").upper()
-        if L in letters and letters.index(L) >= base:
-            idx = letters.index(L)
-            if idx + 1 < len(letters):
-                s["letter"] = letters[idx + 1]
-
-
-def _build_earthing_section(scale: float = 1.0) -> dict:
-    return {
-        "letter":     "C",
-        "title":      "EARTHING AND EARTH LEADS",
-        "subsection": "",
-        "subheading": _EARTHING_SUBHEADING,
-        "items":      _scaled_earth_items(scale),
-    }
-
-
-if _tpls is not None:
-    # Per-template scale for earth lead quantities (auditorium > office > hostel ~ residence).
-    _scale_by_slug = {
-        "auditorium-1ugls": 1.5,
-        "office-typical":   1.0,
-        "hospital-ward":    1.2,
-        "hostel-typical":   0.8,
-        "residence-typical":0.5,
-    }
-    for _slug, _t in _tpls.items():
-        # Find Bill 2
-        _bill2 = next((b for b in _t.get("bills", []) if b.get("no") == 2), None)
-        if not _bill2:
-            continue
-        # Check we don't already have an EARTHING AND EARTH LEADS section
-        if any((s.get("title", "") == "EARTHING AND EARTH LEADS") for s in _bill2["sections"]):
-            continue
-        # Find the position of Section B (Feeders and Subfeeders).
-        _b_idx = None
-        for _i, _s in enumerate(_bill2["sections"]):
-            if (_s.get("letter") or "").upper() == "B":
-                _b_idx = _i
-                break
-        if _b_idx is None:
-            continue
-        # Move any "1c x ... earth lead" items from Section B to a holding list.
-        _section_b = _bill2["sections"][_b_idx]
-        _earth_held = [it for it in _section_b["items"] if _is_earth_lead(it["desc"])]
-        _section_b["items"] = [it for it in _section_b["items"] if not _is_earth_lead(it["desc"])]
-        # Renumber subsequent sections (C -> D, D -> E, E -> F)
-        _renumber_sections_after(_bill2["sections"], "C")
-        # Build the new Section C: held earth leads first, then standard earthing items.
-        _scale = _scale_by_slug.get(_slug, 1.0)
-        _new = _build_earthing_section(_scale)
-        if _earth_held:
-            _new["items"] = _earth_held + _new["items"]
-        # Insert directly after Section B
-        _bill2["sections"].insert(_b_idx + 1, _new)
-
-
-# ---- Mutate catalogue: add a key for the new section --------------------
-try:
-    _cat = _BOQ_SECTION_ITEM_CATALOG
-except NameError:
-    _cat = None
-
-if _cat is not None and "EARTHING AND EARTH LEADS" not in _cat:
-    _cat["EARTHING AND EARTH LEADS"] = [
-        ("Supply, lay and terminate 1c x 25mm2 PVC insulated copper cable as earth lead", "M",   65),
-        ("Supply, lay and terminate 1c x 16mm2 PVC insulated copper cable as earth lead", "M",   42),
-        ("Supply, lay and terminate 1c x 10mm2 PVC insulated copper cable as earth lead", "M",   27),
-        ("Supply, lay and terminate 1c x 6mm2 PVC insulated copper cable as earth lead",  "M",   18),
-        ("Supply, lay and terminate 1c x 4mm2 PVC insulated copper cable as earth lead",  "M",   12),
-        ("Supply and install 50mm x 6mm copper earth bar c/w mounting accessories",       "Nos.", 380),
-        ("Supply and install earth tape clamp",                                            "Nos.",  45),
-        ("Supply and install 35mm2 bare copper bonding tape",                              "M",   120),
-        ("Supply and install earth boss",                                                  "Nos.",  85),
-    ]
-
-
-# ---- Register the new subheading + tweak existing ones ------------------
-try:
-    _BOQ_SECTION_SUBHEADINGS["EARTHING AND EARTH LEADS"] = _EARTHING_SUBHEADING
-    # Owner-revised WIRING OF POINTS subheading per the auditorium sample.
-    _BOQ_SECTION_SUBHEADINGS["WIRING OF POINTS"] = (
-        "Wire the following using PVC insulated copper conduit wires "
-        "with appropriate coloured codes"
-    )
-except NameError:
-    pass
-
-
-# ---- Also apply the v4 subheadings to any template sections already
-# loaded (so the template-checkbox view reflects them too).
-if _tpls is not None:
-    for _t in _tpls.values():
-        for _b in _t.get("bills", []):
-            for _s in _b.get("sections", []):
-                _title_up = (_s.get("title") or "").upper()
-                if _title_up in _BOQ_SECTION_SUBHEADINGS:
-                    _s["subheading"] = _BOQ_SECTION_SUBHEADINGS[_title_up]
 
 
 # new_boq_project_edit_delete_routes.py
@@ -31920,6 +31368,303 @@ def support_user_guide_pdf():
 
 
 
+
+# new_boq_edit_and_learn_routes.py
+# Two owner-driven additions:
+#
+#   A. Edit existing BOQ floor item -- per-row Edit button on floor view
+#      opens an in-place form that updates description / unit / qty /
+#      basic_price + remarks, recomputes final_built_up_rate + total_amount,
+#      and updates the linked boq_floor_rate_buildup row.
+#
+#   B. Learn from owner edits -- every time the owner saves an edit we
+#      store a (user_id, description_signature, unit, basic_price)
+#      override. The next time the same description appears in the
+#      section grid catalogue or a template, we use the owner's basic
+#      price + unit as the default (a 1-call personalisation layer
+#      around the static catalogues).
+
+
+_BOQ_USER_OVERRIDES_DDL_SQLITE = """
+CREATE TABLE IF NOT EXISTS boq_user_item_overrides (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id            INTEGER NOT NULL,
+    description_key    TEXT NOT NULL,
+    unit               TEXT DEFAULT '',
+    basic_price        REAL DEFAULT 0,
+    last_description   TEXT DEFAULT '',
+    updated_at         TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, description_key)
+);
+CREATE INDEX IF NOT EXISTS idx_boq_user_overrides_user
+    ON boq_user_item_overrides(user_id);
+"""
+
+_BOQ_USER_OVERRIDES_DDL_PG = """
+CREATE TABLE IF NOT EXISTS boq_user_item_overrides (
+    id                 SERIAL PRIMARY KEY,
+    user_id            INTEGER NOT NULL,
+    description_key    VARCHAR(500) NOT NULL,
+    unit               VARCHAR(20) DEFAULT '',
+    basic_price        REAL DEFAULT 0,
+    last_description   VARCHAR(500) DEFAULT '',
+    updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, description_key)
+);
+CREATE INDEX IF NOT EXISTS idx_boq_user_overrides_user
+    ON boq_user_item_overrides(user_id);
+"""
+
+
+_BOQ_USER_OVERRIDES_ALTERS = [
+    # 2026-06-28: extend overrides to carry the full rate-builder + qty so
+    # the next project derived from the same template starts with what the
+    # owner LAST set (not the static template defaults).
+    "ALTER TABLE boq_user_item_overrides ADD COLUMN supply_pct REAL DEFAULT 0",
+    "ALTER TABLE boq_user_item_overrides ADD COLUMN install_pct REAL DEFAULT 0",
+    "ALTER TABLE boq_user_item_overrides ADD COLUMN last_qty REAL DEFAULT 0",
+]
+
+_BOQ_USER_OVERRIDES_ALTERS_PG = [
+    "ALTER TABLE boq_user_item_overrides ADD COLUMN IF NOT EXISTS supply_pct REAL DEFAULT 0",
+    "ALTER TABLE boq_user_item_overrides ADD COLUMN IF NOT EXISTS install_pct REAL DEFAULT 0",
+    "ALTER TABLE boq_user_item_overrides ADD COLUMN IF NOT EXISTS last_qty REAL DEFAULT 0",
+]
+
+
+def _boq_ensure_overrides_table():
+    """Idempotent bootstrap. Same pattern as ensure_boq_hierarchy_schema."""
+    try:
+        is_pg = bool(os.environ.get("DATABASE_URL"))
+        with get_db() as c:
+            if is_pg:
+                for stmt in _BOQ_USER_OVERRIDES_DDL_PG.strip().split(";"):
+                    s = stmt.strip()
+                    if s:
+                        try: c.execute(s)
+                        except Exception: pass
+                for stmt in _BOQ_USER_OVERRIDES_ALTERS_PG:
+                    try: c.execute(stmt)
+                    except Exception: pass
+            else:
+                c.executescript(_BOQ_USER_OVERRIDES_DDL_SQLITE)
+                for stmt in _BOQ_USER_OVERRIDES_ALTERS:
+                    try: c.execute(stmt)
+                    except Exception: pass
+    except Exception:
+        pass
+
+
+def _boq_desc_key(desc: str) -> str:
+    """Description -> stable key. Lowercase, collapse whitespace, take
+    first 240 chars so 'Supply and install 6-way TPN MCB DB' matches the
+    same item across catalogue + template + edit variants."""
+    s = (desc or "").lower()
+    s = " ".join(s.split())
+    return s[:240]
+
+
+def _boq_record_override(uid: int, desc: str, unit: str, basic: float,
+                         supply_pct: float = 0.0, install_pct: float = 0.0,
+                         qty: float = 0.0) -> None:
+    """Save / update the user's preferred values for this description.
+    2026-06-28: extended to carry supply_pct + install_pct + last_qty so the
+    library `learns` the full rate-builder context. Non-raising."""
+    try:
+        _boq_ensure_overrides_table()
+        key = _boq_desc_key(desc)
+        if not key:
+            return
+        with get_db() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO boq_user_item_overrides "
+                "(user_id, description_key, unit, basic_price, last_description, "
+                " supply_pct, install_pct, last_qty) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (int(uid), key, (unit or "").strip()[:20],
+                 float(basic or 0), (desc or "").strip()[:500],
+                 float(supply_pct or 0), float(install_pct or 0),
+                 float(qty or 0)),
+            )
+    except Exception:
+        pass
+
+
+def _boq_lookup_overrides_for_user(uid: int) -> dict:
+    """Return {description_key: (unit, basic_price, supply_pct, install_pct, last_qty)}."""
+    try:
+        _boq_ensure_overrides_table()
+        with get_db() as c:
+            rows = c.execute(
+                "SELECT description_key, unit, basic_price, "
+                "       supply_pct, install_pct, last_qty "
+                "FROM boq_user_item_overrides WHERE user_id=?",
+                (int(uid),),
+            ).fetchall()
+        return {
+            r["description_key"]: (
+                r["unit"] or "",
+                float(r["basic_price"] or 0),
+                float(r["supply_pct"] or 0),
+                float(r["install_pct"] or 0),
+                float(r["last_qty"] or 0),
+            )
+            for r in rows
+        }
+    except Exception:
+        return {}
+
+
+def _boq_template_lines_with_overrides(uid: int, template: dict):
+    """Yield template lines overlaid with the user's recorded overrides.
+    Wraps _boq_template_iter_lines from new_boq_project_templates so the
+    static templates `learn` from prior projects.
+
+    Yields the same 11-tuple shape:
+      (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
+       desc, unit, qty, basic, spec)
+    where unit / qty / basic come from the override when present.
+    """
+    from new_boq_project_templates import _boq_template_iter_lines
+    ov = _boq_lookup_overrides_for_user(uid)
+    for (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
+         desc, unit, qty, basic, spec) in _boq_template_iter_lines(template):
+        key = _boq_desc_key(desc)
+        if key in ov:
+            ov_unit, ov_basic, _ov_sp, _ov_ip, ov_qty = ov[key]
+            unit = ov_unit or unit
+            if ov_basic > 0:
+                basic = ov_basic
+            if ov_qty > 0:
+                qty = ov_qty
+        yield (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
+               desc, unit, qty, basic, spec)
+
+
+def _boq_apply_overrides(uid: int, catalog_rows: list) -> list:
+    """Given a list of (desc, unit, basic) tuples (the section grid
+    catalogue), overlay the user's recorded overrides so the dropdown
+    defaults to the owner's last-used values."""
+    try:
+        _boq_ensure_overrides_table()
+        with get_db() as c:
+            rows = c.execute(
+                "SELECT description_key, unit, basic_price FROM boq_user_item_overrides "
+                "WHERE user_id=?",
+                (int(uid),),
+            ).fetchall()
+        by_key = {r["description_key"]: (r["unit"], r["basic_price"]) for r in rows}
+    except Exception:
+        return catalog_rows
+    out = []
+    for (desc, unit, basic) in catalog_rows:
+        key = _boq_desc_key(desc)
+        if key in by_key:
+            u, b = by_key[key]
+            out.append((desc, (u or unit), (float(b) if b else basic)))
+        else:
+            out.append((desc, unit, basic))
+    return out
+
+
+# ---- Edit existing item ---------------------------------------------------
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/items/<int:iid>/edit", methods=["GET", "POST"])
+@login_required
+def boq_floor_item_edit(pid, bid, fid, iid):
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    building = _boq_building_owned_or_404(bid, pid)
+    floor = _boq_floor_owned_or_404(fid, bid)
+    with get_db() as c:
+        item = c.execute(
+            "SELECT i.*, rb.basic_price AS bu_basic, rb.supply_rate AS bu_supply, "
+            "       rb.install_rate AS bu_install, rb.overhead_pct AS bu_oh, "
+            "       rb.profit_pct AS bu_profit, rb.contingency_pct AS bu_cont, "
+            "       rb.vat_pct AS bu_vat, rb.supply_pct AS bu_supply_pct, "
+            "       rb.install_pct AS bu_install_pct, rb.vat_in_basic AS bu_vat_in_basic "
+            "FROM boq_floor_items i "
+            "LEFT JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
+            "WHERE i.id=? AND i.floor_id=?",
+            (iid, fid),
+        ).fetchone()
+    if not item:
+        abort(404)
+
+    if request.method == "POST":
+        csrf_protect()
+        f = request.form
+        desc = (f.get("description") or "").strip()[:500]
+        unit = (f.get("unit") or "No.").strip()[:20]
+        spec = (f.get("specification") or "").strip()
+        remarks = (f.get("remarks") or "").strip()[:500]
+        try:
+            qty = max(0.0, float(f.get("qty") or 0))
+        except ValueError:
+            qty = 0.0
+        try:
+            basic = max(0.0, float(f.get("basic_price") or 0))
+        except ValueError:
+            basic = 0.0
+        def _pct(name):
+            try:
+                v = f.get(name, "")
+                return max(0.0, min(100.0, float(v))) if v not in (None, "",) else 0.0
+            except (TypeError, ValueError):
+                return 0.0
+        # Rate engine v3 (2026-06-28): supply_pct + install_pct are PERCENTAGES.
+        oh, prf, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("vat_pct")
+        supply_pct  = _pct("supply_pct")
+        install_pct = _pct("install_pct")
+        vat_in_basic = 1 if f.get("vat_in_basic") else 0
+        if not desc or qty <= 0 or basic <= 0:
+            flash("Description, qty and basic price are all required.", "warning")
+            return redirect(url_for("boq_floor_item_edit", pid=pid, bid=bid, fid=fid, iid=iid))
+        from boq_rate_v3 import boq_rate_v3
+        supply, install, final_rate = boq_rate_v3(
+            basic, supply_pct, install_pct, oh, prf, vat,
+            vat_in_basic=bool(vat_in_basic))
+        total = qty * final_rate
+        with get_db() as c:
+            c.execute(
+                "UPDATE boq_floor_items SET description=?, specification=?, "
+                "unit=?, qty=?, remarks=?, final_built_up_rate=?, total_amount=?, "
+                "updated_at=CURRENT_TIMESTAMP WHERE id=? AND floor_id=?",
+                (desc, spec, unit, qty, remarks, final_rate, total, iid, fid),
+            )
+            c.execute(
+                "UPDATE boq_floor_rate_buildup SET basic_price=?, "
+                "supply_pct=?, install_pct=?, supply_rate=?, install_rate=?, "
+                "overhead_pct=?, profit_pct=?, contingency_pct=?, "
+                "vat_pct=?, vat_in_basic=?, final_built_up_rate=?, total_amount=?, "
+                "updated_at=CURRENT_TIMESTAMP WHERE floor_item_id=?",
+                (basic, supply_pct, install_pct, supply, install,
+                 oh, prf, 0, vat, vat_in_basic, final_rate, total, iid),
+            )
+            c.execute("UPDATE boq_floors SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (fid,))
+        # LEARN: record the user's preferred values for this description
+        # so the library applies them to future projects derived from
+        # any template that contains this line.
+        _boq_record_override(uid, desc, unit, basic,
+                             supply_pct=supply_pct, install_pct=install_pct,
+                             qty=qty)
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(get_db, uid, "boq_floor_item_edited", "boq_floor_item", iid,
+                      f"rate={final_rate:.2f} total={total:.2f}")
+        except Exception:
+            pass
+        flash(f"Item updated. Future BOQs will default to {basic:.2f}/{unit} for this item.", "success")
+        return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
+
+    # GET -- render the edit form.
+    return render_template(
+        "boq_floor_item_edit.html",
+        user=current_user(),
+        project=project, building=building, floor=floor, item=item,
+    )
+
+
 # new_boq_wizard_routes.py
 # Multi-building BOQ wizard — one click instantiates a full project from
 # template picks. Replaces the click-by-click "new project -> new building
@@ -31983,6 +31728,12 @@ def boq_wizard_build():
 
     # Collect picks: per-template count.
     from new_boq_project_templates import _boq_template_list, _boq_template_get, _boq_template_iter_lines
+    # 2026-06-28 learning layer: pull overrides recorded from prior edits
+    # so the template auto-fills with the user's last-used values.
+    # _boq_template_lines_with_overrides is defined alongside this route in
+    # web_app.py once both modules splice; globals() lookup is the safe way
+    # to discover it without forcing a module import.
+    _wiover = globals().get("_boq_template_lines_with_overrides")
     all_templates = _boq_template_list()
 
     picks = []
@@ -32046,11 +31797,14 @@ def boq_wizard_build():
 
             # Populate floor items from every template line. Pricing intentionally
             # zero -- owner edits after. Rate engine v3: supply/install are %s.
+            # Override layer overlays the owner's last-used basic+unit+qty.
             from boq_rate_v3 import boq_rate_v3
+            line_iter = (_wiover(uid, tpl) if _wiover
+                         else _boq_template_iter_lines(tpl))
             next_no_cache = {}
             with get_db() as c:
                 for (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
-                     desc, unit, qty_d, basic_d, spec) in _boq_template_iter_lines(tpl):
+                     desc, unit, qty_d, basic_d, spec) in line_iter:
                     qty = float(qty_d or 0)
                     basic = float(basic_d or 0)
                     if not desc.strip():

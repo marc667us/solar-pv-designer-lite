@@ -328,10 +328,16 @@ def boq_project_xlsx(pid):
     ws.merge_cells("A1:I1")
     ws["A2"] = f"Client : {project['client_name'] or '-'}"
     ws["A3"] = f"Location: {project['location'] or '-'}"
+    # 2026-06-28: free-text instructions render in A4 (merged across all cols).
+    if (project["instructions"] or "").strip():
+        ws["A4"] = "Instructions: " + str(project["instructions"]).strip()
+        ws["A4"].font = Font(italic=True, color="555555")
+        ws["A4"].alignment = Alignment(wrap_text=True, vertical="top")
+        ws.merge_cells("A4:I4")
 
     headers = ["Item", "Description", "Qty", "Unit", "Basic Price",
                "Supply Amount", "Install Amount", "Total Amount", "Line Amount"]
-    HROW = 5
+    HROW = 6
     for col, h in enumerate(headers, 1):
         c_ = ws.cell(row=HROW, column=col, value=h)
         c_.font = header_font; c_.fill = header_fill; c_.border = box
@@ -449,6 +455,10 @@ def _boq_project_markdown(pid: int) -> str:
         f"**Generated:** {project['updated_at']}",
         "",
     ]
+    _instr = (project["instructions"] or "").strip()
+    if _instr:
+        md.append("> **Instructions:** " + _instr.replace("\n", " "))
+        md.append("")
     prev = {"bid": None, "fid": None, "bill": None, "sec": None, "sub": None}
     for r in rows:
         if r["building_id"] != prev["bid"]:

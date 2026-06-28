@@ -45,6 +45,22 @@ CREATE INDEX IF NOT EXISTS idx_boq_user_overrides_user
 """
 
 
+_BOQ_USER_OVERRIDES_ALTERS = [
+    # 2026-06-28: extend overrides to carry the full rate-builder + qty so
+    # the next project derived from the same template starts with what the
+    # owner LAST set (not the static template defaults).
+    "ALTER TABLE boq_user_item_overrides ADD COLUMN supply_pct REAL DEFAULT 0",
+    "ALTER TABLE boq_user_item_overrides ADD COLUMN install_pct REAL DEFAULT 0",
+    "ALTER TABLE boq_user_item_overrides ADD COLUMN last_qty REAL DEFAULT 0",
+]
+
+_BOQ_USER_OVERRIDES_ALTERS_PG = [
+    "ALTER TABLE boq_user_item_overrides ADD COLUMN IF NOT EXISTS supply_pct REAL DEFAULT 0",
+    "ALTER TABLE boq_user_item_overrides ADD COLUMN IF NOT EXISTS install_pct REAL DEFAULT 0",
+    "ALTER TABLE boq_user_item_overrides ADD COLUMN IF NOT EXISTS last_qty REAL DEFAULT 0",
+]
+
+
 def _boq_ensure_overrides_table():
     """Idempotent bootstrap. Same pattern as ensure_boq_hierarchy_schema."""
     try:
@@ -56,8 +72,14 @@ def _boq_ensure_overrides_table():
                     if s:
                         try: c.execute(s)
                         except Exception: pass
+                for stmt in _BOQ_USER_OVERRIDES_ALTERS_PG:
+                    try: c.execute(stmt)
+                    except Exception: pass
             else:
                 c.executescript(_BOQ_USER_OVERRIDES_DDL_SQLITE)
+                for stmt in _BOQ_USER_OVERRIDES_ALTERS:
+                    try: c.execute(stmt)
+                    except Exception: pass
     except Exception:
         pass
 
@@ -71,9 +93,12 @@ def _boq_desc_key(desc: str) -> str:
     return s[:240]
 
 
-def _boq_record_override(uid: int, desc: str, unit: str, basic: float) -> None:
-    """Save / update the user's preferred unit + basic price for this
-    description. Non-raising."""
+def _boq_record_override(uid: int, desc: str, unit: str, basic: float,
+                         supply_pct: float = 0.0, install_pct: float = 0.0,
+                         qty: float = 0.0) -> None:
+    """Save / update the user's preferred values for this description.
+    2026-06-28: extended to carry supply_pct + install_pct + last_qty so the
+    library `learns` the full rate-builder context. Non-raising."""
     try:
         _boq_ensure_overrides_table()
         key = _boq_desc_key(desc)
@@ -82,13 +107,67 @@ def _boq_record_override(uid: int, desc: str, unit: str, basic: float) -> None:
         with get_db() as c:
             c.execute(
                 "INSERT OR REPLACE INTO boq_user_item_overrides "
-                "(user_id, description_key, unit, basic_price, last_description) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "(user_id, description_key, unit, basic_price, last_description, "
+                " supply_pct, install_pct, last_qty) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (int(uid), key, (unit or "").strip()[:20],
-                 float(basic or 0), (desc or "").strip()[:500]),
+                 float(basic or 0), (desc or "").strip()[:500],
+                 float(supply_pct or 0), float(install_pct or 0),
+                 float(qty or 0)),
             )
     except Exception:
         pass
+
+
+def _boq_lookup_overrides_for_user(uid: int) -> dict:
+    """Return {description_key: (unit, basic_price, supply_pct, install_pct, last_qty)}."""
+    try:
+        _boq_ensure_overrides_table()
+        with get_db() as c:
+            rows = c.execute(
+                "SELECT description_key, unit, basic_price, "
+                "       supply_pct, install_pct, last_qty "
+                "FROM boq_user_item_overrides WHERE user_id=?",
+                (int(uid),),
+            ).fetchall()
+        return {
+            r["description_key"]: (
+                r["unit"] or "",
+                float(r["basic_price"] or 0),
+                float(r["supply_pct"] or 0),
+                float(r["install_pct"] or 0),
+                float(r["last_qty"] or 0),
+            )
+            for r in rows
+        }
+    except Exception:
+        return {}
+
+
+def _boq_template_lines_with_overrides(uid: int, template: dict):
+    """Yield template lines overlaid with the user's recorded overrides.
+    Wraps _boq_template_iter_lines from new_boq_project_templates so the
+    static templates `learn` from prior projects.
+
+    Yields the same 11-tuple shape:
+      (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
+       desc, unit, qty, basic, spec)
+    where unit / qty / basic come from the override when present.
+    """
+    from new_boq_project_templates import _boq_template_iter_lines
+    ov = _boq_lookup_overrides_for_user(uid)
+    for (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
+         desc, unit, qty, basic, spec) in _boq_template_iter_lines(template):
+        key = _boq_desc_key(desc)
+        if key in ov:
+            ov_unit, ov_basic, _ov_sp, _ov_ip, ov_qty = ov[key]
+            unit = ov_unit or unit
+            if ov_basic > 0:
+                basic = ov_basic
+            if ov_qty > 0:
+                qty = ov_qty
+        yield (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
+               desc, unit, qty, basic, spec)
 
 
 def _boq_apply_overrides(uid: int, catalog_rows: list) -> list:
@@ -192,8 +271,12 @@ def boq_floor_item_edit(pid, bid, fid, iid):
                  oh, prf, 0, vat, vat_in_basic, final_rate, total, iid),
             )
             c.execute("UPDATE boq_floors SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (fid,))
-        # LEARN: record the user's preferred unit + basic for this description.
-        _boq_record_override(uid, desc, unit, basic)
+        # LEARN: record the user's preferred values for this description
+        # so the library applies them to future projects derived from
+        # any template that contains this line.
+        _boq_record_override(uid, desc, unit, basic,
+                             supply_pct=supply_pct, install_pct=install_pct,
+                             qty=qty)
         try:
             from new_boq_hierarchy_schema import boq_audit
             boq_audit(get_db, uid, "boq_floor_item_edited", "boq_floor_item", iid,

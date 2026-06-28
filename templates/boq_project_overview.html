@@ -33,6 +33,9 @@
     <a href="{{ url_for('boq_project_edit', pid=project.id) }}" class="btn btn-outline-warning btn-sm" title="Edit project details">
       <i class="bi bi-pencil me-1"></i>Edit
     </a>
+    <a href="{{ url_for('boq_project_sync_from_bom', pid=project.id) }}" class="btn btn-outline-info btn-sm" title="Pull quantities from a saved BOM into this BOQ">
+      <i class="bi bi-arrow-down-up me-1"></i>Sync from BOM
+    </a>
     <button type="button" class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#recalcBoqModal" title="Recompute all item rates using the current compound build-up formula">
       <i class="bi bi-calculator-fill me-1"></i>Recalculate rates
     </button>
@@ -61,6 +64,36 @@
     </div>
   </div>
 </div>
+
+{# 2026-06-28: editable BOQ title + free-text instructions cell #}
+<form method="POST" action="{{ url_for('boq_project_title_instructions', pid=project.id) }}" class="mb-3">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="solar-card p-3" style="border-left:3px solid var(--solar-gold)">
+    <div class="text-warning fw-bold small mb-2" style="text-transform:uppercase;letter-spacing:1px">
+      <i class="bi bi-pencil-square me-1"></i>BOQ Title &amp; Instructions
+    </div>
+    <div class="mb-2">
+      <label class="form-label small text-secondary mb-1">BOQ title (shown on Excel + PDF header)</label>
+      <input name="project_name" maxlength="300" required class="form-control"
+             value="{{ project.project_name }}"
+             style="font-size:18px;font-weight:600">
+    </div>
+    <div>
+      <label class="form-label small text-secondary mb-1">
+        Instructions / notes for this BOQ
+        <span class="text-secondary fst-italic">(rendered above the BOQ table on Excel and PDF exports)</span>
+      </label>
+      <textarea name="instructions" rows="3" maxlength="4000"
+                class="form-control"
+                placeholder="e.g. All cables must be Tropical / Reroy. Submit BOQ in Ghana Cedis. Site is at Sunyani, Bono Region.">{{ project.instructions or '' }}</textarea>
+    </div>
+    <div class="d-flex justify-content-end mt-2">
+      <button type="submit" class="btn btn-warning btn-sm fw-bold">
+        <i class="bi bi-save me-1"></i>Save title &amp; instructions
+      </button>
+    </div>
+  </div>
+</form>
 
 {% if buildings %}
 <div class="solar-card p-0">
