@@ -7116,7 +7116,7 @@ The BOQ rate engine uses this exact formula per line item:
 
 Plain English: basic price is what the SUPPLIER charges per unit. Supply Amount marks up basic for supply-side costs (freight, handling, the supply-rate %). VAT is added INTO Supply if the supplier invoice did not already include it -- tick the "VAT already on supplier invoice?" checkbox to set vat_in_basic=true and skip the VAT addition. Install Amount is the LABOUR side: install_pct PLUS overhead_pct PLUS profit_pct, all multiplied with the basic. Overhead and profit ride on the install line, NOT supply. There is NO contingency (removed 2026-06-28 by owner directive).
 
-BOQ display columns are: Item | Description | Qty | Unit | Basic Price | Supply Amount | Install Amount | Total Amount | Line Amount. The percentage inputs (supply_pct, install_pct, overhead_pct, profit_pct, vat_pct) live in the rate-builder form per section or per row.
+BOQ display columns are: Item | Description | Qty | Unit | Basic Price | Supply Amount Rate | Installation Amount Rate | Total Amount Rate | Line Amount. The percentage inputs (supply_pct, install_pct, overhead_pct, profit_pct, vat_pct) live in the rate-builder form per section or per row.
 
 Where to set them: /boq-projects/<pid>/buildings/<bid>/floors/<fid>/section/<bill>/<letter>/grid (section grid) -- top of the page has Overhead %, Profit %, VAT %, and the VAT-in-basic checkbox. Per-row: Supply % and Install % columns. The grid also recomputes Supply Amount + Install Amount + Total Amount in real time as the owner types.
 
@@ -22732,7 +22732,7 @@ def boq_project_xlsx(pid):
         ws.merge_cells("A4:I4")
 
     headers = ["Item", "Description", "Qty", "Unit", "Basic Price",
-               "Supply Amount", "Install Amount", "Total Amount", "Line Amount"]
+               "Supply Amount Rate", "Installation Amount Rate", "Total Amount Rate", "Amount"]
     HROW = 6
     for col, h in enumerate(headers, 1):
         c_ = ws.cell(row=HROW, column=col, value=h)
@@ -22872,7 +22872,7 @@ def _boq_project_markdown(pid: int) -> str:
             md.append("")
             md.append(f"#### BILL No. {r['bill_no'] or 0} -- {r['bill_name'] or 'OTHER'}")
             md.append("")
-            md.append("| Item | Description | Qty | Unit | Basic Price | Supply Amount | Install Amount | Total Amount | Line Amount |")
+            md.append("| Item | Description | Qty | Unit | Basic Price | Supply Amount Rate | Installation Amount Rate | Total Amount Rate | Amount |")
             md.append("|---|---|---|---|---|---|---|---|---|")
             prev.update({"bill": r["bill_no"] or 0, "sec": None, "sub": None})
         if (r["section_letter"] or "") != prev["sec"]:

@@ -37,7 +37,7 @@
   <div class="table-responsive">
     <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:12px">
       <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px">
-        <tr><th style="width:40px">Item</th><th>Description</th><th class="text-end">Qty</th><th>Unit</th><th class="text-end">Basic Price</th><th class="text-end">Supply Amount</th><th class="text-end">Install Amount</th><th class="text-end">Total Amount</th><th class="text-end">Line Amount</th></tr>
+        <tr><th style="width:40px">Item</th><th>Description</th><th class="text-end">Quantity</th><th>Unit</th><th class="text-end">Basic Price</th><th class="text-end">Supply Amount Rate</th><th class="text-end">Installation Amount Rate</th><th class="text-end">Total Amount Rate</th><th class="text-end">Amount</th></tr>
       </thead>
       <tbody>
         {% for it in existing %}
@@ -87,7 +87,7 @@
       <span class="text-warning">Supply&nbsp;Amount = Basic&nbsp;&times;&nbsp;(1 + (Supply% + VAT%)/100)</span>;
       <span class="text-warning">Install&nbsp;Amount = Basic&nbsp;&times;&nbsp;((Install% + Overhead% + Profit%)/100)</span>;
       <span class="text-warning">Total&nbsp;Rate = Supply&nbsp;Amount + Install&nbsp;Amount</span>.
-      Install Amount IS the labour line; Overhead and Profit ride on the install side. Contingency removed. When the supplier invoice already carries VAT, tick the box above so VAT is not added a second time.
+      Installation Amount IS the labour line; Overhead and Profit ride on the install side. Contingency removed. When the supplier invoice already carries VAT, tick the box above so VAT is not added a second time.
     </div>
   </div>
 
@@ -100,14 +100,14 @@
             <th style="width:32px">#</th>
             <th style="min-width:340px">Description <span class="text-secondary">(pick from dropdown)</span></th>
             <th style="width:90px">Unit</th>
-            <th class="text-end" style="width:100px">Qty</th>
+            <th class="text-end" style="width:100px">Quantity</th>
             <th class="text-end" style="width:120px">Basic Price</th>
             <th class="text-end" style="width:90px">Supply %</th>
             <th class="text-end" style="width:90px">Install %</th>
-            <th class="text-end" style="width:130px">Supply Amount (auto)</th>
-            <th class="text-end" style="width:130px">Install Amount (auto)</th>
-            <th class="text-end" style="width:140px">Total Amount (auto)</th>
-            <th class="text-end" style="width:150px">Line Amount (auto)</th>
+            <th class="text-end" style="width:130px">Supply Amount Rate (auto)</th>
+            <th class="text-end" style="width:130px">Installation Amount Rate (auto)</th>
+            <th class="text-end" style="width:140px">Total Amount Rate (auto)</th>
+            <th class="text-end" style="width:150px">Amount (auto)</th>
             <th style="min-width:200px">Remarks</th>
           </tr>
         </thead>
