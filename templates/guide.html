@@ -123,17 +123,20 @@
     </a>
   </div>
 
-  {# ── Optional embedded video (owner-supplied via GUIDE_VIDEO_URL_<SLUG> env) ── #}
+  {# ── Embedded video walkthrough (real Playwright recording with cursor + narration) ── #}
   {% if video_url %}
   <div id="video" class="guide-video">
-    <div class="lbl"><i class="bi bi-camera-video-fill me-1"></i>Video walkthrough</div>
+    <div class="lbl"><i class="bi bi-camera-video-fill me-1"></i>Screen walkthrough</div>
     <div class="guide-video-embed">
       {% if 'youtube.com' in video_url or 'youtu.be' in video_url %}
-        {# normalise to embed form #}
         {% set vid = video_url.split('v=')[-1].split('&')[0] if 'youtube.com' in video_url else video_url.split('/')[-1] %}
         <iframe src="https://www.youtube.com/embed/{{ vid }}" allowfullscreen></iframe>
       {% elif 'loom.com' in video_url %}
         <iframe src="{{ video_url.replace('/share/', '/embed/') }}" allowfullscreen></iframe>
+      {% elif video_url.endswith('.mp4') or '/support/asset/' in video_url %}
+        {# Self-hosted MP4 — use <video> so the browser exposes native controls. #}
+        <video src="{{ video_url }}" controls preload="metadata"
+               style="position:absolute;top:0;left:0;width:100%;height:100%;background:#000"></video>
       {% else %}
         <iframe src="{{ video_url }}" allowfullscreen></iframe>
       {% endif %}

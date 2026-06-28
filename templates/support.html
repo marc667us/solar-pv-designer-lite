@@ -85,49 +85,10 @@
   <i class="bi bi-collection me-2" style="color:#9090b8"></i>Topic Guides
 </h5>
 
-<!-- Tutorial cards -->
+<!-- Tutorial cards (Email Setup / Portal Tutorial / Sales Pitch -- the Full
+     User + Technical Guide cards have moved into the new Guides section
+     above and are not duplicated here any more). -->
 <div class="row g-4">
-
-  <!-- Full User Guide -->
-  <div class="col-md-6">
-    <div class="solar-card p-4 h-100 d-flex flex-column">
-      <div class="d-flex align-items-center gap-3 mb-3">
-        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#0ea5e922,#0ea5e944);border:1px solid #0ea5e944;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
-          ðŸ“˜
-        </div>
-        <div>
-          <div class="fw-bold" style="font-size:15px">Full User Guide</div>
-          <div class="text-secondary" style="font-size:12px">Complete walkthrough — account setup to final report</div>
-        </div>
-      </div>
-      <p class="text-secondary" style="font-size:13px;line-height:1.6">
-        Covers every step: creating an account, setting up your organisation profile, entering
-        loads, running calculations, accessing all 8 report types, emailing reports to clients,
-        and managing your subscription.
-      </p>
-      <div class="mt-2 mb-3 d-flex flex-wrap gap-2" style="font-size:11px">
-        <span class="badge" style="background:#0ea5e922;color:#0ea5e9;border:1px solid #0ea5e944">11 Sections</span>
-        <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">Beginner Friendly</span>
-        <span class="badge" style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44">~15 min read</span>
-      </div>
-      <div class="mt-auto d-flex gap-2 flex-wrap">
-        <a href="{{ url_for('support_user_guide') }}" class="btn btn-sm px-3 fw-bold"
-           style="background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;border:none">
-          <i class="bi bi-book me-1"></i>Read Guide
-        </a>
-        <a href="{{ url_for('support_asset', slug='user-walkthrough') }}" class="btn btn-sm px-3"
-           target="_blank"
-           style="background:#0ea5e922;color:#0ea5e9;border:1px solid #0ea5e944">
-          <i class="bi bi-play-btn-fill me-1"></i>Watch (MP4)
-        </a>
-        <a href="{{ url_for('support_asset', slug='user-guide') }}" class="btn btn-sm px-3"
-           target="_blank"
-           style="background:#ef444422;color:#ef4444;border:1px solid #ef444444">
-          <i class="bi bi-file-earmark-pdf me-1"></i>PDF
-        </a>
-      </div>
-    </div>
-  </div>
 
   <!-- Email Setup -->
   <div class="col-md-6">
@@ -195,44 +156,6 @@
         <a href="{{ url_for('support_asset', slug='portal-tutorial') }}" class="btn btn-sm px-3 fw-bold"
            target="_blank"
            style="background:linear-gradient(135deg,#f59e0b,#ea580c);color:#000;border:none">
-          <i class="bi bi-file-earmark-pdf me-1"></i>Open PDF
-        </a>
-      </div>
-    </div>
-  </div>
-
-  <!-- Technical Guide (engineering basis) -->
-  <div class="col-md-6">
-    <div class="solar-card p-4 h-100 d-flex flex-column">
-      <div class="d-flex align-items-center gap-3 mb-3">
-        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#a78bfa22,#a78bfa44);border:1px solid #a78bfa44;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
-          <i class="bi bi-cpu-fill" style="color:#a78bfa"></i>
-        </div>
-        <div>
-          <div class="fw-bold" style="font-size:15px">Technical Guide</div>
-          <div class="text-secondary" style="font-size:12px">Engineering basis — formulas, standards, integration</div>
-        </div>
-      </div>
-      <p class="text-secondary" style="font-size:13px;line-height:1.6">
-        Every formula and standard the platform applies. PV / battery / inverter / DC / AC
-        sizing, BS 7671 + IEC 62548 + IEC 60364 citations, the BOQ engine, IEC 61724 yield,
-        economic analysis, and the June 17 engineering changelog (Bézier sun model,
-        factor precedence chain, mount-aware Drawing 1B).
-      </p>
-      <div class="mt-2 mb-3 d-flex flex-wrap gap-2" style="font-size:11px">
-        <span class="badge" style="background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44">18 Sections</span>
-        <span class="badge" style="background:#ef444422;color:#ef4444;border:1px solid #ef444444">Engineer-Grade</span>
-        <span class="badge" style="background:#0ea5e922;color:#0ea5e9;border:1px solid #0ea5e944">~30 min read</span>
-      </div>
-      <div class="mt-auto d-flex gap-2 flex-wrap">
-        <a href="{{ url_for('support_asset', slug='tech-walkthrough') }}" class="btn btn-sm px-3"
-           target="_blank"
-           style="background:#a78bfa22;color:#a78bfa;border:1px solid #a78bfa44">
-          <i class="bi bi-play-btn-fill me-1"></i>Watch (MP4)
-        </a>
-        <a href="{{ url_for('support_asset', slug='technical-guide') }}" class="btn btn-sm px-3 fw-bold"
-           target="_blank"
-           style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;border:none">
           <i class="bi bi-file-earmark-pdf me-1"></i>Open PDF
         </a>
       </div>
