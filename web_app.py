@@ -31862,6 +31862,222 @@ def boq_wizard_build():
     return redirect(url_for("boq_project_overview", pid=pid))
 
 
+# new_boq_catalog_quickadd_route.py
+# 2026-06-28: when a BOQ row's description has no catalogue match (or the
+# owner just wants to spin up a new item on the fly), this lightweight
+# endpoint INSERTs into equipment_catalog and returns the new id + basic
+# price as JSON so the calling form can pop it back into the BOQ row.
+
+
+@app.route("/equipment-catalog/quick-add", methods=["POST"])
+@login_required
+def boq_catalog_quick_add():
+    uid = session["user_id"]
+    csrf_protect()
+    f = request.form
+    name  = (f.get("name") or "").strip()[:300]
+    brand = (f.get("brand") or "").strip()[:120]
+    cat   = (f.get("category") or "").strip().lower()[:80]
+    new_cat = (f.get("new_category") or "").strip().lower()[:80]
+    if new_cat:
+        cat = new_cat
+    unit  = (f.get("unit") or "No.").strip()[:20]
+    spec  = (f.get("spec") or "").strip()
+    try:
+        basic = max(0.0, float(f.get("basic_price") or 0))
+    except (TypeError, ValueError):
+        basic = 0.0
+    if not name:
+        return jsonify({"ok": False, "error": "Name is required."}), 400
+    if not cat:
+        return jsonify({"ok": False, "error": "Pick or type a category."}), 400
+    if basic <= 0:
+        return jsonify({"ok": False, "error": "Basic price must be > 0."}), 400
+
+    with get_db() as c:
+        cur = c.execute(
+            "INSERT INTO equipment_catalog "
+            "(category, name, brand, model, spec, unit, price_usd, "
+            " is_active, is_verified, is_public_visible, "
+            " source_type, approval_status, submitted_by_user_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (cat, name, brand, "", spec, unit, basic,
+             1, 0, 0, "project_library", "project_only", uid),
+        )
+        new_id = int(cur.lastrowid or 0)
+
+    try:
+        from new_boq_hierarchy_schema import boq_audit
+        boq_audit(get_db, uid, "catalogue_quick_add", "equipment_catalog", new_id,
+                  f"cat={cat} brand={brand} basic={basic:.2f}")
+    except Exception:
+        pass
+
+    return jsonify({
+        "ok": True,
+        "id": new_id,
+        "name": name,
+        "brand": brand,
+        "category": cat,
+        "unit": unit,
+        "basic_price": basic,
+    })
+
+
+@app.route("/equipment-catalog/categories", methods=["GET"])
+@login_required
+def boq_catalog_categories():
+    """Distinct category list for the quick-add dropdown."""
+    with get_db() as c:
+        rows = c.execute(
+            "SELECT DISTINCT category FROM equipment_catalog "
+            "WHERE COALESCE(category,'') <> '' AND COALESCE(is_active,1)=1 "
+            "ORDER BY category"
+        ).fetchall()
+    return jsonify({"categories": [r["category"] for r in rows]})
+
+
+# new_boq_title_instructions_route.py
+# Editable BOQ title + free-text instructions cell on the project overview.
+# 2026-06-28 owner directive — the instructions render above the BOQ table
+# on Excel / PDF exports.
+
+
+@app.route("/boq-projects/<int:pid>/title-instructions", methods=["POST"])
+@login_required
+def boq_project_title_instructions(pid):
+    uid = session["user_id"]
+    _boq_project_owned_or_404(pid, uid)
+    csrf_protect()
+    f = request.form
+    title = (f.get("project_name") or "").strip()[:300]
+    instructions = (f.get("instructions") or "").strip()[:4000]
+    if not title:
+        flash("Title is required.", "warning")
+        return redirect(url_for("boq_project_overview", pid=pid))
+    with get_db() as c:
+        c.execute(
+            "UPDATE boq_projects SET project_name=?, instructions=?, "
+            "updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?",
+            (title, instructions, pid, uid),
+        )
+    try:
+        from new_boq_hierarchy_schema import boq_audit
+        boq_audit(get_db, uid, "boq_project_title_updated", "boq_project", pid,
+                  f"title_len={len(title)} instr_len={len(instructions)}")
+    except Exception:
+        pass
+    flash("Title and instructions saved.", "success")
+    return redirect(url_for("boq_project_overview", pid=pid))
+
+
+# new_boq_bom_sync_route.py
+# 2026-06-28: pull quantities from a BOM into the BOQ project's items.
+# Matches BOM `custom_name` against BOQ `description` (case-insensitive
+# substring); on a match, overwrites the BOQ qty + recomputes total.
+
+
+@app.route("/boq-projects/<int:pid>/sync-from-bom", methods=["GET", "POST"])
+@login_required
+def boq_project_sync_from_bom(pid):
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+
+    # GET: render a picker page listing the owner's BOMs (most recent first).
+    if request.method == "GET":
+        with get_db() as c:
+            boms = c.execute(
+                "SELECT id, title, project_name, client_name, updated_at, "
+                "  (SELECT COUNT(*) FROM marketplace_bom_items WHERE bom_id=marketplace_boms.id) AS n_items "
+                "FROM marketplace_boms WHERE user_id=? ORDER BY updated_at DESC, id DESC",
+                (uid,),
+            ).fetchall()
+        return render_template(
+            "boq_sync_from_bom.html",
+            user=current_user(), project=project, boms=boms,
+        )
+
+    csrf_protect()
+    try:
+        bom_id = int(request.form.get("bom_id") or 0)
+    except (TypeError, ValueError):
+        bom_id = 0
+    if bom_id <= 0:
+        flash("Pick a BOM to sync from.", "warning")
+        return redirect(url_for("boq_project_sync_from_bom", pid=pid))
+
+    with get_db() as c:
+        bom = c.execute(
+            "SELECT id, title FROM marketplace_boms WHERE id=? AND user_id=?",
+            (bom_id, uid),
+        ).fetchone()
+        if not bom:
+            flash("BOM not found.", "warning")
+            return redirect(url_for("boq_project_sync_from_bom", pid=pid))
+        bom_items = c.execute(
+            "SELECT custom_name, qty, unit FROM marketplace_bom_items WHERE bom_id=?",
+            (bom_id,),
+        ).fetchall()
+        items = c.execute(
+            "SELECT id, description, qty AS old_qty, final_built_up_rate "
+            "FROM boq_floor_items WHERE project_id=?",
+            (pid,),
+        ).fetchall()
+
+    # Build a lowercase-name lookup. Multiple BOM items with the same name
+    # collapse to the SUM of their qty (preserves total intent).
+    bom_lookup = {}
+    for bi in bom_items:
+        key = (bi["custom_name"] or "").strip().lower()
+        if not key:
+            continue
+        bom_lookup[key] = bom_lookup.get(key, 0.0) + float(bi["qty"] or 0)
+
+    updated = 0
+    skipped = 0
+    with get_db() as c:
+        for it in items:
+            desc = (it["description"] or "").strip().lower()
+            new_qty = None
+            # Exact match first; fall back to first BOM key that's a
+            # substring of the item description.
+            if desc in bom_lookup:
+                new_qty = bom_lookup[desc]
+            else:
+                for k, q in bom_lookup.items():
+                    if k and k in desc:
+                        new_qty = q; break
+            if new_qty is None or new_qty <= 0:
+                skipped += 1
+                continue
+            if abs(float(it["old_qty"] or 0) - float(new_qty)) < 1e-9:
+                skipped += 1
+                continue
+            rate = float(it["final_built_up_rate"] or 0)
+            new_total = float(new_qty) * rate
+            c.execute(
+                "UPDATE boq_floor_items SET qty=?, total_amount=?, "
+                "updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=?",
+                (float(new_qty), new_total, it["id"], pid),
+            )
+            c.execute(
+                "UPDATE boq_floor_rate_buildup SET total_amount=?, "
+                "updated_at=CURRENT_TIMESTAMP WHERE floor_item_id=?",
+                (new_total, it["id"]),
+            )
+            updated += 1
+
+    try:
+        from new_boq_hierarchy_schema import boq_audit
+        boq_audit(get_db, uid, "boq_bom_sync", "boq_project", pid,
+                  f"bom_id={bom_id} updated={updated} skipped={skipped}")
+    except Exception:
+        pass
+
+    flash(f"Synced from BOM \"{bom['title']}\": {updated} item(s) updated, {skipped} unchanged.", "success")
+    return redirect(url_for("boq_project_overview", pid=pid))
+
+
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=5000, debug=False)
