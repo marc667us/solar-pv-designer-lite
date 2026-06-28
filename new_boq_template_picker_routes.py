@@ -329,8 +329,8 @@ def boq_project_xlsx(pid):
     ws["A2"] = f"Client : {project['client_name'] or '-'}"
     ws["A3"] = f"Location: {project['location'] or '-'}"
 
-    headers = ["Item", "Description", "Qty", "Unit", "Basic Rate",
-               "Supply Rate", "Install Rate", "Total Rate", "Amount"]
+    headers = ["Item", "Description", "Qty", "Unit", "Basic Price",
+               "Supply Amount", "Install Amount", "Total Amount", "Line Amount"]
     HROW = 5
     for col, h in enumerate(headers, 1):
         c_ = ws.cell(row=HROW, column=col, value=h)
@@ -461,7 +461,7 @@ def _boq_project_markdown(pid: int) -> str:
             md.append("")
             md.append(f"#### BILL No. {r['bill_no'] or 0} -- {r['bill_name'] or 'OTHER'}")
             md.append("")
-            md.append("| Item | Description | Qty | Unit | Basic Rate | Supply Rate | Install Rate | Total Rate | Amount |")
+            md.append("| Item | Description | Qty | Unit | Basic Price | Supply Amount | Install Amount | Total Amount | Line Amount |")
             md.append("|---|---|---|---|---|---|---|---|---|")
             prev.update({"bill": r["bill_no"] or 0, "sec": None, "sub": None})
         if (r["section_letter"] or "") != prev["sec"]:
