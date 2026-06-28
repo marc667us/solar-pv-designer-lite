@@ -20728,9 +20728,10 @@ def _boq_compute_rate(basic, supply, install, oh_pct, prf_pct, cnt_pct=0, vat_pc
     pp = max(0.0, float(prf_pct or 0))
     vp = max(0.0, float(vat_pct or 0))
     eff_vat = 0.0 if vat_in_basic else vp
-    supply_amount  = b * (1.0 + (sp + eff_vat) / 100.0)
-    install_amount = b * ((ip + op + pp) / 100.0)
-    return supply_amount + install_amount
+    # MARKUP-only (2026-06-28): supply + install are markups; total includes basic.
+    supply_amount  = b * (sp + eff_vat) / 100.0
+    install_amount = b * (ip + op + pp) / 100.0
+    return b + supply_amount + install_amount
 def _boq_make_floors(project_id: int, building_id: int,
                      n_floors: int, basement: bool, roof: bool):
     """Spec s5: auto-create Ground/First/Second... + optional Basement + Roof."""
@@ -21481,9 +21482,10 @@ def _boq_safe_rate(basic, supply, install, oh, prf, cnt=0, vat=0, vat_in_basic=F
     pp = max(0.0, float(prf or 0))
     vp = max(0.0, float(vat or 0))
     eff_vat = 0.0 if vat_in_basic else vp
-    supply_amount  = b * (1.0 + (sp + eff_vat) / 100.0)
-    install_amount = b * ((ip + op + pp) / 100.0)
-    return supply_amount + install_amount
+    # MARKUP-only (2026-06-28): supply + install are markups; total includes basic.
+    supply_amount  = b * (sp + eff_vat) / 100.0
+    install_amount = b * (ip + op + pp) / 100.0
+    return b + supply_amount + install_amount
 def _boq_rate_breakdown(basic, supply, install, oh, prf, cnt=0, vat=0, vat_in_basic=False):
     """Per-step breakdown matching _boq_safe_rate (2026-06-28 owner spec).
 
@@ -21497,9 +21499,10 @@ def _boq_rate_breakdown(basic, supply, install, oh, prf, cnt=0, vat=0, vat_in_ba
     pp = max(0.0, float(prf or 0))
     vp = max(0.0, float(vat or 0))
     eff_vat = 0.0 if vat_in_basic else vp
-    supply_amount  = b * (1.0 + (sp + eff_vat) / 100.0)
-    install_amount = b * ((ip + op + pp) / 100.0)
-    total = supply_amount + install_amount
+    # MARKUP-only (2026-06-28); total INCLUDES basic.
+    supply_amount  = b * (sp + eff_vat) / 100.0
+    install_amount = b * (ip + op + pp) / 100.0
+    total = b + supply_amount + install_amount
     return {
         "basic_price":      b,
         "supply_pct":       sp,

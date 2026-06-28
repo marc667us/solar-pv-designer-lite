@@ -44,18 +44,24 @@
 
   <div class="solar-card p-3 mb-3">
     <div class="row g-2 align-items-end">
-      <div class="col-md-3 text-warning fw-bold" style="text-transform:uppercase;font-size:12px;letter-spacing:.5px">
-        <i class="bi bi-percent me-1"></i>Section-wide markup
+      <div class="col-md-2 text-warning fw-bold" style="text-transform:uppercase;font-size:12px;letter-spacing:.5px">
+        <i class="bi bi-percent me-1"></i>Section-wide rates
       </div>
-      <div class="col-md-2"><label class="form-label small text-secondary mb-1">Overhead %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="overhead_pct" value="30"></div>
-      <div class="col-md-2"><label class="form-label small text-secondary mb-1">Profit %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="profit_pct" value="0"></div>
-      <div class="col-md-2"><label class="form-label small text-secondary mb-1">Contingency %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="contingency_pct" value="0"></div>
-      <div class="col-md-3"><label class="form-label small text-secondary mb-1">VAT %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="vat_pct" value="0"></div>
+      <div class="col-md-2"><label class="form-label small text-secondary mb-1">Supply %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="supply_default_pct" value="0"></div>
+      <div class="col-md-2"><label class="form-label small text-secondary mb-1">Install %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="install_default_pct" value="0"></div>
+      <div class="col-md-1"><label class="form-label small text-secondary mb-1">Overhead %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="overhead_pct" value="0"></div>
+      <div class="col-md-1"><label class="form-label small text-secondary mb-1">Profit %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="profit_pct" value="0"></div>
+      <div class="col-md-1"><label class="form-label small text-secondary mb-1">VAT %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="vat_pct" value="0"></div>
+      <div class="col-md-3">
+        <label class="form-label small text-secondary mb-1">VAT already on supplier invoice?</label>
+        <div class="form-check pt-1"><input class="form-check-input" type="checkbox" name="vat_in_basic" id="tpl_vat_in_basic" value="1"><label class="form-check-label small text-secondary" for="tpl_vat_in_basic">Yes &mdash; don't add VAT</label></div>
+      </div>
     </div>
     <div class="text-secondary small mt-2">
-      Compound build-up:
-      <span class="text-warning">Rate = Basic × (1 + (OH% + Profit%)/100) × (1 + Cont%/100) × (1 + VAT%/100)</span>.
-      Template lines treat Basic as Supply (no separate install cost). Same formula as the sectional grid.
+      Rate engine v3 (matches the section grid):
+      <span class="text-warning">Supply Amount Rate = Basic × (1 + (Supply% + VAT%)/100)</span>;
+      <span class="text-warning">Installation Amount Rate = Basic × ((Install% + Overhead% + Profit%)/100)</span>;
+      <span class="text-warning">Total Amount Rate = Supply Amount Rate + Installation Amount Rate</span>; Amount = Quantity × Total Amount Rate. Contingency is no longer applied.
     </div>
   </div>
 
@@ -82,9 +88,9 @@
                 <th style="width:34px"><i class="bi bi-check-square"></i></th>
                 <th style="min-width:380px">Description</th>
                 <th style="width:80px">Unit</th>
-                <th class="text-end" style="width:100px">Qty</th>
-                <th class="text-end" style="width:120px">Basic</th>
-                <th class="text-end" style="width:140px">Total Rate (auto)</th>
+                <th class="text-end" style="width:100px">Quantity</th>
+                <th class="text-end" style="width:120px">Basic Price</th>
+                <th class="text-end" style="width:140px">Total Amount Rate (auto)</th>
                 <th class="text-end" style="width:150px">Amount (auto)</th>
                 <th style="width:130px">Reorder</th>
               </tr>
@@ -159,15 +165,19 @@
 <script>
   // Live recompute per row + section markup; tick-all / untick-all helpers.
   (function(){
-    function rates() {
-      // Compound build-up to match server-side _boq_safe_rate:
-      //   final = basic * (1 + (oh+prf)/100) * (1 + cnt/100) * (1 + vat/100)
-      // (Templates treat basic AS supply; install is always 0 here.)
-      var oh  = parseFloat(document.querySelector('[name=overhead_pct]').value || 0);
-      var prf = parseFloat(document.querySelector('[name=profit_pct]').value || 0);
-      var cnt = parseFloat(document.querySelector('[name=contingency_pct]').value || 0);
-      var vat = parseFloat(document.querySelector('[name=vat_pct]').value || 0);
-      return (1 + (oh + prf) / 100) * (1 + cnt / 100) * (1 + vat / 100);
+    function pcts() {
+      // Rate engine v3 (2026-06-28) -- MARKUP-only supply + install; total
+      // adds basic back in. Mirrors boq_rate_v3.boq_rate_v3 + the section
+      // grid JS so templates and grid render identically.
+      return {
+        sp:  parseFloat(document.querySelector('[name=supply_default_pct]').value || 0),
+        ip:  parseFloat(document.querySelector('[name=install_default_pct]').value || 0),
+        oh:  parseFloat(document.querySelector('[name=overhead_pct]').value || 0),
+        prf: parseFloat(document.querySelector('[name=profit_pct]').value || 0),
+        vat: parseFloat(document.querySelector('[name=vat_pct]').value || 0),
+        vib: !!(document.querySelector('[name=vat_in_basic]') &&
+                document.querySelector('[name=vat_in_basic]').checked),
+      };
     }
     window._boqTplRow = function(el) {
       var tr = el.closest('tr.boq-tpl-row'); if (!tr) return;
@@ -176,9 +186,13 @@
       var qty = tr.querySelector('.boq-qty');
       var rate = tr.querySelector('.boq-rate');
       var amount = tr.querySelector('.boq-amount');
+      var p = pcts();
       var b = parseFloat(basic.value || 0);
       var q = parseFloat(qty.value || 0);
-      var r = b * rates();
+      var effVat = p.vib ? 0 : p.vat;
+      var sa = b * (p.sp + effVat) / 100;
+      var ia = b * (p.ip + p.oh + p.prf) / 100;
+      var r = b + sa + ia;
       var a = q * r;
       var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
       rate.textContent = nf.format(Math.round(r));
@@ -257,9 +271,13 @@
     // Custom rows don't have a `.boq-tick` checkbox -- compute directly.
     window._boqTplCustomRow = function(el) {
       var tr = el.closest('tr.boq-tpl-row'); if (!tr) return;
-      var basic = parseFloat(tr.querySelector('input[name="custom_basic[]"]').value || 0);
-      var qty   = parseFloat(tr.querySelector('input[name="custom_qty[]"]').value || 0);
-      var r = basic * rates();
+      var b = parseFloat(tr.querySelector('input[name="custom_basic[]"]').value || 0);
+      var qty = parseFloat(tr.querySelector('input[name="custom_qty[]"]').value || 0);
+      var p = pcts();
+      var effVat = p.vib ? 0 : p.vat;
+      var sa = b * (p.sp + effVat) / 100;
+      var ia = b * (p.ip + p.oh + p.prf) / 100;
+      var r = b + sa + ia;
       var a = qty * r;
       var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
       tr.querySelector('.boq-rate').textContent = nf.format(Math.round(r));
@@ -285,11 +303,15 @@
       });
     });
     // section markup change -> recompute all
-    ['overhead_pct','profit_pct','contingency_pct','vat_pct'].forEach(function(n){
+    ['supply_default_pct','install_default_pct','overhead_pct','profit_pct','vat_pct'].forEach(function(n){
       var el = document.querySelector('[name=' + n + ']');
       if (el) el.addEventListener('input', function(){
         document.querySelectorAll('tr.boq-tpl-row .boq-basic').forEach(function(b){ window._boqTplRow(b); });
       });
+    });
+    var vibEl = document.querySelector('[name=vat_in_basic]');
+    if (vibEl) vibEl.addEventListener('change', function(){
+      document.querySelectorAll('tr.boq-tpl-row .boq-basic').forEach(function(b){ window._boqTplRow(b); });
     });
 
     // Submit guard -- block Generate BOQ when nothing has Qty set.

@@ -196,7 +196,10 @@ def _boq_safe_rate(basic, supply, install, oh, prf, cnt=0, vat=0, vat_in_basic=F
     pp = max(0.0, float(prf or 0))
     vp = max(0.0, float(vat or 0))
     eff_vat = 0.0 if vat_in_basic else vp
-    return b * (1.0 + (sp + eff_vat) / 100.0) + b * ((ip + op + pp) / 100.0)
+    # MARKUP-only (2026-06-28); per-unit total INCLUDES basic.
+    supply_amount  = b * (sp + eff_vat) / 100.0
+    install_amount = b * (ip + op + pp) / 100.0
+    return b + supply_amount + install_amount
 
 
 # ----- Routes --------------------------------------------------------------

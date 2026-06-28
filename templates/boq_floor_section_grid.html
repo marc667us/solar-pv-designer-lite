@@ -320,9 +320,11 @@
       var ip = parseFloat(install.value || 0);
       var q = parseFloat(qty.value || 0);
       var effVat = pcts.vatInBasic ? 0 : pcts.vat;
-      var sa = b * (1 + (sp + effVat) / 100);
-      var ia = b * ((ip + pcts.oh + pcts.prf) / 100);
-      var r = sa + ia;
+      // MARKUP-only (2026-06-28): Supply + Install are markup amounts
+      // (so 10% of 4500 reads as 450, not 4950). Total Rate adds basic back in.
+      var sa = b * (sp + effVat) / 100;
+      var ia = b * (ip + pcts.oh + pcts.prf) / 100;
+      var r = b + sa + ia;
       var a = q * r;
       var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
       if (supAmt) supAmt.textContent = nf.format(Math.round(sa));
