@@ -22576,7 +22576,7 @@ def boq_template_save(pid, bid, fid, slug):
                 " vat_in_basic, final_built_up_rate, total_amount) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (item_id, pid, uid, basic,
-                 supply_pct, install_pct, basic, 0,
+                 supply_pct, install_pct, supply, install,
                  oh, prf, 0, vat, vat_in_basic, final_rate, total),
             )
             saved += 1
@@ -22645,7 +22645,7 @@ def boq_template_save(pid, bid, fid, slug):
                 " vat_in_basic, final_built_up_rate, total_amount) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (item_id, pid, uid, basic,
-                 supply_pct, install_pct, basic, 0,
+                 supply_pct, install_pct, supply, install,
                  oh, prf, 0, vat, vat_in_basic, final_rate, total),
             )
             saved += 1
