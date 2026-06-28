@@ -58,8 +58,7 @@
       <div class="col-md-3">
         <label class="form-label small text-secondary">Supply rate % <span class="text-secondary">(0&ndash;15)</span></label>
         <select class="form-select" name="supply_pct">
-          {% set _sup = (item.bu_freight or 0) + (item.bu_handling or 0) + (item.bu_insurance or 0) + (item.bu_wastage or 0) %}
-          {% set _sup = _sup if _sup > 0 else 10 %}
+          {% set _sup = (item.bu_supply_pct if item.bu_supply_pct is defined and item.bu_supply_pct is not none else 0) %}
           {% for v in [0,2,4,6,8,10,12,14,15] %}
           <option value="{{ v }}" {% if (_sup|int) == v %}selected{% endif %}>{{ v }}%</option>
           {% endfor %}
@@ -68,9 +67,7 @@
       <div class="col-md-3">
         <label class="form-label small text-secondary">Install rate % <span class="text-secondary">(0&ndash;25)</span></label>
         <select class="form-select" name="install_pct">
-          {% set _bp_now = (item.bu_basic or 0) %}
-          {% set _inst = ((item.bu_install or 0) / _bp_now * 100) if _bp_now else 15 %}
-          {% set _inst = _inst if _inst > 0 else 15 %}
+          {% set _inst = (item.bu_install_pct if item.bu_install_pct is defined and item.bu_install_pct is not none else 0) %}
           {% for v in [0,5,10,15,20,25] %}
           <option value="{{ v }}" {% if (_inst|int) == v %}selected{% endif %}>{{ v }}%</option>
           {% endfor %}
@@ -95,15 +92,6 @@
         </select>
       </div>
       <div class="col-md-3">
-        <label class="form-label small text-secondary">Contingency % <span class="text-secondary">(0&ndash;15, optional)</span></label>
-        <select class="form-select" name="contingency_pct">
-          {% set _cnt = (item.bu_cont or 0) %}
-          {% for v in [0,3,5,8,10,12,15] %}
-          <option value="{{ v }}" {% if (_cnt|int) == v %}selected{% endif %}>{{ v }}%</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-md-3">
         <label class="form-label small text-secondary">VAT % <span class="text-secondary">(0&ndash;50, optional)</span></label>
         <select class="form-select" name="vat_pct">
           {% set _vat = (item.bu_vat or 0) %}
@@ -112,15 +100,21 @@
           {% endfor %}
         </select>
       </div>
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">VAT already on invoice?</label>
+        <div class="form-check pt-2">
+          <input class="form-check-input" type="checkbox" name="vat_in_basic" id="edit_vat_in_basic" value="1" {% if item.bu_vat_in_basic %}checked{% endif %}>
+          <label class="form-check-label small text-secondary" for="edit_vat_in_basic">Yes &mdash; do not add VAT again</label>
+        </div>
+      </div>
 
       <div class="col-md-12 mt-2">
         <div class="small text-secondary" style="border-left:3px solid var(--solar-gold);padding-left:10px;line-height:1.4">
-          <strong>Formula:</strong>
-          Supply = Basic&times;(1 + Supply%/100);
-          Install = Basic&times;(Install%/100);
-          Prime = Supply + Install;
-          Subtotal = Prime + Prime&times;OH/100 + (Prime+OH)&times;Profit/100;
-          Total = Subtotal + Subtotal&times;Cont/100 + (Subtotal+Cont)&times;VAT/100.
+          <strong>Rate engine (2026-06-28):</strong>
+          Supply Amount = Basic&times;(1 + (Supply% + VAT%)/100);
+          Install Amount = Basic&times;((Install% + Overhead% + Profit%)/100);
+          Total = Supply Amount + Install Amount.
+          Install Amount IS the labour line. No contingency. When supplier invoice already carries VAT, tick the box above.
         </div>
       </div>
     </div>

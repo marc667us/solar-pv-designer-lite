@@ -33,7 +33,7 @@
   <div class="table-responsive">
     <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:12.5px">
       <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px">
-        <tr><th style="width:40px">Item</th><th>Description</th><th class="text-end">Qty</th><th>Unit</th><th class="text-end">Basic Rate</th><th class="text-end">Total Rate</th><th class="text-end">Amount</th></tr>
+        <tr><th style="width:40px">Item</th><th>Description</th><th class="text-end">Qty</th><th>Unit</th><th class="text-end">Basic Rate</th><th class="text-end">Supply Rate</th><th class="text-end">Install Rate</th><th class="text-end">Total Rate</th><th class="text-end">Amount</th></tr>
       </thead>
       <tbody>
         {% for it in items %}
@@ -42,7 +42,9 @@
           <td>{{ it.description }}{% if it.specification %}<div class="small text-secondary">{{ it.specification }}</div>{% endif %}</td>
           <td class="text-end">{{ (it.qty or 0)|fmt }}</td>
           <td class="small">{{ it.unit }}</td>
-          <td class="text-end">{# basic rate captured in rate-buildup, displayed approximately as final/markup #}—</td>
+          <td class="text-end">{{ (it.bu_basic or 0)|fmt }}</td>
+          <td class="text-end">{{ (it.bu_supply or 0)|fmt }}</td>
+          <td class="text-end">{{ (it.bu_install or 0)|fmt }}</td>
           <td class="text-end">{{ (it.final_built_up_rate or 0)|money }}</td>
           <td class="text-end fw-bold">{{ (it.total_amount or 0)|money }}</td>
         </tr>
@@ -134,18 +136,19 @@
         </select>
       </div>
       <div class="col-md-3">
-        <label class="form-label small text-secondary">Contingency % (0&ndash;15)</label>
-        <select class="form-select form-select-sm" name="contingency_pct">
-          {% for v in [0,3,5,8,10,12,15] %}<option value="{{ v }}" {% if v == 0 %}selected{% endif %}>{{ v }}%</option>{% endfor %}
-        </select>
-      </div>
-      <div class="col-md-3">
         <label class="form-label small text-secondary">VAT % (0&ndash;50)</label>
         <select class="form-select form-select-sm" name="vat_pct">
           {% for v in [0,5,10,12,15,18,20,25,50] %}<option value="{{ v }}" {% if v == 0 %}selected{% endif %}>{{ v }}%</option>{% endfor %}
         </select>
       </div>
       <div class="col-md-6">
+        <label class="form-label small text-secondary">VAT already on supplier invoice?</label>
+        <div class="form-check pt-1">
+          <input class="form-check-input" type="checkbox" name="vat_in_basic" id="vat_in_basic_loop" value="1">
+          <label class="form-check-label small text-secondary" for="vat_in_basic_loop">Yes &mdash; basic price already includes VAT (don't add a second time)</label>
+        </div>
+      </div>
+      <div class="col-md-12">
         <label class="form-label small text-secondary">Remarks (BOQ)</label>
         <input class="form-control form-control-sm" name="remarks">
       </div>

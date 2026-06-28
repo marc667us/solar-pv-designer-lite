@@ -284,9 +284,14 @@ def boq_section_grid(pid, bid, fid, bill_no, letter):
     # leaving the page.
     with get_db() as c:
         existing = c.execute(
-            "SELECT * FROM boq_floor_items "
-            "WHERE floor_id=? AND bill_no=? AND section_letter=? "
-            "ORDER BY id",
+            "SELECT i.*, "
+            "       b.basic_price AS bu_basic, "
+            "       b.supply_rate AS bu_supply, "
+            "       b.install_rate AS bu_install "
+            "FROM boq_floor_items i "
+            "LEFT JOIN boq_floor_rate_buildup b ON b.floor_item_id=i.id "
+            "WHERE i.floor_id=? AND i.bill_no=? AND i.section_letter=? "
+            "ORDER BY i.id",
             (fid, bill_no, letter),
         ).fetchall()
     next_item_no = _boq_next_item_no(fid, bill_no, letter)
@@ -330,15 +335,17 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
         except (TypeError, ValueError):
             return 0.0
 
-    oh, prf, cnt, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
+    # Rate engine v3 (2026-06-28): supply_pct + install_pct are PERCENTAGES.
+    oh, prf, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("vat_pct")
+    vat_in_basic = 1 if f.get("vat_in_basic") else 0
 
     # Each row is posted with indexed keys: description[0], qty[0], ...
     descriptions = f.getlist("description[]")
     qtys         = f.getlist("qty[]")
     units        = f.getlist("unit[]")
     basics       = f.getlist("basic_price[]")
-    supplies     = f.getlist("supply_rate[]")
-    installs     = f.getlist("install_rate[]")
+    supplies_pct = f.getlist("supply_pct[]")
+    installs_pct = f.getlist("install_pct[]")
     specs        = f.getlist("specification[]")
     remarks_l    = f.getlist("remarks[]")
     # tick[] contains the row indices the owner checked. row_id[] is the
@@ -360,6 +367,7 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
         except (TypeError, ValueError):
             return None
 
+    from boq_rate_v3 import boq_rate_v3
     saved = 0
     skipped = 0
     next_no = int(_boq_next_item_no(fid, bill_no, letter))
@@ -368,8 +376,8 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
             desc = (descriptions[i] or "").strip()[:500]
             qty = _row_float(qtys, i) or 0.0
             basic = _row_float(basics, i) or 0.0
-            supply_raw = _row_float(supplies, i)
-            install_raw = _row_float(installs, i)
+            supply_pct  = _row_float(supplies_pct, i) or 0.0
+            install_pct = _row_float(installs_pct, i) or 0.0
             unit = (units[i] if i < len(units) else "No.").strip() or "No."
             spec_t = (specs[i] if i < len(specs) else "").strip()
             remark = (remarks_l[i] if i < len(remarks_l) else "").strip()[:500]
@@ -389,10 +397,9 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
                 skipped += 1
                 continue
 
-            # Supply defaults to basic; install defaults to 0 (spec rule).
-            supply = supply_raw if supply_raw is not None else basic
-            install = install_raw if install_raw is not None else 0.0
-            final_rate = _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat)
+            supply, install, final_rate = boq_rate_v3(
+                basic, supply_pct, install_pct, oh, prf, vat,
+                vat_in_basic=bool(vat_in_basic))
             total = qty * final_rate
             item_no_disp = str(next_no)
             next_no += 1
@@ -414,12 +421,14 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
             item_id = int(cur.lastrowid or 0)
             c.execute(
                 "INSERT INTO boq_floor_rate_buildup "
-                "(floor_item_id, project_id, user_id, basic_price, supply_rate, "
-                " install_rate, overhead_pct, profit_pct, contingency_pct, vat_pct, "
-                " final_built_up_rate, total_amount) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (item_id, pid, uid, basic, supply, install,
-                 oh, prf, cnt, vat, final_rate, total),
+                "(floor_item_id, project_id, user_id, basic_price, "
+                " supply_pct, install_pct, supply_rate, install_rate, "
+                " overhead_pct, profit_pct, contingency_pct, vat_pct, "
+                " vat_in_basic, final_built_up_rate, total_amount) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (item_id, pid, uid, basic,
+                 supply_pct, install_pct, supply, install,
+                 oh, prf, 0, vat, vat_in_basic, final_rate, total),
             )
             saved += 1
         c.execute("UPDATE boq_projects  SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (pid,))

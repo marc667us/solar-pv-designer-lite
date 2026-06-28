@@ -131,7 +131,8 @@ def boq_floor_item_edit(pid, bid, fid, iid):
             "SELECT i.*, rb.basic_price AS bu_basic, rb.supply_rate AS bu_supply, "
             "       rb.install_rate AS bu_install, rb.overhead_pct AS bu_oh, "
             "       rb.profit_pct AS bu_profit, rb.contingency_pct AS bu_cont, "
-            "       rb.vat_pct AS bu_vat "
+            "       rb.vat_pct AS bu_vat, rb.supply_pct AS bu_supply_pct, "
+            "       rb.install_pct AS bu_install_pct, rb.vat_in_basic AS bu_vat_in_basic "
             "FROM boq_floor_items i "
             "LEFT JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
             "WHERE i.id=? AND i.floor_id=?",
@@ -161,21 +162,18 @@ def boq_floor_item_edit(pid, bid, fid, iid):
                 return max(0.0, min(100.0, float(v))) if v not in (None, "",) else 0.0
             except (TypeError, ValueError):
                 return 0.0
-        oh, prf, cnt, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
+        # Rate engine v3 (2026-06-28): supply_pct + install_pct are PERCENTAGES.
+        oh, prf, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("vat_pct")
+        supply_pct  = _pct("supply_pct")
+        install_pct = _pct("install_pct")
+        vat_in_basic = 1 if f.get("vat_in_basic") else 0
         if not desc or qty <= 0 or basic <= 0:
             flash("Description, qty and basic price are all required.", "warning")
             return redirect(url_for("boq_floor_item_edit", pid=pid, bid=bid, fid=fid, iid=iid))
-        try:
-            supply_raw = f.get("supply_rate", "")
-            supply = float(supply_raw) if supply_raw not in (None, "",) else basic
-        except ValueError:
-            supply = basic
-        try:
-            install_raw = f.get("install_rate", "")
-            install = float(install_raw) if install_raw not in (None, "",) else 0.0
-        except ValueError:
-            install = 0.0
-        final_rate = _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat)
+        from boq_rate_v3 import boq_rate_v3
+        supply, install, final_rate = boq_rate_v3(
+            basic, supply_pct, install_pct, oh, prf, vat,
+            vat_in_basic=bool(vat_in_basic))
         total = qty * final_rate
         with get_db() as c:
             c.execute(
@@ -185,12 +183,13 @@ def boq_floor_item_edit(pid, bid, fid, iid):
                 (desc, spec, unit, qty, remarks, final_rate, total, iid, fid),
             )
             c.execute(
-                "UPDATE boq_floor_rate_buildup SET basic_price=?, supply_rate=?, "
-                "install_rate=?, overhead_pct=?, profit_pct=?, contingency_pct=?, "
-                "vat_pct=?, final_built_up_rate=?, total_amount=?, "
+                "UPDATE boq_floor_rate_buildup SET basic_price=?, "
+                "supply_pct=?, install_pct=?, supply_rate=?, install_rate=?, "
+                "overhead_pct=?, profit_pct=?, contingency_pct=?, "
+                "vat_pct=?, vat_in_basic=?, final_built_up_rate=?, total_amount=?, "
                 "updated_at=CURRENT_TIMESTAMP WHERE floor_item_id=?",
-                (basic, supply, install, oh, prf, cnt, vat,
-                 final_rate, total, iid),
+                (basic, supply_pct, install_pct, supply, install,
+                 oh, prf, 0, vat, vat_in_basic, final_rate, total, iid),
             )
             c.execute("UPDATE boq_floors SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (fid,))
         # LEARN: record the user's preferred unit + basic for this description.

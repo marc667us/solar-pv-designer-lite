@@ -170,14 +170,33 @@ def _boq_next_item_no(floor_id: int, bill_no: int, section_letter: str) -> str:
     return str(int((row["n"] if row else 0) or 0) + 1)
 
 
-def _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat):
-    """Spec rate build-up: final = (supply + install) * (1 + sum_pct/100).
-    Supply defaults to basic; install defaults to 0."""
+def _boq_safe_rate(basic, supply, install, oh, prf, cnt=0, vat=0, vat_in_basic=False):
+    """BOQ rate build-up (2026-06-28 owner spec).
+
+    Arg semantics (CHANGED 2026-06-28):
+        basic   -- material cost per unit (currency)
+        supply  -- supply rate PERCENT
+        install -- install rate PERCENT
+        oh, prf -- overhead %, profit %
+        cnt     -- IGNORED (no contingency)
+        vat     -- VAT %
+        vat_in_basic -- True when supplier invoice already had VAT, so VAT
+                        contribution to supply is 0.
+
+    Formula:
+        eff_vat = 0 if vat_in_basic else vat
+        supply_amount  = basic * (1 + (supply + eff_vat)/100)
+        install_amount = basic * ((install + oh + prf)/100)
+        total          = supply_amount + install_amount   (per unit)
+    """
     b = max(0.0, float(basic or 0))
-    s = max(0.0, float(supply if supply not in (None, "") else b))
-    i = max(0.0, float(install if install not in (None, "") else 0))
-    tot = (float(oh or 0) + float(prf or 0) + float(cnt or 0) + float(vat or 0))
-    return (s + i) * (1.0 + tot / 100.0)
+    sp = max(0.0, float(supply  or 0))
+    ip = max(0.0, float(install or 0))
+    op = max(0.0, float(oh  or 0))
+    pp = max(0.0, float(prf or 0))
+    vp = max(0.0, float(vat or 0))
+    eff_vat = 0.0 if vat_in_basic else vp
+    return b * (1.0 + (sp + eff_vat) / 100.0) + b * ((ip + op + pp) / 100.0)
 
 
 # ----- Routes --------------------------------------------------------------
@@ -269,9 +288,14 @@ def boq_section_loop(pid, bid, fid, bill_no, letter):
     # can see what's been added in the loop so far.
     with get_db() as c:
         items = c.execute(
-            "SELECT * FROM boq_floor_items "
-            "WHERE floor_id=? AND bill_no=? AND section_letter=? "
-            "ORDER BY id",
+            "SELECT i.*, "
+            "       b.basic_price AS bu_basic, "
+            "       b.supply_rate AS bu_supply, "
+            "       b.install_rate AS bu_install "
+            "FROM boq_floor_items i "
+            "LEFT JOIN boq_floor_rate_buildup b ON b.floor_item_id=i.id "
+            "WHERE i.floor_id=? AND i.bill_no=? AND i.section_letter=? "
+            "ORDER BY i.id",
             (fid, bill_no, letter),
         ).fetchall()
 
@@ -359,12 +383,15 @@ def boq_section_add_item(pid, bid, fid, bill_no, letter):
     if not unit:
         unit = "No."
 
-    oh, prf, cnt, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
-    supply_raw  = (f.get("supply_rate") or "").strip()
-    install_raw = (f.get("install_rate") or "").strip()
-    supply  = _num("supply_rate", basic)   if supply_raw  else basic
-    install = _num("install_rate", 0.0)    if install_raw else 0.0
-    final_rate = _boq_safe_rate(basic, supply, install, oh, prf, cnt, vat)
+    # Rate engine v3 (2026-06-28): supply_pct + install_pct are PERCENTAGES.
+    oh, prf, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("vat_pct")
+    supply_pct  = _pct("supply_pct")
+    install_pct = _pct("install_pct")
+    vat_in_basic = 1 if f.get("vat_in_basic") else 0
+    from boq_rate_v3 import boq_rate_v3
+    supply, install, final_rate = boq_rate_v3(
+        basic, supply_pct, install_pct, oh, prf, vat,
+        vat_in_basic=bool(vat_in_basic))
     total = qty * final_rate
     if final_rate <= 0:
         flash("Rate must be > 0. Enter a basic price.", "warning")
@@ -392,12 +419,14 @@ def boq_section_add_item(pid, bid, fid, bill_no, letter):
         item_id = int(cur.lastrowid or 0)
         c.execute(
             "INSERT INTO boq_floor_rate_buildup "
-            "(floor_item_id, project_id, user_id, basic_price, supply_rate, "
-            " install_rate, overhead_pct, profit_pct, contingency_pct, vat_pct, "
-            " final_built_up_rate, total_amount) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (item_id, pid, uid, basic, supply, install,
-             oh, prf, cnt, vat, final_rate, total),
+            "(floor_item_id, project_id, user_id, basic_price, "
+            " supply_pct, install_pct, supply_rate, install_rate, "
+            " overhead_pct, profit_pct, contingency_pct, vat_pct, "
+            " vat_in_basic, final_built_up_rate, total_amount) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (item_id, pid, uid, basic,
+             supply_pct, install_pct, supply, install,
+             oh, prf, 0, vat, vat_in_basic, final_rate, total),
         )
         c.execute("UPDATE boq_projects  SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (pid,))
         c.execute("UPDATE boq_buildings SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (bid,))

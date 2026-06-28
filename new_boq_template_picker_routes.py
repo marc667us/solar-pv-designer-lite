@@ -69,7 +69,12 @@ def boq_template_save(pid, bid, fid, slug):
             return max(0.0, min(100.0, float(v))) if v not in (None, "",) else 0.0
         except (TypeError, ValueError):
             return 0.0
-    oh, prf, cnt, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
+    # Rate engine v3 (2026-06-28): supply_pct + install_pct are PERCENTAGES.
+    oh, prf, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("vat_pct")
+    supply_pct  = _pct("supply_default_pct")
+    install_pct = _pct("install_default_pct")
+    vat_in_basic = 1 if f.get("vat_in_basic") else 0
+    from boq_rate_v3 import boq_rate_v3
 
     ticked = set()
     for k in f.getlist("tick"):
@@ -108,7 +113,9 @@ def boq_template_save(pid, bid, fid, slug):
             if not desc or qty <= 0 or basic <= 0:
                 skipped += 1
                 continue
-            final_rate = _boq_safe_rate(basic, basic, 0, oh, prf, cnt, vat)
+            supply_amount, install_amount, final_rate = boq_rate_v3(
+                basic, supply_pct, install_pct, oh, prf, vat,
+                vat_in_basic=bool(vat_in_basic))
             total = qty * final_rate
 
             key = (bill_no, sect_letter)
@@ -134,12 +141,14 @@ def boq_template_save(pid, bid, fid, slug):
             item_id = int(cur.lastrowid or 0)
             c.execute(
                 "INSERT INTO boq_floor_rate_buildup "
-                "(floor_item_id, project_id, user_id, basic_price, supply_rate, "
-                " install_rate, overhead_pct, profit_pct, contingency_pct, vat_pct, "
-                " final_built_up_rate, total_amount) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (item_id, pid, uid, basic, basic, 0,
-                 oh, prf, cnt, vat, final_rate, total),
+                "(floor_item_id, project_id, user_id, basic_price, "
+                " supply_pct, install_pct, supply_rate, install_rate, "
+                " overhead_pct, profit_pct, contingency_pct, vat_pct, "
+                " vat_in_basic, final_built_up_rate, total_amount) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (item_id, pid, uid, basic,
+                 supply_pct, install_pct, supply_amount, install_amount,
+                 oh, prf, 0, vat, vat_in_basic, final_rate, total),
             )
             saved += 1
 
@@ -174,7 +183,9 @@ def boq_template_save(pid, bid, fid, slug):
             sect_letter = (custom_sect[i] if i < len(custom_sect) else "Z").strip().upper()[:8] or "Z"
             sect_title = (custom_title[i] if i < len(custom_title) else "CUSTOM ITEMS").strip()[:160] or "CUSTOM ITEMS"
             bill_name = _boq_lookup_bill_name(bill_no) or "OTHER"
-            final_rate = _boq_safe_rate(basic, basic, 0, oh, prf, cnt, vat)
+            supply_amount, install_amount, final_rate = boq_rate_v3(
+                basic, supply_pct, install_pct, oh, prf, vat,
+                vat_in_basic=bool(vat_in_basic))
             total = qty * final_rate
             key = (bill_no, sect_letter)
             if key not in next_no_cache:
@@ -198,12 +209,14 @@ def boq_template_save(pid, bid, fid, slug):
             item_id = int(cur.lastrowid or 0)
             c.execute(
                 "INSERT INTO boq_floor_rate_buildup "
-                "(floor_item_id, project_id, user_id, basic_price, supply_rate, "
-                " install_rate, overhead_pct, profit_pct, contingency_pct, vat_pct, "
-                " final_built_up_rate, total_amount) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (item_id, pid, uid, basic, basic, 0,
-                 oh, prf, cnt, vat, final_rate, total),
+                "(floor_item_id, project_id, user_id, basic_price, "
+                " supply_pct, install_pct, supply_rate, install_rate, "
+                " overhead_pct, profit_pct, contingency_pct, vat_pct, "
+                " vat_in_basic, final_built_up_rate, total_amount) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (item_id, pid, uid, basic,
+                 supply_pct, install_pct, supply_amount, install_amount,
+                 oh, prf, 0, vat, vat_in_basic, final_rate, total),
             )
             saved += 1
 
@@ -312,11 +325,12 @@ def boq_project_xlsx(pid):
     ws.title = "BOQ"
     ws["A1"] = f"Bill of Quantities -- {project['project_name']}"
     ws["A1"].font = title_font
-    ws.merge_cells("A1:G1")
+    ws.merge_cells("A1:I1")
     ws["A2"] = f"Client : {project['client_name'] or '-'}"
     ws["A3"] = f"Location: {project['location'] or '-'}"
 
-    headers = ["Item", "Description", "Qty", "Unit", "Basic Rate", "Total Rate", "Amount"]
+    headers = ["Item", "Description", "Qty", "Unit", "Basic Rate",
+               "Supply Rate", "Install Rate", "Total Rate", "Amount"]
     HROW = 5
     for col, h in enumerate(headers, 1):
         c_ = ws.cell(row=HROW, column=col, value=h)
@@ -332,24 +346,24 @@ def boq_project_xlsx(pid):
     for r in rows:
         if r["building_id"] != prev["bid"]:
             ws.cell(row=row, column=1, value=f"BUILDING: {r['building_name']}").font = title_font
-            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
             row += 1
             prev.update({"bid": r["building_id"], "fid": None, "bill": None, "sec": None, "sub": None})
         if r["floor_id"] != prev["fid"]:
             ws.cell(row=row, column=1, value=f"  FLOOR: {r['floor_name']}").font = bold
-            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
             row += 1
             prev.update({"fid": r["floor_id"], "bill": None, "sec": None, "sub": None})
         if (r["bill_no"] or 0) != prev["bill"]:
             ws.cell(row=row, column=1, value=f"BILL No. {r['bill_no'] or 0} -- {r['bill_name'] or 'OTHER'}").font = bold
             ws.cell(row=row, column=1).fill = bill_fill
-            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
             row += 1
             prev.update({"bill": r["bill_no"] or 0, "sec": None, "sub": None})
         if (r["section_letter"] or "") != prev["sec"]:
             sec_t = (r["section_letter"] or "") + ". " + (r["section"] or "").upper()
             ws.cell(row=row, column=1, value=sec_t).font = bold
-            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=9)
             row += 1
             prev.update({"sec": r["section_letter"] or "", "sub": None})
         if (r["subsection_label"] or "") and r["subsection_label"] != prev["sub"]:
@@ -361,12 +375,14 @@ def boq_project_xlsx(pid):
         ws.cell(row=row, column=3, value=float(r["qty"] or 0))
         ws.cell(row=row, column=4, value=_san(r["unit"]))
         ws.cell(row=row, column=5, value=round(float(r["basic_price"] or 0), 2))
-        ws.cell(row=row, column=6, value=round(float(r["final_built_up_rate"] or 0), 2))
-        ws.cell(row=row, column=7, value=round(float(r["total_amount"] or 0), 2))
-        for col in range(1, 8):
+        ws.cell(row=row, column=6, value=round(float(r["supply_rate"] or 0), 2))
+        ws.cell(row=row, column=7, value=round(float(r["install_rate"] or 0), 2))
+        ws.cell(row=row, column=8, value=round(float(r["final_built_up_rate"] or 0), 2))
+        ws.cell(row=row, column=9, value=round(float(r["total_amount"] or 0), 2))
+        for col in range(1, 10):
             ws.cell(row=row, column=col).border = box
         row += 1
-    for col, w in enumerate([8, 50, 8, 8, 14, 14, 16], 1):
+    for col, w in enumerate([8, 50, 8, 8, 14, 14, 14, 14, 16], 1):
         ws.column_dimensions[get_column_letter(col)].width = w
 
     # ---- Per-floor Bills Summary ----
@@ -445,14 +461,14 @@ def _boq_project_markdown(pid: int) -> str:
             md.append("")
             md.append(f"#### BILL No. {r['bill_no'] or 0} -- {r['bill_name'] or 'OTHER'}")
             md.append("")
-            md.append("| Item | Description | Qty | Unit | Basic Rate | Total Rate | Amount |")
-            md.append("|---|---|---|---|---|---|---|")
+            md.append("| Item | Description | Qty | Unit | Basic Rate | Supply Rate | Install Rate | Total Rate | Amount |")
+            md.append("|---|---|---|---|---|---|---|---|---|")
             prev.update({"bill": r["bill_no"] or 0, "sec": None, "sub": None})
         if (r["section_letter"] or "") != prev["sec"]:
-            md.append(f"| | **{r['section_letter'] or ''}. {(r['section'] or '').upper()}** | | | | | |")
+            md.append(f"| | **{r['section_letter'] or ''}. {(r['section'] or '').upper()}** | | | | | | | |")
             prev.update({"sec": r["section_letter"] or "", "sub": None})
         if (r["subsection_label"] or "") and r["subsection_label"] != prev["sub"]:
-            md.append(f"| | *{r['subsection_label']}* | | | | | |")
+            md.append(f"| | *{r['subsection_label']}* | | | | | | | |")
             prev["sub"] = r["subsection_label"]
         md.append(
             f"| {r['item_no_display'] or r['item_no'] or ''} "
@@ -460,6 +476,8 @@ def _boq_project_markdown(pid: int) -> str:
             f"| {float(r['qty'] or 0):.2f} "
             f"| {r['unit']} "
             f"| {float(r['basic_price'] or 0):.2f} "
+            f"| {float(r['supply_rate'] or 0):.2f} "
+            f"| {float(r['install_rate'] or 0):.2f} "
             f"| {float(r['final_built_up_rate'] or 0):.2f} "
             f"| {float(r['total_amount'] or 0):.2f} |"
         )

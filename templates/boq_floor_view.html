@@ -44,6 +44,8 @@
         <th class="text-end">Qty</th>
         <th>Unit</th>
         <th class="text-end">Basic Rate</th>
+        <th class="text-end">Supply Rate</th>
+        <th class="text-end">Install Rate</th>
         <th class="text-end">Total Rate</th>
         <th class="text-end">Amount</th>
         <th></th>
@@ -58,7 +60,7 @@
 
       {% if bill_no != ns.prev_bill %}
       <tr style="background:#0a0a14">
-        <td colspan="8" class="fw-bold text-warning" style="text-transform:uppercase;letter-spacing:.5px;font-size:12.5px">
+        <td colspan="10" class="fw-bold text-warning" style="text-transform:uppercase;letter-spacing:.5px;font-size:12.5px">
           BILL No. {{ bill_no }} — {{ bill_name or 'OTHER' }}
         </td>
       </tr>
@@ -70,7 +72,7 @@
       {% if section_letter and section_letter != ns.prev_section %}
       {% set sect_title_db = (it.section|replace('_',' ')|upper if it.section else '') %}
       <tr style="background:#10102a">
-        <td colspan="8" class="text-warning fw-bold" style="text-transform:uppercase;font-size:11.5px;letter-spacing:.5px">
+        <td colspan="10" class="text-warning fw-bold" style="text-transform:uppercase;font-size:11.5px;letter-spacing:.5px">
           <div class="d-flex align-items-center justify-content-between">
             <div><span class="me-2">{{ section_letter }}.</span>{{ sect_title_db }}</div>
             <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill_no) }}" class="btn btn-outline-warning btn-sm" title="Add item to this section">
@@ -86,7 +88,7 @@
       {% endif %}
 
       {% if subsec and subsec != ns.prev_sub %}
-      <tr><td colspan="8" class="text-secondary" style="font-style:italic;font-size:12px;padding-left:1.5rem">
+      <tr><td colspan="10" class="text-secondary" style="font-style:italic;font-size:12px;padding-left:1.5rem">
         {{ subsec }}{% if it.specification %} — {{ it.specification }}{% endif %}
       </td></tr>
       {% set ns.prev_sub = subsec %}
@@ -101,6 +103,8 @@
         <td class="text-end">{{ (it.qty or 0)|fmt }}</td>
         <td class="small">{{ it.unit }}</td>
         <td class="text-end">{{ (it.bu_basic or 0)|fmt }}</td>
+        <td class="text-end">{{ (it.bu_supply or 0)|fmt }}</td>
+        <td class="text-end">{{ (it.bu_install or 0)|fmt }}</td>
         <td class="text-end">{{ (it.final_built_up_rate or 0)|money }}</td>
         <td class="text-end fw-bold text-warning">{{ (it.total_amount or 0)|money }}</td>
         <td class="text-end" style="white-space:nowrap">

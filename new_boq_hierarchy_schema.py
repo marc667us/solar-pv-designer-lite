@@ -199,6 +199,17 @@ _SQLITE_ALTERS_FLOOR_BILLS = [
     "ALTER TABLE boq_floors      ADD COLUMN contingency_pct REAL DEFAULT 10",
 ]
 
+# 2026-06-28 owner spec: rate engine v3. supply/install are now PERCENTAGES,
+# contingency is dropped, and a vat_in_basic flag suppresses VAT on supply
+# when the supplier invoice already included it. We keep supply_rate /
+# install_rate columns (they now hold the COMPUTED amounts per unit) and
+# add explicit input-side columns for the percentages + the new flag.
+_SQLITE_ALTERS_RATE_V3 = [
+    "ALTER TABLE boq_floor_rate_buildup ADD COLUMN supply_pct REAL DEFAULT 0",
+    "ALTER TABLE boq_floor_rate_buildup ADD COLUMN install_pct REAL DEFAULT 0",
+    "ALTER TABLE boq_floor_rate_buildup ADD COLUMN vat_in_basic INTEGER DEFAULT 0",
+]
+
 
 # ─── Postgres DDL ─────────────────────────────────────────────────────────────
 
@@ -371,6 +382,13 @@ _SQLITE_ALTERS_BOQ_TENANT = [
 ]
 
 
+_PG_ALTERS_RATE_V3 = [
+    "ALTER TABLE boq_floor_rate_buildup ADD COLUMN IF NOT EXISTS supply_pct REAL DEFAULT 0",
+    "ALTER TABLE boq_floor_rate_buildup ADD COLUMN IF NOT EXISTS install_pct REAL DEFAULT 0",
+    "ALTER TABLE boq_floor_rate_buildup ADD COLUMN IF NOT EXISTS vat_in_basic INTEGER DEFAULT 0",
+]
+
+
 def _try_each(c, stmts: Iterable[str]) -> None:
     """Run each statement in its own try block so one failure (already exists,
     legacy schema mismatch) doesn't abort the rest."""
@@ -390,6 +408,7 @@ def ensure_boq_hierarchy_schema(get_db_fn) -> None:
             return
         with get_db_fn() as c:
             _try_each(c, _PG_CREATE_TABLES)
+            _try_each(c, _PG_ALTERS_RATE_V3)
         _BOQ_SCHEMA_DONE["pg"] = True
         return
 
@@ -411,6 +430,7 @@ def ensure_boq_hierarchy_schema(get_db_fn) -> None:
         _try_each(c, _SQLITE_ALTERS_CATALOG)
         _try_each(c, _SQLITE_ALTERS_BOM_RATES)
         _try_each(c, _SQLITE_ALTERS_FLOOR_BILLS)
+        _try_each(c, _SQLITE_ALTERS_RATE_V3)
         _try_each(c, _SQLITE_ALTERS_BOQ_TENANT)
     _BOQ_SCHEMA_DONE["sqlite"] = True
 
