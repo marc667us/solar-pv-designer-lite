@@ -67,7 +67,7 @@
 
 {# 2026-06-28: editable BOQ title + free-text instructions cell #}
 <form method="POST" action="{{ url_for('boq_project_title_instructions', pid=project.id) }}" class="mb-3">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <div class="solar-card p-3" style="border-left:3px solid var(--solar-gold)">
     <div class="text-warning fw-bold small mb-2" style="text-transform:uppercase;letter-spacing:1px">
       <i class="bi bi-pencil-square me-1"></i>BOQ Title &amp; Instructions

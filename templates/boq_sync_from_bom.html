@@ -17,13 +17,13 @@
 <div class="solar-card p-4 text-center text-secondary">
   <i class="bi bi-folder2-open" style="font-size:36px"></i>
   <p class="mt-2 mb-2">No BOMs found on your account yet.</p>
-  <a href="{{ url_for('bom_list') if 'bom_list' in app.view_functions else url_for('boq_project_overview', pid=project.id) }}" class="btn btn-outline-warning btn-sm">
+  <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="btn btn-outline-warning btn-sm">
     <i class="bi bi-arrow-left me-1"></i>Back to project
   </a>
 </div>
 {% else %}
 <form method="POST" action="{{ url_for('boq_project_sync_from_bom', pid=project.id) }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <div class="solar-card p-3">
     <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:13px">
       <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">

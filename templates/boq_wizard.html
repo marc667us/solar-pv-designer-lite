@@ -19,7 +19,7 @@
 </div>
 
 <form method="POST" action="{{ url_for('boq_wizard_build') }}" id="boqWizardForm">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
 
   <!-- Project header -->
   <div class="solar-card p-3 mb-3" style="border-left:3px solid var(--solar-gold)">
