@@ -1,0 +1,117 @@
+{# Inline section block for Complete BOQ. NO outer <form> -- the Complete
+   BOQ page wraps every section in ONE big form so the user saves the
+   whole floor with one Save button.
+
+   Required context (passed via {% with %} from the parent loop):
+     bill_no, bill_name, section_letter, section_title, subsection_label,
+     catalog (list of (desc, unit, basic)), existing (list of saved rows)
+#}
+{% set sid = bill_no|string ~ '_' ~ section_letter|string %}
+
+<div class="solar-card p-3 mb-3" id="sec_{{ sid }}" data-sec-id="{{ sid }}" style="border-left:3px solid var(--solar-gold,#f59e0b)">
+  <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+    <div>
+      <div class="text-warning fw-bold" style="text-transform:uppercase;letter-spacing:.5px">
+        <span class="text-warning">{{ section_letter }}.</span> {{ section_title }}
+        {% if subsection_label %}<span class="text-secondary small ms-2">({{ subsection_label }})</span>{% endif %}
+      </div>
+      <div class="text-secondary small mt-1">
+        {{ catalog|length }} catalog item{{ '' if catalog|length == 1 else 's' }} &middot;
+        {{ existing|length }} row{{ '' if existing|length == 1 else 's' }} already on floor
+      </div>
+    </div>
+    <a href="{{ url_for('boq_section_grid', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill_no, letter=section_letter, title=section_title, bill_name=bill_name, sub=subsection_label) }}" class="btn btn-outline-warning btn-sm">
+      <i class="bi bi-arrow-up-right-circle me-1"></i>Open standalone editor
+    </a>
+  </div>
+
+  {# Read-only summary of items already saved on the floor for this section. #}
+  {% if existing %}
+  <details class="mb-2">
+    <summary class="text-warning small fw-bold" style="cursor:pointer">
+      <i class="bi bi-list-ol me-1"></i>{{ existing|length }} existing row(s) (click to view)
+    </summary>
+    <div class="table-responsive mt-2">
+      <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:12px">
+        <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px">
+          <tr><th>#</th><th>Description</th><th class="text-end">Qty</th><th>Unit</th><th class="text-end">Basic</th><th class="text-end">Amount</th><th style="width:60px"></th></tr>
+        </thead>
+        <tbody>
+          {% for it in existing %}
+          <tr>
+            <td class="text-warning fw-bold small">{{ it.item_no_display or it.item_no or loop.index }}</td>
+            <td class="small">{{ it.description }}</td>
+            <td class="text-end small">{{ (it.qty or 0)|int }}</td>
+            <td class="small">{{ it.unit }}</td>
+            <td class="text-end small">{{ (it.bu_basic or 0)|fmt }}</td>
+            <td class="text-end fw-bold small">{{ (it.total_amount or 0)|money }}</td>
+            <td class="text-end">
+              <a href="{{ url_for('boq_floor_item_edit', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" class="btn btn-outline-warning btn-sm py-0 px-1" title="Edit"><i class="bi bi-pencil"></i></a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endif %}
+
+  {# Editable rows for THIS section. All inputs use indexed names that the
+     parent form's single Save button submits in one shot. Each row carries
+     its own bill_no / section_letter / section_title via hidden inputs so
+     the server-side save handler can route the row to the right section
+     without per-section forms. #}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:13px;min-width:1100px">
+      <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
+        <tr>
+          <th style="width:30px"><i class="bi bi-check-square" title="Tick to include"></i></th>
+          <th style="width:24px">#</th>
+          <th style="min-width:300px">Description <span class="text-secondary">(pick from dropdown)</span></th>
+          <th style="width:80px">Unit</th>
+          <th class="text-end" style="width:80px">Quantity</th>
+          <th class="text-end" style="width:100px">Basic</th>
+          <th class="text-end" style="width:70px">Supply %</th>
+          <th class="text-end" style="width:70px">Install %</th>
+          <th class="text-end" style="width:110px">Total Rate</th>
+          <th class="text-end" style="width:110px">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for desc, unit, basic in catalog %}
+        <tr class="boq-row" data-sid="{{ sid }}">
+          <td class="text-center">
+            <input type="checkbox" class="form-check-input boq-tick" name="tick_{{ sid }}_{{ loop.index0 }}" value="1" checked>
+          </td>
+          <td class="text-secondary small text-end">{{ loop.index }}</td>
+          <td>
+            {# These hidden inputs route this row to the right section on save. #}
+            <input type="hidden" name="bill_no[]"        value="{{ bill_no }}">
+            <input type="hidden" name="section_letter[]" value="{{ section_letter }}">
+            <input type="hidden" name="section_title[]"  value="{{ section_title }}">
+            <input type="hidden" name="bill_name[]"      value="{{ bill_name }}">
+            <input type="hidden" name="subsection_label[]" value="{{ subsection_label }}">
+            <select class="form-select form-select-sm boq-desc" name="description[]">
+              <option value="">— pick item to include this row —</option>
+              {% for cdesc, cunit, cbasic in catalog %}
+              <option value="{{ cdesc }}" data-unit="{{ cunit }}" data-basic="{{ '%.2f'|format(cbasic) }}" {% if cdesc == desc %}selected{% endif %}>{{ cdesc }}</option>
+              {% endfor %}
+            </select>
+            <input class="form-control form-control-sm mt-1 boq-spec" name="specification[]" placeholder="Specification (optional)">
+          </td>
+          <td><input class="form-control form-control-sm boq-unit" name="unit[]" value="{{ unit }}"></td>
+          <td><input type="number" step="1" min="0" class="form-control form-control-sm text-end boq-qty" name="qty[]" value="1"></td>
+          <td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-end boq-basic" name="basic_price[]" value="{{ '%.2f'|format(basic) if basic else '' }}"></td>
+          <td><input type="number" step="0.01" min="0" max="100" class="form-control form-control-sm text-end boq-supply" name="supply_pct[]" placeholder=""></td>
+          <td><input type="number" step="0.01" min="0" max="100" class="form-control form-control-sm text-end boq-install" name="install_pct[]" placeholder=""></td>
+          <td class="text-end boq-rate text-warning fw-bold">0</td>
+          <td class="text-end boq-amount fw-bold">0</td>
+        </tr>
+        {% endfor %}
+        {% if not catalog %}
+        <tr><td colspan="10" class="text-secondary text-center small fst-italic py-2">No catalog items for this section yet. Use "Open standalone editor" to add custom items.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>

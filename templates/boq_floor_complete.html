@@ -11,7 +11,10 @@
       <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=floor.id) }}" class="text-warning">{{ floor.floor_name }}</a>
     </div>
     <h5 class="fw-black mb-0 mt-1"><i class="bi bi-collection text-warning me-1"></i>Complete BOQ &mdash; {{ floor.floor_name }}</h5>
-    <div class="text-secondary small mt-1">All sections from the project's Service Configuration, on one editable page. Switch to <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="text-warning">Section-by-Section</a> for one-section-at-a-time editing &mdash; both modes write to the same data.</div>
+    <div class="text-secondary small mt-1">
+      Every section from your Service Configuration on one page. Set the floor-wide rates once,
+      pick descriptions per row, set quantities, hit one Save button to save the whole floor.
+    </div>
   </div>
   <div class="d-flex gap-2 flex-wrap align-items-center">
     <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-secondary btn-sm">
@@ -40,187 +43,158 @@
   </div>
 </div>
 
-{# Subtotal + Generate prompt #}
-<div class="d-flex flex-wrap gap-3 mb-3 align-items-end">
-  <div class="kpi-card" style="max-width:280px">
-    <div class="kpi-label">Floor subtotal</div>
-    <div class="kpi-value">{{ (floor_subtotal)|money }}</div>
-  </div>
-  {% if has_items %}
-  <div class="text-secondary small align-self-center">
-    <i class="bi bi-info-circle me-1"></i>{{ n_items }} item(s) on this floor. Re-running Generate is safe &mdash; only missing rows are added.
-  </div>
-  {% endif %}
-</div>
+{# ONE big form wraps every section. ONE Save button at the bottom commits the whole floor. #}
+<form method="POST" action="{{ url_for('boq_floor_complete_save_all', pid=project.id, bid=building.id, fid=floor.id) }}" id="completeBoqForm">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
 
-{# Floor-wide rates form: type these once, click Generate Skeleton, and EVERY
-   row that gets inserted uses these markups. Mirrors the Section-by-Section
-   grid's "Section-wide rates" pattern. Basic prices come from the
-   marketplace (auto-fill) so the user only needs to type the markups. #}
-<div class="solar-card p-3 mb-3" id="completeBoqGenerate" style="border-left:3px solid var(--solar-gold,#f59e0b)">
-  <form method="POST" action="{{ url_for('boq_floor_complete_generate', pid=project.id, bid=building.id, fid=floor.id) }}">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-
+  {# Floor-wide rates -- typed ONCE, applied to every row on the floor. #}
+  <div class="solar-card p-3 mb-3" style="border-left:3px solid var(--solar-gold,#f59e0b)">
     <div class="row g-2 align-items-end mb-2">
       <div class="col-md-2 text-warning fw-bold" style="text-transform:uppercase;font-size:12px;letter-spacing:.5px">
         <i class="bi bi-percent me-1"></i>Floor-wide rates
       </div>
-      <div class="col-6 col-md-2">
-        <label class="form-label small text-secondary mb-1">Supply %</label>
-        <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="supply_pct" value="10">
-      </div>
-      <div class="col-6 col-md-2">
-        <label class="form-label small text-secondary mb-1">Install %</label>
-        <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="install_pct" value="15">
-      </div>
-      <div class="col-6 col-md-2">
-        <label class="form-label small text-secondary mb-1">Overhead %</label>
-        <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="overhead_pct" value="10">
-      </div>
-      <div class="col-6 col-md-2">
-        <label class="form-label small text-secondary mb-1">Profit %</label>
-        <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="profit_pct" value="15">
-      </div>
-      <div class="col-6 col-md-2">
-        <label class="form-label small text-secondary mb-1">VAT %</label>
-        <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="vat_pct" value="12.5">
-      </div>
+      <div class="col-6 col-md-2"><label class="form-label small text-secondary mb-1">Supply %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="supply_pct" id="floor_supply_pct" value="10"></div>
+      <div class="col-6 col-md-2"><label class="form-label small text-secondary mb-1">Install %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="install_pct" id="floor_install_pct" value="15"></div>
+      <div class="col-6 col-md-2"><label class="form-label small text-secondary mb-1">Overhead %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="overhead_pct" id="floor_overhead_pct" value="10"></div>
+      <div class="col-6 col-md-2"><label class="form-label small text-secondary mb-1">Profit %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="profit_pct" id="floor_profit_pct" value="15"></div>
+      <div class="col-6 col-md-2"><label class="form-label small text-secondary mb-1">VAT %</label><input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="vat_pct" id="floor_vat_pct" value="12.5"></div>
     </div>
-
     <div class="row g-2 align-items-center">
       <div class="col-md-4">
         <div class="form-check">
-          <input class="form-check-input" type="checkbox" name="vat_in_basic" id="cmp_vat_in_basic" value="1">
-          <label class="form-check-label small text-secondary" for="cmp_vat_in_basic">VAT already on supplier invoice &mdash; do not add VAT again</label>
+          <input class="form-check-input" type="checkbox" name="vat_in_basic" id="floor_vat_in_basic" value="1">
+          <label class="form-check-label small text-secondary" for="floor_vat_in_basic">VAT already on supplier invoice &mdash; do not add VAT again</label>
         </div>
       </div>
-      <div class="col-md-5">
+      <div class="col-md-8">
         <div class="form-check" style="background:#0a0a14;border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:6px 12px">
-          <input class="form-check-input" type="checkbox" name="apply_rates_to_all_rows" id="cmp_apply_all" value="1" checked>
-          <label class="form-check-label small" for="cmp_apply_all">
-            <strong class="text-warning">Apply the rates above to every line item.</strong>
-            <span class="text-secondary">&nbsp;Type once, applied to all.</span>
+          <input class="form-check-input" type="checkbox" name="apply_rates_to_all_rows" id="floor_apply_all" value="1" checked>
+          <label class="form-check-label small" for="floor_apply_all">
+            <strong class="text-warning">Apply these rates to every line item across all sections.</strong>
+            <span class="text-secondary">Set rates once, applied to every row.</span>
           </label>
         </div>
       </div>
-      <div class="col-md-3 text-end">
-        {% if not has_items %}
-        <button class="btn btn-warning fw-bold" onclick="return confirm('Generate {{ skeleton_item_count }} starter row(s) on this floor with the rates above?')">
-          <i class="bi bi-lightning-charge me-1"></i>Generate Skeleton ({{ skeleton_item_count }})
-        </button>
-        {% else %}
-        <button class="btn btn-outline-warning" onclick="return confirm('Top-up any missing skeleton rows on this floor with the rates above?')">
-          <i class="bi bi-arrow-clockwise me-1"></i>Top-up missing rows
-        </button>
-        {% endif %}
-      </div>
-    </div>
-
-    <div class="text-secondary small mt-2" style="line-height:1.4">
-      <i class="bi bi-info-circle me-1"></i>
-      Basic prices auto-fill from the Marketplace catalog (and your saved overrides). Items with no marketplace match arrive with basic=0 &mdash; type the price OR add them to the marketplace from the edit form.
-    </div>
-  </form>
-</div>
-
-{# Bills accordion: one per service, each containing collapsible sections.
-   First bill is OPEN by default so the user sees real content immediately
-   after Generate. Item count is shown on every bill header so the user
-   can tell at a glance how full each bill is. #}
-<div class="accordion" id="completeBoq">
-  {% for bill in bills %}
-  {% set _bill_items = (bill.sections|sum(attribute='items', start=[]))|length %}
-  <div class="accordion-item" style="background:#0a0a14;border:1px solid #1e1e3a;margin-bottom:8px">
-    <h2 class="accordion-header">
-      <button class="accordion-button{% if not loop.first %} collapsed{% endif %} fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#bill_{{ bill.no }}" style="background:#15152a;color:#f59e0b;font-size:14px;text-transform:uppercase;letter-spacing:.5px">
-        <i class="bi bi-folder2-open me-2"></i>Bill {{ bill.no }} &mdash; {{ bill.name }}
-        <span class="ms-auto text-secondary small fw-normal me-3">
-          {{ bill.sections|length }} section{{ '' if bill.sections|length == 1 else 's' }} &middot;
-          <span class="text-warning">{{ _bill_items }}</span> item{{ '' if _bill_items == 1 else 's' }}
-        </span>
-      </button>
-    </h2>
-    <div id="bill_{{ bill.no }}" class="accordion-collapse collapse{% if loop.first %} show{% endif %}" data-bs-parent="#completeBoq">
-      <div class="accordion-body p-2">
-        {% for sec in bill.sections %}
-        <div class="mt-2 mb-3 p-2" style="border:1px solid #1e1e3a;border-radius:8px;background:rgba(255,255,255,.01)">
-          <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-            <div>
-              <span class="text-warning fw-bold">{{ sec.letter }}. {{ sec.title }}</span>
-              {% if sec.subsection %}<span class="text-secondary small ms-2">&mdash; {{ sec.subsection }}</span>{% endif %}
-              <span class="text-secondary small ms-2">({{ sec['items']|length }} item{{ '' if sec['items']|length == 1 else 's' }})</span>
-            </div>
-            <div class="d-flex gap-2">
-              {# Reuses the EXISTING Section-by-Section grid editor (spec
-                 line 208: "Build by All Sections shall simply instantiate
-                 every existing section interface one after another. No
-                 duplicate UI."). Skip the legacy-items bucket (bill_no=9999)
-                 since there is no canonical service bill behind it. #}
-              {% if bill.no != 9999 %}
-              <a href="{{ url_for('boq_section_grid', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill.no, letter=(sec.letter or 'A'), title=sec.title, bill_name=bill.name, sub=sec.subsection) }}"
-                 class="btn btn-warning btn-sm fw-bold">
-                <i class="bi bi-pencil-square me-1"></i>Open section editor
-              </a>
-              {% endif %}
-              <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill.no, section_letter=(sec.letter or 'A'), section_title=sec.title) }}" class="btn btn-outline-warning btn-sm">
-                <i class="bi bi-plus me-1"></i>Add item
-              </a>
-            </div>
-          </div>
-
-          {% if sec['items'] %}
-          <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:13px">
-              <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
-                <tr>
-                  <th style="width:40px">Item</th>
-                  <th>Description</th>
-                  <th class="text-end">Quantity</th>
-                  <th>Unit</th>
-                  <th class="text-end">Basic Price</th>
-                  <th class="text-end">Supply Amount Rate</th>
-                  <th class="text-end">Installation Amount Rate</th>
-                  <th class="text-end">Total Amount Rate</th>
-                  <th class="text-end">Amount</th>
-                  <th style="width:90px"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for it in sec['items'] %}
-                <tr>
-                  <td class="text-secondary small">{{ it.item_no_display or it.item_no or loop.index }}</td>
-                  <td>
-                    {{ it.description }}
-                    {% if it.specification %}<div class="text-secondary small">{{ it.specification }}</div>{% endif %}
-                  </td>
-                  <td class="text-end">{{ '%g' | format(it.qty or 0) }}</td>
-                  <td>{{ it.unit }}</td>
-                  <td class="text-end">{{ (it.bu_basic or 0)|money }}</td>
-                  <td class="text-end">{{ (it.bu_supply or 0)|money }}</td>
-                  <td class="text-end">{{ (it.bu_install or 0)|money }}</td>
-                  <td class="text-end fw-bold">{{ (it.bu_final or it.final_built_up_rate or 0)|money }}</td>
-                  <td class="text-end fw-bold">{{ (it.total_amount or 0)|money }}</td>
-                  <td class="text-end">
-                    <a href="{{ url_for('boq_floor_item_edit', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" class="btn btn-outline-warning btn-sm" title="Edit" style="padding:.15rem .3rem"><i class="bi bi-pencil"></i></a>
-                    <form method="POST" action="{{ url_for('boq_floor_delete_item', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" class="d-inline">
-                      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-                      <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove this item?')" title="Delete" style="padding:.15rem .3rem"><i class="bi bi-trash"></i></button>
-                    </form>
-                  </td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          {% else %}
-          <div class="text-secondary small fst-italic">No items yet in this section. Use <b>Generate Skeleton</b> above or <b>Add item</b> to populate.</div>
-          {% endif %}
-        </div>
-        {% endfor %}
-      </div>
     </div>
   </div>
-  {% endfor %}
-</div>
 
+  {# Stacked sections -- every section from the floor's Service Configuration. #}
+  {% for bill in bills %}
+    {% if bill.no != 9999 %}
+    <div class="d-flex align-items-center gap-2 mt-4 mb-2" style="border-bottom:1px solid #1e1e3a;padding-bottom:6px">
+      <i class="bi bi-folder2-open text-warning"></i>
+      <div class="text-warning fw-bold" style="text-transform:uppercase;letter-spacing:.5px">Bill {{ bill.no }} &mdash; {{ bill.name }}</div>
+      <div class="text-secondary small ms-auto">{{ bill.sections|length }} section(s)</div>
+    </div>
+    {% for sec in bill.sections %}
+      {% with bill_no=bill.no, bill_name=bill.name, section_letter=sec.letter, section_title=sec.title, subsection_label=sec.subsection, catalog=(sec.catalog or []), existing=(sec['items'] or []) %}
+        {% include '_boq_section_grid_inline.html' %}
+      {% endwith %}
+    {% endfor %}
+    {% endif %}
+  {% endfor %}
+
+  {# Bottom sticky-ish save bar #}
+  <div class="solar-card p-3 mt-4 mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2" style="background:rgba(245,158,11,.08);border-left:3px solid var(--solar-gold,#f59e0b)">
+    <div>
+      <div class="text-warning fw-bold"><i class="bi bi-cash-stack me-1"></i>Total &mdash; live preview</div>
+      <div class="text-secondary small">Sum of every ticked row using the floor-wide rates above. Save commits ALL ticked rows to the floor in one shot.</div>
+    </div>
+    <div class="text-end">
+      <div class="text-secondary small">FLOOR TOTAL</div>
+      <div class="fw-black text-warning" id="floor_total_live" style="font-size:22px">0</div>
+    </div>
+    <button type="submit" name="next_action" value="save" class="btn btn-warning fw-bold">
+      <i class="bi bi-save me-1"></i>Save Complete BOQ
+    </button>
+  </div>
+</form>
+
+{# Legacy items orphan bucket (read-only) #}
+{% for bill in bills %}
+  {% if bill.no == 9999 %}
+  <div class="solar-card p-3 mt-4 mb-3" style="border-left:3px solid #ef4444">
+    <div class="text-danger fw-bold small mb-2" style="text-transform:uppercase;letter-spacing:1px">
+      <i class="bi bi-exclamation-triangle me-1"></i>Legacy items (not in current Service Configuration)
+    </div>
+    <div class="text-secondary small">{{ bill.sections|length }} orphan section(s). Open them via the floor view to migrate or delete.</div>
+  </div>
+  {% endif %}
+{% endfor %}
+
+<script>
+  // ONE recalc engine for the whole page. Every row uses the floor-wide
+  // rates. Description pick auto-fills unit + basic. Live floor total
+  // updates as the user types.
+  (function(){
+    function floorPcts() {
+      return {
+        supply: parseFloat((document.getElementById('floor_supply_pct')||{value:0}).value || 0),
+        install: parseFloat((document.getElementById('floor_install_pct')||{value:0}).value || 0),
+        oh: parseFloat((document.getElementById('floor_overhead_pct')||{value:0}).value || 0),
+        prf: parseFloat((document.getElementById('floor_profit_pct')||{value:0}).value || 0),
+        vat: parseFloat((document.getElementById('floor_vat_pct')||{value:0}).value || 0),
+        vatInBasic: !!(document.getElementById('floor_vat_in_basic') && document.getElementById('floor_vat_in_basic').checked),
+      };
+    }
+    function recalcRow(tr) {
+      var pcts = floorPcts();
+      var basic = parseFloat((tr.querySelector('.boq-basic') || {value:0}).value || 0);
+      var sp = parseFloat((tr.querySelector('.boq-supply')   || {value:''}).value || pcts.supply);
+      var ip = parseFloat((tr.querySelector('.boq-install')  || {value:''}).value || pcts.install);
+      var qty = parseFloat((tr.querySelector('.boq-qty')     || {value:0}).value || 0);
+      // Per-row Supply/Install fields are optional; if blank, use the floor-wide rates.
+      var spField = tr.querySelector('.boq-supply');  if (spField && !spField.value) sp = pcts.supply;
+      var ipField = tr.querySelector('.boq-install'); if (ipField && !ipField.value) ip = pcts.install;
+      var effVat = pcts.vatInBasic ? 0 : pcts.vat;
+      var sa = basic * (sp + effVat) / 100;
+      var ia = basic * (ip + pcts.oh + pcts.prf) / 100;
+      var rate = basic + sa + ia;
+      var amount = qty * rate;
+      var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
+      var rateEl = tr.querySelector('.boq-rate');
+      var amtEl  = tr.querySelector('.boq-amount');
+      if (rateEl) rateEl.textContent = nf.format(Math.round(rate));
+      if (amtEl)  amtEl.textContent  = nf.format(Math.round(amount));
+      return amount;
+    }
+    function recalcAll() {
+      var sum = 0;
+      document.querySelectorAll('tr.boq-row').forEach(function(tr){
+        var tick = tr.querySelector('.boq-tick');
+        if (!tick || !tick.checked) return;
+        sum += recalcRow(tr);
+      });
+      var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
+      var el = document.getElementById('floor_total_live');
+      if (el) el.textContent = nf.format(Math.round(sum));
+    }
+    // Description pick -> auto-fill unit + basic (per-row, no scoping needed).
+    document.addEventListener('change', function(e){
+      var t = e.target;
+      if (!t) return;
+      var tr = t.closest('tr.boq-row');
+      if (tr && t.tagName === 'SELECT' && t.classList.contains('boq-desc')) {
+        var opt = t.options[t.selectedIndex];
+        if (opt && opt.dataset.unit) {
+          var u = tr.querySelector('.boq-unit');
+          if (u) u.value = opt.dataset.unit;
+        }
+        if (opt && opt.dataset.basic) {
+          var b = tr.querySelector('.boq-basic');
+          if (b) b.value = parseFloat(opt.dataset.basic).toFixed(2);
+        }
+        var tick = tr.querySelector('.boq-tick');
+        if (tick) tick.checked = !!(opt && opt.value);
+      }
+      recalcAll();
+    });
+    document.addEventListener('input', function(e){
+      if (!e.target) return;
+      if (e.target.matches('input[type=number]')) recalcAll();
+    });
+    // Initial recalc on load
+    recalcAll();
+  })();
+</script>
 {% endblock %}
