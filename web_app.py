@@ -32680,7 +32680,62 @@ def boq_floor_complete_generate(pid, bid, fid):
         flash("Pick the engineering services first.", "warning")
         return redirect(url_for("boq_project_edit", pid=pid))
 
-    rows = _services_section_rows(services)
+    # 2026-06-29 owner directive: clone the Section-by-Section behaviour.
+    # Generate Skeleton now uses _BOQ_SECTION_ITEM_CATALOG (the same catalog
+    # the Section-by-Section grid drops into its description dropdown) as
+    # the PRIMARY source of items + units + prices for each section. The
+    # service skeleton drives the bill/section TOPOLOGY; the catalog drives
+    # the CONTENT. If a section has no catalog entry, the skeleton items
+    # remain as the fallback.
+    skeleton_rows = _services_section_rows(services)
+    # Group skeleton rows by (bill_no, section_letter) so we know which
+    # bill+letter+section_title to use.
+    sections_seen = {}
+    for r in skeleton_rows:
+        key = (r["bill_no"], r["section_letter"])
+        if key not in sections_seen:
+            sections_seen[key] = {
+                "bill_no":          r["bill_no"],
+                "bill_name":        r["bill_name"],
+                "section_letter":   r["section_letter"],
+                "section_title":    r["section_title"],
+                "subsection_label": r["subsection_label"],
+                "service_code":     r["service_code"],
+                "fallback_rows":    [],
+            }
+        sections_seen[key]["fallback_rows"].append(r)
+    # Look up catalog items per section using _boq_catalog_for_section
+    # (defined in web_app.py via the data_v3 splice).
+    _cat_for_section = globals().get("_boq_catalog_for_section")
+    rows = []
+    for sec in sections_seen.values():
+        catalog_items = []
+        if _cat_for_section:
+            try:
+                catalog_items = _cat_for_section(sec["section_title"]) or []
+            except Exception:
+                catalog_items = []
+        if catalog_items:
+            # Use the catalog content -- realistic descriptions + units + prices,
+            # exactly matches what the Section-by-Section grid uses.
+            for (c_desc, c_unit, c_basic) in catalog_items:
+                rows.append({
+                    "bill_no":          sec["bill_no"],
+                    "bill_name":        sec["bill_name"],
+                    "section_letter":   sec["section_letter"],
+                    "section_title":    sec["section_title"],
+                    "subsection_label": sec["subsection_label"],
+                    "service_code":     sec["service_code"],
+                    "desc":             c_desc,
+                    "unit":             c_unit,
+                    "qty":              0,         # owner enters qty
+                    "basic":            float(c_basic or 0),
+                    "spec":             "",
+                })
+        else:
+            # No catalog entry for this section title -- keep the hardcoded
+            # skeleton fallback so the section is at least scaffolded.
+            rows.extend(sec["fallback_rows"])
 
     # ------------------------------------------------------------------
     # 2026-06-29 owner directive: auto-fill basic prices from the
