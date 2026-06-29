@@ -429,9 +429,14 @@ _PG_ALTERS_RATE_V3 = [
 
 
 # 2026-06-29: Build by Template retired -- see _SQLITE_ALTERS_BUILD_MODE.
+# subsection_label widened to 200 chars: spec-derived service skeletons
+# include subsections like "Temperature / humidity / CO2 / pressure /
+# occupancy / air-quality" (65 chars) that don't fit the legacy
+# VARCHAR(20). On SQLite TEXT has no width so no parallel ALTER needed.
 _PG_ALTERS_BUILD_MODE = [
     "ALTER TABLE boq_projects ADD COLUMN IF NOT EXISTS build_mode VARCHAR(40) DEFAULT 'complete_boq'",
     "ALTER TABLE boq_floor_items ADD COLUMN IF NOT EXISTS service_code VARCHAR(40) DEFAULT ''",
+    "ALTER TABLE boq_floor_items ALTER COLUMN subsection_label TYPE VARCHAR(200)",
 ]
 
 

@@ -70,20 +70,38 @@
     </div>
 
     {% if user and user.is_admin %}
-    <details class="text-start mt-4 small text-secondary" open>
+    <details class="text-start mt-4" open>
       <summary class="text-warning small">Admin: technical details</summary>
-      <div class="mt-2" style="font-family:monospace">
-        <div><strong>Code:</strong> {{ code }}</div>
-        <div><strong>Path:</strong> {{ request.path if request else '' }}</div>
+      <div class="mt-2 small" style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;color:#e8e8f0">
+        <div><span style="color:#9090c0">Code:</span> <span style="color:#e8e8f0">{{ code }}</span></div>
+        <div><span style="color:#9090c0">Path:</span> <span style="color:#e8e8f0">{{ request.path if request else '' }}</span></div>
         {% if last_error %}
         <div class="mt-3 pt-2" style="border-top:1px solid #1e1e3a">
-          <div><strong>Error type:</strong> <code class="text-warning">{{ last_error.error_type }}</code></div>
-          <div><strong>Message:</strong> <code class="text-danger">{{ (last_error.error_message or '')[:300] }}</code></div>
-          <div><strong>When:</strong> {{ last_error.created_at }}</div>
-          <div class="mt-2"><a href="{{ url_for('admin_error_detail', error_id=last_error.id) }}" class="text-warning">Open full trace &rarr;</a></div>
+          <div class="mb-2"><span style="color:#9090c0">Error type:</span> <span style="color:#fbbf24;font-weight:600">{{ last_error.error_type }}</span></div>
+          <div class="mb-2">
+            <div style="color:#9090c0">Message:</div>
+            {# Full message in a scrollable, readable block. Pre-wrap respects
+               newlines from psycopg2 and similar libraries. Light text on a
+               dark gold-bordered card so it's actually readable. #}
+            <div style="background:#0a0a14;border:1px solid #f59e0b66;border-radius:8px;padding:10px 12px;color:#fde68a;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-word;line-height:1.45;margin-top:4px">{{ last_error.error_message or '(no message captured)' }}</div>
+          </div>
+          <div class="mb-2"><span style="color:#9090c0">When:</span> <span style="color:#e8e8f0">{{ last_error.created_at }}</span></div>
+          <div class="mt-3 d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('admin_error_detail', error_id=last_error.id) }}" class="btn btn-sm btn-warning fw-bold">
+              <i class="bi bi-file-earmark-text me-1"></i>Open full stack trace
+            </a>
+            <a href="{{ url_for('admin_errors_list') }}" class="btn btn-sm btn-outline-warning">
+              <i class="bi bi-list-ul me-1"></i>All errors
+            </a>
+            <button type="button" class="btn btn-sm btn-outline-light" onclick="
+              var txt='Type: {{ last_error.error_type|e }}\nMsg: ' + document.querySelector('details [style*=fde68a]').textContent;
+              navigator.clipboard.writeText(txt).then(function(){this.innerText='Copied';}.bind(this));">
+              <i class="bi bi-clipboard me-1"></i>Copy type + message
+            </button>
+          </div>
         </div>
         {% else %}
-        <div class="mt-2 text-secondary"><em>(no captured error yet -- visit /admin/errors)</em></div>
+        <div class="mt-2" style="color:#9090c0"><em>(no captured error yet -- visit /admin/errors)</em></div>
         {% endif %}
       </div>
     </details>

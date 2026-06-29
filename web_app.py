@@ -32765,6 +32765,20 @@ def boq_floor_complete_generate(pid, bid, fid):
                 total_rate = basic + supply_amt + install_amt
             total_amount = qty * total_rate
 
+            # Defensive truncation -- even with the ALTER on subsection_label
+            # to VARCHAR(200), legacy DBs that haven't picked up the migration
+            # yet would still throw "string data, right truncation" on PG.
+            # Clamp each value to its known column ceiling.
+            _section      = (r["section_title"] or "")[:80]
+            _subsection   = (r["subsection_label"] or "")[:200]
+            _bill_name    = (r["bill_name"] or "")[:120]
+            _sec_letter   = (r["section_letter"] or "")[:8]
+            _sub_label    = (r["subsection_label"] or "")[:200]
+            _desc         = (r["desc"] or "")[:500]
+            _spec         = (r.get("spec", "") or "")
+            _unit         = (r.get("unit", "") or "")[:20]
+            _service_code = (r.get("service_code", "") or "")[:40]
+
             cur = c.execute(
                 "INSERT INTO boq_floor_items ("
                 "  floor_id, building_id, project_id, user_id, "
@@ -32776,11 +32790,11 @@ def boq_floor_complete_generate(pid, bid, fid):
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     fid, bid, pid, uid,
-                    r["section_title"], r["subsection_label"],
-                    r["bill_no"], r["bill_name"], r["section_letter"], r["subsection_label"],
-                    r["desc"], r.get("spec", ""), r.get("unit", ""), qty,
+                    _section, _subsection,
+                    r["bill_no"], _bill_name, _sec_letter, _sub_label,
+                    _desc, _spec, _unit, qty,
                     total_rate, total_amount,
-                    next_disp, r.get("service_code", ""),
+                    next_disp, _service_code,
                 ),
             )
             new_id = int(cur.lastrowid or 0)
