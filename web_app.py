@@ -32707,23 +32707,27 @@ def boq_floor_complete_generate(pid, bid, fid):
             next_disp += 1
             n_inserted += 1
 
-            try:
-                c.execute(
-                    "INSERT INTO boq_floor_rate_buildup ("
-                    "  floor_item_id, project_id, basic_price, supply_rate, install_rate, "
-                    "  overhead_pct, profit_pct, contingency_pct, vat_pct, "
-                    "  supply_pct, install_pct, vat_in_basic, "
-                    "  final_built_up_rate, total_amount) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (
-                        new_id, pid, basic, supply_amt, install_amt,
-                        oh_def, prf_def, 0.0, vat_def,
-                        sp_def, ip_def, 0,
-                        total_rate, total_amount,
-                    ),
-                )
-            except Exception:
-                pass
+            # Note: user_id is NOT NULL in the rate_buildup schema. We must
+            # include it -- on Postgres, a NULL-violation here poisons the
+            # transaction and the NEXT iteration's INSERT throws
+            # "current transaction is aborted" (unhandled -> 500). On SQLite
+            # the NOT NULL is laxly enforced and the bug never surfaces.
+            c.execute(
+                "INSERT INTO boq_floor_rate_buildup ("
+                "  floor_item_id, project_id, user_id, basic_price, "
+                "  supply_rate, install_rate, "
+                "  overhead_pct, profit_pct, contingency_pct, vat_pct, "
+                "  supply_pct, install_pct, vat_in_basic, "
+                "  final_built_up_rate, total_amount) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    new_id, pid, uid, basic,
+                    supply_amt, install_amt,
+                    oh_def, prf_def, 0.0, vat_def,
+                    sp_def, ip_def, 0,
+                    total_rate, total_amount,
+                ),
+            )
 
     try:
         from new_boq_hierarchy_schema import boq_audit
