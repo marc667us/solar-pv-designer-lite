@@ -7,9 +7,11 @@ name: Diag Complete BOQ Generate Skeleton
 #
 # Zero-cost (curl only, no paid APIs).
 
-on: { workflow_dispatch: {} }
+on:
+  workflow_dispatch:
 
-permissions: { contents: read }
+permissions:
+  contents: read
 
 jobs:
   probe:
