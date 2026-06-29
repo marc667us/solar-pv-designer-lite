@@ -151,14 +151,18 @@
               <span class="text-secondary small ms-2">({{ sec['items']|length }} item{{ '' if sec['items']|length == 1 else 's' }})</span>
             </div>
             <div class="d-flex gap-2">
-              {# Reuses the EXISTING Section-by-Section grid editor (spec line 208:
-                 "Build by All Sections shall simply instantiate every existing
-                 section interface one after another. No duplicate UI."). #}
-              <a href="{{ url_for('boq_section_grid', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill.no, letter=sec.letter) }}?title={{ sec.title|urlencode }}&bill_name={{ bill.name|urlencode }}&sub={{ sec.subsection|urlencode }}"
+              {# Reuses the EXISTING Section-by-Section grid editor (spec
+                 line 208: "Build by All Sections shall simply instantiate
+                 every existing section interface one after another. No
+                 duplicate UI."). Skip the legacy-items bucket (bill_no=9999)
+                 since there is no canonical service bill behind it. #}
+              {% if bill.no != 9999 %}
+              <a href="{{ url_for('boq_section_grid', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill.no, letter=(sec.letter or 'A'), title=sec.title, bill_name=bill.name, sub=sec.subsection) }}"
                  class="btn btn-warning btn-sm fw-bold">
                 <i class="bi bi-pencil-square me-1"></i>Open section editor
               </a>
-              <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}?bill_no={{ bill.no }}&section_letter={{ sec.letter }}&section_title={{ sec.title|urlencode }}" class="btn btn-outline-warning btn-sm">
+              {% endif %}
+              <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill.no, section_letter=(sec.letter or 'A'), section_title=sec.title) }}" class="btn btn-outline-warning btn-sm">
                 <i class="bi bi-plus me-1"></i>Add item
               </a>
             </div>

@@ -32723,18 +32723,46 @@ def boq_floor_complete_generate(pid, bid, fid):
 
     # Build a sorted list of (lname, tuple) for prefix/substring search.
     catalog_lnames = sorted(catalog_by_name.keys(), key=lambda x: -len(x))
+    # Pre-tokenize catalog names for keyword overlap matching.
+    import re as _re_match
+    _stopwords = {"the","and","of","or","for","with","as","approved","equal","supply","install","fix","lay","connect","commission","standard","approved",""}
+    def _tokens(s):
+        return [t for t in _re_match.split(r"[^a-z0-9]+", (s or "").lower()) if t and t not in _stopwords and (len(t) >= 3 or t.isdigit())]
+    catalog_tokens = {ln: set(_tokens(ln)) for ln in catalog_lnames}
 
     def _find_in_catalog(desc):
         d = (desc or "").strip().lower()
         if not d:
             return None
+        # 1. Exact lowercase match.
         if d in catalog_by_name:
             return catalog_by_name[d]
-        # Substring: prefer the LONGEST catalog name that is contained in the
-        # skeleton description (avoids "Cable" matching everything).
+        # 2. Substring: catalog name contained in description.
         for ln in catalog_lnames:
             if len(ln) >= 8 and ln in d:
                 return catalog_by_name[ln]
+        # 3. Substring: description contained in catalog name.
+        for ln in catalog_lnames:
+            if len(d) >= 8 and d in ln:
+                return catalog_by_name[ln]
+        # 4. Keyword overlap: pick the catalog name with the highest score
+        #    (count of shared meaningful tokens), tie-broken by longest name.
+        desc_toks = set(_tokens(d))
+        if not desc_toks:
+            return None
+        best_ln = None
+        best_score = 0
+        for ln in catalog_lnames:
+            cts = catalog_tokens[ln]
+            if not cts:
+                continue
+            shared = desc_toks & cts
+            score = len(shared)
+            if score >= 2 and score > best_score:
+                best_score = score
+                best_ln = ln
+        if best_ln is not None:
+            return catalog_by_name[best_ln]
         return None
 
     enriched_rows = []
