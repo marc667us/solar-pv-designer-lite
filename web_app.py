@@ -31825,6 +31825,16 @@ def boq_floor_item_edit(pid, bid, fid, iid):
             basic, supply_pct, install_pct, oh, prf, vat,
             vat_in_basic=bool(vat_in_basic))
         total = qty * final_rate
+        # 2026-06-29 owner directive: when the user enters rates on ONE
+        # item, propagate the MARKUP percentages (supply%, install%,
+        # overhead%, profit%, vat%, vat_in_basic) to every other item on
+        # this floor and recompute each line's total. Basic price stays
+        # per-item (it's the supplier's per-unit cost). The form carries
+        # a hidden checkbox ``propagate_rates`` defaulted to ``yes`` --
+        # tick it off in the form to make a one-off rate change.
+        propagate = (f.get("propagate_rates", "yes") or "yes").lower() == "yes"
+        from boq_rate_v3 import boq_rate_v3
+        n_propagated = 0
         with get_db() as c:
             c.execute(
                 "UPDATE boq_floor_items SET description=?, specification=?, "
@@ -31841,6 +31851,42 @@ def boq_floor_item_edit(pid, bid, fid, iid):
                 (basic, supply_pct, install_pct, supply, install,
                  oh, prf, 0, vat, vat_in_basic, final_rate, total, iid),
             )
+            if propagate:
+                # Pull every sibling on the floor + its per-item basic_price
+                # (basic is NOT replaced -- only the markup percentages).
+                siblings = c.execute(
+                    "SELECT i.id AS iid, COALESCE(i.qty,0) AS qty, "
+                    "       COALESCE(rb.basic_price,0) AS basic "
+                    "FROM boq_floor_items i "
+                    "LEFT JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
+                    "WHERE i.floor_id=? AND i.id <> ?",
+                    (fid, iid),
+                ).fetchall()
+                for s in siblings:
+                    s_basic = float(s["basic"] or 0)
+                    s_qty = float(s["qty"] or 0)
+                    s_sup, s_ins, s_rate = boq_rate_v3(
+                        s_basic, supply_pct, install_pct, oh, prf, vat,
+                        vat_in_basic=bool(vat_in_basic))
+                    s_total = s_qty * s_rate
+                    c.execute(
+                        "UPDATE boq_floor_items SET final_built_up_rate=?, "
+                        "total_amount=?, updated_at=CURRENT_TIMESTAMP "
+                        "WHERE id=?",
+                        (s_rate, s_total, s["iid"]),
+                    )
+                    c.execute(
+                        "UPDATE boq_floor_rate_buildup SET "
+                        "supply_pct=?, install_pct=?, supply_rate=?, install_rate=?, "
+                        "overhead_pct=?, profit_pct=?, vat_pct=?, vat_in_basic=?, "
+                        "final_built_up_rate=?, total_amount=?, "
+                        "updated_at=CURRENT_TIMESTAMP "
+                        "WHERE floor_item_id=?",
+                        (supply_pct, install_pct, s_sup, s_ins,
+                         oh, prf, vat, vat_in_basic,
+                         s_rate, s_total, s["iid"]),
+                    )
+                    n_propagated += 1
             c.execute("UPDATE boq_floors SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (fid,))
         # LEARN: record the user's preferred values for this description
         # so the library applies them to future projects derived from
@@ -31851,10 +31897,13 @@ def boq_floor_item_edit(pid, bid, fid, iid):
         try:
             from new_boq_hierarchy_schema import boq_audit
             boq_audit(get_db, uid, "boq_floor_item_edited", "boq_floor_item", iid,
-                      f"rate={final_rate:.2f} total={total:.2f}")
+                      f"rate={final_rate:.2f} total={total:.2f} propagated={n_propagated}")
         except Exception:
             pass
-        flash(f"Item updated. Future BOQs will default to {basic:.2f}/{unit} for this item.", "success")
+        if propagate and n_propagated:
+            flash(f"Item updated. Markups propagated to {n_propagated} other line item(s) on this floor.", "success")
+        else:
+            flash(f"Item updated. Future BOQs will default to {basic:.2f}/{unit} for this item.", "success")
         return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
 
     # GET -- render the edit form.

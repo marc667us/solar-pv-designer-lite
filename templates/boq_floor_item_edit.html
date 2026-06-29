@@ -110,16 +110,31 @@
 
       <div class="col-md-12 mt-2">
         <div class="small text-secondary" style="border-left:3px solid var(--solar-gold);padding-left:10px;line-height:1.4">
-          <strong>Rate engine (2026-06-28):</strong>
-          Supply Amount = Basic&times;(1 + (Supply% + VAT%)/100);
-          Install Amount = Basic&times;((Install% + Overhead% + Profit%)/100);
-          Total = Supply Amount + Install Amount.
-          Install Amount IS the labour line. No contingency. When supplier invoice already carries VAT, tick the box above.
+          <strong>Rate engine (markup-only, 2026-06-29):</strong>
+          Supply Amount Rate = Basic&times;(Supply% + VAT%)/100;
+          Installation Amount Rate = Basic&times;(Install% + Overhead% + Profit%)/100;
+          Total Amount Rate = Basic + Supply Amount + Installation Amount.
+          No contingency. When supplier invoice already carries VAT, tick the box above.
         </div>
       </div>
     </div>
 
     <hr class="my-4" style="border-color:#1e1e3a">
+
+    {# 2026-06-29 owner directive: by default, saving propagates the markup
+       percentages to every other line item on this floor so the user only
+       has to enter rates ONCE. Basic price stays per-item.
+       Untick to apply rates to THIS item only. #}
+    <div class="solar-card p-3 mb-3" style="background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.25)">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="propagate_rates_cb" name="propagate_rates" value="yes" checked>
+        <label class="form-check-label small" for="propagate_rates_cb">
+          <strong class="text-warning">Apply these markup rates to every line item on this floor.</strong>
+          <span class="text-secondary">&nbsp;&mdash; Supply%, Install%, Overhead%, Profit%, VAT%, and the "VAT already on invoice" flag are copied to every line so you only set the rates once. Each line keeps its own Basic Price (your supplier&rsquo;s per-unit cost). Untick to make these rates apply to this item only.</span>
+        </label>
+      </div>
+    </div>
+
     <div class="text-secondary small mb-3" style="border-left:3px solid var(--solar-gold);padding-left:10px">
       <i class="bi bi-lightbulb me-1"></i>
       <strong>Learning:</strong> when you save, the system records this Description + Unit + Basic Rate so future BOQs default to your edited values for the same item.
