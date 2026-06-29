@@ -33345,18 +33345,43 @@ def boq_floor_complete(pid, bid, fid):
         sec["items"].append(it)
 
     # Attach the per-section catalog so the template can render a dropdown
-    # per row -- the same dropdown Section-by-Section's grid uses.
-    try:
-        for no, bucket in bill_index.items():
-            for sec in bucket["sections"]:
-                cat = _lookup_section_catalog(sec["title"])
+    # per row -- the same dropdown Section-by-Section's grid uses. Uses
+    # _boq_catalog_for_section (module-level) directly + a normalisation
+    # retry for the few section titles whose punctuation differs from
+    # _BOQ_SECTION_ITEM_CATALOG keys (e.g. SUB-FEEDER vs SUBFEEDER).
+    def _norm_view(s):
+        s = (s or "").upper()
+        for ch in ("-", "/", ","):
+            s = s.replace(ch, " ")
+        return " ".join(s.split())
+
+    _cat_dict = globals().get("_BOQ_SECTION_ITEM_CATALOG", {}) or {}
+
+    def _lookup_for_view(title):
+        try:
+            hits = _boq_catalog_for_section(title) or []
+            if hits:
+                return hits
+        except Exception:
+            pass
+        target = _norm_view(title).replace(" ", "")
+        for k, v in _cat_dict.items():
+            kn = _norm_view(k).replace(" ", "")
+            if kn and target and (kn == target or kn.startswith(target) or target.startswith(kn) or kn in target or target in kn):
+                return list(v)
+        return []
+
+    for no, bucket in bill_index.items():
+        for sec in bucket["sections"]:
+            try:
+                cat = _lookup_for_view(sec["title"])
                 try:
                     cat = _boq_apply_overrides(uid, cat) if cat else cat
                 except Exception:
                     pass
                 sec["catalog"] = cat or []
-    except Exception:
-        pass
+            except Exception:
+                sec["catalog"] = []
 
     bills = [
         {"no": no, "name": bill_index[no]["name"], "sections": bill_index[no]["sections"]}
