@@ -31882,10 +31882,22 @@ def boq_floor_item_edit(pid, bid, fid, iid):
         return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
 
     # GET -- render the edit form.
+    # 2026-06-29: clone the Section-by-Section dropdown behaviour. Look up
+    # the same per-section catalog Section-by-Section's grid uses; the
+    # template renders the Description field as a <select> whose options
+    # are these catalog rows, with the row's basic + unit on dataset
+    # attributes for client-side auto-fill on pick.
+    try:
+        _section_title = (item["section"] or "").strip() if hasattr(item, "keys") else ""
+        catalog = _boq_catalog_for_section(_section_title) if _section_title else []
+        catalog = _boq_apply_overrides(uid, catalog)
+    except Exception:
+        catalog = []
     return render_template(
         "boq_floor_item_edit.html",
         user=current_user(),
         project=project, building=building, floor=floor, item=item,
+        catalog=catalog,
     )
 
 

@@ -21,10 +21,51 @@
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <div class="row g-3">
       <div class="col-md-12">
-        <label class="form-label small text-secondary">Description *</label>
-        <textarea class="form-control" name="description" rows="2" required>{{ item.description }}</textarea>
-        <div class="text-secondary small mt-1">Include the instruction verb + product + brand (e.g. "Supply and install ... as Memshield or approved equal").</div>
+        <label class="form-label small text-secondary">Description * <span class="text-secondary fst-italic">(pick from the dropdown to auto-fill Unit + Basic Rate, or type a custom one)</span></label>
+        {% if catalog %}
+        <select id="edit_desc_dropdown" class="form-select" onchange="window._editDescPick(this);">
+          <option value="">— pick a catalog item to auto-fill Unit + Basic Rate —</option>
+          {% for cdesc, cunit, cbasic in catalog %}
+          <option value="{{ cdesc }}" data-unit="{{ cunit }}" data-basic="{{ '%.2f'|format(cbasic) }}" {% if cdesc == item.description %}selected{% endif %}>{{ cdesc }}</option>
+          {% endfor %}
+          <option value="__custom__">+ Custom description (type your own below)</option>
+        </select>
+        {% endif %}
+        <textarea class="form-control mt-2" name="description" id="edit_desc_text" rows="2" required>{{ item.description }}</textarea>
+        <div class="text-secondary small mt-1">
+          {% if catalog %}
+          Pick from the dropdown to swap to a different catalog item -- Unit and Basic Rate update automatically.
+          {% endif %}
+          Include the instruction verb + product + brand (e.g. "Supply and install ... as Memshield or approved equal").
+        </div>
       </div>
+      {% if catalog %}
+      <script>
+        // Description dropdown: auto-fill Unit + Basic when the user picks a
+        // catalog item. Mirrors the section-grid behaviour. The text below
+        // the dropdown stays editable for custom descriptions.
+        window._editDescPick = function(sel){
+          var opt = sel.options[sel.selectedIndex];
+          if (!opt || !opt.value) return;
+          var descBox = document.getElementById('edit_desc_text');
+          var unitBox = document.querySelector('[name=unit]');
+          var basicBox = document.querySelector('[name=basic_price]');
+          if (opt.value === '__custom__') {
+            if (descBox) { descBox.value = ''; descBox.focus(); }
+            return;
+          }
+          if (descBox)  { descBox.value = opt.value; }
+          if (opt.dataset.unit && unitBox && unitBox.value === 'No.') {
+            unitBox.value = opt.dataset.unit;
+          } else if (opt.dataset.unit && unitBox) {
+            unitBox.value = opt.dataset.unit;
+          }
+          if (opt.dataset.basic && basicBox) {
+            basicBox.value = parseFloat(opt.dataset.basic).toFixed(2);
+          }
+        };
+      </script>
+      {% endif %}
       <div class="col-md-12">
         <label class="form-label small text-secondary">Specification</label>
         <textarea class="form-control" name="specification" rows="2">{{ item.specification or '' }}</textarea>
