@@ -1,0 +1,210 @@
+name: Diag Complete BOQ Generate Skeleton
+
+# Authenticate via Keycloak Direct Grant (Resource Owner Password Credentials)
+# against the live solarpro realm, then walk a fresh BOQ Project all the
+# way to POST /complete/generate. Captures every HTTP status + the body
+# of any 4xx/5xx so we can see exactly what the route is throwing.
+#
+# Zero-cost (curl only, no paid APIs).
+
+on: { workflow_dispatch: {} }
+
+permissions: { contents: read }
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE: https://solarpro.aiappinvent.com
+      KC_BASE: https://auth.aiappinvent.com
+      KC_REALM: solarpro
+      KC_CLIENT_ID: solarpro-web
+      USERNAME: marc667us
+    steps:
+      - name: 0) Get KC OIDC token via direct grant
+        env:
+          PASSWORD: ${{ secrets.SOLARPRO_OWNER_PASSWORD }}
+        run: |
+          set +e
+          TOK=$(curl -sS -X POST \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=password" \
+            -d "client_id=${KC_CLIENT_ID}" \
+            -d "username=${USERNAME}" \
+            -d "password=${PASSWORD}" \
+            -d "scope=openid profile email" \
+            "${KC_BASE}/realms/${KC_REALM}/protocol/openid-connect/token")
+          echo "Token response (first 400 bytes):"
+          echo "$TOK" | head -c 400
+          echo
+          ACCESS=$(echo "$TOK" | python3 -c "import sys, json; print(json.load(sys.stdin).get('access_token','')[:40])")
+          echo "access_token prefix: $ACCESS..."
+          # Save full token for later steps
+          echo "$TOK" | python3 -c "import sys, json; t=json.load(sys.stdin); print(t.get('access_token',''))" > /tmp/access_token.txt
+          test -s /tmp/access_token.txt || { echo "FAIL: no access token"; exit 1; }
+
+      - name: 1) Use access token to establish session via /auth/callback or bearer
+        run: |
+          set +e
+          ACCESS=$(cat /tmp/access_token.txt)
+          # Try sending Bearer header; some Flask apps accept it. Otherwise we
+          # need the full /auth/callback dance which needs a state cookie.
+          COOKIE=/tmp/cookies.txt
+          rm -f "$COOKIE"
+
+          # First hit /auth/login to seed PKCE state cookie
+          curl -sS -c "$COOKIE" -b "$COOKIE" -L -o /tmp/auth_login.html -w "/auth/login: %{http_code} -> %{url_effective}\n" "${BASE}/auth/login"
+          echo "  cookies after /auth/login:"
+          cat "$COOKIE" | grep -v '^#' | awk '{print "    "$6"="$7}' | head
+          # Now POST our access token directly to /auth/callback? Probably won't work.
+          # Instead, follow OIDC flow programmatically: get auth URL, exchange
+          # code via KC, then redirect-back to /auth/callback. This is hard
+          # without a browser.
+          # Simpler: use the access token as Bearer for API endpoints if
+          # supported. Otherwise we need to do the auth code flow.
+
+      - name: 2) Direct-probe the Generate endpoint with Bearer auth
+        run: |
+          set +e
+          ACCESS=$(cat /tmp/access_token.txt)
+          echo "==== POST /boq-projects/1/buildings/1/floors/1/complete/generate ===="
+          RESP=$(curl -sS -X POST \
+            -H "Authorization: Bearer $ACCESS" \
+            -H "X-Requested-With: XMLHttpRequest" \
+            -w "\n---\nHTTP=%{http_code} CT=%{content_type}\n" \
+            "${BASE}/boq-projects/1/buildings/1/floors/1/complete/generate")
+          echo "$RESP" | head -c 4000
+
+      - name: 3) Walk full flow: KC auth-code grant -> session -> Generate
+        env:
+          PASSWORD: ${{ secrets.SOLARPRO_OWNER_PASSWORD }}
+        run: |
+          set +e
+          python3 <<'PY'
+          import os, re, sys, requests, html
+          BASE = os.environ["BASE"]
+          KC_BASE = os.environ["KC_BASE"]
+          REALM = os.environ["KC_REALM"]
+          USER = os.environ["USERNAME"]
+          PW = os.environ["PASSWORD"]
+
+          s = requests.Session()
+          s.headers["User-Agent"] = "diag-complete-boq/1.0"
+
+          # 1) Hit /auth/login -> KC auth endpoint
+          r = s.get(f"{BASE}/auth/login", allow_redirects=False, timeout=30)
+          print(f"GET /auth/login -> {r.status_code}  loc={r.headers.get('Location','')[:80]}")
+          loc = r.headers.get("Location","")
+          if r.status_code != 302 or "auth.aiappinvent.com" not in loc:
+              print(f"FAIL: expected redirect to KC; got {r.status_code}")
+              sys.exit(1)
+
+          # 2) Follow to KC realm login page
+          r = s.get(loc, allow_redirects=False, timeout=30)
+          print(f"GET KC realm -> {r.status_code}")
+          # KC renders an HTML login form with a hidden form action URL
+          m = re.search(r'<form[^>]+action="([^"]+)"', r.text)
+          if not m:
+              print(f"FAIL: no form action found in KC login page")
+              print("body sample:", r.text[:600])
+              sys.exit(1)
+          form_action = html.unescape(m.group(1))
+          print(f"form action: {form_action[:80]}")
+
+          # 3) POST KC credentials
+          r = s.post(form_action, data={"username": USER, "password": PW,
+                                        "credentialId": ""},
+                     allow_redirects=False, timeout=30)
+          print(f"POST KC creds -> {r.status_code}  loc={r.headers.get('Location','')[:80]}")
+          if r.status_code != 302:
+              # Look for error message
+              em = re.search(r'class="kc-feedback-text">([^<]+)<', r.text)
+              if em:
+                  print(f"KC error: {em.group(1)}")
+              sys.exit(1)
+          callback_loc = r.headers.get("Location","")
+
+          # 4) Follow to /auth/callback which establishes Flask session
+          r = s.get(callback_loc, allow_redirects=False, timeout=30)
+          print(f"GET /auth/callback -> {r.status_code}  loc={r.headers.get('Location','')[:80]}")
+          # follow further redirects
+          while r.status_code in (301, 302):
+              loc = r.headers.get("Location","")
+              if loc.startswith("/"):
+                  loc = BASE + loc
+              if "auth.aiappinvent.com" in loc or loc == BASE + "/auth/login":
+                  break
+              r = s.get(loc, allow_redirects=False, timeout=30)
+              print(f"  -> {r.status_code}  {r.headers.get('Location','')[:60]}")
+
+          # 5) Verify we're logged in by hitting /dashboard
+          r = s.get(f"{BASE}/dashboard", timeout=30)
+          print(f"GET /dashboard -> {r.status_code}  len={len(r.text)}")
+          if r.status_code != 200 or "Sign in" in r.text or "Login" in r.text[:500]:
+              print("WARN: dashboard not loaded; auth probably failed")
+              sys.exit(1)
+          print("OK: session established")
+
+          # 6) Hit /boq-projects to find an existing project
+          r = s.get(f"{BASE}/boq-projects", timeout=30)
+          print(f"GET /boq-projects -> {r.status_code}")
+          pids = sorted(set(int(m) for m in re.findall(r"/boq-projects/(\d+)\b", r.text) if m.isdigit()), reverse=True)
+          if not pids:
+              print("No projects found; cannot exercise Generate.")
+              sys.exit(0)
+          PID = pids[0]
+          print(f"Using project {PID}")
+
+          # 7) Find a building + floor under that project
+          r = s.get(f"{BASE}/boq-projects/{PID}", timeout=30)
+          print(f"GET /boq-projects/{PID} -> {r.status_code}")
+          bids = sorted(set(int(m) for m in re.findall(rf"/boq-projects/{PID}/buildings/(\d+)\b", r.text) if m.isdigit()))
+          if not bids:
+              print("No buildings under this project; cannot exercise Generate.")
+              sys.exit(0)
+          BID = bids[0]
+          r = s.get(f"{BASE}/boq-projects/{PID}/buildings/{BID}", timeout=30)
+          fids = sorted(set(int(m) for m in re.findall(rf"/floors/(\d+)\b", r.text) if m.isdigit()))
+          if not fids:
+              print("No floors under this building; cannot exercise Generate.")
+              sys.exit(0)
+          FID = fids[0]
+          print(f"Using building {BID} floor {FID}")
+
+          # 8) GET /complete to grab CSRF + confirm page loads
+          r = s.get(f"{BASE}/boq-projects/{PID}/buildings/{BID}/floors/{FID}/complete", timeout=30)
+          print(f"GET /complete -> {r.status_code}  len={len(r.text)}")
+          m = re.search(r'name="_csrf"\s+value="([^"]+)"', r.text)
+          csrf = m.group(1) if m else ""
+          print(f"  csrf: {csrf[:8]}...")
+          if r.status_code != 200:
+              print("==== /complete GET FAILED ====")
+              print(r.text[:3000])
+              sys.exit(1)
+
+          # 9) POST /complete/generate
+          r = s.post(f"{BASE}/boq-projects/{PID}/buildings/{BID}/floors/{FID}/complete/generate",
+                     data={"_csrf": csrf}, allow_redirects=False, timeout=60)
+          print(f"POST /complete/generate -> {r.status_code}  loc={r.headers.get('Location','')[:80]}  len={len(r.text)}")
+          if r.status_code >= 400 or r.status_code == 0:
+              print("==== /complete/generate FAILED -- body dump ====")
+              print(r.text[:6000])
+              sys.exit(1)
+          if r.status_code in (301, 302):
+              # Follow the redirect and see if the next page renders
+              loc = r.headers.get("Location","")
+              if loc.startswith("/"):
+                  loc = BASE + loc
+              r = s.get(loc, timeout=30)
+              print(f"GET {loc[-50:]} -> {r.status_code}  len={len(r.text)}")
+              if r.status_code != 200:
+                  print("==== Follow-up GET FAILED -- body dump ====")
+                  print(r.text[:6000])
+                  sys.exit(1)
+              print("==== SUCCESS: Complete BOQ shows after Generate ====")
+              has_acc = "accordion" in r.text
+              has_topup = "Top-up missing" in r.text
+              n_edit = r.text.count("boq_floor_item_edit")
+              print(f"  accordion={has_acc}  top-up={has_topup}  edit-links={n_edit}")
+          PY
