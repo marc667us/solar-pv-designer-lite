@@ -177,16 +177,46 @@ def boq_floor_complete_generate(pid, bid, fid):
             }
         sections_seen[key]["fallback_rows"].append(r)
     # Look up catalog items per section using _boq_catalog_for_section
-    # (defined in web_app.py via the data_v3 splice).
+    # (defined in web_app.py via the data_v3 splice). The lookup helper does
+    # exact + uppercase + alias + startswith matching. We add a normalisation
+    # cascade for stubborn cases like "SUB-FEEDER CABLES AND EARTH LEADS"
+    # (mine) vs "SUBFEEDER CABLES AND EARTHLEADS" (catalog): strip
+    # hyphens + collapse "EARTH LEADS" -> "EARTHLEADS", retry.
     _cat_for_section = globals().get("_boq_catalog_for_section")
+    _catalog_dict = globals().get("_BOQ_SECTION_ITEM_CATALOG", {})
+
+    def _norm(s):
+        s = (s or "").upper()
+        for ch in ("-", "/", ","):
+            s = s.replace(ch, " ")
+        s = " ".join(s.split())
+        return s
+
+    def _lookup_section_catalog(section_title):
+        if not _cat_for_section:
+            return []
+        # First try the existing helper as-is.
+        try:
+            hits = _cat_for_section(section_title) or []
+            if hits:
+                return hits
+        except Exception:
+            hits = []
+        # Normalised retry: try every catalog key after spaces / hyphens /
+        # slashes are collapsed so "SUB-FEEDER" matches "SUBFEEDER", and
+        # "EARTH LEADS" matches "EARTHLEADS".
+        target = _norm(section_title).replace(" ", "")
+        for k, v in (_catalog_dict or {}).items():
+            kn = _norm(k).replace(" ", "")
+            if not kn or not target:
+                continue
+            if kn == target or kn.startswith(target) or target.startswith(kn) or kn in target or target in kn:
+                return list(v)
+        return []
+
     rows = []
     for sec in sections_seen.values():
-        catalog_items = []
-        if _cat_for_section:
-            try:
-                catalog_items = _cat_for_section(sec["section_title"]) or []
-            except Exception:
-                catalog_items = []
+        catalog_items = _lookup_section_catalog(sec["section_title"])
         if catalog_items:
             # Use the catalog content -- realistic descriptions + units + prices,
             # exactly matches what the Section-by-Section grid uses.
@@ -292,13 +322,20 @@ def boq_floor_complete_generate(pid, bid, fid):
             return catalog_by_name[best_ln]
         return None
 
+    # Precedence on the basic price:
+    #   1. User override (highest -- personal pricing memory)
+    #   2. Section catalog price already on the row (from _BOQ_SECTION_ITEM_CATALOG)
+    #   3. Marketplace match (equipment_catalog) -- only when basic is still 0
+    #   4. basic=0 -- user adds via Quick Add or types on Edit
     enriched_rows = []
     for r in rows:
         new_r = dict(r)
         new_r.setdefault("library_item_id", None)
         desc = r.get("desc", "")
         key = _boq_desc_key(desc)
-        # 1. User override (most personal).
+        starting_basic = float(new_r.get("basic") or 0)
+
+        # 1. User override -- always wins.
         if key and key in overrides:
             ov_unit, ov_basic, _ov_sp, _ov_ip, _ov_qty = overrides[key]
             if ov_basic > 0:
@@ -307,7 +344,14 @@ def boq_floor_complete_generate(pid, bid, fid):
                 n_priced_from_overrides += 1
                 enriched_rows.append(new_r)
                 continue
-        # 2-3. Marketplace (equipment_catalog) -- exact then fuzzy.
+
+        # 2. Section catalog already supplied a price -- keep it.
+        if starting_basic > 0:
+            n_priced_from_catalog += 1
+            enriched_rows.append(new_r)
+            continue
+
+        # 3. Marketplace lookup ONLY for rows that arrived with basic=0.
         cat_hit = _find_in_catalog(desc)
         if cat_hit:
             cat_id, cat_unit, cat_price, cat_spec = cat_hit
@@ -319,7 +363,8 @@ def boq_floor_complete_generate(pid, bid, fid):
             n_priced_from_catalog += 1
             enriched_rows.append(new_r)
             continue
-        # 4. Not found anywhere -- mark for the quick-add flow.
+
+        # 4. Not priced anywhere -- user types in / quick-adds later.
         n_needs_price += 1
         enriched_rows.append(new_r)
     rows = enriched_rows
