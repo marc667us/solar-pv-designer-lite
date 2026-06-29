@@ -78,7 +78,7 @@ jobs:
             "${BASE}/boq-projects/1/buildings/1/floors/1/complete/generate")
           echo "$RESP" | head -c 4000
 
-      - name: 3) Walk full flow: KC auth-code grant -> session -> Generate
+      - name: "3) Walk full flow -- KC auth-code grant, session, Generate"
         env:
           PASSWORD: ${{ secrets.SOLARPRO_OWNER_PASSWORD }}
         run: |
