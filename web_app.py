@@ -32557,13 +32557,22 @@ def boq_floor_complete(pid, bid, fid):
             "items": [],
         })
 
-    # Attach real items to the right section. Match on (bill_no, section_letter,
-    # section_title) so we don't merge unrelated sections that share a letter
-    # across bills.
+    # Attach real items to the right section. boq_floor_items uses the
+    # ``section`` column (not ``section_title``) -- that column was added by
+    # the section setup form back in 2026-06 and holds the human-readable
+    # title. ``bill_name`` + ``section_letter`` are the canonical join keys.
+    def _row_get(row, key, default=""):
+        try:
+            v = row[key]
+        except (KeyError, IndexError):
+            return default
+        return v if v is not None else default
+
     for it in items:
-        bill_no = int(it["bill_no"] or 0)
-        letter = (it["section_letter"] or "").upper()
-        title = (it["section_title"] or it["section"] or "").upper()
+        bill_no = int(_row_get(it, "bill_no", 0) or 0)
+        letter = (_row_get(it, "section_letter", "") or "").upper()
+        title = (_row_get(it, "section", "") or "").upper()
+        subsec = _row_get(it, "subsection_label", "") or _row_get(it, "subsection", "")
         bucket = bill_index.get(bill_no)
         if not bucket:
             # Item exists under a bill no longer in the service set -- park it
@@ -32573,7 +32582,7 @@ def boq_floor_complete(pid, bid, fid):
             bucket = bill_index[9999]
             sec = next((s for s in bucket["sections"] if s["letter"] == letter and s["title"].upper() == title), None)
             if not sec:
-                sec = {"letter": letter or "Z", "title": (it["section_title"] or it["section"] or "Uncategorised"), "subsection": (it["subsection_label"] or it["subsection"] or ""), "service_code": "", "items": []}
+                sec = {"letter": letter or "Z", "title": (_row_get(it, "section", "") or "Uncategorised"), "subsection": subsec, "service_code": "", "items": []}
                 bucket["sections"].append(sec)
             sec["items"].append(it)
             continue
@@ -32581,7 +32590,7 @@ def boq_floor_complete(pid, bid, fid):
         if sec is None:
             # Section letter is in this bill but with a different title --
             # add it to the bucket so the item still renders.
-            sec = {"letter": letter, "title": (it["section_title"] or it["section"] or "Section"), "subsection": (it["subsection_label"] or it["subsection"] or ""), "service_code": "", "items": []}
+            sec = {"letter": letter, "title": (_row_get(it, "section", "") or "Section"), "subsection": subsec, "service_code": "", "items": []}
             bucket["sections"].append(sec)
         sec["items"].append(it)
 

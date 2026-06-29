@@ -127,8 +127,8 @@
                   <td class="text-end fw-bold">{{ (it.bu_final or it.final_built_up_rate or 0)|money }}</td>
                   <td class="text-end fw-bold">{{ (it.total_amount or 0)|money }}</td>
                   <td class="text-end">
-                    <a href="{{ url_for('boq_item_edit', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" class="btn btn-outline-warning btn-sm" title="Edit" style="padding:.15rem .3rem"><i class="bi bi-pencil"></i></a>
-                    <form method="POST" action="{{ url_for('boq_item_delete', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" class="d-inline">
+                    <a href="{{ url_for('boq_floor_item_edit', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" class="btn btn-outline-warning btn-sm" title="Edit" style="padding:.15rem .3rem"><i class="bi bi-pencil"></i></a>
+                    <form method="POST" action="{{ url_for('boq_floor_delete_item', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" class="d-inline">
                       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
                       <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove this item?')" title="Delete" style="padding:.15rem .3rem"><i class="bi bi-trash"></i></button>
                     </form>
