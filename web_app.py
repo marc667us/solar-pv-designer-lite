@@ -6306,6 +6306,20 @@ def admin_dashboard():
         monthly_signups = c.execute(
             "SELECT strftime('%Y-%m', created_at) AS mo, COUNT(*) AS cnt "
             "FROM users GROUP BY mo ORDER BY mo DESC LIMIT 6").fetchall()
+        # 2026-06-29: surface user feedback on the admin home page.
+        try:
+            new_feedback = c.execute(
+                "SELECT COUNT(*) FROM beta_feedback WHERE status='new'"
+            ).fetchone()[0]
+        except Exception:
+            new_feedback = 0
+        try:
+            recent_feedback = c.execute(
+                "SELECT id, username, type, page, message, status, created_at "
+                "FROM beta_feedback ORDER BY id DESC LIMIT 6"
+            ).fetchall()
+        except Exception:
+            recent_feedback = []
 
     plan_counts = {}
     for u in users:
@@ -6321,6 +6335,8 @@ def admin_dashboard():
                            total_rev=total_rev, new_leads=new_leads,
                            subs=subs, paid_users=paid_users,
                            recent_users=recent_users,
+                           new_feedback=new_feedback,
+                           recent_feedback=recent_feedback,
                            monthly_signups=list(reversed(list(monthly_signups))))
 
 

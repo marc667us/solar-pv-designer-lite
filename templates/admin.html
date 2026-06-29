@@ -65,6 +65,7 @@
     ('bi-people-fill',        '#0ea5e9', 'Total Users',      total_users),
     ('bi-folder-fill',        '#f59e0b', 'Total Projects',   projects),
     ('bi-ticket-fill',        '#ef4444', 'Open Tickets',     open_t),
+    ('bi-chat-square-text-fill','#f59e0b', 'New Feedback',   (new_feedback or 0)),
     ('bi-person-check-fill',  '#22c55e', 'Paid Accounts',    paid),
     ('bi-envelope-heart-fill','#a78bfa', 'Newsletter Subs',  subs),
     ('bi-person-plus-fill',   '#ef4444', 'New Leads',        new_leads),
@@ -140,6 +141,7 @@
         {% for href,icon,color,title,sub in [
           (url_for('admin_users'),      'bi-people-fill',        '#0ea5e9', 'Users',          'Plans, roles, accounts'),
           (url_for('admin_tickets'),    'bi-ticket-fill',        '#ef4444', 'Tickets',        'Support &amp; replies'),
+          (url_for('admin_feedback'),   'bi-chat-square-text-fill','#f59e0b', 'Feedback',     'Beta user feedback &amp; ratings'),
           (url_for('admin_appliances'), 'bi-database-fill',      '#22c55e', 'Appliances',     'Load library DB'),
           (url_for('admin_sales'),      'bi-megaphone-fill',     '#f59e0b', 'Sales',          'Leads &amp; pipeline'),
           (url_for('admin_platform'),    'bi-speedometer2',       '#22c55e', 'Platform',        'MRR, growth metrics'),
@@ -277,6 +279,76 @@
     </div>
   </div>
 
+</div>
+
+<!-- ── Row 3: Recent feedback ───────────────────────────────────────────────── -->
+<div class="row g-4 mt-1">
+  <div class="col-12">
+    <div class="solar-card p-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="section-head mb-0">
+          <i class="bi bi-chat-square-text-fill me-2"></i>Recent User Feedback
+          {% if new_feedback %}
+          <span class="badge ms-1" style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;font-size:10px">
+            {{ new_feedback }} new
+          </span>
+          {% endif %}
+        </div>
+        <a href="{{ url_for('admin_feedback') }}" class="btn btn-outline-secondary btn-sm" style="font-size:11px">All Feedback →</a>
+      </div>
+      {% if recent_feedback %}
+      {% set fb_type_color = {'bug':'#ef4444','suggestion':'#a78bfa','general':'#0ea5e9','rating':'#f59e0b'} %}
+      {% set fb_status_color = {'new':'#f59e0b','reviewed':'#0ea5e9','resolved':'#22c55e'} %}
+      <div class="table-responsive">
+        <table class="table table-sm mb-0" style="font-size:12px">
+          <thead>
+            <tr style="border-color:#1e1e3a">
+              <th class="text-secondary fw-normal">#</th>
+              <th class="text-secondary fw-normal">From</th>
+              <th class="text-secondary fw-normal">Type</th>
+              <th class="text-secondary fw-normal">Page</th>
+              <th class="text-secondary fw-normal">Message</th>
+              <th class="text-secondary fw-normal">Status</th>
+              <th class="text-secondary fw-normal">Date</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for f in recent_feedback %}
+          {% set tc = fb_type_color.get(f.type, '#6868a0') %}
+          {% set sc = fb_status_color.get(f.status, '#6868a0') %}
+          <tr class="ticket-row" style="border-color:#1e1e3a">
+            <td class="text-secondary">#{{ f.id }}</td>
+            <td class="fw-semibold">{{ f.username or '—' }}</td>
+            <td>
+              <span class="badge" style="font-size:9px;background:{{ tc }}22;color:{{ tc }};border:1px solid {{ tc }}44">
+                {{ (f.type or 'general')|upper }}
+              </span>
+            </td>
+            <td style="max-width:180px">
+              <span class="text-truncate d-block text-secondary" style="max-width:180px;font-size:11px">{{ f.page or '—' }}</span>
+            </td>
+            <td style="max-width:340px">
+              <span class="text-truncate d-block" style="max-width:340px">{{ (f.message or '')[:90] }}{% if (f.message or '')|length > 90 %}…{% endif %}</span>
+            </td>
+            <td>
+              <span class="badge" style="font-size:9px;background:{{ sc }}22;color:{{ sc }};border:1px solid {{ sc }}44">
+                {{ (f.status or 'new')|upper }}
+              </span>
+            </td>
+            <td class="text-secondary">{{ (f.created_at or '')[:10] }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center text-secondary py-4 small">
+        <i class="bi bi-chat-square-text d-block mb-2" style="font-size:28px;color:#6868a044"></i>
+        No feedback submitted yet. Users can leave feedback from the widget on any page.
+      </div>
+      {% endif %}
+    </div>
+  </div>
 </div>
 
 {% endblock %}
