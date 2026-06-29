@@ -155,12 +155,19 @@ def boq_floor_complete_generate(pid, bid, fid):
     rows = _services_section_rows(services)
 
     n_inserted = 0
+    n_skipped = 0
     with get_db() as c:
         # Existing (bill_no, section_letter, description) keys -- skip dupes.
+        # ONLY dedup against rows that came from Generate Skeleton previously
+        # (service_code is set). Items added via Section-by-Section have
+        # service_code='' and must NOT block the skeleton from filling its
+        # canonical rows -- the user's Section-by-Section work and the
+        # Complete BOQ skeleton can coexist on the same floor.
         existing = {
             (int(r["bill_no"] or 0), (r["section_letter"] or "").upper(), (r["description"] or "").strip().lower())
             for r in c.execute(
-                "SELECT bill_no, section_letter, description FROM boq_floor_items WHERE floor_id=?",
+                "SELECT bill_no, section_letter, description FROM boq_floor_items "
+                "WHERE floor_id=? AND COALESCE(service_code,'') <> ''",
                 (fid,),
             ).fetchall()
         }
@@ -192,6 +199,7 @@ def boq_floor_complete_generate(pid, bid, fid):
         for r in rows:
             key = (int(r["bill_no"]), (r["section_letter"] or "").upper(), (r["desc"] or "").strip().lower())
             if key in existing:
+                n_skipped += 1
                 continue
             try:
                 basic = float(r.get("basic") or 0)
@@ -278,7 +286,19 @@ def boq_floor_complete_generate(pid, bid, fid):
         pass
 
     if n_inserted:
-        flash(f"Generated {n_inserted} starter row(s) from your Service Configuration. Edit quantities and prices in place.", "success")
+        flash(f"Generated {n_inserted} new starter row(s) from your Service Configuration ({n_skipped} already on the floor). Open any bill below to edit quantities + prices.", "success")
     else:
-        flash("No new rows added -- every skeleton row already exists on this floor.", "info")
+        # Tell the user EXACTLY what's there so they understand nothing was
+        # missing. Avoid the previous "no new rows" terseness that read as
+        # an error.
+        with get_db() as c:
+            n_total = c.execute(
+                "SELECT COUNT(*) FROM boq_floor_items WHERE floor_id=?", (fid,)
+            ).fetchone()[0]
+        flash(
+            f"Your Service Configuration's {n_skipped} skeleton row(s) are already on this floor "
+            f"({n_total} total items including any Section-by-Section additions). Open any bill below "
+            f"to edit quantities + prices, or change services on the Edit Project page to add more bills.",
+            "info",
+        )
     return redirect(url_for("boq_floor_complete", pid=pid, bid=bid, fid=fid))

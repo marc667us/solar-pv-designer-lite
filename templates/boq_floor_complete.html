@@ -69,17 +69,24 @@
   {% endif %}
 </div>
 
-{# Bills accordion: one per service, each containing collapsible sections #}
+{# Bills accordion: one per service, each containing collapsible sections.
+   First bill is OPEN by default so the user sees real content immediately
+   after Generate. Item count is shown on every bill header so the user
+   can tell at a glance how full each bill is. #}
 <div class="accordion" id="completeBoq">
   {% for bill in bills %}
+  {% set _bill_items = (bill.sections|sum(attribute='items', start=[]))|length %}
   <div class="accordion-item" style="background:#0a0a14;border:1px solid #1e1e3a;margin-bottom:8px">
     <h2 class="accordion-header">
-      <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#bill_{{ bill.no }}" style="background:#15152a;color:#f59e0b;font-size:14px;text-transform:uppercase;letter-spacing:.5px">
+      <button class="accordion-button{% if not loop.first %} collapsed{% endif %} fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#bill_{{ bill.no }}" style="background:#15152a;color:#f59e0b;font-size:14px;text-transform:uppercase;letter-spacing:.5px">
         <i class="bi bi-folder2-open me-2"></i>Bill {{ bill.no }} &mdash; {{ bill.name }}
-        <span class="ms-auto text-secondary small fw-normal me-3">{{ bill.sections|length }} section(s)</span>
+        <span class="ms-auto text-secondary small fw-normal me-3">
+          {{ bill.sections|length }} section{{ '' if bill.sections|length == 1 else 's' }} &middot;
+          <span class="text-warning">{{ _bill_items }}</span> item{{ '' if _bill_items == 1 else 's' }}
+        </span>
       </button>
     </h2>
-    <div id="bill_{{ bill.no }}" class="accordion-collapse collapse" data-bs-parent="#completeBoq">
+    <div id="bill_{{ bill.no }}" class="accordion-collapse collapse{% if loop.first %} show{% endif %}" data-bs-parent="#completeBoq">
       <div class="accordion-body p-2">
         {% for sec in bill.sections %}
         <div class="mt-2 mb-3 p-2" style="border:1px solid #1e1e3a;border-radius:8px;background:rgba(255,255,255,.01)">
