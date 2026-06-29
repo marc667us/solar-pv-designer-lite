@@ -9485,6 +9485,25 @@ def err_429(e):
         message="You've made too many requests in a short time. "
                 "Please wait a moment and try again."), 429
 
+def _last_error_for_admin():
+    """Return the most recent error_logs row (or None) if the caller is an
+    admin -- so the friendly error.html can surface error type + message
+    + a link to the full trace without a separate page hop. Always fails
+    closed (returns None) for non-admin / no-user / DB problems."""
+    try:
+        u = current_user()
+        if not u or not u.get("is_admin"):
+            return None
+        with get_db() as _c:
+            row = _c.execute(
+                "SELECT id, created_at, error_type, error_message FROM error_logs "
+                "ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        return row
+    except Exception:
+        return None
+
+
 @app.errorhandler(500)
 def err_500(e):
     # Log full traceback to runtime logs so 500s are diagnosable.
@@ -9496,7 +9515,8 @@ def err_500(e):
     return render_template("error.html", code=500,
         title="Internal Server Error",
         message="Something went wrong on our end. "
-                "Please go back to the dashboard and try again."), 500
+                "Please go back to the dashboard and try again.",
+        last_error=_last_error_for_admin()), 500
 
 @app.errorhandler(405)
 def err_405(e):
@@ -9554,13 +9574,15 @@ def err_uncaught(e):
         if isinstance(e, _HTTPExc):
             return render_template("error.html", code=e.code or 500,
                 title="Hiccup",
-                message=str(e.description or "We hit a small hiccup. Please try again.")
+                message=str(e.description or "We hit a small hiccup. Please try again."),
+                last_error=_last_error_for_admin()
             ), e.code or 500
     except Exception:
         pass
     return render_template("error.html", code=500,
         title="Small hiccup",
-        message="We hit a small hiccup. Your data is safe -- please try again."), 500
+        message="We hit a small hiccup. Your data is safe -- please try again.",
+        last_error=_last_error_for_admin()), 500
 
 
 # ─── Client Prospecting Agent ─────────────────────────────────────────────────

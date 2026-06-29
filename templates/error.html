@@ -70,11 +70,21 @@
     </div>
 
     {% if user and user.is_admin %}
-    <details class="text-start mt-4 small text-secondary">
+    <details class="text-start mt-4 small text-secondary" open>
       <summary class="text-warning small">Admin: technical details</summary>
-      <div class="mt-2">
+      <div class="mt-2" style="font-family:monospace">
         <div><strong>Code:</strong> {{ code }}</div>
         <div><strong>Path:</strong> {{ request.path if request else '' }}</div>
+        {% if last_error %}
+        <div class="mt-3 pt-2" style="border-top:1px solid #1e1e3a">
+          <div><strong>Error type:</strong> <code class="text-warning">{{ last_error.error_type }}</code></div>
+          <div><strong>Message:</strong> <code class="text-danger">{{ (last_error.error_message or '')[:300] }}</code></div>
+          <div><strong>When:</strong> {{ last_error.created_at }}</div>
+          <div class="mt-2"><a href="{{ url_for('admin_error_detail', error_id=last_error.id) }}" class="text-warning">Open full trace &rarr;</a></div>
+        </div>
+        {% else %}
+        <div class="mt-2 text-secondary"><em>(no captured error yet -- visit /admin/errors)</em></div>
+        {% endif %}
       </div>
     </details>
     {% endif %}
