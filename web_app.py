@@ -31825,16 +31825,6 @@ def boq_floor_item_edit(pid, bid, fid, iid):
             basic, supply_pct, install_pct, oh, prf, vat,
             vat_in_basic=bool(vat_in_basic))
         total = qty * final_rate
-        # 2026-06-29 owner directive: when the user enters rates on ONE
-        # item, propagate the MARKUP percentages (supply%, install%,
-        # overhead%, profit%, vat%, vat_in_basic) to every other item on
-        # this floor and recompute each line's total. Basic price stays
-        # per-item (it's the supplier's per-unit cost). The form carries
-        # a hidden checkbox ``propagate_rates`` defaulted to ``yes`` --
-        # tick it off in the form to make a one-off rate change.
-        propagate = (f.get("propagate_rates", "yes") or "yes").lower() == "yes"
-        from boq_rate_v3 import boq_rate_v3
-        n_propagated = 0
         with get_db() as c:
             c.execute(
                 "UPDATE boq_floor_items SET description=?, specification=?, "
@@ -31851,42 +31841,6 @@ def boq_floor_item_edit(pid, bid, fid, iid):
                 (basic, supply_pct, install_pct, supply, install,
                  oh, prf, 0, vat, vat_in_basic, final_rate, total, iid),
             )
-            if propagate:
-                # Pull every sibling on the floor + its per-item basic_price
-                # (basic is NOT replaced -- only the markup percentages).
-                siblings = c.execute(
-                    "SELECT i.id AS iid, COALESCE(i.qty,0) AS qty, "
-                    "       COALESCE(rb.basic_price,0) AS basic "
-                    "FROM boq_floor_items i "
-                    "LEFT JOIN boq_floor_rate_buildup rb ON rb.floor_item_id=i.id "
-                    "WHERE i.floor_id=? AND i.id <> ?",
-                    (fid, iid),
-                ).fetchall()
-                for s in siblings:
-                    s_basic = float(s["basic"] or 0)
-                    s_qty = float(s["qty"] or 0)
-                    s_sup, s_ins, s_rate = boq_rate_v3(
-                        s_basic, supply_pct, install_pct, oh, prf, vat,
-                        vat_in_basic=bool(vat_in_basic))
-                    s_total = s_qty * s_rate
-                    c.execute(
-                        "UPDATE boq_floor_items SET final_built_up_rate=?, "
-                        "total_amount=?, updated_at=CURRENT_TIMESTAMP "
-                        "WHERE id=?",
-                        (s_rate, s_total, s["iid"]),
-                    )
-                    c.execute(
-                        "UPDATE boq_floor_rate_buildup SET "
-                        "supply_pct=?, install_pct=?, supply_rate=?, install_rate=?, "
-                        "overhead_pct=?, profit_pct=?, vat_pct=?, vat_in_basic=?, "
-                        "final_built_up_rate=?, total_amount=?, "
-                        "updated_at=CURRENT_TIMESTAMP "
-                        "WHERE floor_item_id=?",
-                        (supply_pct, install_pct, s_sup, s_ins,
-                         oh, prf, vat, vat_in_basic,
-                         s_rate, s_total, s["iid"]),
-                    )
-                    n_propagated += 1
             c.execute("UPDATE boq_floors SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (fid,))
         # LEARN: record the user's preferred values for this description
         # so the library applies them to future projects derived from
@@ -31897,13 +31851,10 @@ def boq_floor_item_edit(pid, bid, fid, iid):
         try:
             from new_boq_hierarchy_schema import boq_audit
             boq_audit(get_db, uid, "boq_floor_item_edited", "boq_floor_item", iid,
-                      f"rate={final_rate:.2f} total={total:.2f} propagated={n_propagated}")
+                      f"rate={final_rate:.2f} total={total:.2f}")
         except Exception:
             pass
-        if propagate and n_propagated:
-            flash(f"Item updated. Markups propagated to {n_propagated} other line item(s) on this floor.", "success")
-        else:
-            flash(f"Item updated. Future BOQs will default to {basic:.2f}/{unit} for this item.", "success")
+        flash(f"Item updated. Future BOQs will default to {basic:.2f}/{unit} for this item.", "success")
         return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
 
     # GET -- render the edit form.
@@ -32707,6 +32658,93 @@ def boq_floor_complete_generate(pid, bid, fid):
 
     rows = _services_section_rows(services)
 
+    # ------------------------------------------------------------------
+    # 2026-06-29 owner directive: auto-fill basic prices from the
+    # marketplace (equipment_catalog) + user overrides (learning layer)
+    # so the user does NOT have to type a basic price for every line.
+    # Matches Section-by-Section's behaviour where the grid catalogue
+    # dropdown auto-fills Unit + Basic. Order of precedence per item:
+    #     1. boq_user_item_overrides  -- user's last-saved price/unit
+    #     2. equipment_catalog        -- marketplace canonical price (exact name match)
+    #     3. equipment_catalog        -- substring match (fuzzy)
+    #     4. _BOQ_SECTION_ITEM_CATALOG -- hardcoded section catalog (legacy)
+    #     5. skeleton default basic=0 -- user adds via /equipment-catalog/quick-add
+    # ------------------------------------------------------------------
+    n_priced_from_overrides = 0
+    n_priced_from_catalog = 0
+    n_needs_price = 0
+    try:
+        overrides = _boq_lookup_overrides_for_user(uid)
+    except Exception:
+        overrides = {}
+    # Pull catalog into a {lower(name): (id, unit, price_usd, spec)} once.
+    try:
+        with get_db() as c:
+            cat_rows = c.execute(
+                "SELECT id, LOWER(name) AS lname, unit, price_usd, spec "
+                "FROM equipment_catalog WHERE COALESCE(is_active,1)=1 "
+                "AND COALESCE(price_usd,0) > 0"
+            ).fetchall()
+        catalog_by_name = {
+            (r["lname"] or ""): (
+                int(r["id"]),
+                (r["unit"] or "No."),
+                float(r["price_usd"] or 0),
+                (r["spec"] or ""),
+            )
+            for r in cat_rows
+        }
+    except Exception:
+        catalog_by_name = {}
+
+    # Build a sorted list of (lname, tuple) for prefix/substring search.
+    catalog_lnames = sorted(catalog_by_name.keys(), key=lambda x: -len(x))
+
+    def _find_in_catalog(desc):
+        d = (desc or "").strip().lower()
+        if not d:
+            return None
+        if d in catalog_by_name:
+            return catalog_by_name[d]
+        # Substring: prefer the LONGEST catalog name that is contained in the
+        # skeleton description (avoids "Cable" matching everything).
+        for ln in catalog_lnames:
+            if len(ln) >= 8 and ln in d:
+                return catalog_by_name[ln]
+        return None
+
+    enriched_rows = []
+    for r in rows:
+        new_r = dict(r)
+        new_r.setdefault("library_item_id", None)
+        desc = r.get("desc", "")
+        key = _boq_desc_key(desc)
+        # 1. User override (most personal).
+        if key and key in overrides:
+            ov_unit, ov_basic, _ov_sp, _ov_ip, _ov_qty = overrides[key]
+            if ov_basic > 0:
+                new_r["basic"] = ov_basic
+                new_r["unit"] = ov_unit or new_r.get("unit", "No.")
+                n_priced_from_overrides += 1
+                enriched_rows.append(new_r)
+                continue
+        # 2-3. Marketplace (equipment_catalog) -- exact then fuzzy.
+        cat_hit = _find_in_catalog(desc)
+        if cat_hit:
+            cat_id, cat_unit, cat_price, cat_spec = cat_hit
+            new_r["basic"] = cat_price
+            new_r["unit"] = cat_unit or new_r.get("unit", "No.")
+            if cat_spec and not new_r.get("spec"):
+                new_r["spec"] = cat_spec
+            new_r["library_item_id"] = cat_id
+            n_priced_from_catalog += 1
+            enriched_rows.append(new_r)
+            continue
+        # 4. Not found anywhere -- mark for the quick-add flow.
+        n_needs_price += 1
+        enriched_rows.append(new_r)
+    rows = enriched_rows
+
     n_inserted = 0
     n_skipped = 0
     with get_db() as c:
@@ -32787,6 +32825,8 @@ def boq_floor_complete_generate(pid, bid, fid):
             _unit         = (r.get("unit", "") or "")[:20]
             _service_code = (r.get("service_code", "") or "")[:40]
 
+            _library_item_id = r.get("library_item_id")  # None when not in catalog
+
             cur = c.execute(
                 "INSERT INTO boq_floor_items ("
                 "  floor_id, building_id, project_id, user_id, "
@@ -32794,15 +32834,15 @@ def boq_floor_complete_generate(pid, bid, fid):
                 "  bill_no, bill_name, section_letter, subsection_label, "
                 "  description, specification, unit, qty, "
                 "  final_built_up_rate, total_amount, "
-                "  display_order, service_code) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "  display_order, service_code, library_item_id) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     fid, bid, pid, uid,
                     _section, _subsection,
                     r["bill_no"], _bill_name, _sec_letter, _sub_label,
                     _desc, _spec, _unit, qty,
                     total_rate, total_amount,
-                    next_disp, _service_code,
+                    next_disp, _service_code, _library_item_id,
                 ),
             )
             new_id = int(cur.lastrowid or 0)
@@ -32839,7 +32879,19 @@ def boq_floor_complete_generate(pid, bid, fid):
         pass
 
     if n_inserted:
-        flash(f"Generated {n_inserted} new starter row(s) from your Service Configuration ({n_skipped} already on the floor). Open any bill below to edit quantities + prices.", "success")
+        # Compose a single, plain-English flash that shows the user
+        # exactly how much work is left -- and how much was pre-filled
+        # from the marketplace + their own override history.
+        bits = [f"Generated {n_inserted} new line item(s)."]
+        if n_priced_from_overrides:
+            bits.append(f"{n_priced_from_overrides} pre-priced from your saved overrides.")
+        if n_priced_from_catalog:
+            bits.append(f"{n_priced_from_catalog} pre-priced from the Marketplace catalog.")
+        if n_needs_price:
+            bits.append(f"{n_needs_price} item(s) have no marketplace match -- type the basic price OR click \"Add to Marketplace\" next to the row to save it for next time.")
+        if n_skipped:
+            bits.append(f"{n_skipped} skeleton row(s) were already on the floor.")
+        flash(" ".join(bits), "success")
     else:
         # Tell the user EXACTLY what's there so they understand nothing was
         # missing. Avoid the previous "no new rows" terseness that read as
@@ -32855,6 +32907,7 @@ def boq_floor_complete_generate(pid, bid, fid):
             "info",
         )
     return redirect(url_for("boq_floor_complete", pid=pid, bid=bid, fid=fid))
+
 
 if __name__ == "__main__":
     init_db()

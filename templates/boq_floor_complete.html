@@ -90,15 +90,24 @@
       <div class="accordion-body p-2">
         {% for sec in bill.sections %}
         <div class="mt-2 mb-3 p-2" style="border:1px solid #1e1e3a;border-radius:8px;background:rgba(255,255,255,.01)">
-          <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
             <div>
               <span class="text-warning fw-bold">{{ sec.letter }}. {{ sec.title }}</span>
               {% if sec.subsection %}<span class="text-secondary small ms-2">&mdash; {{ sec.subsection }}</span>{% endif %}
               <span class="text-secondary small ms-2">({{ sec['items']|length }} item{{ '' if sec['items']|length == 1 else 's' }})</span>
             </div>
-            <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}?bill_no={{ bill.no }}&section_letter={{ sec.letter }}&section_title={{ sec.title|urlencode }}" class="btn btn-outline-warning btn-sm">
-              <i class="bi bi-plus me-1"></i>Add item
-            </a>
+            <div class="d-flex gap-2">
+              {# Reuses the EXISTING Section-by-Section grid editor (spec line 208:
+                 "Build by All Sections shall simply instantiate every existing
+                 section interface one after another. No duplicate UI."). #}
+              <a href="{{ url_for('boq_section_grid', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill.no, letter=sec.letter) }}?title={{ sec.title|urlencode }}&bill_name={{ bill.name|urlencode }}&sub={{ sec.subsection|urlencode }}"
+                 class="btn btn-warning btn-sm fw-bold">
+                <i class="bi bi-pencil-square me-1"></i>Open section editor
+              </a>
+              <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}?bill_no={{ bill.no }}&section_letter={{ sec.letter }}&section_title={{ sec.title|urlencode }}" class="btn btn-outline-warning btn-sm">
+                <i class="bi bi-plus me-1"></i>Add item
+              </a>
+            </div>
           </div>
 
           {% if sec['items'] %}
