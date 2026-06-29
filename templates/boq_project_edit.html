@@ -12,8 +12,10 @@
 </div>
 
 <div class="solar-card p-4">
-  <form method="POST">
+  <form method="POST" id="editForm">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {# Set by JS just before submit if the user confirms removing sections #}
+    <input type="hidden" name="remove_sections" id="remove_sections" value="">
     <div class="row g-3">
       <div class="col-md-6">
         <label class="form-label small text-secondary">Project name *</label>
@@ -48,6 +50,62 @@
         </div>
       </div>
     </div>
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+
+    <h6 class="fw-bold text-warning mb-2"><i class="bi bi-list-check me-1"></i>Service Configuration *</h6>
+    <div class="text-secondary small mb-3">Select Engineering Services Included. You can add or remove services here at any time; if you untick a service the system will ask whether to keep or remove its related BOQ sections.</div>
+    <div class="row g-2 mb-2" id="svc_grid">
+      {% for code, label, icon in (services or []) %}
+      <div class="col-md-6">
+        <div class="form-check" style="background:#0a0a14;border:1px solid #1e1e3a;border-radius:8px;padding:8px 12px">
+          <input class="form-check-input svc-cb" type="checkbox" name="services" value="{{ code }}" id="svc_{{ code }}" {% if code in (chosen_services or []) %}checked{% endif %}>
+          <label class="form-check-label" for="svc_{{ code }}">
+            <i class="{{ icon }} me-2 text-warning"></i>{{ label }}
+          </label>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="d-flex gap-2 mb-3">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="svc_all">Select All</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="svc_clear">Clear All</button>
+    </div>
+
+    {# Live preview of the BOQ sections that will load #}
+    <div class="solar-card p-3 mb-3" id="svc_preview_card" style="background:#0a0a14;border:1px solid #1e1e3a;display:none">
+      <div class="text-warning fw-bold small mb-2" style="text-transform:uppercase;letter-spacing:1px">
+        <i class="bi bi-list-task me-1"></i>Loaded BOQ Sections
+      </div>
+      <div class="small text-secondary mb-2" id="svc_preview_count"></div>
+      <div id="svc_preview"></div>
+    </div>
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+
+    <h6 class="fw-bold text-warning mb-2"><i class="bi bi-tools me-1"></i>Build Mode</h6>
+    <div class="text-secondary small mb-3">Choose the default build mode. You can switch modes any time from the floor view; this is just the default the BOQ Builder opens with.</div>
+    <div class="row g-2">
+      <div class="col-md-6">
+        <div class="form-check" style="background:#0a0a14;border:1px solid #1e1e3a;border-radius:8px;padding:10px 14px">
+          <input class="form-check-input" type="radio" name="build_mode" value="section_by_section" id="bm_sbs" {% if (project.build_mode or 'complete_boq') == 'section_by_section' %}checked{% endif %}>
+          <label class="form-check-label" for="bm_sbs">
+            <span class="fw-bold"><i class="bi bi-list-ol me-1"></i>Section-by-Section</span>
+            <div class="text-secondary small mt-1">Build and review one section at a time.</div>
+          </label>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="form-check" style="background:#0a0a14;border:1px solid #1e1e3a;border-radius:8px;padding:10px 14px">
+          <input class="form-check-input" type="radio" name="build_mode" value="complete_boq" id="bm_cb" {% if (project.build_mode or 'complete_boq') == 'complete_boq' %}checked{% endif %}>
+          <label class="form-check-label" for="bm_cb">
+            <span class="fw-bold"><i class="bi bi-collection me-1"></i>Complete BOQ</span>
+            <div class="text-secondary small mt-1">Load every applicable section into one editable BOQ.</div>
+          </label>
+        </div>
+      </div>
+    </div>
+
     <hr class="my-4" style="border-color:#1e1e3a">
     <div class="d-flex justify-content-between">
       <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="btn btn-outline-light">Cancel</a>
@@ -55,4 +113,61 @@
     </div>
   </form>
 </div>
+
+<script>
+  const SVC_SECTIONS = {{ service_sections_json|safe }};
+  const SVC_LABELS = {{ service_labels_json|safe }};
+  // Snapshot of services ticked at page load, so on submit we can detect what was removed.
+  const INITIAL_SERVICES = new Set({{ (chosen_services or [])|tojson }});
+
+  function svcRender() {
+    const ticked = [...document.querySelectorAll('input.svc-cb:checked')].map(i => i.value);
+    const card = document.getElementById('svc_preview_card');
+    const tgt = document.getElementById('svc_preview');
+    const cnt = document.getElementById('svc_preview_count');
+    if (!ticked.length) { card.style.display = 'none'; tgt.innerHTML = ''; return; }
+    card.style.display = 'block';
+    let html = '';
+    let nsections = 0;
+    ticked.forEach((code, idx) => {
+      const skel = SVC_SECTIONS[code];
+      if (!skel) return;
+      html += `<div class="mt-2"><div class="fw-bold text-warning small">Bill ${idx+1}. ${skel.name}</div><ul class="mb-2 small text-secondary">`;
+      (skel.sections || []).forEach(s => {
+        nsections += 1;
+        html += `<li>${s.letter}. ${s.title}${s.subsection ? ' <span class="text-secondary">— ' + s.subsection + '</span>' : ''}</li>`;
+      });
+      html += '</ul></div>';
+    });
+    tgt.innerHTML = html;
+    cnt.textContent = `${ticked.length} service${ticked.length !== 1 ? 's' : ''} · ${nsections} section${nsections !== 1 ? 's' : ''}`;
+  }
+  document.querySelectorAll('input.svc-cb').forEach(i => i.addEventListener('change', svcRender));
+  document.getElementById('svc_all').addEventListener('click', () => {
+    document.querySelectorAll('input.svc-cb').forEach(i => i.checked = true);
+    svcRender();
+  });
+  document.getElementById('svc_clear').addEventListener('click', () => {
+    document.querySelectorAll('input.svc-cb').forEach(i => i.checked = false);
+    svcRender();
+  });
+
+  // Confirmation prompt on submit when a service was unticked.
+  document.getElementById('editForm').addEventListener('submit', (ev) => {
+    const ticked = new Set([...document.querySelectorAll('input.svc-cb:checked')].map(i => i.value));
+    const removed = [...INITIAL_SERVICES].filter(s => !ticked.has(s));
+    if (removed.length) {
+      const labels = removed.map(c => SVC_LABELS[c] || c).join(', ');
+      const choice = confirm(
+        `You unticked the following services:\n\n  ${labels}\n\n` +
+        `Do you want to ALSO REMOVE the BOQ sections related to these services from this project?\n\n` +
+        `Click OK to remove the sections (their items will be deleted).\n` +
+        `Click Cancel to keep the sections as they are.`
+      );
+      document.getElementById('remove_sections').value = choice ? 'yes' : 'no';
+    }
+  });
+
+  svcRender();
+</script>
 {% endblock %}

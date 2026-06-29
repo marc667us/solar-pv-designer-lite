@@ -140,13 +140,17 @@
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <p>Recompute <strong>Total Rate</strong> and <strong>Amount</strong> for every item in this project using the current compound rate build-up formula:</p>
+          <p>Recompute <strong>Supply Amount Rate</strong>, <strong>Installation Amount Rate</strong>, <strong>Total Amount Rate</strong>, and <strong>Amount</strong> for every item in this project using the markup-only rate engine (single source: <code>boq_rate_v3</code>):</p>
           <div class="solar-card p-2 small text-secondary mb-3" style="background:rgba(14,165,233,.05);border:1px solid rgba(14,165,233,.25)">
             <code style="color:#7dd3fc">
-              Rate = (Supply + Install) &times; (1 + (OH% + Profit%)/100) &times; (1 + Cont%/100) &times; (1 + VAT%/100)
+              effective_vat = 0 if vat_in_basic else vat%<br>
+              Supply Amount Rate = Basic &times; (Supply% + effective_vat) / 100<br>
+              Installation Amount Rate = Basic &times; (Install% + OH% + Profit%) / 100<br>
+              Total Amount Rate = Basic + Supply Amount Rate + Installation Amount Rate<br>
+              Amount = Quantity &times; Total Amount Rate
             </code>
           </div>
-          <p class="text-secondary small mb-2">Items saved with the older FLAT-additive formula (rate = direct &times; (1 + sum of all pcts / 100)) will see their totals <strong>increase ~5&ndash;10%</strong> because the new compound formula correctly nests contingency and VAT on top of the marked-up subtotal &mdash; tax-authority defensible (GRA / FIRS / KRA).</p>
+          <p class="text-secondary small mb-2">Markup-only model (2026-06-28): the two markup columns are added to <em>Basic Price</em> to get the per-unit total. Contingency is <strong>not</strong> applied. Rows saved before the markup switch will see their Supply Amount and Installation Amount adjust to the new semantics; the Total Amount Rate and Amount preserve correctness end-to-end.</p>
           <p class="text-secondary small mb-2">Per-item percentages stored in the rate build-up table are <strong>not</strong> changed by this action &mdash; only the recomputed totals are written back.</p>
           <label class="form-label small text-secondary">Type <code>RECALC</code> to confirm:</label>
           <input class="form-control" name="confirm" placeholder="RECALC" required>
@@ -171,7 +175,7 @@
         </div>
         <div class="modal-body">
           <p>This will permanently clear <strong>every line item and rate build-up row</strong> in this project.</p>
-          <p class="text-secondary small">Buildings and floors are kept. You can then re-pick templates or open sections to start adding fresh lines.</p>
+          <p class="text-secondary small">Buildings and floors are kept. You can then open <strong>Complete BOQ</strong> or <strong>Section-by-Section</strong> on any floor to start adding fresh lines.</p>
           <label class="form-label small text-secondary">Type <code>RESET</code> to confirm:</label>
           <input class="form-control" name="confirm" placeholder="RESET" required>
         </div>

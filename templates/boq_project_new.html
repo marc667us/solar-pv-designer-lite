@@ -68,13 +68,13 @@
 
     <hr class="my-4" style="border-color:#1e1e3a">
 
-    <h6 class="fw-bold text-warning mb-2"><i class="bi bi-list-check me-1"></i>Services this BOQ must cover *</h6>
-    <div class="text-secondary small mb-3">Tick every service the project must price for. Any service you tick gets its own bill in the BOQ — including ones a template doesn't cover. Templates that match your selection get sorted to the top of the picker.</div>
-    <div class="row g-2 mb-2">
+    <h6 class="fw-bold text-warning mb-2"><i class="bi bi-list-check me-1"></i>Service Configuration *</h6>
+    <div class="text-secondary small mb-3">Select Engineering Services Included. Each service determines which BOQ sections load when you build the project &mdash; in either <b>Section-by-Section</b> or <b>Complete BOQ</b> mode.</div>
+    <div class="row g-2 mb-2" id="svc_grid">
       {% for code, label, icon in (services or []) %}
       <div class="col-md-6">
         <div class="form-check" style="background:#0a0a14;border:1px solid #1e1e3a;border-radius:8px;padding:8px 12px">
-          <input class="form-check-input" type="checkbox" name="services" value="{{ code }}" id="svc_{{ code }}">
+          <input class="form-check-input svc-cb" type="checkbox" name="services" value="{{ code }}" id="svc_{{ code }}">
           <label class="form-check-label" for="svc_{{ code }}">
             <i class="{{ icon }} me-2 text-warning"></i>{{ label }}
           </label>
@@ -83,13 +83,59 @@
       {% endfor %}
     </div>
     <div class="d-flex gap-2 mb-3">
-      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.querySelectorAll('input[name=services]').forEach(i=>i.checked=true)">Select all</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.querySelectorAll('input[name=services]').forEach(i=>i.checked=false)">Clear</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="svc_all">Select All</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="svc_clear">Clear All</button>
+    </div>
+
+    {# Live preview of the BOQ sections that will load #}
+    <div class="solar-card p-3 mb-3" id="svc_preview_card" style="background:#0a0a14;border:1px solid #1e1e3a;display:none">
+      <div class="text-warning fw-bold small mb-2" style="text-transform:uppercase;letter-spacing:1px">
+        <i class="bi bi-list-task me-1"></i>Loaded BOQ Sections
+      </div>
+      <div class="small text-secondary mb-2" id="svc_preview_count"></div>
+      <div id="svc_preview"></div>
     </div>
 
     <hr class="my-4" style="border-color:#1e1e3a">
-    <div class="text-secondary small mb-3"><i class="bi bi-info-circle me-1"></i>Defaults are pre-filled — only change what doesn't match your project. Next step: add the first building, then pick a template scoped to the services you ticked.</div>
+    <div class="text-secondary small mb-3"><i class="bi bi-info-circle me-1"></i>Defaults are pre-filled — only change what doesn't match your project. Next: add the first building, then pick <b>Section-by-Section</b> or <b>Complete BOQ</b> on the floor view.</div>
     <button class="btn btn-warning fw-bold"><i class="bi bi-arrow-right-circle me-1"></i>Create project &amp; add building</button>
   </form>
 </div>
+
+<script>
+  // Service -> sections map (built from _BOQ_SERVICE_BILL_SKELETON, owner-facing labels)
+  const SVC_SECTIONS = {{ service_sections_json|safe }};
+  function svcRender() {
+    const ticked = [...document.querySelectorAll('input.svc-cb:checked')].map(i => i.value);
+    const card = document.getElementById('svc_preview_card');
+    const tgt = document.getElementById('svc_preview');
+    const cnt = document.getElementById('svc_preview_count');
+    if (!ticked.length) { card.style.display = 'none'; tgt.innerHTML = ''; return; }
+    card.style.display = 'block';
+    let html = '';
+    let nsections = 0;
+    ticked.forEach((code, idx) => {
+      const skel = SVC_SECTIONS[code];
+      if (!skel) return;
+      html += `<div class="mt-2"><div class="fw-bold text-warning small">Bill ${idx+1}. ${skel.name}</div><ul class="mb-2 small text-secondary">`;
+      (skel.sections || []).forEach(s => {
+        nsections += 1;
+        html += `<li>${s.letter}. ${s.title}${s.subsection ? ' <span class="text-secondary">— ' + s.subsection + '</span>' : ''}</li>`;
+      });
+      html += '</ul></div>';
+    });
+    tgt.innerHTML = html;
+    cnt.textContent = `${ticked.length} service${ticked.length !== 1 ? 's' : ''} · ${nsections} section${nsections !== 1 ? 's' : ''}`;
+  }
+  document.querySelectorAll('input.svc-cb').forEach(i => i.addEventListener('change', svcRender));
+  document.getElementById('svc_all').addEventListener('click', () => {
+    document.querySelectorAll('input.svc-cb').forEach(i => i.checked = true);
+    svcRender();
+  });
+  document.getElementById('svc_clear').addEventListener('click', () => {
+    document.querySelectorAll('input.svc-cb').forEach(i => i.checked = false);
+    svcRender();
+  });
+  svcRender();
+</script>
 {% endblock %}

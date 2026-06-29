@@ -171,35 +171,24 @@ def _boq_next_item_no(floor_id: int, bill_no: int, section_letter: str) -> str:
 
 
 def _boq_safe_rate(basic, supply, install, oh, prf, cnt=0, vat=0, vat_in_basic=False):
-    """BOQ rate build-up (2026-06-28 owner spec).
+    """Thin wrapper around boq_rate_v3.boq_rate_v3 -- the single source of
+    truth for BOQ rate computation (2026-06-29 unification).
 
-    Arg semantics (CHANGED 2026-06-28):
-        basic   -- material cost per unit (currency)
-        supply  -- supply rate PERCENT
-        install -- install rate PERCENT
-        oh, prf -- overhead %, profit %
-        cnt     -- IGNORED (no contingency)
-        vat     -- VAT %
-        vat_in_basic -- True when supplier invoice already had VAT, so VAT
-                        contribution to supply is 0.
+    Returns the per-unit total rate (basic + markup-only supply + markup-only
+    install). ``cnt`` is accepted for backward-compat with old callsites but
+    IGNORED (contingency was retired 2026-06-28).
 
-    Formula:
-        eff_vat = 0 if vat_in_basic else vat
-        supply_amount  = basic * (1 + (supply + eff_vat)/100)
-        install_amount = basic * ((install + oh + prf)/100)
-        total          = supply_amount + install_amount   (per unit)
+    Formula (delegated to boq_rate_v3):
+        effective_vat   = 0 if vat_in_basic else vat
+        supply_amount   = basic * (supply  + effective_vat)        / 100
+        install_amount  = basic * (install + overhead + profit)    / 100
+        total_rate      = basic + supply_amount + install_amount   (per unit)
     """
-    b = max(0.0, float(basic or 0))
-    sp = max(0.0, float(supply  or 0))
-    ip = max(0.0, float(install or 0))
-    op = max(0.0, float(oh  or 0))
-    pp = max(0.0, float(prf or 0))
-    vp = max(0.0, float(vat or 0))
-    eff_vat = 0.0 if vat_in_basic else vp
-    # MARKUP-only (2026-06-28); per-unit total INCLUDES basic.
-    supply_amount  = b * (sp + eff_vat) / 100.0
-    install_amount = b * (ip + op + pp) / 100.0
-    return b + supply_amount + install_amount
+    from boq_rate_v3 import boq_rate_v3
+    _supply_amt, _install_amt, total_rate = boq_rate_v3(
+        basic, supply, install, oh, prf, vat, vat_in_basic
+    )
+    return total_rate
 
 
 # ----- Routes --------------------------------------------------------------

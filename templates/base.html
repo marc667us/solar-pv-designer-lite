@@ -344,7 +344,7 @@
             <li><span class="dropdown-header text-secondary" style="font-size:11px;letter-spacing:.5px;color:#9090c0!important">MY DOCUMENTS</span></li>
             <li><a class="dropdown-item" href="{{ url_for('price_sheets_list') }}"><i class="bi bi-file-earmark-text me-2 text-warning"></i>Price Sheets</a></li>
             <li><a class="dropdown-item" href="{{ url_for('boms_list') }}"><i class="bi bi-list-check me-2" style="color:#0ea5e9"></i>BOMs / Cost Estimates</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('boq_projects_list') }}"><i class="bi bi-diagram-3 me-2 text-warning"></i>BOQ Projects (multi-building)</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('boq_projects_list') }}"><i class="bi bi-diagram-3 me-2 text-warning"></i>BOQ Projects</a></li>
             <li><a class="dropdown-item" href="{{ url_for('rfqs_list') }}"><i class="bi bi-envelope-paper me-2" style="color:#a78bfa"></i>RFQs</a></li>
             <li><a class="dropdown-item" href="{{ url_for('me_dashboard') }}"><i class="bi bi-person-badge me-2 text-info"></i>My Procurement</a></li>
             {% if (user.role or '') == 'supplier_admin' %}

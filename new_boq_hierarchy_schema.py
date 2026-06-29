@@ -226,6 +226,17 @@ _SQLITE_ALTERS_RATE_V3 = [
 ]
 
 
+# 2026-06-29: Build by Template retired. The BOQ engine is unified to two
+# modes only -- Section-by-Section + Complete BOQ. `build_mode` defaults to
+# 'complete_boq' so any pre-refactor project lands on the new screen with all
+# its existing sections shown together (silent auto-migration). Per
+# projectboq build update1.txt lines 426-447, 679-697.
+_SQLITE_ALTERS_BUILD_MODE = [
+    "ALTER TABLE boq_projects ADD COLUMN build_mode TEXT DEFAULT 'complete_boq'",
+    "ALTER TABLE boq_floor_items ADD COLUMN service_code TEXT DEFAULT ''",
+]
+
+
 # ─── Postgres DDL ─────────────────────────────────────────────────────────────
 
 _PG_CREATE_TABLES = [
@@ -417,6 +428,13 @@ _PG_ALTERS_RATE_V3 = [
 ]
 
 
+# 2026-06-29: Build by Template retired -- see _SQLITE_ALTERS_BUILD_MODE.
+_PG_ALTERS_BUILD_MODE = [
+    "ALTER TABLE boq_projects ADD COLUMN IF NOT EXISTS build_mode VARCHAR(40) DEFAULT 'complete_boq'",
+    "ALTER TABLE boq_floor_items ADD COLUMN IF NOT EXISTS service_code VARCHAR(40) DEFAULT ''",
+]
+
+
 def _try_each(c, stmts: Iterable[str]) -> None:
     """Run each statement in its own try block so one failure (already exists,
     legacy schema mismatch) doesn't abort the rest."""
@@ -437,6 +455,7 @@ def ensure_boq_hierarchy_schema(get_db_fn) -> None:
         with get_db_fn() as c:
             _try_each(c, _PG_CREATE_TABLES)
             _try_each(c, _PG_ALTERS_RATE_V3)
+            _try_each(c, _PG_ALTERS_BUILD_MODE)
         _BOQ_SCHEMA_DONE["pg"] = True
         return
 
@@ -459,6 +478,7 @@ def ensure_boq_hierarchy_schema(get_db_fn) -> None:
         _try_each(c, _SQLITE_ALTERS_BOM_RATES)
         _try_each(c, _SQLITE_ALTERS_FLOOR_BILLS)
         _try_each(c, _SQLITE_ALTERS_RATE_V3)
+        _try_each(c, _SQLITE_ALTERS_BUILD_MODE)
         _try_each(c, _SQLITE_ALTERS_BOQ_TENANT)
     _BOQ_SCHEMA_DONE["sqlite"] = True
 

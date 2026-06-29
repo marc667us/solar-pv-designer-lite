@@ -18,11 +18,11 @@
     <a href="{{ url_for('boq_floor_summary', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-info btn-sm">
       <i class="bi bi-stack me-1"></i>Bills Summary
     </a>
-    <a href="{{ url_for('boq_template_picker', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-warning fw-bold btn-sm">
-      <i class="bi bi-card-checklist me-1"></i>Start from template
+    <a href="{{ url_for('boq_floor_complete', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-warning fw-bold btn-sm">
+      <i class="bi bi-collection me-1"></i>Complete BOQ
     </a>
     <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-warning btn-sm">
-      <i class="bi bi-folder-plus me-1"></i>Open new section
+      <i class="bi bi-list-ol me-1"></i>Section-by-Section
     </a>
   </div>
 </div>
@@ -137,17 +137,37 @@
   </table>
 </div>
 {% else %}
-<div class="solar-card p-4 text-center text-secondary mb-3">
-  <i class="bi bi-folder2-open" style="font-size:36px"></i>
-  <p class="mt-2 mb-2">No items on this floor yet — start fast from a template or open a single section.</p>
-  <div class="d-flex gap-2 justify-content-center flex-wrap">
-    <a href="{{ url_for('boq_template_picker', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-warning fw-bold btn-sm">
-      <i class="bi bi-card-checklist me-1"></i>Start from template
-    </a>
-    <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-warning btn-sm">
-      <i class="bi bi-folder-plus me-1"></i>Open one section
-    </a>
+<div class="solar-card p-4 mb-3" style="background:#0a0a14;border:1px solid #1e1e3a">
+  <div class="text-center text-secondary">
+    <i class="bi bi-folder2-open" style="font-size:36px"></i>
+    <p class="mt-2 mb-3">No items on this floor yet &mdash; pick a build mode below to load the BOQ sections from your Service Configuration.</p>
   </div>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <a href="{{ url_for('boq_floor_complete', pid=project.id, bid=building.id, fid=floor.id) }}" class="d-block text-decoration-none">
+        <div class="p-3 text-center" style="border:2px solid var(--solar-gold,#f59e0b);border-radius:10px;background:rgba(245,158,11,.07)">
+          <i class="bi bi-collection text-warning" style="font-size:28px"></i>
+          <div class="fw-bold text-warning mt-2">Complete BOQ</div>
+          <div class="text-secondary small mt-1">Load every applicable section from your selected services into one editable BOQ.</div>
+        </div>
+      </a>
+    </div>
+    <div class="col-md-6">
+      <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="d-block text-decoration-none">
+        <div class="p-3 text-center" style="border:2px solid #1e1e3a;border-radius:10px;background:rgba(255,255,255,.02)">
+          <i class="bi bi-list-ol text-warning" style="font-size:28px"></i>
+          <div class="fw-bold mt-2" style="color:#e0e0f0">Section-by-Section</div>
+          <div class="text-secondary small mt-1">Build and review one section at a time. Existing workflow.</div>
+        </div>
+      </a>
+    </div>
+  </div>
+  {% if (project.build_mode or 'complete_boq') %}
+  <div class="text-secondary small text-center mt-3">
+    <i class="bi bi-info-circle me-1"></i>Default build mode for this project: <span class="text-warning">{{ 'Complete BOQ' if (project.build_mode or 'complete_boq') == 'complete_boq' else 'Section-by-Section' }}</span>
+    <span class="ms-1">&middot; change on the <a href="{{ url_for('boq_project_edit', pid=project.id) }}" class="text-warning">project edit page</a>.</span>
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Complete BOQ — {{ floor.floor_name }}{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('boq_projects_list') }}" class="text-warning">BOQ Projects</a> ·
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="text-warning">{{ project.project_name }}</a> ·
+      <a href="{{ url_for('boq_building_view', pid=project.id, bid=building.id) }}" class="text-warning">{{ building.building_name }}</a> ·
+      <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=floor.id) }}" class="text-warning">{{ floor.floor_name }}</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-collection text-warning me-1"></i>Complete BOQ &mdash; {{ floor.floor_name }}</h5>
+    <div class="text-secondary small mt-1">All sections from the project's Service Configuration, on one editable page. Switch to <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="text-warning">Section-by-Section</a> for one-section-at-a-time editing &mdash; both modes write to the same data.</div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left-short me-1"></i>Floor view
+    </a>
+    <a href="{{ url_for('boq_floor_summary', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-info btn-sm">
+      <i class="bi bi-stack me-1"></i>Bills Summary
+    </a>
+    <a href="{{ url_for('boq_project_edit', pid=project.id) }}" class="btn btn-outline-warning btn-sm">
+      <i class="bi bi-gear me-1"></i>Edit Services
+    </a>
+  </div>
+</div>
+
+{# Service chips strip #}
+<div class="solar-card p-3 mb-3" style="border-left:3px solid var(--solar-gold,#f59e0b)">
+  <div class="text-warning fw-bold small mb-2" style="text-transform:uppercase;letter-spacing:1px">
+    <i class="bi bi-list-check me-1"></i>Engineering Services Included ({{ services|length }})
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    {% for code in services %}
+    <span class="badge" style="background:rgba(245,158,11,.15);color:var(--solar-gold,#f59e0b);font-size:12px;padding:6px 12px;border:1px solid rgba(245,158,11,.4)">
+      <i class="{{ service_icons.get(code, 'bi-circle') }} me-1"></i>{{ service_labels.get(code, code) }}
+    </span>
+    {% endfor %}
+  </div>
+</div>
+
+{# Subtotal + Generate prompt (only when floor has no items yet) #}
+<div class="d-flex flex-wrap gap-3 mb-3 align-items-end">
+  <div class="kpi-card" style="max-width:300px">
+    <div class="kpi-label">Floor subtotal</div>
+    <div class="kpi-value">{{ (floor_subtotal)|money }}</div>
+  </div>
+  {% if not has_items %}
+  <form method="POST" action="{{ url_for('boq_floor_complete_generate', pid=project.id, bid=building.id, fid=floor.id) }}" class="d-flex gap-2 align-items-center">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="text-secondary small">
+      <i class="bi bi-magic me-1"></i>{{ skeleton_item_count }} starter row(s) ready to drop in. You can edit every quantity, price, and description after.
+    </div>
+    <button class="btn btn-warning fw-bold btn-sm" onclick="return confirm('Generate {{ skeleton_item_count }} starter row(s) on this floor?')">
+      <i class="bi bi-lightning-charge me-1"></i>Generate Skeleton
+    </button>
+  </form>
+  {% else %}
+  <div class="text-secondary small align-self-center">
+    <i class="bi bi-info-circle me-1"></i>{{ n_items }} item(s) on this floor. Re-running Generate is safe &mdash; only missing rows are added.
+    <form method="POST" action="{{ url_for('boq_floor_complete_generate', pid=project.id, bid=building.id, fid=floor.id) }}" class="d-inline ms-2">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-warning btn-sm" onclick="return confirm('Re-run skeleton generator? Existing rows are kept untouched.')">
+        <i class="bi bi-arrow-clockwise me-1"></i>Top-up missing rows
+      </button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+
+{# Bills accordion: one per service, each containing collapsible sections #}
+<div class="accordion" id="completeBoq">
+  {% for bill in bills %}
+  <div class="accordion-item" style="background:#0a0a14;border:1px solid #1e1e3a;margin-bottom:8px">
+    <h2 class="accordion-header">
+      <button class="accordion-button collapsed fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#bill_{{ bill.no }}" style="background:#15152a;color:#f59e0b;font-size:14px;text-transform:uppercase;letter-spacing:.5px">
+        <i class="bi bi-folder2-open me-2"></i>Bill {{ bill.no }} &mdash; {{ bill.name }}
+        <span class="ms-auto text-secondary small fw-normal me-3">{{ bill.sections|length }} section(s)</span>
+      </button>
+    </h2>
+    <div id="bill_{{ bill.no }}" class="accordion-collapse collapse" data-bs-parent="#completeBoq">
+      <div class="accordion-body p-2">
+        {% for sec in bill.sections %}
+        <div class="mt-2 mb-3 p-2" style="border:1px solid #1e1e3a;border-radius:8px;background:rgba(255,255,255,.01)">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+              <span class="text-warning fw-bold">{{ sec.letter }}. {{ sec.title }}</span>
+              {% if sec.subsection %}<span class="text-secondary small ms-2">&mdash; {{ sec.subsection }}</span>{% endif %}
+              <span class="text-secondary small ms-2">({{ sec['items']|length }} item{{ '' if sec['items']|length == 1 else 's' }})</span>
+            </div>
+            <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}?bill_no={{ bill.no }}&section_letter={{ sec.letter }}&section_title={{ sec.title|urlencode }}" class="btn btn-outline-warning btn-sm">
+              <i class="bi bi-plus me-1"></i>Add item
+            </a>
+          </div>
+
+          {% if sec['items'] %}
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:13px">
+              <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
+                <tr>
+                  <th style="width:40px">Item</th>
+                  <th>Description</th>
+                  <th class="text-end">Quantity</th>
+                  <th>Unit</th>
+                  <th class="text-end">Basic Price</th>
+                  <th class="text-end">Supply Amount Rate</th>
+                  <th class="text-end">Installation Amount Rate</th>
+                  <th class="text-end">Total Amount Rate</th>
+                  <th class="text-end">Amount</th>
+                  <th style="width:90px"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for it in sec['items'] %}
+                <tr>
+                  <td class="text-secondary small">{{ it.item_no_display or it.item_no or loop.index }}</td>
+                  <td>
+                    {{ it.description }}
+                    {% if it.specification %}<div class="text-secondary small">{{ it.specification }}</div>{% endif %}
+                  </td>
+                  <td class="text-end">{{ '%g' | format(it.qty or 0) }}</td>
+                  <td>{{ it.unit }}</td>
+                  <td class="text-end">{{ (it.bu_basic or 0)|money }}</td>
+                  <td class="text-end">{{ (it.bu_supply or 0)|money }}</td>
+                  <td class="text-end">{{ (it.bu_install or 0)|money }}</td>
+                  <td class="text-end fw-bold">{{ (it.bu_final or it.final_built_up_rate or 0)|money }}</td>
+                  <td class="text-end fw-bold">{{ (it.total_amount or 0)|money }}</td>
+                  <td class="text-end">
+                    <a href="{{ url_for('boq_item_edit', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" class="btn btn-outline-warning btn-sm" title="Edit" style="padding:.15rem .3rem"><i class="bi bi-pencil"></i></a>
+                    <form method="POST" action="{{ url_for('boq_item_delete', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" class="d-inline">
+                      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                      <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove this item?')" title="Delete" style="padding:.15rem .3rem"><i class="bi bi-trash"></i></button>
+                    </form>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="text-secondary small fst-italic">No items yet in this section. Use <b>Generate Skeleton</b> above or <b>Add item</b> to populate.</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}

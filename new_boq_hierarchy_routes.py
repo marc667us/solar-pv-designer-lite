@@ -137,23 +137,17 @@ def _boq_floor_owned_or_404(fid: int, bid: int):
 
 
 def _boq_compute_rate(basic, supply, install, oh_pct, prf_pct, cnt_pct=0, vat_pct=0, vat_in_basic=False):
-    """2026-06-28 owner spec. supply/install are PERCENTAGES.
-    cnt_pct ignored. vat_in_basic suppresses VAT on supply.
-        supply_amount   = basic * (1 + (supply + (0 if vat_in_basic else vat))/100)
-        install_amount  = basic * ((install + oh + prf)/100)
-        total           = supply_amount + install_amount
+    """Thin wrapper around boq_rate_v3.boq_rate_v3 -- the single source of
+    truth for BOQ rate computation (2026-06-29 unification).
+
+    Returns the per-unit total rate (basic + markup-only supply + markup-only
+    install). ``cnt_pct`` is accepted for backward-compat but IGNORED.
     """
-    b  = max(0.0, float(basic or 0))
-    sp = max(0.0, float(supply  or 0))
-    ip = max(0.0, float(install or 0))
-    op = max(0.0, float(oh_pct  or 0))
-    pp = max(0.0, float(prf_pct or 0))
-    vp = max(0.0, float(vat_pct or 0))
-    eff_vat = 0.0 if vat_in_basic else vp
-    # MARKUP-only (2026-06-28); per-unit total INCLUDES basic.
-    supply_amount  = b * (sp + eff_vat) / 100.0
-    install_amount = b * (ip + op + pp) / 100.0
-    return b + supply_amount + install_amount
+    from boq_rate_v3 import boq_rate_v3
+    _supply_amt, _install_amt, total_rate = boq_rate_v3(
+        basic, supply, install, oh_pct, prf_pct, vat_pct, vat_in_basic
+    )
+    return total_rate
 def _boq_make_floors(project_id: int, building_id: int,
                      n_floors: int, basement: bool, roof: bool):
     """Spec s5: auto-create Ground/First/Second... + optional Basement + Roof."""

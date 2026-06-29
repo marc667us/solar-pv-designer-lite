@@ -7105,16 +7105,18 @@ Outputs: shading factor (0..1 multiplier on PV output), loss percentage, per-dir
 Demo modes: ?demo=10/20/25/30 inject obstructions for sales demos. LIVE MODEL badge confirms the user is on the real simulation, not a static placeholder. The owner can override the computed factor with a slider on the report page -- the override is persisted and used by all downstream reports.
 
 
--- TOPIC 3: RATE BUILDUP + BASIC PRICES (v3 engine, 2026-06-28) --
+-- TOPIC 3: RATE BUILDUP + BASIC PRICES (v3 engine, MARKUP-ONLY -- 2026-06-29 corrected) --
 
-The BOQ rate engine uses this exact formula per line item:
+The BOQ rate engine uses this exact formula per line item (single source of truth: boq_rate_v3.boq_rate_v3):
   effective_vat    = 0 if vat_in_basic else vat_pct
-  supply_amount    = basic_price * (1 + (supply_pct + effective_vat) / 100)
-  install_amount   = basic_price * ((install_pct + overhead_pct + profit_pct) / 100)
-  total_amount     = supply_amount + install_amount      (per unit)
-  line_amount      = qty * total_amount                  (BOQ line total)
+  supply_amount    = basic_price * (supply_pct + effective_vat) / 100      (MARKUP)
+  install_amount   = basic_price * (install_pct + overhead_pct + profit_pct) / 100   (MARKUP)
+  total_rate       = basic_price + supply_amount + install_amount          (per unit, INCLUDES basic)
+  line_amount      = qty * total_rate                                       (BOQ line total)
 
-Plain English: basic price is what the SUPPLIER charges per unit. Supply Amount marks up basic for supply-side costs (freight, handling, the supply-rate %). VAT is added INTO Supply if the supplier invoice did not already include it -- tick the "VAT already on supplier invoice?" checkbox to set vat_in_basic=true and skip the VAT addition. Install Amount is the LABOUR side: install_pct PLUS overhead_pct PLUS profit_pct, all multiplied with the basic. Overhead and profit ride on the install line, NOT supply. There is NO contingency (removed 2026-06-28 by owner directive).
+Worked example: basic=4500, supply=10%, install=0, overhead=0, profit=0, vat=0 -> supply_amount=450 (NOT 4950), per-unit total_rate=4950.
+
+Plain English: basic price is what the SUPPLIER charges per unit. Supply Amount is a MARKUP on basic (freight, handling, supply-rate %). VAT is added INTO Supply if the supplier invoice did not already include it -- tick the "VAT already on supplier invoice?" checkbox to set vat_in_basic=true and skip the VAT addition. Install Amount is also a MARKUP, covering install_pct PLUS overhead_pct PLUS profit_pct. Overhead and profit ride on the install side, NOT supply. Total Amount Rate = Basic Price + Supply Amount + Install Amount (per unit). There is NO contingency (removed 2026-06-28 by owner directive).
 
 BOQ display columns are: Item | Description | Qty | Unit | Basic Price | Supply Amount Rate | Installation Amount Rate | Total Amount Rate | Line Amount. The percentage inputs (supply_pct, install_pct, overhead_pct, profit_pct, vat_pct) live in the rate-builder form per section or per row.
 
@@ -7136,28 +7138,39 @@ Cost Estimate gets a Labour cost line (10-30% slider), a Cost Estimate header br
 BOM -> BOQ qty sync (since 2026-06-28): on the BOQ project overview, the "Sync from BOM" button opens a picker of the owner's BOMs. Pick one, click Sync -- the system matches each BOM line's `custom_name` to a BOQ item description (case-insensitive; exact first, then substring) and overwrites the BOQ qty with the BOM qty + recomputes total. Lines that already match the BOM qty are left alone.
 
 
--- TOPIC 5: PROJECT BOQ TEMPLATES + SECTIONS --
+-- TOPIC 5: PROJECT BOQ SERVICE CONFIGURATION + BUILD MODES (2026-06-29 refactor) --
 
-14 templates ship in /boq-projects/wizard:
-  Healthcare: hospital-floor-ground, hospital-floor-first, hospital-floor-second, iso-male-ward, morgue-building
-  Residential: staff-housing-1bed, staff-housing-2bed
-  Commercial: kitchen-building, it-room
-  Industrial: energy-centre, maintenance-building, stores-building, external-service
-  Multi-discipline: master-reference-library (13 bills, 124 items across containment, wiring, accessories, lighting, distribution, main equipment, earthing, solar PV, ICT, CCTV, BMS, IoT, testing)
+The BOQ Builder retired "Build by Template" and now uses ONE engine with two build modes:
+  1. Section-by-Section -- build one section at a time (the classic per-section workflow).
+  2. Complete BOQ      -- load every applicable section from your Service Configuration into one editable page.
 
-Topology of every BOQ template:
-  Bill (e.g. "BILL No. 2 -- INTERNAL ELECTRICAL WIRING")
-    Section (e.g. "A. SWITCH BOARDS AND DISTRIBUTION BOARDS")
-      Sub-section (optional, e.g. "i. Light and fan points")
-        Items (1, 2, 3 ... description / qty / unit / basic)
+Both modes share the same calculation engine (boq_rate_v3), same Apply Rates, same summaries, same exports.
 
-Two ways to create a BOQ project from templates:
-  A. Multi-building Wizard (recommended) -- /boq-projects/wizard. One screen: tick the building types + counts you need + global markup defaults + VAT-in-basic flag + project name + client + location. Submit creates the project + one building per (template x count) + one floor per building + every template line populated. Pricing in the sample templates is 0 by default; owner fills basic price after.
-  B. Classic per-building flow -- /boq-projects/new -> create project -> add buildings one by one -> per floor -> "Start from template" or "Open one section". The classic flow shows the same 14 templates and lets the owner override per-line qty + basic.
+Service Configuration drives what loads. 15 engineering services are available -- pick the ones your project must cover on the New / Edit project form:
+  1. Internal Electrical Installation        2. Fire Alarm System Installation
+  3. Equipotential Bonding System            4. Lightning Protection System
+  5. Power Supply, LV Distribution + EXL     6. Local Area Network + WLAN
+  7. IT Server Room Infrastructure           8. VoIP System Installation
+  9. Public Address System                   10. IP CCTV Network Installation
+  11. TV System Installation                 12. IP Clock System Installation
+  13. Nurse Call System Installation         14. Medical Equipment Electrical
+  15. Building Management System (BMS)
 
-Section grid (the "by section" workflow): /boq-projects/<pid>/buildings/<bid>/floors/<fid>/bill/<bill>/section/<letter>/grid. Bulk-edit every line under a single section -- tick rows to include, edit qty / basic / supply% / install% per row, set section-wide Overhead/Profit/VAT/vat_in_basic at top, save. The grid shows Supply Amount + Install Amount + Total Amount + Line Amount live-computed.
+Each service has its own bill on the floor; each bill has the spec sections (Preliminaries, Switch Boards & DBs, Sub-Feeder Cables, Wiring of Points, Luminaires, Accessories, Bonding & Earthing, etc. for Internal Electrical; mapping is spec-fixed per service).
 
-Learning layer: when the owner edits an item (description + unit + basic + qty + supply% + install%), the new values are recorded against the description as an override (table boq_user_item_overrides). The next time ANY template containing that same description is instantiated -- via the wizard or "Start from template" -- the override is overlaid on top of the static template defaults. The library effectively LEARNS the owner's preferred values across projects.
+Topology of every BOQ floor:
+  Bill (e.g. "INTERNAL ELECTRICAL INSTALLATION") -- one per selected service
+    Section (e.g. "A. PRELIMINARIES", "B. SWITCH BOARDS AND DISTRIBUTION BOARDS")
+      Sub-section (optional, e.g. "Lighting + socket circuits")
+        Items (1, 2, 3 ... description / qty / unit / basic / supply% / install%)
+
+Two ways to build a BOQ floor:
+  A. Complete BOQ -- /boq-projects/<pid>/buildings/<bid>/floors/<fid>/complete. Single editable page showing every section from your selected services. Click "Generate Skeleton" to bulk-insert the starter rows; edit qty / basic / description / remarks in place. Sections render as collapsible accordion cards; reuses the Section Builder editor.
+  B. Section-by-Section -- /boq-projects/<pid>/buildings/<bid>/floors/<fid>/section/new. Open one section at a time. The classic per-section setup / grid / loop flow is unchanged.
+
+Section grid (Section-by-Section): /boq-projects/<pid>/buildings/<bid>/floors/<fid>/bill/<bill>/section/<letter>/grid. Bulk-edit every line under a single section -- tick rows to include, edit qty / basic / supply% / install% per row, set section-wide Overhead/Profit/VAT/vat_in_basic at top, save. The grid shows Supply Amount + Install Amount + Total Amount + Line Amount live-computed.
+
+Learning layer: when the owner edits an item (description + unit + basic + qty + supply% + install%), the new values are recorded against the description as an override (table boq_user_item_overrides). The next time ANY skeleton bill (Complete BOQ generate, Section-by-Section grid) sees the same description, the override is overlaid on the spec defaults. The library effectively LEARNS the owner's preferred values across projects.
 
 Editable BOQ title + Instructions cell: on /boq-projects/<pid>/overview -- the top card has an editable title + free-text Instructions textarea. Save persists to boq_projects.project_name + .instructions. The instructions render above the BOQ table on Excel + PDF exports.
 
@@ -7245,9 +7258,9 @@ def assistant_chat():
         # --SHADING (3D) --
         (["shading","shade","obstruction","sun arc","sun path","3d shading","shading factor","shading report","shading simulation"],
          "**3D Shading** lives at /project/<pid>/report/shading. Interactive SVG (not WebGL) with proportional roof + sun arc + 16-compass obstruction placement + time-of-day sky lerp. Inputs come from /project/<pid>/inspection -- roof type, tilt, azimuth, building H/W/L, mount type, per-direction obstructions, optional manual shading factor. Output = factor (0..1) multiplied into PV output and the 25-yr energy report. Use ?demo=10/20/25/30 for sales demos."),
-        # --RATE BUILDUP v3 --
+        # --RATE BUILDUP v3 (MARKUP-ONLY, corrected 2026-06-29) --
         (["rate buildup","rate build-up","build up","basic price","supply amount","install amount","total amount","line amount","supply rate","install rate"],
-         "**Rate engine v3** (2026-06-28): supply_amount = basic * (1 + (supply% + effective_vat)/100); install_amount = basic * ((install% + overhead% + profit%)/100); total_amount = supply + install (per unit); line_amount = qty * total_amount. effective_vat is 0 when the supplier invoice already included VAT (tick the **VAT already on supplier invoice?** box). NO contingency (removed). Set the percentages on the section grid top bar + per-row Supply%/Install% cells; values recompute live."),
+         "**Rate engine v3** (markup-only -- 2026-06-29 correction). Per-unit formula (single source: boq_rate_v3): supply_amount = basic * (supply% + effective_vat) / 100 (MARKUP only); install_amount = basic * (install% + overhead% + profit%) / 100 (MARKUP only); total_rate = basic + supply_amount + install_amount (INCLUDES basic); line_amount = qty * total_rate. Worked example: basic=4500, supply=10% -> supply_amount=450, total_rate=4950 (basic + 450). effective_vat is 0 when the supplier invoice already included VAT (tick the **VAT already on supplier invoice?** box). NO contingency (removed). Set the percentages on the Section-by-Section grid top bar + per-row Supply%/Install% cells; values recompute live."),
         (["overhead","profit","vat","vat included","vat_in_basic","contingency"],
          "Overhead % and Profit % ride on the **install side** of the rate build-up (they get added to install_pct and applied to basic). VAT % goes on the **supply side** -- unless the supplier invoice already carries VAT, in which case tick the **VAT already on supplier invoice?** box and VAT contribution drops to 0. **Contingency is no longer applied** (removed 2026-06-28 by owner directive). Set all of these at /boq-projects/<pid>/buildings/.../section/.../grid top bar."),
         # --BOM + COST ESTIMATE --
@@ -7255,15 +7268,15 @@ def assistant_chat():
          "**BOM** (Bill of Materials) is the raw material list with qty + unit -- no markup, used for take-off + supplier order. View at /boms/<id>. **Cost Estimate** is the SAME document with the supply / install / overhead / profit / VAT roll-up applied on top, branded \"SolarPro Marketplace - Accra, Ghana\" with a Labour cost line slider. View at /boms/<id>?as=cost_estimate. Create both from /procurement-center -- tick products, pick currency, pick \"BOM\" doc type, Add."),
         (["sync from bom","sync bom","sync qty","bom to boq","import bom","pull qty","update qty from bom","copy bom","push bom","bom into boq","bom qty"],
          "On the BOQ project overview, click **Sync from BOM** -- pick a saved BOM, click Sync. The system matches each BOM line's custom_name against BOQ item descriptions (case-insensitive; exact first, then substring) and overwrites the BOQ qty + recomputes the line total. Lines already matching the BOM qty are left alone. Audit log records updated / skipped counts."),
-        # --BOQ TEMPLATES + SECTIONS + WIZARD --
-        (["boq template","boq templates","building template","template library","what templates","wizard","multi-building","one click boq"],
-         "14 BOQ templates ship in the **Multi-Building Wizard** at /boq-projects/wizard: healthcare (hospital floors ground/first/second, iso-male ward, morgue), residential (1-bed and 2-bed staff housing), commercial (kitchen, IT room), industrial (energy centre, maintenance, stores, external substation) plus the master-reference-library (13 bills, 124 items). One screen -> tick building types + counts -> Submit -> project + buildings + floors + every template line populated."),
-        (["bill","section","sub-section","subsection","by section","section grid","section workflow","boq hierarchy"],
-         "BOQ topology: **Bill** (e.g. BILL No. 2 -- INTERNAL ELECTRICAL WIRING) -> **Section** (e.g. A. SWITCH BOARDS) -> optional **Sub-section** (e.g. i. Light points) -> Items (qty, unit, basic). Edit any section's lines in bulk at /boq-projects/<pid>/buildings/<bid>/floors/<fid>/bill/<bill>/section/<letter>/grid -- tick rows, edit qty / basic / supply% / install% per row, save. Section-wide markup (Overhead/Profit/VAT/vat_in_basic) lives at the top of the grid."),
+        # --BOQ SERVICE CONFIGURATION + BUILD MODES (2026-06-29 refactor) --
+        (["boq template","boq templates","building template","template library","what templates","wizard","multi-building","one click boq","build by template","start from template"],
+         "**Build by Template has been retired** (2026-06-29). The BOQ Builder now uses one engine with two build modes: **Section-by-Section** (one section at a time, classic workflow) and **Complete BOQ** (every section from your Service Configuration on one editable page). The 15 engineering services on the project Edit form drive which sections load -- pick services, click Generate Skeleton on Complete BOQ, edit in place. Multi-building projects: create the project, then add Buildings + Floors from the project overview (no wizard needed)."),
+        (["bill","section","sub-section","subsection","by section","section grid","section workflow","boq hierarchy","section-by-section","complete boq"],
+         "BOQ topology: **Bill** (one per selected service e.g. INTERNAL ELECTRICAL INSTALLATION) -> **Section** (e.g. A. PRELIMINARIES, B. SWITCH BOARDS AND DISTRIBUTION BOARDS) -> optional **Sub-section** (e.g. i. Light points) -> Items (qty, unit, basic, supply%, install%). Two modes share the same engine: **Section-by-Section** opens one section at a time at /boq-projects/<pid>/buildings/<bid>/floors/<fid>/bill/<bill>/section/<letter>/grid; **Complete BOQ** loads every section together at /boq-projects/<pid>/buildings/<bid>/floors/<fid>/complete. Both reuse the same row editor."),
         (["boq title","boq instructions","project title","project instructions","edit boq name","note above table","title and notes","add a title","add instructions","boq notes","project notes","add notes","add note"],
          "On /boq-projects/<pid>/overview the top card has an editable **BOQ title** + a free-text **Instructions** textarea (max 4000 chars). Save persists to boq_projects.project_name + .instructions. The instructions render in italic gray above the BOQ table on Excel + PDF exports."),
         (["learning","learn","library update","propagate","auto-fill template","template defaults","does the system remember","system remember"],
-         "**Learning layer** (since 2026-06-28): every time the owner edits a BOQ item (description / unit / basic / qty / supply% / install%), the values are recorded as an override against the description (boq_user_item_overrides). The next time ANY template containing the same description is instantiated -- via the wizard or \"Start from template\" -- the override is overlaid on top of the static template defaults. The library effectively learns the owner's preferred values across projects."),
+         "**Learning layer** (since 2026-06-28): every time the owner edits a BOQ item (description / unit / basic / qty / supply% / install%), the values are recorded as an override against the description (boq_user_item_overrides). The next time the same description appears -- on the Section-by-Section grid catalogue or when Complete BOQ generates the skeleton -- the override is overlaid on top of the spec defaults. The library effectively learns the owner's preferred values across projects."),
                 # kb-growth-marketplace-2026-06-27
         # --BUYING INTENT (HIGHEST priority -- route shopping questions to
         # the marketplace BEFORE the "panel" or "system" sizing entries
@@ -20685,6 +20698,18 @@ def _boq_project_owned_or_404(pid: int, uid: int):
             "SELECT * FROM boq_projects WHERE id=? AND user_id=?" + t_clause,
             (pid, uid) + t_params,
         ).fetchone()
+        if row:
+            # 2026-06-29 unified BOQ engine refactor: silent auto-migration
+            # to v3 services + build_mode (runs ONLY for the row's owner so
+            # other tenants' rows are never written). Idempotent.
+            try:
+                _ensure_project_migrated_to_v3(c, pid)
+                row = c.execute(
+                    "SELECT * FROM boq_projects WHERE id=? AND user_id=?" + t_clause,
+                    (pid, uid) + t_params,
+                ).fetchone()
+            except Exception:
+                pass
     if not row:
         abort(404)
     return row
@@ -20715,23 +20740,17 @@ def _boq_floor_owned_or_404(fid: int, bid: int):
 
 
 def _boq_compute_rate(basic, supply, install, oh_pct, prf_pct, cnt_pct=0, vat_pct=0, vat_in_basic=False):
-    """2026-06-28 owner spec. supply/install are PERCENTAGES.
-    cnt_pct ignored. vat_in_basic suppresses VAT on supply.
-        supply_amount   = basic * (1 + (supply + (0 if vat_in_basic else vat))/100)
-        install_amount  = basic * ((install + oh + prf)/100)
-        total           = supply_amount + install_amount
+    """Thin wrapper around boq_rate_v3.boq_rate_v3 -- the single source of
+    truth for BOQ rate computation (2026-06-29 unification).
+
+    Returns the per-unit total rate (basic + markup-only supply + markup-only
+    install). ``cnt_pct`` is accepted for backward-compat but IGNORED.
     """
-    b  = max(0.0, float(basic or 0))
-    sp = max(0.0, float(supply  or 0))
-    ip = max(0.0, float(install or 0))
-    op = max(0.0, float(oh_pct  or 0))
-    pp = max(0.0, float(prf_pct or 0))
-    vp = max(0.0, float(vat_pct or 0))
-    eff_vat = 0.0 if vat_in_basic else vp
-    # MARKUP-only (2026-06-28): supply + install are markups; total includes basic.
-    supply_amount  = b * (sp + eff_vat) / 100.0
-    install_amount = b * (ip + op + pp) / 100.0
-    return b + supply_amount + install_amount
+    from boq_rate_v3 import boq_rate_v3
+    _supply_amt, _install_amt, total_rate = boq_rate_v3(
+        basic, supply, install, oh_pct, prf_pct, vat_pct, vat_in_basic
+    )
+    return total_rate
 def _boq_make_floors(project_id: int, building_id: int,
                      n_floors: int, basement: bool, roof: bool):
     """Spec s5: auto-create Ground/First/Second... + optional Basement + Roof."""
@@ -20835,7 +20854,23 @@ def boq_projects_new():
         except Exception:
             pass
         return redirect(url_for("boq_building_new", pid=pid))
-    return render_template("boq_project_new.html", user=current_user(), services=_BOQ_SERVICES)
+    # 2026-06-29 v3: pass the section skeleton as JSON so the form
+    # preview renders client-side without an ajax round-trip.
+    import json as _json
+    _svc_sections = {
+        code: {
+            "name": skel["name"],
+            "sections": [
+                {"letter": s["letter"], "title": s["title"], "subsection": s.get("subsection", "")}
+                for s in skel.get("sections", [])
+            ],
+        }
+        for code, skel in _BOQ_SERVICE_BILL_SKELETON.items()
+    }
+    return render_template("boq_project_new.html",
+                           user=current_user(),
+                           services=_BOQ_SERVICES,
+                           service_sections_json=_json.dumps(_svc_sections))
 
 
 @app.route("/boq-projects/<int:pid>")
@@ -21457,35 +21492,23 @@ def _migrate_legacy_boq_rate_buildup():
 
 
 def _boq_safe_rate(basic, supply, install, oh, prf, cnt=0, vat=0, vat_in_basic=False):
-    """BOQ rate build-up (2026-06-28 owner spec).
+    """Thin wrapper around boq_rate_v3.boq_rate_v3 -- the single source of
+    truth for BOQ rate computation (2026-06-29 unification).
 
-    Arg semantics (CHANGED 2026-06-28):
-        basic   -- material cost per unit (currency)
-        supply  -- supply rate PERCENT (was currency in v2)
-        install -- install rate PERCENT (was currency in v2)
-        oh, prf -- overhead %, profit %
-        cnt     -- IGNORED (no contingency under new model)
-        vat     -- VAT %
-        vat_in_basic -- when True (supplier invoice already had VAT),
-                        VAT contribution to supply rate is 0.
+    Returns the per-unit total rate (basic + markup-only supply + markup-only
+    install). ``cnt`` is accepted for backward-compat but IGNORED.
 
-    Formula:
+    Formula (delegated to boq_rate_v3):
         effective_vat   = 0 if vat_in_basic else vat
-        supply_amount   = basic * (1 + (supply + effective_vat)/100)
-        install_amount  = basic * ((install + oh + prf)/100)
-        total_rate      = supply_amount + install_amount   (per unit)
+        supply_amount   = basic * (supply  + effective_vat)        / 100
+        install_amount  = basic * (install + overhead + profit)    / 100
+        total_rate      = basic + supply_amount + install_amount   (per unit)
     """
-    b = max(0.0, float(basic or 0))
-    sp = max(0.0, float(supply  or 0))
-    ip = max(0.0, float(install or 0))
-    op = max(0.0, float(oh  or 0))
-    pp = max(0.0, float(prf or 0))
-    vp = max(0.0, float(vat or 0))
-    eff_vat = 0.0 if vat_in_basic else vp
-    # MARKUP-only (2026-06-28): supply + install are markups; total includes basic.
-    supply_amount  = b * (sp + eff_vat) / 100.0
-    install_amount = b * (ip + op + pp) / 100.0
-    return b + supply_amount + install_amount
+    from boq_rate_v3 import boq_rate_v3
+    _supply_amt, _install_amt, total_rate = boq_rate_v3(
+        basic, supply, install, oh, prf, vat, vat_in_basic
+    )
+    return total_rate
 def _boq_rate_breakdown(basic, supply, install, oh, prf, cnt=0, vat=0, vat_in_basic=False):
     """Per-step breakdown matching _boq_safe_rate (2026-06-28 owner spec).
 
@@ -22373,311 +22396,36 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
 
 
 # new_boq_template_picker_routes.py
-# Whole-floor template picker + checkbox render + bulk save.
-# Plus Excel / PDF / Email exports of the whole-project BOQ.
+# RETIRED 2026-06-29: Build by Template stub. The picker / view / save
+# routes are kept registered so any cached link still resolves to a
+# friendly redirect into the new Section-by-Section + Complete BOQ
+# workflow. The whole-project Excel / PDF / Email exports below this
+# stub are NOT part of the template picker -- they live alongside it for
+# historical reasons and remain fully active.
 
 
-# ---- Picker --------------------------------------------------------------
+# ---- Picker stubs --------------------------------------------------------
 
 @app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/from-template", methods=["GET"])
 @login_required
 def boq_template_picker(pid, bid, fid):
-    uid = session["user_id"]
-    project = _boq_project_owned_or_404(pid, uid)
-    building = _boq_building_owned_or_404(bid, pid)
-    floor = _boq_floor_owned_or_404(fid, bid)
-    from new_boq_project_templates import _boq_template_list, _boq_template_get
-    # Filter by building purpose where possible; show all if none match.
-    purpose = (building["primary_purpose"] or "").strip().lower()
-    matched = _boq_template_list(purpose=purpose)
-    others  = [t for t in _boq_template_list() if t["slug"] not in {m["slug"] for m in matched}]
-    # 2026-06-22 services: tag every template card with the services it covers + a
-    # match-count vs the project's chosen services so the UI can highlight winners.
-    try:
-        _services_csv = (project["services_csv"] if "services_csv" in project.keys() else "") or ""
-    except Exception:
-        _services_csv = ""
-    chosen = _services_csv_to_list(_services_csv)
-    chosen_set = set(chosen)
-    def _enrich(t):
-        full = _boq_template_get(t["slug"]) or {}
-        svc = _template_services(full)
-        matches = [s for s in svc if s in chosen_set]
-        t["services"] = [(s, _BOQ_SERVICE_LABEL[s], _BOQ_SERVICE_ICON[s]) for s in svc]
-        t["match_count"] = len(matches)
-        return t
-    matched = [_enrich(t) for t in matched]
-    others  = [_enrich(t) for t in others]
-    matched.sort(key=lambda t: -t["match_count"])
-    others.sort(key=lambda t: -t["match_count"])
-    # Services chosen but no template / no skeleton covers them.
-    all_template_svc = set()
-    for tt in matched + others:
-        for s, _, _ in tt["services"]:
-            all_template_svc.add(s)
-    uncovered = [s for s in chosen if s not in all_template_svc]
-    chosen_view = [(s, _BOQ_SERVICE_LABEL[s], _BOQ_SERVICE_ICON[s]) for s in chosen]
-    uncovered_view = [(s, _BOQ_SERVICE_LABEL[s], _BOQ_SERVICE_ICON[s]) for s in uncovered]
-    return render_template(
-        "boq_template_picker.html",
-        user=current_user(),
-        project=project, building=building, floor=floor,
-        matched=matched, others=others, purpose=purpose,
-        chosen_services=chosen_view, uncovered_services=uncovered_view,
-    )
+    flash("Build by Template has been retired. Use Complete BOQ or Section-by-Section from the floor view.", "info")
+    return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
 
-
-# ---- Checkbox render -----------------------------------------------------
 
 @app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/from-template/<slug>", methods=["GET"])
 @login_required
 def boq_template_view(pid, bid, fid, slug):
-    uid = session["user_id"]
-    project = _boq_project_owned_or_404(pid, uid)
-    building = _boq_building_owned_or_404(bid, pid)
-    floor = _boq_floor_owned_or_404(fid, bid)
-    from new_boq_project_templates import _boq_template_get
-    template = _boq_template_get(slug)
-    if not template:
-        flash("Template not found.", "warning")
-        return redirect(url_for("boq_template_picker", pid=pid, bid=bid, fid=fid))
-    # 2026-06-22 services: inject extra bills for any chosen service the
-    # template doesn't already cover.
-    try:
-        _scsv = (project["services_csv"] if "services_csv" in project.keys() else "") or ""
-    except Exception:
-        _scsv = ""
-    chosen = _services_csv_to_list(_scsv)
-    template = _inject_service_bills(template, chosen)
-    injected = template.get("_services_injected") or []
-    chosen_view = [(s, _BOQ_SERVICE_LABEL[s], _BOQ_SERVICE_ICON[s]) for s in chosen]
-    injected_view = [(s, _BOQ_SERVICE_LABEL[s], _BOQ_SERVICE_ICON[s]) for s in injected]
-    return render_template(
-        "boq_template_checkbox.html",
-        user=current_user(),
-        project=project, building=building, floor=floor,
-        template=template, slug=slug,
-        chosen_services=chosen_view, injected_services=injected_view,
-    )
+    flash("Build by Template has been retired. Use Complete BOQ or Section-by-Section from the floor view.", "info")
+    return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
 
 
 @app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/from-template/<slug>/save", methods=["POST"])
 @login_required
 def boq_template_save(pid, bid, fid, slug):
-    uid = session["user_id"]
-    _boq_project_owned_or_404(pid, uid)
-    _boq_building_owned_or_404(bid, pid)
-    _boq_floor_owned_or_404(fid, bid)
     csrf_protect()
-    from new_boq_project_templates import _boq_template_get, _boq_template_iter_lines
-    template = _boq_template_get(slug)
-    if not template:
-        flash("Template not found.", "warning")
-        return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
-
-    f = request.form
-    # Section-wide markup applied to all rows.
-    def _pct(name):
-        try:
-            v = f.get(name, "")
-            return max(0.0, min(100.0, float(v))) if v not in (None, "",) else 0.0
-        except (TypeError, ValueError):
-            return 0.0
-    oh, prf, cnt, vat = _pct("overhead_pct"), _pct("profit_pct"), _pct("contingency_pct"), _pct("vat_pct")
-    # Rate engine v3 (2026-06-28): supply_pct + install_pct are PERCENTAGES.
-    supply_pct  = _pct("supply_default_pct")
-    install_pct = _pct("install_default_pct")
-    vat_in_basic = 1 if f.get("vat_in_basic") else 0
-    from boq_rate_v3 import boq_rate_v3
-
-    ticked = set()
-    for k in f.getlist("tick"):
-        try:
-            ticked.add(int(k))
-        except (TypeError, ValueError):
-            pass
-
-    # Per-line qty / basic / desc / unit overrides come keyed by line_idx.
-    def _line_val(prefix, idx, default=""):
-        return (f.get(f"{prefix}[{idx}]") or default).strip()
-
-    saved = 0
-    skipped = 0
-    next_no_cache = {}  # (bill_no, section_letter) -> next int
-    with get_db() as c:
-        for (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
-             desc, unit, qty_d, basic_d, spec) in _boq_template_iter_lines(template):
-            if idx not in ticked:
-                skipped += 1
-                continue
-            # Apply per-line edits.
-            desc  = _line_val("desc", idx, desc)[:500]
-            unit  = _line_val("unit", idx, unit)[:20]
-            spec  = _line_val("spec", idx, spec)
-            qty_s = _line_val("qty", idx, "")
-            basic_s = _line_val("basic", idx, "")
-            try:
-                qty = float(qty_s) if qty_s else float(qty_d)
-            except ValueError:
-                qty = float(qty_d)
-            try:
-                basic = float(basic_s) if basic_s else float(basic_d)
-            except ValueError:
-                basic = float(basic_d)
-            if not desc or qty <= 0:
-                skipped += 1
-                continue
-            # Owner directive 2026-06-28: basic=0 placeholders OK; look up
-            # marketplace catalogue price by description match if missing.
-            if basic <= 0 and desc:
-                try:
-                    _row = c.execute(
-                        "SELECT price_usd FROM equipment_catalog "
-                        "WHERE LOWER(name) = LOWER(?) AND COALESCE(is_active,1)=1 "
-                        "ORDER BY id DESC LIMIT 1",
-                        (desc,),
-                    ).fetchone()
-                    if _row and _row["price_usd"]:
-                        basic = float(_row["price_usd"])
-                except Exception:
-                    pass
-            # 2026-06-28 v3: compute supply_amount + install_amount via v3 helper.
-            supply, install, final_rate = boq_rate_v3(
-                basic, supply_pct, install_pct, oh, prf, vat,
-                vat_in_basic=bool(vat_in_basic))
-            total = qty * final_rate
-
-            key = (bill_no, sect_letter)
-            if key not in next_no_cache:
-                next_no_cache[key] = int(_boq_next_item_no(fid, bill_no, sect_letter))
-            item_no_disp = str(next_no_cache[key])
-            next_no_cache[key] += 1
-
-            cur = c.execute(
-                "INSERT INTO boq_floor_items "
-                "(floor_id, building_id, project_id, user_id, section, subsection, "
-                " library_item_id, supplier_id, item_no, description, specification, "
-                " unit, qty, final_built_up_rate, total_amount, remarks, "
-                " source_type, approval_status, "
-                " bill_no, bill_name, section_letter, subsection_label, item_no_display) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (fid, bid, pid, uid, sect_title.lower()[:80], "",
-                 None, None, item_no_disp,
-                 desc, spec, unit, qty, final_rate, total, "",
-                 "project_library", "project_only",
-                 bill_no, bill_name, sect_letter, subsec, item_no_disp),
-            )
-            item_id = int(cur.lastrowid or 0)
-            c.execute(
-                "INSERT INTO boq_floor_rate_buildup "
-                "(floor_item_id, project_id, user_id, basic_price, "
-                " supply_pct, install_pct, supply_rate, install_rate, "
-                " overhead_pct, profit_pct, contingency_pct, vat_pct, "
-                " vat_in_basic, final_built_up_rate, total_amount) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (item_id, pid, uid, basic,
-                 supply_pct, install_pct, supply, install,
-                 oh, prf, 0, vat, vat_in_basic, final_rate, total),
-            )
-            saved += 1
-
-        # Custom additions: lines added inline via the "+ Custom item" rows.
-        # Posted as parallel arrays custom_desc[], custom_qty[], ...
-        custom_descs = f.getlist("custom_desc[]")
-        custom_qtys  = f.getlist("custom_qty[]")
-        custom_units = f.getlist("custom_unit[]")
-        custom_basic = f.getlist("custom_basic[]")
-        custom_bill  = f.getlist("custom_bill[]")
-        custom_sect  = f.getlist("custom_section[]")
-        custom_title = f.getlist("custom_title[]")
-        for i in range(len(custom_descs)):
-            desc = (custom_descs[i] or "").strip()[:500]
-            if not desc:
-                continue
-            try:
-                qty = float(custom_qtys[i]) if i < len(custom_qtys) and custom_qtys[i] else 0.0
-            except ValueError:
-                qty = 0.0
-            try:
-                basic = float(custom_basic[i]) if i < len(custom_basic) and custom_basic[i] else 0.0
-            except ValueError:
-                basic = 0.0
-            if qty <= 0 or basic <= 0:
-                continue
-            unit = (custom_units[i] if i < len(custom_units) else "No.").strip() or "No."
-            try:
-                bill_no = int(custom_bill[i]) if i < len(custom_bill) else 2
-            except ValueError:
-                bill_no = 2
-            sect_letter = (custom_sect[i] if i < len(custom_sect) else "Z").strip().upper()[:8] or "Z"
-            sect_title = (custom_title[i] if i < len(custom_title) else "CUSTOM ITEMS").strip()[:160] or "CUSTOM ITEMS"
-            bill_name = _boq_lookup_bill_name(bill_no) or "OTHER"
-            # 2026-06-28 v3: compute supply_amount + install_amount via v3 helper.
-            supply, install, final_rate = boq_rate_v3(
-                basic, supply_pct, install_pct, oh, prf, vat,
-                vat_in_basic=bool(vat_in_basic))
-            total = qty * final_rate
-            key = (bill_no, sect_letter)
-            if key not in next_no_cache:
-                next_no_cache[key] = int(_boq_next_item_no(fid, bill_no, sect_letter))
-            item_no_disp = str(next_no_cache[key])
-            next_no_cache[key] += 1
-            cur = c.execute(
-                "INSERT INTO boq_floor_items "
-                "(floor_id, building_id, project_id, user_id, section, subsection, "
-                " library_item_id, supplier_id, item_no, description, specification, "
-                " unit, qty, final_built_up_rate, total_amount, remarks, "
-                " source_type, approval_status, "
-                " bill_no, bill_name, section_letter, subsection_label, item_no_display) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (fid, bid, pid, uid, sect_title.lower()[:80], "",
-                 None, None, item_no_disp,
-                 desc, "", unit, qty, final_rate, total, "",
-                 "custom_current_boq", "project_only",
-                 bill_no, bill_name, sect_letter, "", item_no_disp),
-            )
-            item_id = int(cur.lastrowid or 0)
-            c.execute(
-                "INSERT INTO boq_floor_rate_buildup "
-                "(floor_item_id, project_id, user_id, basic_price, "
-                " supply_pct, install_pct, supply_rate, install_rate, "
-                " overhead_pct, profit_pct, contingency_pct, vat_pct, "
-                " vat_in_basic, final_built_up_rate, total_amount) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (item_id, pid, uid, basic,
-                 supply_pct, install_pct, supply, install,
-                 oh, prf, 0, vat, vat_in_basic, final_rate, total),
-            )
-            saved += 1
-
-        c.execute("UPDATE boq_projects  SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (pid,))
-        c.execute("UPDATE boq_buildings SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (bid,))
-        c.execute("UPDATE boq_floors    SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (fid,))
-
-    try:
-        from new_boq_hierarchy_schema import boq_audit
-        boq_audit(get_db, uid, "boq_template_generated", "boq_floor", fid,
-                  f"template={slug} saved={saved} skipped={skipped}")
-    except Exception:
-        pass
-    # When zero rows actually generated (template pre-fills basic + ticks
-    # but leaves Qty blank by default), the user otherwise lands on an
-    # empty BOQ page wondering why "Generate BOQ" did nothing. Redirect
-    # back to the template-picker with a clear warning instead.
-    if saved == 0:
-        flash(
-            "Nothing generated -- " + str(skipped) + " row(s) were skipped "
-            "(blank Qty, empty description, or Basic price = 0). Enter a Qty "
-            "for at least one ticked row, then click Generate BOQ again.",
-            "warning",
-        )
-        return redirect(url_for(
-            "boq_template_checkbox", pid=pid, bid=bid, fid=fid, slug=slug,
-        ))
-
-    flash(f"Generated {saved} line(s) from template '{slug}'. ({skipped} skipped.)", "success")
-    # "Generate BOQ" lands on the project BOQ view immediately.
-    return redirect(url_for("boq_project_boq", pid=pid))
+    flash("Build by Template has been retired. Use Complete BOQ or Section-by-Section from the floor view.", "info")
+    return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
 
 
 # ---- Whole-project Excel / PDF / Email exports ---------------------------
@@ -23307,465 +23055,23 @@ def _boq_catalog_for_section(section_title: str) -> list:
 
 
 # ===========================================================================
-# WHOLE-FLOOR PROJECT TEMPLATES
-# Each template's Bill 2 starts: A. Switch Boards -> B. Subfeeder Cables
-# (mandatory ordering per owner directive).
-# Descriptions follow <verb> <product> as <brand> or approved equal.
-# ===========================================================================
+# RETIRED 2026-06-29: Build by Template stub. The whole-floor templates
+# dictionary + _boq_template_list / get / iter_lines helpers used to live
+# below this comment. They drove the retired template picker.
+# Service Configuration -> Complete BOQ replaces them via the
+# _BOQ_SERVICE_BILL_SKELETON in the boq_services_engine splice above.
 
-def _it(desc, unit, qty, basic, spec=""):
-    return {"desc": desc, "unit": unit, "qty": qty, "basic": basic, "spec": spec}
-
-
-# Common section helpers used across templates
-_COMMON_SUBFEEDER = [
-    _it("Supply, lay and connect 4c x 16mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal", "M",  60,   190),
-    _it("Supply, lay and connect 4c x 10mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal", "M",  40,   125),
-    _it("Supply, lay and connect 1c x 16mm2 PVC Insulated copper cable as earth lead",                                                  "M",  40,    42),
-    _it("Supply, lay and connect 1c x 10mm2 PVC Insulated copper cable as earth lead",                                                  "M",  40,    27),
-]
-
-_BOQ_PROJECT_TEMPLATES = {
-
-    # ============== AUDITORIUM (1UGLS reference) ============================
-    "auditorium-1ugls": {
-        "name":        "Auditorium -- full reference (1UGLS-style)",
-        "purpose":     "commercial",
-        "subtype":     "Auditorium",
-        "description": "Mirrors the 1UGLS Auditorium electrical BOQ -- 6 bills, ~95 items. Use as a starting point for any auditorium / school hall / lecture-theatre project.",
-        "bills": [
-            {"no": 1, "name": "PRELIMINARIES", "sections": [
-                {"letter": "A", "title": "PRELIMINARY ITEMS", "subsection": "", "items": [
-                    _it("Allow for site mobilisation and setup",         "Lot",  1, 25000),
-                    _it("Allow for site insurance",                      "Lot",  1, 15000),
-                    _it("Allow for project manager presence on site",    "Mth",  4,  8500),
-                    _it("Allow for site engineer presence on site",      "Mth",  4,  7000),
-                    _it("Allow for health & safety provisions",          "Lot",  1,  6500),
-                    _it("Allow for site office accommodation",           "Mth",  4,  3500),
-                    _it("Allow for tools and small plant",               "Lot",  1,  4500),
-                    _it("Allow for final commissioning and handover",    "Lot",  1,  8000),
-                ]},
-            ]},
-            {"no": 2, "name": "INTERNAL ELECTRICAL WIRING", "sections": [
-                {"letter": "A", "title": "SWITCH BOARDS AND DISTRIBUTION BOARDS", "subsection": "", "items": [
-                    _it("Supply and install 6-way TPN MCCB Distribution Panel Board c/w 400A Incomer as Memshield or approved equal", "Nos.", 1, 19800),
-                    _it("Supply and install 6-way TPN MCB Distribution Board c/w 200A INT. switch as Memshield or approved equal",    "Nos.", 1, 15500),
-                    _it("Supply and install 6-way TPN MCB Distribution Board c/w 63A INT. switch as Memshield or approved equal",     "Nos.", 1,  3308.81),
-                    _it("Supply and install 6-way TPN MCB Distribution Board c/w 32A INT. switch as Memshield or approved equal",     "Nos.", 1,  3309.81),
-                    _it("Supply and install 4-way TPN MCB Distribution Board c/w 32A INT. switch as Memshield or approved equal",     "Nos.", 1,  3200),
-                    _it("Supply and install 200A TPN Fuse Switch as Memshield or approved equal",                                     "Nos.", 1,  6700),
-                    _it("Supply and install 400A TPN Fuse Switch as Memshield or approved equal",                                     "Nos.", 1, 12160),
-                    _it("Supply and install 125A TPN Fuse Switch as Memshield or approved equal",                                     "Nos.", 1,  4600),
-                    _it("Supply and install 100A TPN load Isolator as Memshield or approved equal",                                   "Nos.", 3,  1470),
-                    _it("Supply and install 63A TPN load Isolator as Memshield or approved equal",                                    "Nos.", 3,   900),
-                ]},
-                {"letter": "B", "title": "SUBFEEDER CABLES AND EARTHLEADS", "subsection": "", "items": [
-                    _it("Supply, lay and connect 4c x 240mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal", "M", 120, 3849),
-                    _it("Supply, lay and connect 1c x 120mm2 PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal",     "M",  10,  400),
-                    _it("Supply, lay and connect 4c x 120mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal", "M", 120, 2242.80),
-                    _it("Supply, lay and connect 1c x 70mm2 PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal",      "M",  10,  298),
-                    _it("Supply, lay and connect 4c x 50mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal",  "M", 120,  651),
-                    _it("Supply, lay and connect 1c x 25mm2 PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal",      "M",  10,   65),
-                    _it("Supply, lay and connect 1c x 16mm2 PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal",      "M",  70,   42),
-                    _it("Supply, lay and connect 4c x 16mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal",  "M", 145,  190),
-                    _it("Supply, lay and connect 4c x 10mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal",  "M",  20,  125),
-                    _it("Supply, lay and connect 1c x 10mm2 PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal",      "M",  20,   27),
-                    _it("Supply, lay and connect 4c x 25mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal",  "M", 135,  290),
-                ]},
-                {"letter": "C", "title": "WIRING OF POINTS", "subsection": "I. Light and fan points", "items": [
-                    _it("Wire light/fan points using 1.5mm2 PVC insulated copper cable (Brown)", "Coils", 30, 391),
-                    _it("Wire light/fan points using 1.5mm2 PVC insulated copper cable (Blue)",  "Coils", 35, 391),
-                    _it("Wire light/fan points using 1.5mm2 PVC insulated copper cable (Grey)",  "Coils", 33, 391),
-                    _it("Supply and install 20mm diameter PVC conduit pipe",                     "Nos.", 578, 14.63),
-                    _it("Supply and install 75mm x 75mm steel conduit boxes",                    "Nos.", 467, 13),
-                    _it("Supply and install circular boxes of various ways",                     "Nos.",  50,  5),
-                ]},
-                {"letter": "C", "title": "WIRING OF POINTS", "subsection": "II. 13A socket points and hand dryer", "items": [
-                    _it("Wire 13A socket points using 2.5mm2 PVC insulated copper cable (Brown)",         "Coils",  5, 653),
-                    _it("Wire 13A socket points using 2.5mm2 PVC insulated copper cable (Blue)",          "Coils",  5, 653),
-                    _it("Wire 13A socket points using 2.5mm2 PVC insulated copper cable (Yellow/Green)",  "Coils",  5, 653),
-                    _it("Supply and install 20mm diameter PVC conduit pipe",                              "Nos.", 156, 14.63),
-                    _it("Supply and install 150mm x 75mm steel conduit boxes",                            "Nos.",  20, 18),
-                ]},
-                {"letter": "D", "title": "LUMINAIRES", "subsection": "", "items": [
-                    _it("Supply and fix 35W Round Recessed downlighter as Philips or approved equal",                          "Nos.", 53,  550),
-                    _it("Supply and fix 36W 1200mm LED linear Panel light c/w enclosure as Philips or approved equal",         "Nos.", 10,  707.01),
-                    _it("Supply and fix 36W 1200mm LED linear Panel light as Philips or approved equal",                       "Nos.",  4,  372),
-                    _it("Supply and fix 18W LED round surface panel light as Philips or approved equal",                       "Nos.", 17,  305),
-                    _it("Supply and fix 12W LED round surface panel light as Philips or approved equal",                       "Nos.", 20,  226),
-                    _it("Supply and fix LED Strip light as Philips or approved equal",                                          "Coil",  1,   35),
-                ]},
-                {"letter": "E", "title": "ACCESSORIES", "subsection": "", "items": [
-                    _it("Supply and fix 6A One Way One gang light switch as MK or approved equal",                                                  "Nos.", 22, 20.73),
-                    _it("Supply and fix 6A One Way two gang light switch as MK or approved equal",                                                  "Nos.",  4, 34.13),
-                    _it("Supply and fix 6A two Way one gang light switch as MK or approved equal",                                                  "Nos.", 12, 23.16),
-                    _it("Supply and fix 6A two Way two gang light switch as MK or approved equal",                                                  "Nos.",  1, 35),
-                    _it("Supply and fix 6 Compartment floor box c/w 2 double sockets + 2 double data outlet as MK or approved equal",               "Nos.", 29, 2100),
-                    _it("Supply and fix 1 x 13A unswitched Socket outlet as MK or approved equal",                                                  "Nos.",  5, 40),
-                    _it("Supply and fix 2 x 13A Switched Socket outlet as MK or approved equal",                                                    "Nos.",  6, 60),
-                    _it("Supply and fix Plastic Automatic Hand Dryer",                                                                              "Nos.",  2, 1250),
-                ]},
-            ]},
-            {"no": 3, "name": "BONDING AND EARTHING", "sections": [
-                {"letter": "A", "title": "BONDING AND EARTHING", "subsection": "", "items": [
-                    _it("Supply and lay 70mm2 bare copper conductor to fully contact the earth and treat",          "M",    138,  289),
-                    _it("Supply and vertically lay 50mm2 bare copper conductor as connecting electrode",            "M",     35,  133),
-                    _it("Supply and fix holding rings made of galvanised steel",                                    "Nos.",   7,   20.30),
-                    _it("Supply, fix and connect equalisation bar c/w 8 studs and connecting accessories",          "Nos.",   3,  548.55),
-                    _it("Supply and install 6x6 IP65 grounding junction box 20cm above finished floor level",       "Nos.",   3,   36.57),
-                    _it("Supply and install 3x3 square box",                                                        "Nos.",   3,   13),
-                    _it("Perform Arc welding as mechanical attaching taps",                                         "Pts.",  80,  135),
-                    _it("Perform Exothermic welding",                                                               "Nos.",  20,  750),
-                    _it("Supply and install 600mm x 600mm copper earth mat c/w 1500mm copper earth rod",            "Nos.",   7, 1700),
-                    _it("Supply and install warning tape (yellow/green)",                                           "Nos.",   3,  150),
-                    _it("Supply and install standard 1.5M high graded copper earth rod",                            "Nos.",   7, 1200),
-                    _it("Test the installation using scripts from the electrical engineer",                         "Lot",    1, 5000),
-                    _it("Supply and install concrete inspection chamber with cover",                                "Nos.",   1,  457.13),
-                    _it("Supply and lay stranded 35mm2 copper bare cable",                                          "M",      2,  120),
-                ]},
-            ]},
-            {"no": 4, "name": "FIRE ALARM SYSTEM", "sections": [
-                {"letter": "A", "title": "WIRING OF FIRE POINTS", "subsection": "", "items": [
-                    _it("Supply, lay and connect 3c x 2.5mm2 red fire-resistant network detection cable drawn and looped", "M",   500,  30),
-                    _it("Supply and install 20mm diameter self-extinguishing thermoplastic conduit",                       "Nos.",120,  14.63),
-                    _it("Supply and install 75mm x 75mm steel conduit boxes",                                              "Nos.", 10,  13),
-                    _it("Supply and install circular boxes of various ways",                                               "Nos.", 50,   5),
-                ]},
-                {"letter": "B", "title": "FIRE PANEL AND ACCESSORIES", "subsection": "", "items": [
-                    _it("Supply, install, connect and commission Addressable optical Smoke detector as Hochiki or approved equal", "Nos.", 13,  532),
-                    _it("Supply, install, connect and commission Break glass call point as Hochiki or approved equal",             "Nos.",  4,  600),
-                    _it("Supply, install, connect and commission Fire Alarm Beacon/Sounder indoor with strobe",                    "Nos.",  4,  980),
-                    _it("Supply and install Fire Alarm Junction Box",                                                              "Nos.",  1,  250),
-                    _it("Supply, install, connect and commission Outdoor Weatherproof siren c/w strobe",                           "Nos.",  1,  980),
-                    _it("Supply, install, connect and commission 8 Zone Addressable Fire Alarm Control Panel",                     "Nos.",  1, 53640),
-                    _it("Supply and install Fire Exit Sign",                                                                       "Nos.",  3,  120),
-                ]},
-            ]},
-            {"no": 5, "name": "DATA AND VOICE COMMUNICATIONS", "sections": [
-                {"letter": "A", "title": "WIRING OF POINTS", "subsection": "Telephone and Data points", "items": [
-                    _it("Supply and install 20mm diameter PVC conduit pipe", "Nos.",  95, 14.63),
-                    _it("Supply and install 75mmx75mm square box",            "Nos.",  25, 13),
-                    _it("Supply, lay and connect Cat 6e UTP Data cable",     "Coils",  3, 1650),
-                ]},
-                {"letter": "B", "title": "DATA EQUIPMENT AND ACCESSORIES", "subsection": "", "items": [
-                    _it("Supply and install 48 Port CAT 6 patch panel",                                                                 "Nos.", 3,   1500),
-                    _it("Supply, install and commission 48 port CAT 6 Switch w/ 1GB fibre optic uplink as Cisco or approved equal",     "Nos.", 3,   2300),
-                    _it("Supply and install Fibre patch",                                                                                "Nos.", 2,    850),
-                    _it("Supply and install 12U Data network cabinet",                                                                   "Nos.", 1,   1600),
-                    _it("Supply, lay and connect OM3 Laser-Optimized Multimode Aqua fibre optic cable",                                 "M",  150,     52),
-                    _it("Supply and install RJ45 double data outlet c/w faceplate, insert and mounting screws as MK or approved equal", "Nos.", 13,    104),
-                    _it("Supply and install Power strip",                                                                                "Nos.", 2,    150),
-                ]},
-            ]},
-            {"no": 6, "name": "SIGNAL COMMUNICATION SYSTEMS", "sections": [
-                {"letter": "A", "title": "SMALL SIGNAL IP NETWORK", "subsection": "", "items": [
-                    _it("Supply and install 20mm diameter PVC conduit pipe",                                  "Nos.",  50, 14.63),
-                    _it("Supply and install 75mmx75mm square box",                                             "Nos.",  15, 13),
-                    _it("Supply, lay and connect Cat 6e UTP Data cable",                                       "Coils",  2, 1650),
-                    _it("Supply, install and commission Building/Zonal IP audio amplifier",                    "M",      1, 4900),
-                    _it("Supply, lay and connect 20m AV cables -- building MIC to zonal amp",                  "M",     20,   19),
-                    _it("Supply, lay and connect audio speaker cables (pair)",                                  "M",    100,    3),
-                ]},
-                {"letter": "B", "title": "EQUIPMENT AND ACCESSORIES", "subsection": "", "items": [
-                    _it("Supply, install and commission IP Cam dome 100m, 180-degree view with night vision",  "Nos.",  3,  865),
-                    _it("Supply, install and connect circular ceiling recessed audio speakers",                "Nos.", 10,  260),
-                    _it("Supply, install and connect wall mounted audio speakers",                              "Nos.",  3,  400),
-                    _it("Supply and install Power strip",                                                       "Nos.",  1,  150),
-                ]},
-            ]},
-        ],
-    },
-
-    # ============== OFFICE ==================================================
-    "office-typical": {
-        "name":        "Typical Commercial Office floor",
-        "purpose":     "commercial",
-        "subtype":     "Office",
-        "description": "Lean office-floor BOQ: switch boards + subfeeders + lighting + sockets + data, basic earthing. Good starter for SME / co-working / banking-hall projects.",
-        "bills": [
-            {"no": 1, "name": "PRELIMINARIES", "sections": [
-                {"letter": "A", "title": "PRELIMINARY ITEMS", "subsection": "", "items": [
-                    _it("Allow for site mobilisation and setup",     "Lot", 1, 12000),
-                    _it("Allow for project manager presence on site","Mth", 2,  8500),
-                    _it("Allow for health & safety provisions",      "Lot", 1,  4500),
-                    _it("Allow for tools and small plant",            "Lot", 1,  3000),
-                    _it("Allow for final commissioning and handover","Lot", 1,  5000),
-                ]},
-            ]},
-            {"no": 2, "name": "INTERNAL ELECTRICAL WIRING", "sections": [
-                {"letter": "A", "title": "SWITCH BOARDS AND DISTRIBUTION BOARDS", "subsection": "", "items": [
-                    _it("Supply and install 12-way SPN MCB Distribution Board c/w 100A INT. switch as Memshield or approved equal", "Nos.", 1, 4200),
-                    _it("Supply and install 8-way SPN MCB Distribution Board c/w 63A INT. switch as Memshield or approved equal",   "Nos.", 1, 2800),
-                    _it("Supply and install 100A TPN load Isolator as Memshield or approved equal",                                 "Nos.", 1, 1470),
-                ]},
-                {"letter": "B", "title": "SUBFEEDER CABLES AND EARTHLEADS", "subsection": "", "items": _COMMON_SUBFEEDER},
-                {"letter": "C", "title": "WIRING OF POINTS", "subsection": "Light points", "items": [
-                    _it("Wire light points using 1.5mm2 PVC insulated copper cable (Brown)", "Coils",  8, 391),
-                    _it("Wire light points using 1.5mm2 PVC insulated copper cable (Blue)",  "Coils",  8, 391),
-                    _it("Supply and install 20mm diameter PVC conduit pipe",                  "Nos.", 120, 14.63),
-                    _it("Supply and install 75mm x 75mm steel conduit boxes",                 "Nos.",  80, 13),
-                ]},
-                {"letter": "C", "title": "WIRING OF POINTS", "subsection": "Socket points", "items": [
-                    _it("Wire socket points using 2.5mm2 PVC insulated copper cable (Brown)", "Coils", 3, 653),
-                    _it("Wire socket points using 2.5mm2 PVC insulated copper cable (Blue)",  "Coils", 3, 653),
-                ]},
-                {"letter": "D", "title": "LUMINAIRES", "subsection": "", "items": [
-                    _it("Supply and fix 40W 600x600mm LED recessed panel light c/w driver as Philips or approved equal", "Nos.", 18,  599),
-                    _it("Supply and fix 18W LED round surface panel light as Philips or approved equal",                 "Nos.",  8,  305),
-                    _it("Supply and fix Emergency exit luminaire c/w battery backup",                                     "Nos.",  4,  480),
-                ]},
-                {"letter": "E", "title": "ACCESSORIES", "subsection": "", "items": [
-                    _it("Supply and fix 6A One Way two gang light switch as MK or approved equal",      "Nos.", 12,  34.13),
-                    _it("Supply and fix 2 x 13A Switched Socket outlet as MK or approved equal",        "Nos.", 24,  60),
-                    _it("Supply and fix 2 x 13A USB Socket outlet as MK or approved equal",             "Nos.",  8,  95),
-                    _it("Supply and fix 6 Compartment floor box c/w 2 double sockets as MK or approved equal", "Nos.",  6, 2100),
-                ]},
-            ]},
-            {"no": 5, "name": "DATA AND VOICE COMMUNICATIONS", "sections": [
-                {"letter": "A", "title": "DATA EQUIPMENT AND ACCESSORIES", "subsection": "", "items": [
-                    _it("Supply, lay and connect Cat 6e UTP Data cable",                                                            "Coils", 4, 1650),
-                    _it("Supply, install and commission 24 port CAT 6 Switch w/ 1GB fibre optic uplink as Cisco or approved equal", "Nos.",  1, 1800),
-                    _it("Supply and install 12U Data network cabinet",                                                              "Nos.",  1, 1600),
-                    _it("Supply and install RJ45 double data outlet c/w faceplate as MK or approved equal",                         "Nos.", 12,  104),
-                ]},
-            ]},
-        ],
-    },
-
-    # ============== HOSPITAL ================================================
-    "hospital-ward": {
-        "name":        "Hospital Ward floor",
-        "purpose":     "commercial",
-        "subtype":     "Hospital",
-        "description": "Hospital-ward template with essential power split (normal + emergency), nurse call wiring, medical-grade sockets.",
-        "bills": [
-            {"no": 1, "name": "PRELIMINARIES", "sections": [
-                {"letter": "A", "title": "PRELIMINARY ITEMS", "subsection": "", "items": [
-                    _it("Allow for site mobilisation and setup",        "Lot", 1, 18000),
-                    _it("Allow for project manager presence on site",   "Mth", 3,  8500),
-                    _it("Allow for site engineer presence on site",     "Mth", 3,  7000),
-                    _it("Allow for health & safety / infection control","Lot", 1,  8500),
-                    _it("Allow for final commissioning and handover",   "Lot", 1,  6500),
-                ]},
-            ]},
-            {"no": 2, "name": "INTERNAL ELECTRICAL WIRING", "sections": [
-                {"letter": "A", "title": "SWITCH BOARDS AND DISTRIBUTION BOARDS", "subsection": "", "items": [
-                    _it("Supply and install 12-way TPN MCB DB c/w 200A INT. switch (Normal Power) as Memshield or approved equal",    "Nos.", 1, 16500),
-                    _it("Supply and install 8-way TPN MCB DB c/w 100A INT. switch (Essential Power) as Memshield or approved equal",  "Nos.", 1,  8200),
-                    _it("Supply and install 6-way TPN MCB DB c/w 63A INT. switch (UPS Power) as Memshield or approved equal",         "Nos.", 1,  3308.81),
-                    _it("Supply, install and commission ATS Panel 200A c/w controller",                                                "Nos.", 1, 22000),
-                ]},
-                {"letter": "B", "title": "SUBFEEDER CABLES AND EARTHLEADS", "subsection": "", "items": [
-                    _it("Supply, lay and connect 4c x 50mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal", "M",  60,  651),
-                    _it("Supply, lay and connect 4c x 25mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal", "M",  80,  290),
-                    _it("Supply, lay and connect 4c x 16mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal", "M", 100,  190),
-                    _it("Supply, lay and connect 4c x 10mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal", "M",  60,  125),
-                    _it("Supply, lay and connect 1c x 25mm2 PVC Insulated copper cable as earth lead",                                                "M",  50,   65),
-                    _it("Supply, lay and connect 1c x 16mm2 PVC Insulated copper cable as earth lead",                                                "M",  50,   42),
-                ]},
-                {"letter": "C", "title": "WIRING OF POINTS", "subsection": "Light points", "items": [
-                    _it("Wire light points using 1.5mm2 PVC insulated copper cable (Brown)", "Coils", 18, 391),
-                    _it("Wire light points using 1.5mm2 PVC insulated copper cable (Blue)",  "Coils", 18, 391),
-                    _it("Supply and install 20mm diameter PVC conduit pipe",                  "Nos.",300, 14.63),
-                ]},
-                {"letter": "C", "title": "WIRING OF POINTS", "subsection": "Medical-grade socket points", "items": [
-                    _it("Wire medical-grade socket points using 4.0mm2 PVC insulated copper cable (Brown)", "Coils", 6, 1037),
-                    _it("Wire medical-grade socket points using 4.0mm2 PVC insulated copper cable (Blue)",  "Coils", 6, 1037),
-                ]},
-                {"letter": "D", "title": "LUMINAIRES", "subsection": "", "items": [
-                    _it("Supply and fix 40W 600x600mm LED recessed panel light c/w driver as Philips or approved equal", "Nos.", 22, 599),
-                    _it("Supply and fix Emergency LED exam-room luminaire as Philips or approved equal",                  "Nos.",  6, 850),
-                    _it("Supply and fix Emergency exit luminaire c/w battery backup",                                     "Nos.",  6, 480),
-                ]},
-                {"letter": "E", "title": "ACCESSORIES", "subsection": "", "items": [
-                    _it("Supply and fix Medical-grade twin socket outlet (red, essential) as MK or approved equal",  "Nos.", 18, 220),
-                    _it("Supply and fix Medical-grade twin socket outlet (white, normal) as MK or approved equal",   "Nos.", 24, 180),
-                    _it("Supply and fix 6A One Way two gang light switch as MK or approved equal",                   "Nos.", 18,  34.13),
-                ]},
-            ]},
-            {"no": 4, "name": "FIRE ALARM SYSTEM", "sections": [
-                {"letter": "A", "title": "WIRING OF FIRE POINTS", "subsection": "", "items": [
-                    _it("Supply, lay and connect 3c x 2.5mm2 red fire-resistant detection cable", "M",    350,  30),
-                    _it("Supply and install 20mm diameter thermoplastic fire conduit",            "Nos.",  80,  14.63),
-                ]},
-                {"letter": "B", "title": "FIRE PANEL AND ACCESSORIES", "subsection": "", "items": [
-                    _it("Supply, install, connect and commission Addressable optical Smoke detector as Hochiki or approved equal", "Nos.", 18,    532),
-                    _it("Supply, install, connect and commission Break glass call point as Hochiki or approved equal",             "Nos.",  6,    600),
-                    _it("Supply, install, connect and commission 8 Zone Addressable Fire Panel as Hochiki or approved equal",      "Nos.",  1, 53640),
-                ]},
-            ]},
-            {"no": 6, "name": "SIGNAL COMMUNICATION SYSTEMS", "sections": [
-                {"letter": "A", "title": "NURSE CALL SYSTEM", "subsection": "", "items": [
-                    _it("Supply, install and commission Nurse call patient bedhead unit",       "Nos.", 12, 1600),
-                    _it("Supply, install and commission Nurse call corridor display",          "Nos.",  2, 2200),
-                    _it("Supply, install and commission Nurse call master station",            "Nos.",  1, 6800),
-                    _it("Supply, lay and connect Nurse call wiring 4c x 0.5mm2 shielded",      "M",   400,   18),
-                ]},
-            ]},
-        ],
-    },
-
-    # ============== HOSTEL ==================================================
-    "hostel-typical": {
-        "name":        "Hostel / Student Residence floor",
-        "purpose":     "residential",
-        "subtype":     "Hostel",
-        "description": "Hostel-floor BOQ for student or staff accommodation -- per-room DBs, basic lighting + sockets, communal areas.",
-        "bills": [
-            {"no": 1, "name": "PRELIMINARIES", "sections": [
-                {"letter": "A", "title": "PRELIMINARY ITEMS", "subsection": "", "items": [
-                    _it("Allow for site mobilisation and setup",        "Lot", 1,  8000),
-                    _it("Allow for project manager presence on site",   "Mth", 2,  6500),
-                    _it("Allow for final commissioning and handover",   "Lot", 1,  3500),
-                ]},
-            ]},
-            {"no": 2, "name": "INTERNAL ELECTRICAL WIRING", "sections": [
-                {"letter": "A", "title": "SWITCH BOARDS AND DISTRIBUTION BOARDS", "subsection": "", "items": [
-                    _it("Supply and install 12-way SPN Consumer Unit c/w 100A switch (floor) as Memshield or approved equal", "Nos.", 1, 3800),
-                    _it("Supply and install 6-way SPN room consumer unit as Memshield or approved equal",                     "Nos.", 8,  850),
-                ]},
-                {"letter": "B", "title": "SUBFEEDER CABLES AND EARTHLEADS", "subsection": "", "items": _COMMON_SUBFEEDER},
-                {"letter": "C", "title": "WIRING OF POINTS", "subsection": "Light points (per room)", "items": [
-                    _it("Wire light points using 1.5mm2 PVC insulated copper cable (Brown)", "Coils", 12, 391),
-                    _it("Wire light points using 1.5mm2 PVC insulated copper cable (Blue)",  "Coils", 12, 391),
-                    _it("Supply and install 20mm diameter PVC conduit pipe",                  "Nos.",180, 14.63),
-                    _it("Supply and install 75mm x 75mm steel conduit boxes",                 "Nos.",150, 13),
-                ]},
-                {"letter": "C", "title": "WIRING OF POINTS", "subsection": "Socket points (per room)", "items": [
-                    _it("Wire socket points using 2.5mm2 PVC insulated copper cable (Brown)", "Coils", 5, 653),
-                    _it("Wire socket points using 2.5mm2 PVC insulated copper cable (Blue)",  "Coils", 5, 653),
-                ]},
-                {"letter": "D", "title": "LUMINAIRES", "subsection": "", "items": [
-                    _it("Supply and fix 18W LED ceiling round panel light as Philips or approved equal",  "Nos.", 16, 226),
-                    _it("Supply and fix LED bathroom waterproof fitting as Philips or approved equal",     "Nos.",  8, 380),
-                ]},
-                {"letter": "E", "title": "ACCESSORIES", "subsection": "", "items": [
-                    _it("Supply and fix 6A One Way One gang light switch as MK or approved equal",                   "Nos.", 16, 20.73),
-                    _it("Supply and fix 2 x 13A Switched Socket outlet as MK or approved equal",                     "Nos.", 24, 60),
-                    _it("Supply and fix 1 x 13A unswitched Socket outlet as MK or approved equal",                   "Nos.",  8, 40),
-                    _it("Supply and fix 20A DP switch with neon indicator (water heater) as MK or approved equal",   "Nos.",  8, 35),
-                ]},
-            ]},
-        ],
-    },
-
-    # ============== RESIDENCE (single-family) -- NEW ========================
-    "residence-typical": {
-        "name":        "Single-Family Residence (3-bed)",
-        "purpose":     "residential",
-        "subtype":     "Single Family House",
-        "description": "3-bedroom residential electrical BOQ. Main consumer unit + subfeeder cables + per-room wiring, lighting, sockets, water-heater, AC and security outlets. Aimed at electricians doing residential installations.",
-        "bills": [
-            {"no": 1, "name": "PRELIMINARIES", "sections": [
-                {"letter": "A", "title": "PRELIMINARY ITEMS", "subsection": "", "items": [
-                    _it("Allow for site mobilisation and setup",         "Lot", 1, 4500),
-                    _it("Allow for tools and small plant",                "Lot", 1, 2500),
-                    _it("Allow for final commissioning and handover",    "Lot", 1, 2500),
-                ]},
-            ]},
-            {"no": 2, "name": "INTERNAL ELECTRICAL WIRING", "sections": [
-                {"letter": "A", "title": "SWITCH BOARDS AND DISTRIBUTION BOARDS", "subsection": "", "items": [
-                    _it("Supply and install 12-way SPN Consumer Unit c/w 100A main switch as Memshield or approved equal", "Nos.", 1, 3800),
-                    _it("Supply and install 8-way SPN sub-consumer unit (kitchen/utility) as Memshield or approved equal",  "Nos.", 1, 1500),
-                    _it("Supply and install 63A TPN load Isolator as Memshield or approved equal",                          "Nos.", 1,  900),
-                ]},
-                {"letter": "B", "title": "SUBFEEDER CABLES AND EARTHLEADS", "subsection": "", "items": [
-                    _it("Supply, lay and connect 4c x 25mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal", "M",  30,  290),
-                    _it("Supply, lay and connect 4c x 16mm2 PVC/PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal", "M",  40,  190),
-                    _it("Supply, lay and connect 1c x 16mm2 PVC Insulated copper cable as earth lead",                                                 "M",  35,   42),
-                    _it("Supply and install 1500mm copper earth rod, buried 1.5m below ground with soil treatment",                                    "Set", 1, 1200),
-                ]},
-                {"letter": "C", "title": "WIRING OF POINTS", "subsection": "Light points (whole house)", "items": [
-                    _it("Wire light points using 1.5mm2 PVC insulated copper cable (Brown)",            "Coils",  6, 391),
-                    _it("Wire light points using 1.5mm2 PVC insulated copper cable (Blue)",             "Coils",  6, 391),
-                    _it("Wire light points using 1.5mm2 PVC insulated copper cable (Yellow/Green)",     "Coils",  4, 391),
-                    _it("Supply and install 20mm diameter PVC conduit pipe",                            "Nos.", 250, 14.63),
-                    _it("Supply and install 75mm x 75mm steel conduit boxes",                           "Nos.", 200, 13),
-                    _it("Supply and install circular boxes of various ways",                            "Nos.",  60,  5),
-                ]},
-                {"letter": "C", "title": "WIRING OF POINTS", "subsection": "13A socket points", "items": [
-                    _it("Wire socket points using 2.5mm2 PVC insulated copper cable (Brown)",           "Coils",  4, 653),
-                    _it("Wire socket points using 2.5mm2 PVC insulated copper cable (Blue)",            "Coils",  4, 653),
-                    _it("Wire socket points using 2.5mm2 PVC insulated copper cable (Yellow/Green)",    "Coils",  3, 653),
-                ]},
-                {"letter": "C", "title": "WIRING OF POINTS", "subsection": "Water heater + AC points", "items": [
-                    _it("Wire water heater / AC points using 4.0mm2 PVC insulated copper cable (Brown)",         "Coils", 2, 1037),
-                    _it("Wire water heater / AC points using 4.0mm2 PVC insulated copper cable (Blue)",          "Coils", 2, 1037),
-                    _it("Wire water heater / AC points using 4.0mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 2, 1037),
-                ]},
-                {"letter": "D", "title": "LUMINAIRES", "subsection": "", "items": [
-                    _it("Supply and fix 18W LED round surface panel light (rooms) as Philips or approved equal",        "Nos.", 16, 305),
-                    _it("Supply and fix 12W LED round surface panel light (corridor/utility) as Philips or approved equal","Nos.", 6, 226),
-                    _it("Supply and fix LED bathroom waterproof fitting IP44 as Philips or approved equal",              "Nos.",  4, 380),
-                    _it("Supply and fix Outdoor wall-mounted LED floodlight 50W IP65 (security)",                         "Nos.",  3, 380),
-                ]},
-                {"letter": "E", "title": "ACCESSORIES", "subsection": "", "items": [
-                    _it("Supply and fix 6A One Way One gang light switch as MK or approved equal",                                       "Nos.", 16, 20.73),
-                    _it("Supply and fix 6A One Way two gang light switch as MK or approved equal",                                       "Nos.",  6, 34.13),
-                    _it("Supply and fix 6A two Way one gang light switch as MK or approved equal (staircase / corridor)",                "Nos.",  4, 23.16),
-                    _it("Supply and fix 2 x 13A Switched Socket outlet as MK or approved equal",                                         "Nos.", 22, 60),
-                    _it("Supply and fix 1 x 13A unswitched Socket outlet as MK or approved equal (kitchen appliance)",                   "Nos.",  6, 40),
-                    _it("Supply and fix 20A DP switch with neon indicator (water heater) as MK or approved equal",                       "Nos.",  4, 35),
-                    _it("Supply and fix 20A DP switch with neon indicator (AC outdoor unit) as MK or approved equal",                    "Nos.",  3, 35),
-                    _it("Supply and fix Weatherproof IP65 socket outlet (outdoor) as MK or approved equal",                              "Nos.",  2, 110),
-                ]},
-            ]},
-            {"no": 3, "name": "BONDING AND EARTHING", "sections": [
-                {"letter": "A", "title": "BONDING AND EARTHING", "subsection": "", "items": [
-                    _it("Supply and lay 35mm2 bare copper conductor to fully contact the earth and treat",     "M",   25, 120),
-                    _it("Supply and install standard 1.5M high graded copper earth rod",                       "Nos.", 1, 1200),
-                    _it("Perform Exothermic welding",                                                          "Nos.", 2,  750),
-                    _it("Supply and install concrete inspection chamber with cover",                           "Nos.", 1,  457.13),
-                    _it("Test the installation using scripts from the electrical engineer",                    "Lot",  1, 2500),
-                ]},
-            ]},
-        ],
-    },
-}
-
-
-# ===========================================================================
-# Public helpers (replace the originals in _BOQ_PROJECT_TEMPLATES_v1)
-# ===========================================================================
-
+# Minimal stubs so any straggler import / call degrades gracefully.
 def _boq_template_list(purpose: str = "") -> list:
-    out = []
-    for slug, t in _BOQ_PROJECT_TEMPLATES.items():
-        if purpose and t.get("purpose") != purpose:
-            continue
-        out.append({
-            "slug": slug,
-            "name": t["name"],
-            "purpose": t["purpose"],
-            "subtype": t["subtype"],
-            "description": t["description"],
-            "n_bills": len(t["bills"]),
-            "n_lines": sum(len(s["items"]) for b in t["bills"] for s in b["sections"]),
-        })
-    return out
+    return []
 
 
 def _boq_template_get(slug: str) -> dict:
-    return _BOQ_PROJECT_TEMPLATES.get(slug)
+    return None
 
 
 def _boq_template_iter_lines(template: dict):
-    idx = 0
-    for b in template["bills"]:
-        bill_no = b["no"]
-        bill_name = b["name"]
-        for s in b["sections"]:
-            section_letter = s["letter"]
-            section_title = s["title"]
-            subsec = s.get("subsection", "")
-            for it in s["items"]:
-                yield (bill_no, bill_name, section_letter, section_title, subsec,
-                       idx, it["desc"], it.get("unit", "No."),
-                       float(it.get("qty", 1)), float(it.get("basic", 0)),
-                       it.get("spec", ""))
-                idx += 1
-
-
+    return iter(())
 
 
 # new_boq_project_edit_delete_routes.py
@@ -23798,27 +23104,79 @@ def boq_project_edit(pid):
         ptype = (f.get("project_type") or "single_building").strip()
         ext_works = 1 if f.get("external_works_included") else 0
         infra = 1 if f.get("infrastructure_included") else 0
+        # 2026-06-29 v3: Service Configuration + Build Mode editing.
+        new_services = [c for c in (f.getlist("services") or []) if c in _BOQ_SERVICE_LABEL]
+        new_services_csv = ",".join(new_services)
+        new_build_mode = (f.get("build_mode") or "complete_boq").strip().lower()
+        if new_build_mode not in ("section_by_section", "complete_boq"):
+            new_build_mode = "complete_boq"
+        remove_orphans = (f.get("remove_sections") or "").strip().lower() == "yes"
         if not name:
             flash("Project name is required.", "warning")
             return redirect(url_for("boq_project_edit", pid=pid))
+        # Compute removed services so we can audit + (optionally) delete their bill rows.
+        prev_services = _services_csv_to_list(project["services_csv"] or "")
+        removed = [s for s in prev_services if s not in new_services]
         with get_db() as c:
             c.execute(
                 "UPDATE boq_projects SET project_name=?, client_name=?, location=?, "
                 "project_type=?, external_works_included=?, infrastructure_included=?, "
+                "services_csv=?, build_mode=?, "
                 "updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?",
-                (name, client, location, ptype, ext_works, infra, pid, uid),
+                (name, client, location, ptype, ext_works, infra,
+                 new_services_csv, new_build_mode, pid, uid),
             )
+            n_deleted = 0
+            if removed and remove_orphans:
+                # Delete only items+rate rows tagged with one of the removed service codes.
+                # Legacy items have service_code='' and are NEVER deleted here.
+                placeholders = ",".join(["?"] * len(removed))
+                # Rate-buildup rows first so the FK chain works on engines without ON DELETE CASCADE enforcement.
+                c.execute(
+                    f"DELETE FROM boq_floor_rate_buildup WHERE floor_item_id IN ("
+                    f"  SELECT id FROM boq_floor_items WHERE project_id = ? AND service_code IN ({placeholders})"
+                    f")",
+                    (pid, *removed),
+                )
+                cur = c.execute(
+                    f"DELETE FROM boq_floor_items WHERE project_id = ? AND service_code IN ({placeholders})",
+                    (pid, *removed),
+                )
+                try:
+                    n_deleted = cur.rowcount or 0
+                except Exception:
+                    n_deleted = 0
         try:
             from new_boq_hierarchy_schema import boq_audit
-            boq_audit(get_db, uid, "boq_project_edited", "boq_project", pid)
+            boq_audit(get_db, uid, "boq_project_edited", "boq_project", pid,
+                      f"services={new_services_csv} mode={new_build_mode} removed={removed} deleted_items={n_deleted}")
         except Exception:
             pass
-        flash(f"Project '{name}' updated.", "success")
+        if removed and remove_orphans and n_deleted:
+            flash(f"Project '{name}' updated. Removed {n_deleted} BOQ item(s) tied to dropped services.", "success")
+        else:
+            flash(f"Project '{name}' updated.", "success")
         return redirect(url_for("boq_project_overview", pid=pid))
+    import json as _json
+    _chosen = _services_csv_to_list(project["services_csv"] or "")
+    _svc_sections = {
+        code: {
+            "name": skel["name"],
+            "sections": [
+                {"letter": s["letter"], "title": s["title"], "subsection": s.get("subsection", "")}
+                for s in skel.get("sections", [])
+            ],
+        }
+        for code, skel in _BOQ_SERVICE_BILL_SKELETON.items()
+    }
     return render_template(
         "boq_project_edit.html",
         user=current_user(),
         project=project,
+        services=_BOQ_SERVICES,
+        chosen_services=_chosen,
+        service_sections_json=_json.dumps(_svc_sections),
+        service_labels_json=_json.dumps(_BOQ_SERVICE_LABEL),
     )
 
 
@@ -23826,13 +23184,14 @@ def boq_project_edit(pid):
 @login_required
 def boq_project_recalc(pid):
     """Recompute total_amount + final_built_up_rate for every item in
-    the project using the current compound rate-buildup formula.
+    the project using the markup-only rate engine (boq_rate_v3.boq_rate_v3,
+    single source of truth -- 2026-06-29 unification).
 
-    Idempotent. Reads basic/supply/install/oh/prf/cnt/vat from
-    boq_floor_rate_buildup, calls _boq_safe_rate, writes the new
-    final_built_up_rate + total_amount back to BOTH boq_floor_items
-    and boq_floor_rate_buildup. Flashes count + old vs new grand
-    total so the owner sees the delta from the math fix.
+    Idempotent. Reads basic/supply%/install%/oh%/prf%/vat% from
+    boq_floor_rate_buildup, calls _boq_safe_rate (a thin wrapper around
+    boq_rate_v3), writes the new final_built_up_rate + total_amount back
+    to BOTH boq_floor_items and boq_floor_rate_buildup. Flashes count
+    + old vs new grand total so the owner sees the delta.
     """
     uid = session["user_id"]
     project = _boq_project_owned_or_404(pid, uid)
@@ -23896,7 +23255,7 @@ def boq_project_recalc(pid):
         "Recalculated " + str(updated) + " item(s). "
         "Grand total " + str(round(old_grand, 2)) + " -> "
         + str(round(new_grand, 2)) + " (" + sign + str(round(delta, 2)) + ")."
-        " Using compound rate-buildup formula.",
+        " Using markup-only rate engine (boq_rate_v3).",
         "success",
     )
     return redirect(url_for("boq_project_overview", pid=pid))
@@ -25859,253 +25218,894 @@ def admin_marketplace_categories_toggle(cid):
 
 
 # === BEGIN: boq_services_engine splice ===
-# 2026-06-22 (session A): BOQ project services. Users tick which services
-# the project must cover BEFORE picking a template. Templates are then
-# scored against the chosen services and any chosen service that isn't in
-# the template gets a generic placeholder bill injected so the BOQ never
-# silently drops a service the project requires.
+# 2026-06-29 refactor (projectboq build update1.txt). The BOQ engine is unified:
+#   - Build by Template is RETIRED. There is no template picker, no wizard.
+#   - Two build modes share the same engine: Section-by-Section (one section
+#     at a time) and Complete BOQ (all selected services' sections in one
+#     editable page).
+#   - Service Configuration is the SOLE driver of which sections load.
+#
+# Source spec sections of relevance:
+#   - lines 469-477  : 14 engineering services
+#   - lines 502-608  : verbatim service -> section mapping
+#   - lines 633-641  : important rules
+#   - lines 679-697  : acceptance criteria
+#
+# The 15th service (BMS) is preserved at the owner's direction (2026-06-29)
+# with sections modelled after the other 14 (processors, AI/analytics
+# controllers, sensors, actuators, field wiring & terminal blocks, power
+# systems, network cabling, workstations, integrations, T&C).
+#
+# Codes are STABLE -- they persist in boq_projects.services_csv. The legacy
+# map below carries pre-refactor projects forward (silent auto-migrate).
 
-# Ordered service registry. Codes are stable (used in boq_projects.services_csv).
-# Owner can add more later via _BOQ_SERVICES + skeleton in _BOQ_SERVICE_BILL_SKELETON.
+
+# ---------------------------------------------------------------------------
+# 1. Service registry (15 services, spec order, BMS last)
+# ---------------------------------------------------------------------------
+
 _BOQ_SERVICES = [
-    ("power_supply_lighting", "Power supply & external lighting",  "bi-lightning-charge"),
-    ("internal_electrical",   "Internal electrical installation",  "bi-plug-fill"),
-    ("it_network",            "IT & network systems",              "bi-hdd-network"),
-    ("fire_alarm",            "Fire alarm system",                 "bi-fire"),
-    ("lightning_protection",  "Lightning protection",              "bi-cloud-lightning-rain"),
-    ("earthing_bonding",      "Equipotential earthing & bonding",  "bi-arrow-down-square"),
-    ("ip_cctv",               "IP CCTV system",                    "bi-camera-video"),
-    ("nurse_call",            "Nurse call system",                 "bi-bell-fill"),
-    ("ip_pa",                 "IP PA / public-address system",     "bi-megaphone"),
-    ("bms",                   "BMS (building management)",         "bi-cpu"),
+    ("internal_electrical",   "Internal Electrical Installation",                              "bi-plug-fill"),
+    ("fire_alarm",            "Fire Alarm System Installation",                                "bi-fire"),
+    ("earthing_bonding",      "Equipotential Bonding System Installation",                     "bi-arrow-down-square"),
+    ("lightning_protection",  "Lightning Protection System Installation",                      "bi-cloud-lightning-rain"),
+    ("power_supply_lv",       "Power Supply, LV Distribution and External Lighting Systems",   "bi-lightning-charge"),
+    ("lan_wlan",              "Local Area Network and Wireless Area Network",                  "bi-hdd-network"),
+    ("it_server_room",        "IT Server Room Infrastructure",                                 "bi-server"),
+    ("voip",                  "VoIP System Installation",                                      "bi-telephone-inbound"),
+    ("ip_pa",                 "Public Address System Installation",                            "bi-megaphone"),
+    ("ip_cctv",               "IP CCTV Network Installation",                                  "bi-camera-video"),
+    ("tv_system",             "TV System Installation",                                        "bi-tv"),
+    ("ip_clock",              "IP Clock System Installation",                                  "bi-clock-history"),
+    ("nurse_call",            "Nurse Call System Installation",                                "bi-bell-fill"),
+    ("medical_equip",         "Medical Equipment Electrical Installation",                     "bi-heart-pulse"),
+    ("bms",                   "Building Management System (BMS)",                              "bi-cpu"),
 ]
 _BOQ_SERVICE_CODES = [c for c, _, _ in _BOQ_SERVICES]
 _BOQ_SERVICE_LABEL = {c: l for c, l, _ in _BOQ_SERVICES}
 _BOQ_SERVICE_ICON  = {c: ic for c, _, ic in _BOQ_SERVICES}
 
 
-# Map existing template bill names -> services. Uses uppercase substring match.
-# A bill may serve multiple services.
+# ---------------------------------------------------------------------------
+# 2. Legacy code -> new code map (silent migration on first read)
+# ---------------------------------------------------------------------------
+# A legacy code may expand to multiple new codes (it_network -> lan_wlan +
+# it_server_room because the spec splits them).
+
+_BOQ_SERVICE_LEGACY_MAP = {
+    "power_supply_lighting": ["power_supply_lv"],
+    "it_network":            ["lan_wlan", "it_server_room"],
+    # All other pre-refactor codes (internal_electrical, fire_alarm,
+    # earthing_bonding, lightning_protection, ip_cctv, nurse_call, ip_pa,
+    # bms) match the new set 1:1 so they need no entry here.
+}
+
+
+# ---------------------------------------------------------------------------
+# 3. Bill-name -> services map (infers services_csv from existing bill rows
+#    when a legacy project has services_csv NULL).
+# ---------------------------------------------------------------------------
+
 _BOQ_BILL_TO_SERVICES = [
-    ("PRELIMINARIES",                 []),  # not a service on its own
-    ("INTERNAL ELECTRICAL",           ["internal_electrical", "power_supply_lighting"]),
-    ("EXTERNAL LIGHTING",             ["power_supply_lighting"]),
+    ("PRELIMINARIES",                 []),   # spans services
+    ("INTERNAL ELECTRICAL",           ["internal_electrical"]),
+    ("SWITCH BOARDS",                 ["internal_electrical"]),
+    ("DISTRIBUTION BOARDS",           ["internal_electrical"]),
+    ("WIRING OF POINTS",              ["internal_electrical"]),
+    ("LUMINAIRES",                    ["internal_electrical"]),
+    ("EXTERNAL LIGHTING",             ["power_supply_lv"]),
+    ("POWER SUPPLY",                  ["power_supply_lv"]),
+    ("LV DISTRIBUTION",               ["power_supply_lv"]),
+    ("TRANSFORMER",                   ["power_supply_lv"]),
     ("BONDING AND EARTHING",          ["earthing_bonding"]),
     ("EQUIPOTENTIAL",                 ["earthing_bonding"]),
     ("LIGHTNING PROTECTION",          ["lightning_protection"]),
     ("FIRE ALARM",                    ["fire_alarm"]),
-    ("DATA AND VOICE",                ["it_network"]),
-    ("STRUCTURED CABLING",            ["it_network"]),
-    ("IT AND NETWORK",                ["it_network"]),
-    ("SIGNAL COMMUNICATION",          ["ip_pa", "ip_cctv"]),
-    ("CCTV",                          ["ip_cctv"]),
+    ("FIRE DETECTION",                ["fire_alarm"]),
+    ("STRUCTURED CABLING",            ["lan_wlan"]),
+    ("DATA AND VOICE",                ["lan_wlan"]),
+    ("WIRELESS",                      ["lan_wlan"]),
+    ("LAN AND",                       ["lan_wlan"]),
+    ("NETWORK CABINET",               ["lan_wlan"]),
+    ("IT SERVER ROOM",                ["it_server_room"]),
+    ("SERVER ROOM",                   ["it_server_room"]),
+    ("UPS",                           ["it_server_room"]),
+    ("VOIP",                          ["voip"]),
+    ("IP PHONE",                      ["voip"]),
+    ("VOICE GATEWAY",                 ["voip"]),
     ("PUBLIC ADDRESS",                ["ip_pa"]),
+    ("PA SYSTEM",                     ["ip_pa"]),
+    ("CCTV",                          ["ip_cctv"]),
+    ("TV SYSTEM",                     ["tv_system"]),
+    ("IP CLOCK",                      ["ip_clock"]),
+    ("MASTER CLOCK",                  ["ip_clock"]),
     ("NURSE CALL",                    ["nurse_call"]),
-    ("BMS",                           ["bms"]),
+    ("MEDICAL EQUIPMENT",             ["medical_equip"]),
+    ("ISOLATED POWER SUPPLY",         ["medical_equip"]),
     ("BUILDING MANAGEMENT",           ["bms"]),
+    ("BMS",                           ["bms"]),
+    # Legacy aggregate names (pre-2026-06-29) -- still resolve.
+    ("SIGNAL COMMUNICATION",          ["ip_pa", "ip_cctv"]),
+    ("IT AND NETWORK",                ["lan_wlan"]),
 ]
 
 
-def _template_services(template: dict) -> list:
-    """Return the de-duplicated service codes a template covers."""
-    services = []
-    seen = set()
-    for bill in template.get("bills", []):
-        name = (bill.get("name") or "").upper()
-        for needle, svc_list in _BOQ_BILL_TO_SERVICES:
-            if needle in name:
-                for s in svc_list:
-                    if s not in seen:
-                        seen.add(s)
-                        services.append(s)
-    return services
+# ---------------------------------------------------------------------------
+# 4. Per-service section skeleton.
+#    Each service = one Bill on the floor. The Bill's `sections` is the
+#    verbatim list from the spec; each section has 3-5 representative items
+#    so the BOQ feels real out-of-the-box. qty=0 + basic=0 by owner directive
+#    (2026-06-28) -- owner fills in per project.
+# ---------------------------------------------------------------------------
 
-
-# Generic placeholder bills -- 1 per service. These mirror the supplier price
-# sheets the owner shared (Apinto Agenda + Grand Pacific) so the lines feel
-# real even when nothing in the picked template covered that service.
 _BOQ_SERVICE_BILL_SKELETON = {
-    "power_supply_lighting": {
-        "name": "POWER SUPPLY AND EXTERNAL LIGHTING",
-        "sections": [
-            {"letter": "A", "title": "UTILITY SUPPLY AND METERING", "subsection": "", "items": [
-                {"desc": "Utility metering kiosk + bulk meter",   "unit": "Lot",  "qty": 1, "basic":  8500, "spec": "Per ECG / NEDCo standard"},
-                {"desc": "Main incoming switchgear",              "unit": "No.",  "qty": 1, "basic": 15000, "spec": "Rated per project demand"},
-            ]},
-            {"letter": "B", "title": "EXTERNAL AREA LIGHTING", "subsection": "", "items": [
-                {"desc": "9m steel street-light pole + LED head", "unit": "No.",  "qty": 6, "basic":  3200, "spec": "60W LED, IP66"},
-                {"desc": "Underground feed cable to poles",       "unit": "m",    "qty": 80,"basic":    65, "spec": "4C x 6mm2 Cu/XLPE/SWA/PVC"},
-                {"desc": "Photocell + contactor control unit",    "unit": "No.",  "qty": 1, "basic":  1850, "spec": "32A dusk-to-dawn"},
-            ]},
-        ],
-    },
+
+    # ------------ 1. Internal Electrical Installation -----------------
     "internal_electrical": {
         "name": "INTERNAL ELECTRICAL INSTALLATION",
         "sections": [
-            {"letter": "A", "title": "DISTRIBUTION BOARDS", "subsection": "", "items": [
-                {"desc": "Final DB c/w MCBs", "unit": "No.", "qty": 1, "basic": 3200, "spec": "TPN, 12-way, 100A"},
+            {"letter": "A", "title": "PRELIMINARIES", "subsection": "", "items": [
+                {"desc": "Site supervision and project management",                "unit": "Item", "qty": 0, "basic": 0, "spec": "Per contract programme"},
+                {"desc": "Mobilisation and demobilisation",                        "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Testing instruments and PPE allowance",                  "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Permits, certificates and notices",                      "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
             ]},
-            {"letter": "B", "title": "WIRING OF POINTS", "subsection": "Lighting + socket circuits", "items": [
-                {"desc": "1.5mm² PVC copper cable", "unit": "Roll", "qty": 4, "basic": 390, "spec": "BS 6004"},
-                {"desc": "2.5mm² PVC copper cable", "unit": "Roll", "qty": 4, "basic": 650, "spec": "BS 6004"},
-                {"desc": "PVC conduit 20mm + boxes", "unit": "Lot", "qty": 1, "basic": 1850, "spec": "Heavy gauge"},
+            {"letter": "B", "title": "SWITCH BOARDS AND DISTRIBUTION BOARDS", "subsection": "", "items": [
+                {"desc": "Main Distribution Board (MDB)",                          "unit": "No.", "qty": 0, "basic": 0, "spec": "TPN, MCCB incomer + outgoing breakers"},
+                {"desc": "Sub Distribution Board (SDB)",                           "unit": "No.", "qty": 0, "basic": 0, "spec": "TPN, 12-way, 100A"},
+                {"desc": "Final Distribution Board (FDB)",                         "unit": "No.", "qty": 0, "basic": 0, "spec": "SPN, 8-way, 63A with MCBs"},
+                {"desc": "Surge protection device (Type 1+2)",                     "unit": "No.", "qty": 0, "basic": 0, "spec": "IEC 61643"},
+            ]},
+            {"letter": "C", "title": "SUB-FEEDER CABLES AND EARTH LEADS", "subsection": "", "items": [
+                {"desc": "4C x 16mm² Cu/XLPE/SWA/PVC sub-feeder cable",            "unit": "m",   "qty": 0, "basic": 0, "spec": "BS 5467"},
+                {"desc": "4C x 25mm² Cu/XLPE/SWA/PVC sub-feeder cable",            "unit": "m",   "qty": 0, "basic": 0, "spec": "BS 5467"},
+                {"desc": "1C x 10mm² PVC earth lead",                              "unit": "m",   "qty": 0, "basic": 0, "spec": "Green/yellow"},
+                {"desc": "Cable gland and lug kit (per cable size)",               "unit": "Set", "qty": 0, "basic": 0, "spec": "Brass, BS 6121"},
+            ]},
+            {"letter": "D", "title": "WIRING OF POINTS", "subsection": "Lighting + socket circuits", "items": [
+                {"desc": "1.5mm² PVC single copper conductor",                     "unit": "Roll", "qty": 0, "basic": 0, "spec": "BS 6004, R/B/Y/G&Y per phase colour"},
+                {"desc": "2.5mm² PVC single copper conductor",                     "unit": "Roll", "qty": 0, "basic": 0, "spec": "BS 6004"},
+                {"desc": "4.0mm² PVC single copper conductor",                     "unit": "Roll", "qty": 0, "basic": 0, "spec": "BS 6004"},
+                {"desc": "20mm PVC conduit + boxes (Heavy gauge)",                 "unit": "Lot", "qty": 0, "basic": 0, "spec": "BS 6099"},
+            ]},
+            {"letter": "E", "title": "LUMINAIRES", "subsection": "", "items": [
+                {"desc": "LED panel light 600x600 (40W, 4000K)",                   "unit": "No.", "qty": 0, "basic": 0, "spec": "UGR<19, recessed"},
+                {"desc": "LED downlight 18W (4000K)",                              "unit": "No.", "qty": 0, "basic": 0, "spec": "Recessed, IP44 bathroom-rated"},
+                {"desc": "LED batten 4ft (36W)",                                   "unit": "No.", "qty": 0, "basic": 0, "spec": "Surface, BS EN 60598"},
+                {"desc": "Emergency exit luminaire (3hr maintained)",              "unit": "No.", "qty": 0, "basic": 0, "spec": "Self-test, BS EN 60598-2-22"},
+            ]},
+            {"letter": "F", "title": "ACCESSORIES", "subsection": "", "items": [
+                {"desc": "13A switched socket outlet (single)",                    "unit": "No.", "qty": 0, "basic": 0, "spec": "White moulded, BS 1363"},
+                {"desc": "13A switched socket outlet (double)",                    "unit": "No.", "qty": 0, "basic": 0, "spec": "White moulded, BS 1363"},
+                {"desc": "1-gang 1-way wall switch (10A)",                         "unit": "No.", "qty": 0, "basic": 0, "spec": "White moulded, BS 3676"},
+                {"desc": "2-gang 2-way wall switch (10A)",                         "unit": "No.", "qty": 0, "basic": 0, "spec": "White moulded"},
+                {"desc": "Ceiling rose with hook",                                 "unit": "No.", "qty": 0, "basic": 0, "spec": "BS 67"},
+            ]},
+            {"letter": "G", "title": "BONDING AND EARTHING", "subsection": "", "items": [
+                {"desc": "Main earth bar (drilled copper)",                        "unit": "No.", "qty": 0, "basic": 0, "spec": "Insulated, lockable enclosure"},
+                {"desc": "16mm² PVC earth conductor",                              "unit": "m",   "qty": 0, "basic": 0, "spec": "Green/yellow"},
+                {"desc": "Earth rod 1.5m + clamp + inspection pit",                "unit": "Set", "qty": 0, "basic": 0, "spec": "Copper-bonded, BS 7430"},
+            ]},
+            {"letter": "H", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "Insulation resistance test (per circuit)",               "unit": "Item", "qty": 0, "basic": 0, "spec": "500V Megger, BS 7671"},
+                {"desc": "Earth loop impedance test",                              "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "RCD operation test",                                     "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Phase rotation test",                                    "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "I", "title": "DOCUMENTATION AND HANDOVER", "subsection": "", "items": [
+                {"desc": "As-built drawings (PDF + DWG)",                          "unit": "Set", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Operation and Maintenance manual",                       "unit": "Set", "qty": 0, "basic": 0, "spec": "Printed + USB"},
+                {"desc": "Test certificates (electrical)",                         "unit": "Set", "qty": 0, "basic": 0, "spec": "BS 7671 Schedule of Test Results"},
+                {"desc": "Training to client maintenance staff",                   "unit": "Day", "qty": 0, "basic": 0, "spec": ""},
             ]},
         ],
     },
-    "it_network": {
-        "name": "IT AND NETWORK SYSTEMS",
-        "sections": [
-            {"letter": "A", "title": "STRUCTURED CABLING", "subsection": "", "items": [
-                {"desc": "Cat6 UTP horizontal cable",         "unit": "Roll", "qty": 4, "basic": 1200, "spec": "305m / box, blue jacket"},
-                {"desc": "Cat6 RJ45 keystone outlet",         "unit": "No.",  "qty":40, "basic":   28, "spec": "T568B punch-down"},
-                {"desc": "24-port Cat6 patch panel",          "unit": "No.",  "qty": 2, "basic":  650, "spec": "1U, loaded"},
-            ]},
-            {"letter": "B", "title": "ACTIVE NETWORK EQUIPMENT", "subsection": "", "items": [
-                {"desc": "24-port Gigabit PoE switch",        "unit": "No.",  "qty": 1, "basic": 7500, "spec": "L2, 370W PoE budget"},
-                {"desc": "Wireless access point (WiFi 6)",    "unit": "No.",  "qty": 4, "basic": 1800, "spec": "PoE-fed"},
-            ]},
-        ],
-    },
+
+    # ------------ 2. Fire Alarm System Installation -------------------
     "fire_alarm": {
-        "name": "FIRE ALARM SYSTEM",
+        "name": "FIRE ALARM SYSTEM INSTALLATION",
         "sections": [
-            {"letter": "A", "title": "PANELS AND DETECTORS", "subsection": "", "items": [
-                {"desc": "Addressable FACP",                  "unit": "No.",  "qty": 1, "basic": 8500, "spec": "2-loop, EN 54-2/4"},
-                {"desc": "Optical smoke detector",            "unit": "No.",  "qty":24, "basic":  220, "spec": "Addressable, EN 54-7"},
-                {"desc": "Manual call point",                 "unit": "No.",  "qty": 8, "basic":  180, "spec": "EN 54-11"},
-                {"desc": "Sounder + strobe",                  "unit": "No.",  "qty": 8, "basic":  320, "spec": "100dB, EN 54-3/23"},
+            {"letter": "A", "title": "FIRE DETECTION AND ALARM SYSTEM", "subsection": "", "items": [
+                {"desc": "Addressable Fire Alarm Control Panel (FACP)",            "unit": "No.", "qty": 0, "basic": 0, "spec": "2-loop, EN 54-2/4"},
+                {"desc": "Optical smoke detector (addressable)",                   "unit": "No.", "qty": 0, "basic": 0, "spec": "EN 54-7"},
+                {"desc": "Heat detector (addressable, A2S)",                       "unit": "No.", "qty": 0, "basic": 0, "spec": "EN 54-5"},
+                {"desc": "Manual Call Point (break-glass)",                        "unit": "No.", "qty": 0, "basic": 0, "spec": "EN 54-11"},
+                {"desc": "Sounder + strobe (wall-mount, 100dB)",                   "unit": "No.", "qty": 0, "basic": 0, "spec": "EN 54-3/23"},
             ]},
-            {"letter": "B", "title": "CABLING", "subsection": "", "items": [
-                {"desc": "Fire-resistant cable",              "unit": "m",    "qty":250,"basic":   14, "spec": "FP200, 1.5mm² 2C"},
+            {"letter": "B", "title": "FIRE ALARM CABLING", "subsection": "", "items": [
+                {"desc": "Fire-resistant cable 1.5mm² 2C (FP200)",                 "unit": "m",   "qty": 0, "basic": 0, "spec": "BS EN 50200 PH120"},
+                {"desc": "Fire-resistant cable 2.5mm² 2C (FP200)",                 "unit": "m",   "qty": 0, "basic": 0, "spec": "For sounder circuits"},
+                {"desc": "Containment for FA cabling (LSF tray + clips)",          "unit": "m",   "qty": 0, "basic": 0, "spec": "Red colour-coded"},
+            ]},
+            {"letter": "C", "title": "FIRE ALARM ACCESSORIES", "subsection": "", "items": [
+                {"desc": "Door retainer (24Vdc, magnetic)",                        "unit": "No.", "qty": 0, "basic": 0, "spec": "EN 1155"},
+                {"desc": "Interface module (input/output)",                        "unit": "No.", "qty": 0, "basic": 0, "spec": "Addressable, BMS-linked"},
+                {"desc": "Battery backup (24Vdc, sealed lead-acid)",               "unit": "Set", "qty": 0, "basic": 0, "spec": "24hrs standby + 30min alarm"},
+            ]},
+            {"letter": "D", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "100% device sweep test (smoke + heat + MCP)",            "unit": "Item", "qty": 0, "basic": 0, "spec": "BS 5839-1"},
+                {"desc": "Sounder audibility test (per zone)",                     "unit": "Item", "qty": 0, "basic": 0, "spec": "65dBA above ambient"},
+                {"desc": "Cause-and-effect commissioning",                         "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
             ]},
         ],
     },
-    "lightning_protection": {
-        "name": "LIGHTNING PROTECTION SYSTEM",
-        "sections": [
-            {"letter": "A", "title": "AIR TERMINALS AND DOWN CONDUCTORS", "subsection": "", "items": [
-                {"desc": "Copper air-terminal rod (1m, 16mm dia)", "unit": "No.",  "qty": 4, "basic":  450, "spec": "BS EN 62305"},
-                {"desc": "25 x 3mm copper tape down conductor",    "unit": "m",    "qty":80, "basic":   42, "spec": "Hard-drawn copper"},
-                {"desc": "Roof + wall tape clips",                  "unit": "No.",  "qty":40, "basic":   12, "spec": ""},
-            ]},
-            {"letter": "B", "title": "EARTHING", "subsection": "", "items": [
-                {"desc": "Copper-bonded earth rod (1.5m)",         "unit": "No.",  "qty": 4, "basic":  280, "spec": "16mm dia"},
-                {"desc": "Inspection pit + clamp",                 "unit": "No.",  "qty": 4, "basic":  650, "spec": ""},
-            ]},
-        ],
-    },
+
+    # ------------ 3. Equipotential Bonding System Installation --------
     "earthing_bonding": {
-        "name": "EQUIPOTENTIAL EARTHING AND BONDING",
+        "name": "EQUIPOTENTIAL BONDING SYSTEM INSTALLATION",
         "sections": [
-            {"letter": "A", "title": "MAIN EARTHING TERMINAL", "subsection": "", "items": [
-                {"desc": "Main earth bar (copper, drilled)",      "unit": "No.",  "qty": 1, "basic":  850, "spec": "Insulated, lockable"},
-                {"desc": "70mm² PVC copper earth conductor",      "unit": "m",    "qty":40, "basic":   95, "spec": "Green/yellow"},
-                {"desc": "Earth rod 1.5m + boss + clamp",         "unit": "No.",  "qty": 3, "basic":  320, "spec": ""},
+            {"letter": "A", "title": "BONDING AND EARTHING", "subsection": "", "items": [
+                {"desc": "Main earthing terminal (MET) copper bar",                "unit": "No.", "qty": 0, "basic": 0, "spec": "Insulated, lockable"},
+                {"desc": "70mm² PVC earth conductor",                              "unit": "m",   "qty": 0, "basic": 0, "spec": "Green/yellow"},
+                {"desc": "35mm² PVC earth conductor",                              "unit": "m",   "qty": 0, "basic": 0, "spec": "Green/yellow"},
             ]},
-            {"letter": "B", "title": "BONDING", "subsection": "", "items": [
-                {"desc": "Equipotential bonding to services",     "unit": "Lot",  "qty": 1, "basic": 1200, "spec": "Water, gas, structural steel"},
+            {"letter": "B", "title": "EQUIPOTENTIAL BONDING", "subsection": "", "items": [
+                {"desc": "Bonding to incoming water service",                      "unit": "No.", "qty": 0, "basic": 0, "spec": "Earth clamp + 10mm² conductor"},
+                {"desc": "Bonding to incoming gas service",                        "unit": "No.", "qty": 0, "basic": 0, "spec": "Earth clamp + 10mm² conductor"},
+                {"desc": "Bonding to structural steel",                            "unit": "No.", "qty": 0, "basic": 0, "spec": "16mm² conductor + lug"},
+                {"desc": "Supplementary bonding (wet areas)",                      "unit": "Lot", "qty": 0, "basic": 0, "spec": "Per IEE wiring regs 415.2"},
+            ]},
+            {"letter": "C", "title": "EARTH BARS AND EARTH LEADS", "subsection": "", "items": [
+                {"desc": "Sub-earth bar (drilled copper, 6 ways)",                 "unit": "No.", "qty": 0, "basic": 0, "spec": "Wall-mounted enclosure"},
+                {"desc": "Cable lug (per conductor size)",                         "unit": "No.", "qty": 0, "basic": 0, "spec": "Compression type, tinned"},
+            ]},
+            {"letter": "D", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "Earth resistance measurement",                           "unit": "Item", "qty": 0, "basic": 0, "spec": "Fall-of-potential method"},
+                {"desc": "Continuity test of bonding conductors",                  "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Test certificate (earthing)",                            "unit": "Set", "qty": 0, "basic": 0, "spec": "BS 7430"},
             ]},
         ],
     },
-    "ip_cctv": {
-        "name": "IP CCTV SYSTEM",
+
+    # ------------ 4. Lightning Protection System Installation ---------
+    "lightning_protection": {
+        "name": "LIGHTNING PROTECTION SYSTEM INSTALLATION",
         "sections": [
-            {"letter": "A", "title": "CAMERAS AND RECORDER", "subsection": "", "items": [
-                {"desc": "5MP IP dome camera (PoE)",              "unit": "No.",  "qty": 8, "basic": 1450, "spec": "H.265, IK10, IR 30m"},
-                {"desc": "5MP IP bullet camera (PoE)",            "unit": "No.",  "qty": 4, "basic": 1550, "spec": "H.265, IP67, IR 50m"},
-                {"desc": "16-channel NVR + 4TB HDD",              "unit": "No.",  "qty": 1, "basic": 6500, "spec": "RAID-1 / motion-search"},
-                {"desc": "23\" LED monitor",                     "unit": "No.",  "qty": 1, "basic": 1200, "spec": "Full HD"},
+            {"letter": "A", "title": "LIGHTNING PROTECTION", "subsection": "Risk assessment + design", "items": [
+                {"desc": "Risk assessment per IEC 62305-2",                        "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Rolling sphere design + drawing pack",                   "unit": "Set", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "B", "title": "AIR TERMINALS", "subsection": "", "items": [
+                {"desc": "Copper air-terminal rod 1m x 16mm dia",                  "unit": "No.", "qty": 0, "basic": 0, "spec": "BS EN 62305"},
+                {"desc": "Air-terminal base + insulating pad",                     "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "C", "title": "DOWN CONDUCTORS", "subsection": "", "items": [
+                {"desc": "25 x 3mm hard-drawn copper tape",                        "unit": "m",   "qty": 0, "basic": 0, "spec": "BS EN 50164-2"},
+                {"desc": "Roof + wall tape clips (per type)",                      "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "D", "title": "TEST CLAMPS", "subsection": "", "items": [
+                {"desc": "Test clamp (bolted disconnect, brass)",                  "unit": "No.", "qty": 0, "basic": 0, "spec": "Accessible at 2.0m AGL"},
+            ]},
+            {"letter": "E", "title": "EARTH ELECTRODES", "subsection": "", "items": [
+                {"desc": "Copper-bonded earth rod 1.5m x 16mm dia",                "unit": "No.", "qty": 0, "basic": 0, "spec": "BS 7430"},
+                {"desc": "Inspection pit + lid + clamp",                           "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Bentonite earth-enhancing compound",                     "unit": "Bag", "qty": 0, "basic": 0, "spec": "25kg"},
+            ]},
+            {"letter": "F", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "Earth resistance measurement (LPS)",                     "unit": "Item", "qty": 0, "basic": 0, "spec": "Target <10 ohms"},
+                {"desc": "Continuity sweep (down conductors)",                     "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "LPS test certificate",                                   "unit": "Set", "qty": 0, "basic": 0, "spec": "IEC 62305"},
             ]},
         ],
     },
-    "nurse_call": {
-        "name": "NURSE CALL SYSTEM",
+
+    # ------------ 5. Power Supply, LV Distribution and External Lighting Systems
+    "power_supply_lv": {
+        "name": "POWER SUPPLY, LV DISTRIBUTION AND EXTERNAL LIGHTING SYSTEMS",
         "sections": [
-            {"letter": "A", "title": "PANEL AND BEDSIDE UNITS", "subsection": "", "items": [
-                {"desc": "Nurse call master station",             "unit": "No.",  "qty": 1, "basic": 5500, "spec": "Wired, IP65 backbox"},
-                {"desc": "Bedside call point + pull cord",        "unit": "No.",  "qty":12, "basic":  280, "spec": "Push + reset"},
-                {"desc": "Corridor over-door indicator",          "unit": "No.",  "qty": 6, "basic":  220, "spec": "Red/green LED"},
-                {"desc": "Staff staff-presence override key",     "unit": "No.",  "qty": 6, "basic":   90, "spec": ""},
+            {"letter": "A", "title": "TRANSFORMERS", "subsection": "", "items": [
+                {"desc": "Distribution transformer (oil-immersed, ONAN)",          "unit": "No.", "qty": 0, "basic": 0, "spec": "11kV/415V, rated per demand"},
+                {"desc": "Transformer civil plinth + bund wall",                   "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "B", "title": "RMU", "subsection": "Ring main unit", "items": [
+                {"desc": "11kV Ring Main Unit (2-way + Tee-off)",                  "unit": "No.", "qty": 0, "basic": 0, "spec": "SF6 insulated, IEC 62271"},
+            ]},
+            {"letter": "C", "title": "AVR", "subsection": "Automatic voltage regulator", "items": [
+                {"desc": "AVR (servo-motor type)",                                 "unit": "No.", "qty": 0, "basic": 0, "spec": "415V, sized per total load"},
+            ]},
+            {"letter": "D", "title": "MAIN LV SWITCHBOARDS", "subsection": "", "items": [
+                {"desc": "Main LV switchboard (form 4b, IP54)",                    "unit": "No.", "qty": 0, "basic": 0, "spec": "Air circuit breaker incomer + MCCB outgoers"},
+                {"desc": "Capacitor bank (PFC, automatic)",                        "unit": "No.", "qty": 0, "basic": 0, "spec": "Target 0.95 lagging"},
+            ]},
+            {"letter": "E", "title": "PANEL BOARDS", "subsection": "", "items": [
+                {"desc": "Sub-main panel board (TPN, MCCB)",                       "unit": "No.", "qty": 0, "basic": 0, "spec": "Floor or building level"},
+            ]},
+            {"letter": "F", "title": "DISTRIBUTION BOARDS", "subsection": "", "items": [
+                {"desc": "Final distribution board (TPN, MCB)",                    "unit": "No.", "qty": 0, "basic": 0, "spec": "12 / 18 / 24 way"},
+            ]},
+            {"letter": "G", "title": "SUB-FEEDER CABLES", "subsection": "", "items": [
+                {"desc": "4C x 70mm² Cu/XLPE/SWA/PVC sub-feeder",                  "unit": "m",   "qty": 0, "basic": 0, "spec": "BS 5467"},
+                {"desc": "4C x 50mm² Cu/XLPE/SWA/PVC sub-feeder",                  "unit": "m",   "qty": 0, "basic": 0, "spec": "BS 5467"},
+                {"desc": "Cable tray (galv. perforated, 300mm)",                   "unit": "m",   "qty": 0, "basic": 0, "spec": "Hot-dip galvanised"},
+            ]},
+            {"letter": "H", "title": "EXTERNAL LIGHTING", "subsection": "", "items": [
+                {"desc": "9m steel street-light pole + LED head (60W)",            "unit": "No.", "qty": 0, "basic": 0, "spec": "IP66, 4000K"},
+                {"desc": "Bollard light (LED, 12W)",                               "unit": "No.", "qty": 0, "basic": 0, "spec": "IK10, vandal-resistant"},
+                {"desc": "Photocell + contactor control panel",                    "unit": "No.", "qty": 0, "basic": 0, "spec": "Dusk-to-dawn + override"},
+            ]},
+            {"letter": "I", "title": "EARTHING GRID", "subsection": "", "items": [
+                {"desc": "Bare copper earth tape (25 x 3mm)",                      "unit": "m",   "qty": 0, "basic": 0, "spec": "Buried, exothermic-welded"},
+                {"desc": "Earth electrode (copper-bonded, 2.4m)",                  "unit": "No.", "qty": 0, "basic": 0, "spec": "BS 7430"},
+            ]},
+            {"letter": "J", "title": "CABLE TRENCHES", "subsection": "", "items": [
+                {"desc": "Excavation + backfill cable trench (450 x 800mm)",       "unit": "m",   "qty": 0, "basic": 0, "spec": "Including sand bed + tile cover"},
+                {"desc": "Concrete cable duct (uPVC, 100mm)",                      "unit": "m",   "qty": 0, "basic": 0, "spec": "Class 1"},
+            ]},
+            {"letter": "K", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "Switchgear commissioning + functional test",             "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Transformer oil + electrical tests",                     "unit": "Item", "qty": 0, "basic": 0, "spec": "BDV / DGA / IR"},
+                {"desc": "Lighting control + photocell commissioning",             "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
             ]},
         ],
     },
+
+    # ------------ 6. Local Area Network and Wireless Area Network -----
+    "lan_wlan": {
+        "name": "LOCAL AREA NETWORK AND WIRELESS AREA NETWORK",
+        "sections": [
+            {"letter": "A", "title": "DATA AND VOICE COMMUNICATION", "subsection": "", "items": [
+                {"desc": "Cat6 RJ45 voice/data outlet (single-gang)",              "unit": "No.", "qty": 0, "basic": 0, "spec": "T568B punch-down"},
+                {"desc": "Cat6 RJ45 voice/data outlet (double-gang)",              "unit": "No.", "qty": 0, "basic": 0, "spec": "T568B punch-down"},
+            ]},
+            {"letter": "B", "title": "STRUCTURED CABLING", "subsection": "", "items": [
+                {"desc": "Cat6 UTP horizontal cable (305m roll)",                  "unit": "Roll", "qty": 0, "basic": 0, "spec": "Blue jacket"},
+                {"desc": "24-port Cat6 patch panel (1U)",                          "unit": "No.", "qty": 0, "basic": 0, "spec": "Loaded"},
+                {"desc": "Cat6 patch lead (1m)",                                   "unit": "No.", "qty": 0, "basic": 0, "spec": "Snagless"},
+                {"desc": "Cat6 patch lead (2m)",                                   "unit": "No.", "qty": 0, "basic": 0, "spec": "Snagless"},
+            ]},
+            {"letter": "C", "title": "NETWORK CABINETS", "subsection": "", "items": [
+                {"desc": "24U floor-standing data cabinet (600x800)",              "unit": "No.", "qty": 0, "basic": 0, "spec": "Glass front, locking"},
+                {"desc": "12U wall-mounted data cabinet (600x500)",                "unit": "No.", "qty": 0, "basic": 0, "spec": "Glass front, locking"},
+                {"desc": "Cable manager + PDU + cooling fan",                      "unit": "Set", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "D", "title": "WIRELESS ACCESS POINTS", "subsection": "", "items": [
+                {"desc": "WiFi 6 Access Point (PoE+)",                             "unit": "No.", "qty": 0, "basic": 0, "spec": "2x2 MIMO, IEEE 802.11ax"},
+                {"desc": "WiFi 6 Access Point (outdoor, IP67)",                    "unit": "No.", "qty": 0, "basic": 0, "spec": "PoE+, mesh-capable"},
+                {"desc": "Wireless controller (cloud-managed)",                    "unit": "No.", "qty": 0, "basic": 0, "spec": "Per architecture"},
+            ]},
+            {"letter": "E", "title": "TESTING AND CERTIFICATION", "subsection": "", "items": [
+                {"desc": "Cat6 channel certification (per outlet)",                "unit": "No.", "qty": 0, "basic": 0, "spec": "Fluke / Wirexpert report"},
+                {"desc": "Wireless site survey + heatmap",                         "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Network commissioning + handover",                       "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+        ],
+    },
+
+    # ------------ 7. IT Server Room Infrastructure --------------------
+    "it_server_room": {
+        "name": "IT SERVER ROOM INFRASTRUCTURE",
+        "sections": [
+            {"letter": "A", "title": "IT SERVER ROOM POWER", "subsection": "", "items": [
+                {"desc": "Server room sub-DB (TPN, 12-way)",                       "unit": "No.", "qty": 0, "basic": 0, "spec": "63A incomer + MCBs"},
+                {"desc": "Critical-load distribution feed",                        "unit": "Item", "qty": 0, "basic": 0, "spec": "From essential bus"},
+                {"desc": "Single-phase isolators (per rack)",                      "unit": "No.", "qty": 0, "basic": 0, "spec": "32A"},
+            ]},
+            {"letter": "B", "title": "UPS", "subsection": "Uninterruptible power supply", "items": [
+                {"desc": "Online double-conversion UPS (rack-mount)",              "unit": "No.", "qty": 0, "basic": 0, "spec": "Sized per critical load + 30min runtime"},
+                {"desc": "Extended battery cabinet",                               "unit": "No.", "qty": 0, "basic": 0, "spec": "Sealed VRLA, hot-swap"},
+                {"desc": "Maintenance bypass switch",                              "unit": "No.", "qty": 0, "basic": 0, "spec": "Manual, make-before-break"},
+            ]},
+            {"letter": "C", "title": "SERVER RACKS", "subsection": "", "items": [
+                {"desc": "42U server rack (600x1000)",                             "unit": "No.", "qty": 0, "basic": 0, "spec": "Perforated doors, baying kit"},
+                {"desc": "Vertical cable manager + 0U PDU",                        "unit": "Set", "qty": 0, "basic": 0, "spec": "Switched, monitored"},
+            ]},
+            {"letter": "D", "title": "DATA CABINETS", "subsection": "", "items": [
+                {"desc": "24U data cabinet (network row)",                         "unit": "No.", "qty": 0, "basic": 0, "spec": "600x800, glass front"},
+                {"desc": "Fibre patch panel (LC duplex, 24-port)",                 "unit": "No.", "qty": 0, "basic": 0, "spec": "OS2 single-mode"},
+            ]},
+            {"letter": "E", "title": "EARTHING AND BONDING", "subsection": "", "items": [
+                {"desc": "Computer-room earth grid (mesh)",                        "unit": "Lot", "qty": 0, "basic": 0, "spec": "TIA-942"},
+                {"desc": "Rack-bonding kit (per cabinet)",                         "unit": "No.", "qty": 0, "basic": 0, "spec": "16mm² conductor + lug"},
+            ]},
+            {"letter": "F", "title": "ENVIRONMENTAL MONITORING", "subsection": "", "items": [
+                {"desc": "Temperature + humidity sensor (SNMP)",                   "unit": "No.", "qty": 0, "basic": 0, "spec": "Email/SMS alerting"},
+                {"desc": "Leak-detection rope sensor",                             "unit": "m",   "qty": 0, "basic": 0, "spec": "Under raised floor"},
+                {"desc": "Smoke + heat early-warning detection (VESDA)",           "unit": "No.", "qty": 0, "basic": 0, "spec": "Aspirating"},
+            ]},
+            {"letter": "G", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "UPS load + autonomy test",                               "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Environmental monitoring commissioning",                 "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Tier-rating compliance check (per design)",              "unit": "Item", "qty": 0, "basic": 0, "spec": "TIA-942 / Uptime"},
+            ]},
+        ],
+    },
+
+    # ------------ 8. VoIP System Installation -------------------------
+    "voip": {
+        "name": "VOIP SYSTEM INSTALLATION",
+        "sections": [
+            {"letter": "A", "title": "VOIP SYSTEM", "subsection": "", "items": [
+                {"desc": "IP-PBX server (appliance + license pack)",               "unit": "No.", "qty": 0, "basic": 0, "spec": "Sized per total extensions"},
+                {"desc": "SIP trunk licence (annual)",                             "unit": "Channel", "qty": 0, "basic": 0, "spec": "Per concurrent call"},
+            ]},
+            {"letter": "B", "title": "IP PHONES", "subsection": "", "items": [
+                {"desc": "IP desk phone (entry, monochrome)",                      "unit": "No.", "qty": 0, "basic": 0, "spec": "PoE, HD voice"},
+                {"desc": "IP desk phone (executive, colour, Gigabit)",             "unit": "No.", "qty": 0, "basic": 0, "spec": "PoE, BLF keys"},
+                {"desc": "IP conference phone",                                    "unit": "No.", "qty": 0, "basic": 0, "spec": "Omnidirectional, PoE"},
+            ]},
+            {"letter": "C", "title": "VOICE GATEWAY", "subsection": "", "items": [
+                {"desc": "Analog-to-VoIP gateway (FXS / FXO)",                     "unit": "No.", "qty": 0, "basic": 0, "spec": "For legacy fax / analog lines"},
+                {"desc": "E1 / PRI gateway",                                       "unit": "No.", "qty": 0, "basic": 0, "spec": "If TDM trunks retained"},
+            ]},
+            {"letter": "D", "title": "NETWORK SWITCHES", "subsection": "", "items": [
+                {"desc": "24-port PoE+ access switch (Gigabit)",                   "unit": "No.", "qty": 0, "basic": 0, "spec": "L2, 370W PoE budget"},
+                {"desc": "10G uplink module (SFP+)",                               "unit": "No.", "qty": 0, "basic": 0, "spec": "Multimode"},
+            ]},
+            {"letter": "E", "title": "DATA OUTLETS", "subsection": "", "items": [
+                {"desc": "Cat6 RJ45 voice outlet (single-gang)",                   "unit": "No.", "qty": 0, "basic": 0, "spec": "T568B"},
+            ]},
+            {"letter": "F", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "Call-quality testing (per extension)",                   "unit": "Item", "qty": 0, "basic": 0, "spec": "MOS > 4.0"},
+                {"desc": "Failover + redundancy test",                             "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "User training (admin + user)",                           "unit": "Day", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+        ],
+    },
+
+    # ------------ 9. Public Address System Installation ---------------
     "ip_pa": {
-        "name": "IP PA AND PUBLIC ADDRESS SYSTEM",
+        "name": "PUBLIC ADDRESS SYSTEM INSTALLATION",
         "sections": [
-            {"letter": "A", "title": "AMPLIFIER AND SPEAKERS", "subsection": "", "items": [
-                {"desc": "120W IP PA amplifier",                  "unit": "No.",  "qty": 1, "basic": 4500, "spec": "100V line, zone-paging"},
-                {"desc": "Ceiling speaker 6W (100V)",             "unit": "No.",  "qty":18, "basic":  180, "spec": "Fire-rated dome"},
-                {"desc": "Paging microphone (push-to-talk)",      "unit": "No.",  "qty": 1, "basic":  850, "spec": ""},
+            {"letter": "A", "title": "PUBLIC ADDRESS SYSTEM", "subsection": "", "items": [
+                {"desc": "PA controller + zone-paging server",                     "unit": "No.", "qty": 0, "basic": 0, "spec": "Per zone count, EN 54-16"},
+            ]},
+            {"letter": "B", "title": "AMPLIFIERS", "subsection": "", "items": [
+                {"desc": "PA amplifier 120W (100V line)",                          "unit": "No.", "qty": 0, "basic": 0, "spec": "Zone-output, EN 54-16"},
+                {"desc": "PA amplifier 240W (100V line)",                          "unit": "No.", "qty": 0, "basic": 0, "spec": "EN 54-16"},
+                {"desc": "Standby / hot-swap amplifier",                           "unit": "No.", "qty": 0, "basic": 0, "spec": "Redundancy"},
+            ]},
+            {"letter": "C", "title": "SPEAKERS", "subsection": "", "items": [
+                {"desc": "Ceiling speaker 6W (100V)",                              "unit": "No.", "qty": 0, "basic": 0, "spec": "Fire-rated dome"},
+                {"desc": "Wall-mount cabinet speaker 10W (100V)",                  "unit": "No.", "qty": 0, "basic": 0, "spec": "EN 54-24"},
+                {"desc": "Horn speaker 30W (100V, outdoor IP66)",                  "unit": "No.", "qty": 0, "basic": 0, "spec": "EN 54-24"},
+            ]},
+            {"letter": "D", "title": "MICROPHONE POINTS", "subsection": "", "items": [
+                {"desc": "Desktop paging microphone (PTT)",                        "unit": "No.", "qty": 0, "basic": 0, "spec": "Zone-select keypad"},
+                {"desc": "Emergency / all-call microphone",                        "unit": "No.", "qty": 0, "basic": 0, "spec": "Lockable, EN 54-16"},
+            ]},
+            {"letter": "E", "title": "PA CABLING", "subsection": "", "items": [
+                {"desc": "100V line speaker cable (1.5mm² 2C)",                    "unit": "m",   "qty": 0, "basic": 0, "spec": "Fire-rated for EVAC"},
+                {"desc": "PA containment (LSF tray + clips)",                      "unit": "m",   "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "F", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "Sound-pressure measurement (per zone)",                  "unit": "Item", "qty": 0, "basic": 0, "spec": "65dBA above ambient"},
+                {"desc": "Speech intelligibility (STI) test",                      "unit": "Item", "qty": 0, "basic": 0, "spec": "STI > 0.50"},
+                {"desc": "Zone-paging functional test",                            "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
             ]},
         ],
     },
+
+    # ------------ 10. IP CCTV Network Installation --------------------
+    "ip_cctv": {
+        "name": "IP CCTV NETWORK INSTALLATION",
+        "sections": [
+            {"letter": "A", "title": "IP CCTV SYSTEM", "subsection": "", "items": [
+                {"desc": "VMS server + licence pack",                              "unit": "No.", "qty": 0, "basic": 0, "spec": "Per camera count"},
+                {"desc": "Operator workstation (dual-screen)",                     "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "B", "title": "CAMERAS", "subsection": "", "items": [
+                {"desc": "5MP IP dome camera (PoE, indoor)",                       "unit": "No.", "qty": 0, "basic": 0, "spec": "H.265, IR 30m"},
+                {"desc": "5MP IP bullet camera (PoE, outdoor IP67)",               "unit": "No.", "qty": 0, "basic": 0, "spec": "H.265, IR 50m"},
+                {"desc": "8MP PTZ camera (PoE+, 30x zoom)",                        "unit": "No.", "qty": 0, "basic": 0, "spec": "IP67, IR 200m"},
+            ]},
+            {"letter": "C", "title": "NVR", "subsection": "Network video recorder", "items": [
+                {"desc": "32-channel NVR + storage (RAID-5)",                      "unit": "No.", "qty": 0, "basic": 0, "spec": "Days retention per spec"},
+                {"desc": "Storage expansion module",                               "unit": "No.", "qty": 0, "basic": 0, "spec": "If retention > 30 days"},
+            ]},
+            {"letter": "D", "title": "POE SWITCHES", "subsection": "", "items": [
+                {"desc": "24-port PoE+ switch (Gigabit, 370W)",                    "unit": "No.", "qty": 0, "basic": 0, "spec": "Camera-only VLAN"},
+                {"desc": "Industrial PoE+ switch (DIN-rail, outdoor)",             "unit": "No.", "qty": 0, "basic": 0, "spec": "IP30, -40 to 75C"},
+            ]},
+            {"letter": "E", "title": "CCTV CABLING", "subsection": "", "items": [
+                {"desc": "Cat6 outdoor UV-resistant cable",                        "unit": "m",   "qty": 0, "basic": 0, "spec": "Black jacket, gel-filled"},
+                {"desc": "Fibre patch (multi-mode OM3, LC-LC)",                    "unit": "m",   "qty": 0, "basic": 0, "spec": "For long runs > 90m"},
+            ]},
+            {"letter": "F", "title": "CAMERA POLES / MOUNTS", "subsection": "", "items": [
+                {"desc": "6m camera pole (hot-dip galvanised)",                    "unit": "No.", "qty": 0, "basic": 0, "spec": "Bracket + power feed"},
+                {"desc": "Wall-mount bracket (IP66 junction)",                     "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "G", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "Per-camera image-quality test",                          "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Storage retention verification",                         "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "VMS + analytics commissioning",                          "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+        ],
+    },
+
+    # ------------ 11. TV System Installation --------------------------
+    "tv_system": {
+        "name": "TV SYSTEM INSTALLATION",
+        "sections": [
+            {"letter": "A", "title": "TV SYSTEM", "subsection": "", "items": [
+                {"desc": "TV head-end controller + IPTV server",                   "unit": "No.", "qty": 0, "basic": 0, "spec": "Per channel count"},
+                {"desc": "STB / set-top box (per TV outlet)",                      "unit": "No.", "qty": 0, "basic": 0, "spec": "HD, HDMI out"},
+            ]},
+            {"letter": "B", "title": "TV OUTLETS", "subsection": "", "items": [
+                {"desc": "F-type TV wall plate (single)",                          "unit": "No.", "qty": 0, "basic": 0, "spec": "Screened, BS 41003"},
+                {"desc": "Combined TV + data outlet",                              "unit": "No.", "qty": 0, "basic": 0, "spec": "1-gang plate"},
+            ]},
+            {"letter": "C", "title": "COAXIAL CABLING", "subsection": "", "items": [
+                {"desc": "RG6 coaxial cable (1.0/4.6 quad-shield)",                "unit": "m",   "qty": 0, "basic": 0, "spec": "75Ω, BS EN 50117"},
+                {"desc": "F-type connector (compression)",                         "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "D", "title": "SPLITTERS", "subsection": "", "items": [
+                {"desc": "2-way TV splitter (5-2400 MHz)",                         "unit": "No.", "qty": 0, "basic": 0, "spec": "Screened housing"},
+                {"desc": "4-way TV splitter",                                      "unit": "No.", "qty": 0, "basic": 0, "spec": "Screened housing"},
+                {"desc": "8-way TV splitter",                                      "unit": "No.", "qty": 0, "basic": 0, "spec": "Screened housing"},
+            ]},
+            {"letter": "E", "title": "AMPLIFIERS", "subsection": "", "items": [
+                {"desc": "TV distribution amplifier (40 dB)",                      "unit": "No.", "qty": 0, "basic": 0, "spec": "Rack or wall-mount"},
+                {"desc": "Channel processor / modulator",                          "unit": "No.", "qty": 0, "basic": 0, "spec": "Per channel"},
+            ]},
+            {"letter": "F", "title": "ANTENNA / DISH", "subsection": "", "items": [
+                {"desc": "UHF / VHF terrestrial antenna",                          "unit": "No.", "qty": 0, "basic": 0, "spec": "Mast-mounted"},
+                {"desc": "Satellite dish + LNB (1.2m)",                            "unit": "No.", "qty": 0, "basic": 0, "spec": "Wall or ground mount"},
+                {"desc": "Antenna mast + lightning protection",                    "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "G", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "Per-outlet signal-level test",                           "unit": "No.", "qty": 0, "basic": 0, "spec": "65-75 dBμV"},
+                {"desc": "Channel scan + program guide",                           "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+        ],
+    },
+
+    # ------------ 12. IP Clock System Installation --------------------
+    "ip_clock": {
+        "name": "IP CLOCK SYSTEM INSTALLATION",
+        "sections": [
+            {"letter": "A", "title": "IP CLOCK SYSTEM", "subsection": "", "items": [
+                {"desc": "NTP time-server (rack-mount, GPS-disciplined)",          "unit": "No.", "qty": 0, "basic": 0, "spec": "Stratum-1"},
+                {"desc": "Clock management software (annual)",                     "unit": "Lot", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "B", "title": "MASTER CLOCK", "subsection": "", "items": [
+                {"desc": "Master clock with PoE output",                           "unit": "No.", "qty": 0, "basic": 0, "spec": "Redundant"},
+                {"desc": "GPS antenna + outdoor mount",                            "unit": "Set", "qty": 0, "basic": 0, "spec": "Roof-mounted"},
+            ]},
+            {"letter": "C", "title": "IP CLOCKS", "subsection": "", "items": [
+                {"desc": "IP digital wall clock (PoE)",                            "unit": "No.", "qty": 0, "basic": 0, "spec": "12 / 24 hr"},
+                {"desc": "IP analogue wall clock (PoE)",                           "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "IP double-sided clock (corridor)",                       "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "D", "title": "POE SWITCHES", "subsection": "", "items": [
+                {"desc": "8-port PoE+ switch (clock VLAN)",                        "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "E", "title": "NETWORK CABLING", "subsection": "", "items": [
+                {"desc": "Cat6 horizontal drop (per clock)",                       "unit": "m",   "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Surface back-box + bracket",                             "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "F", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "NTP synchronisation test (per clock)",                   "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "GPS lock verification",                                  "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+        ],
+    },
+
+    # ------------ 13. Nurse Call System Installation ------------------
+    "nurse_call": {
+        "name": "NURSE CALL SYSTEM INSTALLATION",
+        "sections": [
+            {"letter": "A", "title": "NURSE CALL SYSTEM", "subsection": "", "items": [
+                {"desc": "Nurse call master station + server",                     "unit": "No.", "qty": 0, "basic": 0, "spec": "BS HTM 08-03 compliant"},
+                {"desc": "Reporting + audit software (annual)",                    "unit": "Lot", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "B", "title": "BEDHEAD UNITS", "subsection": "", "items": [
+                {"desc": "Bedhead trunking + nurse-call socket",                   "unit": "No.", "qty": 0, "basic": 0, "spec": "Aluminium, hygiene-rated"},
+                {"desc": "Pull-cord call point (en-suite)",                        "unit": "No.", "qty": 0, "basic": 0, "spec": "IP65"},
+            ]},
+            {"letter": "C", "title": "CALL POINTS", "subsection": "", "items": [
+                {"desc": "Patient handset call point",                             "unit": "No.", "qty": 0, "basic": 0, "spec": "Reassurance LED + reset"},
+                {"desc": "Staff assist call point",                                "unit": "No.", "qty": 0, "basic": 0, "spec": "Yellow, staff-only"},
+                {"desc": "Emergency call point (cardiac arrest)",                  "unit": "No.", "qty": 0, "basic": 0, "spec": "Red, lockable reset"},
+            ]},
+            {"letter": "D", "title": "CORRIDOR INDICATORS", "subsection": "", "items": [
+                {"desc": "Over-door indicator (multi-colour LED)",                 "unit": "No.", "qty": 0, "basic": 0, "spec": "Per bay"},
+                {"desc": "Buzzer + audible repeater",                              "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "E", "title": "STAFF STATION DISPLAY", "subsection": "", "items": [
+                {"desc": "Staff station LCD display",                              "unit": "No.", "qty": 0, "basic": 0, "spec": "Touch panel"},
+                {"desc": "DECT pager / mobile handset",                            "unit": "No.", "qty": 0, "basic": 0, "spec": "Per staff member"},
+            ]},
+            {"letter": "F", "title": "NURSE CALL CABLING", "subsection": "", "items": [
+                {"desc": "Nurse-call bus cable (per system spec)",                 "unit": "m",   "qty": 0, "basic": 0, "spec": "Manufacturer-approved"},
+                {"desc": "Containment + back-boxes",                               "unit": "m",   "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "G", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "Per-bed call-flow test",                                 "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Cardiac-arrest escalation test",                         "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Staff training (clinical + facilities)",                 "unit": "Day", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+        ],
+    },
+
+    # ------------ 14. Medical Equipment Electrical Installation -------
+    "medical_equip": {
+        "name": "MEDICAL EQUIPMENT ELECTRICAL INSTALLATION",
+        "sections": [
+            {"letter": "A", "title": "MEDICAL EQUIPMENT POWER", "subsection": "", "items": [
+                {"desc": "Theatre / ICU sub-DB (medical, IP2X)",                   "unit": "No.", "qty": 0, "basic": 0, "spec": "BS HTM 06-01"},
+                {"desc": "Medical-grade socket outlet (clean-power)",              "unit": "No.", "qty": 0, "basic": 0, "spec": "Red/Green colour-coded"},
+            ]},
+            {"letter": "B", "title": "UPS POWER WIRING", "subsection": "", "items": [
+                {"desc": "Centralised medical UPS feed",                           "unit": "Item", "qty": 0, "basic": 0, "spec": "Sized per clinical demand"},
+                {"desc": "Local UPS feed (per imaging suite)",                     "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "C", "title": "ESSENTIAL POWER WIRING", "subsection": "", "items": [
+                {"desc": "Generator-backed essential-bus feed",                    "unit": "Item", "qty": 0, "basic": 0, "spec": "ATS-fed"},
+                {"desc": "Critical-load isolator (per equipment)",                 "unit": "No.", "qty": 0, "basic": 0, "spec": "Lockable"},
+            ]},
+            {"letter": "D", "title": "ISOLATED POWER SUPPLY", "subsection": "Where applicable (Group 2 medical locations)", "items": [
+                {"desc": "Isolating transformer (5/8/10 kVA)",                     "unit": "No.", "qty": 0, "basic": 0, "spec": "BS HTM 06-01 / IEC 61558-2-15"},
+                {"desc": "Line isolation monitor (LIM)",                           "unit": "No.", "qty": 0, "basic": 0, "spec": "Audible + visual alarm"},
+                {"desc": "Equipotential bus bar (clean earth)",                    "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "E", "title": "EQUIPOTENTIAL BONDING", "subsection": "", "items": [
+                {"desc": "Equipotential bonding to all metallic parts",            "unit": "Lot", "qty": 0, "basic": 0, "spec": "BS HTM 06-01"},
+                {"desc": "Bonding test point (clinical area)",                     "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "F", "title": "MEDICAL EQUIPMENT FINAL CONNECTIONS", "subsection": "", "items": [
+                {"desc": "Final connection to MRI / CT (per OEM)",                 "unit": "Lot", "qty": 0, "basic": 0, "spec": "Per imaging OEM spec"},
+                {"desc": "Final connection to surgical luminaire",                 "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Final connection to dialysis station",                   "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "G", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "LIM functional + alarm test",                            "unit": "Item", "qty": 0, "basic": 0, "spec": "Group 2 areas"},
+                {"desc": "Equipotential resistance test (per outlet)",             "unit": "No.", "qty": 0, "basic": 0, "spec": "BS HTM 06-01"},
+                {"desc": "Witness test with clinical engineering",                 "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+        ],
+    },
+
+    # ------------ 15. Building Management System (BMS) ----------------
+    # (15th service kept at owner's direction 2026-06-29 -- modelled after the
+    # 14 spec services. Sections: head-end processors, AI/analytics, field
+    # controllers, sensors, actuators, field wiring & terminals, BMS power,
+    # network cabling & switches, workstations & licences, integrations, T&C.)
     "bms": {
         "name": "BUILDING MANAGEMENT SYSTEM (BMS)",
         "sections": [
-            {"letter": "A", "title": "CONTROLLERS AND I/O", "subsection": "", "items": [
-                {"desc": "BACnet/IP DDC controller",              "unit": "No.",  "qty": 2, "basic": 5500, "spec": "32 UI / 16 UO"},
-                {"desc": "Field I/O module (8AI / 8DI / 8DO)",   "unit": "No.",  "qty": 4, "basic": 1800, "spec": "BACnet MSTP"},
-                {"desc": "BMS server PC + license",               "unit": "Lot",  "qty": 1, "basic":11500, "spec": "100 BACnet points"},
+            {"letter": "A", "title": "BMS HEAD-END PROCESSORS AND CENTRAL SERVERS", "subsection": "", "items": [
+                {"desc": "BMS application server (rack-mount)",                    "unit": "No.", "qty": 0, "basic": 0, "spec": "Hot-spare / redundant"},
+                {"desc": "BMS database server + storage",                          "unit": "No.", "qty": 0, "basic": 0, "spec": "RAID"},
+                {"desc": "BMS point-licence pack (per 100 points)",                "unit": "Lot", "qty": 0, "basic": 0, "spec": ""},
             ]},
-            {"letter": "B", "title": "SENSORS AND ACTUATORS", "subsection": "", "items": [
-                {"desc": "Duct temperature sensor",               "unit": "No.",  "qty":12, "basic":  140, "spec": "NTC10K"},
-                {"desc": "Motorised damper actuator",             "unit": "No.",  "qty": 8, "basic":  850, "spec": "24V 5Nm"},
+            {"letter": "B", "title": "AI / ANALYTICS CONTROLLERS", "subsection": "", "items": [
+                {"desc": "AI/analytics edge gateway (fault detection + diagnostics)", "unit": "No.", "qty": 0, "basic": 0, "spec": "Energy optimisation"},
+                {"desc": "Predictive-maintenance module (annual licence)",         "unit": "Lot", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Energy-management software pack",                        "unit": "Lot", "qty": 0, "basic": 0, "spec": "kWh dashboards + alerts"},
+            ]},
+            {"letter": "C", "title": "FIELD CONTROLLERS AND I/O MODULES", "subsection": "DDC", "items": [
+                {"desc": "BACnet/IP DDC controller (32 UI / 16 UO)",               "unit": "No.", "qty": 0, "basic": 0, "spec": "Programmable"},
+                {"desc": "BACnet MS/TP I/O module (8AI / 8DI / 8DO)",              "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Application-specific controller (VAV / FCU)",            "unit": "No.", "qty": 0, "basic": 0, "spec": "Pre-loaded VAV / FCU app"},
+            ]},
+            {"letter": "D", "title": "SENSORS", "subsection": "Temperature / humidity / CO2 / pressure / occupancy / air-quality", "items": [
+                {"desc": "Duct temperature sensor (NTC10K)",                       "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Room temperature + setpoint sensor",                     "unit": "No.", "qty": 0, "basic": 0, "spec": "BACnet MS/TP"},
+                {"desc": "Combined CO2 + temperature + humidity sensor",           "unit": "No.", "qty": 0, "basic": 0, "spec": "NDIR CO2"},
+                {"desc": "Differential pressure sensor (air)",                     "unit": "No.", "qty": 0, "basic": 0, "spec": "0-500 Pa"},
+                {"desc": "PIR occupancy sensor (BMS-linked)",                      "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "E", "title": "ACTUATORS", "subsection": "Valves / dampers / VAV", "items": [
+                {"desc": "Motorised damper actuator (24V, 5 Nm)",                  "unit": "No.", "qty": 0, "basic": 0, "spec": "Modulating, spring-return"},
+                {"desc": "2-port motorised valve (DN50, modulating)",              "unit": "No.", "qty": 0, "basic": 0, "spec": "0-10 V"},
+                {"desc": "VAV box damper actuator",                                "unit": "No.", "qty": 0, "basic": 0, "spec": "Belimo or equivalent"},
+            ]},
+            {"letter": "F", "title": "FIELD WIRING AND TERMINAL BLOCKS", "subsection": "", "items": [
+                {"desc": "Belden 18 AWG shielded BMS bus cable",                   "unit": "m",   "qty": 0, "basic": 0, "spec": "BACnet MS/TP"},
+                {"desc": "Multi-core control cable (per spec)",                    "unit": "m",   "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Wago / Phoenix terminal block kit",                      "unit": "Lot", "qty": 0, "basic": 0, "spec": "Spring-cage, DIN-rail"},
+                {"desc": "Field control panel (IP55, lockable)",                   "unit": "No.", "qty": 0, "basic": 0, "spec": "Per floor"},
+            ]},
+            {"letter": "G", "title": "BMS POWER SYSTEMS", "subsection": "", "items": [
+                {"desc": "24Vdc power supply (DIN-rail, 240W)",                    "unit": "No.", "qty": 0, "basic": 0, "spec": "Backup-ready"},
+                {"desc": "BMS UPS (rack-mount, 1kVA)",                             "unit": "No.", "qty": 0, "basic": 0, "spec": "30 min runtime"},
+                {"desc": "Dedicated BMS sub-DB feed",                              "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "H", "title": "BMS NETWORK CABLING AND SWITCHES", "subsection": "", "items": [
+                {"desc": "BMS VLAN PoE switch (16-port)",                          "unit": "No.", "qty": 0, "basic": 0, "spec": "L2 managed"},
+                {"desc": "Cat6 horizontal drop (BMS controller)",                  "unit": "m",   "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Fibre uplink (multimode)",                               "unit": "m",   "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "I", "title": "OPERATOR WORKSTATIONS AND SOFTWARE LICENCES", "subsection": "", "items": [
+                {"desc": "BMS operator workstation (dual-screen)",                 "unit": "No.", "qty": 0, "basic": 0, "spec": "i7, 16GB, SSD"},
+                {"desc": "Operator graphics + dashboards (licence)",               "unit": "Lot", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Mobile / web client licence",                            "unit": "Lot", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "J", "title": "INTEGRATION WITH HVAC, LIGHTING, FIRE ALARM, ACCESS CONTROL", "subsection": "", "items": [
+                {"desc": "BACnet / Modbus integration to HVAC plant",              "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "DALI / KNX integration to lighting control",             "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Fire-alarm interface (volt-free contacts + BACnet)",     "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Access-control / CCTV interface",                        "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "K", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+                {"desc": "Point-to-point I/O verification",                        "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Control-loop tuning + commissioning",                    "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Witness test with M&E commissioning team",               "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Operator training + handover",                           "unit": "Day", "qty": 0, "basic": 0, "spec": ""},
             ]},
         ],
     },
+
 }
 
 
-def _inject_service_bills(template: dict, chosen_services: list) -> dict:
-    """Return a copy of ``template`` with extra bills appended for any chosen
-    service the template doesn't already cover.
-
-    The injected bills carry bill numbers starting at ``max(existing_no) + 1``
-    so the existing numbering is preserved (auditorium-1ugls has bills 1..6 --
-    injected bills start at 7+).
-    """
-    existing_codes = set(_template_services(template))
-    missing = [s for s in chosen_services
-               if s in _BOQ_SERVICE_BILL_SKELETON and s not in existing_codes]
-    if not missing:
-        return template
-    # Deep-ish copy so mutations don't bleed back to _BOQ_PROJECT_TEMPLATES.
-    out = {
-        "name":        template["name"],
-        "purpose":     template["purpose"],
-        "subtype":     template["subtype"],
-        "description": template["description"],
-        "bills":       [dict(b, sections=list(b.get("sections", []))) for b in template["bills"]],
-    }
-    next_no = max((b["no"] for b in out["bills"]), default=0) + 1
-    for svc in missing:
-        skel = _BOQ_SERVICE_BILL_SKELETON[svc]
-        out["bills"].append({
-            "no": next_no,
-            "name": skel["name"],
-            "sections": [dict(s) for s in skel["sections"]],
-            "_injected_service": svc,
-        })
-        next_no += 1
-    out["_services_injected"] = missing
-    return out
-
+# ---------------------------------------------------------------------------
+# 5. Helpers
+# ---------------------------------------------------------------------------
 
 def _services_csv_to_list(csv: str) -> list:
-    """Split boq_projects.services_csv into a clean list of known codes."""
+    """Split boq_projects.services_csv into a clean list of KNOWN codes.
+
+    Applies the legacy migration map (e.g. ``it_network`` -> ``lan_wlan`` +
+    ``it_server_room``). Unknown codes are silently dropped. Order is
+    preserved; duplicates removed.
+    """
     if not csv:
         return []
-    out = []
+    out, seen = [], set()
     for tok in (csv or "").split(","):
         t = tok.strip()
-        if t and t in _BOQ_SERVICE_LABEL and t not in out:
-            out.append(t)
+        if not t:
+            continue
+        # Apply legacy expansion first.
+        new_codes = _BOQ_SERVICE_LEGACY_MAP.get(t, [t])
+        for c in new_codes:
+            if c in _BOQ_SERVICE_LABEL and c not in seen:
+                seen.add(c)
+                out.append(c)
     return out
 
 
 def _services_label_list(codes: list) -> list:
     """Map a list of service codes to their human labels (order preserved)."""
     return [_BOQ_SERVICE_LABEL[c] for c in codes if c in _BOQ_SERVICE_LABEL]
+
+
+def _services_loaded_sections(codes: list) -> list:
+    """Return the flat 'Loaded BOQ Sections:' preview for the UI panel.
+
+    Each entry is a dict::
+
+        {"bill_no", "bill_name", "section_letter", "section_title", "subsection"}
+
+    Bill numbers are assigned 1..N in the order codes were selected so the
+    preview matches what will be inserted into ``boq_floor_items``.
+    """
+    out = []
+    for bill_no, code in enumerate((c for c in codes if c in _BOQ_SERVICE_BILL_SKELETON), start=1):
+        skel = _BOQ_SERVICE_BILL_SKELETON[code]
+        for sec in skel["sections"]:
+            out.append({
+                "bill_no":        bill_no,
+                "bill_name":      skel["name"],
+                "section_letter": sec["letter"],
+                "section_title":  sec["title"],
+                "subsection":     sec.get("subsection", ""),
+                "service_code":   code,
+            })
+    return out
+
+
+def _services_section_rows(codes: list) -> list:
+    """Return the list of rows to insert into ``boq_floor_items`` for the
+    selected services. Each row carries ``bill_no``, ``bill_name``,
+    ``section_letter``, ``section_title``, ``subsection_label`` plus the
+    item fields (``desc``, ``unit``, ``qty``, ``basic``, ``spec``)."""
+    out = []
+    for bill_no, code in enumerate((c for c in codes if c in _BOQ_SERVICE_BILL_SKELETON), start=1):
+        skel = _BOQ_SERVICE_BILL_SKELETON[code]
+        for sec in skel["sections"]:
+            for item in sec.get("items", []):
+                out.append({
+                    "bill_no":          bill_no,
+                    "bill_name":        skel["name"],
+                    "section_letter":   sec["letter"],
+                    "section_title":    sec["title"],
+                    "subsection_label": sec.get("subsection", ""),
+                    "service_code":     code,
+                    "desc":             item["desc"],
+                    "unit":             item["unit"],
+                    "qty":              item["qty"],
+                    "basic":            item["basic"],
+                    "spec":             item.get("spec", ""),
+                })
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 5b. Legacy stubs (kept ONLY until Task #7 retires the template picker).
+#     These functions used to score templates against chosen services and
+#     inject placeholder bills for any uncovered service. The new engine
+#     drives sections directly from services + the skeleton above, so these
+#     stubs return inputs unchanged and will be deleted together with the
+#     template picker code in the same commit.
+# ---------------------------------------------------------------------------
+
+def _template_services(template: dict) -> list:
+    return []
+
+def _inject_service_bills(template: dict, chosen_services: list) -> dict:
+    return template
+
+
+def _infer_services_from_bill_names(bill_names: list) -> list:
+    """Infer service codes from a list of existing bill names (used to
+    auto-populate ``services_csv`` for pre-refactor projects on first read).
+
+    Order preserved, duplicates removed. Returns ``[]`` if no bill matched.
+    """
+    out, seen = [], set()
+    for name in bill_names or []:
+        up = (name or "").upper()
+        for needle, svc_list in _BOQ_BILL_TO_SERVICES:
+            if needle in up:
+                for s in svc_list:
+                    if s in _BOQ_SERVICE_LABEL and s not in seen:
+                        seen.add(s)
+                        out.append(s)
+    return out
+
+
+def _ensure_project_migrated_to_v3(c, project_id: int) -> tuple:
+    """Silent auto-migration of a single ``boq_projects`` row to the unified
+    BOQ engine (2026-06-29 refactor). Called at the top of every project-read
+    route. Idempotent.
+
+    Steps:
+      1. SELECT services_csv, build_mode FROM boq_projects.
+      2. If services_csv contains LEGACY codes, expand via _services_csv_to_list.
+      3. If services_csv is empty, infer from DISTINCT bill_name across the
+         project's existing boq_floor_items rows.
+      4. If build_mode is NULL/empty, set to 'complete_boq'.
+      5. UPDATE the row if anything changed; return (services_list, build_mode).
+
+    No-op if the project is already on the new schema with a non-legacy
+    services_csv. Returns the final (services_list, build_mode) either way.
+    """
+    try:
+        c.execute(
+            "SELECT services_csv, build_mode FROM boq_projects WHERE id = ?",
+            (project_id,),
+        )
+        row = c.fetchone()
+    except Exception:
+        return ([], "complete_boq")
+    if not row:
+        return ([], "complete_boq")
+
+    raw_csv = (row[0] or "") if not hasattr(row, "keys") else (row["services_csv"] or "")
+    raw_mode = (row[1] or "") if not hasattr(row, "keys") else (row["build_mode"] or "")
+    # Normalise via the legacy expander.
+    services = _services_csv_to_list(raw_csv)
+
+    # If still empty, infer from existing bill names on this project.
+    if not services:
+        try:
+            c.execute(
+                "SELECT DISTINCT bill_name FROM boq_floor_items WHERE project_id = ?",
+                (project_id,),
+            )
+            bill_names = [r[0] if not hasattr(r, "keys") else r["bill_name"] for r in c.fetchall()]
+        except Exception:
+            bill_names = []
+        services = _infer_services_from_bill_names(bill_names)
+
+    build_mode = raw_mode.strip().lower() or "complete_boq"
+    if build_mode not in ("section_by_section", "complete_boq"):
+        build_mode = "complete_boq"
+
+    new_csv = ",".join(services)
+    if new_csv != raw_csv or build_mode != raw_mode:
+        try:
+            c.execute(
+                "UPDATE boq_projects SET services_csv = ?, build_mode = ? WHERE id = ?",
+                (new_csv, build_mode, project_id),
+            )
+        except Exception:
+            pass
+
+    return (services, build_mode)
+
 
 # === END: boq_services_engine splice ===
 
@@ -31828,200 +31828,24 @@ def boq_floor_item_edit(pid, bid, fid, iid):
 
 
 # new_boq_wizard_routes.py
-# Multi-building BOQ wizard — one click instantiates a full project from
-# template picks. Replaces the click-by-click "new project -> new building
-# -> new floor -> from-template" sequence.
-#
-# Flow:
-#   GET  /boq-projects/wizard           form with all templates as ticks + counts
-#   POST /boq-projects/wizard/build     creates project + N buildings + N floors,
-#                                       populates every floor with its template lines
-
+# RETIRED 2026-06-29: multi-building Wizard stub. The wizard required
+# whole-floor templates which have been retired. Multi-building projects
+# are still fully supported: New BOQ Project -> add Building(s) ->
+# add Floor(s) -> Service Configuration -> Complete BOQ.
 
 @app.route("/boq-projects/wizard", methods=["GET"])
 @login_required
 def boq_wizard():
-    _boq_ensure_schema()
-    from new_boq_project_templates import _boq_template_list
-    # Group templates by purpose for the form.
-    all_templates = _boq_template_list()
-    grouped = {}
-    for t in all_templates:
-        grouped.setdefault(t["purpose"] or "other", []).append(t)
-    # Stable order for purposes
-    order = ["healthcare", "residential", "commercial", "industrial", "other"]
-    grouped_order = [(p, grouped[p]) for p in order if p in grouped]
-    return render_template(
-        "boq_wizard.html",
-        user=current_user(),
-        grouped=grouped_order,
-        total_templates=len(all_templates),
-    )
+    flash("The multi-building Wizard has been retired. Create a new BOQ Project, then add buildings + floors from the project overview.", "info")
+    return redirect(url_for("boq_projects_new"))
 
 
 @app.route("/boq-projects/wizard/build", methods=["POST"])
 @login_required
 def boq_wizard_build():
-    uid = session["user_id"]
-    _boq_ensure_schema()
     csrf_protect()
-    f = request.form
-
-    name = (f.get("project_name") or "").strip()[:300]
-    if not name:
-        flash("Project name is required.", "warning")
-        return redirect(url_for("boq_wizard"))
-    client = (f.get("client_name") or "").strip()[:300]
-    location = (f.get("location") or "").strip()[:300]
-
-    # Section-wide markup defaults (applied to every line on every floor).
-    def _pct(key):
-        try:
-            v = f.get(key, "")
-            return max(0.0, min(100.0, float(v))) if v not in (None, "") else 0.0
-        except (TypeError, ValueError):
-            return 0.0
-    oh   = _pct("overhead_pct")
-    prf  = _pct("profit_pct")
-    vat  = _pct("vat_pct")
-    sup_default_pct = _pct("supply_default_pct")
-    ins_default_pct = _pct("install_default_pct")
-    vat_in_basic = 1 if f.get("vat_in_basic") else 0
-
-    # Collect picks: per-template count.
-    from new_boq_project_templates import _boq_template_list, _boq_template_get, _boq_template_iter_lines
-    # 2026-06-28 learning layer: pull overrides recorded from prior edits
-    # so the template auto-fills with the user's last-used values.
-    # _boq_template_lines_with_overrides is defined alongside this route in
-    # web_app.py once both modules splice; globals() lookup is the safe way
-    # to discover it without forcing a module import.
-    _wiover = globals().get("_boq_template_lines_with_overrides")
-    all_templates = _boq_template_list()
-
-    picks = []
-    for t in all_templates:
-        slug = t["slug"]
-        if not f.get(f"pick_{slug}"):
-            continue
-        try:
-            count = max(1, min(50, int(f.get(f"count_{slug}") or 1)))
-        except (TypeError, ValueError):
-            count = 1
-        picks.append((slug, t["name"], t["subtype"], t["purpose"], count))
-
-    if not picks:
-        flash("Tick at least one building type.", "warning")
-        return redirect(url_for("boq_wizard"))
-
-    # Create the project.
-    with get_db() as c:
-        cur = c.execute(
-            "INSERT INTO boq_projects (user_id, project_name, client_name, "
-            "location, project_type, external_works_included, infrastructure_included) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (uid, name, client, location, "multi_building", 0, 0),
-        )
-        pid = int(cur.lastrowid or 0)
-
-    # For each pick, create one building per count, with one floor named after
-    # the template; populate every template line onto that floor.
-    total_buildings = 0
-    total_floors = 0
-    total_items = 0
-
-    for slug, tname, subtype, purpose, count in picks:
-        tpl = _boq_template_get(slug)
-        if not tpl:
-            continue
-        for n in range(1, count + 1):
-            bld_name = tname if count == 1 else f"{tname} #{n}"
-            primary = (purpose or "commercial").lower()
-            # Map any unknown purpose to "commercial" so the building form check passes.
-            if primary not in {"residential", "commercial", "industrial", "healthcare"}:
-                primary = "commercial"
-            with get_db() as c:
-                cur = c.execute(
-                    "INSERT INTO boq_buildings (project_id, building_name, building_code, "
-                    "primary_purpose, purpose_subtype, other_purpose_description, "
-                    "building_area, number_of_floors, basement_included, roof_level_included, "
-                    "external_area_included) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                    (pid, bld_name[:300], "", primary, (subtype or "")[:80], "",
-                     0.0, 1, 0, 0, 0),
-                )
-                bid = int(cur.lastrowid or 0)
-                # Single floor named after the template.
-                cur2 = c.execute(
-                    "INSERT INTO boq_floors (building_id, project_id, floor_name, "
-                    "floor_level, floor_type) VALUES (?,?,?,?,?)",
-                    (bid, pid, "Ground Floor", 0, "ground"),
-                )
-                fid = int(cur2.lastrowid or 0)
-
-            # Populate floor items from every template line. Pricing intentionally
-            # zero -- owner edits after. Rate engine v3: supply/install are %s.
-            # Override layer overlays the owner's last-used basic+unit+qty.
-            from boq_rate_v3 import boq_rate_v3
-            line_iter = (_wiover(uid, tpl) if _wiover
-                         else _boq_template_iter_lines(tpl))
-            next_no_cache = {}
-            with get_db() as c:
-                for (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
-                     desc, unit, qty_d, basic_d, spec) in line_iter:
-                    qty = float(qty_d or 0)
-                    basic = float(basic_d or 0)
-                    if not desc.strip():
-                        continue
-                    supply_amount, install_amount, final_rate = boq_rate_v3(
-                        basic, sup_default_pct, ins_default_pct,
-                        oh, prf, vat, vat_in_basic=bool(vat_in_basic))
-                    total = qty * final_rate
-
-                    key = (bill_no, sect_letter)
-                    if key not in next_no_cache:
-                        next_no_cache[key] = 1
-                    item_no_disp = str(next_no_cache[key])
-                    next_no_cache[key] += 1
-
-                    cur = c.execute(
-                        "INSERT INTO boq_floor_items "
-                        "(floor_id, building_id, project_id, user_id, section, subsection, "
-                        " library_item_id, supplier_id, item_no, description, specification, "
-                        " unit, qty, final_built_up_rate, total_amount, remarks, "
-                        " source_type, approval_status, "
-                        " bill_no, bill_name, section_letter, subsection_label, item_no_display) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                        (fid, bid, pid, uid, sect_title.lower()[:80], "",
-                         None, None, item_no_disp,
-                         desc, spec or "", unit, qty, final_rate, total, "",
-                         "wizard_library", "project_only",
-                         bill_no, bill_name, sect_letter, subsec or "", item_no_disp),
-                    )
-                    item_id = int(cur.lastrowid or 0)
-                    c.execute(
-                        "INSERT INTO boq_floor_rate_buildup "
-                        "(floor_item_id, project_id, user_id, basic_price, "
-                        " supply_pct, install_pct, supply_rate, install_rate, "
-                        " overhead_pct, profit_pct, contingency_pct, vat_pct, "
-                        " vat_in_basic, final_built_up_rate, total_amount) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                        (item_id, pid, uid, basic,
-                         sup_default_pct, ins_default_pct, supply_amount, install_amount,
-                         oh, prf, 0, vat, vat_in_basic, final_rate, total),
-                    )
-                    total_items += 1
-            total_floors += 1
-            total_buildings += 1
-
-    try:
-        from new_boq_hierarchy_schema import boq_audit
-        boq_audit(get_db, uid, "boq_wizard_built", "boq_project", pid,
-                  f"buildings={total_buildings} floors={total_floors} items={total_items}")
-    except Exception:
-        pass
-
-    flash(f"Project created: {total_buildings} building(s), {total_floors} floor(s), {total_items} item(s) populated. "
-          "Edit pricing per row before exporting.", "success")
-    return redirect(url_for("boq_project_overview", pid=pid))
+    flash("The multi-building Wizard has been retired. Create a new BOQ Project, then add buildings + floors from the project overview.", "info")
+    return redirect(url_for("boq_projects_new"))
 
 
 # new_boq_catalog_quickadd_route.py
@@ -32639,6 +32463,264 @@ if _tpls is not None:
                 if _title_up in _BOQ_SECTION_SUBHEADINGS:
                     _s["subheading"] = _BOQ_SECTION_SUBHEADINGS[_title_up]
 
+
+# new_boq_complete_route.py
+# 2026-06-29 unified BOQ engine refactor (projectboq build update1.txt).
+#
+# Mode 2 -- Complete BOQ. Replaces "Build by Template". Loads every section
+# from the project's selected services into ONE editable page that reuses
+# the existing Section Builder editors (no new editing UI is introduced).
+#
+# Two routes:
+#
+#   GET  /boq-projects/<pid>/buildings/<bid>/floors/<fid>/complete
+#        Renders the floor's BOQ grouped by Bill -> Section. If no rows
+#        exist yet, shows a service-configuration summary + Generate prompt.
+#
+#   POST /boq-projects/<pid>/buildings/<bid>/floors/<fid>/complete/generate
+#        Idempotent. For every section in the project's services that does
+#        not already have an item on this floor, inserts the skeleton items
+#        (one row per item) and one boq_floor_rate_buildup row per item,
+#        seeded with the project's default supply/install/oh/profit/vat.
+
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/complete")
+@login_required
+def boq_floor_complete(pid, bid, fid):
+    """Mode 2 -- Complete BOQ view. Reuses the existing per-row editors."""
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    building = _boq_building_owned_or_404(bid, pid)
+    floor = _boq_floor_owned_or_404(fid, bid)
+
+    services = _services_csv_to_list(project["services_csv"] or "")
+    if not services:
+        flash("Pick the engineering services this project must cover first.", "warning")
+        return redirect(url_for("boq_project_edit", pid=pid))
+
+    # Skeleton (the list of bills the user is ABOUT to see + the rows that
+    # would be inserted on Generate).
+    skeleton_rows = _services_section_rows(services)
+    skeleton_sections = _services_loaded_sections(services)
+
+    with get_db() as c:
+        items = c.execute(
+            "SELECT i.*, b.final_built_up_rate AS bu_final, "
+            "       b.basic_price AS bu_basic, b.supply_rate AS bu_supply, "
+            "       b.install_rate AS bu_install, b.overhead_pct AS bu_oh, "
+            "       b.profit_pct AS bu_profit, b.contingency_pct AS bu_cont, "
+            "       b.vat_pct AS bu_vat "
+            "FROM boq_floor_items i "
+            "LEFT JOIN boq_floor_rate_buildup b ON b.floor_item_id=i.id "
+            "WHERE i.floor_id=? "
+            "ORDER BY COALESCE(i.bill_no,0), COALESCE(i.section_letter,''), "
+            "         COALESCE(i.display_order,0), "
+            "         COALESCE(NULLIF(i.item_no_display,''),'0'), i.id",
+            (fid,),
+        ).fetchall()
+        subtotal_row = c.execute(
+            "SELECT COALESCE(SUM(total_amount),0) AS g FROM boq_floor_items WHERE floor_id=?",
+            (fid,),
+        ).fetchone()
+
+    floor_subtotal = float(subtotal_row["g"] or 0) if subtotal_row else 0.0
+
+    # Build the bill-grouped view directly off the skeleton so EVERY service's
+    # section appears even when empty. Items get attached to their (bill_no,
+    # section_letter) bucket; if no items exist yet, the section shows empty
+    # rows with the skeleton item descriptions as placeholders.
+    bill_index = {}  # bill_no -> {"name", "sections": {(letter, title, subsection): [items]}}
+    for r in skeleton_sections:
+        bill_no = r["bill_no"]
+        bill_index.setdefault(bill_no, {"name": r["bill_name"], "sections": []})
+        bill_index[bill_no]["sections"].append({
+            "letter": r["section_letter"],
+            "title":  r["section_title"],
+            "subsection": r["subsection"],
+            "service_code": r["service_code"],
+            "items": [],
+        })
+
+    # Attach real items to the right section. Match on (bill_no, section_letter,
+    # section_title) so we don't merge unrelated sections that share a letter
+    # across bills.
+    for it in items:
+        bill_no = int(it["bill_no"] or 0)
+        letter = (it["section_letter"] or "").upper()
+        title = (it["section_title"] or it["section"] or "").upper()
+        bucket = bill_index.get(bill_no)
+        if not bucket:
+            # Item exists under a bill no longer in the service set -- park it
+            # under a synthetic "Legacy items" bill at the end (preserves
+            # data while making the orphan visible to the user).
+            bill_index.setdefault(9999, {"name": "LEGACY ITEMS (not in current Service Configuration)", "sections": []})
+            bucket = bill_index[9999]
+            sec = next((s for s in bucket["sections"] if s["letter"] == letter and s["title"].upper() == title), None)
+            if not sec:
+                sec = {"letter": letter or "Z", "title": (it["section_title"] or it["section"] or "Uncategorised"), "subsection": (it["subsection_label"] or it["subsection"] or ""), "service_code": "", "items": []}
+                bucket["sections"].append(sec)
+            sec["items"].append(it)
+            continue
+        sec = next((s for s in bucket["sections"] if s["letter"] == letter and s["title"].upper() == title), None)
+        if sec is None:
+            # Section letter is in this bill but with a different title --
+            # add it to the bucket so the item still renders.
+            sec = {"letter": letter, "title": (it["section_title"] or it["section"] or "Section"), "subsection": (it["subsection_label"] or it["subsection"] or ""), "service_code": "", "items": []}
+            bucket["sections"].append(sec)
+        sec["items"].append(it)
+
+    bills = [
+        {"no": no, "name": bill_index[no]["name"], "sections": bill_index[no]["sections"]}
+        for no in sorted(bill_index.keys())
+    ]
+
+    return render_template(
+        "boq_floor_complete.html",
+        user=current_user(),
+        project=project,
+        building=building,
+        floor=floor,
+        bills=bills,
+        services=services,
+        service_labels=_BOQ_SERVICE_LABEL,
+        service_icons=_BOQ_SERVICE_ICON,
+        has_items=bool(items),
+        n_items=len(items),
+        skeleton_item_count=len(skeleton_rows),
+        floor_subtotal=floor_subtotal,
+    )
+
+
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/floors/<int:fid>/complete/generate", methods=["POST"])
+@login_required
+def boq_floor_complete_generate(pid, bid, fid):
+    """Bulk-insert the skeleton item rows for every selected service that
+    doesn't already have a row on this floor. Idempotent -- existing items
+    are NEVER touched (matches on bill_no + section_letter + description).
+    """
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    building = _boq_building_owned_or_404(bid, pid)
+    floor = _boq_floor_owned_or_404(fid, bid)
+    csrf_protect()
+
+    services = _services_csv_to_list(project["services_csv"] or "")
+    if not services:
+        flash("Pick the engineering services first.", "warning")
+        return redirect(url_for("boq_project_edit", pid=pid))
+
+    rows = _services_section_rows(services)
+
+    n_inserted = 0
+    with get_db() as c:
+        # Existing (bill_no, section_letter, description) keys -- skip dupes.
+        existing = {
+            (int(r["bill_no"] or 0), (r["section_letter"] or "").upper(), (r["description"] or "").strip().lower())
+            for r in c.execute(
+                "SELECT bill_no, section_letter, description FROM boq_floor_items WHERE floor_id=?",
+                (fid,),
+            ).fetchall()
+        }
+        # Default percentages for new rows -- read from any sibling rate-buildup
+        # on this floor; fallback to (10, 15, 10, 15, 12.5).
+        sib = c.execute(
+            "SELECT b.supply_pct, b.install_pct, b.overhead_pct, b.profit_pct, b.vat_pct "
+            "FROM boq_floor_rate_buildup b "
+            "JOIN boq_floor_items i ON i.id = b.floor_item_id "
+            "WHERE i.floor_id=? LIMIT 1",
+            (fid,),
+        ).fetchone()
+        if sib:
+            sp_def = float(sib["supply_pct"] or 10)
+            ip_def = float(sib["install_pct"] or 15)
+            oh_def = float(sib["overhead_pct"] or 10)
+            prf_def = float(sib["profit_pct"] or 15)
+            vat_def = float(sib["vat_pct"] or 12.5)
+        else:
+            sp_def, ip_def, oh_def, prf_def, vat_def = 10.0, 15.0, 10.0, 15.0, 12.5
+
+        # display_order continues from whatever the highest is on this floor.
+        max_disp_row = c.execute(
+            "SELECT COALESCE(MAX(display_order),0) AS m FROM boq_floor_items WHERE floor_id=?",
+            (fid,),
+        ).fetchone()
+        next_disp = int(max_disp_row["m"] or 0) + 1
+
+        for r in rows:
+            key = (int(r["bill_no"]), (r["section_letter"] or "").upper(), (r["desc"] or "").strip().lower())
+            if key in existing:
+                continue
+            try:
+                basic = float(r.get("basic") or 0)
+            except Exception:
+                basic = 0.0
+            try:
+                qty = float(r.get("qty") or 0)
+            except Exception:
+                qty = 0.0
+            # Compute amounts via boq_rate_v3 so the new row matches the
+            # markup-only semantics everywhere else.
+            try:
+                from boq_rate_v3 import boq_rate_v3 as _rate_v3
+                supply_amt, install_amt, total_rate = _rate_v3(basic, sp_def, ip_def, oh_def, prf_def, vat_def, 0)
+            except Exception:
+                supply_amt = basic * (sp_def + vat_def) / 100.0
+                install_amt = basic * (ip_def + oh_def + prf_def) / 100.0
+                total_rate = basic + supply_amt + install_amt
+            total_amount = qty * total_rate
+
+            cur = c.execute(
+                "INSERT INTO boq_floor_items ("
+                "  floor_id, building_id, project_id, user_id, "
+                "  section, subsection, "
+                "  bill_no, bill_name, section_letter, subsection_label, "
+                "  description, specification, unit, qty, "
+                "  final_built_up_rate, total_amount, "
+                "  display_order, service_code) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    fid, bid, pid, uid,
+                    r["section_title"], r["subsection_label"],
+                    r["bill_no"], r["bill_name"], r["section_letter"], r["subsection_label"],
+                    r["desc"], r.get("spec", ""), r.get("unit", ""), qty,
+                    total_rate, total_amount,
+                    next_disp, r.get("service_code", ""),
+                ),
+            )
+            new_id = int(cur.lastrowid or 0)
+            next_disp += 1
+            n_inserted += 1
+
+            try:
+                c.execute(
+                    "INSERT INTO boq_floor_rate_buildup ("
+                    "  floor_item_id, project_id, basic_price, supply_rate, install_rate, "
+                    "  overhead_pct, profit_pct, contingency_pct, vat_pct, "
+                    "  supply_pct, install_pct, vat_in_basic, "
+                    "  final_built_up_rate, total_amount) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        new_id, pid, basic, supply_amt, install_amt,
+                        oh_def, prf_def, 0.0, vat_def,
+                        sp_def, ip_def, 0,
+                        total_rate, total_amount,
+                    ),
+                )
+            except Exception:
+                pass
+
+    try:
+        from new_boq_hierarchy_schema import boq_audit
+        boq_audit(get_db, uid, "boq_complete_generate", "boq_floor", fid,
+                  f"services={services} inserted={n_inserted}")
+    except Exception:
+        pass
+
+    if n_inserted:
+        flash(f"Generated {n_inserted} starter row(s) from your Service Configuration. Edit quantities and prices in place.", "success")
+    else:
+        flash("No new rows added -- every skeleton row already exists on this floor.", "info")
+    return redirect(url_for("boq_floor_complete", pid=pid, bid=bid, fid=fid))
 
 if __name__ == "__main__":
     init_db()
