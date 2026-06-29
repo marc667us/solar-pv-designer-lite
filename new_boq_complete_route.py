@@ -219,7 +219,9 @@ def boq_floor_complete_generate(pid, bid, fid):
         catalog_items = _lookup_section_catalog(sec["section_title"])
         if catalog_items:
             # Use the catalog content -- realistic descriptions + units + prices,
-            # exactly matches what the Section-by-Section grid uses.
+            # exactly matches what the Section-by-Section grid uses. Default
+            # qty=1 so the row LOOKS COMPLETE end-to-end (description + qty +
+            # unit + basic + rates). User edits only the qty exceptions.
             for (c_desc, c_unit, c_basic) in catalog_items:
                 rows.append({
                     "bill_no":          sec["bill_no"],
@@ -230,14 +232,18 @@ def boq_floor_complete_generate(pid, bid, fid):
                     "service_code":     sec["service_code"],
                     "desc":             c_desc,
                     "unit":             c_unit,
-                    "qty":              0,         # owner enters qty
+                    "qty":              1,
                     "basic":            float(c_basic or 0),
                     "spec":             "",
                 })
         else:
             # No catalog entry for this section title -- keep the hardcoded
-            # skeleton fallback so the section is at least scaffolded.
-            rows.extend(sec["fallback_rows"])
+            # skeleton fallback (also defaulted to qty=1).
+            for r in sec["fallback_rows"]:
+                _r = dict(r)
+                if not _r.get("qty"):
+                    _r["qty"] = 1
+                rows.append(_r)
 
     # ------------------------------------------------------------------
     # 2026-06-29 owner directive: auto-fill basic prices from the
