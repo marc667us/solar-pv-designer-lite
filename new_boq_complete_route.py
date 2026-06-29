@@ -258,23 +258,47 @@ def boq_floor_complete_generate(pid, bid, fid):
                 (fid,),
             ).fetchall()
         }
-        # Default percentages for new rows -- read from any sibling rate-buildup
-        # on this floor; fallback to (10, 15, 10, 15, 12.5).
-        sib = c.execute(
-            "SELECT b.supply_pct, b.install_pct, b.overhead_pct, b.profit_pct, b.vat_pct "
-            "FROM boq_floor_rate_buildup b "
-            "JOIN boq_floor_items i ON i.id = b.floor_item_id "
-            "WHERE i.floor_id=? LIMIT 1",
-            (fid,),
-        ).fetchone()
-        if sib:
-            sp_def = float(sib["supply_pct"] or 10)
-            ip_def = float(sib["install_pct"] or 15)
-            oh_def = float(sib["overhead_pct"] or 10)
-            prf_def = float(sib["profit_pct"] or 15)
-            vat_def = float(sib["vat_pct"] or 12.5)
+        # 2026-06-29 owner directive: the floor-wide rates form on the
+        # Complete BOQ page lets the user enter Supply%, Install%, OH%,
+        # Profit%, VAT%, and "VAT in basic" ONCE -- those values apply to
+        # every row that gets inserted.
+        # Precedence:
+        #   1. Form values (user just typed them on Generate Skeleton)
+        #   2. Any existing sibling rate_buildup (preserves previous Generate)
+        #   3. Hardcoded fallback (10, 15, 10, 15, 12.5)
+        f = request.form
+        def _pct(name, default):
+            try:
+                v = f.get(name, "")
+                return max(0.0, min(100.0, float(v))) if v not in (None, "",) else default
+            except (TypeError, ValueError):
+                return default
+        sp_form = f.get("supply_pct")
+        if sp_form not in (None, "",):
+            sp_def = _pct("supply_pct", 10.0)
+            ip_def = _pct("install_pct", 15.0)
+            oh_def = _pct("overhead_pct", 10.0)
+            prf_def = _pct("profit_pct", 15.0)
+            vat_def = _pct("vat_pct", 12.5)
+            vinb_def = 1 if f.get("vat_in_basic") else 0
         else:
-            sp_def, ip_def, oh_def, prf_def, vat_def = 10.0, 15.0, 10.0, 15.0, 12.5
+            sib = c.execute(
+                "SELECT b.supply_pct, b.install_pct, b.overhead_pct, b.profit_pct, b.vat_pct, b.vat_in_basic "
+                "FROM boq_floor_rate_buildup b "
+                "JOIN boq_floor_items i ON i.id = b.floor_item_id "
+                "WHERE i.floor_id=? LIMIT 1",
+                (fid,),
+            ).fetchone()
+            if sib:
+                sp_def = float(sib["supply_pct"] or 10)
+                ip_def = float(sib["install_pct"] or 15)
+                oh_def = float(sib["overhead_pct"] or 10)
+                prf_def = float(sib["profit_pct"] or 15)
+                vat_def = float(sib["vat_pct"] or 12.5)
+                vinb_def = int(sib["vat_in_basic"] or 0)
+            else:
+                sp_def, ip_def, oh_def, prf_def, vat_def = 10.0, 15.0, 10.0, 15.0, 12.5
+                vinb_def = 0
 
         # display_order continues from whatever the highest is on this floor.
         max_disp_row = c.execute(
@@ -297,12 +321,14 @@ def boq_floor_complete_generate(pid, bid, fid):
             except Exception:
                 qty = 0.0
             # Compute amounts via boq_rate_v3 so the new row matches the
-            # markup-only semantics everywhere else.
+            # markup-only semantics everywhere else. Honour vat_in_basic
+            # from the form so the floor-wide rates entry stays consistent.
+            _eff_vat = 0 if vinb_def else vat_def
             try:
                 from boq_rate_v3 import boq_rate_v3 as _rate_v3
-                supply_amt, install_amt, total_rate = _rate_v3(basic, sp_def, ip_def, oh_def, prf_def, vat_def, 0)
+                supply_amt, install_amt, total_rate = _rate_v3(basic, sp_def, ip_def, oh_def, prf_def, vat_def, bool(vinb_def))
             except Exception:
-                supply_amt = basic * (sp_def + vat_def) / 100.0
+                supply_amt = basic * (sp_def + _eff_vat) / 100.0
                 install_amt = basic * (ip_def + oh_def + prf_def) / 100.0
                 total_rate = basic + supply_amt + install_amt
             total_amount = qty * total_rate
@@ -362,7 +388,7 @@ def boq_floor_complete_generate(pid, bid, fid):
                     new_id, pid, uid, basic,
                     supply_amt, install_amt,
                     oh_def, prf_def, 0.0, vat_def,
-                    sp_def, ip_def, 0,
+                    sp_def, ip_def, vinb_def,
                     total_rate, total_amount,
                 ),
             )

@@ -384,13 +384,33 @@ def boq_section_grid_save(pid, bid, fid, bill_no, letter):
     saved = 0
     skipped = 0
     next_no = int(_boq_next_item_no(fid, bill_no, letter))
+
+    # 2026-06-29 owner directive: when "Apply rates to every line item in
+    # this section" is ticked, the FIRST row with non-empty supply_pct /
+    # install_pct sets the section-wide values; every other row inherits.
+    apply_rates_all = (f.get("apply_rates_to_all_rows") or "1") == "1"
+    canonical_supply_pct = None
+    canonical_install_pct = None
+    if apply_rates_all:
+        for _i in range(len(descriptions)):
+            _sp = _row_float(supplies_pct, _i)
+            _ip = _row_float(installs_pct, _i)
+            if (_sp is not None and _sp > 0) or (_ip is not None and _ip > 0):
+                canonical_supply_pct = _sp if _sp is not None else 0.0
+                canonical_install_pct = _ip if _ip is not None else 0.0
+                break
+
     with get_db() as c:
         for i in range(len(descriptions)):
             desc = (descriptions[i] or "").strip()[:500]
             qty = _row_float(qtys, i) or 0.0
             basic = _row_float(basics, i) or 0.0
-            supply_pct  = _row_float(supplies_pct, i) or 0.0
-            install_pct = _row_float(installs_pct, i) or 0.0
+            if apply_rates_all and canonical_supply_pct is not None:
+                supply_pct = canonical_supply_pct
+                install_pct = canonical_install_pct
+            else:
+                supply_pct  = _row_float(supplies_pct, i) or 0.0
+                install_pct = _row_float(installs_pct, i) or 0.0
             unit = (units[i] if i < len(units) else "No.").strip() or "No."
             spec_t = (specs[i] if i < len(specs) else "").strip()
             remark = (remarks_l[i] if i < len(remarks_l) else "").strip()[:500]

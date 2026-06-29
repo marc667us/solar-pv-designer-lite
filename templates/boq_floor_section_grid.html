@@ -119,6 +119,24 @@
         </div>
       </div>
     </div>
+
+    {# 2026-06-29 owner directive: a section-scoped "set rates once" checkbox.
+       When ticked, on save the Supply% / Install% typed on the FIRST row
+       (or any row with non-empty rates) is applied to every other row in
+       this section. Overhead / Profit / VAT / vat_in_basic above already
+       apply section-wide; this extends the same "type once" convenience to
+       the per-row Supply% + Install% columns. #}
+    <div class="row g-2 mt-1">
+      <div class="col-12">
+        <div class="form-check" style="background:#0a0a14;border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:8px 14px">
+          <input class="form-check-input" type="checkbox" name="apply_rates_to_all_rows" id="apply_rates_to_all_rows" value="1" checked>
+          <label class="form-check-label small" for="apply_rates_to_all_rows">
+            <strong class="text-warning">Apply the rates I type to every line item in this section.</strong>
+            <span class="text-secondary">&nbsp;&mdash; The Supply% and Install% on the first row of the grid get copied to every other row on save, so you don&rsquo;t have to type them per line. Each row keeps its own Basic Price.</span>
+          </label>
+        </div>
+      </div>
+    </div>
     <div class="text-secondary small">
       Rate engine (2026-06-28):
       <span class="text-warning">Supply&nbsp;Amount = Basic&nbsp;&times;&nbsp;(1 + (Supply% + VAT%)/100)</span>;

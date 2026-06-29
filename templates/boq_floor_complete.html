@@ -40,33 +40,87 @@
   </div>
 </div>
 
-{# Subtotal + Generate prompt (only when floor has no items yet) #}
+{# Subtotal + Generate prompt #}
 <div class="d-flex flex-wrap gap-3 mb-3 align-items-end">
-  <div class="kpi-card" style="max-width:300px">
+  <div class="kpi-card" style="max-width:280px">
     <div class="kpi-label">Floor subtotal</div>
     <div class="kpi-value">{{ (floor_subtotal)|money }}</div>
   </div>
-  {% if not has_items %}
-  <form method="POST" action="{{ url_for('boq_floor_complete_generate', pid=project.id, bid=building.id, fid=floor.id) }}" class="d-flex gap-2 align-items-center">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <div class="text-secondary small">
-      <i class="bi bi-magic me-1"></i>{{ skeleton_item_count }} starter row(s) ready to drop in. You can edit every quantity, price, and description after.
-    </div>
-    <button class="btn btn-warning fw-bold btn-sm" onclick="return confirm('Generate {{ skeleton_item_count }} starter row(s) on this floor?')">
-      <i class="bi bi-lightning-charge me-1"></i>Generate Skeleton
-    </button>
-  </form>
-  {% else %}
+  {% if has_items %}
   <div class="text-secondary small align-self-center">
     <i class="bi bi-info-circle me-1"></i>{{ n_items }} item(s) on this floor. Re-running Generate is safe &mdash; only missing rows are added.
-    <form method="POST" action="{{ url_for('boq_floor_complete_generate', pid=project.id, bid=building.id, fid=floor.id) }}" class="d-inline ms-2">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      <button class="btn btn-outline-warning btn-sm" onclick="return confirm('Re-run skeleton generator? Existing rows are kept untouched.')">
-        <i class="bi bi-arrow-clockwise me-1"></i>Top-up missing rows
-      </button>
-    </form>
   </div>
   {% endif %}
+</div>
+
+{# Floor-wide rates form: type these once, click Generate Skeleton, and EVERY
+   row that gets inserted uses these markups. Mirrors the Section-by-Section
+   grid's "Section-wide rates" pattern. Basic prices come from the
+   marketplace (auto-fill) so the user only needs to type the markups. #}
+<div class="solar-card p-3 mb-3" id="completeBoqGenerate" style="border-left:3px solid var(--solar-gold,#f59e0b)">
+  <form method="POST" action="{{ url_for('boq_floor_complete_generate', pid=project.id, bid=building.id, fid=floor.id) }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+    <div class="row g-2 align-items-end mb-2">
+      <div class="col-md-2 text-warning fw-bold" style="text-transform:uppercase;font-size:12px;letter-spacing:.5px">
+        <i class="bi bi-percent me-1"></i>Floor-wide rates
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label small text-secondary mb-1">Supply %</label>
+        <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="supply_pct" value="10">
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label small text-secondary mb-1">Install %</label>
+        <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="install_pct" value="15">
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label small text-secondary mb-1">Overhead %</label>
+        <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="overhead_pct" value="10">
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label small text-secondary mb-1">Profit %</label>
+        <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="profit_pct" value="15">
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label small text-secondary mb-1">VAT %</label>
+        <input type="number" step="0.1" min="0" max="100" class="form-control form-control-sm" name="vat_pct" value="12.5">
+      </div>
+    </div>
+
+    <div class="row g-2 align-items-center">
+      <div class="col-md-4">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="vat_in_basic" id="cmp_vat_in_basic" value="1">
+          <label class="form-check-label small text-secondary" for="cmp_vat_in_basic">VAT already on supplier invoice &mdash; do not add VAT again</label>
+        </div>
+      </div>
+      <div class="col-md-5">
+        <div class="form-check" style="background:#0a0a14;border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:6px 12px">
+          <input class="form-check-input" type="checkbox" name="apply_rates_to_all_rows" id="cmp_apply_all" value="1" checked>
+          <label class="form-check-label small" for="cmp_apply_all">
+            <strong class="text-warning">Apply the rates above to every line item.</strong>
+            <span class="text-secondary">&nbsp;Type once, applied to all.</span>
+          </label>
+        </div>
+      </div>
+      <div class="col-md-3 text-end">
+        {% if not has_items %}
+        <button class="btn btn-warning fw-bold" onclick="return confirm('Generate {{ skeleton_item_count }} starter row(s) on this floor with the rates above?')">
+          <i class="bi bi-lightning-charge me-1"></i>Generate Skeleton ({{ skeleton_item_count }})
+        </button>
+        {% else %}
+        <button class="btn btn-outline-warning" onclick="return confirm('Top-up any missing skeleton rows on this floor with the rates above?')">
+          <i class="bi bi-arrow-clockwise me-1"></i>Top-up missing rows
+        </button>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="text-secondary small mt-2" style="line-height:1.4">
+      <i class="bi bi-info-circle me-1"></i>
+      Basic prices auto-fill from the Marketplace catalog (and your saved overrides). Items with no marketplace match arrive with basic=0 &mdash; type the price OR add them to the marketplace from the edit form.
+    </div>
+  </form>
 </div>
 
 {# Bills accordion: one per service, each containing collapsible sections.
