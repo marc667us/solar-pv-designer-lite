@@ -37,36 +37,11 @@
     </div>
   </div>
 
-  {# Read-only summary of items already saved on the floor for this section. #}
-  {% if existing %}
-  <details class="mb-2">
-    <summary class="text-warning small fw-bold" style="cursor:pointer">
-      <i class="bi bi-list-ol me-1"></i>{{ existing|length }} existing row(s) (click to view)
-    </summary>
-    <div class="table-responsive mt-2">
-      <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:12px">
-        <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px">
-          <tr><th>#</th><th>Description</th><th class="text-end">Qty</th><th>Unit</th><th class="text-end">Basic</th><th class="text-end">Amount</th><th style="width:60px"></th></tr>
-        </thead>
-        <tbody>
-          {% for it in existing %}
-          <tr>
-            <td class="text-warning fw-bold small">{{ it.item_no_display or it.item_no or loop.index }}</td>
-            <td class="small">{{ it.description }}</td>
-            <td class="text-end small">{{ (it.qty or 0)|int }}</td>
-            <td class="small">{{ it.unit }}</td>
-            <td class="text-end small">{{ (it.bu_basic or 0)|fmt }}</td>
-            <td class="text-end fw-bold small">{{ (it.total_amount or 0)|money }}</td>
-            <td class="text-end">
-              <a href="{{ url_for('boq_floor_item_edit', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" class="btn btn-outline-warning btn-sm py-0 px-1" title="Edit"><i class="bi bi-pencil"></i></a>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </details>
-  {% endif %}
+  {# 2026-06-30: legacy 'existing rows' details element removed per owner
+     directive. The new flow uses Generate Floor BOQ to review saved rows;
+     the section subtotal of saved rows is still shown at the bottom of
+     this card (it reads `existing` server-side, the details list isn't
+     rendered). #}
 
   {# Editable rows for THIS section. All inputs use indexed names that the
      parent form's single Save button submits in one shot. Each row carries
