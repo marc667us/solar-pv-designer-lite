@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}Floor BOQ — {{ floor.floor_name }}{% endblock %}
+{% block content %}
+
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    body { background: white !important; color: black !important; }
+    .solar-card { background: white !important; border-color: #ccc !important; color: black !important; }
+    table { color: black !important; }
+  }
+</style>
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 no-print">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('boq_projects_list') }}" class="text-warning">BOQ Projects</a> &middot;
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="text-warning">{{ project.project_name }}</a> &middot;
+      <a href="{{ url_for('boq_building_view', pid=project.id, bid=building.id) }}" class="text-warning">{{ building.building_name }}</a> &middot;
+      <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=floor.id) }}" class="text-warning">{{ floor.floor_name }}</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-file-earmark-text text-warning me-1"></i>Floor BOQ &mdash; {{ floor.floor_name }}</h5>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('boq_floor_boq_pdf', pid=project.id, bid=building.id, fid=floor.id) }}"
+       class="btn btn-warning fw-bold btn-sm" target="_blank">
+      <i class="bi bi-file-earmark-pdf me-1"></i>Export PDF
+    </a>
+    <a href="{{ url_for('boq_floor_boq_xlsx', pid=project.id, bid=building.id, fid=floor.id) }}"
+       class="btn btn-warning fw-bold btn-sm">
+      <i class="bi bi-file-earmark-excel me-1"></i>Export Excel
+    </a>
+    <button type="button" class="btn btn-outline-warning btn-sm"
+            data-bs-toggle="modal" data-bs-target="#emailBoqModal">
+      <i class="bi bi-envelope me-1"></i>Email
+    </button>
+    <button onclick="window.print()" class="btn btn-outline-warning btn-sm">
+      <i class="bi bi-printer-fill me-1"></i>Print
+    </button>
+  </div>
+</div>
+
+<div class="solar-card p-4">
+  <div class="text-center mb-3">
+    <div class="text-warning fw-bold small" style="letter-spacing:2px;text-transform:uppercase">Floor BOQ for Review</div>
+    <h4 class="fw-black mb-1">{{ project.project_name }}</h4>
+    <div class="text-secondary small">{{ building.building_name }} &middot; {{ floor.floor_name }}</div>
+    {% if project.client_name %}<div class="text-secondary small">Client: {{ project.client_name }}</div>{% endif %}
+  </div>
+
+  {% if not rows %}
+  <div class="text-secondary text-center small fst-italic py-4">
+    No saved BOQ items on this floor yet. Go to <a href="{{ url_for('boq_floor_build_all', pid=project.id, bid=building.id, fid=floor.id) }}" class="text-warning">Build all sections</a> to add some, then come back.
+  </div>
+  {% else %}
+
+  <div class="table-responsive">
+    <table class="table table-sm align-middle" style="color:#e0e0f0;font-size:13px">
+      <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
+        <tr>
+          <th style="width:50px">Item</th>
+          <th>Description</th>
+          <th class="text-end" style="width:70px">Qty</th>
+          <th style="width:60px">Unit</th>
+          <th class="text-end" style="width:90px">Basic Price</th>
+          <th class="text-end" style="width:100px">Supply Rate</th>
+          <th class="text-end" style="width:100px">Install Rate</th>
+          <th class="text-end" style="width:100px">Total Rate</th>
+          <th class="text-end" style="width:110px">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set ns = namespace(prev_bill=None, prev_section=None, prev_sub=None) %}
+        {% for r in rows %}
+        {% if (r.bill_no or 0) != ns.prev_bill %}
+        <tr style="background:#0a0a14">
+          <td colspan="9" class="fw-bold text-warning" style="text-transform:uppercase;letter-spacing:.5px;font-size:12.5px">
+            BILL No. {{ r.bill_no or 0 }} &mdash; {{ r.bill_name or 'OTHER' }}
+          </td>
+        </tr>
+        {% set ns.prev_bill = r.bill_no or 0 %}
+        {% set ns.prev_section = None %}
+        {% set ns.prev_sub = None %}
+        {% endif %}
+        {% if (r.section_letter or '')|upper != ns.prev_section %}
+        <tr style="background:rgba(245,158,11,.05)">
+          <td colspan="9" class="fw-bold text-warning small" style="text-transform:uppercase;letter-spacing:.5px">
+            {{ (r.section_letter or '')|upper }}. {{ (r.section or '')|upper }}
+          </td>
+        </tr>
+        {% set ns.prev_section = (r.section_letter or '')|upper %}
+        {% set ns.prev_sub = None %}
+        {% endif %}
+        {% if r.subsection_label and r.subsection_label != ns.prev_sub %}
+        <tr><td></td><td class="fst-italic small text-secondary">{{ r.subsection_label }}</td><td colspan="7"></td></tr>
+        {% set ns.prev_sub = r.subsection_label %}
+        {% endif %}
+        <tr>
+          <td class="text-secondary small">{{ r.item_no_display or r.item_no or loop.index }}</td>
+          <td class="small">{{ r.description }}</td>
+          <td class="text-end small">{{ (r.qty or 0)|int }}</td>
+          <td class="small">{{ r.unit }}</td>
+          <td class="text-end small">{{ (r.basic_price or 0)|fmt }}</td>
+          <td class="text-end small">{{ (r.supply_rate or 0)|fmt }}</td>
+          <td class="text-end small">{{ (r.install_rate or 0)|fmt }}</td>
+          <td class="text-end fw-bold small">{{ (r.final_built_up_rate or 0)|fmt }}</td>
+          <td class="text-end fw-bold text-warning">{{ (r.total_amount or 0)|money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="background:rgba(245,158,11,.15);border-top:3px solid var(--solar-gold,#f59e0b)">
+          <td colspan="8" class="text-end fw-black" style="font-size:15px">FLOOR TOTAL CARRIED TO BUILDING SUMMARY</td>
+          <td class="text-end fw-black text-warning" style="font-size:17px">{{ (floor_total)|money }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <hr class="my-4" style="border-color:#1e1e3a">
+
+  <div class="row g-3 small">
+    <div class="col-md-6">
+      <div class="text-warning fw-bold small mb-2" style="text-transform:uppercase;letter-spacing:.5px">
+        <i class="bi bi-diagram-3 me-1"></i>Per-service totals
+      </div>
+      <table class="table table-sm" style="color:#e0e0f0;font-size:12px">
+        <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px">
+          <tr><th>Service</th><th class="text-end">Amount</th><th class="text-end" style="width:60px">%</th></tr>
+        </thead>
+        <tbody>
+          {% for svc in services_breakdown %}
+          <tr>
+            <td>{{ svc.label }}</td>
+            <td class="text-end fw-bold">{{ (svc.service_total)|money }}</td>
+            <td class="text-end text-secondary">{% if floor_total > 0 %}{{ '%.1f'|format(svc.service_total * 100 / floor_total) }}%{% else %}&mdash;{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="col-md-6">
+      <div class="text-warning fw-bold small mb-2" style="text-transform:uppercase;letter-spacing:.5px">
+        <i class="bi bi-stack me-1"></i>Per-bill totals
+      </div>
+      <table class="table table-sm" style="color:#e0e0f0;font-size:12px">
+        <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px">
+          <tr><th>Bill</th><th class="text-end">Amount</th><th class="text-end" style="width:60px">%</th></tr>
+        </thead>
+        <tbody>
+          {% for b in bills %}
+          <tr>
+            <td>{{ b.bill_no }} &mdash; {{ b.bill_name }}</td>
+            <td class="text-end fw-bold">{{ (b.subtotal)|money }}</td>
+            <td class="text-end text-secondary">{% if floor_total > 0 %}{{ '%.1f'|format(b.subtotal * 100 / floor_total) }}%{% else %}&mdash;{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% endif %}
+</div>
+
+<div class="modal fade no-print" id="emailBoqModal" tabindex="-1" aria-labelledby="emailBoqModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:#0d0d1f;color:#e0e0f0;border:1px solid #2a2a4a">
+      <form method="POST" action="{{ url_for('boq_floor_boq_email', pid=project.id, bid=building.id, fid=floor.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="modal-header" style="border-color:#2a2a4a">
+          <h6 class="modal-title text-warning fw-bold" id="emailBoqModalLabel">
+            <i class="bi bi-envelope me-1"></i>Email Floor BOQ PDF
+          </h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-secondary">
+            Send the floor BOQ as a PDF attachment. Defaults to the project's client email; edit if you want to send elsewhere.
+          </p>
+          <div class="mb-3">
+            <label class="form-label small text-secondary">Recipient email</label>
+            <input type="email" class="form-control form-control-sm" name="to" required
+                   value="{{ project.client_email or '' }}"
+                   placeholder="client@example.com">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-secondary">Subject</label>
+            <input type="text" class="form-control form-control-sm" name="subject"
+                   value="Floor BOQ for review — {{ project.project_name }} / {{ floor.floor_name }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-secondary">Message (optional)</label>
+            <textarea class="form-control form-control-sm" name="body" rows="4"
+                      placeholder="Hi, please find attached the floor BOQ for review..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer" style="border-color:#2a2a4a">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning fw-bold btn-sm">
+            <i class="bi bi-send me-1"></i>Send email
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

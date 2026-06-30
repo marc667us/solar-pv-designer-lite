@@ -21,6 +21,10 @@
     <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-warning fw-bold btn-sm">
       <i class="bi bi-list-ol me-1"></i>Section-by-Section
     </a>
+    <a href="{{ url_for('boq_floor_boq_review', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-warning fw-bold btn-sm"
+       title="Generate this floor's BOQ for review + export as PDF / Excel / Email">
+      <i class="bi bi-file-earmark-text me-1"></i>Generate Floor BOQ
+    </a>
     {# 2026-06-30: "Build all sections at once" loads every section in the
        Section-by-Section grid stacked on one page. Replaces the standalone
        Complete BOQ page. #}
