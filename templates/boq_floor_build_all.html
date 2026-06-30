@@ -68,10 +68,10 @@
       </div>
       <div class="col-md-8">
         <div class="form-check" style="background:#0a0a14;border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:6px 12px">
-          <input class="form-check-input" type="checkbox" name="apply_rates_to_all_rows" id="floor_apply_all" value="1" checked disabled>
+          <input class="form-check-input" type="checkbox" name="apply_rates_to_all_rows" id="floor_apply_all" value="1" checked>
           <label class="form-check-label small" for="floor_apply_all">
-            <strong class="text-warning">First-rate-for-all-items.</strong>
-            <span class="text-secondary">The rates above apply to every row across every section in this floor.</span>
+            <strong class="text-warning">First-rate-for-all-items (on).</strong>
+            <span class="text-secondary">The Supply% / Install% above are written into every row across every section. Untick to set rates per row.</span>
           </label>
         </div>
       </div>
@@ -130,57 +130,89 @@
 {% endfor %}
 
 <script>
-  // ONE recalc engine for the whole page. Every row uses the floor-wide
-  // rates. Description pick auto-fills unit + basic. Live floor total
-  // updates as the user types.
-  // 2026-06-30 formula: supply_amount = basic * (sp + oh + prf + effVat) / 100
+  // ONE recalc engine for the whole page.
+  // 2026-06-30 formula: supply_amount  = basic * (sp + oh + prf + effVat) / 100
   //                     install_amount = basic * ip / 100
   // Overhead + Profit ride on Supply (sold-side markup).
+  //
+  // CASCADE: when "first-rate-for-all-items" is checked (default), the
+  // floor-wide Supply% / Install% are WRITTEN INTO every row's Supply% /
+  // Install% input on load and whenever the floor-wide value changes. Each
+  // row's Supply/Install input shows the cascaded value -- so the user sees
+  // the rate they typed reflected in every line. Manual edits inside a row
+  // mark that row as "overridden" so the cascade no longer overwrites it
+  // (per-row override is opt-in). Unticking the master checkbox disables
+  // the cascade -- rows keep whatever value they currently show.
   (function(){
+    function fId(id) { return document.getElementById(id); }
     function floorPcts() {
       return {
-        supply: parseFloat((document.getElementById('floor_supply_pct')||{value:0}).value || 0),
-        install: parseFloat((document.getElementById('floor_install_pct')||{value:0}).value || 0),
-        oh: parseFloat((document.getElementById('floor_overhead_pct')||{value:0}).value || 0),
-        prf: parseFloat((document.getElementById('floor_profit_pct')||{value:0}).value || 0),
-        vat: parseFloat((document.getElementById('floor_vat_pct')||{value:0}).value || 0),
-        vatInBasic: !!(document.getElementById('floor_vat_in_basic') && document.getElementById('floor_vat_in_basic').checked),
+        supply: parseFloat((fId('floor_supply_pct')||{value:0}).value || 0),
+        install: parseFloat((fId('floor_install_pct')||{value:0}).value || 0),
+        oh: parseFloat((fId('floor_overhead_pct')||{value:0}).value || 0),
+        prf: parseFloat((fId('floor_profit_pct')||{value:0}).value || 0),
+        vat: parseFloat((fId('floor_vat_pct')||{value:0}).value || 0),
+        vatInBasic: !!(fId('floor_vat_in_basic') && fId('floor_vat_in_basic').checked),
       };
+    }
+    function cascadeOn() {
+      var c = fId('floor_apply_all');
+      return !c || c.checked;
+    }
+    // Push the floor-wide Supply% / Install% into every row input that has
+    // not been manually overridden. Returns nothing -- side effect only.
+    function pushCascade() {
+      if (!cascadeOn()) return;
+      var pcts = floorPcts();
+      var spStr = String(pcts.supply || 0);
+      var ipStr = String(pcts.install || 0);
+      document.querySelectorAll('tr.boq-row').forEach(function(tr){
+        var sp = tr.querySelector('.boq-supply');
+        var ip = tr.querySelector('.boq-install');
+        if (sp && !sp.dataset.boqOverride) sp.value = spStr;
+        if (ip && !ip.dataset.boqOverride) ip.value = ipStr;
+      });
     }
     function recalcRow(tr) {
       var pcts = floorPcts();
       var basic = parseFloat((tr.querySelector('.boq-basic') || {value:0}).value || 0);
-      var sp = parseFloat((tr.querySelector('.boq-supply')   || {value:''}).value || pcts.supply);
-      var ip = parseFloat((tr.querySelector('.boq-install')  || {value:''}).value || pcts.install);
-      var qty = parseFloat((tr.querySelector('.boq-qty')     || {value:0}).value || 0);
-      // Per-row Supply/Install fields are optional; if blank, use the floor-wide rates.
-      var spField = tr.querySelector('.boq-supply');  if (spField && !spField.value) sp = pcts.supply;
-      var ipField = tr.querySelector('.boq-install'); if (ipField && !ipField.value) ip = pcts.install;
+      var spField = tr.querySelector('.boq-supply');
+      var ipField = tr.querySelector('.boq-install');
+      // If the cascade is on AND the row hasn't been overridden, the row
+      // input MAY still be blank (e.g. before pushCascade fires). Fall back
+      // to floor-wide.
+      var sp = parseFloat((spField && spField.value) || pcts.supply || 0);
+      var ip = parseFloat((ipField && ipField.value) || pcts.install || 0);
+      var qty = parseFloat((tr.querySelector('.boq-qty') || {value:0}).value || 0);
       var effVat = pcts.vatInBasic ? 0 : pcts.vat;
-      // 2026-06-30: Overhead + Profit ride on Supply; Install is the pure labour line.
       var sa = basic * (sp + pcts.oh + pcts.prf + effVat) / 100;
       var ia = basic * ip / 100;
       var rate = basic + sa + ia;
       var amount = qty * rate;
       var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
+      var saEl = tr.querySelector('.boq-supply-amt');
+      var iaEl = tr.querySelector('.boq-install-amt');
       var rateEl = tr.querySelector('.boq-rate');
       var amtEl  = tr.querySelector('.boq-amount');
+      if (saEl)   saEl.textContent   = nf.format(Math.round(sa));
+      if (iaEl)   iaEl.textContent   = nf.format(Math.round(ia));
       if (rateEl) rateEl.textContent = nf.format(Math.round(rate));
       if (amtEl)  amtEl.textContent  = nf.format(Math.round(amount));
-      return amount;
+      var tick = tr.querySelector('.boq-tick');
+      return (tick && tick.checked) ? amount : 0;
     }
     function recalcAll() {
       var sum = 0;
       document.querySelectorAll('tr.boq-row').forEach(function(tr){
-        var tick = tr.querySelector('.boq-tick');
-        if (!tick || !tick.checked) return;
         sum += recalcRow(tr);
       });
       var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
-      var el = document.getElementById('floor_total_live');
+      var el = fId('floor_total_live');
       if (el) el.textContent = nf.format(Math.round(sum));
     }
-    // Description pick -> auto-fill unit + basic (per-row, no scoping needed).
+    function fullRefresh() { pushCascade(); recalcAll(); }
+
+    // Description pick -> auto-fill unit + basic.
     document.addEventListener('change', function(e){
       var t = e.target;
       if (!t) return;
@@ -198,14 +230,59 @@
         var tick = tr.querySelector('.boq-tick');
         if (tick) tick.checked = !!(opt && opt.value);
       }
-      recalcAll();
+      // Tick toggle should also rerun the totals
+      if (t.classList && t.classList.contains('boq-tick')) recalcAll();
+      // Master cascade toggle
+      if (t.id === 'floor_apply_all') fullRefresh();
+      // VAT-in-basic toggle
+      if (t.id === 'floor_vat_in_basic') recalcAll();
     });
+
+    // Floor-wide rate change -> cascade to every row + recompute.
+    ['floor_supply_pct','floor_install_pct','floor_overhead_pct',
+     'floor_profit_pct','floor_vat_pct'].forEach(function(id){
+       var el = fId(id);
+       if (el) el.addEventListener('input', fullRefresh);
+    });
+
+    // Per-row Supply/Install: typing marks the row as overridden so the
+    // cascade no longer overwrites it. Also: if THIS is the FIRST manual
+    // override and the cascade is on, copy the typed value up to the
+    // floor-wide input so every OTHER row picks it up. That fulfils the
+    // "first rate I type applies to all items" intent.
     document.addEventListener('input', function(e){
-      if (!e.target) return;
-      if (e.target.matches('input[type=number]')) recalcAll();
+      var t = e.target;
+      if (!t || !t.classList) return;
+      var tr = t.closest('tr.boq-row');
+      if (tr && (t.classList.contains('boq-supply') || t.classList.contains('boq-install'))) {
+        t.dataset.boqOverride = '1';
+        if (cascadeOn()) {
+          var anyOtherOverride = false;
+          var cls = t.classList.contains('boq-supply') ? '.boq-supply' : '.boq-install';
+          document.querySelectorAll('tr.boq-row ' + cls).forEach(function(o){
+            if (o !== t && o.dataset.boqOverride) anyOtherOverride = true;
+          });
+          if (!anyOtherOverride) {
+            var floorId = t.classList.contains('boq-supply') ? 'floor_supply_pct' : 'floor_install_pct';
+            var fEl = fId(floorId);
+            if (fEl) {
+              fEl.value = t.value;
+              // Push cascade to siblings (but skip THIS row -- it's already
+              // typed). Since t now has the override flag, pushCascade
+              // won't overwrite it.
+              pushCascade();
+            }
+          }
+        }
+        recalcAll();
+        return;
+      }
+      // Any other numeric input -> just recalc.
+      if (t.matches && t.matches('input[type=number]')) recalcAll();
     });
-    // Initial recalc on load
-    recalcAll();
+
+    // Initial paint: push the cascade, then recompute.
+    fullRefresh();
   })();
 </script>
 {% endblock %}
