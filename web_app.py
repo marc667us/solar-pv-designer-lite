@@ -22185,20 +22185,58 @@ _BOQ_SECTION_ITEM_CATALOG = {
     ],
 
     "WIRING OF POINTS": [
-        # --- Pipes / conduits (priced per metre or per piece) ---
+        # ===== A. LIGHTING POINTS (1.5mm2) =====
+        # Boxes
+        ("Lighting Point - 3x3 steel square box",                                   "Nos.",   13),
+        # Conduit point
+        ("Lighting Point - 20mm PVC conduit pipe",                                  "M",       5),
+        # Wires (Live + Neutral + Control)
+        ("Lighting Point - 1.5mm2 PVC copper cable, Live (Brown)",                  "Coils", 391),
+        ("Lighting Point - 1.5mm2 PVC copper cable, Neutral (Blue)",                "Coils", 391),
+        ("Lighting Point - 1.5mm2 PVC copper cable, Control (Grey)",                "Coils", 391),
+
+        # ===== B. SOCKET OUTLET POINTS (2.5mm2) =====
+        # Boxes
+        ("Socket Outlet Point - 3x6 steel square box",                              "Nos.",   18),
+        # Conduit point
+        ("Socket Outlet Point - 20mm PVC conduit pipe",                             "M",       5),
+        # Wires (Live + Neutral + Earth)
+        ("Socket Outlet Point - 2.5mm2 PVC copper cable, Live (Brown)",             "Coils", 653),
+        ("Socket Outlet Point - 2.5mm2 PVC copper cable, Neutral (Blue)",           "Coils", 653),
+        ("Socket Outlet Point - 2.5mm2 PVC copper cable, Earth (Yellow/Green)",     "Coils", 653),
+
+        # ===== C. AIR CONDITIONER POINTS (4.0mm2) =====
+        # Boxes
+        ("Air Conditioner Point - 3x6 steel square box",                            "Nos.",   18),
+        # Conduit point
+        ("Air Conditioner Point - 25mm PVC conduit pipe",                           "Nos.",   19.50),
+        # Wires (Live + Neutral + Earth)
+        ("Air Conditioner Point - 4.0mm2 PVC copper cable, Live (Brown)",           "Coils", 1037),
+        ("Air Conditioner Point - 4.0mm2 PVC copper cable, Neutral (Blue)",         "Coils", 1037),
+        ("Air Conditioner Point - 4.0mm2 PVC copper cable, Earth (Yellow/Green)",   "Coils", 1037),
+
+        # ===== D. WATER HEATER POINTS (4.0mm2) =====
+        # Boxes
+        ("Water Heater Point - 3x6 steel square box",                               "Nos.",   18),
+        # Conduit point
+        ("Water Heater Point - 25mm PVC conduit pipe",                              "Nos.",   19.50),
+        # Wires (Live + Neutral + Earth)
+        ("Water Heater Point - 4.0mm2 PVC copper cable, Live (Brown)",              "Coils", 1037),
+        ("Water Heater Point - 4.0mm2 PVC copper cable, Neutral (Blue)",            "Coils", 1037),
+        ("Water Heater Point - 4.0mm2 PVC copper cable, Earth (Yellow/Green)",      "Coils", 1037),
+
+        # ===== LEGACY / GENERAL ITEMS (preserved for back-compat with existing BOQ rows) =====
         ("20mm PVC rigid conduit pipe (3m length, priced per metre)", "M",    5),
         ("20mm flexible PVC tube (rolls, priced per metre)",  "M",    6),
         ("20mm diameter PVC conduit pipe",                    "Nos.",   14.63),
         ("25mm diameter PVC conduit pipe",                    "Nos.",   19.50),
         ("32mm diameter PVC conduit pipe",                    "Nos.",   28.00),
-        # --- Boxes ---
         ("3x3 steel square box",                              "No.",    13),
         ("3x6 steel square box",                              "No.",    18),
         ("75mm x 75mm steel conduit boxes",                   "Nos.",   13),
         ("150mm x 75mm steel conduit boxes",                  "Nos.",   18),
         ("Circular boxes of various ways",                    "Nos.",    5),
         ("Junction boxes",                                    "Nos.",    8),
-        # --- Wires / cables ---
         ("1.5mm2 PVC insulated copper cable (Brown)",         "Coils", 391),
         ("1.5mm2 PVC insulated copper cable (Blue)",          "Coils", 391),
         ("1.5mm2 PVC insulated copper cable (Grey)",          "Coils", 391),
@@ -23158,20 +23196,58 @@ _BOQ_SECTION_ITEM_CATALOG = {
     ],
 
     "WIRING OF POINTS": [
-        # --- Pipes / conduits (priced per metre or per piece) ---
+        # ===== A. LIGHTING POINTS (1.5mm2) =====
+        # Boxes
+        ("Supply and install Lighting Point - 3x3 steel square box",                                                "Nos.",   13),
+        # Conduit point
+        ("Supply and install Lighting Point - 20mm PVC conduit pipe",                                               "M",       5),
+        # Wires (Live + Neutral + Control)
+        ("Wire Lighting Point in conduit using 1.5mm2 PVC insulated copper cable, Live (Brown)",                    "Coils", 391),
+        ("Wire Lighting Point in conduit using 1.5mm2 PVC insulated copper cable, Neutral (Blue)",                  "Coils", 391),
+        ("Wire Lighting Point in conduit using 1.5mm2 PVC insulated copper cable, Control (Grey)",                  "Coils", 391),
+
+        # ===== B. SOCKET OUTLET POINTS (2.5mm2) =====
+        # Boxes
+        ("Supply and install Socket Outlet Point - 3x6 steel square box",                                           "Nos.",   18),
+        # Conduit point
+        ("Supply and install Socket Outlet Point - 20mm PVC conduit pipe",                                          "M",       5),
+        # Wires (Live + Neutral + Earth)
+        ("Wire Socket Outlet Point in conduit using 2.5mm2 PVC insulated copper cable, Live (Brown)",               "Coils", 653),
+        ("Wire Socket Outlet Point in conduit using 2.5mm2 PVC insulated copper cable, Neutral (Blue)",             "Coils", 653),
+        ("Wire Socket Outlet Point in conduit using 2.5mm2 PVC insulated copper cable, Earth (Yellow/Green)",       "Coils", 653),
+
+        # ===== C. AIR CONDITIONER POINTS (4.0mm2) =====
+        # Boxes
+        ("Supply and install Air Conditioner Point - 3x6 steel square box",                                         "Nos.",   18),
+        # Conduit point
+        ("Supply and install Air Conditioner Point - 25mm PVC conduit pipe",                                        "Nos.",   19.50),
+        # Wires (Live + Neutral + Earth)
+        ("Wire Air Conditioner Point in conduit using 4.0mm2 PVC insulated copper cable, Live (Brown)",             "Coils", 1037),
+        ("Wire Air Conditioner Point in conduit using 4.0mm2 PVC insulated copper cable, Neutral (Blue)",           "Coils", 1037),
+        ("Wire Air Conditioner Point in conduit using 4.0mm2 PVC insulated copper cable, Earth (Yellow/Green)",     "Coils", 1037),
+
+        # ===== D. WATER HEATER POINTS (4.0mm2) =====
+        # Boxes
+        ("Supply and install Water Heater Point - 3x6 steel square box",                                            "Nos.",   18),
+        # Conduit point
+        ("Supply and install Water Heater Point - 25mm PVC conduit pipe",                                           "Nos.",   19.50),
+        # Wires (Live + Neutral + Earth)
+        ("Wire Water Heater Point in conduit using 4.0mm2 PVC insulated copper cable, Live (Brown)",                "Coils", 1037),
+        ("Wire Water Heater Point in conduit using 4.0mm2 PVC insulated copper cable, Neutral (Blue)",              "Coils", 1037),
+        ("Wire Water Heater Point in conduit using 4.0mm2 PVC insulated copper cable, Earth (Yellow/Green)",        "Coils", 1037),
+
+        # ===== LEGACY / GENERAL ITEMS (preserved for back-compat with existing BOQ rows) =====
         ("Supply and install 20mm PVC rigid conduit pipe (3m length, priced per metre)",                           "M",    5),
         ("Supply and install 20mm flexible PVC tube (rolls, priced per metre)",                                     "M",    6),
         ("Supply and install 20mm diameter PVC conduit pipe",                                                       "Nos.",   14.63),
         ("Supply and install 25mm diameter PVC conduit pipe",                                                       "Nos.",   19.50),
         ("Supply and install 32mm diameter PVC conduit pipe",                                                       "Nos.",   28.00),
-        # --- Boxes ---
         ("Supply and install 3x3 steel square box",                                                                 "No.",    13),
         ("Supply and install 3x6 steel square box",                                                                 "No.",    18),
         ("Supply and install 75mm x 75mm steel conduit boxes",                                                      "Nos.",   13),
         ("Supply and install 150mm x 75mm steel conduit boxes",                                                     "Nos.",   18),
         ("Supply and install circular boxes of various ways",                                                       "Nos.",    5),
         ("Supply and install junction boxes",                                                                       "Nos.",    8),
-        # --- Wires / cables ---
         ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Brown)",         "Coils", 391),
         ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Blue)",          "Coils", 391),
         ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Grey)",          "Coils", 391),
