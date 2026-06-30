@@ -22471,9 +22471,9 @@ _BOQ_SECTION_ITEM_CATALOG = {
         # Conduit point
         ("Lighting Point - 20mm PVC conduit pipe",                                  "M",       5),
         # Wires (Live + Neutral + Control)
-        ("Lighting Point - 1.5mm2 PVC copper cable, Live (Brown)",                  "Coils", 391),
-        ("Lighting Point - 1.5mm2 PVC copper cable, Neutral (Blue)",                "Coils", 391),
-        ("Lighting Point - 1.5mm2 PVC copper cable, Control (Grey)",                "Coils", 391),
+        ("Lighting Point - 1.5mm2 PVC copper cable, Live (Brown)",                  "M",    4.25),
+        ("Lighting Point - 1.5mm2 PVC copper cable, Neutral (Blue)",                "M",    4.25),
+        ("Lighting Point - 1.5mm2 PVC copper cable, Control (Grey)",                "M",    4.25),
 
         # ===== B. SOCKET OUTLET POINTS (2.5mm2) =====
         # Boxes
@@ -22481,9 +22481,9 @@ _BOQ_SECTION_ITEM_CATALOG = {
         # Conduit point
         ("Socket Outlet Point - 20mm PVC conduit pipe",                             "M",       5),
         # Wires (Live + Neutral + Earth)
-        ("Socket Outlet Point - 2.5mm2 PVC copper cable, Live (Brown)",             "Coils", 653),
-        ("Socket Outlet Point - 2.5mm2 PVC copper cable, Neutral (Blue)",           "Coils", 653),
-        ("Socket Outlet Point - 2.5mm2 PVC copper cable, Earth (Yellow/Green)",     "Coils", 653),
+        ("Socket Outlet Point - 2.5mm2 PVC copper cable, Live (Brown)",             "M",    7.10),
+        ("Socket Outlet Point - 2.5mm2 PVC copper cable, Neutral (Blue)",           "M",    7.10),
+        ("Socket Outlet Point - 2.5mm2 PVC copper cable, Earth (Yellow/Green)",     "M",    7.10),
 
         # ===== C. AIR CONDITIONER POINTS (4.0mm2) =====
         # Boxes
@@ -22491,9 +22491,9 @@ _BOQ_SECTION_ITEM_CATALOG = {
         # Conduit point
         ("Air Conditioner Point - 25mm PVC conduit pipe",                           "Nos.",   19.50),
         # Wires (Live + Neutral + Earth)
-        ("Air Conditioner Point - 4.0mm2 PVC copper cable, Live (Brown)",           "Coils", 1037),
-        ("Air Conditioner Point - 4.0mm2 PVC copper cable, Neutral (Blue)",         "Coils", 1037),
-        ("Air Conditioner Point - 4.0mm2 PVC copper cable, Earth (Yellow/Green)",   "Coils", 1037),
+        ("Air Conditioner Point - 4.0mm2 PVC copper cable, Live (Brown)",           "M",    11.27),
+        ("Air Conditioner Point - 4.0mm2 PVC copper cable, Neutral (Blue)",         "M",    11.27),
+        ("Air Conditioner Point - 4.0mm2 PVC copper cable, Earth (Yellow/Green)",   "M",    11.27),
 
         # ===== D. WATER HEATER POINTS (4.0mm2) =====
         # Boxes
@@ -22501,9 +22501,9 @@ _BOQ_SECTION_ITEM_CATALOG = {
         # Conduit point
         ("Water Heater Point - 25mm PVC conduit pipe",                              "Nos.",   19.50),
         # Wires (Live + Neutral + Earth)
-        ("Water Heater Point - 4.0mm2 PVC copper cable, Live (Brown)",              "Coils", 1037),
-        ("Water Heater Point - 4.0mm2 PVC copper cable, Neutral (Blue)",            "Coils", 1037),
-        ("Water Heater Point - 4.0mm2 PVC copper cable, Earth (Yellow/Green)",      "Coils", 1037),
+        ("Water Heater Point - 4.0mm2 PVC copper cable, Live (Brown)",              "M",    11.27),
+        ("Water Heater Point - 4.0mm2 PVC copper cable, Neutral (Blue)",            "M",    11.27),
+        ("Water Heater Point - 4.0mm2 PVC copper cable, Earth (Yellow/Green)",      "M",    11.27),
 
         # ===== LEGACY / GENERAL ITEMS (preserved for back-compat with existing BOQ rows) =====
         ("20mm PVC rigid conduit pipe (3m length, priced per metre)", "M",    5),
@@ -22517,19 +22517,19 @@ _BOQ_SECTION_ITEM_CATALOG = {
         ("150mm x 75mm steel conduit boxes",                  "Nos.",   18),
         ("Circular boxes of various ways",                    "Nos.",    5),
         ("Junction boxes",                                    "Nos.",    8),
-        ("1.5mm2 PVC insulated copper cable (Brown)",         "Coils", 391),
-        ("1.5mm2 PVC insulated copper cable (Blue)",          "Coils", 391),
-        ("1.5mm2 PVC insulated copper cable (Grey)",          "Coils", 391),
-        ("1.5mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 391),
-        ("2.5mm2 PVC insulated copper cable (Brown)",         "Coils", 653),
-        ("2.5mm2 PVC insulated copper cable (Blue)",          "Coils", 653),
-        ("2.5mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 653),
-        ("4.0mm2 PVC insulated copper cable (Brown)",         "Coils", 1037),
-        ("4.0mm2 PVC insulated copper cable (Blue)",          "Coils", 1037),
-        ("4.0mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 1037),
-        ("6.0mm2 PVC insulated copper cable (Brown)",         "Coils", 1500),
-        ("6.0mm2 PVC insulated copper cable (Blue)",          "Coils", 1500),
-        ("6.0mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 1500),
+        ("1.5mm2 PVC insulated copper cable (Brown)",         "M",    4.25),
+        ("1.5mm2 PVC insulated copper cable (Blue)",          "M",    4.25),
+        ("1.5mm2 PVC insulated copper cable (Grey)",          "M",    4.25),
+        ("1.5mm2 PVC insulated copper cable (Yellow/Green)",  "M",    4.25),
+        ("2.5mm2 PVC insulated copper cable (Brown)",         "M",    7.10),
+        ("2.5mm2 PVC insulated copper cable (Blue)",          "M",    7.10),
+        ("2.5mm2 PVC insulated copper cable (Yellow/Green)",  "M",    7.10),
+        ("4.0mm2 PVC insulated copper cable (Brown)",         "M",    11.27),
+        ("4.0mm2 PVC insulated copper cable (Blue)",          "M",    11.27),
+        ("4.0mm2 PVC insulated copper cable (Yellow/Green)",  "M",    11.27),
+        ("6.0mm2 PVC insulated copper cable (Brown)",         "M",    16.30),
+        ("6.0mm2 PVC insulated copper cable (Blue)",          "M",    16.30),
+        ("6.0mm2 PVC insulated copper cable (Yellow/Green)",  "M",    16.30),
     ],
 
     "LUMINAIRES": [
@@ -23482,9 +23482,9 @@ _BOQ_SECTION_ITEM_CATALOG = {
         # Conduit point
         ("Supply and install Lighting Point - 20mm PVC conduit pipe",                                               "M",       5),
         # Wires (Live + Neutral + Control)
-        ("Wire Lighting Point in conduit using 1.5mm2 PVC insulated copper cable, Live (Brown)",                    "Coils", 391),
-        ("Wire Lighting Point in conduit using 1.5mm2 PVC insulated copper cable, Neutral (Blue)",                  "Coils", 391),
-        ("Wire Lighting Point in conduit using 1.5mm2 PVC insulated copper cable, Control (Grey)",                  "Coils", 391),
+        ("Wire Lighting Point in conduit using 1.5mm2 PVC insulated copper cable, Live (Brown)",                    "M",    4.25),
+        ("Wire Lighting Point in conduit using 1.5mm2 PVC insulated copper cable, Neutral (Blue)",                  "M",    4.25),
+        ("Wire Lighting Point in conduit using 1.5mm2 PVC insulated copper cable, Control (Grey)",                  "M",    4.25),
 
         # ===== B. SOCKET OUTLET POINTS (2.5mm2) =====
         # Boxes
@@ -23492,9 +23492,9 @@ _BOQ_SECTION_ITEM_CATALOG = {
         # Conduit point
         ("Supply and install Socket Outlet Point - 20mm PVC conduit pipe",                                          "M",       5),
         # Wires (Live + Neutral + Earth)
-        ("Wire Socket Outlet Point in conduit using 2.5mm2 PVC insulated copper cable, Live (Brown)",               "Coils", 653),
-        ("Wire Socket Outlet Point in conduit using 2.5mm2 PVC insulated copper cable, Neutral (Blue)",             "Coils", 653),
-        ("Wire Socket Outlet Point in conduit using 2.5mm2 PVC insulated copper cable, Earth (Yellow/Green)",       "Coils", 653),
+        ("Wire Socket Outlet Point in conduit using 2.5mm2 PVC insulated copper cable, Live (Brown)",               "M",    7.10),
+        ("Wire Socket Outlet Point in conduit using 2.5mm2 PVC insulated copper cable, Neutral (Blue)",             "M",    7.10),
+        ("Wire Socket Outlet Point in conduit using 2.5mm2 PVC insulated copper cable, Earth (Yellow/Green)",       "M",    7.10),
 
         # ===== C. AIR CONDITIONER POINTS (4.0mm2) =====
         # Boxes
@@ -23502,9 +23502,9 @@ _BOQ_SECTION_ITEM_CATALOG = {
         # Conduit point
         ("Supply and install Air Conditioner Point - 25mm PVC conduit pipe",                                        "Nos.",   19.50),
         # Wires (Live + Neutral + Earth)
-        ("Wire Air Conditioner Point in conduit using 4.0mm2 PVC insulated copper cable, Live (Brown)",             "Coils", 1037),
-        ("Wire Air Conditioner Point in conduit using 4.0mm2 PVC insulated copper cable, Neutral (Blue)",           "Coils", 1037),
-        ("Wire Air Conditioner Point in conduit using 4.0mm2 PVC insulated copper cable, Earth (Yellow/Green)",     "Coils", 1037),
+        ("Wire Air Conditioner Point in conduit using 4.0mm2 PVC insulated copper cable, Live (Brown)",             "M",    11.27),
+        ("Wire Air Conditioner Point in conduit using 4.0mm2 PVC insulated copper cable, Neutral (Blue)",           "M",    11.27),
+        ("Wire Air Conditioner Point in conduit using 4.0mm2 PVC insulated copper cable, Earth (Yellow/Green)",     "M",    11.27),
 
         # ===== D. WATER HEATER POINTS (4.0mm2) =====
         # Boxes
@@ -23512,9 +23512,9 @@ _BOQ_SECTION_ITEM_CATALOG = {
         # Conduit point
         ("Supply and install Water Heater Point - 25mm PVC conduit pipe",                                           "Nos.",   19.50),
         # Wires (Live + Neutral + Earth)
-        ("Wire Water Heater Point in conduit using 4.0mm2 PVC insulated copper cable, Live (Brown)",                "Coils", 1037),
-        ("Wire Water Heater Point in conduit using 4.0mm2 PVC insulated copper cable, Neutral (Blue)",              "Coils", 1037),
-        ("Wire Water Heater Point in conduit using 4.0mm2 PVC insulated copper cable, Earth (Yellow/Green)",        "Coils", 1037),
+        ("Wire Water Heater Point in conduit using 4.0mm2 PVC insulated copper cable, Live (Brown)",                "M",    11.27),
+        ("Wire Water Heater Point in conduit using 4.0mm2 PVC insulated copper cable, Neutral (Blue)",              "M",    11.27),
+        ("Wire Water Heater Point in conduit using 4.0mm2 PVC insulated copper cable, Earth (Yellow/Green)",        "M",    11.27),
 
         # ===== LEGACY / GENERAL ITEMS (preserved for back-compat with existing BOQ rows) =====
         ("Supply and install 20mm PVC rigid conduit pipe (3m length, priced per metre)",                           "M",    5),
@@ -23528,19 +23528,19 @@ _BOQ_SECTION_ITEM_CATALOG = {
         ("Supply and install 150mm x 75mm steel conduit boxes",                                                     "Nos.",   18),
         ("Supply and install circular boxes of various ways",                                                       "Nos.",    5),
         ("Supply and install junction boxes",                                                                       "Nos.",    8),
-        ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Brown)",         "Coils", 391),
-        ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Blue)",          "Coils", 391),
-        ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Grey)",          "Coils", 391),
-        ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 391),
-        ("Wire the following point in conduit / trunking using 2.5mm2 PVC insulated copper cable (Brown)",         "Coils", 653),
-        ("Wire the following point in conduit / trunking using 2.5mm2 PVC insulated copper cable (Blue)",          "Coils", 653),
-        ("Wire the following point in conduit / trunking using 2.5mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 653),
-        ("Wire the following point in conduit / trunking using 4.0mm2 PVC insulated copper cable (Brown)",         "Coils", 1037),
-        ("Wire the following point in conduit / trunking using 4.0mm2 PVC insulated copper cable (Blue)",          "Coils", 1037),
-        ("Wire the following point in conduit / trunking using 4.0mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 1037),
-        ("Wire the following point in conduit / trunking using 6.0mm2 PVC insulated copper cable (Brown)",         "Coils", 1500),
-        ("Wire the following point in conduit / trunking using 6.0mm2 PVC insulated copper cable (Blue)",          "Coils", 1500),
-        ("Wire the following point in conduit / trunking using 6.0mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 1500),
+        ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Brown)",         "M",    4.25),
+        ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Blue)",          "M",    4.25),
+        ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Grey)",          "M",    4.25),
+        ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Yellow/Green)",  "M",    4.25),
+        ("Wire the following point in conduit / trunking using 2.5mm2 PVC insulated copper cable (Brown)",         "M",    7.10),
+        ("Wire the following point in conduit / trunking using 2.5mm2 PVC insulated copper cable (Blue)",          "M",    7.10),
+        ("Wire the following point in conduit / trunking using 2.5mm2 PVC insulated copper cable (Yellow/Green)",  "M",    7.10),
+        ("Wire the following point in conduit / trunking using 4.0mm2 PVC insulated copper cable (Brown)",         "M",    11.27),
+        ("Wire the following point in conduit / trunking using 4.0mm2 PVC insulated copper cable (Blue)",          "M",    11.27),
+        ("Wire the following point in conduit / trunking using 4.0mm2 PVC insulated copper cable (Yellow/Green)",  "M",    11.27),
+        ("Wire the following point in conduit / trunking using 6.0mm2 PVC insulated copper cable (Brown)",         "M",    16.30),
+        ("Wire the following point in conduit / trunking using 6.0mm2 PVC insulated copper cable (Blue)",          "M",    16.30),
+        ("Wire the following point in conduit / trunking using 6.0mm2 PVC insulated copper cable (Yellow/Green)",  "M",    16.30),
     ],
 
     "LUMINAIRES": [
