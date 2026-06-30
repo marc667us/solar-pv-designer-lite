@@ -21467,6 +21467,7 @@ _BOQ_SECTION_TITLES = {
     2: [
         "SWITCH BOARDS AND DISTRIBUTION BOARDS",
         "SUBFEEDER CABLES AND EARTHLEADS",
+        "EARTHING AND EARTH LEADS",
         "WIRING OF POINTS",
         "LUMINAIRES",
         "ACCESSORIES",
@@ -22118,6 +22119,36 @@ _BOQ_SECTION_ITEM_CATALOG = {
         ("100mm diameter PVC pipe",                                                "M",    25),
         ("75mm diameter PVC pipe",                                                 "M",    18),
         ("50mm diameter PVC pipe",                                                 "M",    12),
+    ],
+
+    # ===== EARTHING AND EARTH LEADS (Bill 2 Section D) ===================
+    "EARTHING AND EARTH LEADS": [
+        # --- Earth electrode + inspection chamber ---
+        ("Prefab concrete inspection chamber c/w cast-iron cover",       "No.",  457.13),
+        ("Prefab plastic earth inspection chamber c/w lockable cover",   "No.",  385),
+        # --- Earth rods (pure copper) ---
+        ("Pure copper earth rod 1.5m c/w driving stud + spike",          "No.", 1200),
+        ("Pure copper earth rod 2.4m c/w driving stud + spike",          "No.", 1800),
+        ("Pure copper earth rod 3.0m c/w driving stud + spike",          "No.", 2400),
+        # --- Conduit pipes (per metre) ---
+        ("50mm diameter PVC conduit pipe (priced per metre)",            "M",     12),
+        ("75mm diameter PVC conduit pipe (priced per metre)",            "M",     18),
+        ("100mm diameter PVC conduit pipe (priced per metre)",           "M",     25),
+        # --- Earth-lead cables (single-core PVC copper, 10mm2 and up) ---
+        ("1c x 10mm2 PVC insulated copper earth lead (Green/Yellow)",    "M",     27),
+        ("1c x 16mm2 PVC insulated copper earth lead (Green/Yellow)",    "M",     42),
+        ("1c x 25mm2 PVC insulated copper earth lead (Green/Yellow)",    "M",     65),
+        ("1c x 35mm2 PVC insulated copper earth lead (Green/Yellow)",    "M",    120),
+        ("1c x 50mm2 PVC insulated copper earth lead (Green/Yellow)",    "M",    170),
+        ("1c x 70mm2 PVC insulated copper earth lead (Green/Yellow)",    "M",    298),
+        # --- Steel junction boxes with covers ---
+        ("Steel junction box 100x100x50 mm c/w cover (IP54)",            "No.",   28),
+        ("Steel junction box 150x150x75 mm c/w cover (IP54)",            "No.",   45),
+        ("Steel junction box 200x200x100 mm c/w cover (IP65)",           "No.",   75),
+        # --- Earth rod clamps ---
+        ("Earth rod clamp (brass, 5/8 inch rod)",                       "No.",   45),
+        ("Earth rod clamp (heavy duty, copper)",                         "No.",   65),
+        ("Earth lead tape clamp",                                        "No.",   35),
     ],
 
     "WIRING OF POINTS": [
@@ -23061,6 +23092,36 @@ _BOQ_SECTION_ITEM_CATALOG = {
         ("Supply, lay and connect 1c x 10mm2 PVC Insulated copper cable c/w connecting accessories as Tropical or approved equal",      "M",   27),
         ("Supply and install 1500mm copper earth rod, buried 1.5m below ground with soil treatment",                                    "Set",1200),
         ("Supply, lay and connect 1c x 240mm2 bare copper cable as earth jumper c/w accessories",                                       "M",  700),
+    ],
+
+    # ===== EARTHING AND EARTH LEADS (Bill 2 Section D, v3 spec-formatted) ===
+    "EARTHING AND EARTH LEADS": [
+        # --- Earth electrode + inspection chamber ---
+        ("Supply and install prefab concrete inspection chamber c/w cast-iron cover",                                  "No.",  457.13),
+        ("Supply and install prefab plastic earth inspection chamber c/w lockable cover",                              "No.",  385),
+        # --- Earth rods (pure copper) ---
+        ("Supply and install pure copper earth rod 1.5m c/w driving stud + spike",                                     "No.", 1200),
+        ("Supply and install pure copper earth rod 2.4m c/w driving stud + spike",                                     "No.", 1800),
+        ("Supply and install pure copper earth rod 3.0m c/w driving stud + spike",                                     "No.", 2400),
+        # --- Conduit pipes (per metre) ---
+        ("Supply and install 50mm diameter PVC conduit pipe (priced per metre)",                                       "M",     12),
+        ("Supply and install 75mm diameter PVC conduit pipe (priced per metre)",                                       "M",     18),
+        ("Supply and install 100mm diameter PVC conduit pipe (priced per metre)",                                      "M",     25),
+        # --- Earth-lead cables (single-core PVC copper, 10mm2 and up) ---
+        ("Supply, lay and terminate 1c x 10mm2 PVC insulated copper earth lead (Green/Yellow)",                        "M",     27),
+        ("Supply, lay and terminate 1c x 16mm2 PVC insulated copper earth lead (Green/Yellow)",                        "M",     42),
+        ("Supply, lay and terminate 1c x 25mm2 PVC insulated copper earth lead (Green/Yellow)",                        "M",     65),
+        ("Supply, lay and terminate 1c x 35mm2 PVC insulated copper earth lead (Green/Yellow)",                        "M",    120),
+        ("Supply, lay and terminate 1c x 50mm2 PVC insulated copper earth lead (Green/Yellow)",                        "M",    170),
+        ("Supply, lay and terminate 1c x 70mm2 PVC insulated copper earth lead (Green/Yellow)",                        "M",    298),
+        # --- Steel junction boxes with covers ---
+        ("Supply and install steel junction box 100x100x50 mm c/w cover (IP54)",                                       "No.",   28),
+        ("Supply and install steel junction box 150x150x75 mm c/w cover (IP54)",                                       "No.",   45),
+        ("Supply and install steel junction box 200x200x100 mm c/w cover (IP65)",                                      "No.",   75),
+        # --- Earth rod clamps ---
+        ("Supply and install earth rod clamp (brass, 5/8 inch rod)",                                                  "No.",   45),
+        ("Supply and install earth rod clamp (heavy duty, copper)",                                                    "No.",   65),
+        ("Supply and install earth lead tape clamp",                                                                   "No.",   35),
     ],
 
     "WIRING OF POINTS": [
@@ -25548,37 +25609,48 @@ _BOQ_SERVICE_BILL_SKELETON = {
                 {"desc": "1C x 10mm² PVC earth lead",                              "unit": "m",   "qty": 0, "basic": 0, "spec": "Green/yellow"},
                 {"desc": "Cable gland and lug kit (per cable size)",               "unit": "Set", "qty": 0, "basic": 0, "spec": "Brass, BS 6121"},
             ]},
-            {"letter": "D", "title": "WIRING OF POINTS", "subsection": "Lighting + socket circuits", "items": [
+            {"letter": "D", "title": "EARTHING AND EARTH LEADS", "subsection": "", "items": [
+                {"desc": "Prefab concrete inspection chamber c/w cast-iron cover", "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "Pure copper earth rod 1.5m c/w driving stud + spike",    "unit": "No.", "qty": 0, "basic": 0, "spec": "BS 7430"},
+                {"desc": "50mm PVC conduit pipe (priced per metre)",               "unit": "m",   "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "75mm PVC conduit pipe (priced per metre)",               "unit": "m",   "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "100mm PVC conduit pipe (priced per metre)",              "unit": "m",   "qty": 0, "basic": 0, "spec": ""},
+                {"desc": "1c x 10mm² PVC insulated copper earth lead",      "unit": "m",   "qty": 0, "basic": 0, "spec": "Green/Yellow"},
+                {"desc": "1c x 25mm² PVC insulated copper earth lead",      "unit": "m",   "qty": 0, "basic": 0, "spec": "Green/Yellow"},
+                {"desc": "Steel junction box 150x150x75 mm c/w cover",             "unit": "No.", "qty": 0, "basic": 0, "spec": "IP54"},
+                {"desc": "Earth rod clamp (brass)",                                "unit": "No.", "qty": 0, "basic": 0, "spec": ""},
+            ]},
+            {"letter": "E", "title": "WIRING OF POINTS", "subsection": "Lighting + socket circuits", "items": [
                 {"desc": "1.5mm² PVC single copper conductor",                     "unit": "Roll", "qty": 0, "basic": 0, "spec": "BS 6004, R/B/Y/G&Y per phase colour"},
                 {"desc": "2.5mm² PVC single copper conductor",                     "unit": "Roll", "qty": 0, "basic": 0, "spec": "BS 6004"},
                 {"desc": "4.0mm² PVC single copper conductor",                     "unit": "Roll", "qty": 0, "basic": 0, "spec": "BS 6004"},
                 {"desc": "20mm PVC conduit + boxes (Heavy gauge)",                 "unit": "Lot", "qty": 0, "basic": 0, "spec": "BS 6099"},
             ]},
-            {"letter": "E", "title": "LUMINAIRES", "subsection": "", "items": [
+            {"letter": "F", "title": "LUMINAIRES", "subsection": "", "items": [
                 {"desc": "LED panel light 600x600 (40W, 4000K)",                   "unit": "No.", "qty": 0, "basic": 0, "spec": "UGR<19, recessed"},
                 {"desc": "LED downlight 18W (4000K)",                              "unit": "No.", "qty": 0, "basic": 0, "spec": "Recessed, IP44 bathroom-rated"},
                 {"desc": "LED batten 4ft (36W)",                                   "unit": "No.", "qty": 0, "basic": 0, "spec": "Surface, BS EN 60598"},
                 {"desc": "Emergency exit luminaire (3hr maintained)",              "unit": "No.", "qty": 0, "basic": 0, "spec": "Self-test, BS EN 60598-2-22"},
             ]},
-            {"letter": "F", "title": "ACCESSORIES", "subsection": "", "items": [
+            {"letter": "G", "title": "ACCESSORIES", "subsection": "", "items": [
                 {"desc": "13A switched socket outlet (single)",                    "unit": "No.", "qty": 0, "basic": 0, "spec": "White moulded, BS 1363"},
                 {"desc": "13A switched socket outlet (double)",                    "unit": "No.", "qty": 0, "basic": 0, "spec": "White moulded, BS 1363"},
                 {"desc": "1-gang 1-way wall switch (10A)",                         "unit": "No.", "qty": 0, "basic": 0, "spec": "White moulded, BS 3676"},
                 {"desc": "2-gang 2-way wall switch (10A)",                         "unit": "No.", "qty": 0, "basic": 0, "spec": "White moulded"},
                 {"desc": "Ceiling rose with hook",                                 "unit": "No.", "qty": 0, "basic": 0, "spec": "BS 67"},
             ]},
-            {"letter": "G", "title": "BONDING AND EARTHING", "subsection": "", "items": [
+            {"letter": "H", "title": "BONDING AND EARTHING", "subsection": "", "items": [
                 {"desc": "Main earth bar (drilled copper)",                        "unit": "No.", "qty": 0, "basic": 0, "spec": "Insulated, lockable enclosure"},
                 {"desc": "16mm² PVC earth conductor",                              "unit": "m",   "qty": 0, "basic": 0, "spec": "Green/yellow"},
                 {"desc": "Earth rod 1.5m + clamp + inspection pit",                "unit": "Set", "qty": 0, "basic": 0, "spec": "Copper-bonded, BS 7430"},
             ]},
-            {"letter": "H", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
+            {"letter": "I", "title": "TESTING AND COMMISSIONING", "subsection": "", "items": [
                 {"desc": "Insulation resistance test (per circuit)",               "unit": "Item", "qty": 0, "basic": 0, "spec": "500V Megger, BS 7671"},
                 {"desc": "Earth loop impedance test",                              "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
                 {"desc": "RCD operation test",                                     "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
                 {"desc": "Phase rotation test",                                    "unit": "Item", "qty": 0, "basic": 0, "spec": ""},
             ]},
-            {"letter": "I", "title": "DOCUMENTATION AND HANDOVER", "subsection": "", "items": [
+            {"letter": "J", "title": "DOCUMENTATION AND HANDOVER", "subsection": "", "items": [
                 {"desc": "As-built drawings (PDF + DWG)",                          "unit": "Set", "qty": 0, "basic": 0, "spec": ""},
                 {"desc": "Operation and Maintenance manual",                       "unit": "Set", "qty": 0, "basic": 0, "spec": "Printed + USB"},
                 {"desc": "Test certificates (electrical)",                         "unit": "Set", "qty": 0, "basic": 0, "spec": "BS 7671 Schedule of Test Results"},
@@ -32385,6 +32457,8 @@ _BOQ_SECTION_SUBHEADINGS = {
         "Supply, lay and terminate as armoured or non-armoured cables of approved brands e.g. Tropical or Kable Metal",
     "SUBFEEDER CABLES AND EARTHLEADS":
         "Supply, lay and terminate as armoured or non-armoured cables of approved brands e.g. Tropical or Kable Metal",
+    "EARTHING AND EARTH LEADS":
+        "Supply, install and connect the following earthing items as BS 7430 / IEC 62561 with copper earth rods, PVC conduits and single-core copper earth leads",
     "WIRING OF POINTS":
         "Wire the following points in conduit/trunking as directed using PVC insulated copper cable",
     "LUMINAIRES":
