@@ -6,7 +6,7 @@
      bill_no, bill_name, section_letter, section_title, subsection_label,
      catalog (list of (desc, unit, basic)), existing (list of saved rows)
 #}
-{% set sid = bill_no|string ~ '_' ~ section_letter|string %}
+{% set sid = bill_no|string ~ '_' ~ section_letter|string ~ '_' ~ (instance_id|default(0)|string) %}
 
 <div class="solar-card p-3 mb-3" id="sec_{{ sid }}" data-sec-id="{{ sid }}" style="border-left:3px solid var(--solar-gold,#f59e0b)">
   <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">

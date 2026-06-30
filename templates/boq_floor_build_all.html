@@ -94,7 +94,7 @@
       <div class="text-secondary small ms-auto">{{ bill.sections|length }} section(s)</div>
     </div>
     {% for sec in bill.sections %}
-      {% with bill_no=bill.no, bill_name=bill.name, section_letter=sec.letter, section_title=sec.title, subsection_label=sec.subsection, catalog=(sec.catalog or []), existing=(sec['items'] or []) %}
+      {% with bill_no=bill.no, bill_name=bill.name, section_letter=sec.letter, section_title=sec.title, subsection_label=sec.subsection, catalog=(sec.catalog or []), existing=(sec['items'] or []), instance_id=loop.index0 %}
         {% include '_boq_section_grid_inline.html' %}
       {% endwith %}
     {% endfor %}
