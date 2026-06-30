@@ -1,0 +1,91 @@
+name: Rollback KC Memory Patch
+
+# The "Fix KC Memory OOM" workflow set 4 env vars on solarpro-keycloak that
+# caused the next deploy to fail at update_in_progress. Render kept the OLD
+# container running, but the staged env vars will block every future deploy.
+# This workflow DELETEs those 4 env vars so the service returns to baseline.
+#
+# Trigger:  gh workflow run "Rollback KC Memory Patch"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Resolve solarpro-keycloak service ID
+        run: |
+          set -euo pipefail
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services?name=solarpro-keycloak&limit=10" > /tmp/svc.json
+          KC_ID=$(jq -r '.[] | .service | select(.name=="solarpro-keycloak") | .id' /tmp/svc.json | head -1)
+          if [ -z "$KC_ID" ] || [ "$KC_ID" = "null" ]; then
+            echo "::error::Could not resolve solarpro-keycloak service id"; exit 1
+          fi
+          echo "KC_SERVICE_ID=$KC_ID" >> "$GITHUB_ENV"
+          echo "Resolved KC service id=$KC_ID"
+
+      - name: Delete the 4 env vars added by the failed memory-fix workflow
+        run: |
+          set -uo pipefail
+          for KEY in JAVA_OPTS_APPEND KC_DB_POOL_MAX_SIZE KC_DB_POOL_INITIAL_SIZE KC_DB_POOL_MIN_SIZE; do
+            STATUS=$(curl -s -o /tmp/r.json -w "%{http_code}" -X DELETE \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$KC_SERVICE_ID/env-vars/$KEY")
+            echo "  DELETE $KEY -> HTTP $STATUS"
+            if [ "$STATUS" != "204" ] && [ "$STATUS" != "200" ] && [ "$STATUS" != "404" ]; then
+              echo "::warning::Unexpected status $STATUS deleting $KEY"
+              head -c 200 /tmp/r.json || true
+            fi
+          done
+
+      - name: Trigger a fresh deploy with the baseline env
+        run: |
+          set -euo pipefail
+          DEP=$(curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$KC_SERVICE_ID/deploys" \
+            -d '{"clearCache":"do_not_clear"}' \
+            | jq -r '.id')
+          echo "Triggered deploy: $DEP"
+          echo "KC_DEPLOY_ID=$DEP" >> "$GITHUB_ENV"
+
+      - name: Wait for the deploy to finish (or roll back to old container)
+        run: |
+          set -uo pipefail
+          for i in $(seq 1 60); do
+            STATUS=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$KC_SERVICE_ID/deploys/$KC_DEPLOY_ID" \
+              | jq -r '.status')
+            echo "[$i] deploy status: $STATUS"
+            case "$STATUS" in
+              live)            echo "Deploy LIVE -- rollback succeeded"; exit 0 ;;
+              deactivated|build_failed|update_failed|canceled)
+                                echo "::warning::Rollback deploy ended in $STATUS -- old container still serving"
+                                exit 0 ;;
+            esac
+            sleep 10
+          done
+
+      - name: Confirm KC is responding after rollback
+        run: |
+          set -uo pipefail
+          for i in $(seq 1 10); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+              "https://auth.aiappinvent.com/realms/solarpro/.well-known/openid-configuration" || echo "000")
+            echo "[$i] KC discovery -> $CODE"
+            if [ "$CODE" = "200" ]; then
+              echo "OK: KC serving traffic on baseline config."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::warning::KC not returning 200 yet; check Render dashboard"
