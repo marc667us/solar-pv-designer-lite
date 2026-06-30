@@ -60,7 +60,7 @@
         <td></td>
         <td class="fw-black" style="font-size:15px">
           <a href="{{ url_for('boq_building_summary', pid=project.id, bid=building.id) }}" class="text-warning text-decoration-none" title="Open this building's summary">
-            Total carried to Building Summary <i class="bi bi-arrow-right-circle"></i>
+            FLOOR TOTAL CARRIED TO BUILDING SUMMARY <i class="bi bi-arrow-right-circle"></i>
           </a>
         </td>
         <td class="text-end fw-black text-warning" style="font-size:17px">{{ (carried)|fmt }}</td>
@@ -171,7 +171,7 @@
       <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
         <td class="fw-black" style="font-size:15px">
           <a href="{{ url_for('boq_building_summary', pid=project.id, bid=building.id) }}" class="text-warning text-decoration-none">
-            Carried to Building Summary <i class="bi bi-arrow-right-circle"></i>
+            FLOOR TOTAL CARRIED TO BUILDING SUMMARY <i class="bi bi-arrow-right-circle"></i>
           </a>
         </td>
         <td class="text-end fw-black text-warning" style="font-size:17px">{{ (carried)|fmt }}</td>
