@@ -2034,8 +2034,13 @@ def login():
     if request.method in ("GET", "POST"):
         _kc_next = request.args.get("next")
         if _kc_next:
-            return redirect(url_for("oidc.auth_login", next=_kc_next))
-        return redirect(url_for("oidc.auth_login"))
+            _r = redirect(url_for("oidc.auth_login", next=_kc_next))
+        else:
+            _r = redirect(url_for("oidc.auth_login"))
+        _r.headers["Cache-Control"] = "no-store, must-revalidate"
+        _r.headers["Pragma"] = "no-cache"
+        _r.headers["Expires"] = "0"
+        return _r
     if request.method == "POST":
         csrf_protect()
         username = request.form.get("username", "").strip()

@@ -215,7 +215,11 @@ def auth_login():
         "code_challenge": challenge,
         "code_challenge_method": "S256",
     }
-    return redirect(f"{_authorize_url()}?{urlencode(params)}")
+    _resp = redirect(f"{_authorize_url()}?{urlencode(params)}")
+    _resp.headers["Cache-Control"] = "no-store, must-revalidate"
+    _resp.headers["Pragma"] = "no-cache"
+    _resp.headers["Expires"] = "0"
+    return _resp
 
 
 @oidc_bp.route("/register", methods=["GET"])
@@ -251,7 +255,11 @@ def auth_register():
         "code_challenge": challenge,
         "code_challenge_method": "S256",
     }
-    return redirect(f"{_registrations_url()}?{urlencode(params)}")
+    _resp = redirect(f"{_registrations_url()}?{urlencode(params)}")
+    _resp.headers["Cache-Control"] = "no-store, must-revalidate"
+    _resp.headers["Pragma"] = "no-cache"
+    _resp.headers["Expires"] = "0"
+    return _resp
 
 
 def _oidc_fail_redirect(code: str, reason: str = "", status_hint: int = 0):
