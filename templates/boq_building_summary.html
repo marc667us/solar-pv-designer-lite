@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Building Summary — {{ building.building_name }}{% endblock %}
+{% block content %}
+
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    body { background: white !important; color: black !important; }
+    .solar-card { background: white !important; border-color: #ccc !important; color: black !important; }
+    table { color: black !important; }
+  }
+</style>
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 no-print">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('boq_projects_list') }}" class="text-warning">BOQ Projects</a> &middot;
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="text-warning">{{ project.project_name }}</a> &middot;
+      <a href="{{ url_for('boq_building_view', pid=project.id, bid=building.id) }}" class="text-warning">{{ building.building_name }}</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-building text-warning me-1"></i>{{ building.building_name }} &mdash; Building Summary</h5>
+  </div>
+  <button onclick="window.print()" class="btn btn-warning fw-bold btn-sm"><i class="bi bi-printer-fill me-1"></i>Print / Save as PDF</button>
+</div>
+
+<div class="solar-card p-4">
+  <div class="text-center mb-3">
+    <div class="text-warning fw-bold small" style="letter-spacing:2px;text-transform:uppercase">{{ building.building_name }} &mdash; SUMMARY</div>
+    <h4 class="fw-black mb-1">{{ project.project_name }}</h4>
+    {% if project.client_name %}<div class="text-secondary small">Client: {{ project.client_name }}</div>{% endif %}
+  </div>
+
+  <table class="table align-middle" style="color:#e0e0f0;font-size:14px">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
+      <tr>
+        <th style="width:30px">#</th>
+        <th>Floor</th>
+        <th class="small">Level</th>
+        <th class="text-end">Subtotal</th>
+        <th class="text-end" style="width:120px">% of Building</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in floors %}
+      <tr>
+        <td class="text-secondary">{{ loop.index }}</td>
+        <td>
+          <strong>
+            <a href="{{ url_for('boq_floor_summary', pid=project.id, bid=building.id, fid=f.fid) }}" class="text-warning">{{ f.floor_name }}</a>
+          </strong>
+        </td>
+        <td class="small text-secondary">{{ f.floor_level }}</td>
+        <td class="text-end fw-bold">{{ (f.subtotal)|money }}</td>
+        <td class="text-end text-secondary">
+          {% if building_total > 0 %}{{ '%.1f'|format(f.subtotal * 100 / building_total) }}%{% else %}&mdash;{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      {% if not floors %}
+      <tr><td colspan="5" class="text-secondary text-center small fst-italic py-3">No floors with priced items on this building yet.</td></tr>
+      {% endif %}
+      <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
+        <td></td>
+        <td class="fw-black" style="font-size:15px">
+          <a href="{{ url_for('boq_project_summary', pid=project.id) }}" class="text-warning text-decoration-none">
+            Total carried to Project Summary <i class="bi bi-arrow-right-circle"></i>
+          </a>
+        </td>
+        <td></td>
+        <td class="text-end fw-black text-warning" style="font-size:17px">{{ (building_total)|money }}</td>
+        <td class="text-end text-warning fw-bold">100.0%</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="text-end mt-3 no-print">
+    <a href="{{ url_for('boq_project_summary', pid=project.id) }}" class="btn btn-outline-warning btn-sm">
+      <i class="bi bi-arrow-right-circle me-1"></i>Go to Project Summary
+    </a>
+  </div>
+</div>
+
+{% endblock %}

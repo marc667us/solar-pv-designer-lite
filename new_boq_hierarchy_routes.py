@@ -560,6 +560,44 @@ def boq_project_boq(pid):
                            sections_lookup=dict(_BOQ_SECTIONS))
 
 
+@app.route("/boq-projects/<int:pid>/buildings/<int:bid>/summary")
+@login_required
+def boq_building_summary(pid, bid):
+    """Building-level summary: per-floor subtotals -> grand total
+    carried to Project Summary. Each floor row links to its own Bills
+    summary; the grand-total row links to the project summary."""
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    building = _boq_building_owned_or_404(bid, pid)
+    with get_db() as c:
+        per_floor = c.execute(
+            "SELECT f.id AS fid, f.floor_name, f.floor_level, "
+            "       COALESCE(SUM(i.total_amount),0) AS subtotal "
+            "FROM boq_floors f "
+            "LEFT JOIN boq_floor_items i ON i.floor_id=f.id "
+            "WHERE f.building_id=? "
+            "GROUP BY f.id "
+            "ORDER BY f.floor_level, f.id",
+            (bid,),
+        ).fetchall()
+    floors = [
+        {
+            "fid": int(r["fid"]),
+            "floor_name": r["floor_name"],
+            "floor_level": r["floor_level"],
+            "subtotal": float(r["subtotal"] or 0),
+        }
+        for r in per_floor
+    ]
+    building_total = sum(f["subtotal"] for f in floors)
+    return render_template(
+        "boq_building_summary.html",
+        user=current_user(),
+        project=project, building=building,
+        floors=floors, building_total=building_total,
+    )
+
+
 @app.route("/boq-projects/<int:pid>/summary")
 @login_required
 def boq_project_summary(pid):

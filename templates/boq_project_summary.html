@@ -24,7 +24,7 @@
     <tbody>
       {% for b in per_building %}
       <tr>
-        <td><strong>{{ b.building_name }}</strong></td>
+        <td><strong><a href="{{ url_for('boq_building_summary', pid=project.id, bid=b.id) }}" class="text-warning" title="Open this building's summary">{{ b.building_name }}</a></strong></td>
         <td class="small">{{ b.primary_purpose|title }}</td>
         <td class="small text-secondary">{{ b.purpose_subtype }}</td>
         <td class="text-end fw-bold text-warning">{{ (b.subtotal or 0)|money }}</td>

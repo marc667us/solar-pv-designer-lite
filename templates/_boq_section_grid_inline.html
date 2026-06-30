@@ -139,4 +139,26 @@
       </tbody>
     </table>
   </div>
+
+  {% if existing %}
+  {% set ns = namespace(t=0) %}
+  {% for it in existing %}{% set ns.t = ns.t + (it.total_amount or 0) %}{% endfor %}
+  <div class="d-flex justify-content-between align-items-center mt-2 px-3 py-2 flex-wrap gap-2"
+       style="background:rgba(245,158,11,.10);border-top:2px solid var(--solar-gold,#f59e0b);border-radius:0 0 6px 6px">
+    <div>
+      <span class="text-warning fw-bold small" style="letter-spacing:.5px;text-transform:uppercase">
+        Section {{ section_letter }} subtotal (saved rows)
+      </span>
+      <span class="text-secondary small ms-2">{{ existing|length }} row{{ '' if existing|length == 1 else 's' }}</span>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <span class="text-warning fw-black" style="font-size:16px">{{ ns.t|money }}</span>
+      <a href="{{ url_for('boq_floor_summary', pid=project.id, bid=building.id, fid=floor.id) }}"
+         class="btn btn-outline-warning btn-sm py-0 px-2" style="font-size:11px"
+         title="Open this floor's bills summary">
+        <i class="bi bi-arrow-right-circle me-1"></i>Carried to Floor Summary
+      </a>
+    </div>
+  </div>
+  {% endif %}
 </div>
