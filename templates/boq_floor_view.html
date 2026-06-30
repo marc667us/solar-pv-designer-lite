@@ -44,115 +44,15 @@
   <div class="kpi-value">{{ (floor_subtotal)|money }}</div>
 </div>
 
-{# ─── BOQ items grouped by Bill -> Section -> Sub-section ───────── #}
-{% if items %}
-{% set ns = namespace(prev_bill=None, prev_section=None, prev_sub=None) %}
-<div class="solar-card p-0 mb-3">
-  <table class="table table-sm align-middle mb-0" style="color:#e0e0f0;font-size:13px">
-    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
-      <tr>
-        <th style="width:40px">Item</th>
-        <th>Description</th>
-        <th class="text-end">Quantity</th>
-        <th>Unit</th>
-        <th class="text-end">Basic Price</th>
-        <th class="text-end">Supply Amount Rate</th>
-        <th class="text-end">Installation Amount Rate</th>
-        <th class="text-end">Total Amount Rate</th>
-        <th class="text-end">Amount</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for it in items %}
-      {% set bill_no = it.bill_no or 0 %}
-      {% set section_letter = (it.section_letter or '')|upper %}
-      {% set subsec = it.subsection_label or '' %}
-      {% set bill_name = it.bill_name or '' %}
-
-      {% if bill_no != ns.prev_bill %}
-      <tr style="background:#0a0a14">
-        <td colspan="10" class="fw-bold text-warning" style="text-transform:uppercase;letter-spacing:.5px;font-size:12.5px">
-          BILL No. {{ bill_no }} — {{ bill_name or 'OTHER' }}
-        </td>
-      </tr>
-      {% set ns.prev_bill = bill_no %}
-      {% set ns.prev_section = None %}
-      {% set ns.prev_sub = None %}
-      {% endif %}
-
-      {% if section_letter and section_letter != ns.prev_section %}
-      {% set sect_title_db = (it.section|replace('_',' ')|upper if it.section else '') %}
-      {# 2026-06-28: per-section editable heading + instructions overlay. #}
-      {% set _meta = (section_meta_map or {}).get((bill_no, section_letter), ('', '')) %}
-      {% set sect_title_show = _meta[0] if _meta[0] else sect_title_db %}
-      <tr style="background:#10102a">
-        <td colspan="10" class="text-warning fw-bold" style="text-transform:uppercase;font-size:11.5px;letter-spacing:.5px">
-          <div class="d-flex align-items-center justify-content-between">
-            <div><span class="me-2">{{ section_letter }}.</span>{{ sect_title_show }}</div>
-            <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill_no) }}" class="btn btn-outline-warning btn-sm" title="Add item to this section">
-              <i class="bi bi-plus-circle me-1"></i>Add item
-            </a>
-          </div>
-          {% if _meta[1] %}
-            <div class="text-info" style="font-size:11.5px;text-transform:none;letter-spacing:0;font-style:italic;font-weight:normal;margin-top:4px"><i class="bi bi-info-circle me-1"></i>{{ _meta[1] }}</div>
-          {% else %}
-            {% set _sh = boq_section_subheading(sect_title_db) %}
-            {% if _sh %}<div class="text-secondary" style="font-size:11.5px;text-transform:none;letter-spacing:0;font-style:italic;font-weight:normal;margin-top:4px">{{ _sh }}</div>{% endif %}
-          {% endif %}
-        </td>
-      </tr>
-      {% set ns.prev_section = section_letter %}
-      {% set ns.prev_sub = None %}
-      {% endif %}
-
-      {% if subsec and subsec != ns.prev_sub %}
-      <tr><td colspan="10" class="text-secondary" style="font-style:italic;font-size:12px;padding-left:1.5rem">
-        {{ subsec }}{% if it.specification %} — {{ it.specification }}{% endif %}
-      </td></tr>
-      {% set ns.prev_sub = subsec %}
-      {% endif %}
-
-      <tr>
-        <td class="text-warning fw-bold">{{ it.item_no_display or it.item_no or loop.index }}</td>
-        <td>
-          {{ it.description }}
-          {% if it.specification %}<div class="small text-secondary">{{ it.specification }}</div>{% endif %}
-        </td>
-        <td class="text-end">{{ (it.qty or 0)|fmt }}</td>
-        <td class="small">{{ it.unit }}</td>
-        <td class="text-end">{{ (it.bu_basic or 0)|fmt }}</td>
-        <td class="text-end">{{ (it.bu_supply or 0)|fmt }}</td>
-        <td class="text-end">{{ (it.bu_install or 0)|fmt }}</td>
-        <td class="text-end">{{ (it.final_built_up_rate or 0)|money }}</td>
-        <td class="text-end fw-bold text-warning">{{ (it.total_amount or 0)|money }}</td>
-        <td class="text-end" style="white-space:nowrap">
-          <form method="POST" action="{{ url_for('boq_floor_move_item', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" style="display:inline">
-            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-            <input type="hidden" name="dir" value="up">
-            <button class="btn btn-outline-light btn-sm" title="Move up" style="padding:.15rem .3rem"><i class="bi bi-arrow-up"></i></button>
-          </form>
-          <form method="POST" action="{{ url_for('boq_floor_move_item', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" style="display:inline">
-            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-            <input type="hidden" name="dir" value="down">
-            <button class="btn btn-outline-light btn-sm" title="Move down" style="padding:.15rem .3rem"><i class="bi bi-arrow-down"></i></button>
-          </form>
-          <a href="{{ url_for('boq_floor_item_edit', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" class="btn btn-outline-warning btn-sm" title="Edit" style="padding:.15rem .3rem"><i class="bi bi-pencil"></i></a>
-          <form method="POST" action="{{ url_for('boq_floor_delete_item', pid=project.id, bid=building.id, fid=floor.id, iid=it.id) }}" style="display:inline">
-            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove this item?')" title="Delete" style="padding:.15rem .3rem"><i class="bi bi-trash"></i></button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% else %}
+{# Items table removed 2026-06-30 -- the new flow is:
+   * Section-by-Section / Build all sections  -> add/edit items
+   * Generate Floor BOQ                       -> review + export
+   The old per-item arrows / delete table here was the retired Complete BOQ
+   look. Use the top buttons or Generate Floor BOQ to manage line items. #}
 <div class="solar-card p-4 mb-3" style="background:#0a0a14;border:1px solid #1e1e3a">
   <div class="text-center text-secondary">
     <i class="bi bi-folder2-open" style="font-size:36px"></i>
-    <p class="mt-2 mb-3">No items on this floor yet &mdash; pick a build mode below to load the BOQ sections from your Service Configuration.</p>
+    <p class="mt-2 mb-3">Pick a build mode below to add or edit BOQ items on this floor. Use <strong>Generate Floor BOQ</strong> above to review the saved BOQ and export PDF / Excel / Email.</p>
   </div>
   <div class="row g-3">
     <div class="col-md-6">
@@ -175,5 +75,4 @@
     </div>
   </div>
 </div>
-{% endif %}
 {% endblock %}
