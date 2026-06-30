@@ -19,7 +19,7 @@
   <h6 class="fw-bold mb-3"><i class="bi bi-building me-1 text-warning"></i>Per-building subtotals</h6>
   <table class="table table-sm align-middle" style="color:#e0e0f0;font-size:13px">
     <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
-      <tr><th>Building</th><th>Purpose</th><th>Subtype</th><th class="text-end">Subtotal</th></tr>
+      <tr><th>Building</th><th>Purpose</th><th>Subtype</th><th class="text-end">Subtotal</th><th class="text-end" style="width:120px">% of Project</th></tr>
     </thead>
     <tbody>
       {% for b in per_building %}
@@ -28,6 +28,7 @@
         <td class="small">{{ b.primary_purpose|title }}</td>
         <td class="small text-secondary">{{ b.purpose_subtype }}</td>
         <td class="text-end fw-bold text-warning">{{ (b.subtotal or 0)|money }}</td>
+        <td class="text-end text-secondary">{% if grand_total > 0 %}{{ '%.1f'|format((b.subtotal or 0) * 100 / grand_total) }}%{% else %}—{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -35,6 +36,7 @@
       <tr style="background:rgba(245,158,11,.10)">
         <td colspan="3" class="text-end fw-black">PROJECT GRAND TOTAL</td>
         <td class="text-end fw-black text-warning">{{ (grand_total)|money }}</td>
+        <td class="text-end fw-black text-warning">100.0%</td>
       </tr>
     </tfoot>
   </table>
@@ -44,7 +46,7 @@
   <h6 class="fw-bold mb-3"><i class="bi bi-layers me-1 text-warning"></i>Per-floor subtotals</h6>
   <table class="table table-sm align-middle" style="color:#e0e0f0;font-size:13px">
     <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px">
-      <tr><th>Building</th><th>Floor</th><th>Level</th><th class="text-end">Subtotal</th></tr>
+      <tr><th>Building</th><th>Floor</th><th>Level</th><th class="text-end">Subtotal</th><th class="text-end" style="width:120px">% of Project</th></tr>
     </thead>
     <tbody>
       {% for f in per_floor %}
@@ -53,6 +55,7 @@
         <td>{{ f.floor_name }}</td>
         <td class="small text-secondary">{{ f.floor_level }}</td>
         <td class="text-end fw-bold">{{ (f.subtotal or 0)|money }}</td>
+        <td class="text-end text-secondary">{% if grand_total > 0 %}{{ '%.1f'|format((f.subtotal or 0) * 100 / grand_total) }}%{% else %}—{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>

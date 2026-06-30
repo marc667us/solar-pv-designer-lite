@@ -33,7 +33,7 @@
 
   <table class="table align-middle" style="color:#e0e0f0;font-size:14px">
     <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
-      <tr><th>Item</th><th>Description</th><th class="text-end">Amount</th></tr>
+      <tr><th>Item</th><th>Description</th><th class="text-end">Amount</th><th class="text-end" style="width:120px">% of Floor</th></tr>
     </thead>
     <tbody>
       {% for b in bills %}
@@ -41,17 +41,20 @@
         <td class="text-secondary">{{ loop.index }}</td>
         <td><strong>BILL No. {{ b.bill_no }} — {{ b.bill_name }}</strong></td>
         <td class="text-end">{{ (b.subtotal)|money }}</td>
+        <td class="text-end text-secondary">{% if subtotal > 0 %}{{ '%.1f'|format(b.subtotal * 100 / subtotal) }}%{% else %}—{% endif %}</td>
       </tr>
       {% endfor %}
       <tr>
         <td></td>
         <td class="fw-bold" style="border-top:1px solid #1e1e3a">SUB TOTAL</td>
         <td class="text-end fw-bold" style="border-top:1px solid #1e1e3a">{{ (subtotal)|money }}</td>
+        <td class="text-end fw-bold text-secondary" style="border-top:1px solid #1e1e3a">100.0%</td>
       </tr>
       <tr>
         <td></td>
         <td>CONTINGENCIES ({{ (contingency_pct)|fmt }}%)</td>
         <td class="text-end">{{ (contingency)|fmt }}</td>
+        <td class="text-end text-secondary">+{{ (contingency_pct)|fmt }}%</td>
       </tr>
       <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
         <td></td>
@@ -61,6 +64,7 @@
           </a>
         </td>
         <td class="text-end fw-black text-warning" style="font-size:17px">{{ (carried)|fmt }}</td>
+        <td class="text-end fw-black text-warning">{{ '%.1f'|format(100 + contingency_pct) }}%</td>
       </tr>
     </tbody>
   </table>
@@ -78,5 +82,40 @@
     </div>
   </form>
 </div>
+
+{% if sections %}
+<div class="solar-card p-4 mt-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-grid-3x3-gap text-warning me-1"></i>Per-section breakdown</h6>
+  <table class="table table-sm align-middle" style="color:#e0e0f0;font-size:13px">
+    <thead style="color:#9090c0;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
+      <tr>
+        <th style="width:80px">Bill</th>
+        <th style="width:60px">Section</th>
+        <th>Title</th>
+        <th class="text-end" style="width:70px">Rows</th>
+        <th class="text-end">Subtotal</th>
+        <th class="text-end" style="width:120px">% of Floor</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sections %}
+      <tr>
+        <td class="text-secondary small">{{ s.bill_no }}</td>
+        <td class="fw-bold text-warning">{{ s.section_letter }}</td>
+        <td class="small">{{ s.section_title }}</td>
+        <td class="text-end small text-secondary">{{ s.row_count }}</td>
+        <td class="text-end fw-bold">{{ (s.subtotal)|money }}</td>
+        <td class="text-end text-secondary">{% if subtotal > 0 %}{{ '%.1f'|format(s.subtotal * 100 / subtotal) }}%{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+      <tr style="background:rgba(245,158,11,.10);border-top:2px solid #1e1e3a">
+        <td colspan="4" class="text-end fw-black">FLOOR SUB TOTAL</td>
+        <td class="text-end fw-black text-warning">{{ (subtotal)|money }}</td>
+        <td class="text-end fw-black text-warning">100.0%</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endif %}
 
 {% endblock %}

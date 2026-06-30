@@ -474,6 +474,19 @@ def boq_floor_summary(pid, bid, fid):
             "ORDER BY bill_no",
             (fid,),
         ).fetchall()
+        per_section = c.execute(
+            "SELECT COALESCE(bill_no,0) AS bill_no, "
+            "       COALESCE(bill_name,'') AS bill_name, "
+            "       COALESCE(section_letter,'') AS section_letter, "
+            "       COALESCE(section,'') AS section_title, "
+            "       COALESCE(SUM(total_amount),0) AS subtotal, "
+            "       COUNT(*) AS row_count "
+            "FROM boq_floor_items "
+            "WHERE floor_id=? "
+            "GROUP BY bill_no, bill_name, section_letter, section "
+            "ORDER BY bill_no, section_letter",
+            (fid,),
+        ).fetchall()
 
     bills = [
         {
@@ -484,6 +497,17 @@ def boq_floor_summary(pid, bid, fid):
         for r in per_bill
     ]
     subtotal = sum(b["subtotal"] for b in bills)
+    sections = [
+        {
+            "bill_no":        int(r["bill_no"] or 0),
+            "bill_name":      (r["bill_name"]   or _boq_lookup_bill_name(int(r["bill_no"] or 0)) or "OTHER"),
+            "section_letter": (r["section_letter"] or "").upper(),
+            "section_title":  (r["section_title"]  or ""),
+            "subtotal":       float(r["subtotal"]  or 0),
+            "row_count":      int(r["row_count"] or 0),
+        }
+        for r in per_section
+    ]
     cont_pct = float((floor["contingency_pct"] if "contingency_pct" in floor.keys() else 10) or 10)
     contingency = subtotal * cont_pct / 100.0
     carried = subtotal + contingency
@@ -491,7 +515,7 @@ def boq_floor_summary(pid, bid, fid):
         "boq_floor_summary.html",
         user=current_user(),
         project=project, building=building, floor=floor,
-        bills=bills, subtotal=subtotal,
+        bills=bills, sections=sections, subtotal=subtotal,
         contingency_pct=cont_pct, contingency=contingency,
         carried=carried,
     )
