@@ -7962,6 +7962,95 @@ def _qualify_lead(name, company, phone, system_type, size_kw, budget_usd, messag
     return score, grade, "; ".join(reasons) if reasons else "Unscored"
 
 
+# 2026-06-30: unified pipeline-capture helper used by EVERY public lead-capture form.
+# Single source of truth. Writes to BOTH `assessment_requests` AND `leads` so the
+# /admin/pipeline Kanban + /admin/leads + /admin/assessments all see the lead.
+def _capture_pipeline_lead(
+    *,
+    name="",
+    email="",
+    phone="",
+    country="",
+    region="",
+    system_type="residential",
+    company="",
+    interest="",
+    message="",
+    source="unknown",
+    pipeline_stage="assessment_submitted",
+    extra=None,
+):
+    """Unified pipeline capture used by every public lead-capture form.
+
+    Args (all keyword-only):
+      name, email, phone, country, region : contact + locale
+      system_type    : 'residential' / 'commercial' / 'industrial' / 'hybrid'
+      company        : optional employer / org name
+      interest       : human label for sales ('residential', 'bill-check', ...)
+      message        : free-text note for sales (context, what they asked for)
+      source         : short code identifying which form -- e.g.
+                       'landing_popup', 'bill_check_lead',
+                       'bill_check_emailed', 'bill_check_invite',
+                       'contact', 'demo_request', 'quote_request'.
+      pipeline_stage : initial stage ('assessment_submitted' by default).
+      extra          : optional dict with building_desc / building_size /
+                       num_floors / building_type for the assessment record.
+
+    Returns:
+      assessment_ref (str) on success, "" on any DB failure. Does NOT raise.
+    """
+    import random
+    import string as _str
+    extra = extra or {}
+    ref = "PL-" + "".join(random.choices(_str.ascii_uppercase + _str.digits, k=6))
+    location_desc = (f"{region}, {country}".strip(", ")) if region else (country or "")
+    # _qualify_lead is defined elsewhere in web_app.py -- look it up at call
+    # time so the helper is resilient to import order during splice-in.
+    try:
+        score, grade, notes = _qualify_lead(  # noqa: F821 -- resolved in web_app.py module scope
+            name, company, phone, system_type, "0", "", message)
+    except Exception:
+        score, grade, notes = 0, "D", ""
+    bldg_desc = (extra.get("building_desc") or "")[:500]
+    bldg_size = (extra.get("building_size") or "")[:80]
+    try:
+        num_floors_i = int(extra.get("num_floors") or 1)
+    except (TypeError, ValueError):
+        num_floors_i = 1
+    bldg_type = (extra.get("building_type") or system_type or "")[:80]
+    interest = (interest or system_type or "residential")[:80]
+    try:
+        with get_db() as c:  # noqa: F821 -- resolved in web_app.py module scope
+            c.execute(
+                "INSERT INTO assessment_requests "
+                "(name,email,phone,country,region,system_type,location_desc,message,"
+                " ai_score,ai_grade,ai_notes,source,status,pipeline_stage,"
+                " assessment_ref,building_desc,building_size,num_floors,building_type) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name[:120], email[:200], phone[:80], country[:80], region[:80],
+                 (system_type or "residential")[:40], location_desc[:200], message[:2000],
+                 int(score), grade, notes[:2000], source[:80], "open",
+                 pipeline_stage[:80], ref,
+                 bldg_desc, bldg_size, num_floors_i, bldg_type))
+            c.execute(
+                "INSERT INTO leads "
+                "(name,email,phone,company,country,interest,message,source,"
+                " system_type,ai_score,ai_grade,ai_notes,pipeline_stage) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name[:120], email[:200], phone[:80], (company or "")[:120], country[:80],
+                 interest, message[:2000], source[:80],
+                 (system_type or "residential")[:40],
+                 int(score), grade, notes[:2000], pipeline_stage[:80]))
+        return ref
+    except Exception as e:
+        try:
+            app.logger.warning(  # noqa: F821 -- resolved in web_app.py module scope
+                "pipeline_capture failed src=%s email=%s err=%s", source, email, e)
+        except Exception:
+            pass
+        return ""
+
+
 @app.route("/assess/quick", methods=["POST"])
 @limiter.limit("10 per hour")
 def assess_quick():
@@ -30758,11 +30847,13 @@ def bill_check_lead():
     if not name or not email:
         return jsonify({"error": "name and email required"}), 400
     try:
-        with get_db() as c:
-            c.execute(
-                "INSERT INTO leads (name,email,phone,company,country,interest,message,source) "
-                "VALUES (?,?,?,?,?,?,?,?)",
-                (name, email, phone, "", country, "residential", message, "Electricity Bill Check"))
+        _capture_pipeline_lead(
+            name=name, email=email, phone=phone, country=country,
+            system_type="residential",
+            interest="bill-check",
+            message=message,
+            source="bill_check_lead",
+        )
         try:
             _log_marketplace_action("bill_check_lead_created", "lead", 0, f"email={email}")
         except Exception:
@@ -31205,15 +31296,15 @@ def bill_check_email():
         pass
     # Also drop a lead row so sales sees the engagement
     try:
-        with get_db() as c:
-            c.execute(
-                "INSERT INTO leads (name,email,phone,company,country,interest,message,source) "
-                "VALUES (?,?,?,?,?,?,?,?)",
-                (to_name if to_name != "there" else "",
-                 to_email, "", "", payload.get("country") or "Ghana",
-                 "residential",
-                 f"Bill check report emailed. Bill {bill:.0f}, kWp {kwp:.1f}, drop {drop:.0f}%.",
-                 "Electricity Bill Check — emailed report"))
+        _capture_pipeline_lead(
+            name=(to_name if to_name != "there" else ""),
+            email=to_email,
+            country=(payload.get("country") or "Ghana"),
+            system_type="residential",
+            interest="bill-check",
+            message=f"Bill check report emailed. Bill {bill:.0f}, kWp {kwp:.1f}, drop {drop:.0f}%.",
+            source="bill_check_emailed",
+        )
     except Exception:
         pass
     return jsonify({"ok": True, "share_url": share})
@@ -31280,14 +31371,14 @@ def bill_check_invite():
     # Drop a lead row for the sender too — they engaged enough to invite friends
     if sender_email and "@" in sender_email:
         try:
-            with get_db() as c:
-                c.execute(
-                    "INSERT INTO leads (name,email,phone,company,country,interest,message,source) "
-                    "VALUES (?,?,?,?,?,?,?,?)",
-                    (sender_name, sender_email, "", "",
-                     payload.get("country") or "Ghana", "residential",
-                     f"Invited {len(sent)} friend(s) via bill-check share.",
-                     "Electricity Bill Check — viral invite"))
+            _capture_pipeline_lead(
+                name=sender_name, email=sender_email,
+                country=(payload.get("country") or "Ghana"),
+                system_type="residential",
+                interest="bill-check",
+                message=f"Invited {len(sent)} friend(s) via bill-check share.",
+                source="bill_check_invite",
+            )
         except Exception:
             pass
     return jsonify({"ok": True, "sent": sent, "failed": failed, "share_url": share})

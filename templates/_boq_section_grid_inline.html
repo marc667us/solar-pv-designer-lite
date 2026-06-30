@@ -99,7 +99,16 @@
               <option value="{{ cdesc }}" data-unit="{{ cunit }}" data-basic="{{ '%.2f'|format(cbasic) }}" {% if cdesc == desc %}selected{% endif %}>{{ cdesc }}</option>
               {% endfor %}
             </select>
-            <input class="form-control form-control-sm mt-1 boq-spec" name="specification[]" placeholder="Specification (optional)">
+            <div class="d-flex gap-1 mt-1">
+              <input class="form-control form-control-sm boq-spec" name="specification[]" placeholder="Specification (optional)" style="flex:1">
+              <button type="button" class="btn btn-outline-warning btn-sm"
+                      data-bs-toggle="modal" data-bs-target="#quickAddModal"
+                      title="Item not in the list? Add it as a new product in the marketplace catalogue."
+                      onclick="window._boqOpenQuickAdd(this);"
+                      style="white-space:nowrap;font-size:11px">
+                <i class="bi bi-plus-circle me-1"></i>Add to marketplace
+              </button>
+            </div>
           </td>
           <td><input class="form-control form-control-sm boq-unit" name="unit[]" value="{{ unit }}"></td>
           <td><input type="number" step="1" min="0" class="form-control form-control-sm text-end boq-qty" name="qty[]" value="1"></td>
