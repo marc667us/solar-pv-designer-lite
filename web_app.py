@@ -21615,12 +21615,90 @@ def boq_cost_plan_save(pid):
     return redirect(url_for("boq_cost_plan", pid=pid))
 
 
+_PROJECT_EXTRAS_COLS = (
+    "extras_power_supply",
+    "extras_meter_service",
+    "extras_utility_admin",
+    "extras_taxes_utility",
+    "extras_withholding_tax",
+)
+
+
+def _ensure_boq_project_extras_schema(c):
+    """Lazy ALTER for the 5 campus-level extras columns on boq_projects."""
+    is_pg = bool(os.environ.get("DATABASE_URL"))
+    for col in _PROJECT_EXTRAS_COLS:
+        try:
+            if is_pg:
+                c.execute(
+                    f"ALTER TABLE boq_projects ADD COLUMN IF NOT EXISTS {col} REAL DEFAULT 0"
+                )
+            else:
+                c.execute(
+                    f"ALTER TABLE boq_projects ADD COLUMN {col} REAL DEFAULT 0"
+                )
+        except Exception:
+            pass
+
+
+def _read_project_extras(project_row):
+    keys = project_row.keys() if hasattr(project_row, "keys") else ()
+    def _g(k):
+        if k in keys:
+            return float(project_row[k] or 0)
+        return 0.0
+    return {
+        "power_supply":    _g("extras_power_supply"),
+        "meter_service":   _g("extras_meter_service"),
+        "utility_admin":   _g("extras_utility_admin"),
+        "taxes_utility":   _g("extras_taxes_utility"),
+        "withholding_tax": _g("extras_withholding_tax"),
+    }
+
+
+@app.route("/boq-projects/<int:pid>/summary/extras", methods=["POST"])
+@login_required
+def boq_project_extras_save(pid):
+    """Bulk-save the five campus-level extras on the project."""
+    uid = session["user_id"]
+    project = _boq_project_owned_or_404(pid, uid)
+    csrf_protect()
+    def _f(name):
+        try:
+            return max(0.0, float(request.form.get(name, 0) or 0))
+        except (TypeError, ValueError):
+            return 0.0
+    ps = _f("extras_power_supply")
+    ms = _f("extras_meter_service")
+    ua = _f("extras_utility_admin")
+    tu = _f("extras_taxes_utility")
+    wt = _f("extras_withholding_tax")
+    with get_db() as c:
+        _ensure_boq_project_extras_schema(c)
+        c.execute(
+            "UPDATE boq_projects "
+            "SET extras_power_supply=?, extras_meter_service=?, "
+            "    extras_utility_admin=?, extras_taxes_utility=?, "
+            "    extras_withholding_tax=? "
+            "WHERE id=? AND user_id=?",
+            (ps, ms, ua, tu, wt, pid, uid),
+        )
+    flash("Campus extras saved.", "success")
+    return redirect(url_for("boq_project_summary", pid=pid))
+
+
 @app.route("/boq-projects/<int:pid>/summary")
 @login_required
 def boq_project_summary(pid):
     uid = session["user_id"]
     project = _boq_project_owned_or_404(pid, uid)
     with get_db() as c:
+        _ensure_boq_project_extras_schema(c)
+        # Re-fetch the project row so the new columns are visible.
+        project = c.execute(
+            "SELECT * FROM boq_projects WHERE id=? AND user_id=?",
+            (pid, uid),
+        ).fetchone()
         per_building = c.execute(
             "SELECT b.id, b.building_name, b.primary_purpose, b.purpose_subtype, "
             "       COALESCE(SUM(i.total_amount),0) AS subtotal "
@@ -21643,12 +21721,18 @@ def boq_project_summary(pid):
             "SELECT COALESCE(SUM(total_amount),0) AS g FROM boq_floor_items WHERE project_id=?",
             (pid,),
         ).fetchone()
-    grand_total = float(grand_row["g"] or 0) if grand_row else 0.0
+    floor_grand = float(grand_row["g"] or 0) if grand_row else 0.0
+    extras = _read_project_extras(project)
+    extras_total = sum(extras.values())
+    grand_total = floor_grand + extras_total
     return render_template("boq_project_summary.html",
                            user=current_user(),
                            project=project,
                            per_building=per_building,
                            per_floor=per_floor,
+                           floor_grand=floor_grand,
+                           extras=extras,
+                           extras_total=extras_total,
                            grand_total=grand_total)
 
 
