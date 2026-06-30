@@ -347,10 +347,30 @@
     }
     function recalcAll() {
       var sum = 0;
+      // Per-section accumulator. Keyed by data-sid; only TICKED row
+      // amounts contribute (recalcRow returns 0 for unticked rows).
+      var perSection = {};
       document.querySelectorAll('tr.boq-row').forEach(function(tr){
-        sum += recalcRow(tr);
+        var amt = recalcRow(tr);
+        sum += amt;
+        var sid = tr.dataset && tr.dataset.sid;
+        if (sid) {
+          perSection[sid] = (perSection[sid] || 0) + amt;
+        }
       });
       var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
+      // Update each section's live subtotal span.
+      Object.keys(perSection).forEach(function(sid){
+        var el = document.querySelector('[data-section-live-total="' + sid + '"]');
+        if (el) el.textContent = nf.format(Math.round(perSection[sid]));
+      });
+      // Sections that have NO ticked rows still need to reset to 0.
+      document.querySelectorAll('[data-section-live-total]').forEach(function(el){
+        var sid = el.dataset.sectionLiveTotal;
+        if (sid && perSection[sid] === undefined) {
+          el.textContent = '0';
+        }
+      });
       var el = fId('floor_total_live');
       if (el) el.textContent = nf.format(Math.round(sum));
     }
