@@ -22121,6 +22121,20 @@ _BOQ_SECTION_ITEM_CATALOG = {
     ],
 
     "WIRING OF POINTS": [
+        # --- Pipes / conduits (priced per metre or per piece) ---
+        ("20mm PVC rigid conduit pipe (3m length, priced per metre)", "M",    5),
+        ("20mm flexible PVC tube (rolls, priced per metre)",  "M",    6),
+        ("20mm diameter PVC conduit pipe",                    "Nos.",   14.63),
+        ("25mm diameter PVC conduit pipe",                    "Nos.",   19.50),
+        ("32mm diameter PVC conduit pipe",                    "Nos.",   28.00),
+        # --- Boxes ---
+        ("3x3 steel square box",                              "No.",    13),
+        ("3x6 steel square box",                              "No.",    18),
+        ("75mm x 75mm steel conduit boxes",                   "Nos.",   13),
+        ("150mm x 75mm steel conduit boxes",                  "Nos.",   18),
+        ("Circular boxes of various ways",                    "Nos.",    5),
+        ("Junction boxes",                                    "Nos.",    8),
+        # --- Wires / cables ---
         ("1.5mm2 PVC insulated copper cable (Brown)",         "Coils", 391),
         ("1.5mm2 PVC insulated copper cable (Blue)",          "Coils", 391),
         ("1.5mm2 PVC insulated copper cable (Grey)",          "Coils", 391),
@@ -22134,13 +22148,6 @@ _BOQ_SECTION_ITEM_CATALOG = {
         ("6.0mm2 PVC insulated copper cable (Brown)",         "Coils", 1500),
         ("6.0mm2 PVC insulated copper cable (Blue)",          "Coils", 1500),
         ("6.0mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 1500),
-        ("20mm diameter PVC conduit pipe",                    "Nos.",   14.63),
-        ("25mm diameter PVC conduit pipe",                    "Nos.",   19.50),
-        ("32mm diameter PVC conduit pipe",                    "Nos.",   28.00),
-        ("75mm x 75mm steel conduit boxes",                   "Nos.",   13),
-        ("150mm x 75mm steel conduit boxes",                  "Nos.",   18),
-        ("Circular boxes of various ways",                    "Nos.",    5),
-        ("Junction boxes",                                    "Nos.",    8),
     ],
 
     "LUMINAIRES": [
@@ -23057,6 +23064,20 @@ _BOQ_SECTION_ITEM_CATALOG = {
     ],
 
     "WIRING OF POINTS": [
+        # --- Pipes / conduits (priced per metre or per piece) ---
+        ("Supply and install 20mm PVC rigid conduit pipe (3m length, priced per metre)",                           "M",    5),
+        ("Supply and install 20mm flexible PVC tube (rolls, priced per metre)",                                     "M",    6),
+        ("Supply and install 20mm diameter PVC conduit pipe",                                                       "Nos.",   14.63),
+        ("Supply and install 25mm diameter PVC conduit pipe",                                                       "Nos.",   19.50),
+        ("Supply and install 32mm diameter PVC conduit pipe",                                                       "Nos.",   28.00),
+        # --- Boxes ---
+        ("Supply and install 3x3 steel square box",                                                                 "No.",    13),
+        ("Supply and install 3x6 steel square box",                                                                 "No.",    18),
+        ("Supply and install 75mm x 75mm steel conduit boxes",                                                      "Nos.",   13),
+        ("Supply and install 150mm x 75mm steel conduit boxes",                                                     "Nos.",   18),
+        ("Supply and install circular boxes of various ways",                                                       "Nos.",    5),
+        ("Supply and install junction boxes",                                                                       "Nos.",    8),
+        # --- Wires / cables ---
         ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Brown)",         "Coils", 391),
         ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Blue)",          "Coils", 391),
         ("Wire the following point in conduit / trunking using 1.5mm2 PVC insulated copper cable (Grey)",          "Coils", 391),
@@ -23070,13 +23091,6 @@ _BOQ_SECTION_ITEM_CATALOG = {
         ("Wire the following point in conduit / trunking using 6.0mm2 PVC insulated copper cable (Brown)",         "Coils", 1500),
         ("Wire the following point in conduit / trunking using 6.0mm2 PVC insulated copper cable (Blue)",          "Coils", 1500),
         ("Wire the following point in conduit / trunking using 6.0mm2 PVC insulated copper cable (Yellow/Green)",  "Coils", 1500),
-        ("Supply and install 20mm diameter PVC conduit pipe",                                                       "Nos.",   14.63),
-        ("Supply and install 25mm diameter PVC conduit pipe",                                                       "Nos.",   19.50),
-        ("Supply and install 32mm diameter PVC conduit pipe",                                                       "Nos.",   28.00),
-        ("Supply and install 75mm x 75mm steel conduit boxes",                                                      "Nos.",   13),
-        ("Supply and install 150mm x 75mm steel conduit boxes",                                                     "Nos.",   18),
-        ("Supply and install circular boxes of various ways",                                                       "Nos.",    5),
-        ("Supply and install junction boxes",                                                                       "Nos.",    8),
     ],
 
     "LUMINAIRES": [
