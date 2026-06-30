@@ -1,0 +1,81 @@
+name: KC Weekly Restart
+
+# Triggers a fresh deploy of solarpro-keycloak every Sunday 03:00 UTC as a
+# defense against slow memory leaks. Render free tier has no built-in
+# auto-restart; an unbounded JVM running uninterrupted for weeks accumulates
+# heap from caches, sessions, and JIT compilation that GC cannot reclaim.
+#
+# A weekly redeploy = ~1 cold start per week + ~30 s of unavailability while
+# the new container boots. Renders the leak vector closed without changing
+# any code, env vars, or cost tier.
+#
+# Manual override: gh workflow run "KC Weekly Restart"
+
+on:
+  schedule:
+    - cron: "0 3 * * 0"   # 03:00 UTC every Sunday
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Resolve solarpro-keycloak service ID
+        run: |
+          set -euo pipefail
+          KC_ID=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services?name=solarpro-keycloak&limit=10" \
+            | jq -r '.[] | .service | select(.name=="solarpro-keycloak") | .id' | head -1)
+          if [ -z "$KC_ID" ] || [ "$KC_ID" = "null" ]; then
+            echo "::error::Could not resolve solarpro-keycloak service id"; exit 1
+          fi
+          echo "KC_SERVICE_ID=$KC_ID" >> "$GITHUB_ENV"
+
+      - name: Trigger a fresh deploy
+        run: |
+          set -euo pipefail
+          DEP=$(curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$KC_SERVICE_ID/deploys" \
+            -d '{"clearCache":"do_not_clear"}' \
+            | jq -r '.id')
+          echo "Weekly-restart deploy: $DEP"
+          echo "KC_DEPLOY_ID=$DEP" >> "$GITHUB_ENV"
+
+      - name: Wait for deploy to reach live (10 min max)
+        run: |
+          set -uo pipefail
+          for i in $(seq 1 60); do
+            STATUS=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$KC_SERVICE_ID/deploys/$KC_DEPLOY_ID" \
+              | jq -r '.status')
+            echo "[$i] deploy status: $STATUS"
+            case "$STATUS" in
+              live)
+                echo "Weekly restart LIVE"; exit 0 ;;
+              deactivated|build_failed|update_failed|canceled)
+                echo "::warning::Restart ended in $STATUS -- old container should still be serving"
+                exit 0 ;;
+            esac
+            sleep 10
+          done
+          echo "::warning::Restart did not reach live within 10 minutes"
+
+      - name: Confirm KC discovery after restart
+        run: |
+          set -uo pipefail
+          for i in $(seq 1 12); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+              "https://auth.aiappinvent.com/realms/solarpro/.well-known/openid-configuration" || echo "000")
+            echo "[$i] discovery -> $CODE"
+            [ "$CODE" = "200" ] && { echo "OK"; exit 0; }
+            sleep 10
+          done
+          echo "::warning::KC did not return 200 within 2 minutes after restart"

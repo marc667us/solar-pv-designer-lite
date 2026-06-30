@@ -1,0 +1,159 @@
+name: Patch KC JVM Failsafe
+
+# Hardens solarpro-keycloak against memory-limit overrun + slow memory leaks
+# by setting JAVA_OPTS_APPEND with three flags:
+#
+#   -XX:MaxRAMPercentage=70.0        Cap heap at ~360 MiB on the 512 MiB tier,
+#                                    leaving ~150 MiB for OS + Quarkus native.
+#                                    Does NOT slow cold-start (unlike the
+#                                    rolled-back UseSerialGC / Xss256k bundle).
+#   -XX:+ExitOnOutOfMemoryError      JVM exits 1 the instant heap is exhausted.
+#                                    Render restarts the container -> clean
+#                                    recovery instead of OS OOM-kill thrash.
+#   -XX:+HeapDumpOnOutOfMemoryError  Dumps the heap to /tmp/heap.hprof on OOM
+#   -XX:HeapDumpPath=/tmp/heap.hprof so the next leak is debuggable from logs.
+#
+# Why this is safe to stack on top of the still-being-watched KC_CACHE=local
+# change (2026-06-30 19:23 UTC, commit 57ca52a):
+#   - None of these flags change cold-start time. The prior bundle's 125 s
+#     boot was caused by UseSerialGC + MaxMetaspaceSize=96m + Xss256k +
+#     Postgres pool changes -- absent here.
+#   - These are fail-safe / forensic flags, exactly what you want during a
+#     watch window: if the cache change doesn't fully fix OOM, the container
+#     restarts cleanly AND we capture a heap dump.
+#
+# Trigger:
+#   Dry-run (default):  gh workflow run "Patch KC JVM Failsafe"
+#   Apply:              gh workflow run "Patch KC JVM Failsafe" -f confirm=APPLY
+#
+# Manual rollback if the deploy hangs:
+#   curl -X DELETE -H "Authorization: Bearer $RENDER_API_KEY" \
+#     "https://api.render.com/v1/services/$KC_SERVICE_ID/env-vars/JAVA_OPTS_APPEND"
+#   then POST a new deploy on the service.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type APPLY to actually set JAVA_OPTS_APPEND; anything else = dry-run preview"
+        required: false
+        default: "DRY_RUN"
+
+permissions:
+  contents: read
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM: ${{ github.event.inputs.confirm }}
+      JOPTS: "-XX:MaxRAMPercentage=70.0 -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heap.hprof"
+    steps:
+      - name: Resolve solarpro-keycloak service ID
+        run: |
+          set -euo pipefail
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services?name=solarpro-keycloak&limit=10" > /tmp/svc.json
+          KC_ID=$(jq -r '.[] | .service | select(.name=="solarpro-keycloak") | .id' /tmp/svc.json | head -1)
+          if [ -z "$KC_ID" ] || [ "$KC_ID" = "null" ]; then
+            echo "::error::Could not resolve solarpro-keycloak service id"; exit 1
+          fi
+          echo "KC_SERVICE_ID=$KC_ID" >> "$GITHUB_ENV"
+          echo "Resolved KC service id=$KC_ID"
+
+      - name: Show planned change
+        run: |
+          echo "Planned: JAVA_OPTS_APPEND=$JOPTS"
+          echo "CONFIRM input: $CONFIRM"
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$KC_SERVICE_ID/env-vars?limit=100" \
+            | jq -r '.[] | .envVar | "  \(.key)=<value-redacted>"' \
+            | sort
+
+      - name: PUT JAVA_OPTS_APPEND (apply only)
+        if: ${{ github.event.inputs.confirm == 'APPLY' }}
+        run: |
+          set -euo pipefail
+          BODY=$(jq -nc --arg v "$JOPTS" '{value: $v}')
+          curl -fsS -X PUT \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$KC_SERVICE_ID/env-vars/JAVA_OPTS_APPEND" \
+            -d "$BODY" | jq '.'
+
+      - name: Trigger a fresh deploy (apply only)
+        if: ${{ github.event.inputs.confirm == 'APPLY' }}
+        run: |
+          set -euo pipefail
+          DEP=$(curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$KC_SERVICE_ID/deploys" \
+            -d '{"clearCache":"do_not_clear"}' \
+            | jq -r '.id')
+          echo "Triggered deploy: $DEP"
+          echo "KC_DEPLOY_ID=$DEP" >> "$GITHUB_ENV"
+
+      - name: Wait for the deploy; auto-rollback if stuck >4 min in update_in_progress
+        if: ${{ github.event.inputs.confirm == 'APPLY' }}
+        run: |
+          set -uo pipefail
+          STUCK_COUNT=0
+          for i in $(seq 1 60); do
+            STATUS=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$KC_SERVICE_ID/deploys/$KC_DEPLOY_ID" \
+              | jq -r '.status')
+            echo "[$i] deploy status: $STATUS"
+            case "$STATUS" in
+              live)
+                echo "Deploy LIVE -- JAVA_OPTS_APPEND took effect"
+                exit 0
+                ;;
+              deactivated|build_failed|update_failed|canceled)
+                echo "::error::Deploy ended in $STATUS -- rolling back JAVA_OPTS_APPEND"
+                curl -fsS -X DELETE \
+                  -H "Authorization: Bearer $RENDER_API_KEY" \
+                  "https://api.render.com/v1/services/$KC_SERVICE_ID/env-vars/JAVA_OPTS_APPEND" || true
+                exit 1
+                ;;
+              update_in_progress)
+                STUCK_COUNT=$((STUCK_COUNT + 1))
+                if [ "$STUCK_COUNT" -gt 24 ]; then
+                  echo "::error::Stuck in update_in_progress for >4 min -- rolling back JAVA_OPTS_APPEND"
+                  curl -fsS -X DELETE \
+                    -H "Authorization: Bearer $RENDER_API_KEY" \
+                    "https://api.render.com/v1/services/$KC_SERVICE_ID/env-vars/JAVA_OPTS_APPEND" || true
+                  exit 1
+                fi
+                ;;
+              *)
+                STUCK_COUNT=0
+                ;;
+            esac
+            sleep 10
+          done
+          echo "::warning::Deploy did not reach live within 10 minutes; check Render dashboard manually"
+
+      - name: Confirm KC discovery endpoint after the change
+        if: ${{ github.event.inputs.confirm == 'APPLY' }}
+        run: |
+          set -uo pipefail
+          for i in $(seq 1 20); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+              "https://auth.aiappinvent.com/realms/solarpro/.well-known/openid-configuration" || echo "000")
+            echo "[$i] /realms/solarpro discovery -> $CODE"
+            if [ "$CODE" = "200" ]; then
+              echo "OK: KC discovery is serving on JAVA_OPTS_APPEND."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::warning::KC did not return 200 within 5 minutes -- check logs"
+
+      - name: Dry-run summary
+        if: ${{ github.event.inputs.confirm != 'APPLY' }}
+        run: |
+          echo "DRY RUN -- no changes made."
+          echo "Re-run with -f confirm=APPLY to set JAVA_OPTS_APPEND and redeploy."
