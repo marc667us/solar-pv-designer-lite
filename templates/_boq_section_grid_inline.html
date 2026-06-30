@@ -152,12 +152,13 @@
       <span class="text-secondary small ms-2">{{ existing|length }} row{{ '' if existing|length == 1 else 's' }}</span>
     </div>
     <div class="d-flex align-items-center gap-2 flex-wrap">
-      <span class="text-warning fw-black" style="font-size:16px">{{ ns.t|money }}</span>
       <a href="{{ url_for('boq_floor_summary', pid=project.id, bid=building.id, fid=floor.id) }}"
-         class="btn btn-outline-warning btn-sm py-0 px-2" style="font-size:11px"
-         title="Open this floor's bills summary">
-        <i class="bi bi-arrow-right-circle me-1"></i>Carried to Floor Summary
+         class="text-warning text-decoration-none small"
+         title="Open this floor's bills summary"
+         style="letter-spacing:.5px;text-transform:uppercase;font-weight:600">
+        Carried to Floor Summary <i class="bi bi-arrow-right-circle"></i>
       </a>
+      <span class="text-warning fw-black" style="font-size:16px">{{ ns.t|money }}</span>
     </div>
   </div>
   {% endif %}
