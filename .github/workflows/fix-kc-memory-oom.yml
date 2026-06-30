@@ -1,0 +1,137 @@
+name: Fix KC Memory OOM
+
+# Patch the solarpro-keycloak Render service to stop the boot-time OOM kill
+# cycle on the free 512 MiB tier. Diagnosed 2026-06-30:
+#   - 7 OOM kills in 5 days, all {"memoryLimit":"512Mi"} at COLD START, not under load.
+#   - Traffic is ~75 legitimate user requests / 12h (NOT a DDoS).
+#   - JVM had no -Xmx cap so it tried to take ~70% of host memory; on Render
+#     the host reports uncapped, so heap could balloon past 512 MiB at peak.
+#   - Postgres pool at boot was trying to acquire connections aggressively
+#     (Hibernate `Acquisition timeout while waiting for new connection`)
+#     which compounded the memory spike.
+#
+# Patch:
+#   1. JAVA_OPTS_APPEND caps the heap to 50% (~256 MB) + serial GC + metaspace
+#      ceiling + small stack -> fits inside 512 MiB cgroup with ~80 MB headroom.
+#   2. KC_DB_POOL_* caps the Agroal pool to 5 conns (default 100) so the
+#      Postgres-init memory spike stops.
+#
+# Idempotent: PATCH /env-vars merges. Existing custom env vars are preserved.
+#
+# Triggered manually:
+#   gh workflow run "Fix KC Memory OOM"
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_ram_pct:
+        description: "MaxRAMPercentage for the JVM (default 50.0 -> ~256 MB max heap on 512 MiB)"
+        required: false
+        default: "50.0"
+      db_pool_max:
+        description: "Agroal max pool size (default 5; bump to 10 if traffic grows)"
+        required: false
+        default: "5"
+
+permissions:
+  contents: read
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Resolve solarpro-keycloak service ID
+        run: |
+          set -euo pipefail
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services?name=solarpro-keycloak&limit=10" > /tmp/svc.json
+          KC_ID=$(jq -r '.[] | .service | select(.name=="solarpro-keycloak") | .id' /tmp/svc.json | head -1)
+          if [ -z "$KC_ID" ] || [ "$KC_ID" = "null" ]; then
+            echo "::error::Could not resolve solarpro-keycloak service id"; exit 1
+          fi
+          echo "KC_SERVICE_ID=$KC_ID" >> "$GITHUB_ENV"
+          echo "Resolved KC service id=$KC_ID"
+
+      - name: Show current env vars (mask values)
+        run: |
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$KC_SERVICE_ID/env-vars?limit=100" \
+            | jq -r '.[] | .envVar | "  \(.key) = (len=\(.value | length))"'
+
+      - name: Merge JVM + Postgres-pool env vars
+        env:
+          MAX_RAM_PCT: ${{ github.event.inputs.max_ram_pct }}
+          POOL_MAX:    ${{ github.event.inputs.db_pool_max }}
+        run: |
+          set -euo pipefail
+          # Build the JAVA_OPTS_APPEND payload. Keycloak/Quarkus picks this up
+          # at JVM start. -XX:+UseSerialGC saves ~30 MB vs G1 at this heap
+          # size; metaspace cap stops boot-time inflation.
+          JAVA_OPTS_APPEND="-XX:MaxRAMPercentage=${MAX_RAM_PCT} -XX:InitialRAMPercentage=30.0 -XX:+UseSerialGC -XX:MaxMetaspaceSize=96m -Xss256k -XX:+ExitOnOutOfMemoryError"
+
+          # Render's PATCH /env-vars takes an array of {key,value}. The
+          # endpoint REPLACES THE FULL SET, so we MUST first read the
+          # existing env vars and merge our additions in.
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$KC_SERVICE_ID/env-vars?limit=200" \
+            | jq '[.[] | .envVar | {key, value}]' > /tmp/existing.json
+          echo "Existing env-var count: $(jq 'length' /tmp/existing.json)"
+
+          # Build the patch list: existing minus our keys + our new values.
+          jq --arg jopts "$JAVA_OPTS_APPEND" \
+             --arg poolMax "$POOL_MAX" \
+             '
+             # Drop any prior versions of the keys we are about to set.
+             map(select(.key != "JAVA_OPTS_APPEND"
+                     and .key != "KC_DB_POOL_MAX_SIZE"
+                     and .key != "KC_DB_POOL_INITIAL_SIZE"
+                     and .key != "KC_DB_POOL_MIN_SIZE"))
+             + [
+               {key: "JAVA_OPTS_APPEND",       value: $jopts},
+               {key: "KC_DB_POOL_MAX_SIZE",    value: $poolMax},
+               {key: "KC_DB_POOL_INITIAL_SIZE",value: "2"},
+               {key: "KC_DB_POOL_MIN_SIZE",    value: "2"}
+             ]
+             ' /tmp/existing.json > /tmp/merged.json
+
+          echo "Merged env-var count: $(jq 'length' /tmp/merged.json)"
+          echo "Keys being set:"
+          jq -r '.[] | "  \(.key)"' /tmp/merged.json | sort -u
+
+          # PUT the merged set.
+          curl -fsS -X PUT \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$KC_SERVICE_ID/env-vars" \
+            -d @/tmp/merged.json \
+            | jq -r '.[] | .envVar | "  saved: \(.key)"'
+
+      - name: Trigger a fresh deploy so the new env vars take effect
+        run: |
+          DEP=$(curl -fsS -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$KC_SERVICE_ID/deploys" \
+            -d '{"clearCache":"do_not_clear"}' \
+            | jq -r '.id')
+          echo "Triggered deploy: $DEP"
+          echo "KC_DEPLOY_ID=$DEP" >> "$GITHUB_ENV"
+
+      - name: Wait for the deploy to finish
+        run: |
+          for i in $(seq 1 60); do
+            STATUS=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$KC_SERVICE_ID/deploys/$KC_DEPLOY_ID" \
+              | jq -r '.status')
+            echo "[$i] deploy status: $STATUS"
+            case "$STATUS" in
+              live)            echo "Deploy LIVE"; exit 0 ;;
+              deactivated|build_failed|update_failed|canceled)
+                                echo "::error::Deploy ended in $STATUS"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::warning::Deploy did not reach live within 10 minutes; check Render dashboard"
