@@ -1,0 +1,123 @@
+name: Diag KC Render Memory
+
+# One-off diagnostic: pull the last 24h of logs + events for solarpro-keycloak
+# from the Render API, then post-process to flag OOM / restart cycles and the
+# top traffic sources. Used to answer "why is KC hitting memory limit and
+# restarting?" without needing the Render dashboard.
+#
+# Triggered manually:
+#   gh workflow run "Diag KC Render Memory"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Resolve solarpro-keycloak service ID + owner
+        run: |
+          set -euo pipefail
+          # List services and find solarpro-keycloak
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services?name=solarpro-keycloak&limit=10" \
+            > /tmp/svc.json
+          jq '.[] | .service | {id, name, type, suspended, serviceDetails: {plan: .serviceDetails.plan, region: .serviceDetails.region, env: .serviceDetails.env}}' /tmp/svc.json
+          KC_ID=$(jq -r '.[] | .service | select(.name=="solarpro-keycloak") | .id' /tmp/svc.json | head -1)
+          OWNER=$(jq -r '.[] | .service | select(.name=="solarpro-keycloak") | .ownerId' /tmp/svc.json | head -1)
+          echo "KC_SERVICE_ID=$KC_ID" >> "$GITHUB_ENV"
+          echo "OWNER=$OWNER"         >> "$GITHUB_ENV"
+          echo "Resolved KC service id=$KC_ID owner=$OWNER"
+          if [ -z "$KC_ID" ] || [ "$KC_ID" = "null" ]; then
+            echo "::error::Could not resolve solarpro-keycloak service id"; exit 1
+          fi
+
+      - name: Service status + plan + suspended state
+        run: |
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$KC_SERVICE_ID" > /tmp/kc.json
+          jq '{name,type,suspended,suspendedAt,plan: .serviceDetails.plan,region: .serviceDetails.region,disk: .serviceDetails.disk,healthCheckPath: .serviceDetails.healthCheckPath,numInstances: .serviceDetails.numInstances}' /tmp/kc.json
+
+      - name: Recent service events (Render-side OOM, restart, deploy)
+        run: |
+          echo "=== Last 40 service events ==="
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$KC_SERVICE_ID/events?limit=40" > /tmp/events.json
+          jq -r '.[] | .event | "\(.timestamp)  \(.type)  \(.details.reason // .details.fromImagePath // .details.message // .details.exitCode // "")"' /tmp/events.json
+
+      - name: OOM / SIGKILL / memory events highlighted
+        run: |
+          echo "=== Memory / OOM / restart events ==="
+          jq -r '.[] | .event | select((.type // "") | test("(?i)(oom|kill|restart|crash|exit|out_of_memory|memory|suspend)"))
+                                  | "\(.timestamp)  \(.type)  \(.details | tostring | .[0:200])"' /tmp/events.json || true
+
+      - name: Recent log volume (last 12h, type=app)
+        run: |
+          # Render logs API needs ISO timestamps. Last 12h.
+          START=$(date -u -d '12 hours ago' '+%Y-%m-%dT%H:%M:%SZ')
+          END=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            -G "https://api.render.com/v1/logs" \
+            --data-urlencode "ownerId=$OWNER" \
+            --data-urlencode "resource=$KC_SERVICE_ID" \
+            --data-urlencode "startTime=$START" \
+            --data-urlencode "endTime=$END" \
+            --data-urlencode "limit=1000" \
+            --data-urlencode "direction=backward" \
+            > /tmp/logs.json
+          echo "=== Log line count in last 12h ==="
+          jq '.logs | length' /tmp/logs.json
+          echo
+          echo "=== Last 50 log lines (most recent first) ==="
+          jq -r '.logs[0:50] | .[] | "\(.timestamp)  \(.message)"' /tmp/logs.json | head -200
+
+      - name: Traffic source -- top remote IPs hitting the KC instance
+        run: |
+          echo "=== Top remote IPs (from request logs) ==="
+          jq -r '.logs[] | .message' /tmp/logs.json \
+            | grep -oE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' \
+            | sort | uniq -c | sort -rn | head -25 || echo "(no IPs detected in messages)"
+
+      - name: Traffic source -- top URL paths hit on KC
+        run: |
+          echo "=== Top URL paths hit (likely targets of unauthorised traffic) ==="
+          jq -r '.logs[] | .message' /tmp/logs.json \
+            | grep -oE '"(GET|POST|PUT|DELETE|HEAD|OPTIONS) [^"\\s]+ HTTP/[0-9.]+' \
+            | sort | uniq -c | sort -rn | head -25 || echo "(no HTTP method lines found)"
+          echo
+          echo "=== URL path-only frequency ==="
+          jq -r '.logs[] | .message' /tmp/logs.json \
+            | grep -oE '"(GET|POST|PUT|DELETE|HEAD|OPTIONS) [^"\\s]+' \
+            | awk '{print $1, $2}' | sort | uniq -c | sort -rn | head -30 || true
+
+      - name: Memory + restart watermarks in the JVM heap
+        run: |
+          echo "=== KC JVM heap pressure markers ==="
+          jq -r '.logs[] | .message' /tmp/logs.json \
+            | grep -iE 'oom|out of memory|gc overhead|metaspace|java\.lang\.OutOfMemory|killed|sigkill|sigterm|shutdown|restart' \
+            | head -30 || echo "(no memory pressure markers found in JVM output)"
+
+      - name: User-Agent and bot signature scan
+        run: |
+          echo "=== Top User-Agents (bot identification) ==="
+          jq -r '.logs[] | .message' /tmp/logs.json \
+            | grep -ioE 'User-Agent: [^"]+' \
+            | sort | uniq -c | sort -rn | head -20 || echo "(no User-Agent strings logged)"
+          echo
+          echo "=== Suspect crawler / scanner UA patterns ==="
+          jq -r '.logs[] | .message' /tmp/logs.json \
+            | grep -iE 'bot|crawler|scanner|nmap|sqlmap|nikto|fuzzer|wpscan|zgrab|masscan|censys|shodan' \
+            | head -20 || echo "(no suspect UA matches)"
+
+      - name: 4xx / 5xx tail
+        run: |
+          echo "=== Last 50 4xx / 5xx responses ==="
+          jq -r '.logs[] | .message' /tmp/logs.json \
+            | grep -E '" (40[0-9]|50[0-9])' \
+            | head -50 || echo "(no 4xx/5xx HTTP lines)"
