@@ -1,0 +1,72 @@
+name: Diag KC Boot Log
+
+# Pull the boot logs for a specific KC deploy so we can see why it failed
+# to start. Triggered manually:
+#   gh workflow run "Diag KC Boot Log" -f deploy_id=dep-d920fcegvqtc7392sr70
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_id:
+        description: "Render deploy id (e.g. dep-d920fcegvqtc7392sr70). Empty = most recent."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      DEPLOY_ID:      ${{ inputs.deploy_id }}
+    steps:
+      - name: Resolve service + deploy
+        run: |
+          set -euo pipefail
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services?name=solarpro-keycloak&limit=10" > /tmp/svc.json
+          KC_ID=$(jq -r '.[] | .service | select(.name=="solarpro-keycloak") | .id' /tmp/svc.json | head -1)
+          OWNER=$(jq -r '.[] | .service | select(.name=="solarpro-keycloak") | .ownerId' /tmp/svc.json | head -1)
+          echo "KC_SERVICE_ID=$KC_ID" >> "$GITHUB_ENV"
+          echo "OWNER=$OWNER"         >> "$GITHUB_ENV"
+
+          if [ -z "$DEPLOY_ID" ]; then
+            DEPLOY_ID=$(curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$KC_ID/deploys?limit=1" \
+              | jq -r '.[0].deploy.id')
+          fi
+          echo "DEPLOY_ID=$DEPLOY_ID" >> "$GITHUB_ENV"
+          echo "Diagnosing deploy=$DEPLOY_ID on service=$KC_ID"
+
+      - name: Deploy meta
+        run: |
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$KC_SERVICE_ID/deploys/$DEPLOY_ID" \
+            | jq '{id,status,createdAt,finishedAt,commit:{id:.commit.id, message:.commit.message}}'
+
+      - name: Last 300 log lines for that deploy
+        run: |
+          START=$(date -u -d '30 minutes ago' '+%Y-%m-%dT%H:%M:%SZ')
+          END=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            -G "https://api.render.com/v1/logs" \
+            --data-urlencode "ownerId=$OWNER" \
+            --data-urlencode "resource=$KC_SERVICE_ID" \
+            --data-urlencode "startTime=$START" \
+            --data-urlencode "endTime=$END" \
+            --data-urlencode "limit=300" \
+            --data-urlencode "direction=backward" \
+            > /tmp/logs.json
+          echo "=== Line count ==="
+          jq '.logs | length' /tmp/logs.json
+          echo
+          echo "=== ERROR / WARN / Caused by lines ==="
+          jq -r '.logs[] | .message' /tmp/logs.json \
+            | grep -E 'ERROR|WARN|Caused by|Exception|exit|Failed|Unrecognized|Unknown property|invalid' \
+            | head -80 || true
+          echo
+          echo "=== Last 60 lines (most recent first) ==="
+          jq -r '.logs[0:60] | .[] | "\(.timestamp)  \(.message)"' /tmp/logs.json | head -120
