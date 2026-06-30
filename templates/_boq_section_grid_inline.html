@@ -20,9 +20,21 @@
         {{ existing|length }} row{{ '' if existing|length == 1 else 's' }} already on floor
       </div>
     </div>
-    <a href="{{ url_for('boq_section_grid', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill_no, letter=section_letter, title=section_title, bill_name=bill_name, sub=subsection_label) }}" class="btn btn-outline-warning btn-sm">
-      <i class="bi bi-arrow-up-right-circle me-1"></i>Open standalone editor
-    </a>
+    <div class="d-flex gap-1 align-items-center flex-wrap">
+      <button type="button" class="btn btn-outline-warning btn-sm"
+              onclick="document.querySelectorAll('#sec_{{ sid }} .boq-tick').forEach(function(c){c.checked=true;});"
+              title="Tick every row in this section">
+        <i class="bi bi-check-all me-1"></i>Check all
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm"
+              onclick="document.querySelectorAll('#sec_{{ sid }} .boq-tick').forEach(function(c){c.checked=false;});"
+              title="Untick every row in this section">
+        <i class="bi bi-square me-1"></i>Uncheck all
+      </button>
+      <a href="{{ url_for('boq_section_grid', pid=project.id, bid=building.id, fid=floor.id, bill_no=bill_no, letter=section_letter, title=section_title, bill_name=bill_name, sub=subsection_label) }}" class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-arrow-up-right-circle me-1"></i>Open standalone editor
+      </a>
+    </div>
   </div>
 
   {# Read-only summary of items already saved on the floor for this section. #}
