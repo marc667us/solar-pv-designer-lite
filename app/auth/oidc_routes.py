@@ -447,6 +447,23 @@ def auth_callback():
                         "SELECT id, username FROM users WHERE lower(username)=lower(?) LIMIT 1",
                         (kc_username,),
                     ).fetchone()
+                    # First-login lead capture: brand-new KC signup -> drop a
+                    # row on the sales pipeline so the team knows a fresh
+                    # account just landed and can do welcome outreach.
+                    try:
+                        from web_app import _capture_pipeline_lead  # type: ignore[import-not-found]
+                        _capture_pipeline_lead(
+                            name=kc_name,
+                            email=kc_email,
+                            system_type="residential",
+                            interest="account-signup",
+                            message=(
+                                "New user signed up via Keycloak. "
+                                f"username={kc_username}"),
+                            source="kc_signup",
+                        )
+                    except Exception as _e:
+                        log.warning("KC signup pipeline-capture failed: %s", _e)
                 if row is not None:
                     session["user_id"]  = row["id"]
                     session["username"] = row["username"]

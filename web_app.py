@@ -8437,6 +8437,17 @@ def installer_register():
                     "website,notes,ai_grade) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (company, contact, email, phone, country, regions, years_i, staff_i,
                      certs, specs, max_kw_f, website, notes, grade))
+            # Sales lead: every installer registration is a partner-intent lead.
+            _capture_pipeline_lead(
+                name=contact, email=email, phone=phone, company=company, country=country,
+                system_type="installer",
+                interest="installer-partner",
+                message=(f"Installer registration. years_exp={years_i}, staff={staff_i}, "
+                         f"max_kw={max_kw_f}, regions={regions[:60]}, certs={certs[:60]}, "
+                         f"specialties={specs[:60]}. Notes: {notes[:200]}").strip(),
+                source="installer_register",
+                pipeline_stage=("qualified" if grade in ("A", "B") else "assessment_submitted"),
+            )
             flash("Registration submitted! We'll review your application within 2 business days.", "success")
         except Exception:
             flash("An account with that email already exists.", "warning")
@@ -15617,6 +15628,23 @@ def supplier_register():
         )
     # Auto-login the new supplier
     session["user_id"] = uid
+    # Sales lead: supplier registrations are partner-intent leads.
+    try:
+        _capture_pipeline_lead(
+            name=f.get("contact_name", "") or company,
+            email=email,
+            phone=(f.get("phone", "") or ""),
+            company=company,
+            country=country,
+            system_type="supplier",
+            interest="supplier-partner",
+            message=(f"Supplier registration. categories={f.get('categories','')[:80]}, "
+                     f"website={f.get('website','')[:80]}, "
+                     f"payment_terms={f.get('payment_terms','TT 30 days')[:40]}").strip(),
+            source="supplier_register",
+        )
+    except Exception:
+        pass
     _notify_admin_new_supplier(company, email, country)
     flash(
         "Welcome to the SolarPro Marketplace. Your supplier account is pending "
