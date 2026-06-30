@@ -22082,6 +22082,20 @@ def boq_floor_summary(pid, bid, fid):
             "ORDER BY bill_no, section_letter",
             (fid,),
         ).fetchall()
+        per_service = c.execute(
+            "SELECT COALESCE(service_code,'') AS service_code, "
+            "       COALESCE(bill_no,0) AS bill_no, "
+            "       COALESCE(bill_name,'') AS bill_name, "
+            "       COALESCE(section_letter,'') AS section_letter, "
+            "       COALESCE(section,'') AS section_title, "
+            "       COALESCE(SUM(total_amount),0) AS subtotal, "
+            "       COUNT(*) AS row_count "
+            "FROM boq_floor_items "
+            "WHERE floor_id=? "
+            "GROUP BY service_code, bill_no, bill_name, section_letter, section "
+            "ORDER BY service_code, bill_no, section_letter",
+            (fid,),
+        ).fetchall()
 
     bills = [
         {
@@ -22103,6 +22117,33 @@ def boq_floor_summary(pid, bid, fid):
         }
         for r in per_section
     ]
+
+    # Service-grouped breakdown (2026-06-30 owner directive). Items
+    # without a service_code roll into an "Uncategorised" bucket so
+    # legacy rows still appear.
+    _svc_buckets = {}
+    for r in per_service:
+        code = (r["service_code"] or "").strip().lower()
+        label = _BOQ_SERVICE_LABEL.get(code, code.replace("_", " ").title() if code else "Uncategorised")
+        bucket = _svc_buckets.setdefault(code or "_uncategorised", {
+            "code": code or "_uncategorised",
+            "label": label,
+            "sections": [],
+            "service_total": 0.0,
+        })
+        sub = float(r["subtotal"] or 0)
+        bucket["sections"].append({
+            "bill_no":        int(r["bill_no"] or 0),
+            "bill_name":      (r["bill_name"]   or _boq_lookup_bill_name(int(r["bill_no"] or 0)) or "OTHER"),
+            "section_letter": (r["section_letter"] or "").upper(),
+            "section_title":  (r["section_title"]  or ""),
+            "subtotal":       sub,
+            "row_count":      int(r["row_count"] or 0),
+        })
+        bucket["service_total"] += sub
+    services_breakdown = list(_svc_buckets.values())
+    services_breakdown.sort(key=lambda b: (b["code"] == "_uncategorised", -b["service_total"]))
+
     cont_pct = float((floor["contingency_pct"] if "contingency_pct" in floor.keys() else 10) or 10)
     contingency = subtotal * cont_pct / 100.0
     carried = subtotal + contingency
@@ -22110,7 +22151,8 @@ def boq_floor_summary(pid, bid, fid):
         "boq_floor_summary.html",
         user=current_user(),
         project=project, building=building, floor=floor,
-        bills=bills, sections=sections, subtotal=subtotal,
+        bills=bills, sections=sections, services_breakdown=services_breakdown,
+        subtotal=subtotal,
         contingency_pct=cont_pct, contingency=contingency,
         carried=carried,
     )
