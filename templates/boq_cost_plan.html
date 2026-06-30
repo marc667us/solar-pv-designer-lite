@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}Cost Plan / Cash Flow — {{ project.project_name }}{% endblock %}
+{% block content %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    body { background: white !important; color: black !important; }
+    .solar-card { background: white !important; border-color: #ccc !important; color: black !important; }
+    table { color: black !important; }
+  }
+  .cp-input { background: rgba(255,255,255,.04); color: #e0e0f0; border: 1px solid #2a2a4a; font-size: 13px; }
+  .cp-input:focus { background: rgba(255,255,255,.06); border-color: var(--solar-gold,#f59e0b); }
+</style>
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 no-print">
+  <div>
+    <div class="text-secondary small">
+      <a href="{{ url_for('boq_projects_list') }}" class="text-warning">BOQ Projects</a> &middot;
+      <a href="{{ url_for('boq_project_overview', pid=project.id) }}" class="text-warning">{{ project.project_name }}</a> &middot;
+      <a href="{{ url_for('boq_project_summary', pid=project.id) }}" class="text-warning">Summary</a>
+    </div>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-calendar3 text-warning me-1"></i>Cost Plan &amp; Cash Flow</h5>
+  </div>
+  <button onclick="window.print()" class="btn btn-warning fw-bold btn-sm"><i class="bi bi-printer-fill me-1"></i>Print / Save as PDF</button>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="kpi-card">
+      <div class="kpi-label">Project grand total</div>
+      <div class="kpi-value">{{ (grand_total)|money }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="kpi-card">
+      <div class="kpi-label">Total planned (cash plan)</div>
+      <div class="kpi-value text-warning">{{ (total_planned)|money }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="kpi-card">
+      <div class="kpi-label">Total actual paid-to-date</div>
+      <div class="kpi-value">{{ (total_actual)|money }}</div>
+    </div>
+  </div>
+</div>
+
+{% if not months %}
+<div class="solar-card p-4 mb-3 no-print">
+  <h6 class="fw-bold mb-2"><i class="bi bi-magic text-warning me-1"></i>Auto-seed a starting cash plan</h6>
+  <p class="text-secondary small mb-3">
+    Distribute the project grand total ({{ (grand_total)|money }}) evenly across N months. You can edit the
+    monthly amounts after seeding. Re-seeding clears any existing rows.
+  </p>
+  <form method="POST" action="{{ url_for('boq_cost_plan_seed', pid=project.id) }}" class="row g-2 align-items-end">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="col-md-3">
+      <label class="form-label small text-secondary">Number of months</label>
+      <input type="number" min="1" max="60" step="1" class="form-control form-control-sm cp-input" name="n_months" value="12" required>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-secondary">Start month label (optional)</label>
+      <input type="text" class="form-control form-control-sm cp-input" name="start_label" placeholder="e.g. Jan 2026">
+    </div>
+    <div class="col-md-3 d-flex align-items-end">
+      <button type="submit" class="btn btn-warning fw-bold btn-sm w-100">
+        <i class="bi bi-magic me-1"></i>Generate cash plan
+      </button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% if months %}
+<form method="POST" action="{{ url_for('boq_cost_plan_save', pid=project.id) }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+  <div class="solar-card p-4 mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+      <h6 class="fw-bold mb-0"><i class="bi bi-table text-warning me-1"></i>Monthly disbursement schedule</h6>
+      <div class="d-flex gap-2 no-print">
+        <button type="submit" class="btn btn-warning fw-bold btn-sm">
+          <i class="bi bi-save me-1"></i>Save changes
+        </button>
+        <a href="{{ url_for('boq_cost_plan', pid=project.id) }}?reseed=1" class="btn btn-outline-secondary btn-sm"
+           onclick="return confirm('Re-seed will clear ALL rows and redistribute the project total across N months. Continue?');">
+          <i class="bi bi-arrow-clockwise me-1"></i>Reset &amp; reseed
+        </a>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle" style="color:#e0e0f0;font-size:13px;min-width:900px">
+        <thead style="color:#9090c0;font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #1e1e3a">
+          <tr>
+            <th style="width:60px">Month</th>
+            <th style="width:160px">Label</th>
+            <th class="text-end" style="width:140px">Planned</th>
+            <th class="text-end" style="width:140px">Actual</th>
+            <th class="text-end" style="width:140px">Cumulative Planned</th>
+            <th class="text-end" style="width:140px">Cumulative Actual</th>
+            <th class="text-end" style="width:120px">Variance</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="cpRows">
+          {% set ns = namespace(cp=0, ca=0) %}
+          {% for m in months %}
+          {% set ns.cp = ns.cp + (m.planned_amount or 0) %}
+          {% set ns.ca = ns.ca + (m.actual_amount or 0) %}
+          {% set variance = (m.actual_amount or 0) - (m.planned_amount or 0) %}
+          <tr>
+            <td class="text-warning fw-bold">{{ m.month_index }}</td>
+            <td>
+              <input type="hidden" name="month_index[]" value="{{ m.month_index }}">
+              <input type="text" class="form-control form-control-sm cp-input cp-label" name="month_label[]" value="{{ m.month_label or '' }}" placeholder="e.g. Mar 2026">
+            </td>
+            <td>
+              <input type="number" step="0.01" min="0" class="form-control form-control-sm cp-input cp-planned text-end" name="planned_amount[]" value="{{ '%.2f'|format(m.planned_amount or 0) }}">
+            </td>
+            <td>
+              <input type="number" step="0.01" min="0" class="form-control form-control-sm cp-input cp-actual text-end" name="actual_amount[]" value="{{ '%.2f'|format(m.actual_amount or 0) }}">
+            </td>
+            <td class="text-end cp-cumplanned fw-bold">{{ (ns.cp)|money }}</td>
+            <td class="text-end cp-cumactual fw-bold">{{ (ns.ca)|money }}</td>
+            <td class="text-end cp-variance" style="color:{{ '#10b981' if variance >= 0 else '#ef4444' }}">
+              {{ (variance)|money }}
+            </td>
+            <td>
+              <input type="text" class="form-control form-control-sm cp-input cp-notes" name="notes[]" value="{{ m.notes or '' }}" placeholder="Notes (optional)">
+            </td>
+          </tr>
+          {% endfor %}
+          <tr style="background:rgba(245,158,11,.10);border-top:2px solid var(--solar-gold,#f59e0b)">
+            <td colspan="2" class="text-end fw-black">TOTAL</td>
+            <td class="text-end fw-black text-warning" id="cpTotalPlanned">{{ (total_planned)|money }}</td>
+            <td class="text-end fw-black" id="cpTotalActual">{{ (total_actual)|money }}</td>
+            <td colspan="2"></td>
+            <td class="text-end fw-black" id="cpTotalVariance" style="color:{{ '#10b981' if (total_actual - total_planned) >= 0 else '#ef4444' }}">
+              {{ ((total_actual - total_planned))|money }}
+            </td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="text-secondary small mt-2">
+      <i class="bi bi-info-circle me-1"></i>
+      Planned = the cash disbursement you commit to in that month. Actual = what you actually pay out.
+      Variance = Actual &minus; Planned (positive = paid more than planned, negative = paid less).
+      Cumulative columns track running totals against the project grand total ({{ (grand_total)|money }}).
+    </div>
+  </div>
+</form>
+
+<div class="solar-card p-4 mb-3">
+  <h6 class="fw-bold mb-3"><i class="bi bi-graph-up text-warning me-1"></i>S-curve &mdash; Cumulative Planned vs Actual</h6>
+  <canvas id="sCurve" style="max-height: 360px"></canvas>
+</div>
+
+<script>
+(function(){
+  // Pull months data from the table for chart rendering.
+  var labels = [], planned = [], actual = [], cumP = 0, cumA = 0, cumPlanned = [], cumActual = [];
+  document.querySelectorAll('#cpRows tr').forEach(function(tr){
+    var label = tr.querySelector('.cp-label');
+    var pl = tr.querySelector('.cp-planned');
+    var ac = tr.querySelector('.cp-actual');
+    if (!label || !pl || !ac) return;
+    var monthLbl = label.value || ('Month ' + (labels.length + 1));
+    labels.push(monthLbl);
+    var p = parseFloat(pl.value || 0);
+    var a = parseFloat(ac.value || 0);
+    planned.push(p);
+    actual.push(a);
+    cumP += p; cumA += a;
+    cumPlanned.push(cumP);
+    cumActual.push(cumA);
+  });
+
+  var ctx = document.getElementById('sCurve');
+  if (!ctx || !window.Chart || labels.length === 0) return;
+
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Cumulative Planned', data: cumPlanned, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,.15)', fill: true, tension: 0.35 },
+        { label: 'Cumulative Actual',  data: cumActual,  borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.10)', fill: true, tension: 0.35 },
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: { ticks: { color: '#9090c0' }, grid: { color: 'rgba(255,255,255,.05)' } },
+        x: { ticks: { color: '#9090c0' }, grid: { color: 'rgba(255,255,255,.05)' } }
+      },
+      plugins: {
+        legend: { labels: { color: '#e0e0f0' } },
+        tooltip: { callbacks: { label: function(c){ return c.dataset.label + ': ' + c.parsed.y.toLocaleString(); } } }
+      }
+    }
+  });
+
+  // Live recompute cumulative + variance cells when user edits planned/actual.
+  function nfmt(n){ return new Intl.NumberFormat('en-US', {maximumFractionDigits: 0}).format(Math.round(n)); }
+  function relabel(){
+    var cp = 0, ca = 0, tp = 0, ta = 0;
+    document.querySelectorAll('#cpRows tr').forEach(function(tr){
+      var pl = tr.querySelector('.cp-planned');
+      var ac = tr.querySelector('.cp-actual');
+      var cpEl = tr.querySelector('.cp-cumplanned');
+      var caEl = tr.querySelector('.cp-cumactual');
+      var vEl  = tr.querySelector('.cp-variance');
+      if (!pl || !ac) return;
+      var p = parseFloat(pl.value || 0);
+      var a = parseFloat(ac.value || 0);
+      cp += p; ca += a; tp += p; ta += a;
+      if (cpEl) cpEl.textContent = nfmt(cp);
+      if (caEl) caEl.textContent = nfmt(ca);
+      if (vEl)  {
+        var v = a - p;
+        vEl.textContent = nfmt(v);
+        vEl.style.color = (v >= 0) ? '#10b981' : '#ef4444';
+      }
+    });
+    var tpEl = document.getElementById('cpTotalPlanned');
+    var taEl = document.getElementById('cpTotalActual');
+    var tvEl = document.getElementById('cpTotalVariance');
+    if (tpEl) tpEl.textContent = nfmt(tp);
+    if (taEl) taEl.textContent = nfmt(ta);
+    if (tvEl) {
+      var tv = ta - tp;
+      tvEl.textContent = nfmt(tv);
+      tvEl.style.color = (tv >= 0) ? '#10b981' : '#ef4444';
+    }
+  }
+  document.addEventListener('input', function(e){
+    var t = e.target;
+    if (t && (t.classList.contains('cp-planned') || t.classList.contains('cp-actual'))) relabel();
+  });
+})();
+</script>
+{% endif %}
+
+{% endblock %}
