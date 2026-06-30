@@ -21577,9 +21577,69 @@ def _floor_boq_build_xlsx_bytes(project, building, floor, rows, bills, services_
         s = str(v or "")
         return "'" + s if s and s[0] in ("=", "+", "-", "@") else s
 
-    # ----- Summary sheet -----
+    # ----- BOQ Detail sheet (FIRST -- every saved item, grouped by Bill -> Section -> Subsection) -----
     ws = wb.active
-    ws.title = "Summary"
+    ws.title = "BOQ"
+    ws["A1"] = f"Floor BOQ -- {project['project_name']}"
+    ws["A1"].font = title_font
+    ws.merge_cells("A1:I1")
+    ws["A2"] = f"Building : {building['building_name']}"
+    ws["A3"] = f"Floor    : {floor['floor_name']}"
+    ws["A4"] = f"Client   : {project['client_name'] or '-'}"
+
+    headers = ["Item", "Description", "Qty", "Unit", "Basic Price",
+               "Supply Amount Rate", "Installation Amount Rate",
+               "Total Amount Rate", "Amount"]
+    HROW = 6
+    for col, h in enumerate(headers, 1):
+        c_ = ws.cell(row=HROW, column=col, value=h)
+        c_.font = header_font; c_.fill = header_fill; c_.border = box
+        c_.alignment = Alignment(horizontal="center")
+
+    r1 = HROW + 1
+    prev_bill = prev_sec = prev_sub = None
+    for r in rows:
+        bn = int(r["bill_no"] or 0)
+        sl = (r["section_letter"] or "").upper()
+        sub = r["subsection_label"] or ""
+        if bn != prev_bill:
+            ws.cell(row=r1, column=1,
+                    value=f"BILL No. {bn} -- {r['bill_name'] or 'OTHER'}").font = bold
+            ws.cell(row=r1, column=1).fill = bill_fill
+            ws.merge_cells(start_row=r1, start_column=1, end_row=r1, end_column=9)
+            r1 += 1
+            prev_bill = bn; prev_sec = None; prev_sub = None
+        if sl != prev_sec:
+            ws.cell(row=r1, column=1,
+                    value=f"  {sl}. {(r['section'] or '').upper()}").font = bold
+            ws.merge_cells(start_row=r1, start_column=1, end_row=r1, end_column=9)
+            r1 += 1
+            prev_sec = sl; prev_sub = None
+        if sub and sub != prev_sub:
+            ws.cell(row=r1, column=2, value=sub).font = Font(italic=True)
+            r1 += 1
+            prev_sub = sub
+        ws.cell(row=r1, column=1, value=_san(r["item_no_display"] or r["item_no"] or ""))
+        ws.cell(row=r1, column=2, value=_san(r["description"]))
+        ws.cell(row=r1, column=3, value=float(r["qty"] or 0))
+        ws.cell(row=r1, column=4, value=_san(r["unit"]))
+        ws.cell(row=r1, column=5, value=round(float(r["basic_price"] or 0), 2))
+        ws.cell(row=r1, column=6, value=round(float(r["supply_rate"] or 0), 2))
+        ws.cell(row=r1, column=7, value=round(float(r["install_rate"] or 0), 2))
+        ws.cell(row=r1, column=8, value=round(float(r["final_built_up_rate"] or 0), 2))
+        ws.cell(row=r1, column=9, value=round(float(r["total_amount"] or 0), 2))
+        for col in range(1, 10):
+            ws.cell(row=r1, column=col).border = box
+        r1 += 1
+    r1 += 1
+    ws.cell(row=r1, column=8, value="FLOOR TOTAL CARRIED TO BUILDING SUMMARY").font = title_font
+    ws.cell(row=r1, column=9, value=round(floor_total, 2)).font = title_font
+    ws.cell(row=r1, column=9).fill = bill_fill
+    for col, w in enumerate([8, 50, 8, 8, 14, 14, 14, 14, 16], 1):
+        ws.column_dimensions[get_column_letter(col)].width = w
+
+    # ----- Summary sheet (SECOND -- per-service + per-bill aggregates) -----
+    ws = wb.create_sheet("Summary")
     ws["A1"] = f"Floor BOQ Summary -- {project['project_name']}"
     ws["A1"].font = title_font
     ws.merge_cells("A1:D1")
