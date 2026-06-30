@@ -7897,11 +7897,13 @@ def contact_lead():
     if not name or not email:
         flash("Name and email are required.", "warning")
         return redirect(url_for("landing") + "#contact")
-    with get_db() as c:
-        c.execute(
-            "INSERT INTO leads (name,email,phone,company,country,interest,message,source) "
-            "VALUES (?,?,?,?,?,?,?,?)",
-            (name, email, phone, company, country, interest, message, "website"))
+    _capture_pipeline_lead(
+        name=name, email=email, phone=phone, company=company, country=country,
+        system_type=interest or "residential",
+        interest=interest or "residential",
+        message=message,
+        source="contact_form",
+    )
     flash("Thank you! We'll be in touch within 24 hours.", "success")
     return redirect(url_for("landing") + "#contact")
 
@@ -7918,6 +7920,13 @@ def newsletter_subscribe():
         with get_db() as c:
             c.execute("INSERT OR IGNORE INTO newsletter_subscribers (email,name) VALUES (?,?)",
                       (email, name))
+        _capture_pipeline_lead(
+            name=name, email=email,
+            system_type="residential",
+            interest="newsletter",
+            message="Subscribed to the SolarPro newsletter.",
+            source="newsletter_subscribe",
+        )
         flash("Subscribed! You'll receive our solar industry updates.", "success")
     except Exception:
         flash("Already subscribed with that email.", "info")
@@ -8128,25 +8137,26 @@ def assessment_request():
         if not name or not email:
             flash("Name and email are required.", "warning")
             return redirect(url_for("assessment_request"))
-        score, grade, notes = _qualify_lead(name, company, phone, system_type, size_kw, budget, message)
+        # Wire through the unified helper. Note: the helper sets
+        # pipeline_stage='assessment_submitted' by default; override for hot
+        # leads (A/B grade) so sales sees them on the 'qualified' lane.
         try: size_kw_f = float(size_kw)
         except Exception: size_kw_f = 0.0
-        with get_db() as c:
-            c.execute(
-                "INSERT INTO assessment_requests "
-                "(name,email,phone,company,country,system_type,system_size_kw,budget_usd,"
-                "location_desc,message,ai_score,ai_grade,ai_notes,source) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'website')",
-                (name, email, phone, company, country, system_type, size_kw_f,
-                 budget, location, message, score, grade, notes))
-            # Also add to leads table for unified CRM
-            c.execute(
-                "INSERT INTO leads (name,email,phone,company,country,interest,message,source,"
-                "system_type,system_size_kw,budget_usd,ai_score,ai_grade,ai_notes,pipeline_stage) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (name, email, phone, company, country, system_type, message, "assess_form",
-                 system_type, size_kw_f, budget, score, grade, notes,
-                 "qualified" if grade in ("A","B") else "new"))
+        _grade_check = _qualify_lead(name, company, phone, system_type, size_kw, budget, message)
+        _grade = _grade_check[1]
+        _msg_extra = []
+        if size_kw_f:    _msg_extra.append("Size: %s kWp" % size_kw_f)
+        if budget:       _msg_extra.append("Budget: %s" % budget)
+        if location:     _msg_extra.append("Location: %s" % location)
+        _full_msg = message + (" | " + " | ".join(_msg_extra) if _msg_extra else "")
+        _capture_pipeline_lead(
+            name=name, email=email, phone=phone, company=company, country=country,
+            system_type=system_type or "residential",
+            interest=system_type or "residential",
+            message=_full_msg.strip(),
+            source="assess_form",
+            pipeline_stage=("qualified" if _grade in ("A","B") else "assessment_submitted"),
+        )
         flash("Thank you! Our team will contact you within 24 hours with your assessment.", "success")
         return redirect(url_for("assessment_request"))
     return render_template("assess.html", user=current_user(), countries=get_countries())
@@ -10659,6 +10669,17 @@ def admin_agent_save():
             "VALUES (?,?,?,?,?,?,?,?,?)",
             (name, "", "", company, country, interest, notes, "agent", "new")
         )
+    # Mirror into the unified pipeline so the Kanban + admin/assessments sees it.
+    try:
+        _capture_pipeline_lead(
+            name=name, company=company, country=country,
+            system_type=interest or "commercial",
+            interest=interest or "commercial",
+            message=notes,
+            source="prospecting_agent",
+        )
+    except Exception:
+        pass
     return jsonify({"ok": True})
 
 
