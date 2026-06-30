@@ -138,11 +138,11 @@
       </div>
     </div>
     <div class="text-secondary small">
-      Rate engine (2026-06-28):
-      <span class="text-warning">Supply&nbsp;Amount = Basic&nbsp;&times;&nbsp;(1 + (Supply% + VAT%)/100)</span>;
-      <span class="text-warning">Install&nbsp;Amount = Basic&nbsp;&times;&nbsp;((Install% + Overhead% + Profit%)/100)</span>;
-      <span class="text-warning">Total&nbsp;Rate = Supply&nbsp;Amount + Install&nbsp;Amount</span>.
-      Installation Amount IS the labour line; Overhead and Profit ride on the install side. Contingency removed. When the supplier invoice already carries VAT, tick the box above so VAT is not added a second time.
+      Rate engine (2026-06-30):
+      <span class="text-warning">Supply&nbsp;Amount = Basic&nbsp;&times;&nbsp;(Supply% + Overhead% + Profit% + VAT%)/100</span>;
+      <span class="text-warning">Install&nbsp;Amount = Basic&nbsp;&times;&nbsp;Install%&nbsp;/&nbsp;100</span>;
+      <span class="text-warning">Total&nbsp;Rate = Basic + Supply&nbsp;Amount + Install&nbsp;Amount</span>.
+      Overhead and Profit now ride on the supply side (sold-side markup). Installation Amount is the pure labour line. When the supplier invoice already carries VAT, tick the box above so VAT is not added a second time.
     </div>
   </div>
 
@@ -296,13 +296,14 @@
   // _boqRow(el) -- recompute one row's rate + amount. _boqRecalc() -- subtotal.
   // _boqAddRow() -- append a blank row that mirrors the structure above.
   (function(){
-    // Rate engine v3 (2026-06-28). Mirrors boq_rate_v3.boq_rate_v3:
+    // Rate engine v3 (2026-06-30). Mirrors boq_rate_v3.boq_rate_v3:
     //   eff_vat        = vat_in_basic ? 0 : vat_pct
-    //   supply_amount  = basic * (1 + (supply_pct + eff_vat) / 100)
-    //   install_amount = basic * ((install_pct + oh_pct + prf_pct) / 100)
-    //   total_rate     = supply_amount + install_amount      (per unit)
+    //   supply_amount  = basic * (supply_pct + oh_pct + prf_pct + eff_vat) / 100
+    //   install_amount = basic * install_pct / 100
+    //   total_rate     = basic + supply_amount + install_amount    (per unit)
     //   line_amount    = total_rate * qty
-    // Contingency removed. install_amount IS the labour line.
+    // 2026-06-30: Overhead + Profit ride on Supply (was Install). Install
+    // Amount Rate is now the pure labour line.
     function sectionPcts() {
       var oh  = parseFloat(document.querySelector('[name=overhead_pct]').value || 0);
       var prf = parseFloat(document.querySelector('[name=profit_pct]').value || 0);
@@ -338,10 +339,11 @@
       var ip = parseFloat(install.value || 0);
       var q = parseFloat(qty.value || 0);
       var effVat = pcts.vatInBasic ? 0 : pcts.vat;
-      // MARKUP-only (2026-06-28): Supply + Install are markup amounts
-      // (so 10% of 4500 reads as 450, not 4950). Total Rate adds basic back in.
-      var sa = b * (sp + effVat) / 100;
-      var ia = b * (ip + pcts.oh + pcts.prf) / 100;
+      // MARKUP-only (2026-06-30): Supply carries supply% + overhead% +
+      // profit% + VAT% (the sold-side markup); Install is the pure
+      // labour markup. Total Rate adds basic back in.
+      var sa = b * (sp + pcts.oh + pcts.prf + effVat) / 100;
+      var ia = b * ip / 100;
       var r = b + sa + ia;
       var a = q * r;
       var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});

@@ -178,10 +178,10 @@ def _boq_safe_rate(basic, supply, install, oh, prf, cnt=0, vat=0, vat_in_basic=F
     install). ``cnt`` is accepted for backward-compat with old callsites but
     IGNORED (contingency was retired 2026-06-28).
 
-    Formula (delegated to boq_rate_v3):
+    Formula (delegated to boq_rate_v3, revised 2026-06-30):
         effective_vat   = 0 if vat_in_basic else vat
-        supply_amount   = basic * (supply  + effective_vat)        / 100
-        install_amount  = basic * (install + overhead + profit)    / 100
+        supply_amount   = basic * (supply + overhead + profit + effective_vat) / 100
+        install_amount  = basic * install / 100
         total_rate      = basic + supply_amount + install_amount   (per unit)
     """
     from boq_rate_v3 import boq_rate_v3

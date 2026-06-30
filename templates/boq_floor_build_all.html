@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Complete BOQ — {{ floor.floor_name }}{% endblock %}
+{% block title %}Build all sections — {{ floor.floor_name }}{% endblock %}
 {% block content %}
 
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
@@ -10,10 +10,10 @@
       <a href="{{ url_for('boq_building_view', pid=project.id, bid=building.id) }}" class="text-warning">{{ building.building_name }}</a> ·
       <a href="{{ url_for('boq_floor_view', pid=project.id, bid=building.id, fid=floor.id) }}" class="text-warning">{{ floor.floor_name }}</a>
     </div>
-    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-collection text-warning me-1"></i>Complete BOQ &mdash; {{ floor.floor_name }}</h5>
+    <h5 class="fw-black mb-0 mt-1"><i class="bi bi-grid-3x3-gap text-warning me-1"></i>Build all sections &mdash; {{ floor.floor_name }}</h5>
     <div class="text-secondary small mt-1">
-      Every section from your Service Configuration on one page. Set the floor-wide rates once,
-      pick descriptions per row, set quantities, hit one Save button to save the whole floor.
+      Every section from your Service Configuration in one page, using the canonical Section-by-Section grid.
+      Type the floor-wide rates once; they apply to every row. Tick the rows you want, then Save once.
     </div>
   </div>
   <div class="d-flex gap-2 flex-wrap align-items-center">
@@ -44,7 +44,7 @@
 </div>
 
 {# ONE big form wraps every section. ONE Save button at the bottom commits the whole floor. #}
-<form method="POST" action="{{ url_for('boq_floor_complete_save_all', pid=project.id, bid=building.id, fid=floor.id) }}" id="completeBoqForm">
+<form method="POST" action="{{ url_for('boq_floor_build_all_save', pid=project.id, bid=building.id, fid=floor.id) }}" id="buildAllForm">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
 
   {# Floor-wide rates -- typed ONCE, applied to every row on the floor. #}
@@ -68,13 +68,20 @@
       </div>
       <div class="col-md-8">
         <div class="form-check" style="background:#0a0a14;border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:6px 12px">
-          <input class="form-check-input" type="checkbox" name="apply_rates_to_all_rows" id="floor_apply_all" value="1" checked>
+          <input class="form-check-input" type="checkbox" name="apply_rates_to_all_rows" id="floor_apply_all" value="1" checked disabled>
           <label class="form-check-label small" for="floor_apply_all">
-            <strong class="text-warning">Apply these rates to every line item across all sections.</strong>
-            <span class="text-secondary">Set rates once, applied to every row.</span>
+            <strong class="text-warning">First-rate-for-all-items.</strong>
+            <span class="text-secondary">The rates above apply to every row across every section in this floor.</span>
           </label>
         </div>
       </div>
+    </div>
+    <div class="text-secondary small mt-2">
+      Rate engine (2026-06-30):
+      <span class="text-warning">Supply&nbsp;Amount = Basic&nbsp;&times;&nbsp;(Supply% + Overhead% + Profit% + VAT%)/100</span>;
+      <span class="text-warning">Install&nbsp;Amount = Basic&nbsp;&times;&nbsp;Install%&nbsp;/&nbsp;100</span>;
+      <span class="text-warning">Total&nbsp;Rate = Basic + Supply&nbsp;Amount + Install&nbsp;Amount</span>.
+      Overhead and Profit ride on the sold side (Supply Amount). Installation Amount is the pure labour line.
     </div>
   </div>
 
@@ -105,7 +112,7 @@
       <div class="fw-black text-warning" id="floor_total_live" style="font-size:22px">0</div>
     </div>
     <button type="submit" name="next_action" value="save" class="btn btn-warning fw-bold">
-      <i class="bi bi-save me-1"></i>Save Complete BOQ
+      <i class="bi bi-save me-1"></i>Save all sections
     </button>
   </div>
 </form>
@@ -126,6 +133,9 @@
   // ONE recalc engine for the whole page. Every row uses the floor-wide
   // rates. Description pick auto-fills unit + basic. Live floor total
   // updates as the user types.
+  // 2026-06-30 formula: supply_amount = basic * (sp + oh + prf + effVat) / 100
+  //                     install_amount = basic * ip / 100
+  // Overhead + Profit ride on Supply (sold-side markup).
   (function(){
     function floorPcts() {
       return {
@@ -147,8 +157,9 @@
       var spField = tr.querySelector('.boq-supply');  if (spField && !spField.value) sp = pcts.supply;
       var ipField = tr.querySelector('.boq-install'); if (ipField && !ipField.value) ip = pcts.install;
       var effVat = pcts.vatInBasic ? 0 : pcts.vat;
-      var sa = basic * (sp + effVat) / 100;
-      var ia = basic * (ip + pcts.oh + pcts.prf) / 100;
+      // 2026-06-30: Overhead + Profit ride on Supply; Install is the pure labour line.
+      var sa = basic * (sp + pcts.oh + pcts.prf + effVat) / 100;
+      var ia = basic * ip / 100;
       var rate = basic + sa + ia;
       var amount = qty * rate;
       var nf = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});

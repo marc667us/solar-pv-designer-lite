@@ -18,12 +18,20 @@
     <a href="{{ url_for('boq_floor_summary', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-info btn-sm">
       <i class="bi bi-stack me-1"></i>Bills Summary
     </a>
-    <a href="{{ url_for('boq_floor_complete', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-warning fw-bold btn-sm">
-      <i class="bi bi-collection me-1"></i>Complete BOQ
-    </a>
-    <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-outline-warning btn-sm">
+    <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="btn btn-warning fw-bold btn-sm">
       <i class="bi bi-list-ol me-1"></i>Section-by-Section
     </a>
+    {# 2026-06-30: "Build all sections at once" loads every section in the
+       Section-by-Section grid stacked on one page. Replaces the standalone
+       Complete BOQ page. #}
+    <label class="btn btn-outline-warning btn-sm mb-0 d-flex align-items-center gap-1"
+           title="Tick to open every section from your Service Configuration on one page, in the Section-by-Section grid."
+           style="cursor:pointer">
+      <input type="checkbox" id="buildAllToggle" class="form-check-input m-0"
+             onclick="if (this.checked) window.location='{{ url_for('boq_floor_build_all', pid=project.id, bid=building.id, fid=floor.id) }}';">
+      <i class="bi bi-grid-3x3-gap"></i>
+      <span class="fw-bold">Build all sections</span>
+    </label>
   </div>
 </div>
 
@@ -144,30 +152,24 @@
   </div>
   <div class="row g-3">
     <div class="col-md-6">
-      <a href="{{ url_for('boq_floor_complete', pid=project.id, bid=building.id, fid=floor.id) }}" class="d-block text-decoration-none">
+      <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="d-block text-decoration-none">
         <div class="p-3 text-center" style="border:2px solid var(--solar-gold,#f59e0b);border-radius:10px;background:rgba(245,158,11,.07)">
-          <i class="bi bi-collection text-warning" style="font-size:28px"></i>
-          <div class="fw-bold text-warning mt-2">Complete BOQ</div>
-          <div class="text-secondary small mt-1">Load every applicable section from your selected services into one editable BOQ.</div>
+          <i class="bi bi-list-ol text-warning" style="font-size:28px"></i>
+          <div class="fw-bold text-warning mt-2">Section-by-Section</div>
+          <div class="text-secondary small mt-1">Pick a section, build it, save. The canonical BOQ editor.</div>
         </div>
       </a>
     </div>
     <div class="col-md-6">
-      <a href="{{ url_for('boq_section_setup', pid=project.id, bid=building.id, fid=floor.id) }}" class="d-block text-decoration-none">
+      <a href="{{ url_for('boq_floor_build_all', pid=project.id, bid=building.id, fid=floor.id) }}" class="d-block text-decoration-none">
         <div class="p-3 text-center" style="border:2px solid #1e1e3a;border-radius:10px;background:rgba(255,255,255,.02)">
-          <i class="bi bi-list-ol text-warning" style="font-size:28px"></i>
-          <div class="fw-bold mt-2" style="color:#e0e0f0">Section-by-Section</div>
-          <div class="text-secondary small mt-1">Build and review one section at a time. Existing workflow.</div>
+          <i class="bi bi-grid-3x3-gap text-warning" style="font-size:28px"></i>
+          <div class="fw-bold mt-2" style="color:#e0e0f0">Build all sections</div>
+          <div class="text-secondary small mt-1">Load every section from your Service Configuration on one page using the same Section-by-Section grid. Type rates once; they apply to every row.</div>
         </div>
       </a>
     </div>
   </div>
-  {% if (project.build_mode or 'complete_boq') %}
-  <div class="text-secondary small text-center mt-3">
-    <i class="bi bi-info-circle me-1"></i>Default build mode for this project: <span class="text-warning">{{ 'Complete BOQ' if (project.build_mode or 'complete_boq') == 'complete_boq' else 'Section-by-Section' }}</span>
-    <span class="ms-1">&middot; change on the <a href="{{ url_for('boq_project_edit', pid=project.id) }}" class="text-warning">project edit page</a>.</span>
-  </div>
-  {% endif %}
 </div>
 {% endif %}
 {% endblock %}
