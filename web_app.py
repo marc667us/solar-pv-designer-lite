@@ -26434,6 +26434,27 @@ def _strip_publisher_suffix(title):
     return title.strip()
 
 
+# 2026-07-01: solar-relevance gate. Google News often returns items that
+# hit ONE of the query terms without being about solar (e.g. an ICT
+# procurement notice that mentions 'Ghana' + 'tender'). Drop items that
+# don't have a solar/PV/renewable/off-grid keyword anywhere in the
+# title + body blob so the persistence pool stays quality-controlled.
+_SOLAR_RELEVANCE_KEYWORDS = (
+    "solar", "photovoltaic", " pv ", "off-grid", "off grid", "mini-grid",
+    "mini grid", "microgrid", "micro-grid", "renewable", "clean energy",
+    "green energy", "rooftop pv", "solar epc", "solar ipp",
+    "battery storage", "energy storage system", "hybrid solar",
+)
+
+
+def _is_solar_relevant(title: str, body: str) -> bool:
+    """Return True if the item title or body mentions solar / PV /
+    renewable-energy keywords. Case-insensitive substring match; the
+    ' pv ' variant is space-padded so we don't false-match e.g. 'PVC'."""
+    blob = (" " + (title or "") + " " + (body or "") + " ").lower()
+    return any(kw in blob for kw in _SOLAR_RELEVANCE_KEYWORDS)
+
+
 def _fetch_one(query, timeout=8.0):
     url = _gnews_rss_url(query)
     req = urllib.request.Request(url, headers={
@@ -26452,6 +26473,9 @@ def _fetch_one(query, timeout=8.0):
             desc = re.sub(r"<[^>]+>", " ", it.findtext("description") or "")
             desc = re.sub(r"\s+", " ", desc).strip()
             pub = (it.findtext("pubDate") or "").strip()
+            # Drop non-solar items -- the query terms alone are not enough.
+            if not _is_solar_relevant(raw_title, desc):
+                continue
             out.append({
                 "title":      _strip_publisher_suffix(raw_title),
                 "raw_title":  raw_title,
@@ -26468,11 +26492,64 @@ def _fetch_one(query, timeout=8.0):
     return out
 
 
+def _purge_non_solar_opportunities():
+    """One-shot cleanup: DELETE crawled-opportunity rows that don't
+    contain any of the solar-relevance keywords. Only runs once per
+    process (guarded by _OPPS_CACHE['purged_non_solar']).
+
+    Called from fetch_opportunities on first invocation after the
+    2026-07-01 solar-relevance gate landed -- existing rows from prior
+    unfiltered crawls still contain unrelated tenders (ICT procurement
+    notices, ECG financial reports, etc.) that this cleanup removes.
+    """
+    if _OPPS_CACHE.get("purged_non_solar"):
+        return
+    try:
+        # Build a compound WHERE that keeps only rows containing any
+        # solar keyword in title OR body. Case-insensitive via LOWER().
+        clauses = []
+        params = []
+        for kw in _SOLAR_RELEVANCE_KEYWORDS:
+            _p = "%" + kw + "%"
+            clauses.append("LOWER(title) LIKE ? OR LOWER(body) LIKE ?")
+            params.extend([_p, _p])
+        keep_where = " OR ".join(clauses)
+        with get_db() as c:
+            deleted = 0
+            try:
+                # Count first for logging
+                total_before = int(c.execute(
+                    "SELECT COUNT(*) FROM solar_opportunities_crawled"
+                ).fetchone()[0] or 0)
+                c.execute(
+                    "DELETE FROM solar_opportunities_crawled "
+                    f"WHERE NOT ({keep_where})",
+                    tuple(params),
+                )
+                total_after = int(c.execute(
+                    "SELECT COUNT(*) FROM solar_opportunities_crawled"
+                ).fetchone()[0] or 0)
+                deleted = total_before - total_after
+                try: c.commit()
+                except Exception: pass
+            except Exception as _e:
+                try: app.logger.warning("purge_non_solar failed: %s", _e)
+                except Exception: pass
+        _OPPS_CACHE["purged_non_solar"] = True
+        try: app.logger.info("_purge_non_solar_opportunities deleted %d rows", deleted)
+        except Exception: pass
+    except Exception:
+        pass
+
+
 def fetch_opportunities(force=False, timeout=8.0):
     """Fetch + de-dup solar opportunities from Google News across multiple
     queries. Returns a list of dicts:
        {title, body, source_url, source, country, type, published, raw_title}.
     Cached for 1 hour. Pass force=True to bypass cache."""
+    # 2026-07-01: purge legacy non-solar rows once per process.
+    try: _purge_non_solar_opportunities()
+    except Exception: pass
     now = time.time()
     if (not force and _OPPS_CACHE["items"]
             and (now - _OPPS_CACHE["fetched_at"]) < _OPPS_TTL_SECONDS):
