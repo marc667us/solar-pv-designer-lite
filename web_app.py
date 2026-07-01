@@ -15483,13 +15483,19 @@ def _mp_cache_invalidate():
 def marketplace_public():
     # Cache fast-path -- ANONYMOUS visitors only. Logged-in users
     # see personalised nav so we skip the cache for them.
+    # 2026-07-01: cache key includes CF-IPCountry so viewers in
+    # different countries see their own auto-currency response;
+    # otherwise the first visitor's country would poison the cache
+    # for everyone else in the TTL window.
     if "user_id" not in session:
-        _ck = "anon:" + (request.query_string.decode("utf-8","replace") or "_")
+        _cf_iso_for_cache = (request.headers.get("CF-IPCountry") or "").strip().upper() or "XX"
+        _ck = "anon:" + _cf_iso_for_cache + ":" + (request.query_string.decode("utf-8","replace") or "_")
         _cached = _mp_cache_get(_ck)
         if _cached is not None:
             resp = make_response(_cached)
             resp.headers["X-Cache"] = "HIT"
             resp.headers["Cache-Control"] = "public, max-age=30"
+            resp.headers["Vary"] = "CF-IPCountry"
             return resp
     """Public landing for the electrical pricing marketplace.
 
@@ -15585,8 +15591,20 @@ def marketplace_public():
             selected_category["code"], []
         )
 
-    # Currency selection — same indicative FX rates as the procurement center.
-    currency = (request.args.get("currency") or "GHS").strip().upper()
+    # Currency selection.
+    # 2026-07-01: auto-select currency based on viewer country when the
+    # user hasn't explicitly passed ?currency=. CF-IPCountry ISO ->
+    # currency map covers the platform's active regions. Viewer can
+    # still override with the currency picker at any time.
+    _iso_to_currency = {
+        "GH": "GHS", "NG": "NGN", "KE": "KES", "ZA": "ZAR",
+        "TZ": "USD", "UG": "USD", "SN": "XOF", "CI": "XOF",
+        "GB": "GBP", "US": "USD", "DE": "EUR", "FR": "EUR",
+        "ES": "EUR", "IT": "EUR", "NL": "EUR", "BE": "EUR",
+    }
+    _cf_iso = (request.headers.get("CF-IPCountry") or "").strip().upper()
+    _auto_currency = _iso_to_currency.get(_cf_iso, "GHS")
+    currency = (request.args.get("currency") or _auto_currency).strip().upper()
     if currency not in _CURRENCY_RATES_FROM_USD:
         currency = "GHS"
     rate = _CURRENCY_RATES_FROM_USD.get(currency, 1.0)
@@ -15674,13 +15692,18 @@ def marketplace_public():
                           if _country_compliance is not None else {}),
     )
     # Populate the 60-s anonymous response cache on the way out.
+    # Cache key must include CF-IPCountry so viewers get country-specific
+    # auto-currency; without that, the first anon visitor's country
+    # poisons the cache for all others in the TTL window.
     if "user_id" not in session:
-        _ck = "anon:" + (request.query_string.decode("utf-8","replace") or "_")
+        _cf_iso_for_cache = (request.headers.get("CF-IPCountry") or "").strip().upper() or "XX"
+        _ck = "anon:" + _cf_iso_for_cache + ":" + (request.query_string.decode("utf-8","replace") or "_")
         _mp_cache_set(_ck, _rendered)
     resp = make_response(_rendered)
     resp.headers["X-Cache"] = "MISS"
     if "user_id" not in session:
         resp.headers["Cache-Control"] = "public, max-age=30"
+        resp.headers["Vary"] = "CF-IPCountry"
     return resp
 
 
@@ -20747,7 +20770,16 @@ def support_dashboard():
 @app.route("/marketplace/product/<int:pid>")
 def marketplace_product_detail(pid):
     _ensure_marketplace_tables()
-    currency = (request.args.get("currency") or "GHS").strip().upper()
+    # 2026-07-01: auto-currency by viewer CF-IPCountry when no ?currency=
+    _iso_to_currency = {
+        "GH": "GHS", "NG": "NGN", "KE": "KES", "ZA": "ZAR",
+        "TZ": "USD", "UG": "USD", "SN": "XOF", "CI": "XOF",
+        "GB": "GBP", "US": "USD", "DE": "EUR", "FR": "EUR",
+        "ES": "EUR", "IT": "EUR", "NL": "EUR", "BE": "EUR",
+    }
+    _cf_iso = (request.headers.get("CF-IPCountry") or "").strip().upper()
+    _auto_currency = _iso_to_currency.get(_cf_iso, "GHS")
+    currency = (request.args.get("currency") or _auto_currency).strip().upper()
     if currency not in _CURRENCY_RATES_FROM_USD:
         currency = "GHS"
     rate = _CURRENCY_RATES_FROM_USD.get(currency, 1.0)
