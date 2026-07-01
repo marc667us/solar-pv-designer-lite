@@ -21502,47 +21502,204 @@ def boq_floor_boq_review(pid, bid, fid):
 
 
 def _floor_boq_build_pdf_bytes(project, building, floor, rows, bills, services_breakdown, floor_total):
-    """Return PDF bytes for a floor BOQ using markdown-pdf."""
+    """Return PDF bytes for a floor BOQ.
+
+    Layout: A4 landscape single-table document. Real HTML tables with
+    fixed column widths so long descriptions never push the Amount
+    column off-page. Bill / Section header rows are coloured and
+    span the full 9-column width. Numeric columns are right-aligned
+    with tabular-nums so they line up cleanly on every row.
+    """
     from markdown_pdf import MarkdownPdf, Section
+    from html import escape as _h
     sym = "GHS"
-    title = f"Floor BOQ -- {project['project_name']} / {building['building_name']} / {floor['floor_name']}"
-    md = f"# {title}\n\n"
-    if project["client_name"]:
-        md += f"**Client:** {project['client_name']}\n\n"
-    md += "---\n\n## Items\n\n"
-    md += "| Item | Description | Qty | Unit | Basic | Supply | Install | Total Rate | Amount |\n"
-    md += "|---|---|---|---|---|---|---|---|---|\n"
-    prev_bill = prev_sec = None
+
+    def _num(v):
+        try:
+            return f"{float(v or 0):,.2f}"
+        except Exception:
+            return ""
+
+    def _int(v):
+        try:
+            return f"{int(float(v or 0)):,}"
+        except Exception:
+            return ""
+
+    title = (f"Floor BOQ - {project['project_name']} / "
+             f"{building['building_name']} / {floor['floor_name']}")
+    client_line = ""
+    if project.get("client_name") if hasattr(project, "get") else project["client_name"]:
+        client_line = f"<div class='meta'>Client: <b>{_h(str(project['client_name']))}</b></div>"
+
+    # ------------------------------------------------------------------
+    # One <table> PER BILL. PyMuPDF story renderer does not repeat
+    # <thead> across page breaks -- fresh headers per bill guarantee
+    # that continuation pages always start near a table with visible
+    # column headers.
+    # ------------------------------------------------------------------
+    _thead = (
+        "<thead><tr>"
+        "<th class='c-item'>Item</th>"
+        "<th class='c-desc'>Description</th>"
+        "<th class='c-qty'>Qty</th>"
+        "<th class='c-unit'>Unit</th>"
+        "<th class='c-num'>Basic Price</th>"
+        "<th class='c-num'>Supply Rate</th>"
+        "<th class='c-num'>Install Rate</th>"
+        "<th class='c-num'>Total Rate</th>"
+        "<th class='c-amt'>Amount</th>"
+        "</tr></thead>"
+    )
+
+    # Group rows by bill number in stable order of first appearance.
+    _bill_order = []
+    _by_bill = {}
     for r in rows:
         bn = int(r["bill_no"] or 0)
-        sl = (r["section_letter"] or "").upper()
-        if bn != prev_bill:
-            md += f"\n**BILL No. {bn} -- {r['bill_name'] or 'OTHER'}**\n\n"
-            md += "| Item | Description | Qty | Unit | Basic | Supply | Install | Total Rate | Amount |\n"
-            md += "|---|---|---|---|---|---|---|---|---|\n"
-            prev_bill = bn; prev_sec = None
-        if sl != prev_sec:
-            md += f"_{sl}. {(r['section'] or '').upper()}_\n\n"
-            prev_sec = sl
-        desc = str(r["description"] or "").replace("|", " / ")
-        md += (f"| {r['item_no_display'] or r['item_no'] or ''} | {desc} | "
-               f"{int(r['qty'] or 0)} | {r['unit'] or ''} | "
-               f"{float(r['basic_price'] or 0):,.2f} | "
-               f"{float(r['supply_rate'] or 0):,.2f} | "
-               f"{float(r['install_rate'] or 0):,.2f} | "
-               f"{float(r['final_built_up_rate'] or 0):,.2f} | "
-               f"**{float(r['total_amount'] or 0):,.2f}** |\n")
-    md += f"\n\n**FLOOR TOTAL CARRIED TO BUILDING SUMMARY: {sym} {floor_total:,.2f}**\n\n"
-    md += "---\n\n## Per-service totals\n\n| Service | Amount |\n|---|---|\n"
-    for s in services_breakdown:
-        md += f"| {s['label']} | {sym} {s['service_total']:,.2f} |\n"
-    md += "\n## Per-bill totals\n\n| Bill | Amount |\n|---|---|\n"
-    for b in bills:
-        md += f"| BILL No. {b['bill_no']} -- {b['bill_name']} | {sym} {b['subtotal']:,.2f} |\n"
+        if bn not in _by_bill:
+            _bill_order.append(bn)
+            _by_bill[bn] = {"name": r["bill_name"] or "OTHER", "rows": []}
+        _by_bill[bn]["rows"].append(r)
 
-    pdf = MarkdownPdf()
+    # Bill subtotals from the pre-computed bills list (fallback: sum).
+    _sub_by_bill = {int(b["bill_no"] or 0): float(b["subtotal"] or 0) for b in bills}
+
+    _bill_blocks = []
+    for bn in _bill_order:
+        _bname = _by_bill[bn]["name"]
+        _brows = _by_bill[bn]["rows"]
+        _tbody = ["<tbody>"]
+        prev_sec = None
+        for r in _brows:
+            sl = (r["section_letter"] or "").upper()
+            if sl != prev_sec:
+                _tbody.append(
+                    f"<tr class='sec'><td colspan='9'>{_h(sl)}. "
+                    f"{_h(str(r['section'] or '').upper())}</td></tr>"
+                )
+                prev_sec = sl
+            _tbody.append(
+                "<tr>"
+                f"<td class='c-item'>{_h(str(r['item_no_display'] or r['item_no'] or ''))}</td>"
+                f"<td class='c-desc'>{_h(str(r['description'] or ''))}</td>"
+                f"<td class='c-qty'>{_int(r['qty'])}</td>"
+                f"<td class='c-unit'>{_h(str(r['unit'] or ''))}</td>"
+                f"<td class='c-num'>{_num(r['basic_price'])}</td>"
+                f"<td class='c-num'>{_num(r['supply_rate'])}</td>"
+                f"<td class='c-num'>{_num(r['install_rate'])}</td>"
+                f"<td class='c-num'>{_num(r['final_built_up_rate'])}</td>"
+                f"<td class='c-amt'>{_num(r['total_amount'])}</td>"
+                "</tr>"
+            )
+        _tbody.append("</tbody>")
+        _sub = _sub_by_bill.get(bn, sum(float(r["total_amount"] or 0) for r in _brows))
+        _bill_blocks.append(
+            f"<div class='bill-banner'>BILL No. {bn} &mdash; "
+            f"{_h(str(_bname))}</div>"
+            f"<table class='boq'>{_thead}{''.join(_tbody)}</table>"
+            f"<div class='bill-subtotal'>Bill {bn} Subtotal: "
+            f"{sym} {_num(_sub)}</div>"
+        )
+    items_table = "".join(_bill_blocks)
+
+    # Per-service totals
+    svc_rows = []
+    for s in services_breakdown:
+        svc_rows.append(
+            f"<tr><td>{_h(str(s['label']))}</td>"
+            f"<td class='c-amt'>{sym} {_num(s['service_total'])}</td></tr>"
+        )
+    svc_table = (
+        "<h3>Per-service totals</h3>"
+        "<table class='summary'>"
+        "<thead><tr><th>Service</th><th class='c-amt'>Amount</th></tr></thead>"
+        f"<tbody>{''.join(svc_rows)}</tbody>"
+        "</table>"
+    ) if svc_rows else ""
+
+    # Per-bill totals
+    bill_rows = []
+    for b in bills:
+        bill_rows.append(
+            f"<tr><td>BILL No. {int(b['bill_no'] or 0)} - "
+            f"{_h(str(b['bill_name'] or ''))}</td>"
+            f"<td class='c-amt'>{sym} {_num(b['subtotal'])}</td></tr>"
+        )
+    bill_table = (
+        "<h3>Per-bill totals</h3>"
+        "<table class='summary'>"
+        "<thead><tr><th>Bill</th><th class='c-amt'>Amount</th></tr></thead>"
+        f"<tbody>{''.join(bill_rows)}</tbody>"
+        "</table>"
+    ) if bill_rows else ""
+
+    body = (
+        f"<div class='title'>{_h(title)}</div>"
+        f"{client_line}"
+        f"<div class='meta'>Building: <b>{_h(str(building['building_name']))}</b> "
+        f"&nbsp;|&nbsp; Floor: <b>{_h(str(floor['floor_name']))}</b></div>"
+        f"{items_table}"
+        f"<div class='floor-total'>FLOOR TOTAL CARRIED TO BUILDING SUMMARY: "
+        f"{sym} {_num(floor_total)}</div>"
+        f"{svc_table}"
+        f"{bill_table}"
+    )
+
+    css = """
+    body { font-family: Helvetica, Arial, sans-serif; color: #1f2937; }
+    .title { font-size: 15pt; font-weight: 700; color: #B45309; margin: 0 0 6pt 0; }
+    .meta  { font-size: 9pt; color: #374151; margin: 0 0 2pt 0; }
+    h3     { font-size: 11pt; margin: 12pt 0 4pt 0; color: #1E3A5F; }
+    table.boq, table.summary {
+        width: 100%; border-collapse: collapse; font-size: 8pt;
+        table-layout: fixed; margin-top: 8pt;
+    }
+    table.boq th, table.summary th {
+        background: #1E3A5F; color: #ffffff; font-weight: 700;
+        padding: 5pt 3pt; border: 0.5pt solid #1E3A5F;
+        text-align: center; font-size: 8pt;
+    }
+    table.boq td, table.summary td {
+        padding: 3pt 3pt; border: 0.4pt solid #d1d5db;
+        vertical-align: top; word-wrap: break-word; overflow-wrap: break-word;
+    }
+    table.boq tr.sec td {
+        background: #E5E7EB; font-weight: 700; color: #1f2937;
+        padding: 3pt 4pt; font-size: 8pt; font-style: italic;
+    }
+    .bill-banner {
+        background: #FEF3C7; color: #78350F; font-weight: 700;
+        font-size: 10pt; padding: 6pt 8pt; margin: 12pt 0 0 0;
+        border-left: 3pt solid #B45309;
+    }
+    .bill-subtotal {
+        background: #F3F4F6; color: #1E3A5F; font-weight: 700;
+        font-size: 9pt; padding: 4pt 8pt; margin: 0 0 6pt 0;
+        text-align: right; border-left: 3pt solid #1E3A5F;
+    }
+    .c-item { width: 5%;  text-align: center; }
+    .c-desc { width: 30%; text-align: left; }
+    .c-qty  { width: 5%;  text-align: right; font-variant-numeric: tabular-nums; }
+    .c-unit { width: 5%;  text-align: center; }
+    .c-num  { width: 10%; text-align: right; font-variant-numeric: tabular-nums; }
+    .c-amt  { width: 12%; text-align: right; font-weight: 700;
+              font-variant-numeric: tabular-nums; }
+    .floor-total {
+        margin: 8pt 0; padding: 6pt 8pt; background: #1E3A5F; color: #ffffff;
+        font-size: 11pt; font-weight: 700; text-align: right;
+    }
+    table.summary { width: 60%; }
+    """
+
+    pdf = MarkdownPdf(mode="commonmark")
     pdf.meta["title"] = title
-    pdf.add_section(Section(md, toc=False))
+    # A4 landscape; wide margins on left/right for readability.
+    pdf.add_section(
+        Section(body, toc=False, paper_size="A4-L",
+                borders=(28, 28, -28, -28)),
+        user_css=css,
+    )
     import io
     buf = io.BytesIO()
     pdf.save(buf)
