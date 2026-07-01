@@ -12,6 +12,10 @@
       </div>
     </div>
     <div class="ms-auto d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('news_rss') }}" class="btn btn-outline-warning btn-sm"
+         title="Subscribe to SolarPro news in your RSS reader">
+        <i class="bi bi-rss-fill me-1"></i>RSS
+      </a>
       <a href="{{ url_for('newsfeed_public') }}" class="btn btn-outline-warning btn-sm">
         <i class="bi bi-rss me-1"></i>Live industry newsfeed
       </a>
