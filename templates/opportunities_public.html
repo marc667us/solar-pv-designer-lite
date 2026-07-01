@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Solar Opportunities — RFQ / RFP / EOI / Tender feed | SolarPro{% endblock %}
+{% block content %}
+<div class="container-xl py-4">
+
+  <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+    <div style="font-size:32px;color:var(--solar-gold)"><i class="bi bi-broadcast-pin"></i></div>
+    <div>
+      <h4 class="fw-black mb-0">Solar Opportunities</h4>
+      <div class="text-secondary small">
+        Live RFQ / RFP / EOI / Tender feed for solar projects worldwide.
+        <span class="text-warning fw-semibold">{{ n_total }}</span> tenders indexed
+        {% if selected_type or selected_country %}
+          &middot; showing <span class="text-warning fw-semibold">{{ n_filtered }}</span> after filter
+        {% endif %}
+        &middot; sources: Google News RSS aggregation, updated hourly.
+      </div>
+    </div>
+    <div class="ms-auto d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('newsfeed_public') }}" class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-rss me-1"></i>Live newsfeed
+      </a>
+      <a href="{{ url_for('marketplace_public') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-shop me-1"></i>Marketplace
+      </a>
+    </div>
+  </div>
+
+  {% if type_facets or country_facets %}
+  <div class="mb-3">
+    {% if type_facets %}
+    <div class="d-flex flex-wrap gap-1 mb-2 align-items-center">
+      <span class="text-secondary small me-2" style="letter-spacing:.5px">TYPE:</span>
+      <a href="{{ url_for('public_opportunities', country=selected_country or none) }}"
+         class="btn btn-sm {% if not selected_type %}btn-warning{% else %}btn-outline-light{% endif %}">
+        All
+      </a>
+      {% for f in type_facets %}
+      <a href="{{ url_for('public_opportunities', type=f.name, country=selected_country or none) }}"
+         class="btn btn-sm {% if selected_type == f.name %}btn-warning{% else %}btn-outline-light{% endif %}">
+        {{ f.name }}<span class="badge ms-1" style="background:rgba(255,255,255,.10);font-size:9px">{{ f.n }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if country_facets %}
+    <div class="d-flex flex-wrap gap-1 align-items-center">
+      <span class="text-secondary small me-2" style="letter-spacing:.5px">COUNTRY:</span>
+      <a href="{{ url_for('public_opportunities', type=selected_type or none) }}"
+         class="btn btn-sm {% if not selected_country %}btn-warning{% else %}btn-outline-light{% endif %}">
+        All
+      </a>
+      {% for f in country_facets %}
+      <a href="{{ url_for('public_opportunities', country=f.name, type=selected_type or none) }}"
+         class="btn btn-sm {% if selected_country == f.name %}btn-warning{% else %}btn-outline-light{% endif %}">
+        {{ f.name }}<span class="badge ms-1" style="background:rgba(255,255,255,.10);font-size:9px">{{ f.n }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if items %}
+    <div class="row g-3">
+      {% for it in items %}
+      <div class="col-md-6 col-lg-4">
+        <a href="{{ it.source_url }}" target="_blank" rel="noopener nofollow" class="text-decoration-none">
+          <div class="p-3 h-100" style="border:1px solid #1e1e3a;background:#0a0a14;border-radius:10px;transition:.15s"
+               onmouseover="this.style.borderColor='rgba(245,158,11,.45)'"
+               onmouseout="this.style.borderColor='#1e1e3a'">
+            <div class="d-flex justify-content-between align-items-start mb-2 gap-2">
+              <span class="badge" style="background:rgba(245,158,11,.15);color:var(--solar-gold);font-size:10px;text-transform:uppercase;letter-spacing:.5px">
+                {{ it.type or 'OTHER' }}
+              </span>
+              {% if it.country %}
+              <span class="text-secondary" style="font-size:11px">
+                <i class="bi bi-geo-alt-fill me-1" style="color:#22c55e"></i>{{ it.country }}
+              </span>
+              {% endif %}
+            </div>
+            <div class="fw-semibold text-light mb-2" style="font-size:14px;line-height:1.35">
+              {{ it.title }}
+            </div>
+            {% if it.body %}
+            <div class="text-secondary" style="font-size:11.5px;line-height:1.5">
+              {{ it.body[:180] }}{% if it.body|length > 180 %}…{% endif %}
+            </div>
+            {% endif %}
+            <div class="mt-2 d-flex justify-content-between align-items-center" style="font-size:11px">
+              <span class="text-secondary">
+                <i class="bi bi-newspaper me-1"></i>{{ it.source or 'News' }}
+              </span>
+              <span style="color:var(--solar-gold)">
+                Read more <i class="bi bi-arrow-up-right"></i>
+              </span>
+            </div>
+          </div>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if total_pages > 1 %}
+    <div class="d-flex justify-content-center align-items-center gap-2 mt-4">
+      {% if page > 1 %}
+      <a href="{{ url_for('public_opportunities', page=page-1, type=selected_type or none, country=selected_country or none) }}" class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-chevron-left me-1"></i>Previous
+      </a>
+      {% endif %}
+      <span class="small text-secondary">Page {{ page }} of {{ total_pages }}</span>
+      {% if page < total_pages %}
+      <a href="{{ url_for('public_opportunities', page=page+1, type=selected_type or none, country=selected_country or none) }}" class="btn btn-outline-warning btn-sm">
+        Next<i class="bi bi-chevron-right ms-1"></i>
+      </a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  {% else %}
+    <div class="solar-card p-5 text-center" style="border:1px solid #1e1e3a">
+      <div style="font-size:64px;color:var(--solar-gold);opacity:.35"><i class="bi bi-broadcast-pin"></i></div>
+      <h5 class="text-light mt-3">
+        {% if selected_type or selected_country %}
+          No tenders match this filter yet
+        {% else %}
+          Building the opportunity index…
+        {% endif %}
+      </h5>
+      <p class="text-secondary">
+        {% if selected_type or selected_country %}
+          Try a different type or country, or clear the filter.
+        {% else %}
+          Come back in a few minutes — the crawler is pulling fresh data on the first visit.
+        {% endif %}
+      </p>
+      <a href="{{ url_for('public_opportunities') }}" class="btn btn-outline-warning">
+        <i class="bi bi-x-circle me-1"></i>Clear filter
+      </a>
+    </div>
+  {% endif %}
+
+  {# ── Free-services strip ── #}
+  <div class="mt-5 pt-4" style="border-top:1px solid #1e1e3a">
+    <div class="small text-secondary mb-2" style="letter-spacing:.5px">MORE FREE TOOLS FROM SOLARPRO</div>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="{{ url_for('news_index') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-newspaper me-1"></i>SolarPro news
+      </a>
+      <a href="{{ url_for('newsfeed_public') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-rss me-1"></i>Live newsfeed
+      </a>
+      <a href="{{ url_for('marketplace_public') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-shop me-1"></i>Marketplace
+      </a>
+      <a href="{{ url_for('bill_check_landing') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-lightning-charge me-1"></i>Bill check
+      </a>
+      <a href="{{ url_for('guides_view', slug='quick') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-play-circle me-1"></i>Quick guide
+      </a>
+    </div>
+  </div>
+
+  <div class="mt-3 text-secondary small">
+    <i class="bi bi-info-circle me-1"></i>
+    All listings link out to the original public tender/news source. SolarPro
+    aggregates but does not verify individual tenders.
+  </div>
+
+</div>
+{% endblock %}
