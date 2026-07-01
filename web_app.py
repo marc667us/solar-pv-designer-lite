@@ -26492,6 +26492,50 @@ def _fetch_one(query, timeout=8.0):
     return out
 
 
+_OPPS_TTL_DAYS = 180  # opportunities older than this get auto-purged
+
+
+def _purge_stale_opportunities():
+    """One-shot cleanup: DELETE crawled-opportunity rows whose
+    last_seen_at is older than _OPPS_TTL_DAYS.
+
+    Solar RFP/tender lifecycles are typically 30-90 days from
+    publication to award. 180 days = comfortably past award for the
+    vast majority of tenders, at which point keeping the row provides
+    no value (the tender is over) and pollutes the feed.
+
+    Only runs once per process (guarded by _OPPS_CACHE['purged_stale']).
+    """
+    if _OPPS_CACHE.get("purged_stale"):
+        return
+    try:
+        with get_db() as c:
+            total_before = int(c.execute(
+                "SELECT COUNT(*) FROM solar_opportunities_crawled"
+            ).fetchone()[0] or 0)
+            # SQLite uses julianday for time math; Postgres accepts
+            # CURRENT_TIMESTAMP - INTERVAL. We use portable ISO string
+            # comparison because last_seen_at is a text column on SQLite.
+            from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+            cutoff = (_dt.now(_tz.utc) - _td(days=_OPPS_TTL_DAYS)).isoformat()[:19]
+            c.execute(
+                "DELETE FROM solar_opportunities_crawled "
+                "WHERE last_seen_at < ?",
+                (cutoff,),
+            )
+            total_after = int(c.execute(
+                "SELECT COUNT(*) FROM solar_opportunities_crawled"
+            ).fetchone()[0] or 0)
+            try: c.commit()
+            except Exception: pass
+            deleted = total_before - total_after
+        _OPPS_CACHE["purged_stale"] = True
+        try: app.logger.info("_purge_stale_opportunities cutoff=%s deleted %d rows", cutoff, deleted)
+        except Exception: pass
+    except Exception:
+        pass
+
+
 def _purge_non_solar_opportunities():
     """One-shot cleanup: DELETE crawled-opportunity rows that don't
     contain any of the solar-relevance keywords. Only runs once per
@@ -26547,8 +26591,11 @@ def fetch_opportunities(force=False, timeout=8.0):
     queries. Returns a list of dicts:
        {title, body, source_url, source, country, type, published, raw_title}.
     Cached for 1 hour. Pass force=True to bypass cache."""
-    # 2026-07-01: purge legacy non-solar rows once per process.
+    # 2026-07-01: purge legacy non-solar rows + rows older than TTL,
+    # once per process.
     try: _purge_non_solar_opportunities()
+    except Exception: pass
+    try: _purge_stale_opportunities()
     except Exception: pass
     now = time.time()
     if (not force and _OPPS_CACHE["items"]
