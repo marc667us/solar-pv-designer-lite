@@ -2780,11 +2780,48 @@ def dashboard():
 
     limit    = PLAN_LIMITS.get(plan, 1)
     at_limit = len(projects) >= limit
+    # 2026-07-01: latest 3 news posts previewed on the dashboard news widget
+    dash_news_preview = []
+    try:
+        with get_db() as c:
+            _rows = c.execute(
+                "SELECT id, title, category, created_at FROM news_posts "
+                "WHERE is_published=1 ORDER BY created_at DESC LIMIT 3"
+            ).fetchall()
+            for _r in _rows:
+                dash_news_preview.append({
+                    "id":         _r["id"],
+                    "title":      _r["title"],
+                    "category":   _r["category"] or "industry",
+                    "created_at": _r["created_at"] or "",
+                })
+    except Exception:
+        pass
+
+    # 2026-07-01: newsletter opt-in prompt for users who haven't yet subscribed
+    # AND haven't dismissed the prompt this session. Appears at top of dashboard
+    # so brand-new KC signups (who land here immediately post-callback) see it.
+    show_newsletter_prompt = False
+    try:
+        if not session.get("dismissed_newsletter_prompt"):
+            _uemail = (user["email"] or "").strip().lower()
+            if _uemail:
+                with get_db() as c:
+                    _sub = c.execute(
+                        "SELECT id FROM newsletter_subscribers "
+                        "WHERE lower(email)=lower(?) AND status='active' LIMIT 1",
+                        (_uemail,),
+                    ).fetchone()
+                show_newsletter_prompt = (_sub is None)
+    except Exception:
+        pass
     return render_template("dashboard.html", synth_count=synth_count, user=user, projects=projects,
                            plan=plan, limit=limit, at_limit=at_limit,
                            open_tickets=open_tickets, emails_sent=emails_sent,
                            total_kwp=round(total_kwp, 1),
-                           total_kwh=round(total_kwh, 1))
+                           total_kwh=round(total_kwh, 1),
+                           dash_news_preview=dash_news_preview,
+                           show_newsletter_prompt=show_newsletter_prompt)
 
 
 # ─── Routes — Project ─────────────────────────────────────────────────────────
@@ -7918,9 +7955,14 @@ def contact_lead():
 def newsletter_subscribe():
     email = request.form.get("email", "").strip()
     name  = request.form.get("name", "").strip()
+    # Callers can pass ?next= to return to a specific page (e.g. dashboard
+    # prompt). Only accept relative paths starting with / to avoid open-redirect.
+    next_url = request.form.get("next_url", "").strip()
+    if not next_url.startswith("/") or "//" in next_url[1:]:
+        next_url = ""
     if not email:
         flash("Email is required.", "warning")
-        return redirect(url_for("landing") + "#newsletter")
+        return redirect(next_url or (url_for("landing") + "#newsletter"))
     try:
         with get_db() as c:
             c.execute("INSERT OR IGNORE INTO newsletter_subscribers (email,name) VALUES (?,?)",
@@ -7935,7 +7977,17 @@ def newsletter_subscribe():
         flash("Subscribed! You'll receive our solar industry updates.", "success")
     except Exception:
         flash("Already subscribed with that email.", "info")
-    return redirect(url_for("landing") + "#newsletter")
+    return redirect(next_url or (url_for("landing") + "#newsletter"))
+
+
+@app.route("/newsletter/dismiss-prompt", methods=["POST"])
+@login_required
+def newsletter_dismiss_prompt():
+    """Store a session flag so the dashboard newsletter opt-in banner
+    doesn't reappear during this session."""
+    csrf_protect()
+    session["dismissed_newsletter_prompt"] = True
+    return redirect(url_for("dashboard"))
 
 
 # ─── Assessment Request (public) ──────────────────────────────────────────────
@@ -8678,29 +8730,52 @@ def admin_news():
         action = request.form.get("action")
         with get_db() as c:
             if action == "create":
-                c.execute(
+                cur = c.execute(
                     "INSERT INTO news_posts (title,content,category,is_published) VALUES (?,?,?,?)",
                     (request.form["title"], request.form["content"],
                      request.form.get("category","industry"),
                      1 if request.form.get("publish") else 0))
+                try: c.commit()
+                except Exception: pass
                 flash("News post created.", "success")
             elif action == "edit":
-                nid = request.form.get("nid", type=int)
-                c.execute(
-                    "UPDATE news_posts SET title=?,content=?,category=?,is_published=?,updated_at=? WHERE id=?",
-                    (request.form["title"], request.form["content"],
-                     request.form.get("category","industry"),
-                     1 if request.form.get("publish") else 0,
-                     datetime.now().isoformat(), nid))
-                flash("Post updated.", "success")
+                nid = request.form.get("nid", type=int) or 0
+                if nid <= 0:
+                    flash("Cannot update: missing or invalid post id.", "warning")
+                else:
+                    cur = c.execute(
+                        "UPDATE news_posts SET title=?,content=?,category=?,is_published=?,updated_at=? WHERE id=?",
+                        (request.form["title"], request.form["content"],
+                         request.form.get("category","industry"),
+                         1 if request.form.get("publish") else 0,
+                         datetime.now().isoformat(), nid))
+                    try: c.commit()
+                    except Exception: pass
+                    n = getattr(cur, "rowcount", -1)
+                    if n == 0:
+                        flash(f"Update ran but no post with id={nid} was found. Nothing changed.", "warning")
+                    else:
+                        flash(f"Post {nid} updated.", "success")
             elif action == "delete":
-                c.execute("DELETE FROM news_posts WHERE id=?",
-                          (request.form.get("nid", type=int),))
-                flash("Post deleted.", "info")
+                nid = request.form.get("nid", type=int) or 0
+                if nid <= 0:
+                    flash("Cannot delete: missing or invalid post id.", "warning")
+                else:
+                    cur = c.execute("DELETE FROM news_posts WHERE id=?", (nid,))
+                    try: c.commit()
+                    except Exception: pass
+                    n = getattr(cur, "rowcount", -1)
+                    if n == 0:
+                        flash(f"Delete ran but no post with id={nid} was found.", "warning")
+                    else:
+                        flash(f"Post {nid} deleted.", "info")
         return redirect(url_for("admin_news"))
     with get_db() as c:
         posts = c.execute("SELECT * FROM news_posts ORDER BY created_at DESC").fetchall()
-    return render_template("admin_news.html", user=current_user(), posts=posts)
+    resp = make_response(render_template("admin_news.html", user=current_user(), posts=posts))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @app.route("/admin/newsletter")
