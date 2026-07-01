@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Complete Supplier Profile — SolarPro Marketplace{% endblock %}
+{% block og_description %}Complete your SolarPro supplier profile. Free listing on the global marketplace after our team verifies your company.{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+
+    <div class="rounded-3 p-4 mb-3" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1030 60%,#0f1a22 100%);border:1px solid #1e1e3a">
+      <div class="d-flex align-items-center gap-3 mb-2">
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,var(--solar-gold),var(--solar-orange));display:flex;align-items:center;justify-content:center;font-size:22px;color:#000">
+          <i class="bi bi-building-add"></i>
+        </div>
+        <div>
+          <h4 class="fw-black mb-0">Complete your supplier profile</h4>
+          <div class="text-secondary small">
+            You're signed in as <strong class="text-warning">{{ user.username }}</strong>.
+            Add your company details so we can verify your listing.
+          </div>
+        </div>
+      </div>
+      <div class="text-secondary small mb-0">
+        New listings appear on the public marketplace after our team verifies your company —
+        usually same-day. Verification does not block product entry; you can add products immediately.
+      </div>
+    </div>
+
+    <div class="solar-card p-4">
+      <form method="POST" action="{{ url_for('supplier_onboarding') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-building me-1"></i>Company</h6>
+        <div class="row g-3 mb-3">
+          <div class="col-md-12">
+            <label class="form-label small text-secondary">Company name *</label>
+            <input class="form-control" name="company" required placeholder="Schneider Electric Ghana Ltd">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Country</label>
+            <select class="form-select" name="country">
+              <option value="">Select country</option>
+              {% for c in countries %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Website</label>
+            <input class="form-control" name="website" placeholder="https://...">
+          </div>
+          <div class="col-md-12">
+            <label class="form-label small text-secondary">Office address *</label>
+            <textarea class="form-control" name="address" rows="2" required placeholder="No. 12 Ring Road East, East Legon, Accra, Ghana"></textarea>
+          </div>
+          <div class="col-md-12">
+            <label class="form-label small text-secondary">Categories you supply (comma-separated)</label>
+            <input class="form-control" name="categories" placeholder="LV Cables, Distribution Boards, Switchgear">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-secondary">Typical lead time (days)</label>
+            <input type="number" class="form-control" name="lead_time_days" value="30" min="1">
+          </div>
+          <div class="col-md-8">
+            <label class="form-label small text-secondary">Payment terms</label>
+            <input class="form-control" name="payment_terms" value="TT 30 days">
+          </div>
+        </div>
+
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-person-circle me-1"></i>Contact</h6>
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Contact name</label>
+            <input class="form-control" name="contact_name" value="{{ user.name or user.username }}" placeholder="Marc Owusu">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Phone</label>
+            <input class="form-control" name="phone" placeholder="+233...">
+          </div>
+          <div class="col-md-12">
+            <label class="form-label small text-secondary">Business email</label>
+            <input type="email" class="form-control" name="email" value="{{ user.email or '' }}" placeholder="sales@example.com">
+            <div class="form-text small text-secondary">
+              Defaults to your Keycloak account email. Change if you want RFQs sent to a different mailbox.
+            </div>
+          </div>
+        </div>
+
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" name="terms_agreed" id="terms_agreed" required>
+          <label class="form-check-label small text-secondary" for="terms_agreed">
+            I agree to the <a href="{{ url_for('terms') }}" class="text-warning">Terms of Service</a> and
+            <a href="{{ url_for('privacy') }}" class="text-warning">Privacy Policy</a>.
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-warning fw-bold w-100 py-2">
+          <i class="bi bi-rocket-takeoff me-1"></i>Complete supplier onboarding
+        </button>
+        <div class="text-center small text-secondary mt-3">
+          Not a supplier? <a href="{{ url_for('dashboard') }}" class="text-warning">Go to your dashboard</a> instead.
+        </div>
+      </form>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

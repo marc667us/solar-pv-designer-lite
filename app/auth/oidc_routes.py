@@ -444,12 +444,18 @@ def auth_callback():
                 ).fetchone()
                 if row is None and kc_username:
                     # KC-side user not yet present in solar -- provision a
-                    # minimal `users` row. password_hash stays NULL because
-                    # the user can ONLY authenticate via KC from now on.
+                    # minimal `users` row. The users table still has
+                    # `password_hash TEXT NOT NULL` (Phase B migration 005
+                    # which nulls-out that constraint is owner-pending as
+                    # of 2026-07-01), so we insert a sentinel value that
+                    # check_password_hash() cannot verify. That makes the
+                    # user authable ONLY via KC even if the /login legacy
+                    # POST path is ever reopened by accident.
                     c.execute(
-                        "INSERT INTO users (username, email, name, plan, is_admin, created_at) "
-                        "VALUES (?, ?, ?, 'free', 0, CURRENT_TIMESTAMP)",
-                        (kc_username, kc_email, kc_name),
+                        "INSERT INTO users (username, email, name, password_hash, plan, is_admin, created_at) "
+                        "VALUES (?, ?, ?, ?, 'free', 0, CURRENT_TIMESTAMP)",
+                        (kc_username, kc_email, kc_name,
+                         "KC_ONLY_NEVER_VALID"),
                     )
                     row = c.execute(
                         "SELECT id, username FROM users WHERE lower(username)=lower(?) LIMIT 1",

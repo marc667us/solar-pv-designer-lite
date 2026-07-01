@@ -15799,6 +15799,121 @@ def _legacy_supplier_register_disabled():
     return redirect(url_for("supplier_dashboard"))
 
 
+@app.route("/supplier/onboarding", methods=["GET", "POST"])
+@login_required
+def supplier_onboarding():
+    """Post-KC supplier onboarding.
+
+    Reached after the /supplier/register -> /auth/register KC redirect
+    completes successfully. The OIDC callback creates a users row with
+    role='' plan='free' and drops the user on this route (via the
+    &next=/supplier/onboarding parameter). Here we collect the supplier-
+    specific fields (company, categories, phone, website, address) and:
+      1. INSERT a suppliers row owned by session['user_id']
+      2. UPDATE users SET role='supplier_admin' WHERE id=session['user_id']
+      3. Redirect to /supplier/dashboard so the user can start adding
+         products.
+
+    If the user already has a supplier row, skip the form and route
+    directly to the dashboard.
+    """
+    _ensure_supplier_schema()
+    _ensure_marketplace_tables()
+    uid = int(session.get("user_id") or 0)
+    if uid <= 0:
+        return redirect(url_for("oidc.auth_login", next="/supplier/onboarding"))
+    # Already a supplier? Straight to dashboard.
+    with get_db() as c:
+        _existing = c.execute(
+            "SELECT id FROM suppliers WHERE user_id=? AND is_active=1 LIMIT 1",
+            (uid,),
+        ).fetchone()
+    if _existing:
+        return redirect(url_for("supplier_dashboard"))
+
+    if request.method == "GET":
+        _u = current_user()
+        return render_template(
+            "supplier_onboarding.html",
+            user=_u,
+            countries=get_countries(),
+        )
+
+    csrf_protect()
+    f = request.form
+    if not f.get("terms_agreed"):
+        flash("Please accept the Terms of Service and Privacy Policy.", "danger")
+        return render_template(
+            "supplier_onboarding.html",
+            user=current_user(),
+            countries=get_countries(),
+        )
+    company = (f.get("company") or "").strip()
+    country = (f.get("country") or "").strip()
+    if not company:
+        flash("Company name is required.", "danger")
+        return render_template(
+            "supplier_onboarding.html",
+            user=current_user(),
+            countries=get_countries(),
+        )
+    _u = current_user()
+    contact_name = (f.get("contact_name") or (_u["name"] if _u else "") or "").strip()
+    email        = (f.get("email") or (_u["email"] if _u else "") or "").strip().lower()
+    try:
+        with get_db() as c:
+            c.execute(
+                "INSERT INTO suppliers (name,country,contact_name,phone,email,website,address,"
+                "categories,lead_time_days,payment_terms,rating,user_id,is_verified,is_active) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
+                (company, country, contact_name, f.get("phone", ""),
+                 email, f.get("website", ""), (f.get("address") or "").strip(),
+                 f.get("categories", ""),
+                 _safe_int(f.get("lead_time_days"), 30),
+                 f.get("payment_terms", "TT 30 days"), 5, uid, 0),
+            )
+            # Promote the KC-provisioned user to supplier_admin.
+            c.execute("UPDATE users SET role='supplier_admin' WHERE id=?", (uid,))
+            try:
+                c.commit()
+            except Exception:
+                pass
+    except Exception as _e:
+        try: app.logger.warning("supplier onboarding failed for uid=%s: %s", uid, _e)
+        except Exception: pass
+        flash("Could not create your supplier profile. Please try again or contact support.", "danger")
+        return render_template(
+            "supplier_onboarding.html",
+            user=current_user(),
+            countries=get_countries(),
+        )
+    # Sales lead + admin notification (same as legacy /supplier/register).
+    try:
+        _capture_pipeline_lead(
+            name=contact_name or company,
+            email=email,
+            phone=(f.get("phone", "") or ""),
+            company=company,
+            country=country,
+            system_type="supplier",
+            interest="supplier-partner",
+            message=(f"Supplier onboarding. categories={f.get('categories','')[:80]}, "
+                     f"website={f.get('website','')[:80]}, "
+                     f"payment_terms={f.get('payment_terms','TT 30 days')[:40]}").strip(),
+            source="supplier_onboarding",
+        )
+    except Exception:
+        pass
+    try: _notify_admin_new_supplier(company, email, country)
+    except Exception: pass
+    flash(
+        "Welcome to the SolarPro Marketplace. Your supplier account is pending "
+        "verification by our team — your products will appear publicly once approved.",
+        "success",
+    )
+    return redirect(url_for("supplier_dashboard"))
+
+
 @app.route("/supplier/dashboard")
 @supplier_required
 def supplier_dashboard():
