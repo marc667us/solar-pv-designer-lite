@@ -7922,6 +7922,14 @@ def paystack_webhook():
     return "", 200
 
 
+@app.route("/favicon.ico")
+def favicon_ico():
+    """Serve /favicon.ico for browsers that don't honour the SVG-favicon
+    link tag in base.html. Falls back to the 1200x628 og-cover PNG since
+    ICO conversion would add a Pillow dependency for no benefit."""
+    return redirect(url_for("static", filename="og-cover.png"), code=301)
+
+
 @app.route("/robots.txt")
 def robots_txt():
     """Protect private routes from search-engine crawlers."""
