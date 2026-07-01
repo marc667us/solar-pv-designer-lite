@@ -1,5 +1,37 @@
 {% extends "base.html" %}
 {% block title %}SolarPro Global — Find Solar Tenders & Design Winning Proposals{% endblock %}
+{% block og_description %}Find solar RFQ / RFP / EOI tenders worldwide, browse free live supplier prices, and design PV systems for 200+ countries. Free bill-check tool, industry newsfeed, and BOQ builder.{% endblock %}
+
+{% block ld_json %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "SolarPro Global",
+  "url": {{ request.url_root.rstrip('/')|tojson }},
+  "description": "Intelligent global PV solar system design platform: tenders, marketplace, bill-check, BOQ, industry news.",
+  "sameAs": [
+    "https://github.com/marc667us/solar-pv-designer-lite"
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "url": {{ request.url_root.rstrip('/')|tojson }},
+  "name": "SolarPro Global",
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": {
+      "@type": "EntryPoint",
+      "urlTemplate": "{{ request.url_root.rstrip('/') }}/marketplace?q={search_term_string}"
+    },
+    "query-input": "required name=search_term_string"
+  }
+}
+</script>
+{% endblock %}
 
 {% block extra_head %}
 <style>

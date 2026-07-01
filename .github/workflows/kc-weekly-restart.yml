@@ -13,7 +13,13 @@ name: KC Weekly Restart
 
 on:
   schedule:
+    # 2026-07-01: doubled the cadence after a mid-week OOM outage that
+    # took KC offline until manual restart. Bi-weekly halves the OOM
+    # exposure window on Render free tier (no auto-heal) without
+    # measurably increasing cost. Revisit if we move KC to a paid tier
+    # with built-in restart-on-OOM.
     - cron: "0 3 * * 0"   # 03:00 UTC every Sunday
+    - cron: "0 3 * * 3"   # 03:00 UTC every Wednesday
   workflow_dispatch:
 
 permissions:

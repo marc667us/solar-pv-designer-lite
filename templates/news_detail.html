@@ -1,5 +1,37 @@
 {% extends "base.html" %}
 {% block title %}{{ post.title }} — SolarPro News{% endblock %}
+
+{# ── Social + SEO overrides ── #}
+{% block og_description %}{{ (post.content or '')[:280] }}{% endblock %}
+{% block og_type %}article{% endblock %}
+
+{% block ld_json %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "NewsArticle",
+  "headline": {{ post.title|tojson }},
+  "datePublished": {{ (post.created_at or '')|string|tojson }},
+  "dateModified": {{ (post.updated_at or post.created_at or '')|string|tojson }},
+  "articleSection": {{ (post.category or 'industry')|tojson }},
+  "articleBody": {{ (post.content or '')[:1000]|tojson }},
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": {{ (request.url_root.rstrip('/') + url_for('news_detail', post_id=post.id))|tojson }}
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "SolarPro Global",
+    "url": {{ request.url_root.rstrip('/')|tojson }}
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "SolarPro Global"
+  }
+}
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="container py-4" style="max-width:820px">
 

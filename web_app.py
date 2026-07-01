@@ -15685,8 +15685,32 @@ def _current_supplier():
 @app.route("/supplier/register", methods=["GET", "POST"])
 @limiter.limit("10 per hour")
 def supplier_register():
-    """Self-service supplier signup. Creates a users row with role='supplier_admin'
-    and a paired suppliers row owned by that user."""
+    """Self-service supplier signup.
+
+    SOC 2 M1.1 / owner directive 2026-07-01: this endpoint used to auto-log
+    the new supplier in via session['user_id']=uid, which bypassed Keycloak
+    entirely -- any /supplier/register POST created a fully-authed session
+    without an OIDC round-trip. That is now closed: all auth (including the
+    supplier signup path) MUST go through Keycloak. This endpoint now
+    unconditionally redirects to /auth/register with the supplier onboarding
+    flag set so the OIDC callback lands the user on /supplier/onboarding
+    where they finish the supplier-specific fields (company, categories,
+    address, etc.) against the KC-provisioned users row.
+    """
+    _kc_next = request.args.get("next") or "/supplier/onboarding"
+    _r = redirect(url_for("oidc.auth_register", next=_kc_next))
+    _r.headers["Cache-Control"] = "no-store, must-revalidate"
+    _r.headers["Pragma"] = "no-cache"
+    return _r
+
+
+def _legacy_supplier_register_disabled():
+    """DEAD CODE -- kept only for the historical POST handler that used to
+    accept password + auto-login the supplier. All entry points now
+    redirect to Keycloak via supplier_register(). This function is never
+    called; retaining it makes the diff easier to review and lets a future
+    supplier_onboarding endpoint reuse the field-extraction logic.
+    """
     _ensure_supplier_schema()
     _ensure_marketplace_tables()
     if request.method == "GET":

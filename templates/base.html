@@ -4,6 +4,28 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>{% block title %}SolarPro Global{% endblock %}</title>
+
+{# ── SEO / social preview defaults (per-page override via og_* blocks) ── #}
+{% set _og_site = 'SolarPro Global' %}
+{% set _og_title = self.title() if self.title is defined else 'SolarPro Global' %}
+{% set _og_desc = self.og_description() if self.og_description is defined else 'The intelligent global PV solar design platform — free marketplace, live tender feed, bill-check tool, and industry news.' %}
+{% set _og_type = self.og_type() if self.og_type is defined else 'website' %}
+{% set _og_image = self.og_image() if self.og_image is defined else (request.url_root.rstrip('/') + '/static/land-110m.json') %}
+{% set _og_url = request.base_url %}
+<meta name="description" content="{{ _og_desc|striptags|truncate(300) }}"/>
+<meta property="og:site_name" content="{{ _og_site }}"/>
+<meta property="og:title" content="{{ _og_title|striptags|truncate(150) }}"/>
+<meta property="og:description" content="{{ _og_desc|striptags|truncate(300) }}"/>
+<meta property="og:type" content="{{ _og_type }}"/>
+<meta property="og:url" content="{{ _og_url }}"/>
+<meta property="og:image" content="{{ _og_image }}"/>
+<meta property="og:locale" content="en_US"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="{{ _og_title|striptags|truncate(70) }}"/>
+<meta name="twitter:description" content="{{ _og_desc|striptags|truncate(200) }}"/>
+<meta name="twitter:image" content="{{ _og_image }}"/>
+{% block ld_json %}{% endblock %}
+
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
 <style>
