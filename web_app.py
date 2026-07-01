@@ -26304,7 +26304,12 @@ _BROWSER_UA = (
 
 # Each query targets a different procurement phrasing. They overlap on
 # purpose — de-dup happens after fetching.
+# 2026-07-01: added 5 Ghana-anchored queries + 4 broader Africa queries
+# so the persistence pool grows Ghana + regional coverage instead of
+# being dominated by US/EU global tenders. Existing global queries kept
+# so the /opportunities page remains comprehensive.
 _QUERIES = [
+    # Global -- keep comprehensive coverage on /opportunities
     '"solar tender" OR "solar RFP"',
     '"solar EPC" tender OR contract OR award',
     '"solar PV" "supply and install"',
@@ -26313,6 +26318,17 @@ _QUERIES = [
     '"rooftop solar" tender OR procurement OR "expression of interest"',
     '"photovoltaic" RFP OR tender OR "supply and install"',
     '"solar power project" bidding OR RFP OR "request for proposal"',
+    # Ghana -- SolarPro home market, drives the landing 'Hot tenders' widget
+    'solar Ghana tender OR RFP OR RFQ',
+    'solar Ghana ECG OR NEDCO OR VRA procurement',
+    '"mini grid" Ghana solar OR PV',
+    'Ghana solar PV EPC contract OR award',
+    'Ghana solar RFP OR "request for proposal"',
+    # Wider Africa -- catches regional tenders that reference multiple markets
+    'solar tender OR RFP West Africa OR Africa',
+    'solar Nigeria tender OR RFP',
+    'solar Kenya tender OR RFP',
+    'solar Senegal OR Cote d\'Ivoire tender OR RFP',
 ]
 
 
