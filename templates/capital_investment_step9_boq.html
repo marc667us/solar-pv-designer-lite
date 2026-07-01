@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Step 9 - BOQ - {{ proj.project_name }}{% endblock %}
+{% block content %}
+{% set active_step = 9 %}
+{% set pid = proj.id %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0"><i class="bi bi-list-check text-warning me-1"></i>{{ proj.project_name }}</h5>
+    <div class="text-secondary small">Step 9 of 14 &mdash; BOQ (Bill of Quantities)</div>
+  </div>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="text-secondary small">Back to project</a>
+</div>
+
+{% include "_capital_investment_wizard_rail.html" with context %}
+
+<div class="solar-card p-3 mb-3">
+  <div class="text-secondary small">
+    <i class="bi bi-info-circle text-warning me-1"></i>
+    Step 9 <b>reuses the existing SolarPro BOQ engine</b>. Clicking
+    <i>Generate BOQ</i> creates a linked BOQ project and auto-creates one
+    building per facility you selected on Step 4. Line items, rates, and
+    quantities are then edited in the standard BOQ UI - use
+    <a href="/boq-projects" class="text-warning">/boq-projects</a>
+    Section-by-Section grid or Build-all sections mode.
+  </div>
+</div>
+
+{% if boq_project_id %}
+  <div class="solar-card p-4 mb-3" style="border-color:#1a4a2a;background:#0a1a10">
+    <div class="d-flex align-items-center gap-3">
+      <i class="bi bi-check-circle-fill text-success" style="font-size:32px"></i>
+      <div class="flex-grow-1">
+        <div class="fw-bold text-success">BOQ project #{{ boq_project_id }} already linked</div>
+        <div class="text-secondary small">The Capital Investment project points to this BOQ project.
+          Detailed pricing, sections, and edits live in the standard BOQ UI.</div>
+      </div>
+      <a href="/boq-projects" class="btn btn-warning fw-bold">
+        <i class="bi bi-box-arrow-up-right me-1"></i>Open BOQ Projects
+      </a>
+    </div>
+  </div>
+{% else %}
+  <div class="solar-card p-4 mb-3">
+    <h6 class="fw-bold text-warning mb-3">
+      <i class="bi bi-diagram-3 me-1"></i>Preview: what will be auto-created
+    </h6>
+    <div class="mb-3">
+      <div class="text-secondary small mb-2">
+        Buildings ({{ planned_buildings | length }}):
+      </div>
+      {% if planned_buildings %}
+        <div class="row g-2">
+          {% for b in planned_buildings %}
+            <div class="col-md-4">
+              <div class="p-2" style="background:#0a0a14;border:1px solid #1e1e3a;border-radius:6px">
+                <div class="fw-bold small">{{ b.label }}</div>
+                <div class="text-secondary" style="font-size:11px">
+                  {{ b.sub_items | length }} sub-items
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-warning small">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          No buildings selected on Step 4. Go back and enable at least one.
+        </div>
+      {% endif %}
+    </div>
+    <div class="mb-3">
+      <div class="text-secondary small mb-2">
+        External works ({{ selected_external | length }} enabled):
+      </div>
+      {% if selected_external %}
+        <div class="d-flex flex-wrap gap-1">
+          {% for x in selected_external %}
+            {% set label = '' %}
+            {% for code, l, _, _ in external_works %}
+              {% if code == x %}{% set label = l %}{% endif %}
+            {% endfor %}
+            <span class="badge bg-secondary" style="font-size:11px">{{ label or x }}</span>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+    {% if electrical_selected %}
+    <div class="mb-3">
+      <div class="text-secondary small mb-2">
+        Electrical services from Step 6 ({{ electrical_selected | length }}):
+      </div>
+      <div class="d-flex flex-wrap gap-1">
+        {% for x in electrical_selected %}
+          <span class="badge bg-secondary" style="font-size:11px">{{ x }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    <form method="POST" class="mt-3">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="d-flex justify-content-between align-items-center">
+        <a href="{{ url_for('capital_investment_step8', pid=proj.id) }}" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i>Back to Step 8
+        </a>
+        <button type="submit" class="btn btn-warning fw-bold"
+                {% if not planned_buildings %}disabled{% endif %}>
+          <i class="bi bi-magic me-1"></i>Generate BOQ &amp; link to project
+        </button>
+      </div>
+    </form>
+  </div>
+{% endif %}
+
+<div class="solar-card p-3">
+  <a href="{{ url_for('capital_investment_step10', pid=proj.id) }}" class="btn btn-outline-warning">
+    Continue to Step 10 - Marketplace<i class="bi bi-arrow-right ms-1"></i>
+  </a>
+</div>
+
+{% endblock %}

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Step 12 - Pipeline - {{ proj.project_name }}{% endblock %}
+{% block content %}
+{% set active_step = 12 %}
+{% set pid = proj.id %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0"><i class="bi bi-diagram-3 text-warning me-1"></i>{{ proj.project_name }}</h5>
+    <div class="text-secondary small">Step 12 of 14 &mdash; Sales Pipeline (13-stage utility-scale)</div>
+  </div>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="text-secondary small">Back to project</a>
+</div>
+
+{% include "_capital_investment_wizard_rail.html" with context %}
+
+{% set current_stage = opp.stage %}
+{% set current_idx = -1 %}
+{% for code, _, _ in pipeline_stages %}
+  {% if code == current_stage %}{% set current_idx = loop.index0 %}{% endif %}
+{% endfor %}
+
+<div class="solar-card p-4 mb-3">
+  <h6 class="fw-bold text-warning mb-3"><i class="bi bi-diagram-3 me-1"></i>Progression</h6>
+  <div class="d-flex flex-wrap gap-2 align-items-center">
+    {% for code, label, icon in pipeline_stages %}
+      {% set is_current = (code == current_stage) %}
+      {% set is_past    = (loop.index0 < current_idx) %}
+      <div class="d-flex align-items-center gap-1">
+        <span class="badge {% if is_current %}bg-warning text-dark{% elif is_past %}bg-success{% else %}bg-secondary{% endif %}"
+              style="font-size:12px;padding:6px 10px">
+          <i class="{{ icon }} me-1"></i>{{ label }}
+        </span>
+        {% if not loop.last %}
+          <i class="bi bi-arrow-right text-secondary" style="font-size:10px"></i>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="solar-card p-4 mb-3">
+  <h6 class="fw-bold text-warning mb-3"><i class="bi bi-arrow-right-circle me-1"></i>Advance to</h6>
+  <form method="POST">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="row g-2">
+      {% for code, label, icon in pipeline_stages %}
+        {% set is_current = (code == current_stage) %}
+        <div class="col-md-3 col-6">
+          <button type="submit" name="stage" value="{{ code }}"
+                  class="btn btn-sm w-100 text-start {% if is_current %}btn-warning{% else %}btn-outline-warning{% endif %}"
+                  {% if is_current %}disabled{% endif %}>
+            <i class="{{ icon }} me-1"></i>{{ label }}
+            {% if is_current %}
+              <span class="badge bg-dark ms-1" style="font-size:9px">CURRENT</span>
+            {% endif %}
+          </button>
+        </div>
+      {% endfor %}
+    </div>
+  </form>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-8">
+    <div class="solar-card p-4">
+      <h6 class="fw-bold text-warning mb-3"><i class="bi bi-clock-history me-1"></i>Stage history</h6>
+      {% if history %}
+        <table class="table table-dark table-sm small mb-0">
+          <thead>
+            <tr class="text-secondary" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">
+              <th>#</th><th>From</th><th>To</th><th>At (UTC)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in history %}
+              <tr>
+                <td class="text-secondary">{{ loop.index }}</td>
+                <td class="text-secondary">{{ h.get('from') or '-' }}</td>
+                <td class="text-warning fw-bold">{{ h.get('to') }}</td>
+                <td class="text-secondary small">{{ h.get('at') }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="text-secondary small">No stage transitions recorded yet.</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="solar-card p-4">
+      <h6 class="fw-bold text-warning mb-2"><i class="bi bi-clipboard me-1"></i>Opportunity snapshot</h6>
+      <div class="small">
+        <div class="text-secondary">Capacity</div><div class="fw-bold mb-2">{{ '%.1f'|format(opp.capacity_mwp) if opp.capacity_mwp else '-' }} MWp</div>
+        <div class="text-secondary">CAPEX</div><div class="fw-bold mb-2">USD {{ '{:,.0f}'.format(opp.capex_usd) if opp.capex_usd else '-' }}</div>
+        <div class="text-secondary">IRR</div><div class="fw-bold mb-2">{{ '%.2f'|format(opp.irr_pct) if opp.irr_pct is not none else '-' }} %</div>
+        <div class="text-secondary">NPV</div><div class="fw-bold mb-2">{{ opp.currency or 'GHS' }} {{ '{:,.0f}'.format(opp.npv_local) if opp.npv_local else '-' }}</div>
+        <div class="text-secondary">Investor</div><div class="fw-bold">{{ opp.investor or '-' }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex justify-content-between mt-3">
+  <a href="{{ url_for('capital_investment_step11', pid=proj.id) }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back to Step 11
+  </a>
+  <a href="{{ url_for('capital_investment_step13', pid=proj.id) }}" class="btn btn-warning fw-bold">
+    Continue to Step 13<i class="bi bi-arrow-right ms-1"></i>
+  </a>
+</div>
+
+{% endblock %}

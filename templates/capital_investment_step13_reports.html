@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Step 13 - Reports - {{ proj.project_name }}{% endblock %}
+{% block content %}
+{% set active_step = 13 %}
+{% set pid = proj.id %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0"><i class="bi bi-file-earmark-text text-warning me-1"></i>{{ proj.project_name }}</h5>
+    <div class="text-secondary small">Step 13 of 14 &mdash; Reports</div>
+  </div>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="text-secondary small">Back to project</a>
+</div>
+
+{% include "_capital_investment_wizard_rail.html" with context %}
+
+<div class="solar-card p-3 mb-3">
+  <div class="text-secondary small">
+    <i class="bi bi-info-circle text-warning me-1"></i>
+    5 reports are fully-generated PDFs (data pulled live from Steps 3-8, 11-12).
+    The remaining 8 report types are placeholders - the same reuse-first
+    approach as Steps 9 (BOQ) and 10 (Marketplace) means they will pipe
+    through the existing SolarPro export helpers when built out.
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  {% for key, label, icon, full in report_types %}
+    <div class="col-md-4 col-sm-6">
+      <div class="solar-card p-3 h-100">
+        <div class="d-flex align-items-start gap-2">
+          <i class="{{ icon }} text-warning" style="font-size:24px"></i>
+          <div class="flex-grow-1">
+            <div class="fw-bold small">{{ label }}</div>
+            <div class="text-secondary" style="font-size:11px">
+              {% if full %}Live-generated PDF from project data{% else %}Coming soon{% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="mt-2">
+          {% if full %}
+            <a href="{{ url_for('capital_investment_report_pdf', pid=proj.id, report_key=key) }}"
+               class="btn btn-sm btn-warning fw-bold w-100">
+              <i class="bi bi-download me-1"></i>Download PDF
+            </a>
+          {% else %}
+            <button class="btn btn-sm btn-outline-secondary w-100" disabled>
+              Coming soon
+            </button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="d-flex justify-content-between mt-3">
+  <a href="{{ url_for('capital_investment_step12', pid=proj.id) }}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back to Step 12
+  </a>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="btn btn-warning fw-bold">
+    Return to project overview<i class="bi bi-check2 ms-1"></i>
+  </a>
+</div>
+
+{% endblock %}

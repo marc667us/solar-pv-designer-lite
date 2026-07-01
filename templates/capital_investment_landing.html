@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}PV Capital Investment Design{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0">
+      <i class="bi bi-lightning-charge text-warning me-1"></i>PV Capital Investment Design
+      <span class="badge bg-warning text-dark ms-2" style="font-size:10px">LARGE SCALE</span>
+    </h5>
+    <div class="text-secondary small">Utility scale, IPP, commercial generation, mining, hybrid PV+BESS</div>
+  </div>
+  <a href="{{ url_for('dashboard') }}" class="text-secondary small">Back to dashboard</a>
+</div>
+
+<div class="solar-card p-4 mb-4">
+  <div class="row g-3 align-items-center">
+    <div class="col-md-8">
+      <h4 class="fw-bold mb-2">Design a solar power station, not just a solar system.</h4>
+      <div class="text-secondary">
+        This module extends SolarPro to support <b>utility-scale, independent power producer,
+        embedded generation, and captive commercial solar plants</b>. It reuses the SolarPro
+        engineering engine, BOQ engine, marketplace, financial model, CRM, and sales pipeline you
+        already know &mdash; and adds the buildings, control room, monitoring, transformer yard,
+        SCADA, and O&amp;M topology that a bankable power-plant design needs.
+      </div>
+    </div>
+    <div class="col-md-4 text-md-end">
+      {% if user %}
+        <a href="{{ url_for('capital_investment_new') }}" class="btn btn-warning btn-lg fw-bold">
+          <i class="bi bi-plus-circle me-1"></i>Start New Project
+        </a>
+      {% else %}
+        <a href="{{ url_for('login') }}?next={{ url_for('capital_investment_landing')|urlencode }}"
+           class="btn btn-warning btn-lg fw-bold">
+          <i class="bi bi-box-arrow-in-right me-1"></i>Sign in to start
+        </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="solar-card p-3 h-100">
+      <div class="small text-secondary mb-1">FOR</div>
+      <div class="fw-bold mb-2">Investors &amp; Developers</div>
+      <ul class="small text-secondary mb-0" style="padding-left:1.1rem">
+        <li>Bankable CAPEX / OPEX build-up</li>
+        <li>NPV, IRR, LCOE, DSCR, payback</li>
+        <li>PPA + carbon-credit revenue model</li>
+        <li>Investment memorandum export</li>
+      </ul>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="solar-card p-3 h-100">
+      <div class="small text-secondary mb-1">FOR</div>
+      <div class="fw-bold mb-2">EPC Contractors</div>
+      <ul class="small text-secondary mb-0" style="padding-left:1.1rem">
+        <li>Complete plant BOQ (Section-by-Section + Build-all)</li>
+        <li>Control Room, O&amp;M, Battery, Transformer Yard</li>
+        <li>External works &amp; interconnection scope</li>
+        <li>Marketplace RFQ auto-pull</li>
+      </ul>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="solar-card p-3 h-100">
+      <div class="small text-secondary mb-1">FOR</div>
+      <div class="fw-bold mb-2">Utilities, Banks, Government</div>
+      <ul class="small text-secondary mb-0" style="padding-left:1.1rem">
+        <li>Grid interconnection &amp; substation scope</li>
+        <li>Regulatory + ESIA + PPA scaffolding</li>
+        <li>SCADA / EMS / monitoring plan</li>
+        <li>Operations manual + maintenance strategy</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="solar-card p-4 mb-4">
+  <h6 class="fw-bold text-warning mb-3">
+    <i class="bi bi-diagram-3 me-1"></i>The 14-step design workflow
+  </h6>
+  <div class="row g-2 small">
+    <div class="col-md-6">
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">1</span><span>Project Registration &mdash; client, investor, developer, jurisdiction, currency, tax regime</span></div>
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">2</span><span>Project Type &mdash; ground-mount, rooftop, industrial, utility, IPP, mining, floating, hybrid, BESS</span></div>
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">3</span><span>Site Configuration &mdash; land, terrain, slope, soil, flood/wind/seismic, grid distance, ESIA</span></div>
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">4</span><span>Facility Configuration &mdash; Control Room, O&amp;M, Battery, Switchgear, Transformer Yard, External Works</span></div>
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">5</span><span>Technology &mdash; SCADA, EMS, BMS, CMMS, Digital Twin, Cyber Security</span></div>
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">6</span><span>Electrical System &mdash; DC/AC collection, HV/LV distribution, protection</span></div>
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">7</span><span>PV Design &mdash; capacity, generation, PR, DC/AC, string, combiner, inverter</span></div>
+    </div>
+    <div class="col-md-6">
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">8</span><span>Financial Engineering &mdash; CAPEX/OPEX/PPA/NPV/IRR/LCOE/DSCR/Monte&nbsp;Carlo</span></div>
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">9</span><span>BOQ &mdash; reuses Section-by-Section + Build-all sections engine</span></div>
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">10</span><span>Marketplace &mdash; auto-pulls PV modules, inverters, transformers, RMU, cables</span></div>
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">11</span><span>CRM &mdash; opportunity auto-created with capacity, CAPEX, revenue, IRR</span></div>
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">12</span><span>Sales Pipeline &mdash; Lead &rarr; Concept &rarr; Feasibility &rarr; Bank &rarr; Award &rarr; Construction &rarr; COD</span></div>
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">13</span><span>Reports &mdash; Executive, Technical, Financial, Bankability, Investment Memo, Ops Manual</span></div>
+      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">14</span><span>AI Agents &mdash; PV, Electrical, Civil, Structural, SCADA, Finance, Grid, Reviewer</span></div>
+    </div>
+  </div>
+  <div class="text-secondary small mt-2 mb-0">
+    <i class="bi bi-info-circle text-warning me-1"></i>
+    Plus a Development &amp; Regulatory Configuration sub-step (land tenure, ESIA, grid interconnection,
+    utility approvals, EPA / Energy Commission licensing, building permits, financial close, COD).
+  </div>
+</div>
+
+{% if recent %}
+<div class="solar-card p-4">
+  <h6 class="fw-bold text-warning mb-3">
+    <i class="bi bi-clock-history me-1"></i>Your recent capital-investment projects
+  </h6>
+  <div class="table-responsive">
+    <table class="table table-dark table-sm mb-0">
+      <thead>
+        <tr class="text-secondary" style="font-size:12px;text-transform:uppercase;letter-spacing:.5px">
+          <th>Project</th>
+          <th>Capacity</th>
+          <th>Client</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Currency</th>
+          <th class="text-end">Updated</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in recent %}
+        <tr>
+          <td class="fw-bold">{{ p.project_name }}</td>
+          <td>
+            {% if p.target_kwp %}
+              <span class="badge bg-warning text-dark">{{ '%.1f'|format(p.target_kwp/1000.0) }} MWp</span>
+            {% else %}
+              <span class="text-secondary small">&mdash;</span>
+            {% endif %}
+          </td>
+          <td class="text-secondary">{{ p.client_name or '&mdash;' | safe }}</td>
+          <td class="text-secondary">{{ p.project_type or '&mdash;' | safe }}</td>
+          <td><span class="badge bg-secondary">{{ p.project_status or 'concept' }}</span></td>
+          <td class="text-secondary">{{ p.currency or 'GHS' }}</td>
+          <td class="text-end text-secondary small">{{ (p.updated_at or '')[:16] }}</td>
+          <td class="text-end">
+            <a href="{{ url_for('capital_investment_project', pid=p.id) }}" class="btn btn-sm btn-outline-warning">Open</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

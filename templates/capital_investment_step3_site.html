@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Step 3 - Site Configuration - {{ proj.project_name }}{% endblock %}
+{% block content %}
+{% set active_step = 3 %}
+{% set pid = proj.id %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0"><i class="bi bi-map text-warning me-1"></i>{{ proj.project_name }}</h5>
+    <div class="text-secondary small">Step 3 of 14 &mdash; Site Configuration</div>
+  </div>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="text-secondary small">Back to project</a>
+</div>
+
+{% include "_capital_investment_wizard_rail.html" with context %}
+
+<div class="solar-card p-4">
+  <form method="POST">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+    {# --- Land area block --- #}
+    <h6 class="fw-bold text-warning mb-3"><i class="bi bi-bounding-box-circles me-1"></i>Land &amp; area</h6>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Land area (ha)</label>
+        <input class="form-control" name="land_area_ha" type="number" step="0.01"
+               min="0" value="{{ cfg.get('land_area_ha') or '' }}" placeholder="e.g. 25">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Roof area (m2)</label>
+        <input class="form-control" name="roof_area_m2" type="number" step="1"
+               min="0" value="{{ cfg.get('roof_area_m2') or '' }}"
+               placeholder="only for rooftop / industrial">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Future expansion area (ha)</label>
+        <input class="form-control" name="future_expansion_area_ha" type="number" step="0.01"
+               min="0" value="{{ cfg.get('future_expansion_area_ha') or '' }}">
+      </div>
+    </div>
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+
+    {# --- Terrain block --- #}
+    <h6 class="fw-bold text-warning mb-3"><i class="bi bi-triangle me-1"></i>Terrain &amp; geotech</h6>
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">Terrain</label>
+        <select class="form-select" name="terrain">
+          <option value="">-</option>
+          {% for code, label in terrains %}
+            <option value="{{ code }}" {% if cfg.get('terrain') == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">Slope</label>
+        <select class="form-select" name="slope">
+          <option value="">-</option>
+          {% for code, label in slopes %}
+            <option value="{{ code }}" {% if cfg.get('slope') == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">Soil type</label>
+        <select class="form-select" name="soil">
+          <option value="">-</option>
+          {% for code, label in soils %}
+            <option value="{{ code }}" {% if cfg.get('soil') == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">Flood risk</label>
+        <select class="form-select" name="flood_risk">
+          <option value="">-</option>
+          {% for code, label in flood_risks %}
+            <option value="{{ code }}" {% if cfg.get('flood_risk') == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Wind zone</label>
+        <select class="form-select" name="wind_zone">
+          <option value="">-</option>
+          {% for code, label in wind_zones %}
+            <option value="{{ code }}" {% if cfg.get('wind_zone') == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Seismic zone</label>
+        <select class="form-select" name="seismic_zone">
+          <option value="">-</option>
+          {% for code, label in seismic_zones %}
+            <option value="{{ code }}" {% if cfg.get('seismic_zone') == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Access road</label>
+        <select class="form-select" name="access_road">
+          <option value="">-</option>
+          {% for code, label in access_options %}
+            <option value="{{ code }}" {% if cfg.get('access_road') == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+
+    {# --- Utilities & grid block --- #}
+    <h6 class="fw-bold text-warning mb-3"><i class="bi bi-plug me-1"></i>Utilities &amp; grid interconnection</h6>
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">Water availability</label>
+        <select class="form-select" name="water">
+          <option value="">-</option>
+          {% for code, label in water_options %}
+            <option value="{{ code }}" {% if cfg.get('water_availability') == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">Distance to grid (km)</label>
+        <input class="form-control" name="grid_distance_km" type="number" step="0.01"
+               min="0" value="{{ cfg.get('grid_distance_km') or '' }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">Distance to substation (km)</label>
+        <input class="form-control" name="substation_distance_km" type="number" step="0.01"
+               min="0" value="{{ cfg.get('substation_distance_km') or '' }}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small text-secondary">Nearest HV line (kV)</label>
+        <input class="form-control" name="hv_line_kv" type="number" step="0.1"
+               min="0" value="{{ cfg.get('hv_line_kv') or '' }}"
+               placeholder="e.g. 33, 66, 161">
+      </div>
+    </div>
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+
+    {# --- Environment & constraints block --- #}
+    <h6 class="fw-bold text-warning mb-3"><i class="bi bi-tree me-1"></i>Environment &amp; constraints</h6>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Environmental constraints (ESIA scope)</label>
+        <textarea class="form-control" name="environmental_constraints" rows="3"
+                  maxlength="2000" placeholder="Air quality, noise, waste, heritage sites, community relocation, etc.">{{ cfg.get('environmental_constraints') or '' }}</textarea>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Protected / restricted areas</label>
+        <textarea class="form-control" name="protected_areas" rows="3"
+                  maxlength="1000" placeholder="National parks, buffer zones, wetlands, cultural sites">{{ cfg.get('protected_areas') or '' }}</textarea>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Existing buildings on site</label>
+        <textarea class="form-control" name="existing_buildings" rows="2"
+                  maxlength="1000" placeholder="What must be demolished / kept / repurposed">{{ cfg.get('existing_buildings') or '' }}</textarea>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Preliminary shading assessment</label>
+        <textarea class="form-control" name="shading_assessment" rows="2"
+                  maxlength="1000" placeholder="Nearby mountains, transmission towers, tree lines, adjacent solar rows">{{ cfg.get('shading_assessment') or '' }}</textarea>
+      </div>
+    </div>
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+
+    {# --- Survey uploads block --- #}
+    <h6 class="fw-bold text-warning mb-3"><i class="bi bi-cloud-upload me-1"></i>Survey &amp; imagery references</h6>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Drone survey URL</label>
+        <input class="form-control" name="drone_survey_url" type="url"
+               value="{{ cfg.get('drone_survey_url') or '' }}"
+               placeholder="Sharepoint / Google Drive link">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">GIS data URL</label>
+        <input class="form-control" name="gis_data_url" type="url"
+               value="{{ cfg.get('gis_data_url') or '' }}"
+               placeholder="Shapefile / GeoJSON / KMZ link">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Satellite image URL</label>
+        <input class="form-control" name="satellite_image_url" type="url"
+               value="{{ cfg.get('satellite_image_url') or '' }}"
+               placeholder="Latest imagery for the site">
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-4">
+      <a href="{{ url_for('capital_investment_step2', pid=proj.id) }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Step 2
+      </a>
+      <button type="submit" class="btn btn-warning fw-bold">
+        Save &amp; continue to Step 4<i class="bi bi-arrow-right ms-1"></i>
+      </button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

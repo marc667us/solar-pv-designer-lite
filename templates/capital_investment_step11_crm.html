@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Step 11 - CRM - {{ proj.project_name }}{% endblock %}
+{% block content %}
+{% set active_step = 11 %}
+{% set pid = proj.id %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0"><i class="bi bi-people text-warning me-1"></i>{{ proj.project_name }}</h5>
+    <div class="text-secondary small">Step 11 of 14 &mdash; CRM Investment Opportunity</div>
+  </div>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="text-secondary small">Back to project</a>
+</div>
+
+{% include "_capital_investment_wizard_rail.html" with context %}
+
+<div class="solar-card p-3 mb-3">
+  <div class="text-secondary small">
+    <i class="bi bi-info-circle text-warning me-1"></i>
+    Investment opportunity is auto-derived from the project's engineering
+    (Step 7) and finance (Step 8) blobs. You can override investor + notes,
+    but capacity / CAPEX / IRR / NPV / LCOE stay driven by the underlying data.
+  </div>
+</div>
+
+{% set src = opp or derived %}
+
+<div class="solar-card p-4 mb-3">
+  <div class="row g-2 small">
+    <div class="col-md-3 col-6">
+      <div class="text-secondary">Capacity</div>
+      <div class="fw-bold" style="font-size:18px">
+        {% if src.capacity_mwp %}{{ '%.1f'|format(src.capacity_mwp) }} MWp{% else %}<span class="text-warning">not yet set</span>{% endif %}
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="text-secondary">CAPEX</div>
+      <div class="fw-bold" style="font-size:18px">
+        {% if src.capex_usd %}USD {{ '{:,.0f}'.format(src.capex_usd) }}{% else %}<span class="text-warning">-</span>{% endif %}
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="text-secondary">Revenue Y1</div>
+      <div class="fw-bold" style="font-size:18px">
+        {% if src.revenue_y1_local %}{{ src.currency or proj.currency or 'GHS' }} {{ '{:,.0f}'.format(src.revenue_y1_local) }}{% else %}-{% endif %}
+      </div>
+    </div>
+    <div class="col-md-3 col-6">
+      <div class="text-secondary">IRR</div>
+      <div class="fw-bold" style="font-size:18px">
+        {% if src.irr_pct is not none %}{{ '%.2f'|format(src.irr_pct) }} %{% else %}-{% endif %}
+      </div>
+    </div>
+    <div class="col-md-3 col-6"><div class="text-secondary">NPV</div><div>{% if src.npv_local %}{{ src.currency or proj.currency or 'GHS' }} {{ '{:,.0f}'.format(src.npv_local) }}{% else %}-{% endif %}</div></div>
+    <div class="col-md-3 col-6"><div class="text-secondary">Payback</div><div>{% if src.payback_years %}{{ '%.1f'|format(src.payback_years) }} yr{% else %}-{% endif %}</div></div>
+    <div class="col-md-3 col-6"><div class="text-secondary">DSCR avg</div><div>{% if src.dscr_avg %}{{ '%.2f'|format(src.dscr_avg) }}x{% else %}-{% endif %}</div></div>
+    <div class="col-md-3 col-6"><div class="text-secondary">LCOE</div><div>{% if src.lcoe_local_per_kwh %}{{ '%.4f'|format(src.lcoe_local_per_kwh) }} {{ src.currency or proj.currency or 'GHS' }}/kWh{% else %}-{% endif %}</div></div>
+    <div class="col-md-6"><div class="text-secondary">Location</div><div>{{ src.location or '-' }}</div></div>
+    <div class="col-md-6"><div class="text-secondary">Client</div><div>{{ src.client or '-' }}</div></div>
+  </div>
+</div>
+
+<div class="solar-card p-4">
+  <form method="POST">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <h6 class="fw-bold text-warning mb-3">
+      {% if opp %}<i class="bi bi-arrow-clockwise me-1"></i>Refresh existing opportunity #{{ opp.id }}{% else %}<i class="bi bi-plus-circle me-1"></i>Create investment opportunity{% endif %}
+    </h6>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Investor</label>
+        <input class="form-control" name="investor" maxlength="300"
+               value="{{ (opp.investor if opp else proj.investor) or '' }}"
+               placeholder="e.g. IFC, private-equity fund, sovereign wealth">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Current stage</label>
+        <div class="form-control-plaintext">
+          <span class="badge bg-warning text-dark">
+            {{ (opp.stage if opp else 'lead') }}
+          </span>
+        </div>
+      </div>
+      <div class="col-12">
+        <label class="form-label small text-secondary">Pipeline notes</label>
+        <textarea class="form-control" name="pipeline_notes" rows="3" maxlength="2000"
+                  placeholder="Champion contact, board decisions, key milestones, blockers.">{{ opp.pipeline_notes if opp else '' }}</textarea>
+      </div>
+    </div>
+    <div class="d-flex justify-content-between align-items-center mt-4">
+      <a href="{{ url_for('capital_investment_step10', pid=proj.id) }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Step 10
+      </a>
+      <div>
+        <button type="submit" name="action" value="sync" class="btn btn-outline-warning">
+          {% if opp %}<i class="bi bi-arrow-clockwise me-1"></i>Refresh from project{% else %}<i class="bi bi-plus-circle me-1"></i>Create opportunity{% endif %}
+        </button>
+        <button type="submit" name="action" value="advance" class="btn btn-warning fw-bold ms-2">
+          {% if opp %}Continue to Step 12{% else %}Create &amp; continue{% endif %}<i class="bi bi-arrow-right ms-1"></i>
+        </button>
+      </div>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

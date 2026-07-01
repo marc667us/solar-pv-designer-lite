@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}Regulatory - {{ proj.project_name }}{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0">
+      <i class="bi bi-clipboard-check text-warning me-1"></i>{{ proj.project_name }}
+    </h5>
+    <div class="text-secondary small">
+      Development &amp; Regulatory Configuration
+      <span class="ms-2" style="font-size:16px">{{ framework.flag or '🌍' }}</span>
+      {% if proj.country %}
+        <span class="badge bg-warning text-dark ms-1">{{ proj.country }}</span>
+      {% else %}
+        <span class="badge bg-secondary ms-1">Generic framework</span>
+      {% endif %}
+    </div>
+  </div>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="text-secondary small">Back to project</a>
+</div>
+
+{% set items = (cfg.get('items') or {}) %}
+
+<div class="solar-card p-3 mb-3">
+  <div class="text-secondary small">
+    <i class="bi bi-info-circle text-warning me-1"></i>
+    Country-scoped regulatory scope for
+    <b>{{ proj.country or 'the project jurisdiction' }}</b>.
+    Practice, permits sequence, land tenure options and land-acquisition
+    controls below reflect the local legal framework.
+    Change the project country on Step 1 to reload the framework.
+  </div>
+</div>
+
+{# --- Jurisdiction card --- #}
+<div class="solar-card p-4 mb-3">
+  <h6 class="fw-bold text-warning mb-3">
+    <i class="bi bi-buildings me-1"></i>Jurisdiction authorities
+  </h6>
+  <div class="row g-3 small">
+    <div class="col-md-4">
+      <div class="text-secondary">Electricity regulator</div>
+      <div class="fw-bold">
+        {{ framework.regulator.name }}
+        {% if framework.regulator.abbr %} <span class="text-secondary">({{ framework.regulator.abbr }})</span>{% endif %}
+      </div>
+      {% if framework.regulator.url %}
+        <a href="{{ framework.regulator.url }}" target="_blank" class="text-warning" style="font-size:11px">
+          <i class="bi bi-box-arrow-up-right me-1"></i>Website
+        </a>
+      {% endif %}
+    </div>
+    <div class="col-md-4">
+      <div class="text-secondary">ESIA authority</div>
+      <div class="fw-bold">
+        {{ framework.esia_authority.name }}
+        {% if framework.esia_authority.abbr %} <span class="text-secondary">({{ framework.esia_authority.abbr }})</span>{% endif %}
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="text-secondary">Tariff regulator</div>
+      <div class="fw-bold">
+        {{ framework.tariff_regulator.name }}
+        {% if framework.tariff_regulator.abbr and framework.tariff_regulator.abbr != framework.tariff_regulator.name %}
+          <span class="text-secondary">({{ framework.tariff_regulator.abbr }})</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="text-secondary">Grid operator(s)</div>
+      <div>
+        {% for g in framework.grid_operator %}
+          <span class="badge bg-secondary me-1">{{ g }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="text-secondary">Utility off-taker(s)</div>
+      <div>
+        {% for u in framework.utility_offtakers %}
+          <span class="badge bg-secondary me-1">{{ u }}</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% if framework.notes %}
+    <hr class="my-3" style="border-color:#1e1e3a">
+    <div class="text-secondary small">
+      <i class="bi bi-lightbulb text-warning me-1"></i>{{ framework.notes }}
+    </div>
+  {% endif %}
+</div>
+
+{# --- Country-specific regulations reference --- #}
+<div class="row g-3 mb-3">
+  <div class="col-md-6">
+    <div class="solar-card p-4 h-100">
+      <h6 class="fw-bold text-warning mb-3">
+        <i class="bi bi-book me-1"></i>Statutes &amp; regulations
+      </h6>
+      <ul class="small text-secondary mb-0" style="padding-left:1.1rem">
+        {% for r in framework.regulations %}
+          <li>{{ r }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="solar-card p-4 h-100">
+      <h6 class="fw-bold text-warning mb-3">
+        <i class="bi bi-list-ol me-1"></i>Typical permits sequence
+      </h6>
+      <ol class="small text-secondary mb-0" style="padding-left:1.4rem">
+        {% for step in framework.permits_sequence %}
+          <li>{{ step }}</li>
+        {% endfor %}
+      </ol>
+    </div>
+  </div>
+</div>
+
+{# --- Timeline card --- #}
+{% if framework.typical_timeline_months %}
+<div class="solar-card p-4 mb-3">
+  <h6 class="fw-bold text-warning mb-3">
+    <i class="bi bi-calendar-range me-1"></i>Typical timeline (months) &mdash; base case
+  </h6>
+  <div class="row g-2 small">
+    {% for phase, months in framework.typical_timeline_months.items() %}
+      <div class="col-md col-6">
+        <div class="p-2" style="background:#0a0a14;border:1px solid #1e1e3a;border-radius:6px">
+          <div class="text-secondary" style="font-size:11px">
+            {{ phase.replace('_', ' ').replace('to', '->').upper() }}
+          </div>
+          <div class="fw-bold" style="font-size:16px">{{ months }} m</div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<form method="POST">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+  {# --- Land tenure control --- #}
+  <div class="solar-card p-4 mb-3">
+    <h6 class="fw-bold text-warning mb-3">
+      <i class="bi bi-geo-alt me-1"></i>Land acquisition controls
+    </h6>
+    <label class="form-label small text-secondary">Land tenure structure *</label>
+    <div class="row g-2 mb-3">
+      {% for t in framework.land_tenures %}
+        {% set is_on = (cfg.get('land_tenure') == t.code) %}
+        <div class="col-md-6">
+          <label class="d-block h-100" style="cursor:pointer">
+            <input type="radio" name="land_tenure" value="{{ t.code }}"
+                   {% if is_on %}checked{% endif %} class="d-none tenure-radio">
+            <div class="p-2 tenure-card"
+                 style="background:{% if is_on %}#251b00{% else %}#0a0a14{% endif %};
+                        border:1px solid {% if is_on %}#f59e0b{% else %}#1e1e3a{% endif %};border-radius:6px">
+              <div class="fw-bold small">{{ t.label }}</div>
+              <div class="text-secondary" style="font-size:11px">{{ t.notes }}</div>
+            </div>
+          </label>
+        </div>
+      {% endfor %}
+    </div>
+
+    <label class="form-label small text-secondary mt-2">
+      Country-specific practice - review before signing anything
+    </label>
+    <ul class="small text-secondary mb-3" style="padding-left:1.1rem">
+      {% for p in framework.land_practices %}
+        <li>{{ p }}</li>
+      {% endfor %}
+    </ul>
+
+    <label class="form-label small text-secondary">Land acquisition notes &amp; status</label>
+    <textarea class="form-control" name="land_acquisition_notes" rows="3" maxlength="4000"
+              placeholder="Parcel size, title reference, indenture number, host community, negotiation status, escrow arrangements, surveyor findings.">{{ cfg.get('land_acquisition_notes') or '' }}</textarea>
+
+    <label class="form-label small text-secondary mt-3">Community engagement</label>
+    <textarea class="form-control" name="community_engagement" rows="2" maxlength="2000"
+              placeholder="Chief / elders / district assembly meetings held, minutes, MoUs, community benefit commitments.">{{ cfg.get('community_engagement') or '' }}</textarea>
+  </div>
+
+  {# --- Regulatory milestone tracker --- #}
+  <div class="solar-card p-4 mb-3">
+    <h6 class="fw-bold text-warning mb-3">
+      <i class="bi bi-clipboard-check me-1"></i>Development milestones
+    </h6>
+    <div class="row g-3">
+      {% for code, label, hint in regulatory_items %}
+        {% set current = items.get(code) or {} %}
+        {% set curr_status = current.get('status') or 'not_started' %}
+        <div class="col-md-6">
+          <div class="p-2" style="background:#0a0a14;border:1px solid #1e1e3a;border-radius:6px">
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+              <div class="small fw-bold">{{ label }}</div>
+              <select class="form-select form-select-sm w-auto" name="status__{{ code }}">
+                {% for s_code, s_label, _bg in regulatory_statuses %}
+                  <option value="{{ s_code }}"
+                          {% if curr_status == s_code %}selected{% endif %}>{{ s_label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="text-secondary" style="font-size:11px">{{ hint }}</div>
+            <textarea class="form-control form-control-sm mt-2" name="notes__{{ code }}"
+                      rows="1" maxlength="2000"
+                      placeholder="Reference #, submission date, decision letter reference, blocker">{{ current.get('notes') or '' }}</textarea>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="solar-card p-4 mb-3">
+    <label class="form-label small text-secondary">Additional regulatory notes</label>
+    <textarea class="form-control" name="regulatory_notes" rows="2" maxlength="2000"
+              placeholder="Overall regulatory posture, key legal counsel, court cases, policy changes to monitor.">{{ cfg.get('regulatory_notes') or '' }}</textarea>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Back to project
+    </a>
+    <button type="submit" class="btn btn-warning fw-bold">
+      <i class="bi bi-check2 me-1"></i>Save regulatory scope
+    </button>
+  </div>
+</form>
+
+<script>
+  document.querySelectorAll('.tenure-radio').forEach(function(r){
+    r.addEventListener('change', function(){
+      document.querySelectorAll('.tenure-card').forEach(function(c){
+        c.style.border = '1px solid #1e1e3a';
+        c.style.background = '#0a0a14';
+      });
+      var card = r.closest('label').querySelector('.tenure-card');
+      if(card){
+        card.style.border = '1px solid #f59e0b';
+        card.style.background = '#251b00';
+      }
+    });
+  });
+</script>
+
+{% endblock %}

@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Step 7 - PV Design - {{ proj.project_name }}{% endblock %}
+{% block content %}
+{% set active_step = 7 %}
+{% set pid = proj.id %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0"><i class="bi bi-sun text-warning me-1"></i>{{ proj.project_name }}</h5>
+    <div class="text-secondary small">Step 7 of 14 &mdash; PV Design (utility-scale sizing)</div>
+  </div>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="text-secondary small">Back to project</a>
+</div>
+
+{% include "_capital_investment_wizard_rail.html" with context %}
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="solar-card p-4">
+      <form method="POST">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-grid me-1"></i>System &amp; module</h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Plant capacity DC (kWp) *</label>
+            <input class="form-control" name="kwp" type="number" step="1" min="1" required
+                   value="{{ cfg.get('kwp') or proj.target_kwp or '' }}"
+                   placeholder="e.g. 20000 for 20 MW">
+            {% if proj.target_kwp and not cfg.get('kwp') %}
+              <div class="text-warning small mt-1">
+                <i class="bi bi-info-circle me-1"></i>Pre-filled from Step 1 target ({{ '{:,.1f}'.format(proj.target_kwp/1000.0) }} MWp).
+              </div>
+            {% endif %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">DC / AC ratio</label>
+            <input class="form-control" name="dc_ac_ratio" type="number" step="0.01" min="1"
+                   value="{{ cfg.get('dc_ac_ratio') or '1.20' }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Module technology</label>
+            <select class="form-select" name="module_tech" id="module_tech">
+              {% for code, label, wp in module_techs %}
+                <option value="{{ code }}" data-wp="{{ wp }}"
+                        {% if cfg.get('module_tech') == code %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Module Wp</label>
+            <input class="form-control" name="module_wp" type="number" step="1" min="100"
+                   value="{{ cfg.get('module_wp') or 550 }}">
+          </div>
+        </div>
+
+        <hr class="my-4" style="border-color:#1e1e3a">
+
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-columns-gap me-1"></i>Mounting &amp; inverter</h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Mounting</label>
+            <select class="form-select" name="mounting">
+              {% for code, label in mounting_types %}
+                <option value="{{ code }}" {% if cfg.get('mounting') == code %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Inverter architecture</label>
+            <select class="form-select" name="inverter_type">
+              {% for code, label in inverter_types %}
+                <option value="{{ code }}" {% if cfg.get('inverter_type') == code %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-secondary">Module tilt (&deg;)</label>
+            <input class="form-control" name="tilt_deg" type="number" step="1" min="0" max="90"
+                   value="{{ cfg.get('tilt_deg') or 10 }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-secondary">Azimuth (&deg; from N)</label>
+            <input class="form-control" name="azimuth_deg" type="number" step="1" min="0" max="360"
+                   value="{{ cfg.get('azimuth_deg') or 180 }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-secondary">PSH (kWh/m2/day)</label>
+            <input class="form-control" name="psh_daily" type="number" step="0.01" min="0"
+                   value="{{ cfg.get('psh_daily') or 5.4 }}">
+          </div>
+        </div>
+
+        <hr class="my-4" style="border-color:#1e1e3a">
+
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-graph-up me-1"></i>Performance</h6>
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">Performance ratio</label>
+            <input class="form-control" name="performance_ratio" type="number" step="0.01" min="0.5" max="1"
+                   value="{{ cfg.get('performance_ratio') or 0.78 }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">Availability (%)</label>
+            <input class="form-control" name="availability_pct" type="number" step="0.1" min="80" max="100"
+                   value="{{ cfg.get('availability_pct') or 98 }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">Annual degradation (%)</label>
+            <input class="form-control" name="annual_degradation_pct" type="number" step="0.05" min="0" max="3"
+                   value="{{ cfg.get('annual_degradation_pct') or 0.5 }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">Project life (yr)</label>
+            <input class="form-control" name="project_life_yr" type="number" step="1" min="10" max="40"
+                   value="{{ cfg.get('project_life_yr') or 25 }}">
+          </div>
+        </div>
+
+        <hr class="my-4" style="border-color:#1e1e3a">
+
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-battery-charging me-1"></i>Battery (optional)</h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Battery chemistry</label>
+            <select class="form-select" name="battery_chem">
+              {% for code, label in battery_chemistries %}
+                <option value="{{ code }}" {% if cfg.get('battery_chem') == code %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">Battery capacity (MWh)</label>
+            <input class="form-control" name="battery_mwh" type="number" step="0.1" min="0"
+                   value="{{ cfg.get('battery_mwh') or 0 }}">
+          </div>
+        </div>
+
+        <hr class="my-4" style="border-color:#1e1e3a">
+
+        <textarea class="form-control" name="pv_notes" rows="2" maxlength="2000"
+                  placeholder="Notes: string-inverter vs. central, module-level power electronics, expansion allowance.">{{ cfg.get('notes') or '' }}</textarea>
+
+        <div class="d-flex justify-content-between align-items-center mt-4">
+          <a href="{{ url_for('capital_investment_step6', pid=proj.id) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Back to Step 6
+          </a>
+          <div>
+            <button type="submit" name="recompute_only" value="1" class="btn btn-outline-warning">
+              <i class="bi bi-calculator me-1"></i>Recompute
+            </button>
+            <button type="submit" class="btn btn-warning fw-bold ms-2">
+              Save &amp; continue to Step 8<i class="bi bi-arrow-right ms-1"></i>
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="solar-card p-4" style="position:sticky;top:16px">
+      <h6 class="fw-bold text-warning mb-3"><i class="bi bi-calculator me-1"></i>Sizing preview</h6>
+      {% if sizing and sizing.get('kwp_input') %}
+        <div class="row g-2 small">
+          <div class="col-6"><div class="text-secondary">DC capacity</div><div class="fw-bold">{{ '%.1f'|format(sizing.dc_kwp_actual/1000) }} MWp</div></div>
+          <div class="col-6"><div class="text-secondary">AC capacity</div><div class="fw-bold">{{ '%.1f'|format(sizing.inverter_ac_kw/1000) }} MW</div></div>
+          <div class="col-6"><div class="text-secondary">Modules</div><div class="fw-bold">{{ '{:,}'.format(sizing.n_modules) }}</div></div>
+          <div class="col-6"><div class="text-secondary">Strings</div><div class="fw-bold">{{ '{:,}'.format(sizing.strings) }}</div></div>
+          <div class="col-6"><div class="text-secondary">Combiner boxes</div><div class="fw-bold">{{ sizing.combiners }}</div></div>
+          <div class="col-6"><div class="text-secondary">Central inverters</div><div class="fw-bold">{{ sizing.n_central_inverters }}</div></div>
+          <div class="col-12"><hr style="border-color:#1e1e3a;margin:.5rem 0"></div>
+          <div class="col-6"><div class="text-secondary">Annual generation</div><div class="fw-bold">{{ '{:,.0f}'.format(sizing.annual_gen_mwh) }} MWh</div></div>
+          <div class="col-6"><div class="text-secondary">Specific yield</div><div class="fw-bold">{{ '{:,.0f}'.format(sizing.specific_yield_kwh_per_kwp) }} kWh/kWp</div></div>
+          <div class="col-6"><div class="text-secondary">Monthly avg</div><div class="fw-bold">{{ '{:,.0f}'.format(sizing.monthly_gen_mwh) }} MWh</div></div>
+          <div class="col-6"><div class="text-secondary">Lifetime energy</div><div class="fw-bold">{{ '{:,.0f}'.format(sizing.lifetime_gen_mwh) }} MWh</div></div>
+          <div class="col-12"><hr style="border-color:#1e1e3a;margin:.5rem 0"></div>
+          <div class="col-6"><div class="text-secondary">DC cable est.</div><div>{{ '{:,}'.format(sizing.dc_cable_m_est) }} m</div></div>
+          <div class="col-6"><div class="text-secondary">AC cable est.</div><div>{{ '{:,}'.format(sizing.ac_cable_m_est) }} m</div></div>
+        </div>
+      {% else %}
+        <div class="text-secondary small">
+          Fill in the form and click <b>Recompute</b> to see live sizing.
+          Ghana defaults are pre-loaded (PSH 5.4, PR 0.78, availability 98%).
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+  // When module tech changes, snap the Wp field to the tech default.
+  document.getElementById('module_tech').addEventListener('change', function(){
+    var wp = this.options[this.selectedIndex].dataset.wp;
+    if(wp){ document.querySelector('input[name=module_wp]').value = wp; }
+  });
+</script>
+
+{% endblock %}

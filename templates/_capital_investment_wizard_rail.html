@@ -1,0 +1,33 @@
+{# Reusable 14-step rail. Callers must pass `active_step` (int 1-14) and
+   optionally `pid` for links. Steps 1-5 link out; 6-14 render as inert. #}
+{% set _links = {
+  1: 'capital_investment_project',
+  2: 'capital_investment_step2',
+  3: 'capital_investment_step3',
+  4: 'capital_investment_step4',
+  5: 'capital_investment_step5',
+  6: 'capital_investment_step6',
+  7: 'capital_investment_step7',
+  8: 'capital_investment_step8',
+  9: 'capital_investment_step9',
+  10:'capital_investment_step10',
+  11:'capital_investment_step11',
+  12:'capital_investment_step12',
+  13:'capital_investment_step13',
+} %}
+<div class="solar-card p-2 mb-3">
+  <div class="d-flex flex-wrap gap-1" style="font-size:10px">
+    {% for i in range(1, 15) %}
+      {% set is_active = (i == active_step) %}
+      {% set is_before = (i < active_step) %}
+      {% if _links.get(i) and pid %}
+        <a href="{{ url_for(_links[i], pid=pid) }}"
+           class="badge {% if is_active %}bg-warning text-dark{% elif is_before %}bg-success{% else %}bg-secondary{% endif %} text-decoration-none"
+           style="min-width:28px" title="Go to step {{ i }}">{{ i }}</a>
+      {% else %}
+        <span class="badge {% if is_active %}bg-warning text-dark{% elif is_before %}bg-success{% else %}bg-secondary{% endif %}"
+              style="min-width:28px">{{ i }}</span>
+      {% endif %}
+    {% endfor %}
+  </div>
+</div>

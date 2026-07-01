@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block title %}Step 8 - Finance - {{ proj.project_name }}{% endblock %}
+{% block content %}
+{% set active_step = 8 %}
+{% set pid = proj.id %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0"><i class="bi bi-cash-coin text-warning me-1"></i>{{ proj.project_name }}</h5>
+    <div class="text-secondary small">
+      Step 8 of 14 &mdash; Financial Engineering
+      {% if kwp %}<span class="badge bg-secondary ms-2">{{ '%.1f'|format(kwp/1000) }} MW / {{ '{:,.0f}'.format(annual_gen_mwh) }} MWh/yr from Step 7</span>{% endif %}
+    </div>
+  </div>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="text-secondary small">Back to project</a>
+</div>
+
+{% include "_capital_investment_wizard_rail.html" with context %}
+
+{% if not kwp %}
+  <div class="solar-card p-4 mb-3" style="border-color:#f59e0b">
+    <div class="text-warning">
+      <i class="bi bi-exclamation-triangle me-1"></i>
+      PV kWp is not set. Complete <a href="{{ url_for('capital_investment_step7', pid=proj.id) }}" class="text-warning fw-bold">Step 7 (PV Design)</a> first.
+    </div>
+  </div>
+{% endif %}
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="solar-card p-4">
+      <form method="POST">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+        {# --- Revenue block --- #}
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-cash me-1"></i>Revenue</h6>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label small text-secondary">Model</label>
+            <select class="form-select" name="revenue_model">
+              {% for code, label in revenue_models %}
+                <option value="{{ code }}" {% if cfg.get('revenue_model') == code %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-secondary">Tariff (local / kWh)</label>
+            <input class="form-control" name="tariff_local_per_kwh" type="number" step="0.001" min="0"
+                   value="{{ cfg.get('tariff_local_per_kwh') or 1.5 }}">
+            <div class="text-secondary small mt-1">GHS/kWh, USD/kWh, whichever the project currency is.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-secondary">FX (local / USD)</label>
+            <input class="form-control" name="fx_local_per_usd" type="number" step="0.01" min="0"
+                   value="{{ cfg.get('fx_local_per_usd') or 12.0 }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-secondary">Tariff escalation (%/yr)</label>
+            <input class="form-control" name="tariff_escalation_pct" type="number" step="0.1"
+                   value="{{ cfg.get('tariff_escalation_pct') or 2 }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-secondary">Carbon credit (USD/tCO2)</label>
+            <input class="form-control" name="carbon_credit_usd_per_tco2" type="number" step="0.1" min="0"
+                   value="{{ cfg.get('carbon_credit_usd_per_tco2') or 5 }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-secondary">Grid EF (kgCO2/kWh)</label>
+            <input class="form-control" name="grid_ef_kgco2_per_kwh" type="number" step="0.01" min="0"
+                   value="{{ cfg.get('grid_ef_kgco2_per_kwh') or 0.45 }}">
+          </div>
+        </div>
+
+        <hr class="my-4" style="border-color:#1e1e3a">
+
+        {# --- Debt / equity block --- #}
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-bank me-1"></i>Debt &amp; equity</h6>
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">Discount rate (%)</label>
+            <input class="form-control" name="discount_rate_pct" type="number" step="0.1" min="0"
+                   value="{{ cfg.get('discount_rate_pct') or 10 }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">Debt ratio (%)</label>
+            <input class="form-control" name="debt_ratio_pct" type="number" step="1" min="0" max="100"
+                   value="{{ cfg.get('debt_ratio_pct') or 70 }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">Debt rate (%)</label>
+            <input class="form-control" name="debt_rate_pct" type="number" step="0.1" min="0"
+                   value="{{ cfg.get('debt_rate_pct') or 10 }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">Debt tenor (yr)</label>
+            <input class="form-control" name="debt_tenor_yr" type="number" step="1" min="1"
+                   value="{{ cfg.get('debt_tenor_yr') or 12 }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">Corporate tax (%)</label>
+            <input class="form-control" name="tax_rate_pct" type="number" step="0.1" min="0" max="60"
+                   value="{{ cfg.get('tax_rate_pct') or 25 }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">Project life (yr)</label>
+            <input class="form-control" name="project_life_yr" type="number" step="1" min="10" max="40"
+                   value="{{ cfg.get('project_life_yr') or 25 }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">Degradation (%/yr)</label>
+            <input class="form-control" name="annual_degradation_pct" type="number" step="0.05" min="0"
+                   value="{{ cfg.get('annual_degradation_pct') or (pv_cfg.get('annual_degradation_pct') or 0.5) }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">OPEX escalation (%/yr)</label>
+            <input class="form-control" name="opex_escalation_pct" type="number" step="0.1"
+                   value="{{ cfg.get('opex_escalation_pct') or 3 }}">
+          </div>
+        </div>
+
+        <hr class="my-4" style="border-color:#1e1e3a">
+
+        {# --- CAPEX block --- #}
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-boxes me-1"></i>CAPEX (USD / kWp)</h6>
+        <div class="row g-2">
+          {% set _cx = cfg.get('capex_usd_per_kwp') or {} %}
+          {% for key, dv in default_capex.items() %}
+            <div class="col-md-3 col-6">
+              <label class="form-label small text-secondary">{{ key.replace('_', ' ').title() }}</label>
+              <input class="form-control form-control-sm" name="capex_{{ key }}" type="number" step="1" min="0"
+                     value="{{ _cx.get(key) if _cx.get(key) is not none else dv }}">
+            </div>
+          {% endfor %}
+          <div class="col-md-3 col-6">
+            <label class="form-label small text-secondary">BESS lump sum (USD)</label>
+            <input class="form-control form-control-sm" name="bess_capex_usd" type="number" step="1000" min="0"
+                   value="{{ cfg.get('bess_capex_usd') or 0 }}">
+          </div>
+        </div>
+
+        <hr class="my-4" style="border-color:#1e1e3a">
+
+        {# --- OPEX block --- #}
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-tools me-1"></i>OPEX (USD / kWp / yr)</h6>
+        <div class="row g-2">
+          {% set _ox = cfg.get('opex_usd_per_kwp_yr') or {} %}
+          {% for key, dv in default_opex.items() %}
+            <div class="col-md-3 col-6">
+              <label class="form-label small text-secondary">{{ key.replace('_', ' ').title() }}</label>
+              <input class="form-control form-control-sm" name="opex_{{ key }}" type="number" step="0.1" min="0"
+                     value="{{ _ox.get(key) if _ox.get(key) is not none else dv }}">
+            </div>
+          {% endfor %}
+        </div>
+
+        <hr class="my-4" style="border-color:#1e1e3a">
+
+        <h6 class="fw-bold text-warning mb-3"><i class="bi bi-shuffle me-1"></i>Monte Carlo</h6>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label small text-secondary">MC runs</label>
+            <input class="form-control" name="monte_carlo_runs" type="number" step="50" min="0" max="5000"
+                   value="{{ cfg.get('monte_carlo_runs') or 200 }}">
+            <div class="text-secondary small mt-1">0 = skip; 200 usually enough for P10/P50/P90.</div>
+          </div>
+          <div class="col-md-8">
+            <label class="form-label small text-secondary">Notes</label>
+            <textarea class="form-control" name="fin_notes" rows="2" maxlength="2000"
+                      placeholder="PPA structure, subsidies, feed-in premium, tariff review clauses.">{{ cfg.get('notes') or '' }}</textarea>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-4">
+          <a href="{{ url_for('capital_investment_step7', pid=proj.id) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Back to Step 7
+          </a>
+          <div>
+            <button type="submit" name="recompute_only" value="1" class="btn btn-outline-warning">
+              <i class="bi bi-calculator me-1"></i>Recompute
+            </button>
+            <button type="submit" class="btn btn-warning fw-bold ms-2">
+              Save &amp; continue to Step 9<i class="bi bi-arrow-right ms-1"></i>
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="solar-card p-4" style="position:sticky;top:16px">
+      <h6 class="fw-bold text-warning mb-3"><i class="bi bi-graph-up-arrow me-1"></i>Bankability preview</h6>
+      {% if computed and computed.get('total_capex_usd') %}
+        {% set c = computed %}
+        <div class="row g-2 small mb-2">
+          <div class="col-6"><div class="text-secondary">Total CAPEX</div>
+            <div class="fw-bold">USD {{ '{:,.0f}'.format(c.total_capex_usd) }}</div>
+            <div class="text-secondary" style="font-size:11px">local {{ '{:,.0f}'.format(c.total_capex_local) }}</div></div>
+          <div class="col-6"><div class="text-secondary">CAPEX / kWp</div><div class="fw-bold">USD {{ '{:,.0f}'.format(c.capex_usd_per_kwp) }}</div></div>
+          <div class="col-6"><div class="text-secondary">Annual OPEX</div><div class="fw-bold">USD {{ '{:,.0f}'.format(c.total_opex_usd_yr) }}</div></div>
+          <div class="col-6"><div class="text-secondary">Revenue Y1</div><div class="fw-bold">{{ '{:,.0f}'.format(c.revenue_y1_local) }}</div></div>
+          <div class="col-12"><hr style="border-color:#1e1e3a;margin:.5rem 0"></div>
+          <div class="col-6"><div class="text-secondary">NPV</div>
+            <div class="fw-bold {% if c.npv_local >= 0 %}text-success{% else %}text-danger{% endif %}">{{ '{:,.0f}'.format(c.npv_local) }}</div></div>
+          <div class="col-6"><div class="text-secondary">IRR</div>
+            <div class="fw-bold {% if c.irr_pct and c.irr_pct >= 10 %}text-success{% elif c.irr_pct and c.irr_pct < 5 %}text-danger{% else %}text-warning{% endif %}">
+              {% if c.irr_pct is not none %}{{ '%.2f'|format(c.irr_pct) }} %{% else %}n/a{% endif %}
+            </div></div>
+          <div class="col-6"><div class="text-secondary">LCOE</div>
+            <div class="fw-bold">{% if c.lcoe_local_per_kwh %}{{ '%.4f'|format(c.lcoe_local_per_kwh) }} / kWh{% else %}n/a{% endif %}</div></div>
+          <div class="col-6"><div class="text-secondary">Payback</div>
+            <div class="fw-bold">{% if c.payback_years %}{{ '%.1f'|format(c.payback_years) }} yr{% else %}beyond life{% endif %}</div></div>
+          <div class="col-6"><div class="text-secondary">DSCR avg</div>
+            <div class="fw-bold">{% if c.dscr_avg %}{{ '%.2f'|format(c.dscr_avg) }}x{% else %}n/a{% endif %}</div></div>
+          <div class="col-6"><div class="text-secondary">DSCR min</div>
+            <div class="fw-bold">{% if c.dscr_min %}{{ '%.2f'|format(c.dscr_min) }}x{% else %}n/a{% endif %}</div></div>
+          <div class="col-6"><div class="text-secondary">Debt (local)</div><div>{{ '{:,.0f}'.format(c.debt_local) }}</div></div>
+          <div class="col-6"><div class="text-secondary">Equity (local)</div><div>{{ '{:,.0f}'.format(c.equity_local) }}</div></div>
+        </div>
+
+        {% if c.monte_carlo and c.monte_carlo.get('runs') %}
+          <hr style="border-color:#1e1e3a">
+          <div class="fw-bold text-warning small mb-2">Monte Carlo ({{ c.monte_carlo.runs }} runs)</div>
+          <table class="table table-dark table-sm small mb-0">
+            <thead><tr><th></th><th class="text-end">P10</th><th class="text-end">P50</th><th class="text-end">P90</th></tr></thead>
+            <tbody>
+              <tr><td>NPV (local)</td>
+                <td class="text-end">{{ '{:,.0f}'.format(c.monte_carlo.npv_p10 or 0) }}</td>
+                <td class="text-end">{{ '{:,.0f}'.format(c.monte_carlo.npv_p50 or 0) }}</td>
+                <td class="text-end">{{ '{:,.0f}'.format(c.monte_carlo.npv_p90 or 0) }}</td></tr>
+              <tr><td>IRR (%)</td>
+                <td class="text-end">{{ '%.2f'|format(c.monte_carlo.irr_p10_pct or 0) }}</td>
+                <td class="text-end">{{ '%.2f'|format(c.monte_carlo.irr_p50_pct or 0) }}</td>
+                <td class="text-end">{{ '%.2f'|format(c.monte_carlo.irr_p90_pct or 0) }}</td></tr>
+            </tbody>
+          </table>
+        {% endif %}
+      {% else %}
+        <div class="text-secondary small">
+          Click <b>Recompute</b> after filling in CAPEX / OPEX / tariff to see
+          NPV, IRR, LCOE, DSCR, payback and Monte Carlo bankability.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

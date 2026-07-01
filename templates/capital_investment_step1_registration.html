@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block title %}New Capital Investment Project{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0">
+      <i class="bi bi-plus-circle text-warning me-1"></i>New Capital Investment Project
+    </h5>
+    <div class="text-secondary small">Step 1 of 14 &mdash; Project Registration</div>
+  </div>
+  <a href="{{ url_for('capital_investment_landing') }}" class="text-secondary small">Back</a>
+</div>
+
+{# 14-step progress rail #}
+<div class="solar-card p-2 mb-3">
+  <div class="d-flex flex-wrap gap-1" style="font-size:10px">
+    {% for i in range(1, 15) %}
+      <span class="badge {% if i == 1 %}bg-warning text-dark{% else %}bg-secondary{% endif %}"
+            style="min-width:28px">{{ i }}</span>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="solar-card p-4">
+  <form method="POST" novalidate>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+    {# --- Identity block --- #}
+    <h6 class="fw-bold text-warning mb-3"><i class="bi bi-file-earmark-text me-1"></i>Project identity</h6>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Project name *</label>
+        <input class="form-control" name="project_name" required maxlength="300"
+               placeholder="e.g. Tema 20 MW Solar Farm">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Client / off-taker</label>
+        <input class="form-control" name="client_name" maxlength="300"
+               placeholder="e.g. Volta River Authority, ECG, mining company">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Investor</label>
+        <input class="form-control" name="investor" maxlength="300"
+               placeholder="e.g. IFC, private-equity fund, sovereign wealth">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Developer / EPC</label>
+        <input class="form-control" name="developer" maxlength="300"
+               placeholder="EPC contractor or project developer">
+      </div>
+      <div class="col-12">
+        <label class="form-label small text-secondary">Project description</label>
+        <textarea class="form-control" name="description" rows="2" maxlength="4000"
+                  placeholder="Short executive summary of the plant (MW, location, off-take, hybridisation, deployment window)"></textarea>
+      </div>
+    </div>
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+
+    {# --- Design intent — HEADLINE — the SINGLE input driving everything downstream. --- #}
+    <div class="p-3 mb-3" style="background:#251b00;border:1px solid #f59e0b;border-radius:8px">
+      <h6 class="fw-bold text-warning mb-3">
+        <i class="bi bi-lightning-charge me-1"></i>Design intent
+        <span class="badge bg-warning text-dark ms-1" style="font-size:10px">HEADLINE INPUT</span>
+      </h6>
+      <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label small text-secondary">Target plant capacity (MWp) *</label>
+          <input class="form-control form-control-lg" name="target_mwp" type="number"
+                 step="0.1" min="0.01" placeholder="e.g. 20" autocomplete="off">
+          <div class="text-secondary small mt-1">
+            Enter in MWp. This is the ONE input that drives module count, string
+            count, inverter count, annual generation, CAPEX, IRR, LCOE, and the
+            BOQ scope downstream.
+          </div>
+        </div>
+        <div class="col-md-8">
+          <div class="row g-2 small">
+            <div class="col-6 col-md-3">
+              <div class="p-2" style="background:#0a0a14;border:1px solid #1e1e3a;border-radius:6px">
+                <div class="text-secondary" style="font-size:11px">MODULES</div>
+                <div class="fw-bold" id="hint_modules">-</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="p-2" style="background:#0a0a14;border:1px solid #1e1e3a;border-radius:6px">
+                <div class="text-secondary" style="font-size:11px">ANNUAL MWh</div>
+                <div class="fw-bold" id="hint_gen">-</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="p-2" style="background:#0a0a14;border:1px solid #1e1e3a;border-radius:6px">
+                <div class="text-secondary" style="font-size:11px">CAPEX USD</div>
+                <div class="fw-bold" id="hint_capex">-</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="p-2" style="background:#0a0a14;border:1px solid #1e1e3a;border-radius:6px">
+                <div class="text-secondary" style="font-size:11px">CENTRAL INVERTERS</div>
+                <div class="fw-bold" id="hint_inv">-</div>
+              </div>
+            </div>
+          </div>
+          <div class="text-secondary small mt-2" style="font-size:11px">
+            Live preview using Ghana defaults (PSH 5.4, PR 0.78, DC/AC 1.20, 550 W modules,
+            USD 900/kWp all-in). Refine on Step 7 &amp; Step 8.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+
+    {# --- Location block --- #}
+    <h6 class="fw-bold text-warning mb-3"><i class="bi bi-geo-alt me-1"></i>Location</h6>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Country</label>
+        <select class="form-select" name="country">
+          <option value="Ghana" selected>Ghana</option>
+          <option value="Nigeria">Nigeria</option>
+          <option value="Kenya">Kenya</option>
+          <option value="South Africa">South Africa</option>
+          <option value="Cote d'Ivoire">Cote d'Ivoire</option>
+          <option value="Senegal">Senegal</option>
+          <option value="Egypt">Egypt</option>
+          <option value="Morocco">Morocco</option>
+          <option value="United Kingdom">United Kingdom</option>
+          <option value="United States">United States</option>
+          <option value="Germany">Germany</option>
+          <option value="India">India</option>
+          <option value="United Arab Emirates">United Arab Emirates</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Region / State</label>
+        <input class="form-control" name="region" maxlength="100"
+               placeholder="e.g. Greater Accra">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">District / Municipality</label>
+        <input class="form-control" name="district" maxlength="100"
+               placeholder="e.g. Tema Metropolitan">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">GPS latitude (decimal)</label>
+        <input class="form-control" name="gps_lat" type="number" step="0.000001"
+               min="-90" max="90" placeholder="5.6634">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">GPS longitude (decimal)</label>
+        <input class="form-control" name="gps_lon" type="number" step="0.000001"
+               min="-180" max="180" placeholder="-0.0166">
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <div class="text-secondary small">
+          <i class="bi bi-info-circle text-warning me-1"></i>
+          GPS drives shading, sun-path, and yield calcs later.
+        </div>
+      </div>
+    </div>
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+
+    {# --- Milestones block --- #}
+    <h6 class="fw-bold text-warning mb-3"><i class="bi bi-flag me-1"></i>Milestones &amp; standards</h6>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Project status</label>
+        <select class="form-select" name="project_status">
+          {% for code, label in project_statuses %}
+            <option value="{{ code }}" {% if code == 'concept' %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Target COD</label>
+        <input class="form-control" name="target_cod" type="month" placeholder="YYYY-MM">
+        <div class="text-secondary small mt-1">Commercial Operation Date target</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small text-secondary">Design standard</label>
+        <select class="form-select" name="design_standard">
+          {% for code, label in design_standards %}
+            <option value="{{ code }}" {% if code == 'IEC' %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+
+    {# --- Money block --- #}
+    <h6 class="fw-bold text-warning mb-3"><i class="bi bi-cash-coin me-1"></i>Money</h6>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Reporting currency</label>
+        <select class="form-select" name="currency">
+          {% for code, label in currencies %}
+            <option value="{{ code }}" {% if code == 'GHS' %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small text-secondary">Tax regime</label>
+        <select class="form-select" name="tax_regime">
+          {% for code, label in tax_regimes %}
+            <option value="{{ code }}" {% if code == 'standard' %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+
+    {# --- Quick project-type hint (full picker on Step 2) --- #}
+    <h6 class="fw-bold text-warning mb-3"><i class="bi bi-tag me-1"></i>Provisional project type <span class="text-secondary small">(optional &mdash; you can refine on Step 2)</span></h6>
+    <div class="row g-2">
+      {% for code, label, icon in project_types %}
+        <div class="col-md-4 col-6">
+          <div class="form-check" style="background:#0a0a14;border:1px solid #1e1e3a;border-radius:8px;padding:8px 12px">
+            <input class="form-check-input" type="radio" name="project_type"
+                   value="{{ code }}" id="pt_{{ code }}">
+            <label class="form-check-label small" for="pt_{{ code }}">
+              <i class="{{ icon }} me-2 text-warning"></i>{{ label }}
+            </label>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-4">
+      <a href="{{ url_for('capital_investment_landing') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Cancel
+      </a>
+      <button type="submit" class="btn btn-warning fw-bold">
+        Create project &amp; continue to Step 2<i class="bi bi-arrow-right ms-1"></i>
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+  // Live preview: recompute the 4 hint tiles as the user types capacity.
+  // Ghana defaults: PSH 5.4, PR 0.78, availability 98%, DC/AC 1.20,
+  // 550 W modules, USD 900/kWp all-in CAPEX, 1500 kW central inverter.
+  (function(){
+    var el = document.querySelector('input[name=target_mwp]');
+    if(!el) return;
+    var out = {
+      modules: document.getElementById('hint_modules'),
+      gen:     document.getElementById('hint_gen'),
+      capex:   document.getElementById('hint_capex'),
+      inv:     document.getElementById('hint_inv'),
+    };
+    function fmt(n){ return n.toLocaleString(undefined, {maximumFractionDigits: 0}); }
+    function recompute(){
+      var mwp = parseFloat(el.value);
+      if(!mwp || mwp <= 0){
+        for(var k in out) if(out[k]) out[k].textContent = '-';
+        return;
+      }
+      var kwp = mwp * 1000.0;
+      var n_modules = Math.ceil(kwp * 1000 / 550);
+      var annual_mwh = Math.round(kwp * 5.4 * 365 * 0.78 * 0.98 / 1000);
+      var capex_usd = Math.round(kwp * 900);
+      var inv_ac_kw = kwp / 1.20;
+      var n_inv = Math.max(1, Math.ceil(inv_ac_kw / 1500));
+      out.modules.textContent = fmt(n_modules);
+      out.gen.textContent     = fmt(annual_mwh);
+      out.capex.textContent   = 'USD ' + fmt(capex_usd);
+      out.inv.textContent     = fmt(n_inv);
+    }
+    el.addEventListener('input', recompute);
+    recompute();
+  })();
+</script>
+
+{% endblock %}

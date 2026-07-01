@@ -41,6 +41,7 @@ from app.observability import (
     register_request_hooks as _obs_register_request_hooks,
     scrape_endpoint        as _obs_scrape_endpoint,
 )  # SOC 2 M3.4: Prometheus /metrics + per-request latency + status counters
+from new_capital_investment_routes import register_capital_investment  # PV Capital Investment Design module
 
 # Structured logging (tenant-aware JSON logs)
 try:
@@ -995,6 +996,20 @@ def inject_today_iso():
     # transient banners without server-side touching. e.g. Task #4 BOM
     # changelog banner sunsets on 2026-07-08 by comparing this value.
     return {"today_iso": datetime.utcnow().strftime("%Y-%m-%d")}
+
+# --- PV Capital Investment Design module ---------------------------
+# Wires /large-scale-solar/* routes (landing + Step 1 + project view)
+# on top of the existing helpers just defined above. Safe to leave in
+# place - the register function is idempotent w.r.t. the route table
+# (Flask raises AssertionError if the same endpoint is added twice, so
+# any accidental double-import fails loudly rather than silently).
+register_capital_investment(
+    app,
+    get_db=get_db,
+    login_required=login_required,
+    csrf_protect=csrf_protect,
+    current_user=current_user,
+)
 
 
 def get_project(pid):

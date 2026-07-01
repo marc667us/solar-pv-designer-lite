@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Step 5 - Technology - {{ proj.project_name }}{% endblock %}
+{% block content %}
+{% set active_step = 5 %}
+{% set pid = proj.id %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0"><i class="bi bi-cpu text-warning me-1"></i>{{ proj.project_name }}</h5>
+    <div class="text-secondary small">Step 5 of 14 &mdash; Technology Configuration</div>
+  </div>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="text-secondary small">Back to project</a>
+</div>
+
+{% include "_capital_investment_wizard_rail.html" with context %}
+
+{% set selected = (cfg.get('selected') or []) %}
+
+<div class="solar-card p-3 mb-3">
+  <div class="text-secondary small">
+    <i class="bi bi-info-circle text-warning me-1"></i>
+    Selecting a technology loads its corresponding BOQ sections and marketplace
+    equipment categories. Cross-check the picks against your O&amp;M staffing
+    model &mdash; each selection creates a monitoring &amp; maintenance obligation.
+  </div>
+</div>
+
+<div class="solar-card p-4">
+  <form method="POST">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+    {% for group_name, items in technology_groups %}
+      <h6 class="fw-bold text-warning mb-3 mt-2">
+        <i class="bi bi-hexagon me-1"></i>{{ group_name }}
+      </h6>
+      <div class="row g-2 mb-3">
+        {% for code, label, icon in items %}
+          {% set is_on = (code in selected) %}
+          <div class="col-md-3 col-sm-6">
+            <div class="form-check p-2"
+                 style="background:#0a0a14;border:1px solid {% if is_on %}#f59e0b{% else %}#1e1e3a{% endif %};border-radius:6px">
+              <input class="form-check-input" type="checkbox" name="technology"
+                     value="{{ code }}" id="tech_{{ code }}"
+                     {% if is_on %}checked{% endif %}>
+              <label class="form-check-label small" for="tech_{{ code }}">
+                <i class="{{ icon }} me-1 text-warning"></i>{{ label }}
+              </label>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endfor %}
+
+    <hr class="my-4" style="border-color:#1e1e3a">
+
+    <h6 class="fw-bold text-warning mb-3"><i class="bi bi-chat-left-text me-1"></i>Notes</h6>
+    <textarea class="form-control" name="tech_notes" rows="3" maxlength="2000"
+              placeholder="Vendor preferences, protocol requirements (IEC 61850 / DNP3 / Modbus TCP), cyber-security posture, cloud provider constraints, integration with utility EMS.">{{ cfg.get('notes') or '' }}</textarea>
+
+    <div class="d-flex justify-content-between align-items-center mt-4">
+      <a href="{{ url_for('capital_investment_step4', pid=proj.id) }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to Step 4
+      </a>
+      <button type="submit" class="btn btn-warning fw-bold">
+        Save &amp; return to project overview<i class="bi bi-check2 ms-1"></i>
+      </button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
