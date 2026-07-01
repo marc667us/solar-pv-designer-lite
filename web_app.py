@@ -1876,6 +1876,35 @@ def calc_boq(num_panels, num_bat, inv_kw, pv_kw, bat_kwh,
 # ─── Routes — Auth ────────────────────────────────────────────────────────────
 
 
+def _landing_hot_tenders(limit=3):
+    """Return the latest N solar tenders from solar_opportunities_crawled
+    for the landing page 'hot tenders' widget. Returns [] if the table
+    is missing or empty. Never raises."""
+    try:
+        _ensure_opps_crawled_table()
+        with get_db() as c:
+            rows = c.execute(
+                "SELECT id, title, source, source_url, country, type, "
+                "       last_seen_at "
+                "FROM solar_opportunities_crawled "
+                "WHERE type IN ('RFQ','RFP','EOI','IPP','TENDER') "
+                "ORDER BY last_seen_at DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+        out = []
+        for r in rows:
+            out.append({
+                "title":      r["title"] or "",
+                "source":     r["source"] or "News",
+                "source_url": r["source_url"] or "",
+                "country":    r["country"] or "",
+                "type":       r["type"] or "OTHER",
+            })
+        return out
+    except Exception:
+        return []
+
+
 @app.route("/")
 def landing():
     with get_db() as c:
@@ -1886,10 +1915,12 @@ def landing():
             "SELECT org_whatsapp FROM users WHERE is_admin=1 ORDER BY id LIMIT 1"
         ).fetchone()
     wa_number = (admin["org_whatsapp"] if admin and admin["org_whatsapp"] else "233535068102")
+    hot_tenders = _landing_hot_tenders()
     return render_template("landing.html", user=current_user(),
                            countries=get_countries(), news_posts=news,
                            wa_number=wa_number,
-                           sales_email=EMAIL_SALES)
+                           sales_email=EMAIL_SALES,
+                           hot_tenders=hot_tenders)
 
 
 @app.route("/platform")
@@ -1898,8 +1929,10 @@ def landing_page2():
         news = c.execute(
             "SELECT * FROM news_posts WHERE is_published=1 ORDER BY created_at DESC LIMIT 3"
         ).fetchall()
+    hot_tenders = _landing_hot_tenders()
     return render_template("landing_page2.html", user=current_user(),
-                           countries=get_countries(), news_posts=news)
+                           countries=get_countries(), news_posts=news,
+                           hot_tenders=hot_tenders)
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -35636,22 +35669,46 @@ def _newsfeed_fetch_items(force_refresh=False):
 
 @app.route("/news")
 def news_index():
-    """Public news index. Paginated 10/page, newest first."""
+    """Public news index. Paginated 10/page, newest first. Optional
+    ?category=<cat> filter."""
     try:
         page = max(1, int(request.args.get("page", 1) or 1))
     except (TypeError, ValueError):
         page = 1
     per_page = 10
     offset = (page - 1) * per_page
+    selected_category = (request.args.get("category") or "").strip().lower()
+
     with get_db() as c:
+        # Facet counts for the chip row (case-normalised for consistency).
+        cat_rows = c.execute(
+            "SELECT LOWER(TRIM(category)) AS cat, COUNT(*) AS n "
+            "FROM news_posts WHERE is_published=1 AND category IS NOT NULL AND category != '' "
+            "GROUP BY LOWER(TRIM(category)) ORDER BY n DESC"
+        ).fetchall()
+        category_facets = []
+        for r in cat_rows:
+            _c = (r["cat"] if hasattr(r, "keys") else r[0]) or ""
+            _n = int(r["n"] if hasattr(r, "keys") else r[1])
+            if _c:
+                category_facets.append({"name": _c, "n": _n})
+
+        # Build filter clauses
+        where_extra = ""
+        params_extra = []
+        if selected_category:
+            where_extra = " AND LOWER(TRIM(category)) = ?"
+            params_extra.append(selected_category)
+
         total = c.execute(
-            "SELECT COUNT(*) FROM news_posts WHERE is_published=1"
+            f"SELECT COUNT(*) FROM news_posts WHERE is_published=1{where_extra}",
+            tuple(params_extra),
         ).fetchone()[0]
         posts = c.execute(
-            "SELECT id, title, content, category, created_at, updated_at "
-            "FROM news_posts WHERE is_published=1 "
-            "ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            (per_page, offset),
+            f"SELECT id, title, content, category, created_at, updated_at "
+            f"FROM news_posts WHERE is_published=1{where_extra} "
+            f"ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            tuple(params_extra) + (per_page, offset),
         ).fetchall()
     total_pages = max(1, (int(total or 0) + per_page - 1) // per_page)
     return render_template(
@@ -35661,6 +35718,8 @@ def news_index():
         page=page,
         total_pages=total_pages,
         total=int(total or 0),
+        category_facets=category_facets,
+        selected_category=selected_category,
     )
 
 

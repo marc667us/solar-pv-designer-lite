@@ -22,8 +22,28 @@
       <a href="{{ url_for('marketplace_public') }}" class="btn btn-outline-light btn-sm">
         <i class="bi bi-shop me-1"></i>Marketplace
       </a>
+      <a href="{{ url_for('public_opportunities') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-broadcast-pin me-1"></i>Solar opportunities
+      </a>
     </div>
   </div>
+
+  {# ── Category filter chip row ── #}
+  {% if category_facets %}
+  <div class="d-flex flex-wrap gap-1 mb-3 align-items-center">
+    <span class="text-secondary small me-2" style="letter-spacing:.5px">CATEGORY:</span>
+    <a href="{{ url_for('news_index') }}"
+       class="btn btn-sm {% if not selected_category %}btn-warning{% else %}btn-outline-light{% endif %}">
+      All
+    </a>
+    {% for f in category_facets %}
+    <a href="{{ url_for('news_index', category=f.name) }}"
+       class="btn btn-sm {% if selected_category == f.name %}btn-warning{% else %}btn-outline-light{% endif %}">
+      {{ f.name|title }}<span class="badge ms-1" style="background:rgba(255,255,255,.10);font-size:9px">{{ f.n }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   {% if posts %}
     <div class="row g-3">
@@ -59,13 +79,13 @@
     {% if total_pages > 1 %}
     <div class="d-flex justify-content-center align-items-center gap-2 mt-4">
       {% if page > 1 %}
-      <a href="{{ url_for('news_index', page=page-1) }}" class="btn btn-outline-warning btn-sm">
+      <a href="{{ url_for('news_index', page=page-1, category=selected_category or none) }}" class="btn btn-outline-warning btn-sm">
         <i class="bi bi-chevron-left me-1"></i>Previous
       </a>
       {% endif %}
       <span class="small text-secondary">Page {{ page }} of {{ total_pages }}</span>
       {% if page < total_pages %}
-      <a href="{{ url_for('news_index', page=page+1) }}" class="btn btn-outline-warning btn-sm">
+      <a href="{{ url_for('news_index', page=page+1, category=selected_category or none) }}" class="btn btn-outline-warning btn-sm">
         Next<i class="bi bi-chevron-right ms-1"></i>
       </a>
       {% endif %}
