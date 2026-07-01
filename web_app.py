@@ -27317,22 +27317,6 @@ def _services_section_rows(codes: list) -> list:
     return out
 
 
-# ---------------------------------------------------------------------------
-# 5b. Legacy stubs (kept ONLY until Task #7 retires the template picker).
-#     These functions used to score templates against chosen services and
-#     inject placeholder bills for any uncovered service. The new engine
-#     drives sections directly from services + the skeleton above, so these
-#     stubs return inputs unchanged and will be deleted together with the
-#     template picker code in the same commit.
-# ---------------------------------------------------------------------------
-
-def _template_services(template: dict) -> list:
-    return []
-
-def _inject_service_bills(template: dict, chosen_services: list) -> dict:
-    return template
-
-
 def _infer_services_from_bill_names(bill_names: list) -> list:
     """Infer service codes from a list of existing bill names (used to
     auto-populate ``services_csv`` for pre-refactor projects on first read).
@@ -32982,32 +32966,6 @@ def _boq_lookup_overrides_for_user(uid: int) -> dict:
         }
     except Exception:
         return {}
-
-
-def _boq_template_lines_with_overrides(uid: int, template: dict):
-    """Yield template lines overlaid with the user's recorded overrides.
-    Wraps _boq_template_iter_lines from new_boq_project_templates so the
-    static templates `learn` from prior projects.
-
-    Yields the same 11-tuple shape:
-      (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
-       desc, unit, qty, basic, spec)
-    where unit / qty / basic come from the override when present.
-    """
-    from new_boq_project_templates import _boq_template_iter_lines
-    ov = _boq_lookup_overrides_for_user(uid)
-    for (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
-         desc, unit, qty, basic, spec) in _boq_template_iter_lines(template):
-        key = _boq_desc_key(desc)
-        if key in ov:
-            ov_unit, ov_basic, _ov_sp, _ov_ip, ov_qty = ov[key]
-            unit = ov_unit or unit
-            if ov_basic > 0:
-                basic = ov_basic
-            if ov_qty > 0:
-                qty = ov_qty
-        yield (bill_no, bill_name, sect_letter, sect_title, subsec, idx,
-               desc, unit, qty, basic, spec)
 
 
 def _boq_apply_overrides(uid: int, catalog_rows: list) -> list:

@@ -793,22 +793,6 @@ def _services_section_rows(codes: list) -> list:
     return out
 
 
-# ---------------------------------------------------------------------------
-# 5b. Legacy stubs (kept ONLY until Task #7 retires the template picker).
-#     These functions used to score templates against chosen services and
-#     inject placeholder bills for any uncovered service. The new engine
-#     drives sections directly from services + the skeleton above, so these
-#     stubs return inputs unchanged and will be deleted together with the
-#     template picker code in the same commit.
-# ---------------------------------------------------------------------------
-
-def _template_services(template: dict) -> list:
-    return []
-
-def _inject_service_bills(template: dict, chosen_services: list) -> dict:
-    return template
-
-
 def _infer_services_from_bill_names(bill_names: list) -> list:
     """Infer service codes from a list of existing bill names (used to
     auto-populate ``services_csv`` for pre-refactor projects on first read).
