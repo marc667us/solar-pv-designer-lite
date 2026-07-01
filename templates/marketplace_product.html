@@ -1,5 +1,36 @@
 {% extends "base.html" %}
 {% block title %}{{ product.name }} — Marketplace · SolarPro{% endblock %}
+
+{% block og_description %}{{ product.name }}{% if product.brand %} by {{ product.brand }}{% endif %} — {{ currency }} {{ (product.price_in_currency or 0)|money }}/{{ product.unit or 'No.' }}. {{ (product.spec or '')[:180] }}{% endblock %}
+{% block og_type %}product{% endblock %}
+
+{% block ld_json %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": {{ product.name|tojson }},
+  {% if product.brand %}"brand": {"@type": "Brand", "name": {{ product.brand|tojson }}},{% endif %}
+  {% if product.model %}"sku": {{ product.model|tojson }},{% endif %}
+  {% if product.category_name %}"category": {{ product.category_name|tojson }},{% endif %}
+  "description": {{ (product.spec or product.name)|tojson }},
+  "url": {{ (request.url_root.rstrip('/') + url_for('marketplace_product_detail', pid=product.id))|tojson }},
+  "offers": {
+    "@type": "Offer",
+    "priceCurrency": {{ currency|tojson }},
+    "price": {{ (product.price_in_currency or 0)|round(2)|tojson }},
+    "availability": "https://schema.org/InStock",
+    "url": {{ (request.url_root.rstrip('/') + url_for('marketplace_product_detail', pid=product.id))|tojson }},
+    "seller": {
+      "@type": "Organization",
+      "name": {{ (product.supplier_name or 'SolarPro Marketplace')|tojson }}{% if product.supplier_country %},
+      "address": {"@type": "PostalAddress", "addressCountry": {{ product.supplier_country|tojson }}}{% endif %}
+    }
+  }
+}
+</script>
+{% endblock %}
+
 {% block content %}
 
 <div class="rounded-3 p-3 mb-3" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1030 60%,#0f1a22 100%);border:1px solid #1e1e3a">
