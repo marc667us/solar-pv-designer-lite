@@ -1,5 +1,28 @@
 {% extends "base.html" %}
-{% block title %}Solar News — SolarPro Global{% endblock %}
+{% block title %}Solar News{% if selected_category %} — {{ selected_category|title }}{% endif %} — SolarPro Global{% endblock %}
+{% block og_description %}Latest solar industry news{% if selected_category %} in the {{ selected_category }} category{% endif %} — {{ total }} published post{% if total != 1 %}s{% endif %} covering PV, storage, policy, and market updates.{% endblock %}
+
+{% block ld_json %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  "name": "Solar News{% if selected_category %} — {{ selected_category|title }}{% endif %}",
+  "numberOfItems": {{ posts|length }},
+  "itemListElement": [
+    {% for post in posts %}
+    {
+      "@type": "ListItem",
+      "position": {{ loop.index + ((page - 1) * 10) }},
+      "url": {{ (request.url_root.rstrip('/') + url_for('news_detail', post_id=post.id))|tojson }},
+      "name": {{ post.title|tojson }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="container-xl py-4">
 

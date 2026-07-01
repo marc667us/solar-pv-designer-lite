@@ -1,5 +1,28 @@
 {% extends "base.html" %}
-{% block title %}Solar Opportunities — RFQ / RFP / EOI / Tender feed | SolarPro{% endblock %}
+{% block title %}Solar Opportunities{% if selected_type %} — {{ selected_type }}{% endif %}{% if selected_country %} in {{ selected_country }}{% endif %} — SolarPro{% endblock %}
+{% block og_description %}{{ n_total }} solar tender opportunities worldwide{% if selected_type %} filtered to {{ selected_type }} type{% endif %}{% if selected_country %} in {{ selected_country }}{% endif %} — RFQ, RFP, EOI, and general procurement notices. Free feed, no signup.{% endblock %}
+
+{% block ld_json %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  "name": "Solar Opportunities{% if selected_type %} — {{ selected_type }}{% endif %}{% if selected_country %} in {{ selected_country }}{% endif %}",
+  "numberOfItems": {{ items|length }},
+  "itemListElement": [
+    {% for it in items %}
+    {
+      "@type": "ListItem",
+      "position": {{ loop.index + ((page - 1) * 20) }},
+      "url": {{ it.source_url|tojson }},
+      "name": {{ it.title|tojson }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="container-xl py-4">
 
