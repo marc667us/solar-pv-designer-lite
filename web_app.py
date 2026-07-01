@@ -1876,10 +1876,70 @@ def calc_boq(num_panels, num_bat, inv_kw, pv_kw, bat_kwh,
 # ─── Routes — Auth ────────────────────────────────────────────────────────────
 
 
-def _landing_hot_tenders(limit=3):
-    """Return the latest N solar tenders from solar_opportunities_crawled
-    for the landing page 'hot tenders' widget. Returns [] if the table
-    is missing or empty. Never raises."""
+# ISO 3166-1 alpha-2 -> canonical country name used in
+# solar_opportunities_crawled.country. Matches _COUNTRY_HINTS spelling.
+_ISO_TO_COUNTRY_NAME = {
+    "GH": "Ghana", "NG": "Nigeria", "KE": "Kenya", "ZA": "South Africa",
+    "TZ": "Tanzania", "UG": "Uganda", "SN": "Senegal", "CI": "Cote d'Ivoire",
+    "MA": "Morocco", "EG": "Egypt", "ET": "Ethiopia", "CM": "Cameroon",
+    "BJ": "Benin", "BF": "Burkina Faso", "ML": "Mali", "NE": "Niger",
+    "TG": "Togo", "AO": "Angola", "MZ": "Mozambique", "ZW": "Zimbabwe",
+    "ZM": "Zambia", "MW": "Malawi", "MG": "Madagascar", "MU": "Mauritius",
+    "RW": "Rwanda", "GB": "United Kingdom", "US": "United States",
+    "DE": "Germany", "FR": "France", "IT": "Italy", "ES": "Spain",
+    "AU": "Australia", "IN": "India", "PK": "Pakistan", "BD": "Bangladesh",
+    "PH": "Philippines", "ID": "Indonesia", "VN": "Vietnam", "TH": "Thailand",
+    "BR": "Brazil", "AR": "Argentina", "CO": "Colombia", "CL": "Chile",
+    "AE": "United Arab Emirates", "SA": "Saudi Arabia", "TR": "Turkey",
+}
+
+
+def _viewer_country_name():
+    """Resolve the viewer's country to a canonical country name used in
+    solar_opportunities_crawled. Precedence:
+      1. Logged-in user's profile country
+      2. Cloudflare edge geo header CF-IPCountry (ISO alpha-2)
+      3. Ghana (SolarPro's home market, safe default)
+    Returns a country name string (never empty).
+    """
+    try:
+        u = current_user()
+        if u:
+            _c = (u["country"] if u and "country" in (u.keys() if hasattr(u, "keys") else []) else "") or ""
+            _c = (_c or "").strip()
+            if _c:
+                return _c
+    except Exception:
+        pass
+    try:
+        iso = (request.headers.get("CF-IPCountry") or "").strip().upper()
+        if iso in _ISO_TO_COUNTRY_NAME:
+            return _ISO_TO_COUNTRY_NAME[iso]
+    except Exception:
+        pass
+    return "Ghana"
+
+
+def _landing_hot_tenders(limit=3, country=None):
+    """Return the latest N solar tenders for the landing page 'hot tenders'
+    widget, filtered to the viewer's country.
+
+    Owner directive 2026-07-01: hot tenders strip is country-specific --
+    each visitor sees tenders for their own country. Viewer country is
+    resolved by _viewer_country_name() (user profile > CF-IPCountry >
+    Ghana). Global tenders remain on /opportunities.
+
+    Country match is inclusive: exact country column match OR
+    title/body LIKE the country name, since Google News country
+    extraction sometimes leaves country='' when the country only
+    appears in the article body.
+
+    Returns [] if the table is missing/empty. Never raises.
+    """
+    _country = (country or _viewer_country_name()).strip()
+    if not _country:
+        _country = "Ghana"
+    _needle = "%" + _country.lower() + "%"
     try:
         _ensure_opps_crawled_table()
         with get_db() as c:
@@ -1888,8 +1948,11 @@ def _landing_hot_tenders(limit=3):
                 "       last_seen_at "
                 "FROM solar_opportunities_crawled "
                 "WHERE type IN ('RFQ','RFP','EOI','IPP','TENDER') "
+                "  AND (LOWER(country) = LOWER(?) "
+                "       OR LOWER(title) LIKE ? "
+                "       OR LOWER(body) LIKE ?) "
                 "ORDER BY last_seen_at DESC LIMIT ?",
-                (int(limit),),
+                (_country, _needle, _needle, int(limit)),
             ).fetchall()
         out = []
         for r in rows:
@@ -1897,7 +1960,9 @@ def _landing_hot_tenders(limit=3):
                 "title":      r["title"] or "",
                 "source":     r["source"] or "News",
                 "source_url": r["source_url"] or "",
-                "country":    r["country"] or "",
+                # Normalise country to the viewer's country even if crawler
+                # left it blank -- it matched the LIKE, so it's relevant.
+                "country":    (r["country"] or _country),
                 "type":       r["type"] or "OTHER",
             })
         return out
@@ -1915,12 +1980,14 @@ def landing():
             "SELECT org_whatsapp FROM users WHERE is_admin=1 ORDER BY id LIMIT 1"
         ).fetchone()
     wa_number = (admin["org_whatsapp"] if admin and admin["org_whatsapp"] else "233535068102")
-    hot_tenders = _landing_hot_tenders()
+    viewer_country = _viewer_country_name()
+    hot_tenders = _landing_hot_tenders(country=viewer_country)
     return render_template("landing.html", user=current_user(),
                            countries=get_countries(), news_posts=news,
                            wa_number=wa_number,
                            sales_email=EMAIL_SALES,
-                           hot_tenders=hot_tenders)
+                           hot_tenders=hot_tenders,
+                           hot_tenders_country=viewer_country)
 
 
 @app.route("/platform")
@@ -1929,10 +1996,12 @@ def landing_page2():
         news = c.execute(
             "SELECT * FROM news_posts WHERE is_published=1 ORDER BY created_at DESC LIMIT 3"
         ).fetchall()
-    hot_tenders = _landing_hot_tenders()
+    viewer_country = _viewer_country_name()
+    hot_tenders = _landing_hot_tenders(country=viewer_country)
     return render_template("landing_page2.html", user=current_user(),
                            countries=get_countries(), news_posts=news,
-                           hot_tenders=hot_tenders)
+                           hot_tenders=hot_tenders,
+                           hot_tenders_country=viewer_country)
 
 
 @app.route("/register", methods=["GET", "POST"])

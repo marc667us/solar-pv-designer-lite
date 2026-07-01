@@ -933,12 +933,15 @@
     {# ── Hot tenders strip — cross-sell to /opportunities ── #}
     {% if hot_tenders %}
     <div class="solar-card p-4 mt-3">
-      <div class="d-flex align-items-center gap-2 mb-2">
+      <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
         <div class="section-label" style="margin-bottom:0"><i class="bi bi-broadcast-pin me-1"></i>Hot tenders</div>
         <span class="badge rounded-pill px-2" style="background:rgba(34,197,94,.20);color:#22c55e;font-size:9px;font-weight:700;letter-spacing:.4px">FREE FEED</span>
+        {% if hot_tenders_country %}
+        <span class="badge rounded-pill px-2" style="background:rgba(245,158,11,.15);color:var(--solar-gold);font-size:9px;font-weight:700;letter-spacing:.4px"><i class="bi bi-geo-alt-fill me-1"></i>{{ hot_tenders_country|upper }}</span>
+        {% endif %}
       </div>
       <div class="text-secondary mb-2" style="font-size:11px">
-        Live solar RFQ / RFP / tender feed from public sources — no signup required.
+        Live solar RFQ / RFP / tender feed for <strong>{{ hot_tenders_country }}</strong> from public sources — no signup required.
       </div>
       {% for t in hot_tenders %}
       <a href="{{ t.source_url }}" target="_blank" rel="noopener nofollow" class="text-decoration-none">
