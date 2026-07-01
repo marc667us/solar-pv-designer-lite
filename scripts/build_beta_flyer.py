@@ -170,7 +170,7 @@ def build_square():
     d.text(((W - sw) // 2, cy0 + uh + 62), sub_cta, font=sc_f, fill=TEXT)
 
     # Brand mark — bottom
-    brand = "SolarPro Global"
+    brand = "SolarPro Design"
     bf = font(F_ARIAL_BOLD, 22)
     bw2, _ = measure(d, brand, bf)
     d.text(((W - bw2) // 2, H - 70), brand, font=bf, fill=MUTED)
@@ -263,7 +263,7 @@ def build_wide():
     d.text((cx0 + 20, cy0 + 9), cta, font=cta_f, fill=BG_DEEP)
 
     # Brand mark — bottom left
-    brand = "SolarPro Global"
+    brand = "SolarPro Design"
     bf = font(F_ARIAL_BOLD, 18)
     d.text((L_PAD, H - 50), brand, font=bf, fill=MUTED)
 

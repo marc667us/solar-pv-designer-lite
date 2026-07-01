@@ -137,7 +137,7 @@
         <div class="card-body bg-light">
           <div id="g-card-wrap" style="display:flex;justify-content:center">
             <div id="g-card" class="growth-card">
-              <div class="growth-card__brand">SolarPro Global</div>
+              <div class="growth-card__brand">SolarPro Design</div>
               <div class="growth-card__title">{{ project['name'] }}</div>
               <div class="growth-card__body">
                 Click <b>Generate share card</b> to render a live preview.
@@ -295,7 +295,7 @@
               : type === "roof_before_after_card" ? "Get yours installed"
               : "See your savings in 60 seconds";
     document.getElementById("g-card").innerHTML =
-       `<div class="growth-card__brand">SolarPro Global</div>
+       `<div class="growth-card__brand">SolarPro Design</div>
         <div class="growth-card__title">${title}</div>
         <div class="growth-card__body">${body}</div>
         <div class="growth-card__footer">
@@ -359,7 +359,7 @@
       body: JSON.stringify({event_type:"shared", channel: channel})
     }).catch(()=>{});
     const u = encodeURIComponent(SHARE_URL.replace("?src=qr","?src="+channel));
-    const t = encodeURIComponent("Check out my solar estimate from SolarPro Global");
+    const t = encodeURIComponent("Check out my solar estimate from SolarPro Design");
     let win = "";
     if (channel==="whatsapp") win = "https://wa.me/?text="+t+"%20"+u;
     if (channel==="facebook") win = "https://www.facebook.com/sharer/sharer.php?u="+u;

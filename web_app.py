@@ -2089,16 +2089,16 @@ def register():
                 _login_url  = request.host_url.rstrip("/") + url_for("login")
                 _send_system_email(
                     f["email"],
-                    "Verify your email to activate SolarPro Global",
+                    "Verify your email to activate SolarPro Design",
                     "Hello " + f.get("name", f["username"]) + ",\n\n"
-                    "Welcome to SolarPro Global. Your account has been created on the Free plan.\n\n"
+                    "Welcome to SolarPro Design. Your account has been created on the Free plan.\n\n"
                     "Before you can log in, please confirm your email by clicking the link below:\n\n"
                     "    " + _verify_url + "\n\n"
                     "After verifying, return to the login page to sign in:\n\n"
                     "    " + _login_url + "\n\n"
                     "If you did not create this account you can safely ignore this email.\n\n"
                     "Need help? Reply to this email or write to support@aiappinvent.com.\n\n"
-                    "The SolarPro Global Team\n"
+                    "The SolarPro Design Team\n"
                     "solarpro.aiappinvent.com\n")
             except Exception:
                 pass  # Email failure must never block registration; user can request a resend.
@@ -2260,11 +2260,11 @@ def forgot_password():
                 reset_url = url_for("reset_password", token=token, _external=True)
                 body = (
                     f"Hello {user['name'] or user['username']},\n\n"
-                    f"A password reset was requested for your SolarPro Global account.\n\n"
+                    f"A password reset was requested for your SolarPro Design account.\n\n"
                     f"Click the link below to set a new password (valid for 1 hour):\n\n"
                     f"  {reset_url}\n\n"
                     f"If you did not request this, ignore this email — your password has not changed.\n\n"
-                    f"— SolarPro Global"
+                    f"— SolarPro Design"
                 )
                 ok, err = _send_system_email(
                     user["email"], "Reset your SolarPro password", body)
@@ -2344,7 +2344,7 @@ def support_email_setup():
 @login_required
 def support_email_setup_pdf():
     return _render_pdf(
-        "Email SMTP Setup Guide — SolarPro Global",
+        "Email SMTP Setup Guide — SolarPro Design",
         _TUTORIAL_EMAIL_SETUP_MD,
         "SolarPro_Email_Setup_Guide.pdf")
 
@@ -2398,7 +2398,7 @@ def support_asset(slug):
 
 
 _TUTORIAL_EMAIL_SETUP_MD = """# Email & SMTP Setup Guide
-## SolarPro Global Help Centre
+## SolarPro Design Help Centre
 
 **Version 1.0 Â· solarpro.aiappinvent.com**
 
@@ -2406,7 +2406,7 @@ _TUTORIAL_EMAIL_SETUP_MD = """# Email & SMTP Setup Guide
 
 ## Why Set Up Email?
 
-SolarPro Global can send your solar project PDF reports — BOQ, Economic Analysis,
+SolarPro Design can send your solar project PDF reports — BOQ, Economic Analysis,
 Energy Impact, and more — directly to clients, banks, and installers. To do this,
 the platform needs to connect to your outbound mail server (SMTP).
 
@@ -2585,20 +2585,20 @@ to configure SMTP_HOST, SMTP_USER, and SMTP_PASS in the Render dashboard.
 
 ---
 
-*SolarPro Global Help Centre Â· support@aiappinvent.com*
+*SolarPro Design Help Centre Â· support@aiappinvent.com*
 """
 
 
-_TUTORIAL_USER_GUIDE_MD = """# SolarPro Global — Complete User Guide
+_TUTORIAL_USER_GUIDE_MD = """# SolarPro Design — Complete User Guide
 ## Intelligent PV Solar Design & Financial Engineering Platform
 
 **Version 1.0 Â· solarpro.aiappinvent.com**
 
 ---
 
-## Welcome to SolarPro Global
+## Welcome to SolarPro Design
 
-SolarPro Global is a professional pv solar design platform that takes you from
+SolarPro Design is a professional pv solar design platform that takes you from
 initial site assessment all the way through to a bankable financial proposal —
 in a single workflow. This guide walks you through every step.
 
@@ -2824,7 +2824,7 @@ projects and premium features.
 
 ---
 
-*SolarPro Global Â· solarpro.aiappinvent.com Â· support@aiappinvent.com*
+*SolarPro Design Â· solarpro.aiappinvent.com Â· support@aiappinvent.com*
 """
 
 
@@ -3401,7 +3401,7 @@ def export_pdf_inspection(pid):
 
 **{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","").title()} System | {_fmt(r["pv_kw"],2)} kWp - {_fmt(r["bat_kwh"],2)} kWh - {_fmt(r["inv_kw"],1)} kW
 
-Prepared by: SolarPro Global | Free Consultation Service | BS 7671:2018 - IEC 60364
+Prepared by: SolarPro Design | Free Consultation Service | BS 7671:2018 - IEC 60364
 
 ---
 
@@ -3504,11 +3504,11 @@ _______________________________________________
 | **Date** | | |
 | **Signature** | | |
 
-*Disclaimer: This pre-installation assessment is based on the load schedule provided and does not substitute for a full on-site survey by a qualified engineer. SolarPro Global accepts no liability for decisions made solely on this report.*
+*Disclaimer: This pre-installation assessment is based on the load schedule provided and does not substitute for a full on-site survey by a qualified engineer. SolarPro Design accepts no liability for decisions made solely on this report.*
 
 ---
 
-*Pre-Installation Site Assessment - SolarPro Global | Free Consultation Service | BS 7671:2018 - IEC 60364*
+*Pre-Installation Site Assessment - SolarPro Design | Free Consultation Service | BS 7671:2018 - IEC 60364*
 """
 
     return _render_pdf(f"Pre-Installation Site Assessment - {project['name']}", md,
@@ -3781,7 +3781,7 @@ def project_save(pid):
         return redirect(url_for("dashboard"))
 
     payload = {
-        "app":      "SolarPro Global",
+        "app":      "SolarPro Design",
         "version":  1,
         "exported": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
         "project": {
@@ -3820,7 +3820,7 @@ def project_open():
 
     try:
         payload = json.loads(f.read().decode("utf-8"))
-        if payload.get("app") != "SolarPro Global" or "project" not in payload:
+        if payload.get("app") not in ("SolarPro Design", "SolarPro" + " " + "Global") or "project" not in payload:  # # rename-safe: split literal so future brand renames do NOT touch legacy accept string
             raise ValueError("Not a valid SolarPro project file.")
         proj = payload["project"]
         name = proj.get("name") or "Imported Project"
@@ -3972,7 +3972,7 @@ def export_excel(pid):
     ws = wb.active; ws.title = "Summary"
     ws.sheet_view.showGridLines = False
     title_font = Font(bold=True, size=14, color="F59E0B")
-    ws["A1"] = "SolarPro Global — Project Summary"; ws["A1"].font = title_font
+    ws["A1"] = "SolarPro Design — Project Summary"; ws["A1"].font = title_font
     ws["A2"] = project["name"]
     ws["A3"] = f"{d.get('region','')}, {d.get('country','')}   |   {d.get('system_type','').title()} System"
     ws["A4"] = f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
@@ -4370,7 +4370,7 @@ def export_csv(pid):
     output = io.StringIO()
     w = csv.writer(output)
 
-    w.writerow(["SolarPro Global — Results Export"])
+    w.writerow(["SolarPro Design — Results Export"])
     w.writerow([project["name"], f"{d.get('region','')}, {d.get('country','')}", datetime.now().strftime('%Y-%m-%d')])
     w.writerow([])
     w.writerow(["=== SYSTEM SUMMARY ==="])
@@ -4490,7 +4490,7 @@ def _render_pdf(title, md_content, filename):
     """
 
     pdf = MarkdownPdf(toc_level=2)
-    pdf.meta.update({"title": title, "author": "SolarPro Global", "subject": title})
+    pdf.meta.update({"title": title, "author": "SolarPro Design", "subject": title})
 
     # Split on top-level H1 so each section starts on a new page
     parts = md_content.split("\n# ")
@@ -4579,7 +4579,7 @@ def export_pdf_boq(pid):
 
 **{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","").title()} System | {_fmt(r["pv_kw"],2)} kWp | {_fmt(r["bat_kwh"],2)} kWh | Currency: {d.get("currency","USD")}
 
-Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364
+Prepared by: SolarPro Design Â· BS 7671:2018 Â· IEC 60364
 
 ---
 
@@ -4635,7 +4635,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364
 - Subject to contractor quotation; excludes site-specific VAT / import duties
 - DC cable sizes and AC cable sizes are calculated from actual system design
 
-*Report generated by SolarPro Global Â· {d.get("region","")}, {d.get("country","")}*
+*Report generated by SolarPro Design Â· {d.get("region","")}, {d.get("country","")}*
 """
     fname = f"BOQ_{project['name'].replace(' ','_')}.pdf"
     md = _diagrams_markdown(d, r) + md
@@ -4757,7 +4757,7 @@ For {c["cable_size_mm2"]} mmÂ² {c["core_type"]} copper cable:
 
 *All installations must comply with BS 7671:2018 (18th Edition), IEC 60364-5-52, and local regulations.*
 
-*Report generated by SolarPro Global*
+*Report generated by SolarPro Design*
 """
     fname = f"AC_Cable_VD_{project['name'].replace(' ','_')}.pdf"
     return _render_pdf(f"AC Cable Sizing & Voltage Drop — {project['name']}", md, fname)
@@ -4790,7 +4790,7 @@ def export_pdf_energy(pid):
 
     md = f"""# Energy Impact Analysis — {project["name"]}
 
-**{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","").title()} System | {d.get("psh",0)} PSH | Generated by SolarPro Global
+**{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","").title()} System | {d.get("psh",0)} PSH | Generated by SolarPro Design
 
 ---
 
@@ -4862,7 +4862,7 @@ def export_pdf_energy(pid):
         flag = " â—„ BREAK-EVEN" if eco.get("breakeven") and cf["yr"] == eco["breakeven"] else ""
         md += f"| {cf['yr']} | {sym}{_fmt(cf['gross'],0)} | {sym}{_fmt(cf['om'],0)} | {sym}{_fmt(cf['net'],0)} | {sym}{_fmt(cf['cumul'],0)}{flag} |\n"
 
-    md += f"\n---\n\n*Report generated by SolarPro Global Â· BS 7671 Â· IEC 60364 Â· IEEE*\n"
+    md += f"\n---\n\n*Report generated by SolarPro Design Â· BS 7671 Â· IEC 60364 Â· IEEE*\n"
 
     fname = f"Energy_Impact_{project['name'].replace(' ','_')}.pdf"
     return _render_pdf(f"Energy Impact Analysis — {project['name']}", md, fname)
@@ -4979,7 +4979,7 @@ def export_pdf_economic(pid):
             md += f"**Action:** {rec['action']}\n\n"
             md += f"**Expected Impact:** {rec['impact']}\n\n"
 
-    md += f"\n---\n\n*Report generated by SolarPro Global Â· BS 7671 Â· IEC 60364 Â· IEEE*\n"
+    md += f"\n---\n\n*Report generated by SolarPro Design Â· BS 7671 Â· IEC 60364 Â· IEEE*\n"
     md += f"\n*Assumptions: Tariff escalation 8%/yr, Discount rate 12%, O&M 1.2%/yr, Degradation 0.5%/yr, Life 25 years*\n"
 
     fname = f"Economic_Analysis_{project['name'].replace(' ','_')}.pdf"
@@ -5194,7 +5194,7 @@ def export_pdf_installation(pid):
 
 *All installations must comply with BS 7671:2018 (18th Edition), IEC 60364, IEC 62305 (lightning), and applicable local regulations. Engage a qualified electrical contractor for final installation and commissioning.*
 
-*Report generated by SolarPro Global*
+*Report generated by SolarPro Design*
 """
     fname = f"Installation_{project['name'].replace(' ','_')}.pdf"
     md = _diagrams_markdown(d, r) + md
@@ -5224,7 +5224,7 @@ def export_pdf_workplan(pid):
 
 **{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","").title()} System | {_fmt(r["pv_kw"],2)} kWp | {r["num_panels"]} Panels | {_fmt(r["bat_kwh"],2)} kWh Battery
 
-Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62446
+Prepared by: SolarPro Design Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62446
 
 ---
 
@@ -5493,7 +5493,7 @@ Emergency response coordinator.
 ---
 
 *Installation Work Plan — {project["name"]}*
-*Generated by SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62446 Â· IEC 62305*
+*Generated by SolarPro Design Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62446 Â· IEC 62305*
 """
 
     fname = f"WorkPlan_{project['name'].replace(' ','_')}.pdf"
@@ -5519,7 +5519,7 @@ def export_pdf_staffing(pid):
 
 **{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","").title()} System | {_fmt(r["pv_kw"],2)} kWp | {r["num_panels"]} Panels | {_fmt(r["bat_kwh"],2)} kWh Battery
 
-Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62446
+Prepared by: SolarPro Design Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62446
 
 ---
 
@@ -5604,7 +5604,7 @@ Acts as emergency response coordinator.
 ---
 
 *Staffing Plan — {project["name"]}*
-*Generated by SolarPro Global Â· BS 7671:2018 Â· IEC 62446 Â· NEBOSH / HSE Guidance*
+*Generated by SolarPro Design Â· BS 7671:2018 Â· IEC 62446 Â· NEBOSH / HSE Guidance*
 """
 
     fname = f"StaffingPlan_{project['name'].replace(' ','_')}.pdf"
@@ -5630,7 +5630,7 @@ def export_pdf_pv(pid):
 
 **{d.get("region","")}, {d.get("country","")}** | {d.get("system_type","off-grid").title()} System | Currency: {d.get("currency","USD")}
 
-Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 61215
+Prepared by: SolarPro Design Â· BS 7671:2018 Â· IEC 60364 Â· IEC 61215
 
 ---
 
@@ -5717,7 +5717,7 @@ Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 61215
 ---
 
 *PV System Design Report — {project["name"]}*
-*Generated by SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 61215*
+*Generated by SolarPro Design Â· BS 7671:2018 Â· IEC 60364 Â· IEC 61215*
 """
     fname = f"PV_Report_{project['name'].replace(' ','_')}.pdf"
     md = _diagrams_markdown(d, r) + md
@@ -5770,7 +5770,7 @@ def export_pdf_proposal(pid):
 **Battery:** {_fmt(r["bat_kwh"],2)} kWh {r.get("chemistry","LiFePO4")} | **Inverter:** {_fmt(r["inv_kw"],1)} kW
 **Project Verdict:** {eco.get("verdict","—")} | **Bankability:** {eco.get("bankability","—")}
 
-Prepared by: SolarPro Global Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â· IEC 62446 Â· IEEE
+Prepared by: SolarPro Design Â· BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â· IEC 62446 Â· IEEE
 
 This proposal is a **superset of all individual engineering reports** — it consolidates the Site Assessment,
 PV Design, AC Cable, BOQ, Energy Impact, Economic Analysis, Installation Work Plan, and Staffing Plan
@@ -6420,7 +6420,7 @@ accident log. Emergency response coordinator.
 ---
 
 *Full Technical & Financial Proposal (Superset) — {project["name"]}*
-*Generated by SolarPro Global Â· Intelligent PV Solar Design Platform*
+*Generated by SolarPro Design Â· Intelligent PV Solar Design Platform*
 *BS 7671:2018 Â· IEC 60364 Â· IEC 62305 Â· IEC 62446 Â· IEC 61215 Â· IEEE*
 *All figures are indicative and subject to final site survey and detailed design.*
 """
@@ -6918,7 +6918,7 @@ def account_invoice(payment_id):
     if not pay:
         abort(404)
 
-    org   = (user["org_name"]    or user["name"] or user["username"] or "SolarPro Global Customer")
+    org   = (user["org_name"]    or user["name"] or user["username"] or "SolarPro Design Customer")
     addr  = (user["org_address"] or "").strip()
     email = (user["org_email"]   or user["email"] or "")
     phone = (user["org_phone"]   or "").strip()
@@ -6932,15 +6932,15 @@ def account_invoice(payment_id):
     status_str = (pay["status"]   or "—").upper()
 
     PLAN_LABELS = {
-        "starter":      "SolarPro Global — Starter Plan (Monthly)",
-        "professional": "SolarPro Global — Professional Plan (Monthly)",
-        "business":     "SolarPro Global — Business Plan (Monthly)",
-        "enterprise":   "SolarPro Global — Enterprise Plan (Monthly)",
-        "free":         "SolarPro Global — Free Plan",
+        "starter":      "SolarPro Design — Starter Plan (Monthly)",
+        "professional": "SolarPro Design — Professional Plan (Monthly)",
+        "business":     "SolarPro Design — Business Plan (Monthly)",
+        "enterprise":   "SolarPro Design — Enterprise Plan (Monthly)",
+        "free":         "SolarPro Design — Free Plan",
     }
-    description = PLAN_LABELS.get((pay["plan"] or "").lower(), f"SolarPro Global — {plan_label} Plan")
+    description = PLAN_LABELS.get((pay["plan"] or "").lower(), f"SolarPro Design — {plan_label} Plan")
 
-    md = f"""# SolarPro Global — Payment Receipt
+    md = f"""# SolarPro Design — Payment Receipt
 
 ---
 
@@ -6983,14 +6983,14 @@ def account_invoice(payment_id):
 
 ---
 
-*Thank you for your subscription to SolarPro Global.*
+*Thank you for your subscription to SolarPro Design.*
 
 For billing questions contact us at **billing@aiappinvent.com**
 or visit **https://solarpro.aiappinvent.com**
 
 ---
 
-*SolarPro Global — Intelligent PV Solar System Design Platform*
+*SolarPro Design — Intelligent PV Solar System Design Platform*
 *This is a computer-generated receipt and is valid without a signature.*
 """
 
@@ -7091,7 +7091,7 @@ def _learn_from_conversation(msgs, api_key, agent="helpline"):
     convo = "\n".join(
         f"{m['role'].upper()}: {m['content']}" for m in msgs[-16:]
     )
-    prompt = f"""You are a knowledge-extraction assistant for a solar platform helpdesk (SolarPro Global).
+    prompt = f"""You are a knowledge-extraction assistant for a solar platform helpdesk (SolarPro Design).
 
 CONVERSATION:
 {convo}
@@ -7145,7 +7145,7 @@ If nothing worth extracting, return {{"learned":[]}}"""
         app.logger.warning(f"helpline learning failed (agent={agent}): {e}")
 
 
-_ASSISTANT_SYSTEM = """You are Helpline -- the AI customer engagement, assessment, and technical support agent for SolarPro Global. Mission: guide, engage, support, and convert prospects into real solar projects.
+_ASSISTANT_SYSTEM = """You are Helpline -- the AI customer engagement, assessment, and technical support agent for SolarPro Design. Mission: guide, engage, support, and convert prospects into real solar projects.
 
 # helpline-prompt-2026-06-27-feature-aware
 
@@ -8511,14 +8511,14 @@ def assess_design():
     </div>
   </div>
   <div style="background:#f8f8fc;padding:16px 32px;text-align:center;border-top:1px solid #e8e8f0">
-    <div style="color:#888;font-size:12px">SolarPro Global Â· AI-Powered Solar Design Platform</div>
+    <div style="color:#888;font-size:12px">SolarPro Design Â· AI-Powered Solar Design Platform</div>
     <div style="color:#aaa;font-size:11px;margin-top:4px">Reference: {ref} Â· {region}, {country}</div>
   </div>
 </div>
 </body></html>"""
 
     try:
-        _subj = ("Your Preliminary Solar Design (" + ref + ") - SolarPro Global")
+        _subj = ("Your Preliminary Solar Design (" + ref + ") - SolarPro Design")
         _pl = ("Hi " + str(first) + ", design ready. Ref: " + ref + ". "
                "PV: " + str(round(pv_kw,1)) + "kWp | Battery: " + str(round(bat_kwh,1)) + "kWh | Inverter: " + str(round(inv_kw)) + "kW. "
                "Cost: " + symbol + "{:,.0f}".format(total_local) + " " + currency + ". "
@@ -9229,7 +9229,7 @@ def export_pdf_procurement(pid):
 
 **{d.get("region","")}, {d.get("country","")}** | {_fmt(r["pv_kw"],2)} kWp | {d.get("system_type","").title()} System
 
-Prepared by: SolarPro Global | Currency: USD (local rates apply Ã— {fx})
+Prepared by: SolarPro Design | Currency: USD (local rates apply Ã— {fx})
 
 ---
 
@@ -9267,7 +9267,7 @@ Prepared by: SolarPro Global | Currency: USD (local rates apply Ã— {fx})
             if sup_obj:
                 md += f"**{sup_name}** | {sup_obj.get('country','')} | {sup_obj.get('email','')} | Lead: {lead} days | Terms: {sup_obj.get('payment_terms','TT 30 days')}\n\n"
 
-    md += f"\n---\n\n*Procurement Plan generated by SolarPro Global Â· {project['name']}*\n"
+    md += f"\n---\n\n*Procurement Plan generated by SolarPro Design Â· {project['name']}*\n"
     fname = f"Procurement_{project['name'].replace(' ','_')}.pdf"
     return _render_pdf(f"Procurement Plan — {project['name']}", md, fname)
 
@@ -9343,12 +9343,12 @@ def project_email(pid):
 
         _ptxt = body_text or (
             "Please find the solar project report for " + project["name"] + " attached. "
-            "Generated by SolarPro Global."
+            "Generated by SolarPro Design."
         )
         _phtml = (
             "<div style='font-family:sans-serif;padding:24px'>"
             "<p>" + _ptxt + "</p>"
-            "<hr><p style='color:#888;font-size:12px'>SolarPro Global</p></div>"
+            "<hr><p style='color:#888;font-size:12px'>SolarPro Design</p></div>"
         )
         # Render the selected report to PDF bytes and attach it.
         # Why: prior code only sent the message body and the placeholder said
@@ -9446,7 +9446,7 @@ def export_docx(pid):
 
     # Org details for title page and footer
     u = current_user()
-    org_name    = (u["org_name"]    or u["name"] or u["username"] or "SolarPro Global").strip()
+    org_name    = (u["org_name"]    or u["name"] or u["username"] or "SolarPro Design").strip()
     org_address = (u["org_address"] or "").strip()
     org_email   = (u["org_email"]   or u["email"] or "").strip()
     org_phone   = (u["org_phone"]   or "").strip()
@@ -9524,7 +9524,7 @@ def export_docx(pid):
     header.is_linked_to_previous = False
     hp = header.paragraphs[0]
     hp.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    hp_run = hp.add_run(f"{org_name}  |  {project['name']}  |  SolarPro Global")
+    hp_run = hp.add_run(f"{org_name}  |  {project['name']}  |  SolarPro Design")
     hp_run.font.size = Pt(8)
     hp_run.font.color.rgb = GREY
 
@@ -9541,7 +9541,7 @@ def export_docx(pid):
 
     # ── Title page ────────────────────────────────────────────────────────────
     # Org banner
-    if org_name and org_name != "SolarPro Global":
+    if org_name and org_name != "SolarPro Design":
         to = doc.add_paragraph()
         to.alignment = WD_ALIGN_PARAGRAPH.CENTER
         tor = to.add_run(org_name.upper())
@@ -9550,7 +9550,7 @@ def export_docx(pid):
     doc.add_paragraph()
     t = doc.add_paragraph()
     t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = t.add_run("SolarPro Global")
+    run = t.add_run("SolarPro Design")
     run.bold = True; run.font.size = Pt(22); run.font.color.rgb = GOLD
 
     doc.add_paragraph()
@@ -9720,7 +9720,7 @@ def export_docx(pid):
 
     _para("Standard: BS 7671:2018 / IEC 60364-5-52 | Temperature derating and grouping factors applied.",
           size=9)
-    _para(f"Report generated by {org_name} using SolarPro Global — {datetime.now().strftime('%d %B %Y')}",
+    _para(f"Report generated by {org_name} using SolarPro Design — {datetime.now().strftime('%d %B %Y')}",
           size=9)
 
     buf = io.BytesIO()
@@ -11226,7 +11226,7 @@ def _send_prospect_notification(subject, body_lines, admin_email=None):
             "style='background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;"
             "padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:700'>"
             "Open Agent Dashboard</a>"
-            "<p style='color:#6868a0;font-size:11px;margin-top:20px'>SolarPro Global - AI Prospect Agent</p>"
+            "<p style='color:#6868a0;font-size:11px;margin-top:20px'>SolarPro Design - AI Prospect Agent</p>"
             "</div>"
         )
         ok, _ = _send_email(to, "[SolarPro Agent] " + subject, html, text_body=txt)
@@ -11357,7 +11357,7 @@ def beta_signup():
     _send_email(
         email, "You're on the SolarPro Beta Waitlist!",
         "<h2>Thanks, " + name + "!</h2>"
-        "<p>You've been added to the SolarPro Global beta waitlist. "
+        "<p>You've been added to the SolarPro Design beta waitlist. "
         "We'll send your invite to <b>" + email + "</b> soon.</p>"
         "<p>Visit: <a href='https://solarpro.aiappinvent.com'>solarpro.aiappinvent.com</a></p>"
         "<p>-- The SolarPro Team</p>",
@@ -11489,7 +11489,7 @@ def admin_beta_invite():
     ok, msg = _send_email(
         s["email"], "You're Invited to SolarPro Beta!",
         "<h2>Your Beta Invite is Here, " + s["name"] + "!</h2>"
-        "<p>You've been approved for early access to <b>SolarPro Global</b>.</p>"
+        "<p>You've been approved for early access to <b>SolarPro Design</b>.</p>"
         "<p><a href='" + reg_url + "' style='background:#f59e0b;color:#000;"
         "padding:12px 24px;border-radius:8px;text-decoration:none;"
         "font-weight:bold;display:inline-block;margin:16px 0'>Create Beta Account</a></p>"
@@ -11530,7 +11530,7 @@ def admin_beta_manual_invite():
     ok, msg = _send_email(
         email, "You're Invited to SolarPro Beta!",
         "<h2>Hi " + name + ", your SolarPro Beta invite is ready!</h2>"
-        "<p>You've been personally invited to try <b>SolarPro Global</b>.</p>"
+        "<p>You've been personally invited to try <b>SolarPro Design</b>.</p>"
         "<p><a href='" + reg_url + "' style='background:#f59e0b;color:#000;"
         "padding:12px 24px;border-radius:8px;text-decoration:none;"
         "font-weight:bold;display:inline-block;margin:16px 0'>Create Free Account</a></p>"
@@ -14259,7 +14259,7 @@ def export_pdf_shading(pid):
 
 **{d.get("region","")}, {d.get("country","")}** · {d.get("system_type","off-grid").title()} System
 
-Prepared by: SolarPro Global · BS 7671:2018 · IEC 61853 · IEC 62446
+Prepared by: SolarPro Design · BS 7671:2018 · IEC 61853 · IEC 62446
 
 ---
 
@@ -14462,7 +14462,7 @@ The AI 3D Shading Simulation Agent uses:
 ---
 
 *Shading Analysis Report — {project["name"]}*
-*Generated by SolarPro Global · AI 3D Shading Simulation Agent v1*
+*Generated by SolarPro Design · AI 3D Shading Simulation Agent v1*
 """
     fname = f"Shading_Report_{project['name'].replace(' ','_')}.pdf"
     return _render_pdf(f"Shading Analysis Report — {project['name']}", md, fname)
@@ -22321,7 +22321,7 @@ def boq_floor_boq_email(pid, bid, fid):
     body_text = (request.form.get("body", "") or
                  f"Hi,\n\nPlease find attached the floor BOQ for "
                  f"{building['building_name']} / {floor['floor_name']} "
-                 f"({project['project_name']}) for your review.\n\nRegards,\nSolarPro Global").strip()
+                 f"({project['project_name']}) for your review.\n\nRegards,\nSolarPro Design").strip()
     rows, bills, services_breakdown, floor_total = _floor_boq_rows(pid, fid)
     try:
         pdf_bytes = _floor_boq_build_pdf_bytes(project, building, floor, rows, bills, services_breakdown, floor_total)
@@ -30838,7 +30838,7 @@ def _soc2_make_aicpa_markdown(report):
 
     md  = ""
     md += "# SOC 2 READINESS REPORT\n\n"
-    md += "## SolarPro Global Platform\n\n"
+    md += "## SolarPro Design Platform\n\n"
     md += f"**Report Type:** Internal Readiness Assessment (Pre-Audit)\n\n"
     md += f"**Reporting Period:** Point-in-time assessment as of {generated_at}\n\n"
     md += f"**Trust Services Categories Covered:** Security (CC), Availability (A1), Confidentiality (C1)\n\n"
@@ -30856,16 +30856,16 @@ def _soc2_make_aicpa_markdown(report):
 
     # ─── Section I: Management's Assertion ─────────────────────────────
     md += "# I. Management's Assertion\n\n"
-    md += "Management of SolarPro Global is responsible for:\n\n"
+    md += "Management of SolarPro Design is responsible for:\n\n"
     md += "1. **Designing, implementing, and operating** the controls described in this report to provide reasonable assurance that the service commitments to user entities and the applicable Trust Services Criteria are met.\n\n"
-    md += "2. **Maintaining the security, availability, and confidentiality** of the customer data processed by the SolarPro Global platform.\n\n"
+    md += "2. **Maintaining the security, availability, and confidentiality** of the customer data processed by the SolarPro Design platform.\n\n"
     md += "3. **Selecting the Trust Services Criteria** that are the basis for management's assertion. The criteria selected are the AICPA Trust Services Criteria for Security, Availability, and Confidentiality (2017, with revisions effective for periods ending on or after December 15, 2018).\n\n"
     md += "Based on the controls described and tested in Sections IV and V of this report, management asserts that the controls were **suitably designed** as of the reporting date. The effectiveness of operation over a reporting period of 6+ months will be established by an external Service Auditor in a future Type II engagement.\n\n"
 
     # ─── Section II: System Description ────────────────────────────────
     md += "# II. Description of the Service Organization's System\n\n"
     md += "## A. Services Provided\n\n"
-    md += "SolarPro Global is a Software-as-a-Service platform that supports:\n\n"
+    md += "SolarPro Design is a Software-as-a-Service platform that supports:\n\n"
     md += "- Engineering design of residential, commercial, and industrial photovoltaic (PV) solar power systems\n"
     md += "- Bills of Materials (BOM) and Bills of Quantities (BOQ) generation with hierarchical project/building/floor structures\n"
     md += "- Multi-vendor Marketplace for equipment procurement, including Requests for Quotation (RFQ) and price-sheet management\n"
@@ -30907,7 +30907,7 @@ def _soc2_make_aicpa_markdown(report):
     md += "- **Reference data:** Equipment catalog, supplier directory, product taxonomy, appliance library — system-wide (multi-tenant readable).\n\n"
     md += "## D. Boundaries of the System\n\n"
     md += "The SOC 2 reporting boundary includes:\n\n"
-    md += "- The SolarPro Global Flask web application running on Render.\n"
+    md += "- The SolarPro Design Flask web application running on Render.\n"
     md += "- The Render-managed PostgreSQL database (`solarpro-postgres`).\n"
     md += "- The Keycloak identity provider running on Render (`solarpro-keycloak`).\n"
     md += "- The GitHub repository (`marc667us/solar-pv-designer-lite`) and its automated workflows.\n\n"
@@ -30928,7 +30928,7 @@ def _soc2_make_aicpa_markdown(report):
     md += "| Vendor compromise | Security CI scans (semgrep + pip-audit + bandit + gitleaks) on every push; dependency review pre-release. |\n"
     md += "| Service outage | Render PaaS auto-restart; health endpoints at `/api/health/*` enabling external uptime monitoring. |\n\n"
     md += "## F. Complementary User Entity Controls\n\n"
-    md += "To enable SolarPro Global's controls to function as intended, user entities are expected to:\n\n"
+    md += "To enable SolarPro Design's controls to function as intended, user entities are expected to:\n\n"
     md += "1. Establish strong-password and MFA practices on their Keycloak account.\n"
     md += "2. Review and recertify role assignments for their organization periodically.\n"
     md += "3. Promptly notify SolarPro support of any suspected unauthorized access.\n"
@@ -31021,8 +31021,8 @@ def _soc2_make_pdf_bytes(report):
 
     pdf = MarkdownPdf(toc_level=2)
     pdf.meta.update({
-        "title":   "SOC 2 Readiness Report - SolarPro Global",
-        "author":  "SolarPro Global Internal SOC 2 Compliance",
+        "title":   "SOC 2 Readiness Report - SolarPro Design",
+        "author":  "SolarPro Design Internal SOC 2 Compliance",
         "subject": "SOC 2 Type II Readiness Assessment",
     })
 
@@ -31084,10 +31084,10 @@ def admin_soc2_report_email():
 
     score = report.get("score", 0.0)
     counts = report.get("counts", {})
-    subject = f"SolarPro Global - SOC 2 Readiness Report ({score:.1f}%)"
+    subject = f"SolarPro Design - SOC 2 Readiness Report ({score:.1f}%)"
     safe_addr = to_addr.replace("<", "&lt;").replace(">", "&gt;")
     html_body = f"""
-        <p>The attached PDF is the latest SolarPro Global SOC 2 readiness report.</p>
+        <p>The attached PDF is the latest SolarPro Design SOC 2 readiness report.</p>
         <p><strong>Overall readiness score:</strong> {score:.1f}%<br>
            <strong>Controls passing:</strong> {counts.get('pass', 0)}<br>
            <strong>Controls with warnings:</strong> {counts.get('warn', 0)}<br>
@@ -32699,7 +32699,7 @@ def _bc_render_pdf_bytes(title, md_content):
     hr{border:none;border-top:1px solid #444;margin:10px 0}
     """
     pdf = MarkdownPdf(toc_level=2)
-    pdf.meta.update({"title": title, "author": "SolarPro Global", "subject": title})
+    pdf.meta.update({"title": title, "author": "SolarPro Design", "subject": title})
     parts = md_content.split("\n# ")
     pdf.add_section(Section(parts[0], toc=False), user_css=CSS)
     for part in parts[1:]:
@@ -32713,7 +32713,7 @@ def _bc_build_report_markdown(result, share_url=None, contact_email=None):
     """Build the funding-model-led markdown report shared by PDF / email."""
     f = result.get("funding") or {}
     sym = "GHS "
-    md  = "# Use Your Bill to Fund Solar — SolarPro Global Report\n\n"
+    md  = "# Use Your Bill to Fund Solar — SolarPro Design Report\n\n"
     md += f"*Generated {datetime.now().strftime('%Y-%m-%d %H:%M')} · "
     md += f"PURC tariff effective {result['tariff_meta']['effective_from']}*\n\n"
 
@@ -32778,7 +32778,7 @@ def _bc_build_report_markdown(result, share_url=None, contact_email=None):
     if share_url:
         md += f"**Anyone can run their own check** at this prefilled link: {share_url}\n\n"
     md += ("Forward this PDF to a friend — they'll see the same comparison for their own "
-           "bill in under 60 seconds. SolarPro Global is free to use; no signup required for "
+           "bill in under 60 seconds. SolarPro Design is free to use; no signup required for "
            "the bill check.\n\n")
 
     md += "## Important Notes\n\n"
@@ -32907,7 +32907,7 @@ def bill_check_email():
     html = f"""
     <div style="font-family:Segoe UI,Arial,sans-serif;max-width:600px;margin:auto;color:#1a1a2e">
       <div style="background:#1e1e3a;color:#fbbf24;padding:18px 22px;border-radius:6px 6px 0 0">
-        <div style="font-size:11px;letter-spacing:1.5px;font-weight:900;text-transform:uppercase">SolarPro Global</div>
+        <div style="font-size:11px;letter-spacing:1.5px;font-weight:900;text-transform:uppercase">SolarPro Design</div>
         <h2 style="margin:6px 0 0;font-size:20px">Hi {to_name}, your Bill Check report is attached</h2>
       </div>
       <div style="border:1px solid #e5e7eb;border-top:none;padding:22px;border-radius:0 0 6px 6px">
@@ -32934,7 +32934,7 @@ def bill_check_email():
         f"- Use about {portion:.0f}% of your current monthly bill to repay a {kwp:.1f} kWp solar loan.\n"
         f"- After the loan ends your bill drops by {drop:.0f}% (GHS {saving:,.0f}/mo saving).\n\n"
         f"Forward this report to a friend or share this prefilled link:\n{share}\n\n"
-        f"— SolarPro Global · https://solarpro.aiappinvent.com\n"
+        f"— SolarPro Design · https://solarpro.aiappinvent.com\n"
     )
     try:
         ok = _send_email(
@@ -32998,7 +32998,7 @@ def bill_check_invite():
         html = f"""
         <div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px;margin:auto;color:#1a1a2e">
           <div style="background:#fbbf24;color:#1e1e3a;padding:14px 18px;border-radius:6px 6px 0 0">
-            <strong>SolarPro Global · 60-second bill check</strong>
+            <strong>SolarPro Design · 60-second bill check</strong>
           </div>
           <div style="border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 6px 6px">
             <p>{sender_name} just checked their electricity bill against the PURC Q2 2026 tariff and figured out how much of their bill could fund a solar system.</p>
@@ -33011,7 +33011,7 @@ def bill_check_invite():
         text_body = (
             f"{sender_name} just ran their ECG bill through SolarPro's 60-second bill check.\n\n"
             f"Run yours here (no signup needed):\n{share}\n\n"
-            "— SolarPro Global\n"
+            "— SolarPro Design\n"
         )
         try:
             ok = _send_email(to_email, subject, html, text_body=text_body)
@@ -33067,7 +33067,7 @@ def _bc_compute(payload, loads=None):  # noqa: F811 - intentional override
 
 _GUIDE_QUICK_MD = """# Quick Start — 3 minutes
 
-Welcome to SolarPro Global. This is the bare minimum you need to get a usable solar design out of the platform.
+Welcome to SolarPro Design. This is the bare minimum you need to get a usable solar design out of the platform.
 
 ## 1. Register or log in
 
@@ -36552,9 +36552,9 @@ def news_rss():
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">',
         '<channel>',
-        f'<title>SolarPro Global — News</title>',
+        f'<title>SolarPro Design — News</title>',
         f'<link>{_rss_escape(channel_link)}</link>',
-        f'<description>Industry, project, and platform updates from SolarPro Global.</description>',
+        f'<description>Industry, project, and platform updates from SolarPro Design.</description>',
         f'<language>en</language>',
         f'<atom:link href="{_rss_escape(site_root + url_for("news_rss"))}" rel="self" type="application/rss+xml" />',
     ]
@@ -36600,7 +36600,7 @@ def opportunities_rss():
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">',
         '<channel>',
-        f'<title>SolarPro Global — Solar Opportunities (RFQ / RFP / EOI / Tender)</title>',
+        f'<title>SolarPro Design — Solar Opportunities (RFQ / RFP / EOI / Tender)</title>',
         f'<link>{_rss_escape(channel_link)}</link>',
         f'<description>Aggregated solar tender feed for RFQ, RFP, EOI and general procurement notices worldwide.</description>',
         f'<language>en</language>',

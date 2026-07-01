@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ "Register" if mode=="register" else "Login" }} — SolarPro Global{% endblock %}
+{% block title %}{{ "Register" if mode=="register" else "Login" }} — SolarPro Design{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
 <div class="col-md-5 col-lg-4">
@@ -7,7 +7,7 @@
     <div class="text-center mb-4">
       <div style="font-size:36px">☀️</div>
       <h4 class="fw-bold mt-2">{{ "Create Account" if mode=="register" else "Welcome Back" }}</h4>
-      <p class="text-secondary small">{{ "Join SolarPro Global — free to start." if mode=="register" else "Sign in to your account." }}</p>
+      <p class="text-secondary small">{{ "Join SolarPro Design — free to start." if mode=="register" else "Sign in to your account." }}</p>
     </div>
 
     <form method="POST">

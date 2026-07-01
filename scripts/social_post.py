@@ -33,7 +33,7 @@ BUFFER_GQL = "https://api.buffer.com"
 # Captions live next to the flyer in docs/Social_Posts_v1.md so this script
 # stays declarative; edit the .md to change copy.
 FB_CAPTION = (
-    "SolarPro Global beta is live 🌞\n\n"
+    "SolarPro Design beta is live 🌞\n\n"
     "Find live solar tenders and RFPs across 22+ countries — then auto-generate the "
     "engineering design, BOQ, and a bankable proposal in 30 minutes.\n\n"
     "Built for installers, EPCs, and consultants who want to win more contracts "
@@ -44,7 +44,7 @@ FB_CAPTION = (
 )
 
 IG_CAPTION = (
-    "SolarPro Global beta is live 🌞⚡\n\n"
+    "SolarPro Design beta is live 🌞⚡\n\n"
     "Find live solar RFPs across 22+ countries → auto-design the system → "
     "bankable proposal in 30 minutes.\n\n"
     "Built for installers, EPCs, and consultants who want to win contracts faster.\n\n"
@@ -52,7 +52,7 @@ IG_CAPTION = (
 )
 
 LI_CAPTION = (
-    "SolarPro Global is now in public beta.\n\n"
+    "SolarPro Design is now in public beta.\n\n"
     "The problem: solar installers and EPCs spend more time hunting tenders and "
     "rebuilding the same engineering math than they spend winning contracts.\n\n"
     "What we built:\n"

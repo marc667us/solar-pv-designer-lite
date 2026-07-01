@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>{% block title %}SolarPro Global{% endblock %}</title>
+<title>{% block title %}SolarPro Design{% endblock %}</title>
 {# ── Favicons (SVG for modern browsers, PNG fallback) ── #}
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='logo.svg') }}"/>
 <link rel="icon" type="image/png" href="{{ url_for('static', filename='og-cover.png') }}"/>
@@ -11,8 +11,8 @@
 <meta name="theme-color" content="#f59e0b"/>
 
 {# ── SEO / social preview defaults (per-page override via og_* blocks) ── #}
-{% set _og_site = 'SolarPro Global' %}
-{% set _og_title = self.title() if self.title is defined else 'SolarPro Global' %}
+{% set _og_site = 'SolarPro Design' %}
+{% set _og_title = self.title() if self.title is defined else 'SolarPro Design' %}
 {% set _og_desc = self.og_description() if self.og_description is defined else 'The intelligent global PV solar design platform — free marketplace, live tender feed, bill-check tool, and industry news.' %}
 {% set _og_type = self.og_type() if self.og_type is defined else 'website' %}
 {% set _og_image = self.og_image() if self.og_image is defined else (request.url_root.rstrip('/') + url_for('static', filename='og-cover.png')) %}
@@ -30,8 +30,8 @@
 <meta name="twitter:description" content="{{ _og_desc|striptags|truncate(200) }}"/>
 <meta name="twitter:image" content="{{ _og_image }}"/>
 {# ── RSS auto-discovery for browsers / readers ── #}
-<link rel="alternate" type="application/rss+xml" title="SolarPro Global — News" href="{{ url_for('news_rss') }}"/>
-<link rel="alternate" type="application/rss+xml" title="SolarPro Global — Solar Opportunities" href="{{ url_for('opportunities_rss') }}"/>
+<link rel="alternate" type="application/rss+xml" title="SolarPro Design — News" href="{{ url_for('news_rss') }}"/>
+<link rel="alternate" type="application/rss+xml" title="SolarPro Design — Solar Opportunities" href="{{ url_for('opportunities_rss') }}"/>
 {# ── Canonical URL for search engines ── #}
 <link rel="canonical" href="{{ request.base_url }}"/>
 {% block ld_json %}{% endblock %}
@@ -350,7 +350,7 @@
 
     <a class="navbar-brand" href="{{ url_for('landing') }}" style="padding:4px 0">
       <img src="{{ url_for('static', filename='logo.svg') }}"
-           alt="SolarPro Global" height="34" style="vertical-align:middle">
+           alt="SolarPro Design" height="34" style="vertical-align:middle">
     </a>
 
     <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
@@ -759,7 +759,7 @@
       <div class="col-md-4">
         <div class="mb-1">
           <img src="{{ url_for('static', filename='logo.svg') }}"
-               alt="SolarPro Global" height="36" style="vertical-align:middle">
+               alt="SolarPro Design" height="36" style="vertical-align:middle">
         </div>
         <div class="small" style="color:#4a4a7a;line-height:1.6">
           Intelligent PV Solar System Design Platform.<br>

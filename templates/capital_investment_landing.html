@@ -26,16 +26,81 @@
       </div>
     </div>
     <div class="col-md-4 text-md-end">
-      {% if user %}
-        <a href="{{ url_for('capital_investment_new') }}" class="btn btn-warning btn-lg fw-bold">
+      {# Tier-aware CTA.
+         Free / anonymous  -> Sign up + See Demo
+         Starter           -> See Demo + Upgrade
+         Pro (Professional / Business) -> Start New Project (Steps 1-7 only)
+                                          + Upgrade to Enterprise chip
+         Enterprise        -> Start New Project (all 14 steps) #}
+      {% if tier_level is not defined %}{% set tier_level = 0 %}{% endif %}
+      {% if tier_level >= 3 %}
+        <a href="{{ url_for('capital_investment_new') }}" class="btn btn-warning btn-lg fw-bold w-100 mb-2">
           <i class="bi bi-plus-circle me-1"></i>Start New Project
         </a>
+        <div class="text-success small">
+          <i class="bi bi-check-circle-fill me-1"></i>Enterprise &mdash; all 14 steps unlocked
+        </div>
+      {% elif tier_level >= 2 %}
+        <a href="{{ url_for('capital_investment_new') }}" class="btn btn-warning btn-lg fw-bold w-100 mb-2">
+          <i class="bi bi-plus-circle me-1"></i>Start New Project
+        </a>
+        <div class="text-warning small">
+          <i class="bi bi-info-circle me-1"></i>{{ tier_label }} &mdash; Steps 1-7 only.
+          <a href="/upgrade" class="text-warning fw-bold">Upgrade for BOQ, reports &amp; twin</a>
+        </div>
+      {% elif tier_level >= 1 %}
+        <a href="{{ url_for('capital_investment_demo') }}" class="btn btn-warning btn-lg fw-bold w-100 mb-2">
+          <i class="bi bi-play me-1"></i>See a Demo
+        </a>
+        <a href="/upgrade" class="btn btn-outline-warning w-100">
+          <i class="bi bi-star-fill me-1"></i>Upgrade to Enterprise
+        </a>
+      {% elif user %}
+        <a href="/upgrade" class="btn btn-warning btn-lg fw-bold w-100 mb-2">
+          <i class="bi bi-star-fill me-1"></i>Upgrade to Enterprise
+        </a>
+        <a href="{{ url_for('capital_investment_demo') }}" class="btn btn-outline-warning w-100">
+          <i class="bi bi-play me-1"></i>See a Demo
+        </a>
       {% else %}
-        <a href="{{ url_for('login') }}?next={{ url_for('capital_investment_landing')|urlencode }}"
-           class="btn btn-warning btn-lg fw-bold">
-          <i class="bi bi-box-arrow-in-right me-1"></i>Sign in to start
+        <a href="{{ url_for('register') }}?next={{ url_for('capital_investment_landing')|urlencode }}"
+           class="btn btn-warning btn-lg fw-bold w-100 mb-2">
+          <i class="bi bi-person-plus me-1"></i>Sign up
+        </a>
+        <a href="{{ url_for('capital_investment_demo') }}" class="btn btn-outline-warning w-100">
+          <i class="bi bi-play me-1"></i>See a Demo
         </a>
       {% endif %}
+    </div>
+  </div>
+</div>
+
+{# --- Tier banner strip --- #}
+<div class="solar-card p-3 mb-4">
+  <div class="row g-2 small align-items-center">
+    <div class="col-md-3">
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-secondary">Free</span>
+        <span class="text-secondary" style="font-size:11px">Marketing + Sign-up CTA</span>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-secondary">Starter</span>
+        <span class="text-secondary" style="font-size:11px">+ Read-only Demo</span>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-warning text-dark">Pro</span>
+        <span class="text-secondary" style="font-size:11px">Steps 1-7 (calc + summary)</span>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-success">Enterprise</span>
+        <span class="text-secondary" style="font-size:11px">All 14 steps + reports + twin</span>
+      </div>
     </div>
   </div>
 </div>

@@ -2041,6 +2041,157 @@ def _ensure_capital_investment_schema(get_db) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Subscription tier gating - the module is a paid-tier feature.
+#
+#   FREE       -> marketing landing only.
+#   STARTER    -> marketing landing + read-only DEMO.
+#   PROFESSIONAL / BUSINESS  -> Steps 1-7 setup + PV sizing summary.
+#                                Steps 8-13 + Digital Twin + Regulatory + PDFs
+#                                all show an "Upgrade to Enterprise" upsell.
+#   ENTERPRISE -> full access.
+# ---------------------------------------------------------------------------
+
+CI_TIER_LEVEL: dict[str, int] = {
+    "free":         0,
+    "starter":      1,
+    "professional": 2,
+    "business":     2,
+    "enterprise":   3,
+}
+CI_LEVEL_MARKETING = 0   # marketing landing only
+CI_LEVEL_DEMO      = 1   # read-only showcase project
+CI_LEVEL_SETUP     = 2   # can create real projects + walk Steps 1-7
+CI_LEVEL_FULL      = 3   # BOQ, finance, marketplace, CRM, pipeline, reports,
+                         # regulatory, digital twin
+
+CI_TIER_LABEL: dict[str, str] = {
+    "free": "Free", "starter": "Starter",
+    "professional": "Professional", "business": "Business",
+    "enterprise": "Enterprise",
+}
+
+
+def _ci_tier_of(user: Any) -> str:
+    """Return the user's Capital Investment tier code.
+    Anonymous -> 'free'. Admins are treated as Enterprise regardless
+    of stored plan."""
+    if not user:
+        return "free"
+    try:
+        is_admin = int(user["is_admin"] or 0)
+    except (KeyError, TypeError, ValueError):
+        is_admin = 0
+    if is_admin:
+        return "enterprise"
+    try:
+        plan = (user["plan"] or "free").strip().lower()
+    except (KeyError, TypeError):
+        plan = "free"
+    return plan if plan in CI_TIER_LEVEL else "free"
+
+
+def _ci_level_of(user: Any) -> int:
+    return CI_TIER_LEVEL.get(_ci_tier_of(user), 0)
+
+
+# ---------------------------------------------------------------------------
+# Showcase / demo project (read-only Ghana 20 MW example).
+# Used by /large-scale-solar/demo so Starter tier users can see what the
+# module produces before signing up for Enterprise.
+# ---------------------------------------------------------------------------
+
+def _demo_project() -> dict[str, Any]:
+    """Return a hardcoded 20 MW Ghana demo project + derived sizing/finance
+    numbers. All fields match the schema of capital_investment_projects so
+    templates can render it without special-casing."""
+    proj: dict[str, Any] = {
+        "id":              0,
+        "user_id":         0,
+        "project_name":    "DEMO: Tema 20 MWp Solar Farm (Ghana IPP)",
+        "client_name":     "Volta River Authority (illustrative)",
+        "investor":        "IFC + private-equity fund (illustrative)",
+        "developer":       "SolarPro Ghana EPC",
+        "country":         "Ghana",
+        "region":          "Greater Accra",
+        "district":        "Tema Metropolitan",
+        "gps_lat":         5.6634, "gps_lon": -0.0166,
+        "description":     "20 MWp ground-mount, single-axis tracker, 30 MWh BESS "
+                           "in tender-stage feasibility. This is a static demo "
+                           "used to showcase the Capital Investment module - all "
+                           "numbers are illustrative.",
+        "project_status":  "feasibility",
+        "target_cod":      "2028-06",
+        "target_kwp":      20000.0,
+        "design_standard": "IEC",
+        "currency":        "GHS",
+        "tax_regime":      "epa_exempt",
+        "project_type":    "utility_scale",
+        "boq_project_id":  None,
+        "created_at":      "2026-07-01 12:00:00",
+        "updated_at":      "2026-07-01 12:00:00",
+    }
+    sizing = size_utility_pv(
+        kwp=20000, module_wp=600, dc_ac_ratio=1.20, tilt_deg=12,
+        azimuth_deg=180, psh_daily=5.4, performance_ratio=0.78,
+        availability_pct=98, annual_degradation_pct=0.5,
+        project_life_yr=25, central_inverter_kw=1500,
+    )
+    pv_cfg = {
+        "kwp": 20000, "module_wp": 600, "dc_ac_ratio": 1.20,
+        "module_tech": "mono_topcon", "mounting": "single_axis",
+        "inverter_type": "central", "tilt_deg": 12, "azimuth_deg": 180,
+        "psh_daily": 5.4, "performance_ratio": 0.78,
+        "availability_pct": 98, "annual_degradation_pct": 0.5,
+        "project_life_yr": 25, "battery_chem": "lifepo4",
+        "battery_mwh": 30, "sizing": sizing,
+    }
+    proj["pv_config"] = json.dumps(pv_cfg)
+    proj["site_config"] = json.dumps({
+        "land_area_ha": 50, "terrain": "flat", "slope": "3_5",
+        "soil": "sandy", "flood_risk": "low", "wind_zone": "z2_medium",
+        "seismic_zone": "zone_1", "access_road": "gravel",
+        "water_availability": "borehole", "grid_distance_km": 3.2,
+        "substation_distance_km": 5.8, "hv_line_kv": 33,
+    })
+    proj["facility_config"] = json.dumps({
+        "buildings": ["control_room", "om_building", "security_gate",
+                      "battery_room", "transformer_bldg"],
+        "external_works": ["pv_field", "mounting", "internal_roads",
+                           "cable_trench", "fence", "security_light",
+                           "gate", "weather_station"],
+    })
+    proj["technology_config"] = json.dumps({
+        "selected": ["scada", "ems", "ppc", "weather", "string_mon",
+                     "energy_meter", "bms", "remote_mon", "cyber",
+                     "firewall", "fibre", "gps_sync", "cmms", "spares"],
+    })
+    proj["electrical_config"] = json.dumps({
+        "selected": ["internal_installation", "hv_distribution",
+                     "lv_distribution", "dc_collection", "ac_collection",
+                     "inverters", "transformers", "rmu", "hv_switchgear",
+                     "lv_switchgear", "earthing", "lightning_protection",
+                     "fire_alarm", "ip_cctv", "access_control", "lan", "scada"],
+    })
+    # Finance computed once so it displays consistently every visit.
+    fin_computed = finance_utility(
+        kwp=20000, annual_gen_mwh=sizing["annual_gen_mwh"],
+        tariff_local_per_kwh=1.5, fx_local_per_usd=12.0,
+        project_life_yr=25, discount_rate=0.10, debt_ratio=0.70,
+        debt_rate=0.10, debt_tenor_yr=12, tax_rate=0.25,
+        tariff_escalation=0.02, opex_escalation=0.03,
+        degradation_pct=0.5, bess_capex_usd=6_000_000,
+        carbon_credit_usd_per_tco2=5.0, grid_ef_kgco2_per_kwh=0.45,
+        monte_carlo_runs=200,
+    )
+    proj["finance_config"] = json.dumps({
+        "revenue_model": "ppa", "tariff_local_per_kwh": 1.5,
+        "fx_local_per_usd": 12.0, "computed": fin_computed,
+    })
+    proj["regulatory_config"] = ""
+    return proj
+
+
+# ---------------------------------------------------------------------------
 # Wiring
 # ---------------------------------------------------------------------------
 
@@ -2058,14 +2209,33 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
     """
 
     # ------------------------------------------------------------------
+    # Tier gate helper - closes over current_user + session so we can
+    # keep individual route handlers a single-line check.
+    # ------------------------------------------------------------------
+    def _gate(min_level: int):
+        """Return None if the current user's tier is >= min_level, else a
+        Flask redirect response to the upsell page. Store the incoming
+        path so /upgrade can explain what was locked."""
+        user = current_user()
+        level = _ci_level_of(user)
+        if level >= min_level:
+            return None
+        session["ci_upsell_from"] = request.path
+        session["ci_upsell_min_level"] = min_level
+        return redirect(url_for("capital_investment_upgrade"))
+
+    # ------------------------------------------------------------------
     # GET /large-scale-solar - landing / marketing / start CTA
     # ------------------------------------------------------------------
     @app.route("/large-scale-solar", endpoint="capital_investment_landing")
     def _landing():
         _ensure_capital_investment_schema(get_db)
         recent = []
+        user = current_user()
+        tier = _ci_tier_of(user)
+        tier_level = _ci_level_of(user)
         uid = session.get("user_id")
-        if uid:
+        if uid and tier_level >= CI_LEVEL_SETUP:
             try:
                 with get_db() as c:
                     rows = c.execute(
@@ -2081,9 +2251,62 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                 recent = []
         return render_template(
             "capital_investment_landing.html",
-            user=current_user(),
+            user=user,
+            tier=tier,
+            tier_level=tier_level,
+            tier_label=CI_TIER_LABEL.get(tier, "Free"),
             recent=recent,
             project_types=PROJECT_TYPES,
+        )
+
+    # ------------------------------------------------------------------
+    # GET /large-scale-solar/demo - read-only Ghana 20 MW showcase.
+    # Available to Starter+ (or anon-with-hint on the landing page).
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/demo",
+               endpoint="capital_investment_demo")
+    def _demo():
+        # Anon can see the demo (Starter-level content). We block only
+        # logged-in FREE users from wasting a slot in the funnel - anon
+        # still gets full read-only demo access as a marketing pull.
+        user = current_user()
+        if user and _ci_level_of(user) < CI_LEVEL_DEMO:
+            session["ci_upsell_from"] = request.path
+            session["ci_upsell_min_level"] = CI_LEVEL_DEMO
+            return redirect(url_for("capital_investment_upgrade"))
+        proj = _demo_project()
+        pv_cfg = json.loads(proj["pv_config"])
+        fin_cfg = json.loads(proj["finance_config"])
+        return render_template(
+            "capital_investment_demo.html",
+            user=user,
+            proj=proj,
+            sizing=pv_cfg.get("sizing") or {},
+            computed=fin_cfg.get("computed") or {},
+            tier=_ci_tier_of(user),
+            tier_level=_ci_level_of(user),
+        )
+
+    # ------------------------------------------------------------------
+    # GET /large-scale-solar/upgrade - upsell page explaining why the
+    # module is Enterprise-gated + CTA to the existing /upgrade route.
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/upgrade",
+               endpoint="capital_investment_upgrade")
+    def _upgrade():
+        user = current_user()
+        tier = _ci_tier_of(user)
+        tier_level = _ci_level_of(user)
+        upsell_from = session.pop("ci_upsell_from", None)
+        upsell_min_level = session.pop("ci_upsell_min_level", CI_LEVEL_SETUP)
+        return render_template(
+            "capital_investment_upgrade.html",
+            user=user,
+            tier=tier,
+            tier_level=tier_level,
+            tier_label=CI_TIER_LABEL.get(tier, "Free"),
+            upsell_from=upsell_from,
+            upsell_min_level=upsell_min_level,
         )
 
     # ------------------------------------------------------------------
@@ -2093,6 +2316,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_new")
     @login_required
     def _new():
+        if (g := _gate(CI_LEVEL_SETUP)) is not None: return g
         _ensure_capital_investment_schema(get_db)
         uid = session["user_id"]
 
@@ -2180,6 +2404,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_project")
     @login_required
     def _project(pid: int):
+        if (g := _gate(CI_LEVEL_SETUP)) is not None: return g
         _ensure_capital_investment_schema(get_db)
         uid = session["user_id"]
         with get_db() as c:
@@ -2239,6 +2464,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_step2")
     @login_required
     def _step2(pid: int):
+        if (g := _gate(CI_LEVEL_SETUP)) is not None: return g
         proj = _load_project(pid)
         if request.method == "POST":
             csrf_protect()
@@ -2264,6 +2490,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_step3")
     @login_required
     def _step3(pid: int):
+        if (g := _gate(CI_LEVEL_SETUP)) is not None: return g
         proj = _load_project(pid)
         site_cfg = _safe_json(proj.get("site_config"))
         if request.method == "POST":
@@ -2334,6 +2561,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_step4")
     @login_required
     def _step4(pid: int):
+        if (g := _gate(CI_LEVEL_SETUP)) is not None: return g
         proj = _load_project(pid)
         fac_cfg = _safe_json(proj.get("facility_config"))
         if request.method == "POST":
@@ -2381,6 +2609,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_step5")
     @login_required
     def _step5(pid: int):
+        if (g := _gate(CI_LEVEL_SETUP)) is not None: return g
         proj = _load_project(pid)
         tech_cfg = _safe_json(proj.get("technology_config"))
         if request.method == "POST":
@@ -2411,6 +2640,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_step6")
     @login_required
     def _step6(pid: int):
+        if (g := _gate(CI_LEVEL_SETUP)) is not None: return g
         proj = _load_project(pid)
         elec_cfg = _safe_json(proj.get("electrical_config"))
         if request.method == "POST":
@@ -2442,6 +2672,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_step7")
     @login_required
     def _step7(pid: int):
+        if (g := _gate(CI_LEVEL_SETUP)) is not None: return g
         proj = _load_project(pid)
         pv_cfg = _safe_json(proj.get("pv_config"))
         sizing: dict[str, Any] = {}
@@ -2564,6 +2795,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_step8")
     @login_required
     def _step8(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None: return g
         proj = _load_project(pid)
         fin_cfg = _safe_json(proj.get("finance_config"))
         pv_cfg = _safe_json(proj.get("pv_config"))
@@ -2705,6 +2937,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_step9")
     @login_required
     def _step9(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None: return g
         proj = _load_project(pid)
         uid = session["user_id"]
         fac_cfg = _safe_json(proj.get("facility_config"))
@@ -2823,6 +3056,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_step10")
     @login_required
     def _step10(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None: return g
         proj = _load_project(pid)
         tech_cfg = _safe_json(proj.get("technology_config"))
         elec_cfg = _safe_json(proj.get("electrical_config"))
@@ -2857,6 +3091,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_step11")
     @login_required
     def _step11(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None: return g
         proj = _load_project(pid)
         uid = session["user_id"]
         _ensure_opportunities_schema(get_db)
@@ -2946,6 +3181,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_step12")
     @login_required
     def _step12(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None: return g
         proj = _load_project(pid)
         uid = session["user_id"]
         _ensure_opportunities_schema(get_db)
@@ -3006,6 +3242,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_step13")
     @login_required
     def _step13(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None: return g
         proj = _load_project(pid)
         uid = session["user_id"]
         opp = _load_opportunity(pid, uid)
@@ -3021,6 +3258,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_report_pdf")
     @login_required
     def _report_pdf(pid: int, report_key: str):
+        if (g := _gate(CI_LEVEL_FULL)) is not None: return g
         if report_key not in FULL_REPORT_KEYS:
             abort(404)
         proj = _load_project(pid)
@@ -3050,6 +3288,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_digital_twin")
     @login_required
     def _digital_twin(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None: return g
         proj = _load_project(pid)
         # Scene is built server-side once so the template can render the
         # left-nav layer list without a second round-trip.
@@ -3066,6 +3305,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_dt_scene")
     @login_required
     def _dt_scene_json(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None: return g
         proj = _load_project(pid)
         scene = build_scene_from_project(proj)
         return jsonify(scene)
@@ -3074,6 +3314,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_dt_sun")
     @login_required
     def _dt_sun_json(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None: return g
         proj = _load_project(pid)
         try:
             month = int(request.args.get("month", "6"))
@@ -3096,6 +3337,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_regulatory")
     @login_required
     def _regulatory(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None: return g
         proj = _load_project(pid)
         reg_cfg = _safe_json(proj.get("regulatory_config"))
         framework = country_framework(proj.get("country"))

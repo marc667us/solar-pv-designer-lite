@@ -44,18 +44,18 @@ COPY_PDF_OUT  = DESKTOP / "SolarPro_Beta_Invite_Email_Copy.pdf"
 # Make the repo's modules importable so we can use api_manager.email.send.
 sys.path.insert(0, str(ROOT))
 
-SUBJECT = "Try SolarPro Global — free beta access for your design team"
+SUBJECT = "Try SolarPro Design — free beta access for your design team"
 
 # Body is composed in Markdown so we can both (a) convert to HTML for the
 # actual sends and (b) render the same text to PDF for the owner's copy.
 # Two Jinja-style placeholders: {company} + {first_name}.
 BODY_MD_TEMPLATE = """\
-# SolarPro Global - Public Beta Invitation
+# SolarPro Design - Public Beta Invitation
 
 Dear {company} team,
 
 I'm Marc - founder of **AI App Invent** and the engineer behind
-[SolarPro Global](https://solarpro.aiappinvent.com), a new web app that
+[SolarPro Design](https://solarpro.aiappinvent.com), a new web app that
 turns a customer's daily load schedule into a full pv solar design
 package in under five minutes:
 
@@ -118,12 +118,12 @@ https://aiappinvent.com
 BODY_HTML_TEMPLATE = """\
 <!DOCTYPE html>
 <html><body style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#1a1a1a;line-height:1.55">
-<h2 style="color:#0a2d47">SolarPro Global - Public Beta Invitation</h2>
+<h2 style="color:#0a2d47">SolarPro Design - Public Beta Invitation</h2>
 
 <p>Dear <strong>{company}</strong> team,</p>
 
 <p>I'm Marc - founder of <strong>AI App Invent</strong> and the engineer behind
-<a href="https://solarpro.aiappinvent.com">SolarPro Global</a>, a new web app
+<a href="https://solarpro.aiappinvent.com">SolarPro Design</a>, a new web app
 that turns a customer's daily load schedule into a full pv solar design
 package in under five minutes:</p>
 

@@ -34,7 +34,7 @@ INVITEE_DIR = ROOT / "data" / "beta_outreach"
 LOG_PATH = INVITEE_DIR / "marketplace_launch_sent_log.json"
 
 SUBJECT = "Electrical pricing live on SolarPro — free to browse"
-FROM_NAME = "Marc — SolarPro Global"
+FROM_NAME = "Marc — SolarPro Design"
 DEFAULT_FROM = "sales@aiappinvent.com"
 DEFAULT_REPLY_TO = "marc@aiappinvent.com"
 
@@ -43,7 +43,7 @@ UTM = "?utm_source=launch&utm_medium=email&utm_campaign=marketplace_softlaunch"
 TEXT_BODY = """\
 Hi {greeting},
 
-Quick update from SolarPro Global.
+Quick update from SolarPro Design.
 
 We just launched a free Electrical Pricing Marketplace as part of the
 platform. You can browse live supplier prices for transformers, cables,
@@ -67,13 +67,13 @@ unclear or if there's a product category we're missing.
 Thanks for being an early supporter.
 
 Marc Owusu
-SolarPro Global
+SolarPro Design
 """
 
 HTML_BODY = """\
 <!DOCTYPE html><html><body style="font-family:-apple-system,Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#222;max-width:580px">
 <p>Hi {greeting},</p>
-<p>Quick update from SolarPro Global.</p>
+<p>Quick update from SolarPro Design.</p>
 <p>We just launched a free <strong>Electrical Pricing Marketplace</strong>
 as part of the platform. You can browse live supplier prices for
 transformers, cables, distribution boards, sockets, switchgear, earthing,
@@ -96,7 +96,7 @@ solarpro.aiappinvent.com/supplier/register</a></p>
 <p>No credit card, no trial timer. Reply to this email if anything is
 unclear or if there's a product category we're missing.</p>
 <p>Thanks for being an early supporter.</p>
-<p>Marc Owusu<br>SolarPro Global</p>
+<p>Marc Owusu<br>SolarPro Design</p>
 </body></html>
 """
 

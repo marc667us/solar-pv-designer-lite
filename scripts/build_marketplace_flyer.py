@@ -182,7 +182,7 @@ def build_rect_1200x628() -> Path:
 
     # Brand mark
     _draw_lightning_bolt(draw, 90, 90, 70)
-    draw.text((150, 60),  "SolarPro Global",
+    draw.text((150, 60),  "SolarPro Design",
               font=_font(34, bold=True), fill=TEXT)
     draw.text((150, 102), "solarpro.aiappinvent.com",
               font=_font(18), fill=MUTED)

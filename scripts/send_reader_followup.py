@@ -27,7 +27,7 @@ READERS_PATH = ROOT / "data" / "beta_outreach" / "readers_to_follow_up.json"
 LOG_PATH     = ROOT / "data" / "beta_outreach" / "followup_sent_log.json"
 
 SUBJECT = "Quick question — did SolarPro miss the mark?"
-FROM_NAME = "Marc — SolarPro Global"
+FROM_NAME = "Marc — SolarPro Design"
 DEFAULT_FROM     = "sales@aiappinvent.com"
 DEFAULT_REPLY_TO = "marc@aiappinvent.com"
 
@@ -35,7 +35,7 @@ DEFAULT_REPLY_TO = "marc@aiappinvent.com"
 TEXT_BODY = """\
 Hi {greeting},
 
-I noticed you opened our SolarPro Global beta invitation a few days
+I noticed you opened our SolarPro Design beta invitation a few days
 back — thanks for taking a look.
 
 I'm Marc, the founder. We're seeing a great open rate but no signups
@@ -64,7 +64,7 @@ https://solarpro.aiappinvent.com
 HTML_BODY = """\
 <!DOCTYPE html><html><body style="font-family:-apple-system,Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#222;max-width:560px">
 <p>Hi {greeting},</p>
-<p>I noticed you opened our SolarPro Global beta invitation a few days
+<p>I noticed you opened our SolarPro Design beta invitation a few days
 back — thanks for taking a look.</p>
 <p>I'm Marc, the founder. We're seeing a great open rate but no
 signups yet, which tells me something about the offer isn't quite

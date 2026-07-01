@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}SolarPro Global — Find Solar Tenders & Design Winning Proposals{% endblock %}
+{% block title %}SolarPro Design — Find Solar Tenders & Design Winning Proposals{% endblock %}
 {% block og_description %}Find solar RFQ / RFP / EOI tenders worldwide, browse free live supplier prices, and design PV systems for 200+ countries. Free bill-check tool, industry newsfeed, and BOQ builder.{% endblock %}
 
 {% block ld_json %}
@@ -7,7 +7,7 @@
 {
   "@context": "https://schema.org",
   "@type": "Organization",
-  "name": "SolarPro Global",
+  "name": "SolarPro Design",
   "url": {{ request.url_root.rstrip('/')|tojson }},
   "description": "Intelligent global PV solar system design platform: tenders, marketplace, bill-check, BOQ, industry news.",
   "sameAs": [
@@ -20,7 +20,7 @@
   "@context": "https://schema.org",
   "@type": "WebSite",
   "url": {{ request.url_root.rstrip('/')|tojson }},
-  "name": "SolarPro Global",
+  "name": "SolarPro Design",
   "potentialAction": {
     "@type": "SearchAction",
     "target": {
@@ -748,7 +748,7 @@
         ("Can I white-label reports with my company name and logo?",
          "Yes — on the Business plan ($99/mo). Reports carry your branding. This is popular with consultants who deliver reports to their own clients."),
         ("Do I need to install any software?",
-         "No. SolarPro Global is fully web-based. Works on desktop, tablet, and mobile — including low-bandwidth connections common in developing regions."),
+         "No. SolarPro Design is fully web-based. Works on desktop, tablet, and mobile — including low-bandwidth connections common in developing regions."),
       ] %}
       <div class="faq-item">
         <div class="faq-q" onclick="var a=this.nextElementSibling;a.style.display=a.style.display=='block'?'none':'block';this.querySelector('.faq-icon').style.transform=a.style.display=='block'?'rotate(45deg)':''">
@@ -829,7 +829,7 @@
       </div>
       <h4 class="fw-black mb-1" style="color:#a78bfa">Join the Beta</h4>
       <p class="text-secondary small mb-3">
-        Be among the first to use SolarPro Global. Beta testers get free Professional access during the programme.
+        Be among the first to use SolarPro Design. Beta testers get free Professional access during the programme.
       </p>
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for cat, msg in messages %}
@@ -1244,7 +1244,7 @@
     <span style="color:#2d2d50">|</span>
     <a href="mailto:support@aiappinvent.com" style="color:#6868a0;text-decoration:none;margin:0 10px">Contact</a>
   </div>
-  <div>&copy; {{ 2026 }} SolarPro Global / AI App Invent. All rights reserved.</div>
+  <div>&copy; {{ 2026 }} SolarPro Design / AI App Invent. All rights reserved.</div>
   <div class="mt-1" style="font-size:11px;color:#2d2d50">Platform outputs are for planning purposes only. Professional engineering review required before installation.</div>
 </div>
 

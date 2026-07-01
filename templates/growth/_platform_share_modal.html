@@ -12,7 +12,7 @@
     <div class="modal-content" style="background:#0f0f22;border:1px solid #1e1e3a">
       <div class="modal-header" style="border-bottom:1px solid #1e1e3a">
         <h5 class="modal-title text-warning">
-          <i class="bi bi-megaphone-fill me-2"></i>Share SolarPro Global
+          <i class="bi bi-megaphone-fill me-2"></i>Share SolarPro Design
         </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
@@ -78,7 +78,7 @@
             <label class="form-label small text-secondary">Or scan to share</label>
             <div id="psm-qr" style="display:inline-block;background:#fff;padding:8px;border-radius:8px"></div>
             <p class="text-secondary small mt-2 mb-0">
-              SolarPro Global<br>
+              SolarPro Design<br>
               <span class="text-warning">solarpro.aiappinvent.com</span>
             </p>
           </div>
@@ -103,7 +103,7 @@
   const HOST = "{{ request.host_url.rstrip('/') if request else 'https://solarpro.aiappinvent.com' }}";
   const REF  = "{{ (user.referral_code if user else '') or '' }}";
   const SHARE_URL = HOST + (REF ? ("/r/" + REF) : "/");
-  const SHARE_TEXT = "Design solar PV systems online — free estimate, instant BOQ, automated tender alerts. Try SolarPro Global.";
+  const SHARE_TEXT = "Design solar PV systems online — free estimate, instant BOQ, automated tender alerts. Try SolarPro Design.";
 
   function renderOnce(){
     const inp = document.getElementById("psm-url");
@@ -137,7 +137,7 @@
     if (channel === "facebook")  win = "https://www.facebook.com/sharer/sharer.php?u=" + u;
     if (channel === "linkedin")  win = "https://www.linkedin.com/sharing/share-offsite/?url=" + u;
     if (channel === "x")         win = "https://twitter.com/intent/tweet?url=" + u + "&text=" + t;
-    if (channel === "email")     win = "mailto:?subject=" + encodeURIComponent("SolarPro Global — free solar estimate")
+    if (channel === "email")     win = "mailto:?subject=" + encodeURIComponent("SolarPro Design — free solar estimate")
                                        + "&body=" + t + "%0A%0A" + decodeURIComponent(u);
     if (win) window.open(win, "_blank", "noopener,width=720,height=620");
   };

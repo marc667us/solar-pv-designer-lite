@@ -221,7 +221,7 @@ NARRATIONS = {
         "so you can test different amounts in seconds."
     ),
     "full_user": (
-        "Welcome to SolarPro Global. From the homepage, you can check your bill, "
+        "Welcome to SolarPro Design. From the homepage, you can check your bill, "
         "browse the marketplace, or start a free assessment. "
         "The marketplace lists hundreds of products with per-country compliance "
         "badges so you know what's legal to install in your region. "

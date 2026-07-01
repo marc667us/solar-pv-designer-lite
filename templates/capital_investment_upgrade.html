@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Upgrade required &mdash; PV Capital Investment Design{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0">
+      <i class="bi bi-lock-fill text-warning me-1"></i>
+      {% if upsell_min_level == 3 %}Enterprise{% else %}Professional{% endif %} feature
+    </h5>
+    <div class="text-secondary small">
+      Your current plan: <b>{{ tier_label }}</b>
+      {% if upsell_from %}
+        &middot; Locked page: <code class="text-warning">{{ upsell_from }}</code>
+      {% endif %}
+    </div>
+  </div>
+  <a href="{{ url_for('capital_investment_landing') }}" class="text-secondary small">Back to landing</a>
+</div>
+
+<div class="solar-card p-4 mb-3" style="background:#251b00;border-color:#f59e0b">
+  <div class="row g-3 align-items-center">
+    <div class="col-md-2 text-center">
+      <i class="bi bi-lightning-charge text-warning" style="font-size:56px"></i>
+    </div>
+    <div class="col-md-7">
+      <h4 class="fw-black mb-2">
+        PV Capital Investment Design is an
+        <span class="text-warning">Enterprise</span> capability.
+      </h4>
+      <div class="text-secondary">
+        Utility-scale solar plants are seven- and eight-figure investments.
+        The engineering scope, the bankability model, the country-specific
+        regulatory framework, the 3D digital twin and the auto-generated
+        Investment Memorandum PDFs are all built for professional developers,
+        EPC contractors, banks and government agencies. That's why this
+        module is Enterprise-tier only.
+      </div>
+    </div>
+    <div class="col-md-3 text-md-end">
+      <a href="/upgrade" class="btn btn-warning btn-lg fw-bold w-100">
+        <i class="bi bi-star-fill me-1"></i>Upgrade
+      </a>
+      <div class="text-secondary small mt-2">
+        <a href="mailto:sales@aiappinvent.com?subject=Enterprise%20-%20PV%20Capital%20Investment%20Design"
+           class="text-warning">
+          <i class="bi bi-envelope me-1"></i>Talk to sales
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="solar-card p-3 h-100" style="border-color:#1a4a2a">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="badge bg-success">Enterprise</span>
+        <span class="fw-bold">Fully unlocked</span>
+      </div>
+      <ul class="small text-secondary mb-0" style="padding-left:1.1rem">
+        <li>All 14 wizard steps</li>
+        <li>CAPEX / OPEX / NPV / IRR / LCOE / DSCR</li>
+        <li>Monte Carlo bankability (P10/P50/P90)</li>
+        <li>Section-by-Section BOQ + marketplace auto-pull</li>
+        <li>13-stage utility pipeline + CRM opportunity</li>
+        <li>5 live-generated PDF reports</li>
+        <li>Country-specific regulatory + land-tenure controls</li>
+        <li>3D Digital Twin Studio (Three.js)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="solar-card p-3 h-100">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="badge bg-warning text-dark">Professional / Business</span>
+        <span class="fw-bold">Setup + sizing</span>
+      </div>
+      <ul class="small text-secondary mb-0" style="padding-left:1.1rem">
+        <li>Wizard Steps 1-7</li>
+        <li>Project registration, site, facility</li>
+        <li>Technology + electrical scope</li>
+        <li>PV design engine (utility-scale sizing)</li>
+        <li>Summary equipment table</li>
+        <li class="text-warning"><i class="bi bi-lock me-1"></i>No BOQ, no financials, no reports, no digital twin</li>
+      </ul>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="solar-card p-3 h-100">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="badge bg-secondary">Free / Starter</span>
+        <span class="fw-bold">Explore only</span>
+      </div>
+      <ul class="small text-secondary mb-0" style="padding-left:1.1rem">
+        <li>Marketing landing</li>
+        <li>Read-only demo project (Starter)</li>
+        <li class="text-warning"><i class="bi bi-lock me-1"></i>No project creation, no calculations</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="solar-card p-4 text-center">
+  <div class="text-secondary mb-2">Ready to move to Enterprise?</div>
+  <div class="d-flex justify-content-center gap-2 flex-wrap">
+    <a href="/upgrade" class="btn btn-warning fw-bold btn-lg">
+      <i class="bi bi-arrow-up-circle me-1"></i>Upgrade plan
+    </a>
+    <a href="{{ url_for('capital_investment_demo') }}" class="btn btn-outline-warning btn-lg">
+      <i class="bi bi-play me-1"></i>See a demo first
+    </a>
+    <a href="mailto:sales@aiappinvent.com?subject=Enterprise%20-%20PV%20Capital%20Investment%20Design"
+       class="btn btn-outline-secondary btn-lg">
+      <i class="bi bi-envelope me-1"></i>Contact sales
+    </a>
+  </div>
+</div>
+
+{% endblock %}
