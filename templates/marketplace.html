@@ -323,4 +323,23 @@
 </div>
 {% endif %}
 
+{# ── Free-services strip — always visible ── #}
+<div class="mt-4 pt-3" style="border-top:1px solid #1e1e3a">
+  <div class="small text-secondary mb-2" style="letter-spacing:.5px">MORE FREE TOOLS FROM SOLARPRO</div>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{{ url_for('news_index') }}" class="btn btn-outline-light btn-sm">
+      <i class="bi bi-newspaper me-1"></i>SolarPro news
+    </a>
+    <a href="{{ url_for('newsfeed_public') }}" class="btn btn-outline-light btn-sm">
+      <i class="bi bi-rss me-1"></i>Live industry newsfeed
+    </a>
+    <a href="{{ url_for('bill_check_landing') }}" class="btn btn-outline-light btn-sm">
+      <i class="bi bi-lightning-charge me-1"></i>Bill check
+    </a>
+    <a href="{{ url_for('guides_view', slug='quick') }}" class="btn btn-outline-light btn-sm">
+      <i class="bi bi-play-circle me-1"></i>Quick guide
+    </a>
+  </div>
+</div>
+
 {% endblock %}

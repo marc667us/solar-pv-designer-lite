@@ -438,6 +438,30 @@
     </a>
   </div>
 
+  <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+    <div style="font-size:10.5px;color:var(--dim);letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px">
+      More free tools from SolarPro
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center">
+      <a href="{{ url_for('news_index') }}"
+         style="font-size:11px;padding:5px 10px;border:1px solid var(--border);border-radius:14px;color:var(--text);text-decoration:none;background:var(--card)">
+        <i class="bi bi-newspaper"></i> SolarPro news
+      </a>
+      <a href="{{ url_for('newsfeed_public') }}"
+         style="font-size:11px;padding:5px 10px;border:1px solid var(--border);border-radius:14px;color:var(--text);text-decoration:none;background:var(--card)">
+        <i class="bi bi-rss"></i> Live newsfeed
+      </a>
+      <a href="{{ url_for('marketplace_public') }}"
+         style="font-size:11px;padding:5px 10px;border:1px solid var(--border);border-radius:14px;color:var(--text);text-decoration:none;background:var(--card)">
+        <i class="bi bi-shop"></i> Marketplace
+      </a>
+      <a href="{{ url_for('guides_view', slug='quick') }}"
+         style="font-size:11px;padding:5px 10px;border:1px solid var(--border);border-radius:14px;color:var(--text);text-decoration:none;background:var(--card)">
+        <i class="bi bi-play-circle"></i> Quick guide
+      </a>
+    </div>
+  </div>
+
 </div>
 
 <!-- ─── Live demo JS ─── -->

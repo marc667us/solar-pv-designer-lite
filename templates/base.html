@@ -371,6 +371,13 @@
             <li><a class="dropdown-item" href="{{ url_for('procurement') }}"><i class="bi bi-truck me-2 text-secondary"></i>Project Procurement <span class="text-secondary small">(per-project)</span></a></li>
           </ul>
         </li>
+        <li class="nav-item">
+          <a class="nav-link {% if ep in ('news_index','news_detail','newsfeed_public') %}active{% endif %}"
+             href="{{ url_for('news_index') }}"
+             title="Solar industry news + live newsfeed (free)">
+            <i class="bi bi-newspaper me-1 text-warning"></i>News
+          </a>
+        </li>
         {% if user.is_admin or (user.role or '') == 'technical_support' %}
         <li class="nav-item">
           <a class="nav-link {% if ep == 'support_dashboard' %}active{% endif %}"
@@ -385,6 +392,14 @@
         <li class="nav-item">
           <a class="nav-link {% if ep == 'marketplace_public' %}active{% endif %}" href="{{ url_for('marketplace_public') }}">
             <i class="bi bi-bag-check-fill me-1 text-warning"></i>Marketplace
+            <span class="badge ms-1" style="background:rgba(34,197,94,.18);color:#22c55e;font-size:9px;font-weight:700">FREE</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if ep in ('news_index','news_detail','newsfeed_public') %}active{% endif %}"
+             href="{{ url_for('news_index') }}"
+             title="Solar industry news + live newsfeed (free)">
+            <i class="bi bi-newspaper me-1 text-warning"></i>News
             <span class="badge ms-1" style="background:rgba(34,197,94,.18);color:#22c55e;font-size:9px;font-weight:700">FREE</span>
           </a>
         </li>

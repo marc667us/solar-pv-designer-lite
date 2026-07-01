@@ -403,11 +403,21 @@
     <div class="solar-card p-4">
       <div class="section-label mb-2"><i class="bi bi-newspaper me-1"></i>Latest</div>
       {% for post in news_posts[:2] %}
-      <div class="mb-3 pb-3" style="border-bottom:1px solid #1e1e3a">
-        <div class="small fw-semibold mb-1">{{ post.title }}</div>
-        <div class="text-secondary" style="font-size:11px">{{ post.content[:100] }}…</div>
-      </div>
+      <a href="{{ url_for('news_detail', post_id=post.id) }}" class="text-decoration-none">
+        <div class="mb-3 pb-3" style="border-bottom:1px solid #1e1e3a">
+          <div class="small fw-semibold mb-1 text-light">{{ post.title }}</div>
+          <div class="text-secondary" style="font-size:11px">{{ post.content[:100] }}…</div>
+        </div>
+      </a>
       {% endfor %}
+      <div class="d-flex gap-2 flex-wrap mt-2">
+        <a href="{{ url_for('news_index') }}" class="btn btn-sm btn-outline-warning">
+          <i class="bi bi-newspaper me-1"></i>All news
+        </a>
+        <a href="{{ url_for('newsfeed_public') }}" class="btn btn-sm btn-outline-light">
+          <i class="bi bi-rss me-1"></i>Live newsfeed
+        </a>
+      </div>
     </div>
     {% endif %}
   </div>
