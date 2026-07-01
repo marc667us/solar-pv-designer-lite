@@ -157,6 +157,14 @@ _LV_PANEL_AVR_PRODUCTS_GHS = [
      "Nexans / Tropical / Elsewedy", "LV-1C-400-XLPE",
      "Single-core 400mm2 copper XLPE insulated, PVC outer sheath, 600/1000V, unarmoured",
      "m", 1290.00, 21, "1C XLPE/PVC"),
+    ("Opera Market", "lv_cables", "1C x 500mm2 Cu XLPE/PVC Cable 600/1000V",
+     "Nexans / Tropical / Elsewedy", "LV-1C-500-XLPE",
+     "Single-core 500mm2 copper XLPE insulated, PVC outer sheath, 600/1000V, unarmoured",
+     "m", 1620.00, 30, "1C XLPE/PVC"),
+    ("Agenda Electricals", "lv_cables", "1C x 500mm2 Cu PVC/PVC Cable 600/1000V",
+     "Nexans / Tropical / Elsewedy", "LV-1C-500-PVCPVC",
+     "Single-core 500mm2 copper PVC insulated, PVC outer sheath, 600/1000V, unarmoured",
+     "m", 1460.00, 30, "1C PVC/PVC"),
 
     # ================================================================
     # D. Panel Boards -- SPN Distribution Boards, 230V, Single Phase
