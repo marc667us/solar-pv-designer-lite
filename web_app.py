@@ -36212,13 +36212,18 @@ def public_opportunities():
     """Public read-only view of persisted solar opportunities."""
     _ensure_opps_crawled_table()
 
-    # Bootstrap: if the table has never been populated, run a fetch now.
+    # Bootstrap + post-redeploy refresh:
+    #   * If the DB is empty, run a fetch (first visitor bootstraps).
+    #   * If the in-process cache is empty (post-redeploy) but the DB is
+    #     populated, still trigger a fetch so any newly-added _QUERIES
+    #     (Ghana / Africa / etc.) run at least once against the fresh
+    #     process. Cache TTL (1 hour) bounds the HTTP cost.
     with get_db() as c:
         n_total = int(c.execute(
             "SELECT COUNT(*) FROM solar_opportunities_crawled"
         ).fetchone()[0] or 0)
 
-    if n_total == 0:
+    if n_total == 0 or not _OPPS_CACHE.get("items"):
         try:
             fetch_opportunities()
             with get_db() as c:
