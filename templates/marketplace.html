@@ -83,7 +83,7 @@
     <select name="country" class="form-select" style="background:#0a0a14;border-color:#1e1e3a;color:#fff;max-width:170px"
             title="Country grid profile drives the per-card compliance badge" onchange="this.form.submit()">
       {% for code, prof in country_options.items()|sort %}
-      <option value="{{ code }}" {% if selected_country == code %}selected{% endif %}>{{ code }} · {{ prof.name|default(code) }}</option>
+      <option value="{{ code }}" {% if selected_country == code %}selected{% endif %}>{{ code }} · {{ prof.country|default(prof.name|default(code)) }}</option>
       {% endfor %}
     </select>
     {% endif %}
