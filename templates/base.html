@@ -10,7 +10,7 @@
 {% set _og_title = self.title() if self.title is defined else 'SolarPro Global' %}
 {% set _og_desc = self.og_description() if self.og_description is defined else 'The intelligent global PV solar design platform — free marketplace, live tender feed, bill-check tool, and industry news.' %}
 {% set _og_type = self.og_type() if self.og_type is defined else 'website' %}
-{% set _og_image = self.og_image() if self.og_image is defined else (request.url_root.rstrip('/') + '/static/land-110m.json') %}
+{% set _og_image = self.og_image() if self.og_image is defined else (request.url_root.rstrip('/') + url_for('static', filename='og-cover.png')) %}
 {% set _og_url = request.base_url %}
 <meta name="description" content="{{ _og_desc|striptags|truncate(300) }}"/>
 <meta property="og:site_name" content="{{ _og_site }}"/>
