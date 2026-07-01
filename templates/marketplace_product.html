@@ -8,6 +8,19 @@
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "Home", "item": {{ request.url_root.rstrip('/')|tojson }}},
+    {"@type": "ListItem", "position": 2, "name": "Marketplace", "item": {{ (request.url_root.rstrip('/') + url_for('marketplace_public'))|tojson }}}{% if product.category_name %},
+    {"@type": "ListItem", "position": 3, "name": {{ product.category_name|tojson }}, "item": {{ (request.url_root.rstrip('/') + url_for('marketplace_public') + '?cat=' + (product.category_id|string))|tojson }}},
+    {"@type": "ListItem", "position": 4, "name": {{ product.name|tojson }}, "item": {{ (request.url_root.rstrip('/') + url_for('marketplace_product_detail', pid=product.id))|tojson }}}{% else %},
+    {"@type": "ListItem", "position": 3, "name": {{ product.name|tojson }}, "item": {{ (request.url_root.rstrip('/') + url_for('marketplace_product_detail', pid=product.id))|tojson }}}{% endif %}
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
   "@type": "Product",
   "name": {{ product.name|tojson }},
   {% if product.brand %}"brand": {"@type": "Brand", "name": {{ product.brand|tojson }}},{% endif %}

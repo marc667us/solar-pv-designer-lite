@@ -9,6 +9,17 @@
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "Home", "item": {{ request.url_root.rstrip('/')|tojson }}},
+    {"@type": "ListItem", "position": 2, "name": "News", "item": {{ (request.url_root.rstrip('/') + url_for('news_index'))|tojson }}},
+    {"@type": "ListItem", "position": 3, "name": {{ post.title|tojson }}, "item": {{ (request.url_root.rstrip('/') + url_for('news_detail', post_id=post.id))|tojson }}}
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
   "@type": "NewsArticle",
   "headline": {{ post.title|tojson }},
   "datePublished": {{ (post.created_at or '')|string|tojson }},
