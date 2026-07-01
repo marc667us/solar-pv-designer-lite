@@ -52,6 +52,10 @@ def _newsfeed_fetch_items(force_refresh=False):
         return _NEWSFEED_CACHE["items"]
 
     out = []
+    # Per-topic cap ensures every one of the 5 queries contributes to the
+    # final feed. Previously a global cap made the first query monopolise
+    # the results (Google News returns 100+ items per query).
+    per_topic_cap = 12
     for topic, q in _NEWSFEED_QUERIES:
         url = ("https://news.google.com/rss/search?q=" + q +
                "&hl=en-US&gl=US&ceid=US:en")
@@ -65,7 +69,10 @@ def _newsfeed_fetch_items(force_refresh=False):
             root = _ET.fromstring(data)
         except Exception:
             continue
+        added = 0
         for item in root.iter("item"):
+            if added >= per_topic_cap:
+                break
             try:
                 title = (item.findtext("title") or "").strip()
                 link  = (item.findtext("link")  or "").strip()
@@ -80,10 +87,9 @@ def _newsfeed_fetch_items(force_refresh=False):
                         "source":   source or "News",
                         "topic":    topic,
                     })
+                    added += 1
             except Exception:
                 continue
-        if len(out) >= 40:
-            break
 
     # De-dup by title (Google News sometimes returns the same story from
     # multiple sources for the same query).
