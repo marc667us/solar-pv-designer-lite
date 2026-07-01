@@ -35798,12 +35798,18 @@ from xml.etree import ElementTree as _ET
 _NEWSFEED_CACHE = {"items": [], "fetched_at": 0.0}
 _NEWSFEED_TTL_SECONDS = 15 * 60
 
+# 2026-07-01: owner directive -- newsfeed must be sourced from Ghana.
+# Every query is anchored to Ghana + a solar/PV/energy vertical so the
+# aggregated feed is relevant to SolarPro's home market and its Ghana
+# customer base. If a query returns no results (Ghana has fewer sources
+# than global) the topic simply shows fewer cards; global topics remain
+# accessible on /admin/opportunities for staff-only browsing.
 _NEWSFEED_QUERIES = [
-    ("Solar PV Africa",         "solar+pv+africa"),
-    ("Solar Tenders",           "solar+tender+RFP"),
-    ("Solar Financing",         "solar+financing+africa"),
-    ("Solar Manufacturing",     "solar+panel+manufacturing"),
-    ("Solar Grid Integration",  "solar+grid+integration"),
+    ("Ghana Solar",             "solar+Ghana"),
+    ("Ghana Solar Tenders",     "solar+tender+Ghana"),
+    ("Ghana Solar Financing",   "solar+financing+Ghana"),
+    ("Ghana Renewable Energy",  "renewable+energy+Ghana"),
+    ("Ghana Solar Policy",      "solar+policy+Ghana+PURC+ECG"),
 ]
 
 

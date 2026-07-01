@@ -1,14 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Live Solar Industry Newsfeed — SolarPro{% endblock %}
+{% block title %}Live Ghana Solar Industry Newsfeed — SolarPro{% endblock %}
+{% block og_description %}Live newsfeed of Ghana's solar industry: tenders, financing, policy, renewable-energy news — aggregated from Google News across {{ topics|length }} Ghana-anchored topics.{% endblock %}
 {% block content %}
 <div class="container-xl py-4">
 
   <div class="d-flex align-items-center gap-3 mb-4">
     <div style="font-size:32px;color:var(--solar-gold)"><i class="bi bi-rss-fill"></i></div>
     <div>
-      <h4 class="fw-black mb-0">Live Solar Industry Newsfeed</h4>
+      <h4 class="fw-black mb-0">
+        Live Ghana Solar Newsfeed
+        <span class="badge rounded-pill ms-1" style="background:rgba(245,158,11,.15);color:var(--solar-gold);font-size:9px;font-weight:700;letter-spacing:.4px;vertical-align:middle"><i class="bi bi-geo-alt-fill me-1"></i>GHANA</span>
+      </h4>
       <div class="text-secondary small">
-        Aggregated from Google News across {{ topics|length }} solar topics
+        Aggregated from Google News across {{ topics|length }} Ghana solar topics
         {% if fetched_iso %} · last fetched {{ fetched_iso[:19] }} UTC{% endif %}
         · refreshes every ~15 min
       </div>

@@ -872,12 +872,12 @@
       </form>
     </div>
 
-    <!-- Newsletter -->
+    <!-- Newsletter (Ghana-focused) -->
     <div class="solar-card p-4">
-      <div class="section-label mb-1"><i class="bi bi-envelope-heart me-1"></i>Newsletter</div>
-      <h4 class="fw-black mb-1">Stay Ahead in Solar</h4>
+      <div class="section-label mb-1"><i class="bi bi-envelope-heart me-1"></i>Newsletter <span class="badge rounded-pill ms-1" style="background:rgba(245,158,11,.15);color:var(--solar-gold);font-size:9px;font-weight:700;letter-spacing:.4px"><i class="bi bi-geo-alt-fill me-1"></i>GHANA</span></div>
+      <h4 class="fw-black mb-1">Stay Ahead in Ghana Solar</h4>
       <p class="text-secondary small mb-3">
-        Live RFP alerts, platform updates, solar market insights globally — weekly.
+        Ghana-focused solar updates: live RFP alerts, PURC tariff changes, ECG/NEDCO announcements, and platform updates — weekly.
       </p>
       <form method="POST" action="{{ url_for('newsletter_subscribe') }}">
         <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
