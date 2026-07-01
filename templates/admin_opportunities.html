@@ -8,6 +8,29 @@
       Pulled from public tender RSS feeds, filtered for solar / PV / off-grid / mini-grid / hybrid. Refreshes every 60 minutes.
       Cache age: {{ cache_age_sec }} s. {{ total_unfiltered }} item(s) in cache.
     </div>
+    {% if history_stats and history_stats.total > 0 %}
+    <div class="mt-2 p-2 rounded" style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.30);font-size:12px">
+      <span class="fw-semibold text-success"><i class="bi bi-database-check me-1"></i>Persisted history:</span>
+      <span class="text-secondary">
+        <span class="text-warning fw-bold">{{ history_stats.total }}</span> opportunities crawled to date
+        {% if history_stats.by_type %}
+          &middot;
+          {% for t, n in history_stats.by_type.items() %}
+            {{ t }}: <span class="fw-semibold">{{ n }}</span>{{ ' &middot; '|safe if not loop.last else '' }}
+          {% endfor %}
+        {% endif %}
+        {% if history_stats.by_country_top5 %}
+          &middot; top:
+          {% for row in history_stats.by_country_top5 %}
+            {{ row.country }}: {{ row.n }}{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        {% endif %}
+        {% if history_stats.newest_seen %}
+          &middot; last write {{ history_stats.newest_seen[:19] }}
+        {% endif %}
+      </span>
+    </div>
+    {% endif %}
   </div>
   <div class="d-flex gap-2 flex-wrap">
     {% if items %}
