@@ -32,11 +32,44 @@ _NEW_CATALOG_ENTRIES = {
     ],
 
     "SUB-FEEDER CABLES AND EARTH LEADS": [
+        # Prior smaller cross-sections (10-50mm2, kept for continuity)
         ("4c x 50mm² Cu/XLPE/SWA/PVC sub-feeder cable",                       "M",       651),
         ("4c x 35mm² Cu/XLPE/SWA/PVC sub-feeder cable",                       "M",       470),
         ("4c x 25mm² Cu/XLPE/SWA/PVC sub-feeder cable",                       "M",       290),
         ("4c x 16mm² Cu/XLPE/SWA/PVC sub-feeder cable",                       "M",       190),
         ("4c x 10mm² Cu/XLPE/SWA/PVC sub-feeder cable",                       "M",       125),
+        # 2026-07-01: full LV Power Cables range (pvsolar1/lv cable update11.txt)
+        # 4-Core XLPE/SWA/PVC 600/1000V Copper Armoured
+        ("4C x 70mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",               "M",       900),
+        ("4C x 95mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",               "M",      1190),
+        ("4C x 120mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      1500),
+        ("4C x 150mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      1850),
+        ("4C x 185mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      2300),
+        ("4C x 240mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      3000),
+        ("4C x 300mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      3750),
+        ("4C x 400mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      5000),
+        # 4-Core PVC/SWA/PVC 600/1000V Copper Armoured
+        ("4C x 70mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",                "M",       840),
+        ("4C x 95mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",                "M",      1110),
+        ("4C x 120mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      1400),
+        ("4C x 150mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      1730),
+        ("4C x 185mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      2150),
+        ("4C x 240mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      2800),
+        ("4C x 300mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      3500),
+        ("4C x 400mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      4650),
+        # Single-Core XLPE/PVC 600/1000V Copper (unarmoured)
+        ("1C x 70mm2 Cu XLPE/PVC Cable 600/1000V",                            "M",       230),
+        ("1C x 95mm2 Cu XLPE/PVC Cable 600/1000V",                            "M",       310),
+        ("1C x 120mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       390),
+        ("1C x 150mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       485),
+        ("1C x 185mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       600),
+        ("1C x 240mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       775),
+        ("1C x 300mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       970),
+        ("1C x 400mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",      1290),
+        ("1C x 500mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",      1620),
+        # Single-Core PVC/PVC 600/1000V Copper (unarmoured, owner add)
+        ("1C x 500mm2 Cu PVC/PVC Cable 600/1000V",                            "M",      1460),
+        # Earth leads + accessories (kept from original)
         ("1c x 25mm² PVC copper earth lead",                                  "M",        65),
         ("1c x 16mm² PVC copper earth lead",                                  "M",        42),
         ("1c x 10mm² PVC copper earth lead",                                  "M",        27),
@@ -175,24 +208,89 @@ _NEW_CATALOG_ENTRIES = {
     ],
 
     "AVR": [
+        # Prior placeholder entries (kept for continuity)
         ("AVR (servo-motor type, 415V, 100kVA)",                                "No.",   25000),
         ("AVR (servo-motor type, 415V, 200kVA)",                                "No.",   42000),
         ("AVR (servo-motor type, 415V, 400kVA)",                                "No.",   72000),
+        # 2026-07-01: Single-phase AVRs from pvsolar1/planel update 11.txt
+        ("1 kVA Single Phase Automatic Voltage Regulator",                      "No.",     850),
+        ("2 kVA Single Phase Automatic Voltage Regulator",                      "No.",    1250),
+        ("3 kVA Single Phase Automatic Voltage Regulator",                      "No.",    1850),
+        ("5 kVA Single Phase Automatic Voltage Regulator",                      "No.",    2850),
+        ("7.5 kVA Single Phase Automatic Voltage Regulator",                    "No.",    4500),
+        ("10 kVA Single Phase Automatic Voltage Regulator",                     "No.",    5800),
+        ("15 kVA Single Phase Automatic Voltage Regulator",                     "No.",    8200),
+        ("20 kVA Single Phase Automatic Voltage Regulator",                     "No.",   10800),
+        # 2026-07-01: Three-phase AVRs from same source
+        ("10 kVA Three Phase Automatic Voltage Regulator",                      "No.",   12500),
+        ("15 kVA Three Phase Automatic Voltage Regulator",                      "No.",   15500),
+        ("20 kVA Three Phase Automatic Voltage Regulator",                      "No.",   18500),
+        ("30 kVA Three Phase Automatic Voltage Regulator",                      "No.",   24000),
+        ("50 kVA Three Phase Automatic Voltage Regulator",                      "No.",   36000),
+        ("75 kVA Three Phase Automatic Voltage Regulator",                      "No.",   52000),
+        ("100 kVA Three Phase Automatic Voltage Regulator",                     "No.",   68000),
+        ("150 kVA Three Phase Automatic Voltage Regulator",                     "No.",   98000),
+        ("200 kVA Three Phase Automatic Voltage Regulator",                     "No.",  128000),
+        ("300 kVA Three Phase Automatic Voltage Regulator",                     "No.",  185000),
+        ("500 kVA Three Phase Automatic Voltage Regulator",                     "No.",  295000),
     ],
 
     "MAIN LV SWITCHBOARDS": [
+        # Prior placeholder entries (kept for continuity)
         ("Main LV switchboard (form 4b, IP54, ACB incomer)",                   "No.",   85000),
         ("Capacitor bank PFC automatic (50kVAr)",                               "No.",   28000),
         ("Capacitor bank PFC automatic (100kVAr)",                              "No.",   45000),
         ("MCCB 400A, 4P, 50kA",                                                  "No.",    4500),
         ("MCCB 250A, 4P, 36kA",                                                  "No.",    2800),
         ("MCCB 100A, 4P, 25kA",                                                  "No.",    1200),
+        # 2026-07-01: full Main LV Panel Board range (pvsolar1/planel update 11.txt)
+        ("800A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",   "No.",   95000),
+        ("1000A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",  "No.",  125000),
+        ("1250A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",  "No.",  160000),
+        ("1600A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",  "No.",  220000),
+        ("2000A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",  "No.",  310000),
+        # 2026-07-01: PFC panels (already in seed under panel_boards category)
+        ("50 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",    "No.",   20000),
+        ("100 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",   "No.",   34000),
+        ("150 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",   "No.",   48000),
+        ("200 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",   "No.",   62000),
+        # 2026-07-01: MCC panels
+        ("4 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",      "No.",   28000),
+        ("6 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",      "No.",   38000),
+        ("8 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",      "No.",   50000),
+        ("12 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",     "No.",   72000),
+        # 2026-07-01: ATS panels
+        ("100A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   12000),
+        ("160A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   16000),
+        ("250A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   24000),
+        ("400A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   38000),
+        ("630A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   65000),
+        ("1000A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure", "No.",  110000),
     ],
 
     "PANEL BOARDS": [
+        # Prior placeholder entries (kept for continuity)
         ("Sub-main panel board TPN 250A, MCCB outgoing",                        "No.",   12500),
         ("Sub-main panel board TPN 400A, MCCB outgoing",                        "No.",   18500),
         ("Floor-level panel board, MCB outgoing, 18 way",                       "No.",    4500),
+        # 2026-07-01: SPN Distribution Boards, 230V, Single Phase
+        ("4 Way SPN Distribution Board, 63A incomer, MCB outgoing ways, metal enclosure",   "No.",     850),
+        ("6 Way SPN Distribution Board, 63A incomer, MCB outgoing ways, metal enclosure",   "No.",    1050),
+        ("8 Way SPN Distribution Board, 63A incomer, MCB outgoing ways, metal enclosure",   "No.",    1250),
+        ("12 Way SPN Distribution Board, 80A incomer, MCB outgoing ways, metal enclosure",  "No.",    1650),
+        ("16 Way SPN Distribution Board, 100A incomer, MCB outgoing ways, metal enclosure", "No.",    2200),
+        # 2026-07-01: TPN Distribution Boards, 400/230V, Three Phase
+        ("4 Way TPN Distribution Board, 100A TP incomer, MCB outgoing ways",                "No.",    3500),
+        ("6 Way TPN Distribution Board, 100A TP incomer, MCB outgoing ways",                "No.",    4200),
+        ("8 Way TPN Distribution Board, 125A TP incomer, MCB outgoing ways",                "No.",    5200),
+        ("12 Way TPN Distribution Board, 160A TP incomer, MCB outgoing ways",               "No.",    6800),
+        ("16 Way TPN Distribution Board, 200A TP incomer, MCB outgoing ways",               "No.",    8500),
+        # 2026-07-01: Sub-Main Panel Boards, 400/230V
+        ("125A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   12500),
+        ("160A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   15000),
+        ("250A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   22000),
+        ("400A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   34000),
+        ("630A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   55000),
     ],
 
     "EXTERNAL LIGHTING": [
@@ -668,6 +766,87 @@ _NEW_CATALOG_ENTRIES = {
         ("Access-control / CCTV interface",                                     "Item",   3500),
         ("Lift / escalator status integration",                                  "Item",   2500),
     ],
+
+    # 2026-07-01: same LV cable range under the PRIMARY catalog's spelling
+    # ("SUBFEEDER CABLES AND EARTHLEADS", no dash/space). Extension merge
+    # now APPENDS so these land alongside the existing PVC/PVC entries.
+    "SUBFEEDER CABLES AND EARTHLEADS": [
+        # 4-Core XLPE/SWA/PVC 600/1000V Copper Armoured
+        ("4C x 70mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",               "M",       900),
+        ("4C x 95mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",               "M",      1190),
+        ("4C x 120mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      1500),
+        ("4C x 150mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      1850),
+        ("4C x 185mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      2300),
+        ("4C x 240mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      3000),
+        ("4C x 300mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      3750),
+        ("4C x 400mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      5000),
+        # 4-Core PVC/SWA/PVC 600/1000V Copper Armoured
+        ("4C x 70mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",                "M",       840),
+        ("4C x 95mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",                "M",      1110),
+        ("4C x 120mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      1400),
+        ("4C x 150mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      1730),
+        ("4C x 185mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      2150),
+        ("4C x 240mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      2800),
+        ("4C x 300mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      3500),
+        ("4C x 400mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      4650),
+        # Single-Core XLPE/PVC 600/1000V Copper (unarmoured)
+        ("1C x 70mm2 Cu XLPE/PVC Cable 600/1000V",                            "M",       230),
+        ("1C x 95mm2 Cu XLPE/PVC Cable 600/1000V",                            "M",       310),
+        ("1C x 120mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       390),
+        ("1C x 150mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       485),
+        ("1C x 185mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       600),
+        ("1C x 240mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       775),
+        ("1C x 300mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       970),
+        ("1C x 400mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",      1290),
+        ("1C x 500mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",      1620),
+        ("1C x 500mm2 Cu PVC/PVC Cable 600/1000V",                            "M",      1460),
+    ],
+
+    # 2026-07-01: same panel-board range under the primary catalog's
+    # existing section "SWITCH BOARDS AND DISTRIBUTION BOARDS". Merge is
+    # APPEND so the pre-existing Memshield entries stay.
+    "SWITCH BOARDS AND DISTRIBUTION BOARDS": [
+        # SPN Distribution Boards
+        ("4 Way SPN Distribution Board, 63A incomer, MCB outgoing ways, metal enclosure",   "No.",     850),
+        ("6 Way SPN Distribution Board, 63A incomer, MCB outgoing ways, metal enclosure",   "No.",    1050),
+        ("8 Way SPN Distribution Board, 63A incomer, MCB outgoing ways, metal enclosure",   "No.",    1250),
+        ("12 Way SPN Distribution Board, 80A incomer, MCB outgoing ways, metal enclosure",  "No.",    1650),
+        ("16 Way SPN Distribution Board, 100A incomer, MCB outgoing ways, metal enclosure", "No.",    2200),
+        # TPN Distribution Boards
+        ("4 Way TPN Distribution Board, 100A TP incomer, MCB outgoing ways",                "No.",    3500),
+        ("6 Way TPN Distribution Board, 100A TP incomer, MCB outgoing ways",                "No.",    4200),
+        ("8 Way TPN Distribution Board, 125A TP incomer, MCB outgoing ways",                "No.",    5200),
+        ("12 Way TPN Distribution Board, 160A TP incomer, MCB outgoing ways",               "No.",    6800),
+        ("16 Way TPN Distribution Board, 200A TP incomer, MCB outgoing ways",               "No.",    8500),
+        # Sub-Main Panel Boards
+        ("125A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   12500),
+        ("160A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   15000),
+        ("250A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   22000),
+        ("400A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   34000),
+        ("630A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   55000),
+        # Main LV Panel Boards
+        ("800A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",     "No.",   95000),
+        ("1000A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",    "No.",  125000),
+        ("1250A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",    "No.",  160000),
+        ("1600A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",    "No.",  220000),
+        ("2000A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",    "No.",  310000),
+        # ATS Panels
+        ("100A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   12000),
+        ("160A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   16000),
+        ("250A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   24000),
+        ("400A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   38000),
+        ("630A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   65000),
+        ("1000A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure", "No.",  110000),
+        # MCC + PFC
+        ("4 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",      "No.",   28000),
+        ("6 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",      "No.",   38000),
+        ("8 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",      "No.",   50000),
+        ("12 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",     "No.",   72000),
+        ("50 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",    "No.",   20000),
+        ("100 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",   "No.",   34000),
+        ("150 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",   "No.",   48000),
+        ("200 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",   "No.",   62000),
+    ],
 }
 
 
@@ -685,6 +864,16 @@ except NameError:
 
 if _cat is not None:
     for _key, _items in _NEW_CATALOG_ENTRIES.items():
-        # Don't clobber existing entries (data_v2 wins if there's a conflict).
-        if _key not in _cat:
+        # 2026-07-01: previous logic was 'skip if key exists' (data_v2 wins).
+        # That silently dropped newly-seeded LV cable + panel additions when
+        # the primary catalog already had a same-named section. Switched to
+        # APPEND with case-insensitive description dedup so we can add items
+        # to existing sections without clobbering the original entries.
+        if _key in _cat:
+            _existing = {t[0].lower() for t in _cat[_key]}
+            for _tup in _items:
+                if _tup and _tup[0].lower() not in _existing:
+                    _cat[_key].append(_tup)
+                    _existing.add(_tup[0].lower())
+        else:
             _cat[_key] = list(_items)

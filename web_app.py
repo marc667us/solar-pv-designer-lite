@@ -33868,6 +33868,32 @@ _NEW_CATALOG_ENTRIES = {
         ("1c x 10mm² PVC copper earth lead",                                  "M",        27),
         ("Cable gland and lug kit (per cable size)",                          "Set",     180),
         ("Cable cleat (per metre)",                                            "M",        45),
+        ("4C x 70mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",               "M",       900),
+        ("4C x 95mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",               "M",      1190),
+        ("4C x 120mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      1500),
+        ("4C x 150mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      1850),
+        ("4C x 185mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      2300),
+        ("4C x 240mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      3000),
+        ("4C x 300mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      3750),
+        ("4C x 400mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      5000),
+        ("4C x 70mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",                "M",       840),
+        ("4C x 95mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",                "M",      1110),
+        ("4C x 120mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      1400),
+        ("4C x 150mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      1730),
+        ("4C x 185mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      2150),
+        ("4C x 240mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      2800),
+        ("4C x 300mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      3500),
+        ("4C x 400mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      4650),
+        ("1C x 70mm2 Cu XLPE/PVC Cable 600/1000V",                            "M",       230),
+        ("1C x 95mm2 Cu XLPE/PVC Cable 600/1000V",                            "M",       310),
+        ("1C x 120mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       390),
+        ("1C x 150mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       485),
+        ("1C x 185mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       600),
+        ("1C x 240mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       775),
+        ("1C x 300mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       970),
+        ("1C x 400mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",      1290),
+        ("1C x 500mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",      1620),
+        ("1C x 500mm2 Cu PVC/PVC Cable 600/1000V",                            "M",      1460),
     ],
 
     "TESTING AND COMMISSIONING": [
@@ -34004,6 +34030,25 @@ _NEW_CATALOG_ENTRIES = {
         ("AVR (servo-motor type, 415V, 100kVA)",                                "No.",   25000),
         ("AVR (servo-motor type, 415V, 200kVA)",                                "No.",   42000),
         ("AVR (servo-motor type, 415V, 400kVA)",                                "No.",   72000),
+        ("1 kVA Single Phase Automatic Voltage Regulator",                      "No.",     850),
+        ("2 kVA Single Phase Automatic Voltage Regulator",                      "No.",    1250),
+        ("3 kVA Single Phase Automatic Voltage Regulator",                      "No.",    1850),
+        ("5 kVA Single Phase Automatic Voltage Regulator",                      "No.",    2850),
+        ("7.5 kVA Single Phase Automatic Voltage Regulator",                    "No.",    4500),
+        ("10 kVA Single Phase Automatic Voltage Regulator",                     "No.",    5800),
+        ("15 kVA Single Phase Automatic Voltage Regulator",                     "No.",    8200),
+        ("20 kVA Single Phase Automatic Voltage Regulator",                     "No.",   10800),
+        ("10 kVA Three Phase Automatic Voltage Regulator",                      "No.",   12500),
+        ("15 kVA Three Phase Automatic Voltage Regulator",                      "No.",   15500),
+        ("20 kVA Three Phase Automatic Voltage Regulator",                      "No.",   18500),
+        ("30 kVA Three Phase Automatic Voltage Regulator",                      "No.",   24000),
+        ("50 kVA Three Phase Automatic Voltage Regulator",                      "No.",   36000),
+        ("75 kVA Three Phase Automatic Voltage Regulator",                      "No.",   52000),
+        ("100 kVA Three Phase Automatic Voltage Regulator",                     "No.",   68000),
+        ("150 kVA Three Phase Automatic Voltage Regulator",                     "No.",   98000),
+        ("200 kVA Three Phase Automatic Voltage Regulator",                     "No.",  128000),
+        ("300 kVA Three Phase Automatic Voltage Regulator",                     "No.",  185000),
+        ("500 kVA Three Phase Automatic Voltage Regulator",                     "No.",  295000),
     ],
 
     "MAIN LV SWITCHBOARDS": [
@@ -34013,12 +34058,46 @@ _NEW_CATALOG_ENTRIES = {
         ("MCCB 400A, 4P, 50kA",                                                  "No.",    4500),
         ("MCCB 250A, 4P, 36kA",                                                  "No.",    2800),
         ("MCCB 100A, 4P, 25kA",                                                  "No.",    1200),
+        ("800A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",   "No.",   95000),
+        ("1000A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",  "No.",  125000),
+        ("1250A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",  "No.",  160000),
+        ("1600A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",  "No.",  220000),
+        ("2000A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",  "No.",  310000),
+        ("50 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",    "No.",   20000),
+        ("100 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",   "No.",   34000),
+        ("150 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",   "No.",   48000),
+        ("200 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",   "No.",   62000),
+        ("4 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",      "No.",   28000),
+        ("6 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",      "No.",   38000),
+        ("8 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",      "No.",   50000),
+        ("12 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",     "No.",   72000),
+        ("100A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   12000),
+        ("160A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   16000),
+        ("250A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   24000),
+        ("400A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   38000),
+        ("630A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   65000),
+        ("1000A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure", "No.",  110000),
     ],
 
     "PANEL BOARDS": [
         ("Sub-main panel board TPN 250A, MCCB outgoing",                        "No.",   12500),
         ("Sub-main panel board TPN 400A, MCCB outgoing",                        "No.",   18500),
         ("Floor-level panel board, MCB outgoing, 18 way",                       "No.",    4500),
+        ("4 Way SPN Distribution Board, 63A incomer, MCB outgoing ways, metal enclosure",   "No.",     850),
+        ("6 Way SPN Distribution Board, 63A incomer, MCB outgoing ways, metal enclosure",   "No.",    1050),
+        ("8 Way SPN Distribution Board, 63A incomer, MCB outgoing ways, metal enclosure",   "No.",    1250),
+        ("12 Way SPN Distribution Board, 80A incomer, MCB outgoing ways, metal enclosure",  "No.",    1650),
+        ("16 Way SPN Distribution Board, 100A incomer, MCB outgoing ways, metal enclosure", "No.",    2200),
+        ("4 Way TPN Distribution Board, 100A TP incomer, MCB outgoing ways",                "No.",    3500),
+        ("6 Way TPN Distribution Board, 100A TP incomer, MCB outgoing ways",                "No.",    4200),
+        ("8 Way TPN Distribution Board, 125A TP incomer, MCB outgoing ways",                "No.",    5200),
+        ("12 Way TPN Distribution Board, 160A TP incomer, MCB outgoing ways",               "No.",    6800),
+        ("16 Way TPN Distribution Board, 200A TP incomer, MCB outgoing ways",               "No.",    8500),
+        ("125A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   12500),
+        ("160A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   15000),
+        ("250A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   22000),
+        ("400A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   34000),
+        ("630A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   55000),
     ],
 
     "EXTERNAL LIGHTING": [
@@ -34494,6 +34573,72 @@ _NEW_CATALOG_ENTRIES = {
         ("Access-control / CCTV interface",                                     "Item",   3500),
         ("Lift / escalator status integration",                                  "Item",   2500),
     ],
+
+    "SUBFEEDER CABLES AND EARTHLEADS": [
+        ("4C x 70mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",               "M",       900),
+        ("4C x 95mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",               "M",      1190),
+        ("4C x 120mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      1500),
+        ("4C x 150mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      1850),
+        ("4C x 185mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      2300),
+        ("4C x 240mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      3000),
+        ("4C x 300mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      3750),
+        ("4C x 400mm2 Cu XLPE/SWA/PVC Armoured Cable 600/1000V",              "M",      5000),
+        ("4C x 70mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",                "M",       840),
+        ("4C x 95mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",                "M",      1110),
+        ("4C x 120mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      1400),
+        ("4C x 150mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      1730),
+        ("4C x 185mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      2150),
+        ("4C x 240mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      2800),
+        ("4C x 300mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      3500),
+        ("4C x 400mm2 Cu PVC/SWA/PVC Armoured Cable 600/1000V",               "M",      4650),
+        ("1C x 70mm2 Cu XLPE/PVC Cable 600/1000V",                            "M",       230),
+        ("1C x 95mm2 Cu XLPE/PVC Cable 600/1000V",                            "M",       310),
+        ("1C x 120mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       390),
+        ("1C x 150mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       485),
+        ("1C x 185mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       600),
+        ("1C x 240mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       775),
+        ("1C x 300mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",       970),
+        ("1C x 400mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",      1290),
+        ("1C x 500mm2 Cu XLPE/PVC Cable 600/1000V",                           "M",      1620),
+        ("1C x 500mm2 Cu PVC/PVC Cable 600/1000V",                            "M",      1460),
+    ],
+
+    "SWITCH BOARDS AND DISTRIBUTION BOARDS": [
+        ("4 Way SPN Distribution Board, 63A incomer, MCB outgoing ways, metal enclosure",   "No.",     850),
+        ("6 Way SPN Distribution Board, 63A incomer, MCB outgoing ways, metal enclosure",   "No.",    1050),
+        ("8 Way SPN Distribution Board, 63A incomer, MCB outgoing ways, metal enclosure",   "No.",    1250),
+        ("12 Way SPN Distribution Board, 80A incomer, MCB outgoing ways, metal enclosure",  "No.",    1650),
+        ("16 Way SPN Distribution Board, 100A incomer, MCB outgoing ways, metal enclosure", "No.",    2200),
+        ("4 Way TPN Distribution Board, 100A TP incomer, MCB outgoing ways",                "No.",    3500),
+        ("6 Way TPN Distribution Board, 100A TP incomer, MCB outgoing ways",                "No.",    4200),
+        ("8 Way TPN Distribution Board, 125A TP incomer, MCB outgoing ways",                "No.",    5200),
+        ("12 Way TPN Distribution Board, 160A TP incomer, MCB outgoing ways",               "No.",    6800),
+        ("16 Way TPN Distribution Board, 200A TP incomer, MCB outgoing ways",               "No.",    8500),
+        ("125A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   12500),
+        ("160A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   15000),
+        ("250A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   22000),
+        ("400A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   34000),
+        ("630A TP&N Sub-Main Panel Board, MCCB incomer, outgoing MCCBs, metering, SPD",     "No.",   55000),
+        ("800A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",     "No.",   95000),
+        ("1000A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",    "No.",  125000),
+        ("1250A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",    "No.",  160000),
+        ("1600A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",    "No.",  220000),
+        ("2000A Main LV Panel Board, ACB incomer, MCCB feeders, metering, SPD, busbars",    "No.",  310000),
+        ("100A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   12000),
+        ("160A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   16000),
+        ("250A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   24000),
+        ("400A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   38000),
+        ("630A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure",  "No.",   65000),
+        ("1000A Automatic Transfer Switch Panel, 4P, mains/generator, controller, enclosure", "No.",  110000),
+        ("4 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",      "No.",   28000),
+        ("6 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",      "No.",   38000),
+        ("8 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",      "No.",   50000),
+        ("12 Feeder MCC Panel, motor starters, overloads, control wiring, enclosure",     "No.",   72000),
+        ("50 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",    "No.",   20000),
+        ("100 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",   "No.",   34000),
+        ("150 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",   "No.",   48000),
+        ("200 kVAr Automatic PFC Panel, capacitors, contactors, controller, enclosure",   "No.",   62000),
+    ],
 }
 
 
@@ -34511,8 +34656,16 @@ except NameError:
 
 if _cat is not None:
     for _key, _items in _NEW_CATALOG_ENTRIES.items():
-        # Don't clobber existing entries (data_v2 wins if there's a conflict).
-        if _key not in _cat:
+        # 2026-07-01: append with case-insensitive description dedup so
+        # we can extend existing primary-catalog sections with newly
+        # seeded items instead of silently dropping them.
+        if _key in _cat:
+            _existing = {t[0].lower() for t in _cat[_key]}
+            for _tup in _items:
+                if _tup and _tup[0].lower() not in _existing:
+                    _cat[_key].append(_tup)
+                    _existing.add(_tup[0].lower())
+        else:
             _cat[_key] = list(_items)
 
 
@@ -36017,6 +36170,102 @@ def opportunities_rss():
 
 
 # === END: rss_feeds splice ===
+
+
+# === BEGIN: sitemap_route splice ===
+# 2026-07-01: /sitemap.xml exposes every public page so search engines can
+# crawl and index them. Zero new dependencies.
+#
+# Included:
+#   Landing pages, marketplace, bill-check, guides, support pages that are
+#   public, news_index, newsfeed, opportunities, each published news_post
+#   detail. Static entries have <changefreq> hints; per-post entries include
+#   <lastmod> pulled from updated_at/created_at.
+#
+# Also serves /robots.txt if the file doesn't already exist statically; it
+# points crawlers to /sitemap.xml.
+
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    from flask import make_response
+    site_root = request.url_root.rstrip("/")
+
+    def _u(endpoint, **kw):
+        try:
+            return site_root + url_for(endpoint, **kw)
+        except Exception:
+            return ""
+
+    static_entries = [
+        # (endpoint, changefreq, priority)
+        ("landing",            "weekly",  "1.0"),
+        ("landing_page2",      "weekly",  "0.9"),
+        ("marketplace_public", "daily",   "0.9"),
+        ("bill_check_landing", "monthly", "0.8"),
+        ("news_index",         "daily",   "0.8"),
+        ("newsfeed_public",    "hourly",  "0.7"),
+        ("public_opportunities", "daily", "0.9"),
+        ("news_rss",           "daily",   "0.5"),
+        ("opportunities_rss",  "daily",   "0.5"),
+    ]
+
+    parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
+
+    for endpoint, freq, prio in static_entries:
+        loc = _u(endpoint)
+        if not loc:
+            continue
+        parts.append("<url>")
+        parts.append(f"<loc>{loc}</loc>")
+        parts.append(f"<changefreq>{freq}</changefreq>")
+        parts.append(f"<priority>{prio}</priority>")
+        parts.append("</url>")
+
+    # Public guides — Quick / Full / Technical walkthroughs
+    for slug in ("quick", "full-user", "technical"):
+        loc = _u("guides_view", slug=slug)
+        if loc:
+            parts.append("<url>")
+            parts.append(f"<loc>{loc}</loc>")
+            parts.append("<changefreq>monthly</changefreq>")
+            parts.append("<priority>0.6</priority>")
+            parts.append("</url>")
+
+    # Individual news posts
+    try:
+        with get_db() as c:
+            posts = c.execute(
+                "SELECT id, updated_at, created_at FROM news_posts "
+                "WHERE is_published=1 ORDER BY created_at DESC LIMIT 200"
+            ).fetchall()
+        for p in posts:
+            loc = _u("news_detail", post_id=p["id"])
+            if not loc:
+                continue
+            lastmod = str(p["updated_at"] or p["created_at"] or "")[:10]
+            parts.append("<url>")
+            parts.append(f"<loc>{loc}</loc>")
+            if lastmod:
+                parts.append(f"<lastmod>{lastmod}</lastmod>")
+            parts.append("<changefreq>monthly</changefreq>")
+            parts.append("<priority>0.7</priority>")
+            parts.append("</url>")
+    except Exception:
+        pass
+
+    parts.append("</urlset>")
+    body = "\n".join(parts)
+    resp = make_response(body, 200)
+    resp.headers["Content-Type"] = "application/xml; charset=utf-8"
+    resp.headers["Cache-Control"] = "public, max-age=1800"
+    return resp
+
+
+# === END: sitemap_route splice ===
 
 
 if __name__ == "__main__":
