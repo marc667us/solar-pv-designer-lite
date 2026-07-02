@@ -1486,26 +1486,24 @@ CREATE INDEX IF NOT EXISTS idx_cio_stage   ON capital_investment_opportunities(u
 
 
 def _ensure_opportunities_schema(get_db) -> None:
-    """Idempotent opportunities-table creation. Same pattern as
-    _ensure_capital_investment_schema."""
+    """Idempotent opportunities-table creation. Same per-statement
+    transaction discipline as _ensure_capital_investment_schema so a
+    Postgres failure doesn't cascade."""
     try:
         with get_db() as c:
             c.executescript(_CIO_SQLITE_DDL)
         return
     except Exception:
         pass
-    try:
-        with get_db() as c:
-            for stmt in _CIO_POSTGRES_DDL.split(";"):
-                s = stmt.strip()
-                if not s:
-                    continue
-                try:
-                    c.execute(s)
-                except Exception:
-                    pass
-    except Exception:
-        pass
+    for stmt in _CIO_POSTGRES_DDL.split(";"):
+        s = stmt.strip()
+        if not s:
+            continue
+        try:
+            with get_db() as c:
+                c.execute(s)
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -2006,38 +2004,51 @@ _CIP_POSTGRES_MIGRATIONS = [
 
 
 def _ensure_capital_investment_schema(get_db) -> None:
-    """Idempotent lazy schema creation + additive migrations. Backend
-    detection is by exception, mirroring _ensure_opps_crawled_table."""
+    """Idempotent lazy schema creation + additive migrations.
+
+    CRITICAL: on Postgres, if one statement in a transaction fails,
+    every subsequent statement in the SAME transaction fails with
+    "current transaction is aborted, commands ignored until end of
+    transaction block". Each DDL therefore runs in its OWN
+    `with get_db()` block so failures don't cascade to the
+    ADD COLUMN migrations we depend on for `target_kwp`.
+    """
+    # Try SQLite first (single-statement executescript is Postgres-hostile,
+    # so we let it raise on Postgres and fall through).
+    sqlite_ok = False
     try:
         with get_db() as c:
             c.executescript(_CIP_SQLITE_DDL)
-        # SQLite - run additive migrations one at a time.
+        sqlite_ok = True
+    except Exception:
+        sqlite_ok = False
+    if sqlite_ok:
         for ddl in _CIP_SQLITE_MIGRATIONS:
             try:
                 with get_db() as c:
                     c.execute(ddl)
             except Exception:
-                pass  # column already present
+                pass   # column already present or backend mismatch
         return
-    except Exception:
-        pass
-    try:
-        with get_db() as c:
-            for stmt in _CIP_POSTGRES_DDL.split(";"):
-                s = stmt.strip()
-                if not s:
-                    continue
-                try:
-                    c.execute(s)
-                except Exception:
-                    pass
-            for ddl in _CIP_POSTGRES_MIGRATIONS:
-                try:
-                    c.execute(ddl)
-                except Exception:
-                    pass
-    except Exception:
-        pass
+
+    # Postgres path - split into individual statements, each in its own
+    # transaction, so a duplicate-object NOTICE or CREATE-INDEX conflict
+    # can't abort the later ADD COLUMN migrations.
+    for stmt in _CIP_POSTGRES_DDL.split(";"):
+        s = stmt.strip()
+        if not s:
+            continue
+        try:
+            with get_db() as c:
+                c.execute(s)
+        except Exception:
+            pass
+    for ddl in _CIP_POSTGRES_MIGRATIONS:
+        try:
+            with get_db() as c:
+                c.execute(ddl)
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -2071,21 +2082,42 @@ CI_TIER_LABEL: dict[str, str] = {
 }
 
 
+def _row_get(row: Any, key: str, default: Any = None) -> Any:
+    """Portable row accessor - handles sqlite3.Row (IndexError on missing
+    column), psycopg2 DictRow / RealDictRow (KeyError), plain dict, and
+    attribute-style row objects. Never raises."""
+    if row is None:
+        return default
+    try:
+        v = row[key]
+        return default if v is None else v
+    except (KeyError, IndexError, TypeError):
+        pass
+    try:
+        v = getattr(row, key)
+        return default if v is None else v
+    except AttributeError:
+        return default
+
+
 def _ci_tier_of(user: Any) -> str:
     """Return the user's Capital Investment tier code.
     Anonymous -> 'free'. Admins are treated as Enterprise regardless
-    of stored plan."""
+    of stored plan. Bulletproof against both sqlite3.Row (IndexError
+    on missing column) and psycopg2 DictRow (KeyError)."""
     if not user:
         return "free"
     try:
-        is_admin = int(user["is_admin"] or 0)
-    except (KeyError, TypeError, ValueError):
+        is_admin_raw = _row_get(user, "is_admin", 0) or 0
+        is_admin = int(is_admin_raw) if not isinstance(is_admin_raw, bool) else int(bool(is_admin_raw))
+    except (TypeError, ValueError):
         is_admin = 0
     if is_admin:
         return "enterprise"
+    plan_raw = _row_get(user, "plan", "free") or "free"
     try:
-        plan = (user["plan"] or "free").strip().lower()
-    except (KeyError, TypeError):
+        plan = str(plan_raw).strip().lower()
+    except (TypeError, AttributeError):
         plan = "free"
     return plan if plan in CI_TIER_LEVEL else "free"
 
@@ -2369,20 +2401,69 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             if ptype and ptype not in PROJECT_TYPE_CODES:
                 ptype = ""
 
-            with get_db() as c:
-                cur = c.execute(
-                    "INSERT INTO capital_investment_projects ("
-                    "user_id, project_name, client_name, investor, developer, "
-                    "country, region, district, gps_lat, gps_lon, description, "
-                    "project_status, target_cod, target_kwp, design_standard, "
-                    "currency, tax_regime, project_type"
-                    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (uid, name, client, investor, dev,
-                     country, region, district, lat, lon, desc,
-                     status, target_cod, target_kwp_val, standard,
-                     currency, tax, ptype),
-                )
-                pid = int(cur.lastrowid or 0)
+            # Defensive INSERT. If the wide form (with target_kwp) fails
+            # because the additive migration hasn't run yet on this backend,
+            # fall back to the narrow form and set target_kwp in a follow-up
+            # UPDATE. This is belt-and-braces: the schema-ensure helper
+            # SHOULD have added the column, but Postgres transaction
+            # aborts have burned us before.
+            pid = 0
+            insert_error = None
+            try:
+                with get_db() as c:
+                    cur = c.execute(
+                        "INSERT INTO capital_investment_projects ("
+                        "user_id, project_name, client_name, investor, developer, "
+                        "country, region, district, gps_lat, gps_lon, description, "
+                        "project_status, target_cod, target_kwp, design_standard, "
+                        "currency, tax_regime, project_type"
+                        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (uid, name, client, investor, dev,
+                         country, region, district, lat, lon, desc,
+                         status, target_cod, target_kwp_val, standard,
+                         currency, tax, ptype),
+                    )
+                    pid = int(cur.lastrowid or 0)
+            except Exception as e:
+                insert_error = str(e)
+                try:
+                    with get_db() as c:
+                        cur = c.execute(
+                            "INSERT INTO capital_investment_projects ("
+                            "user_id, project_name, client_name, investor, developer, "
+                            "country, region, district, gps_lat, gps_lon, description, "
+                            "project_status, target_cod, design_standard, "
+                            "currency, tax_regime, project_type"
+                            ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (uid, name, client, investor, dev,
+                             country, region, district, lat, lon, desc,
+                             status, target_cod, standard,
+                             currency, tax, ptype),
+                        )
+                        pid = int(cur.lastrowid or 0)
+                    # Fire-and-forget UPDATE for target_kwp in case the
+                    # column DOES exist but the wide INSERT failed for
+                    # another reason.
+                    if pid and target_kwp_val is not None:
+                        try:
+                            with get_db() as c:
+                                c.execute(
+                                    "UPDATE capital_investment_projects "
+                                    "SET target_kwp=? WHERE id=?",
+                                    (target_kwp_val, pid),
+                                )
+                        except Exception:
+                            pass
+                except Exception as e2:
+                    flash(f"Could not create the project: {e2}. "
+                          "Try again in a moment; if this persists, "
+                          "contact support.", "danger")
+                    return redirect(url_for("capital_investment_new"))
+            if pid <= 0:
+                flash(f"Project creation returned an unexpected ID. "
+                      f"({insert_error or 'unknown error'}) "
+                      "Please retry.", "warning")
+                return redirect(url_for("capital_investment_new"))
             flash("Capital investment project created. Continue with Step 2.", "success")
             return redirect(url_for("capital_investment_project", pid=pid))
 
@@ -2455,6 +2536,80 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                 f"WHERE id=? AND user_id=?",
                 (value, pid, uid),
             )
+
+    # ------------------------------------------------------------------
+    # DIAG - inspect live schema state (admin-only)
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/diag/schema",
+               endpoint="capital_investment_diag_schema")
+    @login_required
+    def _diag_schema():
+        user = current_user()
+        # Admin OR enterprise only.
+        if _ci_level_of(user) < CI_LEVEL_FULL:
+            abort(404)
+        _ensure_capital_investment_schema(get_db)
+        _ensure_opportunities_schema(get_db)
+        out: dict[str, Any] = {"backend": "unknown", "tables": {}}
+        # Try SQLite pragma first (fast).
+        try:
+            with get_db() as c:
+                rows = c.execute(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='table' AND name IN ("
+                    "'capital_investment_projects', "
+                    "'capital_investment_opportunities')",
+                ).fetchall()
+                if rows is not None:
+                    out["backend"] = "sqlite"
+                    for r in rows:
+                        t = r[0] if not hasattr(r, "keys") else r["name"]
+                        cols = c.execute(f"PRAGMA table_info({t})").fetchall()
+                        out["tables"][t] = [
+                            {"name": (col[1] if not hasattr(col, "keys") else col["name"]),
+                             "type": (col[2] if not hasattr(col, "keys") else col["type"])}
+                            for col in cols
+                        ]
+                        rc = c.execute(f"SELECT COUNT(*) FROM {t}").fetchone()
+                        out.setdefault("counts", {})[t] = (rc[0] if rc else 0)
+        except Exception as e:
+            out["sqlite_err"] = str(e)
+        # If SQLite pragma yielded nothing, try Postgres.
+        if not out["tables"]:
+            try:
+                with get_db() as c:
+                    rows = c.execute(
+                        "SELECT table_name FROM information_schema.tables "
+                        "WHERE table_schema='public' AND table_name IN ("
+                        "'capital_investment_projects', "
+                        "'capital_investment_opportunities')",
+                    ).fetchall()
+                    if rows:
+                        out["backend"] = "postgres"
+                    for r in rows or []:
+                        t = r[0] if not hasattr(r, "keys") else r["table_name"]
+                        cols = c.execute(
+                            "SELECT column_name, data_type FROM "
+                            "information_schema.columns "
+                            "WHERE table_schema='public' AND table_name=? "
+                            "ORDER BY ordinal_position",
+                            (t,),
+                        ).fetchall()
+                        out["tables"][t] = [
+                            {"name": (col[0] if not hasattr(col, "keys") else col["column_name"]),
+                             "type": (col[1] if not hasattr(col, "keys") else col["data_type"])}
+                            for col in cols
+                        ]
+                        rc = c.execute(f"SELECT COUNT(*) FROM {t}").fetchone()
+                        out.setdefault("counts", {})[t] = (rc[0] if rc else 0)
+            except Exception as e:
+                out["postgres_err"] = str(e)
+        # Highlight the target_kwp presence (the key symptom of the hiccup).
+        cip = out["tables"].get("capital_investment_projects") or []
+        out["has_target_kwp"] = any(c["name"] == "target_kwp" for c in cip)
+        out["user_tier"] = _ci_tier_of(user)
+        out["user_level"] = _ci_level_of(user)
+        return jsonify(out)
 
     # ------------------------------------------------------------------
     # STEP 2 - Project Type
