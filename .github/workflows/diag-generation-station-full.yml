@@ -1,0 +1,291 @@
+# Full live test suite for the Generation Station Design module.
+# Combines:
+#   A. HTTP smoke — every /large-scale-solar/* route (anon-visible + auth-gated).
+#   B. Postgres schema smoke — every CI table exists, has expected columns.
+#   C. Postgres data smoke — row counts, recent activity, fix verification
+#      (target_kwp populated on post-fix rows).
+#   D. Auxiliary — Keycloak discovery, SolarPro global health.
+#
+# Purpose: prove the module's live state end-to-end from the CI runner
+# without needing a KC session on Claude's side.
+
+name: Diag Generation Station Full
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_user:
+        description: "SolarPro username whose projects we'll enumerate (default: marc667us)"
+        required: false
+        default: "marc667us"
+
+permissions:
+  contents: read
+
+jobs:
+  full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      TARGET_USER: ${{ inputs.target_user || 'marc667us' }}
+      BASE: "https://solarpro.aiappinvent.com"
+      AUTH: "https://auth.aiappinvent.com/realms/solarpro"
+      FIX_SHA: "ca72b15"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql + jq
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client jq
+
+      # ==================================================================
+      # A. HTTP smoke — every /large-scale-solar/* route
+      # ==================================================================
+      - name: A. HTTP smoke — anon-visible + auth-gated routes
+        id: http
+        run: |
+          set +e
+          ok=0; fail=0
+
+          expect() {
+            local method=$1 path=$2 expected=$3 label=$4
+            local url="${BASE}${path}"
+            local code
+            code=$(curl -s -o /dev/null -w "%{http_code}" -X "$method" \
+                        --max-time 60 --user-agent "diag-full/2026-07-02" "$url")
+            if [ "$code" = "$expected" ]; then
+              echo "  [OK  ]  $code  $method  $path  ($label)"
+              ok=$((ok+1))
+            else
+              echo "  [FAIL]  $code (want $expected)  $method  $path  ($label)"
+              fail=$((fail+1))
+            fi
+          }
+
+          # A1. Global health
+          echo "-- A1 global health --"
+          expect GET "/"                    200 "SolarPro landing"
+          expect GET "/api/ping"            200 "liveness"
+          expect GET "/api/health"          200 "health summary"
+
+          # A2. Anon-visible module surface
+          echo "-- A2 anon-visible module routes --"
+          expect GET "/large-scale-solar"          200 "CI landing"
+          expect GET "/large-scale-solar/demo"     200 "20 MW Ghana demo"
+          expect GET "/large-scale-solar/upgrade"  200 "upsell page"
+
+          # A3. Auth-required routes — expect 302 to /login (KC PKCE)
+          echo "-- A3 auth-required routes (302 -> /login) --"
+          pid=1
+          for path in \
+              "/large-scale-solar/new" \
+              "/large-scale-solar/$pid" \
+              "/large-scale-solar/$pid/step2" \
+              "/large-scale-solar/$pid/step3" \
+              "/large-scale-solar/$pid/step4" \
+              "/large-scale-solar/$pid/step5" \
+              "/large-scale-solar/$pid/step6" \
+              "/large-scale-solar/$pid/step7" \
+              "/large-scale-solar/$pid/step8" \
+              "/large-scale-solar/$pid/step9" \
+              "/large-scale-solar/$pid/step10" \
+              "/large-scale-solar/$pid/step11" \
+              "/large-scale-solar/$pid/step12" \
+              "/large-scale-solar/$pid/step13" \
+              "/large-scale-solar/$pid/step14" \
+              "/large-scale-solar/$pid/digital-twin" \
+              "/large-scale-solar/$pid/dt/scene.json" \
+              "/large-scale-solar/$pid/dt/sun.json" \
+              "/large-scale-solar/$pid/regulatory"; do
+            expect GET "$path" 302 "auth gate"
+          done
+
+          # A4. PDF report endpoints — 5 full report keys
+          echo "-- A4 PDF report endpoints --"
+          for key in executive technical financial bankability investment_memo; do
+            expect GET "/large-scale-solar/$pid/report/$key.pdf" 302 "PDF report"
+          done
+
+          # A5. Admin-gated diag endpoints
+          echo "-- A5 admin-gated diag endpoints --"
+          expect GET "/large-scale-solar/diag/schema" 302 "admin diag"
+          expect GET "/large-scale-solar/diag/whoami" 302 "authed whoami"
+
+          echo ""
+          echo "HTTP smoke: $ok OK / $fail FAIL"
+          echo "http_ok=$ok"    >> $GITHUB_OUTPUT
+          echo "http_fail=$fail" >> $GITHUB_OUTPUT
+          [ "$fail" = "0" ]
+
+      # ==================================================================
+      # B / C. Postgres — resolve DB, then run schema + data checks
+      # ==================================================================
+      - name: Resolve solarpro-postgres external URL
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: B. Schema smoke — 3 CI tables present with expected shape
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "-- B1 tables present --"
+          psql "$DATABASE_URL" -c "
+            SELECT table_name,
+                   (SELECT COUNT(*) FROM information_schema.columns
+                     WHERE c.table_schema='public' AND c.table_name=t.table_name) AS n_cols
+              FROM information_schema.tables t
+             CROSS JOIN LATERAL (SELECT table_name) c
+             WHERE t.table_schema='public'
+               AND t.table_name IN (
+                 'capital_investment_projects',
+                 'capital_investment_opportunities',
+                 'capital_investment_agent_runs'
+               )
+             ORDER BY table_name;"
+
+          echo ""
+          echo "-- B2 capital_investment_projects column layout --"
+          psql "$DATABASE_URL" -c "
+            SELECT column_name, data_type, is_nullable, column_default
+              FROM information_schema.columns
+             WHERE table_schema='public'
+               AND table_name='capital_investment_projects'
+             ORDER BY ordinal_position;"
+
+          echo ""
+          echo "-- B3 must-have columns for the create-project fix --"
+          psql "$DATABASE_URL" -c "
+            SELECT
+              bool_or(column_name='target_kwp')       AS has_target_kwp,
+              bool_or(column_name='project_type')     AS has_project_type,
+              bool_or(column_name='currency')         AS has_currency,
+              bool_or(column_name='pv_config')        AS has_pv_config,
+              bool_or(column_name='finance_config')   AS has_finance_config
+              FROM information_schema.columns
+             WHERE table_schema='public'
+               AND table_name='capital_investment_projects';"
+
+      - name: C. Data smoke — row counts + fix verification
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "-- C1 row counts across CI tables --"
+          psql "$DATABASE_URL" -c "
+            SELECT 'capital_investment_projects'      AS tbl, COUNT(*)::int AS rows FROM capital_investment_projects
+            UNION ALL SELECT 'capital_investment_opportunities',      COUNT(*)::int FROM capital_investment_opportunities
+            UNION ALL SELECT 'capital_investment_agent_runs',         COUNT(*)::int FROM capital_investment_agent_runs;"
+
+          echo ""
+          echo "-- C2 projects created since the fix landed (SHA $FIX_SHA @ ~14:33 UTC 2026-07-02) --"
+          psql "$DATABASE_URL" -c "
+            SELECT
+              COUNT(*)                                        AS total_projects,
+              COUNT(*) FILTER (WHERE target_kwp IS NOT NULL)  AS with_target_kwp,
+              COUNT(*) FILTER (WHERE created_at::timestamp >= '2026-07-02 14:33'::timestamp) AS created_post_fix,
+              COUNT(*) FILTER (WHERE created_at::timestamp >= '2026-07-02 14:33'::timestamp
+                               AND target_kwp IS NOT NULL)    AS post_fix_with_target_kwp,
+              COUNT(DISTINCT user_id)                         AS distinct_owners
+              FROM capital_investment_projects;"
+
+          echo ""
+          echo "-- C3 latest 15 projects (any user) --"
+          psql "$DATABASE_URL" -c "
+            SELECT id, user_id, project_name,
+                   COALESCE(target_kwp::text, 'NULL')     AS target_kwp,
+                   project_status, currency,
+                   created_at
+              FROM capital_investment_projects
+             ORDER BY created_at DESC NULLS LAST, id DESC
+             LIMIT 15;"
+
+          echo ""
+          echo "-- C4 latest 10 projects for TARGET_USER = $TARGET_USER --"
+          psql "$DATABASE_URL" -c "
+            SELECT p.id, p.project_name,
+                   COALESCE(p.target_kwp::text,'NULL') AS target_kwp,
+                   p.project_status, p.currency,
+                   p.created_at
+              FROM capital_investment_projects p
+              JOIN users u ON u.id = p.user_id
+             WHERE u.username = '$TARGET_USER'
+             ORDER BY p.created_at DESC NULLS LAST, p.id DESC
+             LIMIT 10;"
+
+          echo ""
+          echo "-- C5 tier state for TARGET_USER = $TARGET_USER --"
+          psql "$DATABASE_URL" -c "
+            SELECT username, is_admin, plan, role, email_verified,
+                   CASE WHEN COALESCE(is_admin::int,0)=1              THEN 3
+                        WHEN plan='enterprise'                         THEN 3
+                        WHEN plan IN ('professional','business')       THEN 2
+                        WHEN plan='starter'                            THEN 1
+                        ELSE                                                0
+                   END AS effective_ci_level,
+                   CASE WHEN COALESCE(is_admin::int,0)=1
+                         OR plan IN ('professional','business','enterprise')
+                        THEN 'PASS'
+                        ELSE 'FAIL -> would redirect to /upgrade'
+                   END AS tier_gate_new
+              FROM users
+             WHERE username='$TARGET_USER';"
+
+      # ==================================================================
+      # D. Auxiliary — Keycloak + SolarPro global health
+      # ==================================================================
+      - name: D. Keycloak + wider SolarPro sanity
+        run: |
+          set +e
+          echo "-- D1 Keycloak realm discovery --"
+          disc=$(curl -s -o /tmp/disc.json -w "%{http_code}|%{time_total}" \
+                      --max-time 15 "$AUTH/.well-known/openid-configuration")
+          echo "  discovery = $disc"
+          if [ "${disc%%|*}" = "200" ]; then
+            jq -r '{issuer, authorization_endpoint, token_endpoint} | to_entries | .[] | "    " + .key + " = " + (.value|tostring)' /tmp/disc.json 2>/dev/null | head -6
+          fi
+          echo ""
+
+          echo "-- D2 KC realm root --"
+          rrc=$(curl -s -o /dev/null -w "%{http_code}|%{time_total}" \
+                     --max-time 15 "$AUTH")
+          echo "  realm root = $rrc"
+          echo ""
+
+          echo "-- D3 SolarPro auxiliary surfaces --"
+          for path in "/dashboard" "/login" "/auth/login" "/marketplace" "/admin"; do
+            code=$(curl -s -o /dev/null -w "%{http_code}|%{time_total}" \
+                        --max-time 30 "$BASE$path")
+            echo "  $code  $path"
+          done
+
+      # ==================================================================
+      # Summary
+      # ==================================================================
+      - name: Summary
+        run: |
+          echo "======================================================="
+          echo "Generation Station Design — full live test suite result"
+          echo "======================================================="
+          echo "HTTP smoke: ${{ steps.http.outputs.http_ok }} OK / ${{ steps.http.outputs.http_fail }} FAIL"
+          echo "See Section B/C above for schema + data outcome."
+          echo "Fix SHA in check:  $FIX_SHA"
