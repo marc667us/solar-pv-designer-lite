@@ -1,0 +1,124 @@
+# One-shot diag: surface the plan / is_admin / role for the operator's
+# row so we can tell whether the Generation Station Design tier gate
+# on /large-scale-solar/new is throwing the user to /upgrade because
+# their plan on live Postgres is not what they think it is.
+#
+# Runs against live Postgres via the standard Render-connection-info
+# path used by the other Diag workflows.
+
+name: Diag Generation Station User Tier
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: "SolarPro username to inspect (default: marc667us)"
+        required: false
+        default: "marc667us"
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      TARGET_USER: ${{ inputs.username || 'marc667us' }}
+    steps:
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: users row for TARGET_USER
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          echo "--- users row for '$TARGET_USER' ---"
+          psql "$DATABASE_URL" -c "
+            SELECT id, username, email,
+                   COALESCE(is_admin::text, 'NULL')   AS is_admin,
+                   COALESCE(plan, 'NULL')             AS plan,
+                   COALESCE(role, 'NULL')             AS role,
+                   COALESCE(trial_end_date::text, 'NULL') AS trial_end,
+                   COALESCE(email_verified::text, 'NULL') AS email_verified
+              FROM users
+             WHERE username = '$TARGET_USER';"
+
+      - name: what the app's tier gate would compute
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          echo "--- tier gate simulation ---"
+          echo "The Capital Investment module treats admin as enterprise regardless of plan."
+          echo "Otherwise plan -> level mapping: free=0, starter=1, professional=2, business=2, enterprise=3"
+          echo "CI_LEVEL_SETUP is 2 (needed to hit /large-scale-solar/new)"
+          echo ""
+          psql "$DATABASE_URL" -c "
+            SELECT username, is_admin, plan,
+                   CASE
+                     WHEN COALESCE(is_admin::int, 0) = 1     THEN 'enterprise (via is_admin=1)'
+                     WHEN plan = 'enterprise'                 THEN 'enterprise (via plan)'
+                     WHEN plan IN ('professional','business') THEN 'professional/business'
+                     WHEN plan = 'starter'                    THEN 'starter'
+                     ELSE                                          'free'
+                   END AS effective_tier,
+                   CASE
+                     WHEN COALESCE(is_admin::int, 0) = 1                          THEN 3
+                     WHEN plan = 'enterprise'                                     THEN 3
+                     WHEN plan IN ('professional','business')                     THEN 2
+                     WHEN plan = 'starter'                                        THEN 1
+                     ELSE                                                              0
+                   END AS effective_level,
+                   CASE
+                     WHEN COALESCE(is_admin::int, 0) = 1                          THEN 'YES'
+                     WHEN plan IN ('professional','business','enterprise')        THEN 'YES'
+                     ELSE                                                              'no (would redirect to /upgrade)'
+                   END AS passes_tier_gate_new
+              FROM users
+             WHERE username = '$TARGET_USER';"
+
+      - name: any capital_investment_projects for this user
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          echo "--- capital_investment_projects for this user (last 10) ---"
+          psql "$DATABASE_URL" -c "
+            SELECT p.id, p.project_name, p.target_kwp,
+                   p.project_status, p.currency,
+                   p.updated_at
+              FROM capital_investment_projects p
+              JOIN users u ON u.id = p.user_id
+             WHERE u.username = '$TARGET_USER'
+             ORDER BY p.updated_at DESC NULLS LAST, p.id DESC
+             LIMIT 10;"
+          echo ""
+          echo "--- capital_investment_projects table shape (has target_kwp?) ---"
+          psql "$DATABASE_URL" -c "
+            SELECT column_name, data_type
+              FROM information_schema.columns
+             WHERE table_schema='public'
+               AND table_name='capital_investment_projects'
+             ORDER BY ordinal_position;"
