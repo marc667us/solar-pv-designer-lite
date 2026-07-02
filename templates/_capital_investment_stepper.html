@@ -1,91 +1,189 @@
-{# Reusable horizontal 14-step progress stepper.
+{# Reusable horizontal 14-step sliding progress bar.
    Callers must pass:
      progress = list of dicts { n, label, done, active, endpoint, field }
-     pid      = project id (optional; if omitted, dots are static / non-clickable)
+     pid      = project id (optional; if omitted, markers are static / non-clickable)
    Optional `size` = 'sm' | 'md' (default md).
+
+   Renders a real sliding progress bar (rail + gold fill + absolute-
+   positioned step markers), not a dots+lines row. Fill width = fraction
+   of steps done; active step marker sits on the bar at its fractional
+   position with a gold pulse; done steps show a small green check.
 #}
 {% set _sz = size if size is defined else 'md' %}
+{% set total_steps = progress|length %}
+{% set done_count = progress|selectattr('done')|list|length %}
+{% set fill_pct = (done_count / total_steps * 100) if total_steps else 0 %}
+{% set active = namespace(index=0, n=1, label='') %}
+{% for step in progress %}
+  {% if step.active %}
+    {% set active.index = loop.index0 %}
+    {% set active.n = step.n %}
+    {% set active.label = step.label %}
+  {% endif %}
+{% endfor %}
+{% set active_pct = (active.index / (total_steps - 1) * 100) if total_steps > 1 else 0 %}
 <style>
-  .ci-stepper { position: relative; padding: 10px 2px; overflow-x: auto; scrollbar-width: thin; }
+  .ci-stepper {
+    overflow-x: auto;
+    padding: 22px 4px 6px;
+    scrollbar-width: thin;
+  }
   .ci-stepper::-webkit-scrollbar { height: 6px; }
-  .ci-stepper::-webkit-scrollbar-thumb { background: #1e1e3a; border-radius: 3px; }
-  .ci-stepper-track { display: flex; align-items: center; gap: 0; min-width: 100%; }
-  .ci-step { display: flex; flex-direction: column; align-items: center;
-             min-width: 62px; flex-shrink: 0; }
-  .ci-step a, .ci-step .ci-step-static {
-    text-decoration: none; color: inherit; display: block;
-    cursor: default;
-  }
-  .ci-step a { cursor: pointer; }
-  .ci-step-dot {
-    width: 34px; height: 34px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 900; font-size: 13px;
-    background: #1e1e3a; color: #6a6a8a;
-    border: 2px solid #1e1e3a;
-    transition: transform 150ms, box-shadow 200ms, background 200ms;
+  .ci-stepper::-webkit-scrollbar-thumb { background: #1e1e3a; border-radius: 999px; }
+
+  .ci-progress-wrap {
     position: relative;
+    min-width: 620px;
+    width: 100%;
+    padding: 22px 18px 4px 18px;
   }
-  .ci-step.done .ci-step-dot {
-    background: #1a4a2a; color: #7fdb9f; border-color: #2a8a4a;
+
+  /* The rail + fill: a single 10 px pill with a gold fill overlay. */
+  .ci-progress-bar {
+    position: relative;
+    height: 10px;
+    border-radius: 999px;
+    background: #1e1e3a;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.55);
   }
-  .ci-step.active .ci-step-dot {
-    background: #f59e0b; color: #000; border-color: #f59e0b;
+  .ci-progress-fill {
+    position: absolute; top: 0; left: 0; bottom: 0;
+    background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
+    border-radius: 999px;
+    transition: width 420ms ease-out;
+    box-shadow: 0 0 8px rgba(245,158,11,.45);
+  }
+
+  /* Every step marker sits on the bar, positioned by --pct. */
+  .ci-step-marker {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    text-decoration: none;
+    color: inherit;
+    z-index: 2;
+  }
+  .ci-step-dot {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #1e1e3a; border: 2px solid #2a2a4a;
+    display: flex; align-items: center; justify-content: center;
+    color: #6a6a8a; font-weight: 800; font-size: 10.5px;
+    transition: transform 180ms, box-shadow 200ms, background 200ms;
+  }
+  .ci-step-marker.done .ci-step-dot {
+    background: #1a4a2a; border-color: #2a8a4a; color: #7fdb9f;
+  }
+  .ci-step-marker.done .ci-step-dot i { font-size: 12px; line-height: 1; }
+  .ci-step-marker.active .ci-step-dot {
+    width: 34px; height: 34px; font-size: 13px;
+    background: #f59e0b; border-color: #f59e0b; color: #111;
     box-shadow: 0 0 0 4px rgba(245,158,11,.22);
     animation: cipulse 1.6s infinite;
   }
-  .ci-step a:hover .ci-step-dot {
-    transform: scale(1.12);
+  .ci-step-marker[href]:hover .ci-step-dot {
+    transform: scale(1.14);
     box-shadow: 0 0 0 6px rgba(245,158,11,.16);
   }
-  .ci-step-label {
-    font-size: 10.5px; color: #8686a6; margin-top: 5px; text-align: center;
-    white-space: nowrap; max-width: 70px; overflow: hidden; text-overflow: ellipsis;
-    letter-spacing: .2px;
+  .ci-step-marker[href]:focus-visible { outline: none; }
+  .ci-step-marker[href]:focus-visible .ci-step-dot {
+    transform: scale(1.14);
+    box-shadow: 0 0 0 6px rgba(245,158,11,.28);
   }
-  .ci-step.done .ci-step-label { color: #7fdb9f; }
-  .ci-step.active .ci-step-label { color: #f59e0b; font-weight: 700; }
-  .ci-step-line {
-    flex-grow: 1; height: 2px; background: #1e1e3a; min-width: 10px;
-    margin: -18px 0 0 0;   /* align to dot centre */
-    align-self: flex-start;
-    margin-top: 16px;
-    transition: background 200ms;
+
+  /* Numeric labels under the bar. */
+  .ci-step-num {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translate(-50%, 4px);
+    font-size: 10.5px;
+    color: #8686a6;
+    letter-spacing: .3px;
+    white-space: nowrap;
   }
-  .ci-step-line.done { background: #2a8a4a; }
+  .ci-step-marker.done .ci-step-num { color: #7fdb9f; }
+  .ci-step-marker.active .ci-step-num { color: #f59e0b; font-weight: 700; }
+
+  /* Active step's short label sits ABOVE the bar so it never collides
+     with the numeric row below. `--label-shift` lets the callsite pin
+     it flush at the very-left or very-right positions where a plain
+     translate(-50%) would clip. */
+  .ci-active-label {
+    position: absolute;
+    top: -4px;
+    left: 0;
+    transform: translate(var(--label-shift, -50%), -100%);
+    background: #f59e0b;
+    color: #111;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0,0,0,.45);
+  }
+  .ci-active-label::after {
+    content: "";
+    position: absolute;
+    top: 100%; left: 50%;
+    transform: translate(-50%, -1px);
+    border: 5px solid transparent;
+    border-top-color: #f59e0b;
+  }
+
   @keyframes cipulse {
     0%, 100% { box-shadow: 0 0 0 4px rgba(245,158,11,.22); }
-    50%      { box-shadow: 0 0 0 8px rgba(245,158,11,.10); }
+    50%      { box-shadow: 0 0 0 8px rgba(245,158,11,.08); }
   }
-  /* Small variant */
-  .ci-stepper.sm .ci-step-dot { width: 26px; height: 26px; font-size: 11px; }
-  .ci-stepper.sm .ci-step-label { font-size: 9.5px; max-width: 56px; }
-  .ci-stepper.sm .ci-step { min-width: 50px; }
-  .ci-stepper.sm .ci-step-line { margin-top: 12px; min-width: 6px; }
+
+  /* --- Small variant (sm) --- */
+  .ci-stepper.sm .ci-progress-wrap { min-width: 480px; padding: 20px 14px 4px; }
+  .ci-stepper.sm .ci-progress-bar  { height: 8px; }
+  .ci-stepper.sm .ci-step-dot      { width: 18px; height: 18px; font-size: 9.5px; }
+  .ci-stepper.sm .ci-step-marker.done .ci-step-dot i { font-size: 10px; }
+  .ci-stepper.sm .ci-step-marker.active .ci-step-dot { width: 28px; height: 28px; font-size: 11.5px; }
+  .ci-stepper.sm .ci-step-num      { font-size: 9.5px; }
+  .ci-stepper.sm .ci-active-label  { font-size: 10px; padding: 2px 8px; }
 </style>
-<div class="ci-stepper {% if _sz == 'sm' %}sm{% endif %}">
-  <div class="ci-stepper-track">
-    {% for step in progress %}
-      {% if not loop.first %}
-        <div class="ci-step-line {% if step.done %}done{% endif %}"></div>
+<div class="ci-stepper{% if _sz == 'sm' %} sm{% endif %}">
+  <div class="ci-progress-wrap">
+    <div class="ci-progress-bar">
+      <div class="ci-progress-fill" style="width: {{ '%.2f'|format(fill_pct) }}%;"></div>
+
+      {# Active-step floating pill above the bar. #}
+      {% if total_steps > 0 %}
+        <div class="ci-active-label"
+             style="left: {{ '%.2f'|format(active_pct) }}%;{% if active_pct <= 5 %} --label-shift: 0;{% elif active_pct >= 95 %} --label-shift: -100%;{% endif %}"
+             title="Step {{ active.n }} — {{ active.label }} (current)">
+          Step {{ active.n }} · {{ active.label }}
+        </div>
       {% endif %}
-      <div class="ci-step {% if step.done %}done{% endif %} {% if step.active %}active{% endif %}">
+
+      {# Every step marker at its fractional position. #}
+      {% for step in progress %}
+        {% set pct = (loop.index0 / (total_steps - 1) * 100) if total_steps > 1 else 0 %}
+        {% set klass = 'ci-step-marker' + (' done' if step.done else '') + (' active' if step.active else '') %}
         {% if step.endpoint and pid %}
-          <a href="{{ url_for(step.endpoint, pid=pid) }}"
-             title="Step {{ step.n }} — {{ step.label }}{% if step.done %} (done){% elif step.active %} (next){% endif %}">
-            <div class="ci-step-dot">
+          <a class="{{ klass }}"
+             href="{{ url_for(step.endpoint, pid=pid) }}"
+             style="left: {{ '%.2f'|format(pct) }}%;"
+             title="Step {{ step.n }} — {{ step.label }}{% if step.done %} (done){% elif step.active %} (current){% endif %}">
+            <span class="ci-step-dot">
               {% if step.done %}<i class="bi bi-check-lg"></i>{% else %}{{ step.n }}{% endif %}
-            </div>
-            <div class="ci-step-label">{{ step.label }}</div>
+            </span>
+            <span class="ci-step-num">{{ step.n }}</span>
           </a>
         {% else %}
-          <div class="ci-step-static"
-               title="Step {{ step.n }} — {{ step.label }}">
-            <div class="ci-step-dot">{{ step.n }}</div>
-            <div class="ci-step-label">{{ step.label }}</div>
-          </div>
+          <span class="{{ klass }}"
+                style="left: {{ '%.2f'|format(pct) }}%;"
+                title="Step {{ step.n }} — {{ step.label }}{% if step.done %} (done){% elif step.active %} (current){% endif %}">
+            <span class="ci-step-dot">
+              {% if step.done %}<i class="bi bi-check-lg"></i>{% else %}{{ step.n }}{% endif %}
+            </span>
+            <span class="ci-step-num">{{ step.n }}</span>
+          </span>
         {% endif %}
-      </div>
-    {% endfor %}
+      {% endfor %}
+    </div>
   </div>
 </div>
