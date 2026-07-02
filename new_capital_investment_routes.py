@@ -2918,6 +2918,14 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         tier = _ci_tier_of(user)
         tier_level = _ci_level_of(user)
         uid = session.get("user_id")
+        try:
+            from flask import current_app
+            current_app.logger.info(
+                "capital_investment _landing: uid=%s tier=%s level=%s",
+                uid, tier, tier_level,
+            )
+        except Exception:
+            pass
         if uid and tier_level >= CI_LEVEL_SETUP:
             try:
                 with get_db() as c:
@@ -2999,7 +3007,26 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                endpoint="capital_investment_new")
     @login_required
     def _new():
-        if (g := _gate(CI_LEVEL_SETUP)) is not None: return g
+        try:
+            from flask import current_app
+            _u = current_user()
+            current_app.logger.info(
+                "capital_investment _new: entry method=%s uid=%s tier=%s level=%s",
+                request.method, session.get("user_id"),
+                _ci_tier_of(_u), _ci_level_of(_u),
+            )
+        except Exception:
+            pass
+        if (g := _gate(CI_LEVEL_SETUP)) is not None:
+            try:
+                from flask import current_app
+                current_app.logger.info(
+                    "capital_investment _new: tier gate redirect to /upgrade uid=%s",
+                    session.get("user_id"),
+                )
+            except Exception:
+                pass
+            return g
         _ensure_capital_investment_schema(get_db)
         uid = session["user_id"]
 
@@ -3199,6 +3226,39 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                 f"WHERE id=? AND user_id=?",
                 (value, pid, uid),
             )
+
+    # ------------------------------------------------------------------
+    # DIAG - who am I? Any logged-in user. Reveals the state that drives
+    # the tier gate on /large-scale-solar/new. Use to reproduce hiccups.
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/diag/whoami",
+               endpoint="capital_investment_diag_whoami")
+    @login_required
+    def _diag_whoami():
+        user = current_user()
+        out: dict[str, Any] = {
+            "session_user_id":  session.get("user_id"),
+            "session_username": session.get("username"),
+            "current_user_row": None,
+            "user_tier":        _ci_tier_of(user),
+            "user_level":       _ci_level_of(user),
+            "tier_labels":      CI_TIER_LABEL,
+            "level_thresholds": {
+                "CI_LEVEL_MARKETING": CI_LEVEL_MARKETING,
+                "CI_LEVEL_DEMO":      CI_LEVEL_DEMO,
+                "CI_LEVEL_SETUP":     CI_LEVEL_SETUP,
+                "CI_LEVEL_FULL":      CI_LEVEL_FULL,
+            },
+            "tier_gate_new":       _ci_level_of(user) >= CI_LEVEL_SETUP,
+            "tier_gate_full":      _ci_level_of(user) >= CI_LEVEL_FULL,
+        }
+        if user is not None:
+            keys = ("id", "username", "email", "is_admin", "plan", "role")
+            row_dict: dict[str, Any] = {}
+            for k in keys:
+                row_dict[k] = _row_get(user, k, None)
+            out["current_user_row"] = row_dict
+        return jsonify(out)
 
     # ------------------------------------------------------------------
     # DIAG - inspect live schema state (admin-only)

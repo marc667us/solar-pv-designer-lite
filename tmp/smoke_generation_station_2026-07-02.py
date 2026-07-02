@@ -172,9 +172,11 @@ def run() -> int:
 
     # --- Free-plan user is gated to /upgrade ---
     print("\n[2] Free-plan user is redirected to /upgrade (tier gate holds) ...")
-    _register_free_user(app.test_client(), "smoketest_free", "smoketest-pass-1234")
+    import uuid as _uuid
+    _free_name = f"smoketest_free_{_uuid.uuid4().hex[:8]}"
+    _register_free_user(app.test_client(), _free_name, "smoketest-pass-1234")
     with app.test_client() as client:
-        _login_as(client, "smoketest_free")
+        _login_as(client, _free_name)
         resp = client.get("/large-scale-solar/new", follow_redirects=False)
         check(resp.status_code in (302, 303),
               f"GET /large-scale-solar/new returned 3xx for free user (got {resp.status_code})")
