@@ -62,7 +62,6 @@ jobs:
                    COALESCE(is_admin::text, 'NULL')   AS is_admin,
                    COALESCE(plan, 'NULL')             AS plan,
                    COALESCE(role, 'NULL')             AS role,
-                   COALESCE(trial_end_date::text, 'NULL') AS trial_end,
                    COALESCE(email_verified::text, 'NULL') AS email_verified
               FROM users
              WHERE username = '$TARGET_USER';"
