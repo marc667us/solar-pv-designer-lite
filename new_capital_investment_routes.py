@@ -997,6 +997,657 @@ COUNTRY_REGULATORY_FRAMEWORKS: dict[str, dict[str, Any]] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Step 14 - AI Agent specialists.
+#
+# Each agent is a pure Python function that takes the project dict and
+# returns a structured report: {status, score (0-100), findings, recs}.
+# The orchestrator dispatches all agents in a fixed order, aggregates
+# scores, and can optionally add an LLM-generated narrative through the
+# existing api_manager AI chain (Claude -> OpenRouter -> Ollama -> GH
+# Models -> rule-based). No Google ADK; reuses SolarPro's plumbing.
+# ---------------------------------------------------------------------------
+
+AGENT_DEPARTMENTS: list[tuple[str, str, str, str]] = [
+    # (code, label, department, icon)
+    ("pv_design",      "PV Design Agent",              "Engineering", "bi-sun"),
+    ("electrical",     "Electrical Design Agent",      "Engineering", "bi-plug"),
+    ("civil",          "Civil Design Agent",           "Engineering", "bi-bricks"),
+    ("structural",     "Structural Agent",             "Engineering", "bi-columns-gap"),
+    ("ict",            "ICT Infrastructure Agent",     "Engineering", "bi-hdd-network"),
+    ("scada",          "SCADA Agent",                  "Engineering", "bi-cpu"),
+    ("grid",           "Grid Connection Agent",        "Engineering", "bi-lightning-charge"),
+    ("financial",      "Financial Engineering Agent",  "Finance",     "bi-cash-coin"),
+    ("investment",     "Investment Agent",             "Finance",     "bi-bank"),
+    ("risk",           "Risk Analysis Agent",          "Finance",     "bi-shield-exclamation"),
+    ("marketplace",    "Marketplace Agent",            "Procurement", "bi-shop"),
+    ("boq",            "BOQ Agent",                    "Procurement", "bi-list-check"),
+    ("report_writer",  "Report Writer Agent",          "Reporting",   "bi-file-earmark-text"),
+    ("qa_qc",          "QA/QC Agent",                  "Governance",  "bi-clipboard-check"),
+    ("reviewer",       "Project Reviewer Agent",       "Governance",  "bi-check2-circle"),
+]
+AGENT_CODES: set[str] = {c for c, _, _, _ in AGENT_DEPARTMENTS}
+
+
+def _f(v: Any, default: float = 0.0) -> float:
+    try:
+        if v in (None, "", "None"):
+            return default
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _rating(score: int) -> str:
+    if score >= 85: return "A - excellent"
+    if score >= 70: return "B - good"
+    if score >= 55: return "C - acceptable"
+    if score >= 40: return "D - marginal"
+    return "F - not ready"
+
+
+def _agent_pv_design(proj: dict[str, Any]) -> dict[str, Any]:
+    pv = _safe_json(proj.get("pv_config"))
+    site = _safe_json(proj.get("site_config"))
+    sizing = pv.get("sizing") or {}
+    kwp = _f(sizing.get("kwp_input") or pv.get("kwp") or proj.get("target_kwp"))
+    findings, recs = [], []
+    score = 100
+    if kwp <= 0:
+        findings.append("kWp not set (Step 7 not completed)")
+        recs.append("Complete Step 7 with a plant capacity")
+        score = 15
+    else:
+        # DC/AC ratio sanity
+        dcac = _f(pv.get("dc_ac_ratio"), 1.20)
+        if dcac < 1.05:
+            findings.append(f"DC/AC ratio {dcac:.2f} is low - inverters over-sized, CAPEX inefficient")
+            recs.append("Target DC/AC 1.15-1.30 for most tropical climates")
+            score -= 10
+        elif dcac > 1.40:
+            findings.append(f"DC/AC ratio {dcac:.2f} is high - meaningful clipping losses expected")
+            recs.append("Model clipping loss and validate against inverter curve")
+            score -= 10
+        # Tilt sanity for Ghana (near equator)
+        gps_lat = _f(proj.get("gps_lat"), 6.0)
+        tilt = _f(pv.get("tilt_deg"), 10)
+        ideal_tilt = abs(gps_lat)
+        if abs(tilt - ideal_tilt) > 10 and pv.get("mounting") == "fixed_tilt":
+            findings.append(f"Fixed tilt {tilt}deg differs by {abs(tilt-ideal_tilt):.0f}deg from latitude-optimal ({ideal_tilt:.0f}deg)")
+            recs.append("Snap tilt closer to latitude unless site-specific reason")
+            score -= 5
+        # Land area vs capacity (~1.5 ha per MW for utility ground-mount)
+        land_ha = _f(site.get("land_area_ha"))
+        needed_ha = kwp / 1000.0 * 1.5
+        if land_ha > 0 and land_ha < needed_ha:
+            findings.append(f"Land {land_ha:.1f} ha may be tight for {kwp/1000:.1f} MW (~{needed_ha:.1f} ha recommended)")
+            recs.append("Verify with a bifacial + HSAT layout or increase land area")
+            score -= 10
+        # Availability
+        avail = _f(pv.get("availability_pct"), 98)
+        if avail < 96:
+            findings.append(f"Availability {avail}% is lower than utility norm (98-99%)")
+            score -= 5
+        if not findings:
+            findings.append("PV design values are all within utility-scale norms")
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": max(0, min(100, score)),
+            "findings": findings, "recs": recs,
+            "summary": f"PV design rating: {_rating(max(0, score))}"}
+
+
+def _agent_electrical(proj: dict[str, Any]) -> dict[str, Any]:
+    elec = _safe_json(proj.get("electrical_config"))
+    pv = _safe_json(proj.get("pv_config"))
+    sizing = pv.get("sizing") or {}
+    selected = set(elec.get("selected") or [])
+    findings, recs = [], []
+    score = 100
+    core = {"internal_installation", "hv_distribution", "lv_distribution",
+            "inverters", "transformers", "earthing", "lightning_protection"}
+    missing = core - selected
+    if missing:
+        findings.append(f"Missing core electrical scope: {', '.join(sorted(missing))}")
+        recs.append("Enable the missing services on Step 6 before proceeding")
+        score -= 8 * len(missing)
+    ac_kw = _f(sizing.get("inverter_ac_kw"))
+    if ac_kw > 5000 and "hv_switchgear" not in selected:
+        findings.append(f"Plant AC {ac_kw/1000:.1f} MW requires HV switchgear but none selected")
+        score -= 10
+    if "hv_distribution" in selected and "rmu" not in selected:
+        findings.append("HV distribution enabled without RMU - MV interconnection likely incomplete")
+        recs.append("Add RMU on Step 6 or note bypass rationale")
+        score -= 5
+    if "scada" in selected and "lan" not in selected:
+        findings.append("SCADA enabled without LAN backbone")
+        recs.append("Enable LAN on Step 6 for SCADA connectivity")
+        score -= 3
+    if not findings:
+        findings.append("Electrical scope is complete for a utility-scale plant")
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": max(0, min(100, score)),
+            "findings": findings, "recs": recs,
+            "summary": f"Electrical rating: {_rating(max(0, score))}"}
+
+
+def _agent_civil(proj: dict[str, Any]) -> dict[str, Any]:
+    site = _safe_json(proj.get("site_config"))
+    fac = _safe_json(proj.get("facility_config"))
+    findings, recs = [], []
+    score = 100
+    slope = (site.get("slope") or "").strip()
+    if slope == "gt_20":
+        findings.append("Slope > 20% - major grading + geotech needed")
+        recs.append("Add 6-9% civil CAPEX contingency")
+        score -= 20
+    elif slope == "10_20":
+        findings.append("Slope 10-20% - grading + drainage attention needed")
+        score -= 8
+    flood = site.get("flood_risk")
+    if flood == "high":
+        findings.append("High flood risk - elevated mounting + drainage compulsory")
+        recs.append("Add drainage + PV table height provision")
+        score -= 15
+    access = site.get("access_road")
+    if access in ("dirt_seasonal", "none"):
+        findings.append(f"Access road '{access}' - construction access + module delivery risk")
+        recs.append("Budget for construction access improvement")
+        score -= 10
+    soil = site.get("soil")
+    if soil == "marshy":
+        findings.append("Marshy soil - deep pile foundations mandatory")
+        recs.append("Instruct a geotech CPT/SPT campaign")
+        score -= 12
+    if soil == "unknown":
+        findings.append("Soil type unknown - geotech survey required")
+        recs.append("Commission a geotech survey before EPC bid")
+        score -= 6
+    ex_works = fac.get("external_works") or []
+    if "drainage" not in ex_works and flood in ("low", "medium", "high"):
+        findings.append(f"Flood risk '{flood}' but drainage not enabled in Step 4 external works")
+        recs.append("Enable drainage on Step 4")
+        score -= 5
+    if not findings:
+        findings.append("Civil / geotech risk profile is low for the given site data")
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": max(0, min(100, score)),
+            "findings": findings, "recs": recs,
+            "summary": f"Civil rating: {_rating(max(0, score))}"}
+
+
+def _agent_structural(proj: dict[str, Any]) -> dict[str, Any]:
+    site = _safe_json(proj.get("site_config"))
+    pv = _safe_json(proj.get("pv_config"))
+    findings, recs = [], []
+    score = 100
+    wind = site.get("wind_zone")
+    mounting = pv.get("mounting")
+    if wind == "cyclone":
+        findings.append("Cyclone-prone zone")
+        recs.append("Specify structures certified to IEC 61400 Class-I or equivalent")
+        score -= 20
+        if mounting == "single_axis":
+            findings.append("Single-axis trackers in cyclone zone - stow angle + control required")
+            score -= 10
+    elif wind == "z3_high":
+        findings.append("High wind zone - upgrade module clamps + rail gauge")
+        score -= 8
+    seismic = site.get("seismic_zone")
+    if seismic in ("zone_3", "zone_4"):
+        findings.append(f"Seismic {seismic} - anchor & bracing design attention")
+        recs.append("Structural PE sign-off on foundations + transformer base")
+        score -= 10
+    if not findings:
+        findings.append("Structural loading profile is standard for site data given")
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": max(0, min(100, score)),
+            "findings": findings, "recs": recs,
+            "summary": f"Structural rating: {_rating(max(0, score))}"}
+
+
+def _agent_ict(proj: dict[str, Any]) -> dict[str, Any]:
+    tech = _safe_json(proj.get("technology_config"))
+    selected = set(tech.get("selected") or [])
+    findings, recs = [], []
+    score = 100
+    if not selected:
+        findings.append("No technology stack selected on Step 5")
+        recs.append("Enable at least SCADA + monitoring + cyber security")
+        score = 25
+        return {"status": "warning", "score": score,
+                "findings": findings, "recs": recs,
+                "summary": f"ICT rating: {_rating(score)}"}
+    if "cyber" not in selected:
+        findings.append("Cyber security not selected - not bankable for utility off-take")
+        recs.append("Enable cyber security + firewall on Step 5")
+        score -= 15
+    if "gps_sync" not in selected and "scada" in selected:
+        findings.append("SCADA without GPS time sync - IEC 61850 event correlation degraded")
+        score -= 8
+    if "fibre" not in selected and "ind_eth" not in selected:
+        findings.append("Neither fibre nor industrial Ethernet backbone selected")
+        recs.append("Enable fibre for the plant collection network")
+        score -= 12
+    if "backup_srv" not in selected and "cloud_backup" not in selected:
+        findings.append("No backup strategy (backup server nor cloud backup)")
+        recs.append("Choose at least one backup path for SCADA historian")
+        score -= 8
+    if not findings:
+        findings.append("ICT infrastructure is comprehensive")
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": max(0, min(100, score)),
+            "findings": findings, "recs": recs,
+            "summary": f"ICT rating: {_rating(max(0, score))}"}
+
+
+def _agent_scada(proj: dict[str, Any]) -> dict[str, Any]:
+    tech = _safe_json(proj.get("technology_config"))
+    elec = _safe_json(proj.get("electrical_config"))
+    s = set(tech.get("selected") or [])
+    e = set(elec.get("selected") or [])
+    findings, recs = [], []
+    score = 100
+    if "scada" not in s:
+        findings.append("SCADA not enabled in Step 5 technology stack")
+        recs.append("Enable SCADA + EMS + PPC on Step 5")
+        score -= 25
+    if "scada" in s and "scada" not in e:
+        findings.append("SCADA in tech stack but no SCADA service on Step 6 - cabling scope missing")
+        recs.append("Enable SCADA in Step 6 electrical services")
+        score -= 8
+    if "ems" not in s:
+        findings.append("EMS not selected - dispatch optimisation missing")
+        recs.append("Enable EMS on Step 5")
+        score -= 5
+    if "ppc" not in s:
+        findings.append("Power Plant Controller (PPC) not selected - grid-code compliance risk")
+        recs.append("Enable PPC on Step 5 to meet reactive/frequency response requirements")
+        score -= 10
+    if "weather" not in s:
+        findings.append("Weather station missing - performance model can't be measured")
+        recs.append("Enable weather station on Step 5")
+        score -= 3
+    if not findings:
+        findings.append("SCADA / EMS / PPC stack is complete")
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": max(0, min(100, score)),
+            "findings": findings, "recs": recs,
+            "summary": f"SCADA rating: {_rating(max(0, score))}"}
+
+
+def _agent_grid(proj: dict[str, Any]) -> dict[str, Any]:
+    site = _safe_json(proj.get("site_config"))
+    elec = _safe_json(proj.get("electrical_config"))
+    pv = _safe_json(proj.get("pv_config"))
+    sizing = pv.get("sizing") or {}
+    ac_kw = _f(sizing.get("inverter_ac_kw"))
+    findings, recs = [], []
+    score = 100
+    dist_km = _f(site.get("grid_distance_km"), -1)
+    if dist_km < 0:
+        findings.append("Grid distance not set on Step 3")
+        score -= 8
+    elif dist_km > 15:
+        findings.append(f"Grid distance {dist_km:.1f} km - substation extension CAPEX will be material")
+        recs.append("Include line construction + wayleave cost in Step 8 CAPEX")
+        score -= 10
+    elif dist_km > 5:
+        findings.append(f"Grid distance {dist_km:.1f} km - budget for interconnection line + easements")
+        score -= 3
+    hv_kv = _f(site.get("hv_line_kv"), -1)
+    if hv_kv > 0 and ac_kw > 0:
+        # Rough sanity: 33 kV OK up to ~15 MW, 66 kV up to ~50 MW, else 132/161 kV
+        if ac_kw > 15000 and hv_kv <= 33:
+            findings.append(f"Interconnect at {hv_kv} kV for {ac_kw/1000:.1f} MW AC - consider 66 kV+")
+            score -= 8
+        if ac_kw > 50000 and hv_kv < 66:
+            findings.append(f"Interconnect at {hv_kv} kV for {ac_kw/1000:.1f} MW AC - 132 kV recommended")
+            score -= 12
+    services = set(elec.get("selected") or [])
+    if "transformers" not in services:
+        findings.append("Transformers not selected on Step 6")
+        recs.append("Enable transformer service on Step 6")
+        score -= 15
+    if "rmu" not in services and ac_kw > 3000:
+        findings.append("RMU absent for a > 3 MW plant")
+        recs.append("Enable RMU on Step 6")
+        score -= 5
+    if not findings:
+        findings.append("Grid interconnection scope is coherent")
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": max(0, min(100, score)),
+            "findings": findings, "recs": recs,
+            "summary": f"Grid rating: {_rating(max(0, score))}"}
+
+
+def _agent_financial(proj: dict[str, Any]) -> dict[str, Any]:
+    fin = _safe_json(proj.get("finance_config"))
+    computed = fin.get("computed") or {}
+    findings, recs = [], []
+    score = 100
+    if not computed:
+        return {"status": "warning", "score": 20,
+                "findings": ["Financial model not yet computed on Step 8"],
+                "recs": ["Complete Step 8 to run the finance engine"],
+                "summary": "Financial rating: F - not ready"}
+    irr = _f(computed.get("irr_pct"))
+    lcoe = _f(computed.get("lcoe_local_per_kwh"))
+    tariff = _f(fin.get("tariff_local_per_kwh"))
+    dscr_min = _f(computed.get("dscr_min"))
+    payback = _f(computed.get("payback_years"))
+    if irr < 8:
+        findings.append(f"IRR {irr:.1f}% is below the 8% utility benchmark")
+        recs.append("Renegotiate PPA or reduce CAPEX assumptions")
+        score -= 15
+    elif irr < 12:
+        findings.append(f"IRR {irr:.1f}% is acceptable but not compelling")
+        score -= 5
+    if dscr_min > 0 and dscr_min < 1.20:
+        findings.append(f"DSCR min {dscr_min:.2f}x - lenders typically require >= 1.25x")
+        recs.append("Lengthen debt tenor or lower leverage")
+        score -= 15
+    elif dscr_min > 0 and dscr_min < 1.30:
+        findings.append(f"DSCR min {dscr_min:.2f}x is right at the covenant floor - tight")
+        score -= 5
+    if tariff > 0 and lcoe > 0:
+        margin = (tariff - lcoe) / tariff * 100
+        if margin < 15:
+            findings.append(f"Tariff-LCOE margin {margin:.1f}% is thin - sensitive to tariff review")
+            score -= 8
+    if payback > 12:
+        findings.append(f"Payback {payback:.1f} yr is longer than the debt tenor")
+        recs.append("Consider ITC / accelerated depreciation")
+        score -= 5
+    if not findings:
+        findings.append("Financial metrics are all within bank-comfort range")
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": max(0, min(100, score)),
+            "findings": findings, "recs": recs,
+            "summary": f"Financial rating: {_rating(max(0, score))}"}
+
+
+def _agent_investment(proj: dict[str, Any]) -> dict[str, Any]:
+    findings, recs = [], []
+    score = 100
+    if not (proj.get("investor") or "").strip():
+        findings.append("Investor field is empty on Step 1")
+        recs.append("Populate Step 1 investor when a champion emerges")
+        score -= 20
+    if not (proj.get("developer") or "").strip():
+        findings.append("Developer / EPC not identified")
+        score -= 5
+    if not (proj.get("description") or "").strip():
+        findings.append("Executive description missing - investor memo will be weak")
+        score -= 5
+    if not (proj.get("client_name") or "").strip():
+        findings.append("Off-taker / client is blank")
+        recs.append("Investors need clarity on the off-take - populate Step 1 client")
+        score -= 15
+    if not findings:
+        findings.append("Deal team + off-taker identity is clear")
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": max(0, min(100, score)),
+            "findings": findings, "recs": recs,
+            "summary": f"Investment posture: {_rating(max(0, score))}"}
+
+
+def _agent_risk(proj: dict[str, Any]) -> dict[str, Any]:
+    reg = _safe_json(proj.get("regulatory_config"))
+    findings, recs = [], []
+    score = 100
+    items = reg.get("items") or {}
+    if not items:
+        findings.append("Development & Regulatory not yet completed")
+        recs.append("Open /large-scale-solar/<pid>/regulatory to capture posture")
+        score -= 25
+    else:
+        critical = ("esia", "grid_interconnect", "energy_commission", "land_tenure")
+        for code in critical:
+            st = (items.get(code) or {}).get("status") or "not_started"
+            if st in ("not_started", "denied"):
+                findings.append(f"{code}: {st}")
+                score -= 8
+    if not reg.get("land_tenure"):
+        findings.append("Land tenure structure not chosen")
+        recs.append("Pick a tenure on the Regulatory step")
+        score -= 10
+    fin = _safe_json(proj.get("finance_config"))
+    if fin.get("revenue_model") == "merchant":
+        findings.append("Merchant revenue model - price + volume risk material")
+        recs.append("Consider PPA cover for at least the debt tenor")
+        score -= 10
+    if not findings:
+        findings.append("Development risk posture is under control")
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": max(0, min(100, score)),
+            "findings": findings, "recs": recs,
+            "summary": f"Risk profile: {_rating(max(0, score))}"}
+
+
+def _agent_marketplace(proj: dict[str, Any]) -> dict[str, Any]:
+    tech = _safe_json(proj.get("technology_config"))
+    elec = _safe_json(proj.get("electrical_config"))
+    pv = _safe_json(proj.get("pv_config"))
+    cats = _marketplace_categories_for(pv, tech, elec)
+    findings, recs = [], []
+    score = 100
+    if not cats:
+        findings.append("No marketplace categories derived - Steps 5-7 incomplete")
+        score = 30
+    if len(cats) < 6:
+        findings.append(f"Only {len(cats)} categories mapped - procurement scope narrow")
+        recs.append("Enable more technology + electrical services on Steps 5-6")
+        score -= 8
+    if not findings:
+        findings.append(f"{len(cats)} marketplace categories mapped from tech/electrical picks")
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": max(0, min(100, score)),
+            "findings": findings, "recs": recs,
+            "summary": f"Marketplace coverage: {_rating(max(0, score))}"}
+
+
+def _agent_boq(proj: dict[str, Any]) -> dict[str, Any]:
+    findings, recs = [], []
+    score = 100
+    if not proj.get("boq_project_id"):
+        findings.append("No BOQ project linked - Step 9 not run")
+        recs.append("Run Step 9 to auto-generate a linked BOQ project + buildings")
+        score = 40
+    else:
+        findings.append(f"BOQ project #{proj['boq_project_id']} linked")
+    fac = _safe_json(proj.get("facility_config"))
+    if not (fac.get("buildings") or []):
+        findings.append("No buildings enabled on Step 4 - BOQ scope will be sparse")
+        recs.append("Enable at least Control Room + O&M + Transformer Yard")
+        score -= 15
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": max(0, min(100, score)),
+            "findings": findings, "recs": recs,
+            "summary": f"BOQ readiness: {_rating(max(0, score))}"}
+
+
+def _agent_report_writer(proj: dict[str, Any]) -> dict[str, Any]:
+    findings, recs = [], []
+    score = 100
+    # This agent nominally invokes the LLM narrative through the SolarPro
+    # AI chain. Here we produce a deterministic executive narrative from
+    # the project's stored data so the agent is always useful even when
+    # the LLM chain is down.
+    pv = _safe_json(proj.get("pv_config"))
+    fin = _safe_json(proj.get("finance_config"))
+    sizing = pv.get("sizing") or {}
+    computed = fin.get("computed") or {}
+    kwp = _f(sizing.get("kwp_input") or pv.get("kwp") or proj.get("target_kwp"))
+    if kwp <= 0:
+        findings.append("Not enough data to author reports - complete Steps 1-8")
+        return {"status": "warning", "score": 30,
+                "findings": findings, "recs": ["Return once Step 8 is done"],
+                "summary": "Reports not ready"}
+    narrative = (
+        f"{proj.get('project_name')} is a {kwp/1000:.1f} MWp "
+        f"utility-scale plant proposed for "
+        f"{proj.get('district') or ''} {proj.get('region') or ''} {proj.get('country') or ''}. "
+        f"The design produces {_f(sizing.get('annual_gen_mwh')):,.0f} MWh/yr at PR "
+        f"{_f(pv.get('performance_ratio'), 0.78):.2f}. "
+        f"Total CAPEX is USD {_f(computed.get('total_capex_usd'))/1e6:.1f}M "
+        f"with a base-case IRR of {_f(computed.get('irr_pct')):.1f}% "
+        f"and LCOE {_f(computed.get('lcoe_local_per_kwh')):.4f} {proj.get('currency') or 'GHS'}/kWh."
+    )
+    findings.append("Executive narrative drafted from project data")
+    recs.append("Download the 5 PDF reports on Step 13")
+    return {"status": "ok", "score": score,
+            "findings": findings, "recs": recs,
+            "summary": "Report narrative ready",
+            "narrative": narrative}
+
+
+def _agent_qa_qc(proj: dict[str, Any]) -> dict[str, Any]:
+    findings, recs = [], []
+    score = 100
+    checks = [
+        ("Step 1 identity", bool((proj.get("project_name") or "").strip())),
+        ("Step 2 project type", bool((proj.get("project_type") or "").strip())),
+        ("Step 3 site config", _is_meaningfully_populated("site_config", proj.get("site_config"))),
+        ("Step 4 facility",   _is_meaningfully_populated("facility_config", proj.get("facility_config"))),
+        ("Step 5 technology", _is_meaningfully_populated("technology_config", proj.get("technology_config"))),
+        ("Step 6 electrical", _is_meaningfully_populated("electrical_config", proj.get("electrical_config"))),
+        ("Step 7 PV design",  _is_meaningfully_populated("pv_config", proj.get("pv_config"))),
+        ("Step 8 finance",    _is_meaningfully_populated("finance_config", proj.get("finance_config"))),
+        ("Step 9 BOQ linked", bool(proj.get("boq_project_id"))),
+    ]
+    missing = [name for name, done in checks if not done]
+    if missing:
+        findings.append(f"Missing / incomplete steps: {', '.join(missing)}")
+        score -= 6 * len(missing)
+        recs.append("Complete the missing steps before requesting Enterprise sign-off")
+    if not missing:
+        findings.append("All upstream engineering + finance steps are populated")
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": max(0, min(100, score)),
+            "findings": findings, "recs": recs,
+            "summary": f"QA/QC completeness: {_rating(max(0, score))}"}
+
+
+def _agent_reviewer(proj: dict[str, Any], sub_scores: dict[str, int]) -> dict[str, Any]:
+    """Overall bankability + readiness score - aggregates every specialist."""
+    findings, recs = [], []
+    if not sub_scores:
+        return {"status": "warning", "score": 0,
+                "findings": ["No specialist scores available"],
+                "recs": [], "summary": "Not ready"}
+    avg = sum(sub_scores.values()) / len(sub_scores)
+    score = int(round(avg))
+    reds = [k for k, v in sub_scores.items() if v < 55]
+    ambers = [k for k, v in sub_scores.items() if 55 <= v < 70]
+    if reds:
+        findings.append(f"Red-status specialists: {', '.join(reds)}")
+        recs.append("Address every red-status specialist before EPC bid")
+    if ambers:
+        findings.append(f"Amber-status specialists: {', '.join(ambers)}")
+    if not reds and not ambers:
+        findings.append("Every specialist above 70 - project is EPC-ready")
+    findings.append(f"Overall bankability score: {score}/100 ({_rating(score)})")
+    return {"status": "ok" if score >= 55 else "warning",
+            "score": score,
+            "findings": findings, "recs": recs,
+            "summary": f"Project readiness: {_rating(score)}"}
+
+
+AGENT_RUNNERS: dict[str, Any] = {
+    "pv_design":     _agent_pv_design,
+    "electrical":    _agent_electrical,
+    "civil":         _agent_civil,
+    "structural":    _agent_structural,
+    "ict":           _agent_ict,
+    "scada":         _agent_scada,
+    "grid":          _agent_grid,
+    "financial":     _agent_financial,
+    "investment":    _agent_investment,
+    "risk":          _agent_risk,
+    "marketplace":   _agent_marketplace,
+    "boq":           _agent_boq,
+    "report_writer": _agent_report_writer,
+    "qa_qc":         _agent_qa_qc,
+    # 'reviewer' is orchestrator-only and runs last with sub-scores.
+}
+
+
+def run_agent_orchestrator(proj: dict[str, Any]) -> dict[str, Any]:
+    """Dispatch every specialist against the project, then run the
+    reviewer with the collected sub-scores. Returns a full report."""
+    results: dict[str, dict[str, Any]] = {}
+    for code in AGENT_CODES:
+        if code == "reviewer":
+            continue
+        runner = AGENT_RUNNERS.get(code)
+        if not runner:
+            continue
+        try:
+            results[code] = runner(proj)
+        except Exception as e:   # pragma: no cover
+            results[code] = {"status": "error", "score": 0,
+                             "findings": [f"Agent crash: {e}"],
+                             "recs": ["Retry after fixing the project data"],
+                             "summary": "Agent error"}
+    sub_scores = {c: r["score"] for c, r in results.items()}
+    results["reviewer"] = _agent_reviewer(proj, sub_scores)
+    return {"specialists": results,
+            "aggregate_score": results["reviewer"]["score"],
+            "aggregate_status": results["reviewer"]["status"]}
+
+
+# ---- agent-runs storage ----
+
+_AGENTRUN_SQLITE_DDL = """
+CREATE TABLE IF NOT EXISTS capital_investment_agent_runs (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id     INTEGER NOT NULL,
+    user_id        INTEGER NOT NULL,
+    agent_code     TEXT NOT NULL,
+    status         TEXT DEFAULT 'ok',
+    score          INTEGER DEFAULT 0,
+    payload        TEXT DEFAULT '{}',
+    created_at     TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_ciar_project ON capital_investment_agent_runs(project_id);
+CREATE INDEX IF NOT EXISTS idx_ciar_user    ON capital_investment_agent_runs(user_id);
+CREATE INDEX IF NOT EXISTS idx_ciar_recent  ON capital_investment_agent_runs(project_id, created_at DESC);
+"""
+_AGENTRUN_POSTGRES_DDL = """
+CREATE TABLE IF NOT EXISTS capital_investment_agent_runs (
+    id             SERIAL PRIMARY KEY,
+    project_id     INTEGER NOT NULL,
+    user_id        INTEGER NOT NULL,
+    agent_code     TEXT NOT NULL,
+    status         TEXT DEFAULT 'ok',
+    score          INTEGER DEFAULT 0,
+    payload        TEXT DEFAULT '{}',
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_ciar_project ON capital_investment_agent_runs(project_id);
+CREATE INDEX IF NOT EXISTS idx_ciar_user    ON capital_investment_agent_runs(user_id);
+CREATE INDEX IF NOT EXISTS idx_ciar_recent  ON capital_investment_agent_runs(project_id, created_at DESC);
+"""
+
+
+def _ensure_agent_runs_schema(get_db) -> None:
+    try:
+        with get_db() as c:
+            c.executescript(_AGENTRUN_SQLITE_DDL)
+        return
+    except Exception:
+        pass
+    for stmt in _AGENTRUN_POSTGRES_DDL.split(";"):
+        s = stmt.strip()
+        if not s:
+            continue
+        try:
+            with get_db() as c:
+                c.execute(s)
+        except Exception:
+            pass
+
+
 def country_framework(country: str | None) -> dict[str, Any]:
     """Return the regulatory framework for a country, falling back to
     'generic' when unknown. Match is case-insensitive by leading match."""
@@ -3437,6 +4088,107 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         return resp
 
     # ------------------------------------------------------------------
+    # STEP 14 - AI Agents (15 specialists + orchestrator)
+    # Enterprise-gated. Rule-based agents that review the project's
+    # stored config and return findings + recommendations + score.
+    # Runs are persisted to capital_investment_agent_runs.
+    # ------------------------------------------------------------------
+    def _load_latest_agent_runs(pid: int) -> dict[str, dict[str, Any]]:
+        """Return {agent_code: last_run_dict} for this project."""
+        _ensure_agent_runs_schema(get_db)
+        out: dict[str, dict[str, Any]] = {}
+        try:
+            with get_db() as c:
+                rows = c.execute(
+                    "SELECT agent_code, status, score, payload, created_at "
+                    "FROM capital_investment_agent_runs "
+                    "WHERE project_id=? "
+                    "ORDER BY created_at DESC, id DESC LIMIT 200",
+                    (pid,),
+                ).fetchall()
+        except Exception:
+            return out
+        for r in rows or []:
+            d = dict(r) if hasattr(r, "keys") else {
+                "agent_code": r[0], "status": r[1], "score": r[2],
+                "payload": r[3], "created_at": r[4],
+            }
+            code = d["agent_code"]
+            if code in out:
+                continue
+            try:
+                pl = json.loads(d.get("payload") or "{}")
+            except (TypeError, ValueError):
+                pl = {}
+            out[code] = {
+                "status":  d.get("status"),
+                "score":   d.get("score"),
+                "created": d.get("created_at"),
+                **pl,
+            }
+        return out
+
+    @app.route("/large-scale-solar/<int:pid>/step14",
+               methods=["GET", "POST"],
+               endpoint="capital_investment_step14")
+    @login_required
+    def _step14(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None: return g
+        proj = _load_project(pid)
+        uid = session["user_id"]
+        _ensure_agent_runs_schema(get_db)
+
+        if request.method == "POST":
+            csrf_protect()
+            which = (request.form.get("agent") or "all").strip()
+            if which == "all":
+                report = run_agent_orchestrator(proj)
+                specialists = report["specialists"]
+            else:
+                if which not in AGENT_CODES:
+                    flash("Unknown agent.", "warning")
+                    return redirect(url_for("capital_investment_step14", pid=pid))
+                if which == "reviewer":
+                    # Reviewer needs sub-scores - just run the whole orchestrator.
+                    report = run_agent_orchestrator(proj)
+                    specialists = report["specialists"]
+                else:
+                    runner = AGENT_RUNNERS.get(which)
+                    specialists = {which: runner(proj)} if runner else {}
+            with get_db() as c:
+                for code, payload in specialists.items():
+                    try:
+                        c.execute(
+                            "INSERT INTO capital_investment_agent_runs "
+                            "(project_id, user_id, agent_code, status, "
+                            " score, payload) VALUES (?,?,?,?,?,?)",
+                            (pid, uid, code,
+                             payload.get("status") or "ok",
+                             int(payload.get("score") or 0),
+                             json.dumps(payload)),
+                        )
+                    except Exception:
+                        pass
+            flash(f"{len(specialists)} agent(s) ran.", "success")
+            return redirect(url_for("capital_investment_step14", pid=pid))
+
+        latest = _load_latest_agent_runs(pid)
+        aggregate_score = None
+        if latest:
+            considered = [v["score"] for k, v in latest.items()
+                          if k != "reviewer" and v.get("score") is not None]
+            if considered:
+                aggregate_score = int(round(sum(considered) / len(considered)))
+        return render_template(
+            "capital_investment_step14_agents.html",
+            user=current_user(),
+            proj=proj,
+            agents=AGENT_DEPARTMENTS,
+            latest=latest,
+            aggregate_score=aggregate_score,
+        )
+
+    # ------------------------------------------------------------------
     # 3D DIGITAL TWIN STUDIO
     # ------------------------------------------------------------------
     @app.route("/large-scale-solar/<int:pid>/digital-twin",
@@ -3899,7 +4651,7 @@ _STEP_LABELS: list[tuple[int, str, str, str]] = [
     (11, "CRM Opportunity",                "_crm_hook",          "capital_investment_step11"),
     (12, "Sales Pipeline",                 "_pipeline_hook",     "capital_investment_step12"),
     (13, "Reports",                        "_report_hook",       "capital_investment_step13"),
-    (14, "AI Agents",                      "_agents_hook",       ""),
+    (14, "AI Agents",                      "_agents_hook",       "capital_investment_step14"),
 ]
 
 

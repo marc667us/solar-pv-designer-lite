@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Step 14 - AI Agents - {{ proj.project_name }}{% endblock %}
+{% block content %}
+{% set active_step = 14 %}
+{% set pid = proj.id %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="fw-black mb-0">
+      <i class="bi bi-cpu text-warning me-1"></i>{{ proj.project_name }}
+    </h5>
+    <div class="text-secondary small">
+      Step 14 of 14 &mdash; AI Agents (15 specialists + reviewer)
+    </div>
+  </div>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="text-secondary small">Back to project</a>
+</div>
+
+{% include "_capital_investment_wizard_rail.html" with context %}
+
+<div class="solar-card p-3 mb-3">
+  <div class="text-secondary small">
+    <i class="bi bi-info-circle text-warning me-1"></i>
+    Each agent is a domain specialist that reads your Step 1-13 data and
+    returns findings + recommendations + a 0-100 score. The Reviewer agent
+    aggregates every specialist to a single project-readiness rating.
+    Runs are deterministic and always available &mdash; no LLM calls in this
+    pass. Runs are persisted so scores can be tracked over time.
+  </div>
+</div>
+
+{# --- Aggregate score card --- #}
+{% set _rev = latest.get('reviewer') if latest else None %}
+{% if _rev or aggregate_score is not none %}
+  {% set _score = _rev.score if _rev else aggregate_score %}
+  {% set _color = 'success' if _score >= 70 else ('warning' if _score >= 55 else 'danger') %}
+  <div class="solar-card p-4 mb-3"
+       style="border-color:#f59e0b;background:linear-gradient(180deg,#251b00,#0e0a02)">
+    <div class="row g-3 align-items-center">
+      <div class="col-md-3 text-center">
+        <div style="width:100px;height:100px;border-radius:50%;
+                    background:{% if _score >= 70 %}#1a4a2a{% elif _score >= 55 %}#f59e0b{% else %}#8a2020{% endif %};
+                    color:#fff;
+                    display:flex;align-items:center;justify-content:center;
+                    font-size:36px;font-weight:900;margin:0 auto;
+                    box-shadow:0 0 0 6px rgba(245,158,11,.15)">
+          {{ _score }}
+        </div>
+        <div class="text-secondary small mt-2">/100 readiness</div>
+      </div>
+      <div class="col-md-6">
+        <div class="text-warning small" style="letter-spacing:1px">PROJECT REVIEWER</div>
+        <div class="fw-black" style="font-size:20px">
+          {% if _rev %}{{ _rev.summary }}{% else %}Overall bankability preview{% endif %}
+        </div>
+        {% if _rev and _rev.findings %}
+          <ul class="small text-secondary mb-0 mt-2" style="padding-left:1.1rem">
+            {% for f in _rev.findings %}<li>{{ f }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+      <div class="col-md-3 text-md-end">
+        <form method="POST">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="agent" value="all">
+          <button type="submit" class="btn btn-warning btn-lg fw-bold w-100">
+            <i class="bi bi-play-fill me-1"></i>Re-run all
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div class="solar-card p-4 mb-3 text-center"
+       style="border-color:#f59e0b;background:#251b00">
+    <i class="bi bi-cpu text-warning" style="font-size:48px"></i>
+    <div class="fw-bold mt-2">No agent runs yet.</div>
+    <div class="text-secondary small mb-3">
+      Click Run all agents to have the 15 specialists review this project.
+    </div>
+    <form method="POST" class="d-inline-block">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="hidden" name="agent" value="all">
+      <button type="submit" class="btn btn-warning btn-lg fw-bold">
+        <i class="bi bi-play-fill me-1"></i>Run all agents
+      </button>
+    </form>
+  </div>
+{% endif %}
+
+{# --- Specialist grid --- #}
+{% set _by_dept = {} %}
+{% for code, label, dept, icon in agents %}
+  {% if _by_dept.setdefault(dept, []).append({'code':code,'label':label,'icon':icon}) %}{% endif %}
+{% endfor %}
+
+{% for dept, items in _by_dept.items() %}
+  <div class="fw-bold text-warning mb-2 mt-3"
+       style="font-size:11px;letter-spacing:1px;text-transform:uppercase">
+    <i class="bi bi-hexagon me-1"></i>{{ dept }}
+  </div>
+  <div class="row g-2 mb-3">
+    {% for a in items %}
+      {% set r = latest.get(a.code) if latest else None %}
+      {% set _s = r.score if r else None %}
+      {% set _b = 'success' if (_s or 0) >= 70 else ('warning' if (_s or 0) >= 55 else 'danger') %}
+      <div class="col-md-6 col-lg-4">
+        <div class="solar-card p-3 h-100"
+             style="border-left:4px solid {% if _s is none %}#1e1e3a{% elif _s >= 70 %}#2a8a4a{% elif _s >= 55 %}#f59e0b{% else %}#c04040{% endif %}">
+          <div class="d-flex align-items-start gap-2 mb-2">
+            <i class="{{ a.icon }} text-warning" style="font-size:22px"></i>
+            <div class="flex-grow-1">
+              <div class="fw-bold small">{{ a.label }}</div>
+              {% if r %}
+                <div class="text-secondary" style="font-size:10.5px">
+                  Last run {{ (r.created or '')[:16] }}
+                </div>
+              {% else %}
+                <div class="text-secondary" style="font-size:10.5px">
+                  Not run yet
+                </div>
+              {% endif %}
+            </div>
+            {% if _s is not none %}
+              <span class="badge bg-{{ _b }}"
+                    style="font-size:14px;padding:5px 10px">{{ _s }}</span>
+            {% endif %}
+          </div>
+          {% if r %}
+            <div class="small text-secondary mb-2">{{ r.summary }}</div>
+            {% if r.findings %}
+              <ul class="small mb-2" style="padding-left:1.05rem;font-size:11px">
+                {% for f in r.findings %}
+                  <li class="{% if 'not set' in f or 'missing' in f.lower() or 'not selected' in f %}text-warning{% elif 'well' in f.lower() or 'complete' in f.lower() or 'no findings' in f.lower() %}text-success{% endif %}">{{ f }}</li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+            {% if r.recs %}
+              <div class="text-secondary" style="font-size:11px;letter-spacing:.5px">
+                RECOMMENDATIONS
+              </div>
+              <ul class="small mb-0" style="padding-left:1.05rem;font-size:11px">
+                {% for rec in r.recs %}<li>{{ rec }}</li>{% endfor %}
+              </ul>
+            {% endif %}
+            {% if r.narrative %}
+              <hr style="border-color:#1e1e3a;margin:.5rem 0">
+              <div class="small text-secondary" style="font-size:11px">
+                <b>Draft narrative:</b> {{ r.narrative }}
+              </div>
+            {% endif %}
+          {% endif %}
+          <form method="POST" class="mt-2">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="agent" value="{{ a.code }}">
+            <button type="submit" class="btn btn-sm btn-outline-warning w-100"
+                    style="font-size:11px">
+              <i class="bi bi-arrow-clockwise me-1"></i>{% if r %}Re-run{% else %}Run{% endif %}
+            </button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endfor %}
+
+<div class="d-flex justify-content-between mt-3">
+  <a href="{{ url_for('capital_investment_step13', pid=proj.id) }}"
+     class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back to Step 13
+  </a>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}"
+     class="btn btn-warning fw-bold">
+    Return to project overview<i class="bi bi-check2 ms-1"></i>
+  </a>
+</div>
+
+{% endblock %}
