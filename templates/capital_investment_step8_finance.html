@@ -138,6 +138,53 @@
           </div>
         </div>
 
+        {# --- Generation Station BOQ linkage (SSS section 8) --- #}
+        <div class="mt-3 p-3 rounded" style="background:#12122b;border:1px solid #1e1e3a">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-bold text-info"><i class="bi bi-diagram-3 me-1"></i>Linked BOQ reconciliation</span>
+            {% if recon and recon.get('n_items') %}
+              <span class="badge bg-info-subtle text-info">{{ recon.n_items }} BOQ line items</span>
+            {% else %}
+              <span class="badge bg-secondary">no linked BOQ yet</span>
+            {% endif %}
+          </div>
+          {% if recon and recon.get('n_items') %}
+            <div class="row g-2 small">
+              <div class="col-4"><div class="text-secondary">Facilities CAPEX estimate</div>
+                <div class="fw-bold">USD {{ '{:,.0f}'.format(recon.est_facilities_usd) }}</div>
+                <div class="text-secondary" style="font-size:11px">electrical + SCADA + security &times; kWp</div></div>
+              <div class="col-4"><div class="text-secondary">BOQ actual (indicative)</div>
+                <div class="fw-bold">USD {{ '{:,.0f}'.format(recon.boq_actual_usd) }}</div>
+                <div class="text-secondary" style="font-size:11px">local {{ '{:,.0f}'.format(recon.boq_actual_local) }}</div></div>
+              <div class="col-4"><div class="text-secondary">Variance</div>
+                <div class="fw-bold {% if recon.variance_usd >= 0 %}text-warning{% else %}text-success{% endif %}">USD {{ '{:,.0f}'.format(recon.variance_usd) }}</div>
+                <div class="text-secondary" style="font-size:11px">{% if recon.variance_usd >= 0 %}BOQ over estimate{% else %}BOQ under estimate{% endif %}</div></div>
+            </div>
+            {% if recon.get('stale') %}
+              <div class="small text-warning mt-2"><i class="bi bi-exclamation-triangle me-1"></i>The linked BOQ changed since this model was last saved &mdash; click <strong>Recompute</strong> to refresh CAPEX / NPV.</div>
+            {% endif %}
+            {% if boq_actuals and boq_actuals.get('per_facility_usd') %}
+              <div class="mt-2 small">
+                <div class="text-secondary mb-1">Per-facility (USD, indicative):</div>
+                <div class="d-flex flex-wrap gap-1">
+                  {% for fac, usd in boq_actuals.per_facility_usd.items() %}
+                    <span class="badge bg-dark border border-secondary text-light">{{ fac.replace('_',' ').title() }}: {{ '{:,.0f}'.format(usd) }}</span>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+            <div class="form-check mt-3">
+              <input class="form-check-input" type="checkbox" name="use_boq_capex" id="use_boq_capex" value="1" {% if recon.get('use_boq_capex') %}checked{% endif %}>
+              <label class="form-check-label small" for="use_boq_capex">
+                Drive electrical / SCADA / security CAPEX from the linked BOQ actual instead of the per-kWp estimate above.
+                <span class="text-secondary">Off by default &mdash; BOQ cells seed at qty&nbsp;1 (indicative) until you complete quantities in Build-all.</span>
+              </label>
+            </div>
+          {% else %}
+            <div class="text-secondary small">Generate the BOQ on <strong>Step 9</strong> to reconcile these CAPEX lines against a real bill of quantities and (optionally) drive facilities CAPEX from it.</div>
+          {% endif %}
+        </div>
+
         <hr class="my-4" style="border-color:#1e1e3a">
 
         {# --- OPEX block --- #}
