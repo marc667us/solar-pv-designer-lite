@@ -35426,6 +35426,12 @@ def boq_floor_build_all_save(pid, bid, fid):
     return redirect(url_for("boq_floor_view", pid=pid, bid=bid, fid=fid))
 
 
+# Step 9 auto-build is a LEAN STARTER BOQ, not the full catalog. Seed a small
+# representative sample per section (the user expands via Build-all). Tune here.
+_CI_MAX_ITEMS_PER_SECTION = 1
+_CI_MAX_ITEMS_PER_FLOOR = 500
+
+
 def _ci_autobuild_floor_items(fid, bid, pid, uid, service_codes):
     """Auto-populate one floor's BOQ line items (the CELL level) from a list of
     _BOQ_SERVICES codes, REUSING the standard section/item catalog and the
@@ -35469,7 +35475,8 @@ def _ci_autobuild_floor_items(fid, bid, pid, uid, service_codes):
             cat = _boq_apply_overrides(uid, cat) if cat else cat
         except Exception:
             pass
-        for item in (cat or []):
+        # Representative sample only - cap items per section.
+        for item in (cat or [])[:_CI_MAX_ITEMS_PER_SECTION]:
             if isinstance(item, dict):
                 idesc = item.get("desc")
                 iunit = item.get("unit") or "No."
@@ -35523,6 +35530,8 @@ def _ci_autobuild_floor_items(fid, bid, pid, uid, service_codes):
             return 0
 
         for r in rows:
+            if inserted >= _CI_MAX_ITEMS_PER_FLOOR:
+                break
             try:
                 basic = float(r.get("basic") or 0.0)
                 qty = float(r.get("qty") or 0.0)

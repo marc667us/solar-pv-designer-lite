@@ -559,7 +559,7 @@ R3_NEW = crlf('''            # 0. Derive the BOQ service codes this plant needs 
                     f"Linked BOQ project #{new_boq_pid} created: "
                     f"{len(selected_buildings)} building(s), "
                     f"{len(service_codes)} service(s), {items_built} priced "
-                    f"line item(s) pre-loaded. Open it to review or edit."
+                    f"line item(s) pre-loaded (a lean 1-per-section starter - expand each section in Build-all). Open it to review or edit."
                     + suffix,
                     "success",
                 )
