@@ -150,18 +150,18 @@ jobs:
           set -e
           echo "-- B1 tables present --"
           psql "$DATABASE_URL" -c "
-            SELECT table_name,
-                   (SELECT COUNT(*) FROM information_schema.columns
-                     WHERE c.table_schema='public' AND c.table_name=t.table_name) AS n_cols
+            SELECT t.table_name,
+                   (SELECT COUNT(*) FROM information_schema.columns c
+                     WHERE c.table_schema='public'
+                       AND c.table_name = t.table_name) AS n_cols
               FROM information_schema.tables t
-             CROSS JOIN LATERAL (SELECT table_name) c
              WHERE t.table_schema='public'
                AND t.table_name IN (
                  'capital_investment_projects',
                  'capital_investment_opportunities',
                  'capital_investment_agent_runs'
                )
-             ORDER BY table_name;"
+             ORDER BY t.table_name;"
 
           echo ""
           echo "-- B2 capital_investment_projects column layout --"
