@@ -144,34 +144,71 @@
   </div>
 </div>
 
-<div class="solar-card p-4 mb-4">
-  <h6 class="fw-bold text-warning mb-3">
-    <i class="bi bi-diagram-3 me-1"></i>The 14-step design workflow
-  </h6>
-  <div class="row g-2 small">
-    <div class="col-md-6">
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">1</span><span>Project Registration &mdash; client, investor, developer, jurisdiction, currency, tax regime</span></div>
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">2</span><span>Project Type &mdash; ground-mount, rooftop, industrial, utility, IPP, mining, floating, hybrid, BESS</span></div>
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">3</span><span>Site Configuration &mdash; land, terrain, slope, soil, flood/wind/seismic, grid distance, ESIA</span></div>
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">4</span><span>Facility Configuration &mdash; Control Room, O&amp;M, Battery, Switchgear, Transformer Yard, External Works</span></div>
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">5</span><span>Technology &mdash; SCADA, EMS, BMS, CMMS, Digital Twin, Cyber Security</span></div>
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">6</span><span>Electrical System &mdash; DC/AC collection, HV/LV distribution, protection</span></div>
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">7</span><span>PV Design &mdash; capacity, generation, PR, DC/AC, string, combiner, inverter</span></div>
+{# --- Workflow preview: horizontal 14-step stepper + Help toggle --- #}
+{% set _step_names = [
+  'Registration','Project Type','Site','Facility','Technology','Electrical',
+  'PV Design','Finance','BOQ','Marketplace','CRM','Pipeline','Reports','AI Agents'
+] %}
+{% set _step_details = [
+  'Client, investor, developer, jurisdiction, currency, tax regime.',
+  'Ground-mount, rooftop, industrial, utility, IPP, mining, floating, hybrid, BESS.',
+  'Land, terrain, slope, soil, flood / wind / seismic zone, grid distance.',
+  'Control Room, O&M, Battery, Switchgear, Transformer Yard, External Works.',
+  'SCADA, EMS, BMS, CMMS, Digital Twin, cyber security.',
+  'DC / AC collection, HV / LV distribution, protection, earthing, lightning.',
+  'Capacity, generation, PR, DC / AC, strings, combiners, inverters.',
+  'CAPEX / OPEX / NPV / IRR / LCOE / DSCR + Monte Carlo bankability.',
+  'Reuses SolarPro BOQ engine (Section-by-Section + Build-all).',
+  'Auto-pulls PV modules, inverters, transformers, RMU, cables.',
+  'Opportunity auto-created with capacity, CAPEX, revenue, IRR.',
+  'Lead → Opportunity → Concept → … → Construction → COD.',
+  'Executive, Technical, Financial, Bankability, Investment Memo PDFs.',
+  'PV, Electrical, Civil, SCADA, Finance, Grid, Reviewer agents.'
+] %}
+{% set progress = [] %}
+{% for _i in range(1, 15) %}
+  {% set _ = progress.append({
+    'n': _i, 'label': _step_names[_i-1],
+    'done': false, 'active': false,
+    'endpoint': '', 'field': ''
+  }) %}
+{% endfor %}
+
+<div class="solar-card p-3 mb-3">
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <div class="fw-bold text-warning" style="font-size:12px;letter-spacing:.5px">
+      <i class="bi bi-diagram-3 me-1"></i>14-STEP DESIGN WORKFLOW
     </div>
-    <div class="col-md-6">
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">8</span><span>Financial Engineering &mdash; CAPEX/OPEX/PPA/NPV/IRR/LCOE/DSCR/Monte&nbsp;Carlo</span></div>
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">9</span><span>BOQ &mdash; reuses Section-by-Section + Build-all sections engine</span></div>
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">10</span><span>Marketplace &mdash; auto-pulls PV modules, inverters, transformers, RMU, cables</span></div>
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">11</span><span>CRM &mdash; opportunity auto-created with capacity, CAPEX, revenue, IRR</span></div>
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">12</span><span>Sales Pipeline &mdash; Lead &rarr; Concept &rarr; Feasibility &rarr; Bank &rarr; Award &rarr; Construction &rarr; COD</span></div>
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">13</span><span>Reports &mdash; Executive, Technical, Financial, Bankability, Investment Memo, Ops Manual</span></div>
-      <div class="d-flex gap-2 mb-2"><span class="badge bg-warning text-dark" style="width:24px">14</span><span>AI Agents &mdash; PV, Electrical, Civil, Structural, SCADA, Finance, Grid, Reviewer</span></div>
-    </div>
+    <button class="btn btn-sm btn-outline-warning" type="button"
+            data-bs-toggle="collapse" data-bs-target="#landingWorkflowHelp"
+            aria-expanded="false" aria-controls="landingWorkflowHelp">
+      <i class="bi bi-question-circle me-1"></i>Help
+    </button>
   </div>
-  <div class="text-secondary small mt-2 mb-0">
-    <i class="bi bi-info-circle text-warning me-1"></i>
-    Plus a Development &amp; Regulatory Configuration sub-step (land tenure, ESIA, grid interconnection,
-    utility approvals, EPA / Energy Commission licensing, building permits, financial close, COD).
+  {% include "_capital_investment_stepper.html" with context %}
+  <div class="text-secondary small px-2 pt-1">
+    Click Help to see what each step does. Plus a country-scoped
+    Development &amp; Regulatory sub-step (land tenure, ESIA, grid
+    interconnection, EPA / Energy Commission licensing, building
+    permits, financial close, COD).
+  </div>
+</div>
+
+<div class="collapse mb-4" id="landingWorkflowHelp">
+  <div class="solar-card p-3">
+    <div class="row g-2 small">
+      {% for i in range(1, 15) %}
+        <div class="col-md-6">
+          <div class="d-flex align-items-start gap-2">
+            <span class="badge bg-warning text-dark" style="min-width:26px">{{ i }}</span>
+            <div>
+              <b>{{ _step_names[i-1] }}</b>
+              <div class="text-secondary" style="font-size:11px">{{ _step_details[i-1] }}</div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
   </div>
 </div>
 

@@ -2,154 +2,250 @@
 {% block title %}{{ proj.project_name }} &mdash; Capital Investment{% endblock %}
 {% block content %}
 
-<div class="d-flex align-items-center justify-content-between mb-3">
-  <div>
-    <h5 class="fw-black mb-0">
-      <i class="bi bi-lightning-charge text-warning me-1"></i>{{ proj.project_name }}
-    </h5>
-    <div class="text-secondary small">
-      Capital Investment Design &middot; created {{ (proj.created_at or '')[:16] }}
-      {% if proj.client_name %} &middot; client <b>{{ proj.client_name }}</b>{% endif %}
-    </div>
-  </div>
-  <a href="{{ url_for('capital_investment_landing') }}" class="text-secondary small">Back to landing</a>
-</div>
-
-{# Project summary chips - HEADLINE capacity chip is highlighted. #}
-<div class="solar-card p-3 mb-3">
-  <div class="d-flex flex-wrap gap-2 align-items-center" style="font-size:12px">
-    {% if proj.target_kwp %}
-      <span class="badge bg-warning text-dark" style="font-size:13px;padding:6px 10px">
-        <i class="bi bi-lightning-charge me-1"></i>{{ '%.1f'|format(proj.target_kwp/1000.0) }} MWp
-      </span>
-    {% endif %}
-    <span class="badge bg-secondary"><i class="bi bi-flag me-1"></i>{{ proj.project_status or 'concept' }}</span>
-    {% if proj.project_type %}<span class="badge bg-secondary">{{ proj.project_type }}</span>{% endif %}
-    {% if proj.currency %}<span class="badge bg-secondary">{{ proj.currency }}</span>{% endif %}
-    {% if proj.design_standard %}<span class="badge bg-secondary">{{ proj.design_standard }}</span>{% endif %}
-    {% if proj.tax_regime %}<span class="badge bg-secondary">tax: {{ proj.tax_regime }}</span>{% endif %}
-    {% if proj.target_cod %}<span class="badge bg-secondary"><i class="bi bi-calendar-event me-1"></i>COD {{ proj.target_cod }}</span>{% endif %}
-    {% if proj.country %}<span class="badge bg-secondary"><i class="bi bi-geo-alt me-1"></i>{{ proj.country }}{% if proj.region %}, {{ proj.region }}{% endif %}</span>{% endif %}
-    {% if proj.gps_lat is not none and proj.gps_lon is not none %}
-      <span class="badge bg-secondary">GPS {{ '%.4f'|format(proj.gps_lat) }}, {{ '%.4f'|format(proj.gps_lon) }}</span>
-    {% endif %}
-  </div>
-</div>
-
-{# Description card if given #}
-{% if proj.description %}
-<div class="solar-card p-3 mb-3">
-  <div class="small text-secondary mb-1">Project description</div>
-  <div>{{ proj.description }}</div>
-</div>
-{% endif %}
-
-{# 14-step wizard state #}
-<div class="solar-card p-4 mb-3">
-  <h6 class="fw-bold text-warning mb-3">
-    <i class="bi bi-diagram-3 me-1"></i>Design workflow
-  </h6>
-  <div class="row g-2">
-    {% for step in progress %}
-      <div class="col-md-6">
-        <div class="d-flex align-items-center gap-2 p-2 rounded"
-             style="background:{% if step.active %}#251b00{% elif step.done %}#0a1a10{% else %}#0a0a14{% endif %};
-                    border:1px solid {% if step.active %}#f59e0b{% elif step.done %}#1a4a2a{% else %}#1e1e3a{% endif %}">
-          <span class="badge {% if step.done %}bg-success{% elif step.active %}bg-warning text-dark{% else %}bg-secondary{% endif %}"
-                style="min-width:26px">{{ step.n }}</span>
-          <div class="flex-grow-1 small">
-            <b>{{ step.label }}</b>
-            {% if step.done %}
-              <span class="text-success ms-1"><i class="bi bi-check-circle-fill"></i></span>
-            {% elif step.active %}
-              <span class="text-warning ms-1">&mdash; next</span>
-            {% endif %}
+{# --- Header row: project title / capacity chip + quick actions --- #}
+<div class="row g-3 align-items-center mb-3">
+  <div class="col-md-8">
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+      {% if proj.target_kwp %}
+        <div style="background:linear-gradient(135deg,#f59e0b,#c76a2e);color:#000;
+                    padding:14px 20px;border-radius:14px;min-width:130px;text-align:center;
+                    box-shadow:0 6px 18px rgba(245,158,11,.25)">
+          <div style="font-size:28px;font-weight:900;line-height:1">
+            {{ '%.1f'|format(proj.target_kwp/1000.0) }}
           </div>
-          {% if step.n == 1 %}
-            <span class="text-secondary small">registered</span>
-          {% elif step.active and step.endpoint %}
-            <a href="{{ url_for(step.endpoint, pid=proj.id) }}" class="btn btn-sm btn-warning">
-              Continue<i class="bi bi-arrow-right ms-1"></i>
-            </a>
-          {% elif step.active and not step.endpoint %}
-            <span class="badge bg-warning text-dark">coming soon</span>
-          {% elif step.done and step.endpoint %}
-            <a href="{{ url_for(step.endpoint, pid=proj.id) }}" class="text-success small">edit</a>
-          {% elif step.done %}
-            <span class="text-success small">done</span>
-          {% else %}
-            <span class="text-secondary small">pending</span>
-          {% endif %}
+          <div style="font-size:11px;letter-spacing:1px;opacity:.9">MWp DC TARGET</div>
+        </div>
+      {% endif %}
+      <div class="flex-grow-1">
+        <h4 class="fw-black mb-1">
+          <i class="bi bi-lightning-charge text-warning me-1"></i>{{ proj.project_name }}
+        </h4>
+        <div class="text-secondary small">
+          {% if proj.client_name %}<b>{{ proj.client_name }}</b> &middot;{% endif %}
+          Capital Investment Design &middot; created {{ (proj.created_at or '')[:10] }}
         </div>
       </div>
-    {% endfor %}
-  </div>
-  <div class="text-secondary small mt-3">
-    <i class="bi bi-info-circle text-warning me-1"></i>
-    Steps 2 through 14 will unlock as each preceding step is completed. Steps 6 through 13
-    reuse the existing SolarPro engines (Section-by-Section BOQ, marketplace, PV design,
-    financial model, CRM, sales pipeline, PDF report generator).
-  </div>
-</div>
-
-{# 3D Digital Twin Studio - replaces the old /shading page #}
-<div class="solar-card p-3 mb-3" style="border-color:#f59e0b;background:#251b00">
-  <div class="d-flex align-items-center gap-3">
-    <i class="bi bi-diagram-3 text-warning" style="font-size:32px"></i>
-    <div class="flex-grow-1">
-      <div class="fw-bold text-warning">3D Digital Twin Studio</div>
-      <div class="text-secondary small">
-        Interactive 3D scene of the plant &mdash; PV field, buildings,
-        transformer yard, roads, fence, weather mast, CCTV. Sun-path
-        animation, layer toggles, click any object for its BOQ / marketplace
-        shortcut. Replaces the old shading page for utility-scale projects.
-      </div>
     </div>
-    <a href="{{ url_for('capital_investment_digital_twin', pid=proj.id) }}"
-       class="btn btn-warning fw-bold">
-      <i class="bi bi-play me-1"></i>Open Studio
+  </div>
+  <div class="col-md-4 text-md-end">
+    <a href="{{ url_for('capital_investment_landing') }}"
+       class="btn btn-sm btn-outline-secondary me-1">
+      <i class="bi bi-arrow-left me-1"></i>Landing
     </a>
+    <button class="btn btn-sm btn-outline-warning" type="button"
+            data-bs-toggle="collapse" data-bs-target="#workflowHelp"
+            aria-expanded="false" aria-controls="workflowHelp">
+      <i class="bi bi-question-circle me-1"></i>Help
+    </button>
   </div>
 </div>
 
-{# Development & Regulatory bolt-on (country-scoped) #}
-<div class="solar-card p-3 mb-3" style="border-color:#1e1e3a">
-  <div class="d-flex align-items-center gap-3">
-    <i class="bi bi-clipboard-check text-warning" style="font-size:28px"></i>
-    <div class="flex-grow-1">
-      <div class="fw-bold">Development &amp; Regulatory Configuration</div>
-      <div class="text-secondary small">
-        Country-specific regulator, ESIA authority, statutes, permit sequence,
-        land-tenure options and land-acquisition practice for
-        <b>{{ proj.country or 'the project jurisdiction' }}</b>.
-      </div>
-    </div>
-    <a href="{{ url_for('capital_investment_regulatory', pid=proj.id) }}"
-       class="btn btn-outline-warning">
-      Open<i class="bi bi-arrow-right ms-1"></i>
-    </a>
-  </div>
+{# --- Secondary chip strip: type / status / currency / COD / location --- #}
+<div class="d-flex flex-wrap gap-2 mb-3" style="font-size:11px">
+  <span class="badge bg-secondary"><i class="bi bi-flag me-1"></i>{{ proj.project_status or 'concept' }}</span>
+  {% if proj.project_type %}<span class="badge bg-secondary">{{ proj.project_type }}</span>{% endif %}
+  {% if proj.currency %}<span class="badge bg-secondary">{{ proj.currency }}</span>{% endif %}
+  {% if proj.design_standard %}<span class="badge bg-secondary">{{ proj.design_standard }}</span>{% endif %}
+  {% if proj.tax_regime %}<span class="badge bg-secondary">tax: {{ proj.tax_regime }}</span>{% endif %}
+  {% if proj.target_cod %}<span class="badge bg-secondary"><i class="bi bi-calendar-event me-1"></i>COD {{ proj.target_cod }}</span>{% endif %}
+  {% if proj.country %}<span class="badge bg-secondary"><i class="bi bi-geo-alt me-1"></i>{{ proj.country }}{% if proj.region %}, {{ proj.region }}{% endif %}</span>{% endif %}
+  {% if proj.gps_lat is not none and proj.gps_lon is not none %}
+    <span class="badge bg-secondary">GPS {{ '%.4f'|format(proj.gps_lat) }}, {{ '%.4f'|format(proj.gps_lon) }}</span>
+  {% endif %}
 </div>
 
-{# Reuse anchors info card #}
+{# --- The stepper --- #}
 <div class="solar-card p-3 mb-3">
-  <div class="row g-2 small">
-    <div class="col-md-4">
-      <div class="text-secondary">Linked BOQ project</div>
-      {% if proj.boq_project_id %}
-        <a href="{{ url_for('boq_projects_list') }}" class="text-warning">#{{ proj.boq_project_id }}</a>
-      {% else %}
-        <span class="text-secondary">not yet linked (created on Step 9)</span>
-      {% endif %}
+  {% include "_capital_investment_stepper.html" with context %}
+  <div class="d-flex justify-content-between align-items-center px-2 pt-1"
+       style="font-size:11px">
+    <div class="text-secondary">
+      {% set _done = progress | selectattr('done') | list | length %}
+      <b class="text-warning">{{ _done }} of 14</b> steps complete
     </div>
-    <div class="col-md-4">
-      <div class="text-secondary">Marketplace</div>
-      <a href="/marketplace" class="text-warning">Browse 605-item catalogue</a>
+    <div class="d-flex gap-2 text-secondary">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#2a8a4a;margin-right:4px;vertical-align:middle"></span>Done</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:4px;vertical-align:middle"></span>Next</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1e1e3a;margin-right:4px;vertical-align:middle"></span>Pending</span>
     </div>
-    <div class="col-md-4">
-      <div class="text-secondary">Sales pipeline</div>
-      <a href="{{ url_for('capital_investment_step12', pid=proj.id) }}"
-         class="text-warning">Open 13-stage pipeline</a>
+  </div>
+</div>
+
+{# --- Current-step spotlight card --- #}
+{% set _active_step = progress | selectattr('active') | list | first %}
+{% if _active_step %}
+  <div class="solar-card p-4 mb-3" style="border-color:#f59e0b;
+       background:linear-gradient(180deg,#251b00,#0e0a02);">
+    <div class="row g-3 align-items-center">
+      <div class="col-auto">
+        <div style="width:64px;height:64px;border-radius:50%;background:#f59e0b;
+                    color:#000;display:flex;align-items:center;justify-content:center;
+                    font-size:26px;font-weight:900;box-shadow:0 0 0 6px rgba(245,158,11,.20)">
+          {{ _active_step.n }}
+        </div>
+      </div>
+      <div class="col">
+        <div class="text-warning" style="font-size:11px;letter-spacing:1px">NEXT STEP</div>
+        <div class="fw-black" style="font-size:20px">{{ _active_step.label }}</div>
+        <div class="text-secondary small">
+          {% if _active_step.n == 2 %}Pick the primary project type — utility scale, IPP, mining, floating, hybrid, or BESS.
+          {% elif _active_step.n == 3 %}Capture land area, terrain, soil, flood/wind/seismic zones, grid distance.
+          {% elif _active_step.n == 4 %}Enable the buildings the plant will carry — control room, O&amp;M, transformer yard, battery, external works.
+          {% elif _active_step.n == 5 %}Choose the SCADA / EMS / BMS / CMMS / cyber / digital-twin technologies.
+          {% elif _active_step.n == 6 %}Pick the 25 electrical services that will drive the BOQ scope.
+          {% elif _active_step.n == 7 %}Utility-scale PV sizing — kWp, DC/AC ratio, tilt, PR — computes modules, strings, inverters, MWh.
+          {% elif _active_step.n == 8 %}CAPEX / OPEX build-up, PPA revenue, NPV / IRR / LCOE / DSCR + Monte Carlo bankability.
+          {% elif _active_step.n == 9 %}Auto-generate a linked BOQ project + buildings using the standard SolarPro BOQ engine.
+          {% elif _active_step.n == 10 %}Marketplace category shortcuts for PV modules, inverters, transformers, RMU, cables.
+          {% elif _active_step.n == 11 %}Auto-create a CRM investment opportunity — capacity, CAPEX, IRR, NPV, LCOE.
+          {% elif _active_step.n == 12 %}13-stage utility pipeline: Lead → Opportunity → Concept → … → Commissioning → Completed.
+          {% elif _active_step.n == 13 %}Executive / Technical / Financial / Bankability / Investment Memo PDFs.
+          {% elif _active_step.n == 14 %}AI agents (PV, Electrical, SCADA, Finance, Grid, Reviewer) — coming soon.
+          {% else %}Complete this step to continue the workflow.{% endif %}
+        </div>
+      </div>
+      <div class="col-md-auto text-md-end">
+        {% if _active_step.endpoint %}
+          <a href="{{ url_for(_active_step.endpoint, pid=proj.id) }}"
+             class="btn btn-warning btn-lg fw-bold">
+            Continue<i class="bi bi-arrow-right ms-1"></i>
+          </a>
+        {% else %}
+          <span class="badge bg-secondary" style="padding:8px 12px">Coming soon</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div class="solar-card p-4 mb-3 text-center" style="border-color:#1a4a2a;background:#0a1a10">
+    <i class="bi bi-check-circle-fill text-success" style="font-size:36px"></i>
+    <div class="fw-bold mt-2">All 14 steps complete.</div>
+    <div class="text-secondary small">Download reports from Step 13 or explore the Digital Twin.</div>
+  </div>
+{% endif %}
+
+{# --- Quick-tools grid: DT / Regulatory / Reports --- #}
+<div class="row g-2 mb-3">
+  <div class="col-md-4">
+    <a href="{{ url_for('capital_investment_digital_twin', pid=proj.id) }}"
+       class="d-block solar-card p-3 h-100 text-decoration-none"
+       style="border-color:#f59e0b;background:#251b00;color:inherit;transition:transform 150ms"
+       onmouseover="this.style.transform='translateY(-2px)'"
+       onmouseout="this.style.transform=''">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-diagram-3 text-warning" style="font-size:22px"></i>
+        <div>
+          <div class="fw-bold small">3D Digital Twin</div>
+          <div class="text-secondary" style="font-size:11px">Layer toggles + sun path</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="{{ url_for('capital_investment_regulatory', pid=proj.id) }}"
+       class="d-block solar-card p-3 h-100 text-decoration-none"
+       style="color:inherit;transition:transform 150ms"
+       onmouseover="this.style.transform='translateY(-2px)'"
+       onmouseout="this.style.transform=''">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-clipboard-check text-warning" style="font-size:22px"></i>
+        <div>
+          <div class="fw-bold small">Regulatory ({{ proj.country or 'jurisdiction' }})</div>
+          <div class="text-secondary" style="font-size:11px">Land tenure + statutes + permits</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-4">
+    <a href="{{ url_for('capital_investment_step13', pid=proj.id) }}"
+       class="d-block solar-card p-3 h-100 text-decoration-none"
+       style="color:inherit;transition:transform 150ms"
+       onmouseover="this.style.transform='translateY(-2px)'"
+       onmouseout="this.style.transform=''">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-file-earmark-text text-warning" style="font-size:22px"></i>
+        <div>
+          <div class="fw-bold small">Reports (5 PDFs)</div>
+          <div class="text-secondary" style="font-size:11px">Exec / Tech / Financial / Bank / Memo</div>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+{# --- Compact anchors footer --- #}
+<div class="d-flex flex-wrap gap-3 justify-content-between align-items-center px-2 mb-3 small text-secondary">
+  <div>
+    <i class="bi bi-list-check text-warning me-1"></i>
+    {% if proj.boq_project_id %}
+      Linked BOQ #<a href="{{ url_for('boq_projects_list') }}" class="text-warning">{{ proj.boq_project_id }}</a>
+    {% else %}
+      BOQ links on Step 9
+    {% endif %}
+  </div>
+  <div>
+    <i class="bi bi-shop text-warning me-1"></i>
+    <a href="/marketplace" class="text-warning">Marketplace</a>
+  </div>
+  <div>
+    <i class="bi bi-diagram-3 text-warning me-1"></i>
+    <a href="{{ url_for('capital_investment_step12', pid=proj.id) }}" class="text-warning">13-stage pipeline</a>
+  </div>
+</div>
+
+{# --- Description (only if given) --- #}
+{% if proj.description %}
+  <div class="solar-card p-3 mb-3">
+    <div class="small text-secondary mb-1"><i class="bi bi-info-circle me-1"></i>Project description</div>
+    <div class="small">{{ proj.description }}</div>
+  </div>
+{% endif %}
+
+{# --- Workflow help (collapsed by default; toggle via header Help button) --- #}
+<div class="collapse mb-3" id="workflowHelp">
+  <div class="solar-card p-4">
+    <h6 class="fw-bold text-warning mb-3">
+      <i class="bi bi-book me-1"></i>Workflow &mdash; how the 14 steps fit together
+    </h6>
+    <div class="row g-2 small">
+      {% for step in progress %}
+        <div class="col-md-6">
+          <div class="d-flex align-items-start gap-2">
+            <span class="badge {% if step.done %}bg-success{% elif step.active %}bg-warning text-dark{% else %}bg-secondary{% endif %}"
+                  style="min-width:26px">{{ step.n }}</span>
+            <div class="flex-grow-1">
+              <b>{{ step.label }}</b>
+              {% if step.endpoint %}
+                <a href="{{ url_for(step.endpoint, pid=proj.id) }}"
+                   class="text-warning ms-1" style="font-size:11px">open</a>
+              {% endif %}
+              <div class="text-secondary" style="font-size:11px">
+                {% if step.n == 1 %}Client / investor / developer / jurisdiction / currency / tax regime.
+                {% elif step.n == 2 %}Ground-mount, rooftop, industrial, utility, IPP, mining, floating, hybrid, BESS.
+                {% elif step.n == 3 %}Land, terrain, slope, soil, flood/wind/seismic, grid distance, ESIA scope.
+                {% elif step.n == 4 %}Control Room, O&amp;M, Battery, Switchgear, Transformer Yard, external works.
+                {% elif step.n == 5 %}SCADA, EMS, BMS, CMMS, Digital Twin, cyber security.
+                {% elif step.n == 6 %}DC/AC collection, HV/LV distribution, protection, earthing, lightning.
+                {% elif step.n == 7 %}Capacity, generation, PR, DC/AC ratio, string / combiner / inverter counts.
+                {% elif step.n == 8 %}CAPEX / OPEX / PPA / NPV / IRR / LCOE / DSCR / Monte Carlo bankability.
+                {% elif step.n == 9 %}Reuses the SolarPro BOQ engine — Section-by-Section + Build-all.
+                {% elif step.n == 10 %}Auto-pulls PV modules, inverters, transformers, RMU, cables.
+                {% elif step.n == 11 %}Opportunity auto-created with capacity, CAPEX, revenue, IRR, payback.
+                {% elif step.n == 12 %}Lead → Concept → Feasibility → Bank → Award → Construction → COD.
+                {% elif step.n == 13 %}Executive, Technical, Financial, Bankability, Investment Memo, Ops Manual.
+                {% elif step.n == 14 %}PV, Electrical, Civil, Structural, SCADA, Finance, Grid, Reviewer agents.
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    <div class="text-secondary small mt-3">
+      <i class="bi bi-info-circle text-warning me-1"></i>
+      Steps 2 through 14 unlock as each preceding step is completed. Steps 9-13 reuse the
+      existing SolarPro engines so nothing you build here duplicates what the standard
+      workflow already provides.
     </div>
   </div>
 </div>
