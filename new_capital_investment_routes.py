@@ -2913,6 +2913,13 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
     @app.route("/large-scale-solar", endpoint="capital_investment_landing")
     def _landing():
         _ensure_capital_investment_schema(get_db)
+        # Eager-create sibling tables so any wizard hop that INSERTs into
+        # them doesn't 500 with 'relation does not exist' on live PG. The
+        # helpers are cheap + idempotent + per-statement transactional.
+        try: _ensure_opportunities_schema(get_db)
+        except Exception: pass
+        try: _ensure_agent_runs_schema(get_db)
+        except Exception: pass
         recent = []
         user = current_user()
         tier = _ci_tier_of(user)
@@ -3028,6 +3035,12 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                 pass
             return g
         _ensure_capital_investment_schema(get_db)
+        # Eager-create sibling tables so Step 11 (CRM) / Step 14 (Agents)
+        # routes never 500 on missing table on this user's live backend.
+        try: _ensure_opportunities_schema(get_db)
+        except Exception: pass
+        try: _ensure_agent_runs_schema(get_db)
+        except Exception: pass
         uid = session["user_id"]
 
         if request.method == "POST":

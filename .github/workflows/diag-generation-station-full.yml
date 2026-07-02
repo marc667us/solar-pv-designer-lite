@@ -190,11 +190,18 @@ jobs:
           DATABASE_URL: ${{ steps.pg.outputs.external }}
         run: |
           set -e
-          echo "-- C1 row counts across CI tables --"
-          psql "$DATABASE_URL" -c "
-            SELECT 'capital_investment_projects'      AS tbl, COUNT(*)::int AS rows FROM capital_investment_projects
-            UNION ALL SELECT 'capital_investment_opportunities',      COUNT(*)::int FROM capital_investment_opportunities
-            UNION ALL SELECT 'capital_investment_agent_runs',         COUNT(*)::int FROM capital_investment_agent_runs;"
+          echo "-- C1 row counts across CI tables (missing tables reported as MISSING) --"
+          for tbl in capital_investment_projects \
+                     capital_investment_opportunities \
+                     capital_investment_agent_runs; do
+            exists=$(psql "$DATABASE_URL" -A -t -c "SELECT to_regclass('public.$tbl') IS NOT NULL")
+            if [ "$exists" = "t" ]; then
+              n=$(psql "$DATABASE_URL" -A -t -c "SELECT COUNT(*) FROM $tbl")
+              printf "  %-40s  %s rows\n" "$tbl" "$n"
+            else
+              printf "  %-40s  MISSING\n" "$tbl"
+            fi
+          done
 
           echo ""
           echo "-- C2 projects created since the fix landed (SHA $FIX_SHA @ ~14:33 UTC 2026-07-02) --"
