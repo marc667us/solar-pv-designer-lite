@@ -3052,12 +3052,11 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             if ptype and ptype not in PROJECT_TYPE_CODES:
                 ptype = ""
 
-            # Defensive INSERT. If the wide form (with target_kwp) fails
-            # because the additive migration hasn't run yet on this backend,
-            # fall back to the narrow form and set target_kwp in a follow-up
-            # UPDATE. This is belt-and-braces: the schema-ensure helper
-            # SHOULD have added the column, but Postgres transaction
-            # aborts have burned us before.
+            # INSERT ... RETURNING id: portable across SQLite 3.35+ and
+            # Postgres. Bypasses the lastrowid / SELECT lastval() edge
+            # cases that made the previous defensive path silently
+            # redirect the user back to /new with a 'please retry'
+            # warning even after a successful INSERT.
             pid = 0
             insert_error = None
             try:
@@ -3068,13 +3067,15 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                         "country, region, district, gps_lat, gps_lon, description, "
                         "project_status, target_cod, target_kwp, design_standard, "
                         "currency, tax_regime, project_type"
-                        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        "RETURNING id",
                         (uid, name, client, investor, dev,
                          country, region, district, lat, lon, desc,
                          status, target_cod, target_kwp_val, standard,
                          currency, tax, ptype),
                     )
-                    pid = int(cur.lastrowid or 0)
+                    row = cur.fetchone()
+                    pid = int(row[0]) if row else 0
             except Exception as e:
                 insert_error = str(e)
                 try:
@@ -3085,16 +3086,18 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                             "country, region, district, gps_lat, gps_lon, description, "
                             "project_status, target_cod, design_standard, "
                             "currency, tax_regime, project_type"
-                            ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                            "RETURNING id",
                             (uid, name, client, investor, dev,
                              country, region, district, lat, lon, desc,
                              status, target_cod, standard,
                              currency, tax, ptype),
                         )
-                        pid = int(cur.lastrowid or 0)
-                    # Fire-and-forget UPDATE for target_kwp in case the
-                    # column DOES exist but the wide INSERT failed for
-                    # another reason.
+                        row = cur.fetchone()
+                        pid = int(row[0]) if row else 0
+                    # Follow-up UPDATE for target_kwp - the column MAY
+                    # exist even when the wide INSERT failed for another
+                    # reason; try once and swallow if it doesn't.
                     if pid and target_kwp_val is not None:
                         try:
                             with get_db() as c:
@@ -3106,6 +3109,15 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                         except Exception:
                             pass
                 except Exception as e2:
+                    try:
+                        from flask import current_app
+                        current_app.logger.error(
+                            "capital_investment _new: both INSERT paths failed "
+                            "wide_err=%r narrow_err=%r uid=%s",
+                            insert_error, str(e2), uid,
+                        )
+                    except Exception:
+                        pass
                     flash(f"Could not create the project: {e2}. "
                           "Try again in a moment; if this persists, "
                           "contact support.", "danger")
