@@ -128,6 +128,7 @@
     "softBounces|sales@aiappinvent.com|2026-07-01T21:49:50.000Z",
     "softBounces|sales@aiappinvent.com|2026-07-01T22:05:01.000Z",
     "softBounces|sales@aiappinvent.com|2026-07-01T23:52:21.000Z",
+    "softBounces|sales@aiappinvent.com|2026-07-02T04:42:48.000Z",
     "softBounces|smoke_1chen2w8@solarpro-test.local|2026-06-24T17:15:45.000Z",
     "softBounces|talk2us@ofgen.co.ke|2026-06-11T15:14:22.000Z",
     "softBounces|test_autotest_gh@solarpro-test.invalid|2026-06-10T19:50:27.000Z",
@@ -137,15 +138,15 @@
     "softBounces|test_autotest_ng@solarpro-test.invalid|2026-06-10T20:58:56.000Z",
     "softBounces|test_autotest_ng@solarpro-test.invalid|2026-06-10T23:09:11.000Z"
   ],
-  "last_run_utc": "2026-07-02T04:42:39.957648+00:00",
+  "last_run_utc": "2026-07-02T09:44:34.049206+00:00",
   "totals": {
     "blocked": 0,
     "deferred": 0,
     "delivered": 0,
     "hardBounces": 0,
-    "opened": 8,
-    "other": 12,
-    "softBounces": 12,
+    "opened": 9,
+    "other": 13,
+    "softBounces": 13,
     "spam": 0
   },
   "window_days": 1
