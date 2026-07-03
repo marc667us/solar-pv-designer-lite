@@ -8,7 +8,8 @@
     <div class="text-secondary small">{{ proj.project_name }} &mdash; derived from the linked BOQ &amp; the project finance. No parallel costing.</div>
   </div>
   <div class="d-flex gap-2">
-    {% if cost.linked %}<a href="{{ url_for('capital_investment_cost_plan_xlsx', pid=proj.id) }}" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-excel me-1"></i>Excel (per service)</a>{% endif %}
+    {% if cost.linked %}<a href="{{ url_for('capital_investment_cost_plan_xlsx', pid=proj.id) }}" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-excel me-1"></i>Excel (per service)</a>
+    <a href="{{ url_for('capital_investment_cost_plan_pdf', pid=proj.id) }}" class="btn btn-outline-danger btn-sm"><i class="bi bi-file-earmark-pdf me-1"></i>PDF report</a>{% endif %}
     <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Overview</a>
   </div>
 </div>

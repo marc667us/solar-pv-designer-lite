@@ -5170,6 +5170,149 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
     # ------------------------------------------------------------------
+    # GET /large-scale-solar/<pid>/cost-plan.pdf -- printable Cost Plan report
+    # (KPIs + by-service + by-building-with-sections + yield + cash flow), built
+    # from the SAME engines as the deck (_ci_cost_plan / _ci_yield_profile /
+    # _ci_cashflow_plan) so the PDF, the deck, and the Excel never diverge.
+    # Owner request 2026-07-03. Rendered via the SolarPro-standard markdown-pdf.
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/<int:pid>/cost-plan.pdf",
+               endpoint="capital_investment_cost_plan_pdf")
+    @login_required
+    def _cost_plan_pdf(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        proj = _load_project(pid)
+        uid = session["user_id"]
+        fin_cfg = _safe_json(proj.get("finance_config"))
+        pv_cfg = _safe_json(proj.get("pv_config"))
+        computed = fin_cfg.get("computed") or {}
+        try:
+            fx = float(computed.get("fx_local_per_usd")
+                       or fin_cfg.get("fx_local_per_usd") or 12.0)
+        except (TypeError, ValueError):
+            fx = 12.0
+        if fx <= 0:
+            fx = 12.0
+        cur = proj.get("currency") or "GHS"
+        cost = _ci_cost_plan(get_db, proj.get("boq_project_id"), uid, fx=fx)
+        yld = _ci_yield_profile(pv_cfg, gps_lat=proj.get("gps_lat")) or {}
+        cash = _ci_cashflow_plan(fin_cfg)
+
+        from flask import Response
+
+        def _m(v):
+            # Money formatter for the markdown body.
+            try:
+                return f"{cur} {float(v or 0):,.0f}"
+            except (TypeError, ValueError):
+                return f"{cur} 0"
+
+        def _clean(s):
+            # Keep pipe/newline out of markdown table cells.
+            return str(s or "").replace("|", "/").replace("\n", " ").strip()
+
+        name = _clean(proj.get("project_name") or f"Project {pid}")
+        t = cost["totals"]
+        parts = [f"# Cost Plan -- {name}\n",
+                 "_Derived from the linked BOQ and the project finance. "
+                 "No parallel costing._\n"]
+
+        # --- KPI summary ---
+        parts.append("## Summary\n")
+        parts.append("| Metric | Value |\n|---|---|")
+        parts.append(f"| Total cost | {_m(t['grand_total_local'])} "
+                     f"(USD {t['grand_total_usd']:,.0f}) |")
+        parts.append(f"| Scope | {t['n_buildings']} buildings, "
+                     f"{t['n_sections']} services, {t['n_items']} line items |")
+        if yld:
+            parts.append(f"| Annual yield | {yld.get('annual_gen_mwh', 0):,.0f} "
+                         f"MWh ({yld.get('specific_yield_kwh_per_kwp', 0)} "
+                         "kWh/kWp) |")
+        if cash.get("irr_pct") is not None:
+            parts.append(f"| IRR | {cash['irr_pct']:.1f}% |")
+        if cash.get("payback_years") is not None:
+            parts.append(f"| Payback | {cash['payback_years']:.1f} yr |")
+        parts.append("")
+
+        # --- Cost by service ---
+        if cost["by_service"]:
+            parts.append("## Cost by service\n")
+            parts.append("| Service | Total | Share | Items |\n|---|---|---|---|")
+            for s in cost["by_service"]:
+                parts.append(f"| {_clean(s['label'])} | {_m(s['total_local'])} "
+                             f"| {s['pct']}% | {s['n_items']} |")
+            parts.append("")
+
+        # --- Cost by building, with section breakdown ---
+        if cost["by_building"]:
+            parts.append("## Cost by building\n")
+            for b in cost["by_building"]:
+                parts.append(f"### {_clean(b['label'])} -- {_m(b['total_local'])} "
+                             f"({b['pct']}%, {b['n_items']} items)\n")
+                parts.append("| # | Description | Unit | Qty | Rate | Amount "
+                             "|\n|---|---|---|---|---|---|")
+                for sec in b["sections"]:
+                    parts.append(f"| | **{_clean(sec['label'])}** | | | | "
+                                 f"**{_m(sec['total_local'])}** |")
+                    for i, it in enumerate(sec["items"], 1):
+                        parts.append(
+                            f"| {_clean(it.get('item_no') or i)} "
+                            f"| {_clean(it['description'])} | {_clean(it['unit'])} "
+                            f"| {it['qty']:,.2f} | {it['rate']:,.2f} "
+                            f"| {it['total_local']:,.0f} |")
+                parts.append("")
+
+        # --- Generation yield ---
+        if yld:
+            parts.append("## Generation yield\n")
+            parts.append(f"- Annual: **{yld.get('annual_gen_mwh', 0):,.0f} MWh** "
+                         f"(specific yield {yld.get('specific_yield_kwh_per_kwp', 0)}"
+                         " kWh/kWp)")
+            d = yld.get("daily") or {}
+            if d:
+                parts.append(f"- Representative day: peak {d.get('peak_mw', 0)} MW, "
+                             f"{d.get('daylight_hours', 0)} h daylight, "
+                             f"{d.get('avg_daily_mwh', 0)} MWh/day avg")
+            if yld.get("monthly"):
+                parts.append("\n| Month | MWh | Share |\n|---|---|---|")
+                for m in yld["monthly"]:
+                    parts.append(f"| {m['month']} | {m['mwh']:,.0f} "
+                                 f"| {m['pct']}% |")
+            if yld.get("annual_series"):
+                parts.append(f"\n**Annual generation over {yld.get('years', 10)} "
+                             "years (with degradation)**\n")
+                parts.append("| Year | MWh | % of Y1 |\n|---|---|---|")
+                for a in yld["annual_series"]:
+                    parts.append(f"| {a['year']} | {a['mwh']:,.0f} "
+                                 f"| {a['pct_of_y1']}% |")
+            parts.append("")
+
+        # --- Cash flow ---
+        if cash.get("available"):
+            parts.append("## Cash flow\n")
+            parts.append(f"- CAPEX: {_m(cash.get('capex_local'))}")
+            parts.append(f"- Equity: {_m(cash.get('equity_local'))}")
+            if cash.get("npv_local") is not None:
+                parts.append(f"- NPV: {_m(cash['npv_local'])}")
+            if cash.get("irr_pct") is not None:
+                parts.append(f"- IRR: {cash['irr_pct']:.1f}%")
+            if cash.get("payback_years") is not None:
+                parts.append(f"- Payback: {cash['payback_years']:.1f} yr")
+            parts.append("\n| Year | Net cash flow | Cumulative |\n|---|---|---|")
+            for i, y in enumerate(cash["years"]):
+                parts.append(f"| {y} | {_m(cash['net'][i])} "
+                             f"| {_m(cash['cumulative'][i])} |")
+            parts.append("")
+
+        md = "\n".join(parts)
+        pdf_bytes = _render_pdf_bytes(md, f"Cost Plan - {name}")
+        fname = f"cost-plan-{pid}.pdf"
+        return Response(
+            pdf_bytes, mimetype="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+    # ------------------------------------------------------------------
     # GET /large-scale-solar/<pid>/step13 -- Reports menu (13 PDF reports)
     # + GET /large-scale-solar/<pid>/report/<key>.pdf -- download
     # ------------------------------------------------------------------
