@@ -61,9 +61,16 @@
         <div class="card-body">
           <div class="fw-semibold text-warning text-uppercase mb-2" style="font-size:11px">Revenue &amp; financing</div>
           <label class="form-label small">Revenue model</label>
-          <select name="revenue_model" class="form-select form-select-sm mb-2">
+          <select name="revenue_model" id="ci-revenue-model" class="form-select form-select-sm mb-2">
             {% for code, label in revenue_models %}<option value="{{ code }}" {{ 'selected' if cfg.revenue_model == code }}>{{ label }}</option>{% endfor %}
           </select>
+          <div id="ci-netmeter" class="border border-secondary rounded p-2 mb-2 {{ '' if cfg.revenue_model == 'net_metering' else 'd-none' }}" style="background:#0d0d1a">
+            <div class="text-info small mb-1"><i class="bi bi-arrow-left-right me-1"></i>Net metering &mdash; self-consumed energy is valued at the tariff above (avoided cost); exported surplus is credited at the export rate.</div>
+            <div class="row g-2">
+              <div class="col-6"><label class="form-label small">Self-consumption %</label>{{ fin('self_consumption_pct', cfg.self_consumption_pct or 60) }}</div>
+              <div class="col-6"><label class="form-label small">Export credit ({{ cur }}/kWh)</label>{{ fin('export_tariff_local_per_kwh', cfg.export_tariff_local_per_kwh) }}<div class="text-secondary" style="font-size:10px">blank = 1:1 net metering</div></div>
+            </div>
+          </div>
           <div class="row g-2">
             <div class="col-6"><label class="form-label small">Tariff ({{ cur }}/kWh)</label>{{ fin('tariff_local_per_kwh', cfg.tariff_local_per_kwh or 1.5) }}</div>
             <div class="col-6"><label class="form-label small">FX ({{ cur }}/USD)</label>{{ fin('fx_local_per_usd', cfg.fx_local_per_usd or 12) }}</div>
@@ -156,4 +163,15 @@
     </div>
   </div>
 </form>
+<script>
+(function () {
+  // Show the net-metering inputs only when that revenue model is selected.
+  var sel = document.getElementById("ci-revenue-model");
+  var panel = document.getElementById("ci-netmeter");
+  if (!sel || !panel) { return; }
+  function sync() { panel.classList.toggle("d-none", sel.value !== "net_metering"); }
+  sel.addEventListener("change", sync);
+  sync();
+})();
+</script>
 {% endblock %}

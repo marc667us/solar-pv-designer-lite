@@ -1075,11 +1075,20 @@ def finance_utility(*,
                     contingency_pct: float | None = None,
                     carbon_credit_usd_per_tco2: float = 5.0,
                     grid_ef_kgco2_per_kwh: float = 0.45,
-                    monte_carlo_runs: int = 200
+                    monte_carlo_runs: int = 200,
+                    revenue_model: str = "ppa",
+                    self_consumption_pct: float = 60.0,
+                    export_tariff_local_per_kwh: float | None = None
                     ) -> dict[str, Any]:
     """CAPEX/OPEX/NPV/IRR/LCOE/DSCR + Monte Carlo P10/P50/P90. Money reported in
     LOCAL currency via fx_local_per_usd; NPV on nominal local cash flows.
-    Module-local engine carried with the module (Codex SSS Section 1)."""
+    Module-local engine carried with the module (Codex SSS Section 1).
+
+    Revenue model: for every model except net metering, year-1 revenue is
+    generation x tariff. For NET METERING the plant self-consumes a share of its
+    output (valued at the avoided retail tariff = tariff_local_per_kwh) and
+    exports the surplus (credited at export_tariff_local_per_kwh, defaulting to
+    the retail tariff = 1:1 net metering). self_consumption_pct is 0-100."""
     import random
 
     cx = dict(DEFAULT_CAPEX_USD_PER_KWP)
@@ -1119,7 +1128,30 @@ def finance_utility(*,
     else:
         annual_debt_service_local = 0.0
 
-    revenue_local_y1 = annual_gen_mwh * 1000.0 * tariff_local_per_kwh
+    gen_kwh_y1 = annual_gen_mwh * 1000.0
+    if revenue_model == "net_metering":
+        # Self-consumed energy is valued at the avoided RETAIL tariff; the
+        # exported surplus is credited at the export/net-metering rate (defaults
+        # to the retail tariff -> 1:1 netting).
+        sc = max(0.0, min(1.0, self_consumption_pct / 100.0))
+        exp_rate = (export_tariff_local_per_kwh
+                    if (export_tariff_local_per_kwh is not None
+                        and export_tariff_local_per_kwh >= 0)
+                    else tariff_local_per_kwh)
+        self_kwh_y1 = gen_kwh_y1 * sc
+        export_kwh_y1 = gen_kwh_y1 * (1.0 - sc)
+        revenue_local_y1 = (self_kwh_y1 * tariff_local_per_kwh
+                            + export_kwh_y1 * exp_rate)
+        net_metering = {
+            "self_consumption_pct": round(sc * 100.0, 1),
+            "self_consumed_mwh_y1": round(self_kwh_y1 / 1000.0, 1),
+            "exported_mwh_y1": round(export_kwh_y1 / 1000.0, 1),
+            "retail_tariff_local_per_kwh": round(tariff_local_per_kwh, 4),
+            "export_tariff_local_per_kwh": round(exp_rate, 4),
+        }
+    else:
+        revenue_local_y1 = gen_kwh_y1 * tariff_local_per_kwh
+        net_metering = None
     carbon_local_y1 = (annual_gen_mwh * grid_ef_kgco2_per_kwh
                        * carbon_credit_usd_per_tco2 * fx_local_per_usd)
     cash_flows: list[float] = [-equity_local]
@@ -1248,6 +1280,8 @@ def finance_utility(*,
         "revenue_by_year": revenue_by_year, "opex_by_year": opex_by_year,
         "debt_by_year": debt_by_year, "net_by_year": net_by_year,
         "monte_carlo": monte_carlo,
+        "revenue_model": revenue_model,
+        "net_metering": net_metering,
     }
 
 
@@ -4352,6 +4386,9 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             carbon_price = _n(f, "carbon_credit_usd_per_tco2", 5.0)
             grid_ef = _n(f, "grid_ef_kgco2_per_kwh", 0.45)
             mc_runs = int(_n(f, "monte_carlo_runs", 200) or 0)
+            # Net-metering inputs (used only when revenue_model == net_metering).
+            self_consumption_pct = _n(f, "self_consumption_pct", 60.0)
+            export_tariff = _n(f, "export_tariff_local_per_kwh", None)
 
             if kwp <= 0 or annual_gen_mwh <= 0:
                 flash("PV kWp and annual generation must be set on Step 7 "
@@ -4391,6 +4428,9 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                 degradation_pct=degrad, bess_capex_usd=bess_capex,
                 carbon_credit_usd_per_tco2=carbon_price,
                 grid_ef_kgco2_per_kwh=grid_ef, monte_carlo_runs=mc_runs,
+                revenue_model=revenue_model,
+                self_consumption_pct=self_consumption_pct,
+                export_tariff_local_per_kwh=export_tariff,
             )
             computed["boq_reconciliation"] = recon
             computed["facility_costs_usd"] = boq_actuals["facility_costs_usd"]
@@ -4401,6 +4441,8 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                 "opex_usd_per_kwp_yr": opex_form,
                 "tariff_local_per_kwh": tariff, "fx_local_per_usd": fx,
                 "revenue_model": revenue_model, "project_life_yr": project_life,
+                "self_consumption_pct": self_consumption_pct,
+                "export_tariff_local_per_kwh": export_tariff,
                 "discount_rate_pct": discount * 100,
                 "debt_ratio_pct": debt_ratio * 100,
                 "debt_rate_pct": debt_rate * 100, "debt_tenor_yr": debt_tenor,
