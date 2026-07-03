@@ -5041,6 +5041,135 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         )
 
     # ------------------------------------------------------------------
+    # GET /large-scale-solar/<pid>/cost-plan.xlsx -- Excel export of the deck,
+    # BROKEN INTO ONE WORKSHEET PER SERVICE (tabs at the bottom) so a large BOQ
+    # stays manageable, plus a Summary tab (owner request 2026-07-03).
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/<int:pid>/cost-plan.xlsx",
+               endpoint="capital_investment_cost_plan_xlsx")
+    @login_required
+    def _cost_plan_xlsx(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        proj = _load_project(pid)
+        uid = session["user_id"]
+        fin_cfg = _safe_json(proj.get("finance_config"))
+        computed = fin_cfg.get("computed") or {}
+        try:
+            fx = float(computed.get("fx_local_per_usd")
+                       or fin_cfg.get("fx_local_per_usd") or 12.0)
+        except (TypeError, ValueError):
+            fx = 12.0
+        if fx <= 0:
+            fx = 12.0
+        cur = proj.get("currency") or "GHS"
+        cost = _ci_cost_plan(get_db, proj.get("boq_project_id"), uid, fx=fx)
+
+        import io
+        import re as _re
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill
+        from flask import Response
+
+        used_titles: set[str] = set()
+
+        def _xs(v):
+            # Excel formula-injection guard: force any string that Excel would
+            # treat as a formula (leading = + - @, or a leading tab/CR) to be
+            # inert text by prefixing an apostrophe. Numbers pass through as-is.
+            if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r"):
+                return "'" + v
+            return v
+
+        def _sheet_title(label: str) -> str:
+            # Excel: <=31 chars, none of []:*?/\, unique, non-blank.
+            t = _re.sub(r'[\[\]:\*\?/\\]', " ", str(label or "Service")).strip()[:28]
+            t = t or "Service"
+            base, i = t, 2
+            while t.lower() in used_titles:
+                suf = f" {i}"
+                t = base[:28 - len(suf)] + suf
+                i += 1
+            used_titles.add(t.lower())
+            return t
+
+        wb = openpyxl.Workbook()
+        bold = Font(bold=True)
+        hdr = Font(bold=True, color="FFFFFF")
+        fill = PatternFill("solid", fgColor="333333")
+
+        ws = wb.active
+        ws.title = "Summary"
+        ws.append([f"Cost Plan - {proj.get('project_name') or ''}"])
+        ws["A1"].font = Font(bold=True, size=14)
+        ws.append([])
+        t = cost["totals"]
+        for k, v in [(f"Total cost ({cur})", t["grand_total_local"]),
+                     ("Total cost (USD)", t["grand_total_usd"]),
+                     ("Buildings", t["n_buildings"]),
+                     ("Services", t["n_sections"]),
+                     ("Line items", t["n_items"])]:
+            ws.append([k, v])
+            ws.cell(ws.max_row, 1).font = bold
+        ws.append([])
+        for title, rows in (
+            (["By service", f"Total ({cur})", "Share %", "Items"],
+             [[_xs(s["label"]), s["total_local"], s["pct"], s["n_items"]]
+              for s in cost["by_service"]]),
+            (["By building", f"Total ({cur})", "Share %", "Items"],
+             [[_xs(b["label"]), b["total_local"], b["pct"], b["n_items"]]
+              for b in cost["by_building"]])):
+            ws.append(title)
+            for c in range(1, len(title) + 1):
+                cell = ws.cell(ws.max_row, c)
+                cell.font = hdr
+                cell.fill = fill
+            for r in rows:
+                ws.append(r)
+            ws.append([])
+
+        # One worksheet per service (section), item lines across buildings.
+        # Key the intermediate map by SECTION CODE (not display label): two
+        # distinct sections can normalise to the same label, and keying by label
+        # would merge their line items onto the wrong sheet (Codex MED-1).
+        svc: dict[str, list] = {}
+        for b in cost["by_building"]:
+            for sec in b["sections"]:
+                svc.setdefault(sec["section"], []).extend(
+                    (b["label"], it) for it in sec["items"])
+        for s in cost["by_service"]:
+            rows = svc.get(s["key"])
+            if not rows:
+                continue
+            sh = wb.create_sheet(_sheet_title(s["label"]))
+            head = ["Building", "#", "Description", "Unit", "Qty",
+                    f"Rate ({cur})", f"Amount ({cur})"]
+            sh.append(head)
+            for c in range(1, len(head) + 1):
+                sh.cell(1, c).font = hdr
+                sh.cell(1, c).fill = fill
+            for bl, it in rows:
+                sh.append([_xs(bl), _xs(it["item_no"]), _xs(it["description"]),
+                           _xs(it["unit"]), it["qty"], it["rate"],
+                           it["total_local"]])
+            sh.append([])
+            sh.append(["", "", "", "", "", "Total", round(s["total_local"], 2)])
+            sh.cell(sh.max_row, 6).font = bold
+            sh.cell(sh.max_row, 7).font = bold
+            for col, w in zip("ABCDEFG", (22, 6, 46, 8, 10, 14, 16)):
+                sh.column_dimensions[col].width = w
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        fname = f"cost-plan-{pid}.xlsx"
+        return Response(
+            buf.getvalue(),
+            mimetype=("application/vnd.openxmlformats-officedocument."
+                      "spreadsheetml.sheet"),
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+    # ------------------------------------------------------------------
     # GET /large-scale-solar/<pid>/step13 -- Reports menu (13 PDF reports)
     # + GET /large-scale-solar/<pid>/report/<key>.pdf -- download
     # ------------------------------------------------------------------
