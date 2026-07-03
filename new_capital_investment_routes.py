@@ -35,6 +35,7 @@ verified schema. Steps 2-14 + digital twin + regulatory land in later phases.
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from flask import (
@@ -506,6 +507,22 @@ _CI_FACILITY_CAPEX_KEYS: tuple[str, ...] = ("electrical", "ict_scada", "security
 # the reconciliation reflects ONLY the generated facilities BOQ (durable across
 # Build-all edits). Populated for real in Phase 5.
 _CI_AUTOBUILD_SOURCE: str = "capital_autobuild"
+
+# Free-tier worker safety cap: the Step 9 BOQ links a floor per selected
+# facility, then pre-prices each floor's starter rows SYNCHRONOUSLY via the
+# standard engine. On the single-worker Render free tier a very large campus
+# (many facilities) could exceed even the raised gunicorn --timeout, killing
+# the sole worker mid-build (503 blip for other users). We therefore auto-price
+# at most this many floors inside the request; any beyond the cap are still
+# fully LINKED (boq_buildings + boq_floors + capital_investment_boq_links) and
+# the user finishes them with the BOQ "Build-all" button. Input: none (module
+# constant). Chosen so a typical 1-6 facility project prices fully in-request,
+# while a 10+ facility campus can never hang the worker. Tune via env override.
+try:
+    _CI_MAX_AUTOBUILD_FLOORS: int = max(1, int(
+        os.environ.get("CI_MAX_AUTOBUILD_FLOORS", "6")))
+except Exception:
+    _CI_MAX_AUTOBUILD_FLOORS = 6
 
 
 def _ci_boq_actuals(get_db, boq_project_id, uid, fx: float = 12.0) -> dict:
@@ -4106,14 +4123,22 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                 return redirect(url_for("capital_investment_step9", pid=pid))
 
             # Auto-build cell-level items via the STANDARD engine (outside the
-            # insert transaction to avoid a nested connection).
+            # insert transaction to avoid a nested connection). To protect the
+            # single free-tier worker we pre-price at most _CI_MAX_AUTOBUILD_FLOORS
+            # floors synchronously; any beyond that stay fully linked (already
+            # inserted above) and the user finishes them with BOQ "Build-all".
             items_built = 0
+            deferred_floors = 0
             try:
                 from web_app import _ci_autobuild_floor_items as _autobuild
             except Exception:
                 _autobuild = None
             if _autobuild:
-                for _bid, _fid, _svcs in built_floors:
+                for _idx, (_bid, _fid, _svcs) in enumerate(built_floors):
+                    if _idx >= _CI_MAX_AUTOBUILD_FLOORS:
+                        # Over the safety cap - leave linked, don't hang the worker.
+                        deferred_floors = len(built_floors) - _idx
+                        break
                     try:
                         items_built += int(
                             _autobuild(_fid, _bid, new_boq_pid, uid, _svcs) or 0)
@@ -4128,6 +4153,11 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             notes = []
             if not links_ready or link_errors:
                 notes.append("facility links unavailable - see admin diagnostics")
+            if deferred_floors:
+                notes.append(
+                    f"{deferred_floors} additional facility floor(s) linked but "
+                    f"not pre-priced (large campus safety cap) - open the BOQ and "
+                    f"use Build-all to price them")
             suffix = (" (" + "; ".join(notes) + ")") if notes else ""
             if service_codes and items_built == 0:
                 flash(
