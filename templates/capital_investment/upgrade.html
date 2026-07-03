@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Unlock Generation Station Design{% endblock %}
+{% block content %}
+<div class="text-center py-4" style="max-width:640px;margin:0 auto">
+  <i class="bi bi-lightning-charge text-warning" style="font-size:2.4rem"></i>
+  <h5 class="fw-bold mt-2">Generation Station Design is an Enterprise feature</h5>
+  <p class="text-secondary">
+    The PV Capital Investment module builds a full utility-scale power-station design &mdash;
+    facilities, priced BOQ, financial model, CRM pipeline, investor-grade reports and a 3D
+    digital twin. Your current plan is <span class="badge bg-secondary">{{ tier_label }}</span>.
+  </p>
+  <a href="{{ url_for('upgrade') }}" class="btn btn-warning fw-bold">
+    <i class="bi bi-stars me-1"></i>See Enterprise plans
+  </a>
+  <div class="mt-3">
+    <a href="{{ url_for('capital_investment_landing') }}" class="text-secondary small">Back to overview</a>
+  </div>
+</div>
+{% endblock %}

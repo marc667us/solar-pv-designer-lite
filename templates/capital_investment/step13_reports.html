@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Step 13 - Reports{% endblock %}
+{% block content %}
+<div class="mb-2">
+  <h5 class="fw-bold mb-0"><i class="bi bi-file-earmark-text text-warning me-1"></i>Step 13 &mdash; Reports</h5>
+  <div class="text-secondary small">Download professional PDF deliverables generated from your project data. BOQ/BOM/construction reports pull real priced totals from the linked BOQ.</div>
+</div>
+
+{% include "capital_investment/_stepper.html" %}
+
+<div class="card bg-dark border-secondary">
+  <div class="card-body">
+    <div class="row g-2">
+      {% for key, label, icon, full in report_types %}
+      <div class="col-md-6 col-lg-4">
+        <a href="{{ url_for('capital_investment_report_pdf', pid=proj.id, report_key=key) }}"
+           class="d-flex align-items-center gap-2 text-decoration-none card bg-black border-secondary h-100 p-2">
+          <i class="bi {{ icon }} text-warning fs-5"></i>
+          <div class="flex-grow-1">
+            <div class="fw-semibold text-light small">{{ label }}</div>
+            <div class="text-secondary" style="font-size:10px">PDF download</div>
+          </div>
+          <i class="bi bi-download text-secondary"></i>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="text-secondary small mt-3">
+      <i class="bi bi-info-circle me-1"></i>Complete Steps 7 (PV), 8 (Finance) and 9 (BOQ) for the most complete reports.
+      Empty figures show as <em>n/a</em> until their step is done &mdash; reports never fail.
+    </div>
+  </div>
+</div>
+
+<div class="d-flex justify-content-between mt-3">
+  <a href="{{ url_for('capital_investment_step12', pid=proj.id) }}" class="btn btn-outline-secondary btn-sm">Back</a>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="btn btn-warning btn-sm fw-bold">
+    Overview <i class="bi bi-arrow-right ms-1"></i></a>
+</div>
+{% endblock %}

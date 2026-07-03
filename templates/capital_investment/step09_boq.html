@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Step 9 - BOQ{% endblock %}
+{% block content %}
+<div class="mb-2">
+  <h5 class="fw-bold mb-0"><i class="bi bi-list-check text-warning me-1"></i>Step 9 &mdash; Bill of Quantities</h5>
+  <div class="text-secondary small">Auto-generate a linked BOQ from your facilities &mdash; reuses the standard SolarPro BOQ engine (Section-by-Section, Build-all, PDF/Excel).</div>
+</div>
+
+{% include "capital_investment/_stepper.html" %}
+
+{% if boq_project_id %}
+<div class="card bg-dark border-success">
+  <div class="card-body">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div>
+        <div class="fw-semibold text-success"><i class="bi bi-check-circle-fill me-1"></i>BOQ linked (project #{{ boq_project_id }})</div>
+        <div class="text-secondary small">Open it to review, edit rates, Build-all, or export.</div>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="/boq-projects/{{ boq_project_id }}" class="btn btn-outline-light btn-sm"><i class="bi bi-folder2-open me-1"></i>Open BOQ project</a>
+        <a href="/boq-projects/{{ boq_project_id }}/boq" class="btn btn-warning btn-sm fw-bold"><i class="bi bi-file-earmark-text me-1"></i>Complete BOQ</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+<form method="post" action="{{ url_for('capital_investment_step9', pid=proj.id) }}" class="card bg-dark border-secondary">
+  <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
+  <div class="card-body">
+    {% if planned_buildings %}
+    <div class="text-secondary small mb-2">The generator will create <strong>{{ planned_buildings|length }}</strong> building(s), each with a Ground Floor and a pre-priced starter BOQ (1 item per section &mdash; expand in Build-all):</div>
+    <div class="row g-2">
+      {% for b in planned_buildings %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card bg-black border-secondary h-100 p-2">
+          <div class="fw-semibold text-light small"><i class="bi bi-building text-warning me-1"></i>{{ b.label }}</div>
+          <div class="text-secondary" style="font-size:11px">{{ b.sub_items|length }} sub-item(s) referenced</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% if selected_external %}
+    <div class="text-secondary small mt-2"><i class="bi bi-signpost-2 me-1"></i>External works flagged ({{ selected_external|length }}) &mdash; site-wide electrical/earthing/lightning/CCTV/LAN scope added.</div>
+    {% endif %}
+    {% else %}
+    <div class="alert alert-warning py-2 small mb-0">
+      No facilities selected. Go to <a href="{{ url_for('capital_investment_step4', pid=proj.id) }}" class="alert-link">Step 4 &mdash; Facilities</a> and enable at least one building first.
+    </div>
+    {% endif %}
+  </div>
+  <div class="card-footer d-flex justify-content-between">
+    <a href="{{ url_for('capital_investment_step8', pid=proj.id) }}" class="btn btn-outline-secondary btn-sm">Back</a>
+    {% if planned_buildings %}
+    <button class="btn btn-warning btn-sm fw-bold" type="submit"><i class="bi bi-magic me-1"></i>Generate linked BOQ</button>
+    {% endif %}
+  </div>
+</form>
+{% endif %}
+{% endblock %}

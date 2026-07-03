@@ -1,0 +1,33 @@
+{# Generation Station wizard rail. Expects `progress` (list of step dicts) and
+   `proj` (with .id). Rebuild 2026-07-03. #}
+<div class="ci-rail d-flex flex-wrap gap-1 mb-3">
+  {% for s in progress %}
+    {% if s.available %}
+      <a class="ci-step text-decoration-none {{ 'done' if s.done else '' }}"
+         href="{% if s.num == 1 %}{{ url_for('capital_investment_new') }}{% else %}{{ url_for(s.endpoint, pid=proj.id) }}{% endif %}"
+         title="Step {{ s.num }} - {{ s.label }}">
+        <span class="ci-step-num">{% if s.done %}<i class="bi bi-check-lg"></i>{% else %}{{ s.num }}{% endif %}</span>
+        <span class="ci-step-label"><i class="bi {{ s.icon }} me-1"></i>{{ s.label }}</span>
+      </a>
+    {% else %}
+      <span class="ci-step soon" title="Step {{ s.num }} - {{ s.label }} (coming soon)">
+        <span class="ci-step-num">{{ s.num }}</span>
+        <span class="ci-step-label"><i class="bi {{ s.icon }} me-1"></i>{{ s.label }}</span>
+      </span>
+    {% endif %}
+  {% endfor %}
+</div>
+<style>
+  .ci-rail { border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:8px; background:rgba(255,255,255,.02); }
+  .ci-step { display:flex; align-items:center; gap:6px; padding:5px 9px; border-radius:8px;
+             color:#b9b9d6; font-size:12px; border:1px solid transparent; }
+  .ci-step:hover { background:rgba(255,255,255,.06); color:#fff; }
+  .ci-step .ci-step-num { display:inline-flex; align-items:center; justify-content:center;
+             width:20px; height:20px; border-radius:50%; background:rgba(255,255,255,.08);
+             font-weight:700; font-size:11px; }
+  .ci-step.done { color:#7ee0a5; }
+  .ci-step.done .ci-step-num { background:#1f7a44; color:#fff; }
+  .ci-step.soon { opacity:.45; cursor:default; }
+  .ci-step.soon:hover { background:transparent; color:#b9b9d6; }
+  @media (max-width:640px){ .ci-step .ci-step-label{ display:none; } }
+</style>

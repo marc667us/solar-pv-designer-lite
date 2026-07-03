@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Step 14 - AI Agents{% endblock %}
+{% block content %}
+<div class="mb-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <div>
+    <h5 class="fw-bold mb-0"><i class="bi bi-robot text-warning me-1"></i>Step 14 &mdash; AI Agent Review</h5>
+    <div class="text-secondary small">14 specialist agents review your project data and score bankability &amp; readiness.</div>
+  </div>
+  {% if aggregate_score is not none %}
+  <div class="text-end">
+    <div class="fw-bold fs-4 {{ 'text-success' if aggregate_score >= 70 else ('text-warning' if aggregate_score >= 55 else 'text-danger') }}">{{ aggregate_score }}/100</div>
+    <div class="text-secondary small">aggregate readiness</div>
+  </div>
+  {% endif %}
+</div>
+
+{% include "capital_investment/_stepper.html" %}
+
+<form method="post" action="{{ url_for('capital_investment_step14', pid=proj.id) }}" class="mb-3">
+  <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
+  <input type="hidden" name="agent" value="all">
+  <button class="btn btn-warning btn-sm fw-bold" type="submit"><i class="bi bi-play-fill me-1"></i>Run all agents</button>
+  <span class="text-secondary small ms-2">Rule-based specialists (no external LLM calls) &mdash; instant, deterministic, zero-cost.</span>
+</form>
+
+<div class="row g-2">
+  {% for code, label, dept, icon in agents %}
+  {% set run = latest.get(code) %}
+  <div class="col-md-6 col-lg-4">
+    <div class="card bg-dark border-secondary h-100">
+      <div class="card-body p-2">
+        <div class="d-flex align-items-center justify-content-between">
+          <div class="fw-semibold text-light small"><i class="bi {{ icon }} text-warning me-1"></i>{{ label }}</div>
+          {% if run and run.score is not none %}
+          <span class="badge {{ 'bg-success' if run.score >= 70 else ('bg-warning text-dark' if run.score >= 55 else 'bg-danger') }}">{{ run.score }}</span>
+          {% else %}<span class="badge bg-secondary">&mdash;</span>{% endif %}
+        </div>
+        <div class="text-secondary" style="font-size:10px">{{ dept }}</div>
+        {% if run %}
+        <div class="text-light small mt-1">{{ run.summary or '' }}</div>
+        {% if run.findings %}
+        <ul class="ps-3 mb-1 mt-1 text-secondary" style="font-size:11px">
+          {% for f in run.findings[:3] %}<li>{{ f }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% if run.recs %}
+        <div class="text-info" style="font-size:11px"><i class="bi bi-lightbulb me-1"></i>{{ run.recs[0] }}</div>
+        {% endif %}
+        <form method="post" action="{{ url_for('capital_investment_step14', pid=proj.id) }}" class="mt-1">
+          <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
+          <input type="hidden" name="agent" value="{{ code }}">
+          <button class="btn btn-outline-secondary btn-sm py-0" style="font-size:10px" type="submit">Re-run</button>
+        </form>
+        {% else %}
+        <div class="text-secondary small mt-1">Not run yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="d-flex justify-content-between mt-3">
+  <a href="{{ url_for('capital_investment_step13', pid=proj.id) }}" class="btn btn-outline-secondary btn-sm">Back</a>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="btn btn-outline-warning btn-sm">Overview</a>
+</div>
+{% endblock %}

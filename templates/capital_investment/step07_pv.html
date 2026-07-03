@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Step 7 - PV Design{% endblock %}
+{% macro num(name, val, step='any', mn='') -%}
+  <input name="{{ name }}" type="number" step="{{ step }}" {% if mn != '' %}min="{{ mn }}"{% endif %}
+         class="form-control form-control-sm" value="{{ val if val not in (None, '') else '' }}">
+{%- endmacro %}
+{% block content %}
+<div class="mb-2">
+  <h5 class="fw-bold mb-0"><i class="bi bi-grid-3x3 text-warning me-1"></i>Step 7 &mdash; PV System Design</h5>
+  <div class="text-secondary small">Size the array, inverters &amp; energy yield. Recompute to iterate before saving.</div>
+</div>
+
+{% include "capital_investment/_stepper.html" %}
+
+<form method="post" action="{{ url_for('capital_investment_step7', pid=proj.id) }}">
+  <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-body">
+          <div class="fw-semibold text-warning text-uppercase mb-2" style="font-size:11px">Technology &amp; array</div>
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label small">Module technology</label>
+              <select name="module_tech" class="form-select form-select-sm"
+                      onchange="var w=this.selectedOptions[0].dataset.wp; if(w) document.querySelector('[name=module_wp]').value=w;">
+                {% for code, label, wp in module_techs %}
+                <option value="{{ code }}" data-wp="{{ wp }}" {{ 'selected' if cfg.module_tech == code }}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Module Wp</label>{{ num('module_wp', cfg.module_wp or 600, '1', '0') }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Mounting</label>
+              <select name="mounting" class="form-select form-select-sm">
+                {% for code, label in mounting_types %}<option value="{{ code }}" {{ 'selected' if cfg.mounting == code }}>{{ label }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Inverter type</label>
+              <select name="inverter_type" class="form-select form-select-sm">
+                {% for code, label in inverter_types %}<option value="{{ code }}" {{ 'selected' if cfg.inverter_type == code }}>{{ label }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4"><label class="form-label small">Target DC (kWp)</label>{{ num('kwp', cfg.kwp, 'any', '0') }}</div>
+            <div class="col-md-4"><label class="form-label small">DC/AC ratio</label>{{ num('dc_ac_ratio', cfg.dc_ac_ratio or 1.2) }}</div>
+            <div class="col-md-4"><label class="form-label small">Life (yr)</label>{{ num('project_life_yr', cfg.project_life_yr or 25, '1', '1') }}</div>
+            <div class="col-md-4"><label class="form-label small">Tilt (&deg;)</label>{{ num('tilt_deg', cfg.tilt_deg or 10) }}</div>
+            <div class="col-md-4"><label class="form-label small">Azimuth (&deg;)</label>{{ num('azimuth_deg', cfg.azimuth_deg or 180) }}</div>
+            <div class="col-md-4"><label class="form-label small">PSH (kWh/m&sup2;/d)</label>{{ num('psh_daily', cfg.psh_daily or 5.4) }}</div>
+          </div>
+          <div class="fw-semibold text-warning text-uppercase mt-3 mb-2" style="font-size:11px">Performance &amp; storage</div>
+          <div class="row g-2">
+            <div class="col-md-4"><label class="form-label small">Perf. ratio</label>{{ num('performance_ratio', cfg.performance_ratio or 0.78) }}</div>
+            <div class="col-md-4"><label class="form-label small">Availability %</label>{{ num('availability_pct', cfg.availability_pct or 98) }}</div>
+            <div class="col-md-4"><label class="form-label small">Degrad %/yr</label>{{ num('annual_degradation_pct', cfg.annual_degradation_pct or 0.5) }}</div>
+            <div class="col-md-6">
+              <label class="form-label small">Battery chemistry</label>
+              <select name="battery_chem" class="form-select form-select-sm">
+                {% for code, label in battery_chemistries %}<option value="{{ code }}" {{ 'selected' if cfg.battery_chem == code }}>{{ label }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6"><label class="form-label small">Battery energy (MWh)</label>{{ num('battery_mwh', cfg.battery_mwh or 0, 'any', '0') }}</div>
+          </div>
+          <div class="mt-2">
+            <label class="form-label small">PV design notes</label>
+            <textarea name="pv_notes" class="form-control form-control-sm" rows="2" maxlength="2000">{{ cfg.notes or '' }}</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card bg-black border-secondary h-100">
+        <div class="card-body">
+          <div class="fw-semibold text-warning text-uppercase mb-2" style="font-size:11px">Design results</div>
+          {% if sizing and not sizing.error %}
+          <div class="row g-2 small">
+            {% set rows = [
+              ('DC installed', '%.2f MWp'|format((sizing.dc_kwp_actual or 0)/1000)),
+              ('Modules', '{:,}'.format(sizing.n_modules or 0)),
+              ('AC inverter', '%.0f kW'|format(sizing.inverter_ac_kw or 0)),
+              ('Central inverters', sizing.n_central_inverters),
+              ('Strings', '{:,}'.format(sizing.strings or 0)),
+              ('Combiners', sizing.combiners),
+              ('Annual yield', '%.0f MWh'|format(sizing.annual_gen_mwh or 0)),
+              ('Specific yield', '%.0f kWh/kWp'|format(sizing.specific_yield_kwh_per_kwp or 0)),
+              ('Lifetime yield', '%.0f MWh'|format(sizing.lifetime_gen_mwh or 0)),
+              ('DC cable est.', '{:,} m'.format(sizing.dc_cable_m_est or 0)),
+              ('AC/MV cable est.', '{:,} m'.format(sizing.ac_cable_m_est or 0)),
+            ] %}
+            {% for label, val in rows %}
+            <div class="col-6 d-flex justify-content-between border-bottom border-secondary py-1">
+              <span class="text-secondary">{{ label }}</span><span class="text-light fw-semibold">{{ val }}</span>
+            </div>
+            {% endfor %}
+          </div>
+          {% elif sizing.error %}
+          <div class="alert alert-warning py-2 small mb-0">{{ sizing.error }}</div>
+          {% else %}
+          <div class="text-secondary small">Enter a target DC capacity and press <strong>Recompute</strong> to size the array.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-between mt-3">
+    <a href="{{ url_for('capital_investment_step6', pid=proj.id) }}" class="btn btn-outline-secondary btn-sm">Back</a>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-warning btn-sm" type="submit" name="recompute_only" value="1"><i class="bi bi-calculator me-1"></i>Recompute</button>
+      <button class="btn btn-warning btn-sm fw-bold" type="submit"><i class="bi bi-check-lg me-1"></i>Save &amp; continue</button>
+    </div>
+  </div>
+</form>
+{% endblock %}

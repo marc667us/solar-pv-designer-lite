@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Step 5 - Technology{% endblock %}
+{% block content %}
+<div class="mb-2">
+  <h5 class="fw-bold mb-0"><i class="bi bi-cpu text-warning me-1"></i>Step 5 &mdash; Technology Stack</h5>
+  <div class="text-secondary small">Plant control, monitoring, analytics, O&amp;M and network technologies.</div>
+</div>
+
+{% include "capital_investment/_stepper.html" %}
+
+{% set sel_t = cfg.technologies or [] %}
+<form method="post" action="{{ url_for('capital_investment_step5', pid=proj.id) }}" class="card bg-dark border-secondary">
+  <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
+  <div class="card-body">
+    {% for group, items in technology_groups %}
+    <div class="mb-3">
+      <div class="text-warning small text-uppercase fw-bold mb-1">{{ group }}</div>
+      <div class="row g-2">
+        {% for code, label, icon in items %}
+        <div class="col-6 col-md-4 col-lg-3">
+          <label class="d-block card bg-black border-secondary p-2 h-100 {{ 'border-warning' if code in sel_t }}" style="cursor:pointer;font-size:12px">
+            <input class="form-check-input me-1" type="checkbox" name="technologies" value="{{ code }}" {{ 'checked' if code in sel_t }}>
+            <i class="bi {{ icon }} text-warning me-1"></i>{{ label }}
+          </label>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    <label class="form-label small">Technology notes</label>
+    <textarea name="notes" class="form-control form-control-sm" rows="2" maxlength="2000">{{ cfg.notes or '' }}</textarea>
+  </div>
+  <div class="card-footer d-flex justify-content-between">
+    <a href="{{ url_for('capital_investment_step4', pid=proj.id) }}" class="btn btn-outline-secondary btn-sm">Back</a>
+    <button class="btn btn-warning btn-sm fw-bold" type="submit">Save &amp; continue <i class="bi bi-arrow-right ms-1"></i></button>
+  </div>
+</form>
+{% endblock %}

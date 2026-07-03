@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Step 3 - Site{% endblock %}
+{% macro sel(name, options, current) -%}
+  <select name="{{ name }}" class="form-select form-select-sm">
+    <option value="">Select&hellip;</option>
+    {% for code, label in options %}
+    <option value="{{ code }}" {{ 'selected' if current == code }}>{{ label }}</option>
+    {% endfor %}
+  </select>
+{%- endmacro %}
+{% block content %}
+<div class="mb-2">
+  <h5 class="fw-bold mb-0"><i class="bi bi-geo-alt text-warning me-1"></i>Step 3 &mdash; Site Characterisation</h5>
+  <div class="text-secondary small">Terrain, ground conditions and site services. Feeds civil scope &amp; risk.</div>
+</div>
+
+{% include "capital_investment/_stepper.html" %}
+
+<form method="post" action="{{ url_for('capital_investment_step3', pid=proj.id) }}" class="card bg-dark border-secondary">
+  <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-4"><label class="form-label small">Terrain</label>{{ sel('terrain', terrains, cfg.terrain) }}</div>
+      <div class="col-md-4"><label class="form-label small">Average slope</label>{{ sel('slope', slopes, cfg.slope) }}</div>
+      <div class="col-md-4"><label class="form-label small">Soil type</label>{{ sel('soil', soils, cfg.soil) }}</div>
+      <div class="col-md-4"><label class="form-label small">Flood risk</label>{{ sel('flood_risk', flood_risks, cfg.flood_risk) }}</div>
+      <div class="col-md-4"><label class="form-label small">Wind zone</label>{{ sel('wind_zone', wind_zones, cfg.wind_zone) }}</div>
+      <div class="col-md-4"><label class="form-label small">Seismic zone</label>{{ sel('seismic_zone', seismic_zones, cfg.seismic_zone) }}</div>
+      <div class="col-md-4"><label class="form-label small">Site access</label>{{ sel('access', accesses, cfg.access) }}</div>
+      <div class="col-md-4"><label class="form-label small">Water supply</label>{{ sel('water', waters, cfg.water) }}</div>
+      <div class="col-md-4">
+        <label class="form-label small">Land area (hectares)</label>
+        <input name="land_area_ha" type="number" step="any" min="0" class="form-control form-control-sm"
+               value="{{ cfg.land_area_ha if cfg.land_area_ha not in (None, '') else '' }}">
+      </div>
+      <div class="col-12">
+        <label class="form-label small">Site notes</label>
+        <textarea name="notes" class="form-control form-control-sm" rows="2" maxlength="2000">{{ cfg.notes or '' }}</textarea>
+      </div>
+    </div>
+  </div>
+  <div class="card-footer d-flex justify-content-between">
+    <a href="{{ url_for('capital_investment_step2', pid=proj.id) }}" class="btn btn-outline-secondary btn-sm">Back</a>
+    <button class="btn btn-warning btn-sm fw-bold" type="submit">Save &amp; continue <i class="bi bi-arrow-right ms-1"></i></button>
+  </div>
+</form>
+{% endblock %}

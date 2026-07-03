@@ -1,0 +1,577 @@
+{% extends "base.html" %}
+{% block title %}Digital Twin Studio - {{ proj.project_name }}{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-2">
+  <div>
+    <h5 class="fw-black mb-0">
+      <i class="bi bi-diagram-3 text-warning me-1"></i>{{ proj.project_name }}
+      <span class="badge bg-warning text-dark ms-1" style="font-size:10px">3D DIGITAL TWIN</span>
+    </h5>
+    <div class="text-secondary small">
+      {% if scene.site.kwp %}{{ '%.1f'|format(scene.site.kwp/1000.0) }} MWp{% endif %}
+      {% if scene.site.land_area_ha %} &middot; {{ '%.1f'|format(scene.site.land_area_ha) }} ha{% endif %}
+      {% if scene.pv.meta.n_rows %} &middot; {{ scene.pv.meta.n_rows }} PV rows{% endif %}
+      {% if scene.inverters %} &middot; {{ scene.inverters | length }} inverters{% endif %}
+      {% if scene.buildings %} &middot; {{ scene.buildings | length }} building(s){% endif %}
+    </div>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="text-secondary small">Back to project</a>
+  </div>
+</div>
+
+{# The studio is a full-width three-pane layout with left nav, centre
+   viewport, right property panel, and a bottom timeline. Height is
+   locked to viewport minus room for the SolarPro chrome. #}
+<div id="dt-studio" style="display:grid;grid-template-columns:220px 1fr 300px;
+     grid-template-rows:1fr auto;gap:6px;
+     height:calc(100vh - 190px);min-height:520px;font-size:13px">
+
+  {# ---------- LEFT NAV ---------- #}
+  <div class="solar-card" style="overflow-y:auto;padding:8px;grid-row:1 / span 2">
+    <div class="fw-bold text-warning mb-2" style="font-size:11px;letter-spacing:.5px">LAYERS</div>
+    {% for grp in layer_groups %}
+      <div class="mb-2">
+        <div class="text-secondary" style="font-size:10px;letter-spacing:.5px;text-transform:uppercase">
+          <i class="{{ grp.icon }} me-1 text-warning"></i>{{ grp.label }}
+        </div>
+        {% for code in grp.codes %}
+          {% set color = scene.palette.get(code, '#cccccc') %}
+          <div class="form-check" style="padding-left:1.6rem;margin:2px 0;font-size:12px">
+            <input class="form-check-input dt-layer-cb" type="checkbox" checked
+                   data-layer="{{ code }}" id="cb_{{ code }}">
+            <label class="form-check-label" for="cb_{{ code }}">
+              <span style="display:inline-block;width:9px;height:9px;background:{{ color }};
+                           border:1px solid #333;vertical-align:middle;margin-right:4px"></span>
+              {{ code.replace('_', ' ') }}
+            </label>
+          </div>
+        {% endfor %}
+      </div>
+    {% endfor %}
+
+    <hr style="border-color:#1e1e3a">
+    <div class="fw-bold text-warning mb-2" style="font-size:11px;letter-spacing:.5px">SIMULATIONS</div>
+    <div class="d-grid gap-1">
+      <button class="btn btn-sm btn-outline-warning" id="btn-sun-play">
+        <i class="bi bi-play-fill me-1"></i>Sun path play
+      </button>
+      <button class="btn btn-sm btn-outline-warning" id="btn-electrical-flow">
+        <i class="bi bi-arrow-right-circle me-1"></i>Electrical flow
+      </button>
+      <button class="btn btn-sm btn-outline-warning" id="btn-topdown">
+        <i class="bi bi-eye me-1"></i>Bird's eye view
+      </button>
+      <button class="btn btn-sm btn-outline-warning" id="btn-perspective">
+        <i class="bi bi-badge-3d me-1"></i>Perspective
+      </button>
+    </div>
+
+    <hr style="border-color:#1e1e3a">
+    <div class="fw-bold text-warning mb-2" style="font-size:11px;letter-spacing:.5px">OUTPUTS</div>
+    <div class="d-grid gap-1">
+      <a href="{{ url_for('capital_investment_step9', pid=proj.id) }}"
+         class="btn btn-sm btn-outline-secondary text-start">
+         <i class="bi bi-list-check me-1"></i>BOQ
+      </a>
+      <a href="{{ url_for('capital_investment_step10', pid=proj.id) }}"
+         class="btn btn-sm btn-outline-secondary text-start">
+         <i class="bi bi-shop me-1"></i>Marketplace
+      </a>
+      <a href="{{ url_for('capital_investment_step13', pid=proj.id) }}"
+         class="btn btn-sm btn-outline-secondary text-start">
+         <i class="bi bi-file-earmark-text me-1"></i>Reports
+      </a>
+      <a href="{{ url_for('capital_investment_step8', pid=proj.id) }}"
+         class="btn btn-sm btn-outline-secondary text-start">
+         <i class="bi bi-graph-up me-1"></i>Financials
+      </a>
+      <button class="btn btn-sm btn-outline-warning" id="btn-download-png">
+        <i class="bi bi-download me-1"></i>Screenshot PNG
+      </button>
+    </div>
+  </div>
+
+  {# ---------- CENTRE VIEWPORT ---------- #}
+  <div class="solar-card" style="position:relative;overflow:hidden;padding:0;grid-row:1">
+    <div id="dt-viewport" style="width:100%;height:100%;background:#0a1015"></div>
+
+    {# HUD overlays #}
+    <div id="dt-hud-top" style="position:absolute;top:8px;left:12px;right:12px;
+         display:flex;justify-content:space-between;pointer-events:none">
+      <div class="text-secondary" style="font-size:11px;text-shadow:0 0 4px #000">
+        <span id="hud-sun-info">Sun -- month 6, hour 12.0</span>
+      </div>
+      <div class="text-secondary" style="font-size:11px;text-shadow:0 0 4px #000">
+        <span id="hud-fps">--</span>
+      </div>
+    </div>
+
+    <div id="dt-hud-loading"
+         style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+                color:#f59e0b;font-size:14px">
+      <i class="bi bi-hourglass-split me-1"></i>Loading 3D scene...
+    </div>
+  </div>
+
+  {# ---------- RIGHT PROPERTY PANEL ---------- #}
+  <div class="solar-card" style="overflow-y:auto;padding:12px;grid-row:1">
+    <div class="fw-bold text-warning mb-2" style="font-size:11px;letter-spacing:.5px">
+      SELECTED OBJECT
+    </div>
+    <div id="dt-props">
+      <div class="text-secondary small">
+        Click any object in the 3D scene to see its properties, BOQ items,
+        and marketplace category shortcut here.
+      </div>
+    </div>
+  </div>
+
+  {# ---------- BOTTOM TIMELINE ---------- #}
+  <div class="solar-card" style="grid-column:2;padding:6px 12px">
+    <div class="d-flex align-items-center gap-3">
+      <button id="tl-play" class="btn btn-sm btn-warning">
+        <i class="bi bi-play-fill"></i>
+      </button>
+      <div class="flex-grow-1">
+        <div class="d-flex align-items-center gap-2 small">
+          <span class="text-secondary" style="min-width:44px">Month</span>
+          <input type="range" id="tl-month" class="form-range" min="1" max="12" step="1" value="6"
+                 style="flex-grow:1">
+          <span id="tl-month-val" class="text-warning fw-bold" style="min-width:24px;text-align:right">6</span>
+        </div>
+        <div class="d-flex align-items-center gap-2 small">
+          <span class="text-secondary" style="min-width:44px">Hour</span>
+          <input type="range" id="tl-hour" class="form-range" min="5" max="19" step="0.25" value="12"
+                 style="flex-grow:1">
+          <span id="tl-hour-val" class="text-warning fw-bold" style="min-width:38px;text-align:right">12.00</span>
+        </div>
+      </div>
+      <div class="text-secondary small" id="tl-sun-summary"
+           style="min-width:170px;text-align:right">alt --, az --</div>
+    </div>
+  </div>
+
+</div>
+
+{# ---------- SERIALISED SCENE DATA (server -> client) ---------- #}
+<script id="dt-scene-json" type="application/json">
+{{ scene | tojson }}
+</script>
+<script>
+  window.DT_PROJECT_PID = {{ proj.id }};
+  window.DT_SUN_URL     = "{{ url_for('capital_investment_dt_sun', pid=proj.id) }}";
+  window.DT_SCENE_URL   = "{{ url_for('capital_investment_dt_scene', pid=proj.id) }}";
+</script>
+
+{# ---------- Three.js UMD (already vendored) ---------- #}
+<script src="/static/vendor/three-r147-umd/three.min.js"></script>
+<script src="/static/vendor/three-r147-umd/OrbitControls.js"></script>
+
+<script>
+(function(){
+  'use strict';
+  var scene, camera, renderer, controls, raycaster, mouse;
+  var sceneData = JSON.parse(document.getElementById('dt-scene-json').textContent);
+  var layerGroups = {};       // layer_code -> THREE.Group
+  var pickables = [];         // array of Meshes with .userData for hit-testing
+  var currentSelection = null;
+  var sunLight, ambientLight;
+  var sunDistance = 0;        // set from land_side
+  var lastFrame = performance.now();
+  var frameCount = 0;
+  var fpsAcc = 0;
+
+  init();
+  buildScene();
+  requestAnimationFrame(loop);
+  updateSun(6, 12);
+
+  function init(){
+    var viewport = document.getElementById('dt-viewport');
+    var w = viewport.clientWidth || 800;
+    var h = viewport.clientHeight || 500;
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a1015);
+    scene.fog = new THREE.Fog(0x0a1015, 200, 4000);
+
+    camera = new THREE.PerspectiveCamera(45, w / h, 0.5, 8000);
+    var cam = sceneData.camera && sceneData.camera.position;
+    if (cam) camera.position.set(cam[0], cam[1], cam[2]);
+    else camera.position.set(200, 200, 200);
+
+    renderer = new THREE.WebGLRenderer({antialias: true, preserveDrawingBuffer: true});
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    renderer.setSize(w, h);
+    viewport.appendChild(renderer.domElement);
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.target.set(0, 0, 0);
+    controls.maxPolarAngle = Math.PI * 0.49;
+    controls.update();
+
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+
+    sunLight = new THREE.DirectionalLight(0xfff0d0, 0.9);
+    sunLight.position.set(100, 200, 100);
+    scene.add(sunLight);
+    scene.add(new THREE.HemisphereLight(0x88aabb, 0x334422, 0.4));
+
+    raycaster = new THREE.Raycaster();
+    mouse = new THREE.Vector2();
+
+    renderer.domElement.addEventListener('click', onCanvasClick, false);
+    window.addEventListener('resize', onResize);
+  }
+
+  function onResize(){
+    var viewport = document.getElementById('dt-viewport');
+    var w = viewport.clientWidth, h = viewport.clientHeight;
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  }
+
+  function getGroup(layerCode){
+    if (layerGroups[layerCode]) return layerGroups[layerCode];
+    var g = new THREE.Group();
+    g.userData.layerCode = layerCode;
+    scene.add(g);
+    layerGroups[layerCode] = g;
+    return g;
+  }
+
+  function layerColor(layerCode){
+    var hex = sceneData.palette[layerCode] || '#cccccc';
+    return new THREE.Color(hex);
+  }
+
+  function addBoxObject(o){
+    var geom = new THREE.BoxGeometry(o.w, o.h, o.l);
+    var mat = new THREE.MeshLambertMaterial({color: layerColor(o.layer)});
+    var m = new THREE.Mesh(geom, mat);
+    m.position.set(o.x, o.y, o.z);
+    if (o.tilt_deg){
+      // Tilt PV rows about the East-West axis (X) so they face South.
+      var az = ((o.azimuth_deg || 180) - 180) * Math.PI / 180;
+      m.rotation.y = -az;
+      m.rotation.x = -o.tilt_deg * Math.PI / 180;
+    }
+    m.userData = {label: o.label, layer: o.layer, meta: o.meta, id: o.id,
+                  color: '#' + mat.color.getHexString()};
+    getGroup(o.layer).add(m);
+    pickables.push(m);
+    return m;
+  }
+
+  function addMastObject(o){
+    var geom = new THREE.CylinderGeometry(o.w * 0.5, o.w * 0.5, o.h, 8);
+    var mat = new THREE.MeshLambertMaterial({color: layerColor(o.layer)});
+    var m = new THREE.Mesh(geom, mat);
+    m.position.set(o.x, o.y, o.z);
+    m.userData = {label: o.label, layer: o.layer, meta: o.meta, id: o.id,
+                  color: '#' + mat.color.getHexString()};
+    getGroup(o.layer).add(m);
+    pickables.push(m);
+    return m;
+  }
+
+  function buildScene(){
+    // Terrain
+    var t = sceneData.terrain;
+    var side = t.side_m;
+    var groundGeom = new THREE.PlaneGeometry(side, side, 1, 1);
+    var groundMat  = new THREE.MeshLambertMaterial({color: layerColor('terrain')});
+    var ground = new THREE.Mesh(groundGeom, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.01;
+    ground.userData = {label: 'Site', layer: 'terrain', meta: t.meta,
+                       id: 'terrain', color: '#3a4a2a'};
+    getGroup('terrain').add(ground);
+    pickables.push(ground);
+    sunDistance = side * 1.5;
+
+    // Compass / axes helper - subtle, on the ground.
+    var helperMat = new THREE.LineBasicMaterial({color: 0x555555});
+    var helperGeom = new THREE.BufferGeometry();
+    var s = side / 2 - 5;
+    helperGeom.setAttribute('position', new THREE.Float32BufferAttribute(
+      [-s, 0.05, 0,  s, 0.05, 0,   0, 0.05, -s,  0, 0.05, s], 3));
+    var helper = new THREE.LineSegments(helperGeom, helperMat);
+    scene.add(helper);
+
+    // Fence (line loop rendered as thin boxes along each edge segment)
+    var fence = sceneData.fence;
+    if (fence && fence.points && fence.points.length >= 3){
+      var pts = fence.points.slice();
+      pts.push(pts[0]);   // close loop
+      for (var i = 0; i < pts.length - 1; i++){
+        var a = pts[i], b = pts[i+1];
+        var dx = b[0] - a[0], dz = b[1] - a[1];
+        var len = Math.sqrt(dx*dx + dz*dz);
+        var mid = [(a[0]+b[0])/2, fence.height_m/2, (a[1]+b[1])/2];
+        var angle = Math.atan2(dz, dx);
+        var g = new THREE.BoxGeometry(len, fence.height_m, 0.15);
+        var mat = new THREE.MeshLambertMaterial({color: layerColor('fence')});
+        var m = new THREE.Mesh(g, mat);
+        m.position.set(mid[0], mid[1], mid[2]);
+        m.rotation.y = -angle;
+        m.userData = {label: fence.label, layer: 'fence',
+                      meta: fence.meta, id: 'fence_' + i,
+                      color: '#c0a060'};
+        getGroup('fence').add(m);
+        pickables.push(m);
+      }
+    }
+
+    // Roads
+    (sceneData.roads || []).forEach(addBoxObject);
+    // Buildings
+    (sceneData.buildings || []).forEach(addBoxObject);
+    // PV rows
+    (sceneData.pv && sceneData.pv.rows || []).forEach(addBoxObject);
+    // Central inverters
+    (sceneData.inverters || []).forEach(addBoxObject);
+    // ICT (masts)
+    (sceneData.ict || []).forEach(function(o){
+      if (o.kind === 'mast') addMastObject(o); else addBoxObject(o);
+    });
+    // Lighting (masts)
+    (sceneData.lighting || []).forEach(function(o){
+      if (o.kind === 'mast') addMastObject(o); else addBoxObject(o);
+    });
+    // Safety
+    (sceneData.safety || []).forEach(addBoxObject);
+
+    // Hide loading hud.
+    var l = document.getElementById('dt-hud-loading');
+    if (l) l.style.display = 'none';
+  }
+
+  function loop(){
+    var now = performance.now();
+    var dt = now - lastFrame; lastFrame = now;
+    fpsAcc += dt; frameCount++;
+    if (frameCount % 30 === 0){
+      var fps = Math.round(1000 * 30 / fpsAcc);
+      document.getElementById('hud-fps').textContent = fps + ' fps';
+      fpsAcc = 0;
+    }
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  }
+
+  // ------ Sun path ------
+  function updateSun(month, hour){
+    fetch(window.DT_SUN_URL + '?month=' + month + '&hour=' + hour)
+      .then(function(r){ return r.json(); })
+      .then(function(sun){
+        var altR = sun.altitude_deg * Math.PI / 180;
+        // Azimuth 0=N, 90=E, 180=S, 270=W in server data. Three.js: +X=E,
+        // +Z=S so a horizontal projection at azimuth az has direction
+        //  ( sin(az_from_N),  cos(az_from_N) ) mapped to (X, Z).
+        var azR = sun.azimuth_deg * Math.PI / 180;
+        var hx = Math.sin(azR), hz = Math.cos(azR);
+        var y  = Math.sin(altR) * sunDistance;
+        var horiz = Math.cos(altR) * sunDistance;
+        sunLight.position.set(hx * horiz, Math.max(y, -sunDistance*0.05),
+                              hz * horiz);
+        sunLight.intensity = sun.is_daylight ? 0.9 : 0.05;
+        ambientLight.intensity = sun.is_daylight ? 0.35 : 0.10;
+        scene.background = new THREE.Color(sun.is_daylight ? 0x0a1015 : 0x000006);
+        document.getElementById('hud-sun-info').textContent =
+          'Sun - month ' + month + ', hour ' + hour.toFixed(2) +
+          '  |  alt ' + sun.altitude_deg.toFixed(1) + 'deg, az ' +
+          sun.azimuth_deg.toFixed(1) + 'deg';
+        document.getElementById('tl-sun-summary').textContent =
+          'alt ' + sun.altitude_deg.toFixed(1) + 'deg, az ' +
+          sun.azimuth_deg.toFixed(1) + 'deg' +
+          (sun.is_daylight ? '' : ' (night)');
+      });
+  }
+
+  // ------ Interaction ------
+  function onCanvasClick(ev){
+    var rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    var hits = raycaster.intersectObjects(pickables, false);
+    if (!hits.length){ setSelection(null); return; }
+    setSelection(hits[0].object);
+  }
+
+  function setSelection(mesh){
+    if (currentSelection && currentSelection.material.emissive){
+      currentSelection.material.emissive.setHex(0x000000);
+    }
+    currentSelection = mesh;
+    var panel = document.getElementById('dt-props');
+    if (!mesh){
+      panel.innerHTML = '<div class="text-secondary small">' +
+        'Click any object in the 3D scene to see its properties, BOQ items, ' +
+        'and marketplace category shortcut here.</div>';
+      return;
+    }
+    if (mesh.material.emissive){
+      mesh.material.emissive.setHex(0x554422);
+    }
+    var d = mesh.userData;
+    var html = '<div class="mb-2"><span class="badge bg-warning text-dark">' +
+               d.layer + '</span></div>' +
+               '<div class="fw-bold mb-2">' + escapeHtml(d.label) + '</div>' +
+               '<div class="small text-secondary mb-2">id: ' + d.id + '</div>';
+    if (d.meta){
+      html += '<table class="table table-dark table-sm small mb-2">';
+      for (var k in d.meta){
+        if (!Object.prototype.hasOwnProperty.call(d.meta, k)) continue;
+        var v = d.meta[k];
+        if (Array.isArray(v)){
+          v = v.length + ' items: ' + escapeHtml(v.slice(0,3).join(', ')) +
+              (v.length > 3 ? ' ...' : '');
+        } else if (v && typeof v === 'object'){
+          v = JSON.stringify(v);
+        } else {
+          v = escapeHtml(String(v));
+        }
+        html += '<tr><td class="text-secondary" style="font-size:11px">' +
+                escapeHtml(k.replace(/_/g, ' ')) +
+                '</td><td>' + v + '</td></tr>';
+      }
+      html += '</table>';
+    }
+    // Marketplace shortcut mapping per layer
+    var marketMap = {
+      'pv_row': 'pv_modules', 'pv_array': 'pv_modules',
+      'inverter': 'inverters', 'transformer': 'transformers',
+      'transformer_bldg': 'transformers',
+      'combiner': 'combiners', 'rmu': 'power_system',
+      'mv_switchgear': 'power_system', 'switchgear_bldg': 'power_system',
+      'battery_room': 'battery_systems',
+      'cctv_pole': 'cctv', 'weather_mast': 'monitoring',
+      'lighting_pole': 'lighting', 'earthing_pit': 'earthing',
+      'scada_bldg': 'server_equipment',
+    };
+    var marketCat = marketMap[d.layer];
+    if (marketCat){
+      html += '<a href="/marketplace?cat=' + encodeURIComponent(marketCat) +
+              '" class="btn btn-sm btn-outline-warning w-100 mb-2">' +
+              '<i class="bi bi-shop me-1"></i>Marketplace ' + marketCat + '</a>';
+    }
+    html += '<a href="/large-scale-solar/' + window.DT_PROJECT_PID +
+            '/step9" class="btn btn-sm btn-outline-warning w-100">' +
+            '<i class="bi bi-list-check me-1"></i>BOQ items</a>';
+    panel.innerHTML = html;
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ------ Layer toggle ------
+  document.querySelectorAll('.dt-layer-cb').forEach(function(cb){
+    cb.addEventListener('change', function(){
+      var code = cb.dataset.layer;
+      var g = layerGroups[code];
+      if (g) g.visible = cb.checked;
+    });
+  });
+
+  // ------ Bottom timeline ------
+  var monthEl = document.getElementById('tl-month');
+  var hourEl  = document.getElementById('tl-hour');
+  var monthLbl = document.getElementById('tl-month-val');
+  var hourLbl  = document.getElementById('tl-hour-val');
+  monthEl.addEventListener('input', function(){
+    monthLbl.textContent = monthEl.value;
+    updateSun(parseInt(monthEl.value, 10), parseFloat(hourEl.value));
+  });
+  hourEl.addEventListener('input', function(){
+    hourLbl.textContent = parseFloat(hourEl.value).toFixed(2);
+    updateSun(parseInt(monthEl.value, 10), parseFloat(hourEl.value));
+  });
+
+  // Play button - iterate hour from 6 -> 18 at 8 minutes = 6 real seconds
+  var playing = false, playTimer = null;
+  document.getElementById('tl-play').addEventListener('click', function(){
+    playing = !playing;
+    this.innerHTML = playing ? '<i class="bi bi-pause-fill"></i>' : '<i class="bi bi-play-fill"></i>';
+    if (playing){
+      playTimer = setInterval(function(){
+        var h = parseFloat(hourEl.value) + 0.25;
+        if (h > 19) h = 5;
+        hourEl.value = h;
+        hourLbl.textContent = h.toFixed(2);
+        updateSun(parseInt(monthEl.value, 10), h);
+      }, 200);
+    } else if (playTimer){ clearInterval(playTimer); }
+  });
+
+  // Sun path top-nav button - same as tl-play.
+  document.getElementById('btn-sun-play').addEventListener('click', function(){
+    document.getElementById('tl-play').click();
+  });
+
+  // ------ Bird's eye + Perspective camera presets ------
+  document.getElementById('btn-topdown').addEventListener('click', function(){
+    var side = sceneData.terrain.side_m;
+    camera.position.set(0, side * 1.3, 0.001);
+    controls.target.set(0, 0, 0);
+    controls.update();
+  });
+  document.getElementById('btn-perspective').addEventListener('click', function(){
+    var cam = sceneData.camera.position;
+    camera.position.set(cam[0], cam[1], cam[2]);
+    controls.target.set(0, 0, 0);
+    controls.update();
+  });
+
+  // ------ Electrical flow: pulse the inverter -> transformer line ------
+  document.getElementById('btn-electrical-flow').addEventListener('click', function(){
+    var infoEl = document.getElementById('hud-sun-info');
+    var invGroup = layerGroups['inverter'];
+    var xfGroup  = layerGroups['transformer'] || layerGroups['transformer_bldg'];
+    if (!invGroup || !invGroup.children.length){
+      alert('No inverters in scene - complete Step 7 (PV design) first.');
+      return;
+    }
+    // Draw temporary lines from every inverter to the transformer yard,
+    // pulse-tinting them yellow for a few seconds.
+    var pulse = new THREE.Group();
+    scene.add(pulse);
+    var target = null;
+    if (xfGroup && xfGroup.children.length){
+      target = xfGroup.children[0].position;
+    } else {
+      target = new THREE.Vector3(sceneData.terrain.side_m/2 - 20, 3,
+                                 sceneData.terrain.side_m/2 - 20);
+    }
+    invGroup.children.forEach(function(inv){
+      var pts = [inv.position.clone(), target.clone()];
+      var geom = new THREE.BufferGeometry().setFromPoints(pts);
+      var mat  = new THREE.LineBasicMaterial({color: 0xf59e0b, linewidth: 2});
+      pulse.add(new THREE.Line(geom, mat));
+    });
+    setTimeout(function(){ scene.remove(pulse); }, 4000);
+  });
+
+  // ------ Screenshot PNG ------
+  document.getElementById('btn-download-png').addEventListener('click', function(){
+    renderer.render(scene, camera);
+    var url = renderer.domElement.toDataURL('image/png');
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'digital_twin_pid{{ proj.id }}.png';
+    a.click();
+  });
+
+})();
+</script>
+
+{% endblock %}

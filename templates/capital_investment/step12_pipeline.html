@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Step 12 - Sales Pipeline{% endblock %}
+{% block content %}
+<div class="mb-2">
+  <h5 class="fw-bold mb-0"><i class="bi bi-kanban text-warning me-1"></i>Step 12 &mdash; Sales Pipeline</h5>
+  <div class="text-secondary small">13-stage utility-scale progression for <strong>{{ opp.project_name }}</strong>.</div>
+</div>
+
+{% include "capital_investment/_stepper.html" %}
+
+<div class="card bg-dark border-secondary mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-1 mb-3">
+      {% for code, label, icon in pipeline_stages %}
+      <div class="ci-pl-stage {{ 'active' if opp.stage == code }} {{ 'past' if loop.index0 < (pipeline_stages|map(attribute=0)|list).index(opp.stage) }}">
+        <i class="bi {{ icon }} me-1"></i>{{ label }}
+      </div>
+      {% endfor %}
+    </div>
+    <form method="post" action="{{ url_for('capital_investment_step12', pid=proj.id) }}" class="row g-2 align-items-end">
+      <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
+      <div class="col-md-6">
+        <label class="form-label small">Move to stage</label>
+        <select name="stage" class="form-select form-select-sm">
+          {% for code, label, icon in pipeline_stages %}
+          <option value="{{ code }}" {{ 'selected' if opp.stage == code }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-warning btn-sm fw-bold w-100" type="submit"><i class="bi bi-arrow-right me-1"></i>Update stage</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card bg-black border-secondary">
+  <div class="card-body">
+    <div class="fw-semibold text-warning text-uppercase mb-2" style="font-size:11px">Stage history</div>
+    {% if history %}
+    <div class="small">
+      {% for h in history|reverse %}
+      <div class="d-flex align-items-center gap-2 border-bottom border-secondary py-1">
+        <i class="bi bi-arrow-right-short text-secondary"></i>
+        <span class="text-secondary">{{ h.get('from') or '(start)' }}</span>
+        <i class="bi bi-arrow-right text-warning"></i>
+        <span class="text-light fw-semibold">{{ h.get('to') }}</span>
+        <span class="text-secondary ms-auto" style="font-size:10px">{{ h.get('at') }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-secondary small">No stage changes yet. Currently at <strong>{{ opp.stage }}</strong>.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="d-flex justify-content-between mt-3">
+  <a href="{{ url_for('capital_investment_step11', pid=proj.id) }}" class="btn btn-outline-secondary btn-sm">Back to opportunity</a>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="btn btn-outline-warning btn-sm">Overview</a>
+</div>
+<style>
+  .ci-pl-stage{font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.1);color:#8a8aa5;}
+  .ci-pl-stage.past{color:#7ee0a5;border-color:#1f7a44;}
+  .ci-pl-stage.active{background:#f0a500;color:#111;border-color:#f0a500;font-weight:700;}
+</style>
+{% endblock %}

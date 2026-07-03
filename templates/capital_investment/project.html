@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ proj.project_name }} - Generation Station{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+  <div>
+    <h5 class="fw-bold mb-0"><i class="bi bi-lightning-charge text-warning me-1"></i>{{ proj.project_name }}</h5>
+    <div class="text-secondary small">
+      {{ project_types.get(proj.project_type, proj.project_type or 'Unclassified') }}
+      {% if proj.target_kwp %}&middot; {{ '%.1f'|format(proj.target_kwp/1000) }} MWp{% endif %}
+      {% if proj.country %}&middot; {{ proj.district }} {{ proj.region }} {{ proj.country }}{% endif %}
+      &middot; {{ proj.currency }}
+    </div>
+  </div>
+  <a href="{{ url_for('capital_investment_landing') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>All projects
+  </a>
+</div>
+
+{% include "capital_investment/_stepper.html" %}
+
+<div class="card bg-dark border-secondary">
+  <div class="card-body">
+    <div class="text-secondary small mb-2">
+      <i class="bi bi-info-circle me-1"></i>Work through the steps in order. Each step reuses an
+      existing SolarPro engine; your progress is tracked on the rail above.
+    </div>
+    <div class="row g-2">
+      {% for s in progress %}
+        <div class="col-6 col-md-4 col-lg-3">
+          {% if s.available %}
+          <a class="d-block text-decoration-none card bg-black border-secondary h-100 p-2 {{ 'border-success' if s.done }}"
+             href="{% if s.num == 1 %}{{ url_for('capital_investment_new') }}{% else %}{{ url_for(s.endpoint, pid=proj.id) }}{% endif %}">
+            <div class="d-flex align-items-center justify-content-between">
+              <span class="small text-secondary">Step {{ s.num }}</span>
+              {% if s.done %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-circle text-secondary"></i>{% endif %}
+            </div>
+            <div class="fw-semibold text-light"><i class="bi {{ s.icon }} me-1 text-warning"></i>{{ s.label }}</div>
+          </a>
+          {% else %}
+          <div class="card bg-black border-secondary h-100 p-2" style="opacity:.45">
+            <div class="d-flex align-items-center justify-content-between">
+              <span class="small text-secondary">Step {{ s.num }}</span>
+              <span class="badge bg-secondary" style="font-size:9px">soon</span>
+            </div>
+            <div class="fw-semibold text-light"><i class="bi {{ s.icon }} me-1 text-secondary"></i>{{ s.label }}</div>
+          </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="mt-3 pt-3 border-top border-secondary d-flex flex-wrap gap-2 align-items-center">
+      {% if reg_available %}
+      <a href="{{ url_for('capital_investment_regulatory', pid=proj.id) }}"
+         class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-bank me-1"></i>Development &amp; Regulatory
+      </a>
+      {% endif %}
+      {% if dt_available %}
+      <a href="{{ url_for('capital_investment_digital_twin', pid=proj.id) }}"
+         class="btn btn-outline-info btn-sm">
+        <i class="bi bi-badge-3d me-1"></i>3D Digital Twin
+      </a>
+      {% endif %}
+      <span class="text-secondary small">Bolt-ons: land tenure &amp; permits (Ghana-first) &middot; interactive 3D plant model.</span>
+    </div>
+  </div>
+</div>
+{% endblock %}

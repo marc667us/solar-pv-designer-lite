@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Step 2 - Project Type{% endblock %}
+{% block content %}
+<div class="mb-2">
+  <h5 class="fw-bold mb-0"><i class="bi bi-diagram-3 text-warning me-1"></i>Step 2 &mdash; Project Type &amp; Classification</h5>
+  <div class="text-secondary small">Classify the generation station. This drives design defaults downstream.</div>
+</div>
+
+{% include "capital_investment/_stepper.html" %}
+
+<form method="post" action="{{ url_for('capital_investment_step2', pid=proj.id) }}" class="card bg-dark border-secondary">
+  <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
+  <div class="card-body">
+    <label class="form-label small text-secondary">Project type</label>
+    <div class="row g-2 mb-3">
+      {% for code, label, icon in project_types %}
+      <div class="col-6 col-md-4">
+        <label class="d-block card bg-black border-secondary h-100 p-2 ci-pick {{ 'border-warning' if proj.project_type == code }}">
+          <input class="form-check-input me-1" type="radio" name="project_type" value="{{ code }}"
+                 {{ 'checked' if proj.project_type == code }}>
+          <i class="bi {{ icon }} text-warning me-1"></i>{{ label }}
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label small">Project status</label>
+        <select name="project_status" class="form-select form-select-sm">
+          {% for code, label in project_statuses %}
+          <option value="{{ code }}" {{ 'selected' if proj.project_status == code }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small">Design standard</label>
+        <select name="design_standard" class="form-select form-select-sm">
+          {% for code, label in design_standards %}
+          <option value="{{ code }}" {{ 'selected' if proj.design_standard == code }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="card-footer d-flex justify-content-between">
+    <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="btn btn-outline-secondary btn-sm">Back</a>
+    <button class="btn btn-warning btn-sm fw-bold" type="submit">Save &amp; continue <i class="bi bi-arrow-right ms-1"></i></button>
+  </div>
+</form>
+<style>.ci-pick{cursor:pointer;font-size:13px}.ci-pick:hover{background:#111!important}</style>
+{% endblock %}

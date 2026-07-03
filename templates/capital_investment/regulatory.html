@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Development & Regulatory{% endblock %}
+{% block content %}
+<div class="mb-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <div>
+    <h5 class="fw-bold mb-0"><i class="bi bi-bank text-warning me-1"></i>Development &amp; Regulatory
+      <span class="ms-1">{{ framework.flag }}</span></h5>
+    <div class="text-secondary small">Land tenure, permits &amp; licensing for <strong>{{ proj.country or 'this country' }}</strong>.</div>
+  </div>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Overview</a>
+</div>
+
+{% include "capital_investment/_stepper.html" %}
+
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card bg-dark border-secondary h-100">
+      <div class="card-body small">
+        <div class="fw-semibold text-warning text-uppercase mb-2" style="font-size:11px">Regulatory framework</div>
+        <div class="mb-2"><span class="text-secondary">Regulator:</span>
+          {{ framework.regulator.name }} ({{ framework.regulator.abbr }})</div>
+        <div class="mb-2"><span class="text-secondary">Environmental:</span>
+          {{ framework.esia_authority.name }} ({{ framework.esia_authority.abbr }})</div>
+        <div class="mb-2"><span class="text-secondary">Tariff:</span> {{ framework.tariff_regulator.name }}</div>
+        <div class="mb-2"><span class="text-secondary">Grid:</span> {{ framework.grid_operator | join(', ') }}</div>
+        <div class="mb-2"><span class="text-secondary">Off-takers:</span> {{ framework.utility_offtakers | join(', ') }}</div>
+        <hr class="border-secondary">
+        <div class="fw-semibold text-light mb-1">Key statutes</div>
+        <ul class="ps-3 mb-2 text-secondary">{% for r in framework.regulations %}<li>{{ r }}</li>{% endfor %}</ul>
+        <div class="fw-semibold text-light mb-1">Permit / licence sequence</div>
+        <ol class="ps-3 mb-2 text-secondary">{% for p in framework.permits_sequence %}<li>{{ p }}</li>{% endfor %}</ol>
+        <div class="fw-semibold text-light mb-1">Land good practice</div>
+        <ul class="ps-3 mb-2 text-secondary">{% for p in framework.land_practices %}<li>{{ p }}</li>{% endfor %}</ul>
+        {% if framework.notes %}<div class="alert alert-secondary py-2 px-2 mb-0" style="font-size:11px">{{ framework.notes }}</div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <form method="post" action="{{ url_for('capital_investment_regulatory', pid=proj.id) }}" class="card bg-dark border-secondary">
+      <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label small">Land tenure on this site</label>
+          <select name="land_tenure" class="form-select form-select-sm">
+            <option value="">Select&hellip;</option>
+            {% for t in framework.land_tenures %}
+            <option value="{{ t.code }}" {{ 'selected' if cfg.land_tenure == t.code }}>{{ t.label }}</option>
+            {% endfor %}
+          </select>
+          {% for t in framework.land_tenures %}
+            {% if cfg.land_tenure == t.code and t.notes %}<div class="text-secondary mt-1" style="font-size:11px">{{ t.notes }}</div>{% endif %}
+          {% endfor %}
+        </div>
+        <div class="fw-semibold text-light mb-2">Approvals checklist</div>
+        {% set items = cfg.get('items') or {} %}
+        {% for code, label, hint in reg_items %}
+        <div class="row g-2 align-items-center mb-2 pb-2 border-bottom border-secondary">
+          <div class="col-md-5">
+            <div class="fw-semibold text-light small">{{ label }}</div>
+            <div class="text-secondary" style="font-size:10px">{{ hint }}</div>
+          </div>
+          <div class="col-md-3">
+            <select name="status_{{ code }}" class="form-select form-select-sm">
+              {% for scode, slabel, scolor in reg_statuses %}
+              <option value="{{ scode }}" {{ 'selected' if items.get(code, {}).get('status') == scode }}>{{ slabel }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <input name="note_{{ code }}" class="form-control form-control-sm" maxlength="600"
+                   placeholder="Note" value="{{ items.get(code, {}).get('note', '') }}">
+          </div>
+        </div>
+        {% endfor %}
+        <div class="mt-2">
+          <label class="form-label small">Overall regulatory notes</label>
+          <textarea name="notes" class="form-control form-control-sm" rows="2" maxlength="2000">{{ cfg.notes or '' }}</textarea>
+        </div>
+      </div>
+      <div class="card-footer d-flex justify-content-end">
+        <button class="btn btn-warning btn-sm fw-bold" type="submit"><i class="bi bi-save me-1"></i>Save checklist</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
