@@ -2898,6 +2898,82 @@ def country_framework(country: str | None) -> dict[str, Any]:
     return COUNTRY_REGULATORY_FRAMEWORKS["generic"]
 
 
+def _ci_location_bundle() -> tuple[list[str], dict[str, dict[str, dict]]]:
+    """Country + region reference data for the Step 1 location dropdowns and
+    automatic GPS fill. REUSES the existing platform solar database
+    (config/global_solar_data.py) rather than duplicating coordinates.
+
+    Inputs: none.
+    Returns: (countries, location_map) where
+        countries    = sorted list of country names, and
+        location_map = {country: {region: {"lat": float, "lon": float,
+                                            "psh": float}}}.
+    The template renders `countries` as the country <select>, drives the
+    dependent region <select> from `location_map[country]`, and auto-fills the
+    lat/lon inputs from `location_map[country][region]`. Returns ([], {}) if the
+    solar DB is unavailable so Step 1 still renders (fields degrade to free text).
+    """
+    try:
+        from config.global_solar_data import GLOBAL_DATA, get_countries
+    except Exception:
+        return [], {}
+    countries = get_countries()
+    location_map: dict[str, dict[str, dict]] = {}
+    for c in countries:
+        regions = (GLOBAL_DATA.get(c, {}) or {}).get("regions", {}) or {}
+        location_map[c] = {
+            rn: {"lat": rd.get("lat"), "lon": rd.get("lon"),
+                 "psh": rd.get("psh")}
+            for rn, rd in regions.items()
+        }
+    return countries, location_map
+
+
+def _ci_resolve_location(form_like) -> tuple[str, str, float | None, float | None]:
+    """Resolve the Step 1 location fields from the submitted form, honouring the
+    dropdown "Other (enter manually)" escape and auto-filling GPS from the solar
+    DB when the user left lat/lon blank.
+
+    Inputs: `form_like` = request.form (a mapping with .get()).
+    Returns: (country, region, gps_lat, gps_lon). country/region are the resolved
+    strings (the free-text *_other value when the select was "__other__"); GPS is
+    the user value when supplied, else the region's reference coordinate, else
+    None. Server-side twin of the template JS so the auto-fill still works with
+    JavaScript disabled and can never be spoofed past the DB's known regions.
+    """
+    _OTHER = "__other__"
+
+    def _flt(key):
+        v = form_like.get(key)
+        try:
+            return float(v) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    country = (form_like.get("country") or "").strip()
+    if country == _OTHER:
+        country = (form_like.get("country_other") or "").strip()
+    country = country[:120]
+    region = (form_like.get("region") or "").strip()
+    if region == _OTHER:
+        region = (form_like.get("region_other") or "").strip()
+    region = region[:120]
+    lat = _flt("gps_lat")
+    lon = _flt("gps_lon")
+    if lat is None or lon is None:
+        try:
+            from config.global_solar_data import get_solar_data
+            sd = get_solar_data(country, region)
+        except Exception:
+            sd = None
+        if sd:
+            if lat is None:
+                lat = sd.get("latitude")
+            if lon is None:
+                lon = sd.get("longitude")
+    return country, region, lat, lon
+
+
 def _pick(form_like, key: str, allowed: list[tuple]) -> str:
     """Return the submitted value if it's a valid code in `allowed`, else ''."""
     v = (form_like.get(key) or "").strip()
@@ -3368,15 +3444,20 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             target_kwp = _n(f, "target_mwp")
             if target_kwp is not None:
                 target_kwp = target_kwp * 1000.0   # MWp form -> kWp stored
+            # Country/region come from the Step 1 dropdowns (with an "Other"
+            # free-text escape); GPS lat/lon auto-fill from the solar DB when the
+            # user left them blank. _ci_resolve_location is the server-side twin
+            # of the template JS so it works with JavaScript disabled too.
+            country, region, gps_lat, gps_lon = _ci_resolve_location(f)
             row_vals = (
                 uid, name,
                 (f.get("client_name") or "").strip()[:300],
                 (f.get("investor") or "").strip()[:300],
                 (f.get("developer") or "").strip()[:300],
-                (f.get("country") or "").strip()[:120],
-                (f.get("region") or "").strip()[:120],
+                country,
+                region,
                 (f.get("district") or "").strip()[:120],
-                _n(f, "gps_lat"), _n(f, "gps_lon"),
+                gps_lat, gps_lon,
                 (f.get("description") or "").strip()[:4000],
                 _pick("project_status", PROJECT_STATUS_CODES, "concept"),
                 (f.get("target_cod") or "").strip()[:40],
@@ -3427,12 +3508,14 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             return redirect(url_for("capital_investment_project", pid=pid))
 
         # GET
+        ci_countries, ci_location_map = _ci_location_bundle()
         return render_template(
             "capital_investment/step01_registration.html",
             user=current_user(), proj=None,
             project_types=PROJECT_TYPES, project_statuses=PROJECT_STATUSES,
             design_standards=DESIGN_STANDARDS, currencies=CURRENCIES,
             tax_regimes=TAX_REGIMES,
+            ci_countries=ci_countries, ci_location_map=ci_location_map,
         )
 
     # ------------------------------------------------------------------

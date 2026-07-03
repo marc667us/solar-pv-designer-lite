@@ -36,23 +36,39 @@
       </div>
       <div class="col-md-4">
         <label class="form-label small">Country</label>
-        <input name="country" class="form-control form-control-sm" value="Ghana" maxlength="120">
+        <select name="country" id="ci-country" class="form-select form-select-sm">
+          {% for c in ci_countries %}<option value="{{ c }}" {{ 'selected' if c == 'Ghana' }}>{{ c }}</option>{% endfor %}
+          <option value="__other__">Other (enter manually)&hellip;</option>
+        </select>
+      </div>
+      <div class="col-md-4" id="ci-country-other-wrap" hidden>
+        <label class="form-label small">Country name</label>
+        <input name="country_other" id="ci-country-other" class="form-control form-control-sm" maxlength="120" placeholder="Type the country">
       </div>
       <div class="col-md-4">
         <label class="form-label small">Region</label>
-        <input name="region" class="form-control form-control-sm" maxlength="120">
+        <select name="region" id="ci-region" class="form-select form-select-sm">
+          <option value="">Select region&hellip;</option>
+        </select>
+      </div>
+      <div class="col-md-4" id="ci-region-other-wrap" hidden>
+        <label class="form-label small">Region name</label>
+        <input name="region_other" id="ci-region-other" class="form-control form-control-sm" maxlength="120" placeholder="Type the region">
       </div>
       <div class="col-md-4">
         <label class="form-label small">District</label>
         <input name="district" class="form-control form-control-sm" maxlength="120">
       </div>
       <div class="col-md-3">
-        <label class="form-label small">GPS latitude</label>
-        <input name="gps_lat" type="number" step="any" class="form-control form-control-sm">
+        <label class="form-label small">GPS latitude <i class="bi bi-magic text-warning" title="Auto-filled from region"></i></label>
+        <input name="gps_lat" id="ci-lat" type="number" step="any" class="form-control form-control-sm" placeholder="auto">
       </div>
       <div class="col-md-3">
-        <label class="form-label small">GPS longitude</label>
-        <input name="gps_lon" type="number" step="any" class="form-control form-control-sm">
+        <label class="form-label small">GPS longitude <i class="bi bi-magic text-warning" title="Auto-filled from region"></i></label>
+        <input name="gps_lon" id="ci-lon" type="number" step="any" class="form-control form-control-sm" placeholder="auto">
+      </div>
+      <div class="col-12">
+        <div class="form-text text-secondary" style="margin-top:-4px"><i class="bi bi-geo-alt me-1"></i>Pick a country &amp; region and the GPS coordinates fill in automatically &mdash; adjust them to the exact site if you know it.</div>
       </div>
       <div class="col-md-3">
         <label class="form-label small">Target capacity (MWp)</label>
@@ -97,4 +113,70 @@
     <button class="btn btn-warning btn-sm fw-bold" type="submit">Register &amp; continue <i class="bi bi-arrow-right ms-1"></i></button>
   </div>
 </form>
+
+<!-- Country -> region -> GPS reference data (from config/global_solar_data.py):
+     { country: { region: {lat, lon, psh} } }. Read by the script below to drive
+     the dependent region dropdown and auto-fill the GPS coordinate inputs. -->
+<script type="application/json" id="ci-loc-data">{{ ci_location_map|tojson }}</script>
+<script>
+(function () {
+  "use strict";
+  var OTHER = "__other__";
+  var LOC = {};
+  try { LOC = JSON.parse(document.getElementById("ci-loc-data").textContent || "{}"); } catch (e) { LOC = {}; }
+  var countrySel = document.getElementById("ci-country");
+  var countryOtherWrap = document.getElementById("ci-country-other-wrap");
+  var regionSel = document.getElementById("ci-region");
+  var regionOtherWrap = document.getElementById("ci-region-other-wrap");
+  var latEl = document.getElementById("ci-lat");
+  var lonEl = document.getElementById("ci-lon");
+  if (!countrySel || !regionSel) { return; }
+
+  // Rebuild the region <select> for the chosen country. Known country ->
+  // its regions + an "Other" escape; unknown/"Other" country -> free text only.
+  function fillRegions(country) {
+    regionSel.innerHTML = "";
+    var regions = LOC[country];
+    if (regions) {
+      regionSel.add(new Option("Select region…", ""));
+      Object.keys(regions).sort().forEach(function (r) { regionSel.add(new Option(r, r)); });
+      regionSel.add(new Option("Other (enter manually)…", OTHER));
+      regionSel.value = "";
+    } else {
+      regionSel.add(new Option("Other (enter manually)…", OTHER));
+      regionSel.value = OTHER;
+    }
+    onRegion();
+  }
+
+  // Region change: toggle the free-text box and auto-fill GPS from the region's
+  // reference coordinate. A real region overwrites lat/lon; "Other" leaves them
+  // for the user. The inputs stay editable so an exact site can be entered.
+  function onRegion() {
+    var isOther = regionSel.value === OTHER;
+    if (regionOtherWrap) { regionOtherWrap.hidden = !isOther; }
+    if (isOther) { return; }
+    var regions = LOC[countrySel.value] || {};
+    var rd = regions[regionSel.value];
+    if (rd && rd.lat !== null && rd.lat !== undefined && rd.lon !== null && rd.lon !== undefined) {
+      latEl.value = rd.lat;
+      lonEl.value = rd.lon;
+    } else {
+      latEl.value = "";
+      lonEl.value = "";
+    }
+  }
+
+  function onCountry() {
+    var isOther = countrySel.value === OTHER;
+    if (countryOtherWrap) { countryOtherWrap.hidden = !isOther; }
+    fillRegions(isOther ? OTHER : countrySel.value);
+  }
+
+  countrySel.addEventListener("change", onCountry);
+  regionSel.addEventListener("change", onRegion);
+  // Seed the region list for the default country (Ghana) on load.
+  onCountry();
+})();
+</script>
 {% endblock %}
