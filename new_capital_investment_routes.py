@@ -410,17 +410,23 @@ def size_utility_pv(*,
         performance_ratio = 0.78
     if availability_pct <= 0 or availability_pct > 100:
         availability_pct = 98.0
+    if annual_degradation_pct < 0 or annual_degradation_pct >= 100:
+        annual_degradation_pct = 0.5   # guard the degradation power series
 
     n_modules       = int(math.ceil(kwp * 1000 / module_wp))
     dc_kwp_actual   = round(n_modules * module_wp / 1000.0, 2)
-    inverter_ac_kw  = round(kwp / dc_ac_ratio, 2)
+    # Size the plant off the ACTUAL installed DC (rounded-up module count), not
+    # the requested target, so inverter AC + energy + specific yield are all
+    # internally consistent with the module count (Codex calc-review MED-1).
+    dc_basis        = dc_kwp_actual if dc_kwp_actual > 0 else kwp
+    inverter_ac_kw  = round(dc_basis / dc_ac_ratio, 2)
     n_central_inv   = int(math.ceil(inverter_ac_kw / max(1.0, central_inverter_kw)))
     strings         = int(math.ceil(n_modules / max(1, modules_per_string)))
     combiners       = int(math.ceil(strings / max(1, strings_per_combiner)))
 
     availability_frac = availability_pct / 100.0
     annual_gen_mwh    = round(
-        kwp * psh_daily * 365 * performance_ratio * availability_frac / 1000.0, 2)
+        dc_basis * psh_daily * 365 * performance_ratio * availability_frac / 1000.0, 2)
     monthly_gen_mwh   = round(annual_gen_mwh / 12.0, 2)
 
     lifetime_mwh = 0.0
@@ -428,7 +434,7 @@ def size_utility_pv(*,
         lifetime_mwh += annual_gen_mwh * ((1 - annual_degradation_pct / 100.0) ** (t - 1))
     lifetime_mwh = round(lifetime_mwh, 2)
 
-    specific_yield_kwh_per_kwp = round(annual_gen_mwh * 1000.0 / kwp, 1)
+    specific_yield_kwh_per_kwp = round(annual_gen_mwh * 1000.0 / dc_basis, 1)
     dc_cable_m_est = int(round(kwp * 6.5, 0))
     ac_cable_m_est = int(round(kwp * 3.5, 0))
 
@@ -458,6 +464,108 @@ def size_utility_pv(*,
         "specific_yield_kwh_per_kwp": specific_yield_kwh_per_kwp,
         "dc_cable_m_est":          dc_cable_m_est,
         "ac_cable_m_est":          ac_cable_m_est,
+    }
+
+
+def _ci_yield_profile(pv_cfg, *, gps_lat=None, years: int = 10) -> dict:
+    """Solar generation-yield profiles derived from the Step-7 PV sizing (no
+    re-simulation): a representative DAILY curve, a latitude-aware MONTHLY
+    distribution, and the ANNUAL yield across `years` (default 10) with module
+    degradation.
+
+    Inputs: pv_cfg (the stored pv_config incl. its `sizing` block), gps_lat (site
+    latitude in degrees; falls back to Ghana ~7.5 when absent), years (annual
+    horizon). The monthly shape uses the extraterrestrial clear-sky insolation
+    model (solar declination + sunset hour angle by month, Duffie & Beckman) so
+    seasonality tracks latitude physically rather than a fixed guess, then is
+    normalised to the sizing's annual energy. Returns {} if no PV sizing exists.
+    """
+    import math
+    sizing = {}
+    if isinstance(pv_cfg, dict) and isinstance(pv_cfg.get("sizing"), dict):
+        sizing = pv_cfg["sizing"]
+
+    def _f(v, d=0.0):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return d
+
+    annual = _f(sizing.get("annual_gen_mwh"))
+    if annual <= 0:
+        return {}
+    deg = _f(sizing.get("annual_degradation_pct"), 0.5)
+    deg = (deg / 100.0) if 0.0 <= deg < 100.0 else 0.005   # guard the series
+    try:
+        lat = float(gps_lat) if gps_lat not in (None, "") else 7.5
+    except (TypeError, ValueError):
+        lat = 7.5
+    lat = max(-89.0, min(89.0, lat))   # keep tan(phi) finite; polar handled below
+    phi = math.radians(lat)
+
+    def _sunset_hour_angle(decl_rad: float) -> float:
+        """Sunset hour angle with proper polar day/night handling (Codex MED-2):
+        cos(ws) = -tan(phi)tan(decl); |.|>=1 -> polar day (pi) or night (0)."""
+        x = -math.tan(phi) * math.tan(decl_rad)
+        if x <= -1.0:
+            return math.pi     # sun never sets (polar day)
+        if x >= 1.0:
+            return 0.0         # sun never rises (polar night)
+        return math.acos(x)
+
+    # Monthly weights via extraterrestrial daily insolation H0 per representative
+    # day, times the number of days -> monthly insolation share.
+    mid_doy = [17, 47, 75, 105, 135, 162, 198, 228, 258, 288, 318, 344]
+    dim = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    mnames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    m_tot = []
+    for i, n in enumerate(mid_doy):
+        decl = math.radians(23.45 * math.sin(math.radians(360.0 * (284 + n) / 365.0)))
+        ws = _sunset_hour_angle(decl)
+        dr = 1 + 0.033 * math.cos(math.radians(360.0 * n / 365.0))
+        h0 = (24.0 / math.pi) * dr * (
+            ws * math.sin(phi) * math.sin(decl)
+            + math.cos(phi) * math.cos(decl) * math.sin(ws))
+        m_tot.append(max(0.0, h0) * dim[i])
+    tot = sum(m_tot) or 1.0
+    monthly = [{"month": mnames[i], "mwh": round(annual * m_tot[i] / tot, 1),
+                "pct": round(m_tot[i] / tot * 100.0, 1)} for i in range(12)]
+
+    # Annual yield across N years with module degradation (year 1 = 100%).
+    annual_series = [{"year": y, "mwh": round(annual * ((1 - deg) ** (y - 1)), 1),
+                      "pct_of_y1": round(((1 - deg) ** (y - 1)) * 100.0, 1)}
+                     for y in range(1, int(years) + 1)]
+
+    # Representative clear-day hourly curve: a sine bell across the (equinox)
+    # daylight window, scaled to the average daily energy (annual / 365).
+    ws0 = _sunset_hour_angle(0.0)
+    daylight_h = ws0 * 24.0 / math.pi
+    sunrise, sunset = 12.0 - daylight_h / 2.0, 12.0 + daylight_h / 2.0
+    avg_daily = annual / 365.0
+    hours = list(range(24))
+    raw = []
+    for h in hours:
+        hc = h + 0.5
+        raw.append(math.sin(math.pi * (hc - sunrise) / daylight_h)
+                   if (sunrise <= hc <= sunset and daylight_h > 0) else 0.0)
+    rs = sum(raw) or 1.0
+    day_mwh = [round(avg_daily * w / rs, 3) for w in raw]
+
+    return {
+        "annual_gen_mwh": round(annual, 1),
+        "specific_yield_kwh_per_kwp": _f(sizing.get("specific_yield_kwh_per_kwp")),
+        "lat_used": round(lat, 2),
+        "daily": {"hours": hours, "mwh": day_mwh,
+                  "peak_mw": round(max(day_mwh), 3) if day_mwh else 0.0,
+                  "avg_daily_mwh": round(avg_daily, 2),
+                  "daylight_hours": round(daylight_h, 1)},
+        "monthly": monthly,
+        "annual_series": annual_series,
+        "years": int(years),
+        "basis": ("Step-7 sizing annual yield; monthly via extraterrestrial "
+                  "clear-sky model (latitude-aware); annual series applies "
+                  "module degradation."),
     }
 
 
@@ -585,6 +693,338 @@ def _ci_boq_actuals(get_db, boq_project_id, uid, fx: float = 12.0) -> dict:
     return out
 
 
+def _ci_cost_plan(get_db, boq_project_id, uid, *, fx: float = 12.0) -> dict:
+    """Cost Plan Deck data derived ENTIRELY from the linked BOQ
+    (boq_floor_items + boq_buildings) -- no parallel costing. This is the shared
+    aggregation engine behind both the by-building / by-service breakdown views
+    (F1) and the exportable Cost Plan Deck (F2).
+
+    Inputs: get_db factory, the linked boq_project_id, owning uid, fx (local per
+    USD). Returns a dict with:
+      linked            -- False until Step 9 links a BOQ.
+      totals            -- {grand_total_local, grand_total_usd, n_items,
+                            n_buildings, n_sections}.
+      by_building       -- [{key, label, total_local, total_usd, pct, n_items,
+                            sections:[{section, label, total_local, n_items,
+                            items:[{item_no, description, unit, qty, rate,
+                            total_local}]}]}] ordered by cost desc.
+      by_service        -- [{key(section), label, total_local, total_usd, pct,
+                            n_items, buildings:[{label, total_local}]}] ordered
+                            by cost desc. (Sections ARE the services in the
+                            Generation-Station BOQ.)
+      distribution      -- {by_building:[{label, total_local, pct}],
+                            by_service:[...]} -- ready for the cost-distribution
+                            infographics.
+    Every query is scoped by user_id (+ tenant via _boq_tenant_clause) and to the
+    Step-9 autobuild items (source_type) so the deck reflects the generated plan.
+    """
+    out = {
+        "linked": False, "boq_project_id": int(boq_project_id or 0),
+        "totals": {"grand_total_local": 0.0, "grand_total_usd": 0.0,
+                   "n_items": 0, "n_buildings": 0, "n_sections": 0},
+        "by_building": [], "by_service": [],
+        "distribution": {"by_building": [], "by_service": []},
+    }
+    try:
+        fx = float(fx)
+    except (TypeError, ValueError):
+        fx = 12.0
+    if fx <= 0:
+        fx = 12.0
+    if not boq_project_id:
+        return out
+
+    try:
+        from web_app import _boq_tenant_clause
+        tclause, tparams = _boq_tenant_clause("i")
+    except Exception:
+        tclause, tparams = "", ()
+    params = [int(boq_project_id), int(uid), _CI_AUTOBUILD_SOURCE] + list(tparams)
+    try:
+        with get_db() as c:
+            rows = c.execute(
+                "SELECT COALESCE(b.purpose_subtype,'') , "
+                "       COALESCE(b.building_name,'') , "
+                "       COALESCE(i.section,'') , COALESCE(i.item_no,'') , "
+                "       COALESCE(i.description,'') , COALESCE(i.unit,'') , "
+                "       COALESCE(i.qty,0) , COALESCE(i.final_built_up_rate,0) , "
+                "       COALESCE(i.total_amount,0) "
+                "FROM boq_floor_items i "
+                "LEFT JOIN boq_buildings b "
+                "       ON b.id=i.building_id AND b.project_id=i.project_id "
+                "WHERE i.project_id=? AND i.user_id=? "
+                "  AND i.source_type=?" + tclause +
+                " ORDER BY b.building_name, i.section, i.item_no",
+                tuple(params)).fetchall()
+    except Exception:
+        return out
+
+    out["linked"] = True
+    fac_labels = {cd: L for cd, L, _, _ in BUILDING_TYPES}
+    # Optional friendly section->service labels from the platform BOQ engine.
+    try:
+        from web_app import _BOQ_SERVICE_LABEL as _svc_label_map
+    except Exception:
+        _svc_label_map = {}
+
+    def _svc_label(section: str) -> str:
+        s = (section or "").strip()
+        if not s:
+            return "General"
+        if isinstance(_svc_label_map, dict) and s in _svc_label_map:
+            return str(_svc_label_map[s])
+        return s.replace("_", " ").title()
+
+    # Aggregate in Python (a Step-9 BOQ is ~hundreds of rows, not millions).
+    buildings: dict = {}   # bkey -> {label, total, n_items, sections{}}
+    services: dict = {}    # section -> {label, total, n_items, buildings{}}
+    grand = 0.0
+    n_items = 0
+    for r in (rows or []):
+        fkey = (r[0] or "").strip() or "unassigned"
+        bname = (r[1] or "").strip() or fac_labels.get(fkey, fkey)
+        section = (r[2] or "").strip() or "general"
+        item_no = (r[3] or "").strip()
+        desc = (r[4] or "").strip()
+        unit = (r[5] or "").strip() or "No."
+        qty = float(r[6] or 0)
+        rate = float(r[7] or 0)
+        tot = float(r[8] or 0)
+        grand += tot
+        n_items += 1
+
+        b = buildings.setdefault(fkey, {
+            "key": fkey, "label": fac_labels.get(fkey, bname),
+            "total_local": 0.0, "n_items": 0, "sections": {}})
+        b["total_local"] += tot
+        b["n_items"] += 1
+        bs = b["sections"].setdefault(section, {
+            "section": section, "label": _svc_label(section),
+            "total_local": 0.0, "n_items": 0, "items": []})
+        bs["total_local"] += tot
+        bs["n_items"] += 1
+        bs["items"].append({
+            "item_no": item_no, "description": desc, "unit": unit,
+            "qty": round(qty, 2), "rate": round(rate, 2),
+            "total_local": round(tot, 2)})
+
+        s = services.setdefault(section, {
+            "key": section, "label": _svc_label(section),
+            "total_local": 0.0, "n_items": 0, "buildings": {}})
+        s["total_local"] += tot
+        s["n_items"] += 1
+        s["buildings"][fkey] = s["buildings"].get(fkey, 0.0) + tot
+
+    def _pct(v: float) -> float:
+        return round((v / grand) * 100.0, 1) if grand else 0.0
+
+    by_building = []
+    for b in buildings.values():
+        secs = []
+        for sec in sorted(b["sections"].values(),
+                          key=lambda x: x["total_local"], reverse=True):
+            secs.append({
+                "section": sec["section"], "label": sec["label"],
+                "total_local": round(sec["total_local"], 2),
+                "n_items": sec["n_items"], "items": sec["items"]})
+        by_building.append({
+            "key": b["key"], "label": b["label"],
+            "total_local": round(b["total_local"], 2),
+            "total_usd": round(b["total_local"] / fx, 2),
+            "pct": _pct(b["total_local"]), "n_items": b["n_items"],
+            "sections": secs})
+    by_building.sort(key=lambda x: x["total_local"], reverse=True)
+
+    by_service = []
+    for s in services.values():
+        blist = [{"label": fac_labels.get(k, k), "total_local": round(v, 2)}
+                 for k, v in sorted(s["buildings"].items(),
+                                    key=lambda kv: kv[1], reverse=True)]
+        by_service.append({
+            "key": s["key"], "label": s["label"],
+            "total_local": round(s["total_local"], 2),
+            "total_usd": round(s["total_local"] / fx, 2),
+            "pct": _pct(s["total_local"]), "n_items": s["n_items"],
+            "buildings": blist})
+    by_service.sort(key=lambda x: x["total_local"], reverse=True)
+
+    out["totals"] = {
+        "grand_total_local": round(grand, 2),
+        "grand_total_usd": round(grand / fx, 2),
+        "n_items": n_items, "n_buildings": len(buildings),
+        "n_sections": len(services)}
+    out["by_building"] = by_building
+    out["by_service"] = by_service
+    out["distribution"] = {
+        "by_building": [{"label": b["label"], "total_local": b["total_local"],
+                         "pct": b["pct"]} for b in by_building],
+        "by_service": [{"label": s["label"], "total_local": s["total_local"],
+                        "pct": s["pct"]} for s in by_service]}
+    return out
+
+
+def _ci_cashflow_plan(fin_cfg) -> dict:
+    """Annual project cash-flow series for the Cost Plan Deck, READ from the
+    Step-8 finance engine output (finance_config.computed) -- no re-modelling.
+
+    Input: fin_cfg (the stored finance_config). Returns
+      available     -- False until Step 8 computes.
+      years         -- [0, 1, ..., N] (year 0 = construction).
+      net           -- net cash flow per year; year 0 = -equity (own cash at
+                       risk; falls back to -CAPEX if equity is 0).
+      cumulative    -- running sum of `net` (cumulative cash position).
+      revenue/opex  -- per-year revenue and OPEX (year 0 = 0) for the stacked bars.
+      capex_local, equity_local, npv_local, irr_pct, payback_years -- headline KPIs.
+    Reuses net_by_year / revenue_by_year / opex_by_year the finance engine already
+    wrote, so the deck and Step 8 can never disagree.
+    """
+    out = {"available": False, "years": [], "net": [], "cumulative": [],
+           "revenue": [], "opex": [], "capex_local": 0.0, "equity_local": 0.0,
+           "npv_local": None, "irr_pct": None, "payback_years": None}
+    computed = {}
+    if isinstance(fin_cfg, dict) and isinstance(fin_cfg.get("computed"), dict):
+        computed = fin_cfg["computed"]
+    net_by_year = computed.get("net_by_year")
+    if not isinstance(net_by_year, list) or not net_by_year:
+        return out
+
+    def _fl(v, d=0.0):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return d
+
+    equity = _fl(computed.get("equity_local"))
+    capex = _fl(computed.get("total_capex_local"))
+    rev_src = computed.get("revenue_by_year")
+    opx_src = computed.get("opex_by_year")
+    rev_src = rev_src if isinstance(rev_src, list) else []
+    opx_src = opx_src if isinstance(opx_src, list) else []
+
+    net = [_fl(x) for x in net_by_year]
+    n = len(net)
+    y0 = -(equity if equity > 0 else capex)          # year-0 cash outflow
+    flows = [round(y0, 2)] + [round(x, 2) for x in net]
+    cumulative, run = [], 0.0
+    for f in flows:
+        run += f
+        cumulative.append(round(run, 2))
+    # Align revenue/opex to the N operating years (year 0 = 0).
+    rev = [0.0] + [round(_fl(x), 2) for x in rev_src[:n]] + [0.0] * max(0, n - len(rev_src))
+    opx = [0.0] + [round(_fl(x), 2) for x in opx_src[:n]] + [0.0] * max(0, n - len(opx_src))
+
+    out.update({
+        "available": True,
+        "years": list(range(0, n + 1)),
+        "net": flows,
+        "cumulative": cumulative,
+        "revenue": rev[:n + 1],
+        "opex": opx[:n + 1],
+        "capex_local": round(capex, 2),
+        "equity_local": round(equity, 2),
+        "npv_local": computed.get("npv_local"),
+        "irr_pct": computed.get("irr_pct"),
+        "payback_years": computed.get("payback_years"),
+    })
+    return out
+
+
+def _svg_hbars(rows, *, width: int = 560, row_h: int = 24, gap: int = 6,
+               pad_left: int = 150, color: str = "#f5c518",
+               money: bool = True) -> str:
+    """Horizontal bar chart as inline SVG (CSP-safe, no external libs) for the
+    cost-distribution infographics. `rows` = [{label, value, pct?}]. Bars scale
+    to the max value; labels/values are HTML-escaped. Returns an <svg> string
+    (mark |safe in the template)."""
+    import html as _html
+    rows = [r for r in (rows or []) if isinstance(r, dict)]
+    if not rows:
+        return '<div class="text-secondary small py-2">No data yet.</div>'
+    vmax = max((abs(float(r.get("value") or 0)) for r in rows), default=0.0) or 1.0
+    bar_area = max(60, width - pad_left - 96)
+    height = len(rows) * (row_h + gap) + gap
+    out = [f'<svg viewBox="0 0 {width} {height}" width="100%" '
+           f'style="max-width:{width}px;font:11px sans-serif" '
+           f'role="img" preserveAspectRatio="xMinYMin meet">']
+    y = gap
+    for r in rows:
+        label = _html.escape(str(r.get("label") or "")[:34])
+        val = float(r.get("value") or 0)
+        pct = r.get("pct")
+        bw = max(1.0, abs(val) / vmax * bar_area)
+        vtxt = (f"{val:,.0f}" if money else f"{val:g}")
+        if pct is not None:
+            vtxt += f"  {float(pct):.1f}%"
+        out.append(
+            f'<text x="{pad_left - 6}" y="{y + row_h * 0.7:.0f}" '
+            f'text-anchor="end" fill="#c9c9e0">{label}</text>')
+        out.append(
+            f'<rect x="{pad_left}" y="{y}" width="{bw:.1f}" height="{row_h}" '
+            f'rx="3" fill="{color}"/>')
+        out.append(
+            f'<text x="{pad_left + bw + 5:.1f}" y="{y + row_h * 0.7:.0f}" '
+            f'fill="#e8e8f5">{vtxt}</text>')
+        y += row_h + gap
+    out.append('</svg>')
+    return "".join(out)
+
+
+def _svg_columns(labels, values, *, line=None, width: int = 560,
+                 height: int = 210, color: str = "#4ea1f5",
+                 line_color: str = "#f5c518", every: int = 1) -> str:
+    """Vertical column chart as inline SVG, with an optional overlaid line
+    (e.g. cumulative cash flow). Handles negative values (columns drop below a
+    zero baseline). `labels`/`values` equal length; `line` optional same length.
+    Used for the daily / monthly / 10-year yield and the cash-flow charts."""
+    import html as _html
+    vals = [float(v or 0) for v in (values or [])]
+    if not vals:
+        return '<div class="text-secondary small py-2">No data yet.</div>'
+    labels = [str(l) for l in (labels or [])]
+    lvals = [float(v or 0) for v in line] if line else None
+    pool = vals + (lvals or []) + [0.0]
+    vmax, vmin = max(pool), min(pool)
+    span = (vmax - vmin) or 1.0
+    pl, pr, pt, pb = 44, 12, 12, 26
+    pw, ph = width - pl - pr, height - pt - pb
+    n = len(vals)
+    step = pw / n
+    bw = step * 0.66
+
+    def yof(v):
+        return pt + (vmax - v) / span * ph
+
+    zero_y = yof(0.0)
+    out = [f'<svg viewBox="0 0 {width} {height}" width="100%" '
+           f'style="max-width:{width}px;font:10px sans-serif" role="img" '
+           f'preserveAspectRatio="xMinYMin meet">']
+    # zero baseline + max gridline
+    out.append(f'<line x1="{pl}" y1="{zero_y:.1f}" x2="{width - pr}" '
+               f'y2="{zero_y:.1f}" stroke="#555" stroke-width="1"/>')
+    out.append(f'<text x="{pl - 5}" y="{pt + 8}" text-anchor="end" '
+               f'fill="#9090b0">{vmax:,.0f}</text>')
+    for i, v in enumerate(vals):
+        x = pl + i * step + (step - bw) / 2
+        top = yof(max(v, 0.0))
+        h = abs(yof(v) - zero_y)
+        out.append(f'<rect x="{x:.1f}" y="{top:.1f}" width="{bw:.1f}" '
+                   f'height="{max(0.5, h):.1f}" rx="2" fill="{color}"/>')
+        if i % max(1, every) == 0:
+            out.append(f'<text x="{pl + i * step + step / 2:.1f}" '
+                       f'y="{height - 8}" text-anchor="middle" '
+                       f'fill="#9090b0">{_html.escape(labels[i]) if i < len(labels) else ""}</text>')
+    if lvals:
+        pts = " ".join(f"{pl + i * step + step / 2:.1f},{yof(v):.1f}"
+                       for i, v in enumerate(lvals))
+        out.append(f'<polyline points="{pts}" fill="none" '
+                   f'stroke="{line_color}" stroke-width="2"/>')
+        for i, v in enumerate(lvals):
+            out.append(f'<circle cx="{pl + i * step + step / 2:.1f}" '
+                       f'cy="{yof(v):.1f}" r="2.2" fill="{line_color}"/>')
+    out.append('</svg>')
+    return "".join(out)
+
+
 def _irr_bisect(cash_flows: list[float],
                 lo: float = -0.99, hi: float = 1.0,
                 iters: int = 80) -> float | None:
@@ -592,6 +1032,10 @@ def _irr_bisect(cash_flows: list[float],
     def npv(r: float) -> float:
         return sum(cf / ((1 + r) ** t) for t, cf in enumerate(cash_flows))
     f_lo, f_hi = npv(lo), npv(hi)
+    if abs(f_lo) < 1e-9:      # exact root at the lower bound (Codex LOW-1)
+        return lo
+    if abs(f_hi) < 1e-9:      # exact root at the upper bound
+        return hi
     if f_lo * f_hi > 0:
         for hi in (2.0, 5.0, 10.0):
             f_hi = npv(hi)
@@ -663,6 +1107,7 @@ def finance_utility(*,
     total_opex_usd_yr = round(sum(opex_lines_usd_yr.values()), 2)
     total_opex_local_yr = round(total_opex_usd_yr * fx_local_per_usd, 2)
 
+    debt_ratio = max(0.0, min(1.0, debt_ratio))   # no negative equity (Codex MED-3)
     debt_local = round(total_capex_local * debt_ratio, 2)
     equity_local = round(total_capex_local - debt_local, 2)
 
@@ -768,13 +1213,16 @@ def finance_utility(*,
             idx = max(0, min(len(vals) - 1, int(p / 100.0 * len(vals))))
             return round(vals[idx], 2)
 
+        # Compute each percentile once; treat only None as missing so a genuine
+        # 0.0 percentile is not dropped (Codex LOW-2).
+        _ip10, _ip50, _ip90 = _pct(mc_irr, 10), _pct(mc_irr, 50), _pct(mc_irr, 90)
         monte_carlo = {
             "runs": monte_carlo_runs,
             "npv_p10": _pct(mc_npv, 10), "npv_p50": _pct(mc_npv, 50),
             "npv_p90": _pct(mc_npv, 90),
-            "irr_p10_pct": round(_pct(mc_irr, 10) * 100, 2) if _pct(mc_irr, 10) else None,
-            "irr_p50_pct": round(_pct(mc_irr, 50) * 100, 2) if _pct(mc_irr, 50) else None,
-            "irr_p90_pct": round(_pct(mc_irr, 90) * 100, 2) if _pct(mc_irr, 90) else None,
+            "irr_p10_pct": round(_ip10 * 100, 2) if _ip10 is not None else None,
+            "irr_p50_pct": round(_ip50 * 100, 2) if _ip50 is not None else None,
+            "irr_p90_pct": round(_ip90 * 100, 2) if _ip90 is not None else None,
         }
     else:
         monte_carlo = None
@@ -4486,6 +4934,68 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             "capital_investment/step12_pipeline.html",
             user=current_user(), proj=proj, progress=_wp(proj),
             opp=opp, history=history, pipeline_stages=PIPELINE_STAGES,
+        )
+
+    # ------------------------------------------------------------------
+    # GET /large-scale-solar/<pid>/cost-plan -- Cost Plan Deck
+    # BOQ-derived cost breakdown (by building / by service, all with sections)
+    # + cost-distribution infographics + solar yield (daily/monthly/10yr) + the
+    # project cash flow. Every number comes from the BOQ + the project's own
+    # finance output -- no parallel costing.
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/<int:pid>/cost-plan",
+               endpoint="capital_investment_cost_plan")
+    @login_required
+    def _cost_plan(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        proj = _load_project(pid)
+        uid = session["user_id"]
+        fin_cfg = _safe_json(proj.get("finance_config"))
+        pv_cfg = _safe_json(proj.get("pv_config"))
+        computed = fin_cfg.get("computed") or {}
+        try:
+            fx = float(computed.get("fx_local_per_usd")
+                       or fin_cfg.get("fx_local_per_usd") or 12.0)
+        except (TypeError, ValueError):
+            fx = 12.0
+        if fx <= 0:
+            fx = 12.0
+        cur = proj.get("currency") or "GHS"
+        boq_pid = proj.get("boq_project_id")
+
+        cost = _ci_cost_plan(get_db, boq_pid, uid, fx=fx)
+        yld = _ci_yield_profile(pv_cfg, gps_lat=proj.get("gps_lat")) or {}
+        cash = _ci_cashflow_plan(fin_cfg)
+
+        daily = yld.get("daily") or {}
+        charts = {
+            "cost_by_building": _svg_hbars(
+                [{"label": d["label"], "value": d["total_local"],
+                  "pct": d["pct"]} for d in cost["distribution"]["by_building"]]),
+            "cost_by_service": _svg_hbars(
+                [{"label": d["label"], "value": d["total_local"],
+                  "pct": d["pct"]}
+                 for d in cost["distribution"]["by_service"][:14]]),
+            "yield_daily": _svg_columns(
+                [str(h) for h in daily.get("hours", [])],
+                daily.get("mwh", []), color="#f5a623", every=3),
+            "yield_monthly": _svg_columns(
+                [m["month"] for m in yld.get("monthly", [])],
+                [m["mwh"] for m in yld.get("monthly", [])], color="#f5a623"),
+            "yield_annual": _svg_columns(
+                [str(a["year"]) for a in yld.get("annual_series", [])],
+                [a["mwh"] for a in yld.get("annual_series", [])],
+                color="#f5a623"),
+            "cashflow": (_svg_columns(
+                [str(y) for y in cash["years"]], cash["net"],
+                line=cash["cumulative"], color="#4ea1f5")
+                if cash.get("available") else ""),
+        }
+        return render_template(
+            "capital_investment/cost_plan.html",
+            user=current_user(), proj=proj, progress=_wp(proj),
+            cost=cost, yld=yld, cash=cash, charts=charts, currency=cur,
         )
 
     # ------------------------------------------------------------------

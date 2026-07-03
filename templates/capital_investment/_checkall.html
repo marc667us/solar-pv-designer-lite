@@ -1,0 +1,53 @@
+{# Reusable "Check all / Uncheck all" control for the Generation-Station
+   multi-select checkbox grids. Usage in a step template:
+     {% from "capital_investment/_checkall.html" import bar, script %}
+     {{ bar('technologies') }}        <- above the checkbox group(s)
+     {{ script() }}                   <- once, near the end of the form/page
+   `target` is the shared checkbox `name` (e.g. 'buildings', 'technologies',
+   'services'). One bar drives every checkbox with that name on the page. #}
+
+{# `prefix` (optional): also toggle every checkbox whose name STARTS WITH it, so
+   a group's check-all cascades to its sub-items (e.g. buildings -> 'sub_'). #}
+{% macro bar(target, label='', prefix='') -%}
+<div class="btn-group btn-group-sm mb-2" role="group" aria-label="Select all or none">
+  <button type="button" class="btn btn-outline-warning py-0 px-2" style="font-size:11px"
+          data-checkall="{{ target }}" data-checkall-on="1"{% if prefix %} data-checkall-prefix="{{ prefix }}"{% endif %}>
+    <i class="bi bi-check2-square me-1"></i>Check all{{ ' ' ~ label if label }}
+  </button>
+  <button type="button" class="btn btn-outline-secondary py-0 px-2" style="font-size:11px"
+          data-checkall="{{ target }}" data-checkall-on="0"{% if prefix %} data-checkall-prefix="{{ prefix }}"{% endif %}>
+    <i class="bi bi-square me-1"></i>Uncheck all
+  </button>
+</div>
+{%- endmacro %}
+
+{% macro script() -%}
+<script>
+(function () {
+  "use strict";
+  // Wire every [data-checkall] button to toggle the checkboxes that share the
+  // named group, keeping any card highlight (border-warning) in sync.
+  document.querySelectorAll("[data-checkall]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var name = btn.getAttribute("data-checkall");
+      var on = btn.getAttribute("data-checkall-on") === "1";
+      var prefix = btn.getAttribute("data-checkall-prefix");
+      // Exact group name, plus any name-prefixed sub-item groups (e.g. 'sub_').
+      var selectors = ['input[type=checkbox][name="' + name + '"]'];
+      if (prefix) { selectors.push('input[type=checkbox][name^="' + prefix + '"]'); }
+      // Toggle the MAIN items first so their onchange reveals sub-item groups,
+      // THEN the sub-items, so cascaded checks land on visible inputs.
+      selectors.forEach(function (sel) {
+        document.querySelectorAll(sel).forEach(function (cb) {
+          if (cb.disabled) { return; }
+          cb.checked = on;
+          var card = cb.closest("label.card") || cb.closest(".card");
+          if (card) { card.classList.toggle("border-warning", on); }
+          cb.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+      });
+    });
+  });
+})();
+</script>
+{%- endmacro %}

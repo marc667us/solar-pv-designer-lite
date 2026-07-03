@@ -49,6 +49,10 @@
       {% endfor %}
     </div>
     <div class="mt-3 pt-3 border-top border-secondary d-flex flex-wrap gap-2 align-items-center">
+      <a href="{{ url_for('capital_investment_cost_plan', pid=proj.id) }}"
+         class="btn btn-warning btn-sm fw-bold">
+        <i class="bi bi-clipboard-data me-1"></i>Cost Plan Deck
+      </a>
       {% if reg_available %}
       <a href="{{ url_for('capital_investment_regulatory', pid=proj.id) }}"
          class="btn btn-outline-warning btn-sm">

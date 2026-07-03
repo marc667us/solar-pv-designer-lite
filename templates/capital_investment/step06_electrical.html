@@ -7,11 +7,13 @@
 </div>
 
 {% include "capital_investment/_stepper.html" %}
+{% from "capital_investment/_checkall.html" import bar, script %}
 
 {% set sel_s = cfg.services or [] %}
 <form method="post" action="{{ url_for('capital_investment_step6', pid=proj.id) }}" class="card bg-dark border-secondary">
   <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
   <div class="card-body">
+    {{ bar('services') }}
     <div class="row g-2">
       {% for code, label, icon, rec in electrical_services %}
       <div class="col-6 col-md-4 col-lg-3">
@@ -33,4 +35,5 @@
     <button class="btn btn-warning btn-sm fw-bold" type="submit">Save &amp; continue <i class="bi bi-arrow-right ms-1"></i></button>
   </div>
 </form>
+{{ script() }}
 {% endblock %}

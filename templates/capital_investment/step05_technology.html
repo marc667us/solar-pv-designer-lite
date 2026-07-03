@@ -7,11 +7,13 @@
 </div>
 
 {% include "capital_investment/_stepper.html" %}
+{% from "capital_investment/_checkall.html" import bar, script %}
 
 {% set sel_t = cfg.technologies or [] %}
 <form method="post" action="{{ url_for('capital_investment_step5', pid=proj.id) }}" class="card bg-dark border-secondary">
   <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
   <div class="card-body">
+    {{ bar('technologies') }}
     {% for group, items in technology_groups %}
     <div class="mb-3">
       <div class="text-warning small text-uppercase fw-bold mb-1">{{ group }}</div>
@@ -35,4 +37,5 @@
     <button class="btn btn-warning btn-sm fw-bold" type="submit">Save &amp; continue <i class="bi bi-arrow-right ms-1"></i></button>
   </div>
 </form>
+{{ script() }}
 {% endblock %}

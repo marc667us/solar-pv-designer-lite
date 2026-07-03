@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Cost Plan Deck - {{ proj.project_name }}{% endblock %}
+{% macro money(v) %}{{ currency }}&nbsp;{{ '{:,.0f}'.format(v or 0) }}{% endmacro %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+  <div>
+    <h5 class="fw-bold mb-0"><i class="bi bi-clipboard-data text-warning me-1"></i>Cost Plan Deck</h5>
+    <div class="text-secondary small">{{ proj.project_name }} &mdash; derived from the linked BOQ &amp; the project finance. No parallel costing.</div>
+  </div>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Overview</a>
+</div>
+
+{% if not cost.linked %}
+<div class="alert alert-warning py-2 small"><i class="bi bi-exclamation-triangle me-1"></i>No linked BOQ yet &mdash; generate the BOQ in <a href="{{ url_for('capital_investment_step9', pid=proj.id) }}" class="alert-link">Step 9</a> to populate the cost plan.</div>
+{% endif %}
+
+{# ---- KPI strip ---- #}
+<div class="row g-2 mb-3">
+  {% set t = cost.totals %}
+  <div class="col-6 col-lg-3"><div class="card bg-dark border-secondary p-2 h-100"><div class="text-secondary" style="font-size:10px">TOTAL COST</div><div class="fw-bold text-warning">{{ money(t.grand_total_local) }}</div><div class="text-secondary small">USD {{ '{:,.0f}'.format(t.grand_total_usd or 0) }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card bg-dark border-secondary p-2 h-100"><div class="text-secondary" style="font-size:10px">SCOPE</div><div class="fw-bold text-light">{{ t.n_buildings }} bldg &middot; {{ t.n_sections }} svc</div><div class="text-secondary small">{{ t.n_items }} line items</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card bg-dark border-secondary p-2 h-100"><div class="text-secondary" style="font-size:10px">ANNUAL YIELD</div><div class="fw-bold text-light">{% if yld %}{{ '{:,.0f}'.format(yld.annual_gen_mwh or 0) }} MWh{% else %}&mdash;{% endif %}</div><div class="text-secondary small">{% if yld %}{{ yld.specific_yield_kwh_per_kwp }} kWh/kWp{% endif %}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card bg-dark border-secondary p-2 h-100"><div class="text-secondary" style="font-size:10px">RETURNS</div><div class="fw-bold text-light">{% if cash.irr_pct is not none %}IRR {{ '%.1f'|format(cash.irr_pct) }}%{% else %}&mdash;{% endif %}</div><div class="text-secondary small">{% if cash.payback_years is not none %}payback {{ '%.1f'|format(cash.payback_years) }} yr{% endif %}</div></div></div>
+</div>
+
+<ul class="nav nav-tabs mb-3" role="tablist" style="font-size:13px">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-overview" type="button">Overview</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-building" type="button">By Building</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-service" type="button">By Service</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-yield" type="button">Yield</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-cash" type="button">Cash Flow</button></li>
+</ul>
+
+<div class="tab-content">
+  {# ================= OVERVIEW ================= #}
+  <div class="tab-pane fade show active" id="tab-overview">
+    <div class="row g-3">
+      <div class="col-lg-6"><div class="card bg-dark border-secondary h-100"><div class="card-body">
+        <h6 class="fw-bold small text-warning mb-2"><i class="bi bi-building me-1"></i>Cost distribution by building</h6>
+        {{ charts.cost_by_building|safe }}
+      </div></div></div>
+      <div class="col-lg-6"><div class="card bg-dark border-secondary h-100"><div class="card-body">
+        <h6 class="fw-bold small text-warning mb-2"><i class="bi bi-list-check me-1"></i>Cost distribution by service (top 14)</h6>
+        {{ charts.cost_by_service|safe }}
+      </div></div></div>
+    </div>
+  </div>
+
+  {# ================= BY BUILDING ================= #}
+  <div class="tab-pane fade" id="tab-building">
+    {% for b in cost.by_building %}
+    <div class="card bg-dark border-secondary mb-2">
+      <div class="card-header d-flex justify-content-between align-items-center py-2">
+        <span class="fw-bold small"><i class="bi bi-building text-warning me-1"></i>{{ b.label }}</span>
+        <span class="small">{{ money(b.total_local) }} <span class="text-secondary">&middot; {{ b.pct }}% &middot; {{ b.n_items }} items</span></span>
+      </div>
+      <div class="card-body py-2">
+        {% for sec in b.sections %}
+        <details class="mb-1">
+          <summary class="d-flex justify-content-between" style="cursor:pointer;font-size:12px">
+            <span class="text-light">{{ sec.label }} <span class="text-secondary">({{ sec.n_items }})</span></span>
+            <span class="text-warning">{{ money(sec.total_local) }}</span>
+          </summary>
+          <div class="table-responsive mt-1">
+            <table class="table table-sm table-dark table-borderless mb-2" style="font-size:11px">
+              <thead class="text-secondary"><tr><th style="width:48px">#</th><th>Description</th><th>Unit</th><th class="text-end">Qty</th><th class="text-end">Rate</th><th class="text-end">Amount</th></tr></thead>
+              <tbody>
+                {% for it in sec['items'] %}
+                <tr><td class="text-secondary">{{ it.item_no or loop.index }}</td><td>{{ it.description }}</td><td class="text-secondary">{{ it.unit }}</td><td class="text-end">{{ '{:,.2f}'.format(it.qty) }}</td><td class="text-end">{{ '{:,.2f}'.format(it.rate) }}</td><td class="text-end">{{ '{:,.0f}'.format(it.total_local) }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+        {% endfor %}
+      </div>
+    </div>
+    {% else %}
+    <div class="text-secondary small">No BOQ cost data yet.</div>
+    {% endfor %}
+  </div>
+
+  {# ================= BY SERVICE ================= #}
+  <div class="tab-pane fade" id="tab-service">
+    <div class="table-responsive">
+      <table class="table table-sm table-dark align-middle" style="font-size:12px">
+        <thead class="text-secondary"><tr><th>Service / section</th><th class="text-end">Total</th><th class="text-end">Share</th><th>Split by building</th></tr></thead>
+        <tbody>
+          {% for s in cost.by_service %}
+          <tr>
+            <td class="text-light">{{ s.label }} <span class="text-secondary">({{ s.n_items }})</span></td>
+            <td class="text-end text-warning">{{ money(s.total_local) }}</td>
+            <td class="text-end">{{ s.pct }}%</td>
+            <td>{% for bb in s.buildings %}<span class="badge bg-secondary-subtle text-secondary border me-1">{{ bb.label }}: {{ '{:,.0f}'.format(bb.total_local) }}</span>{% endfor %}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="text-secondary">No BOQ cost data yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ================= YIELD ================= #}
+  <div class="tab-pane fade" id="tab-yield">
+    {% if yld %}
+    <div class="row g-3">
+      <div class="col-lg-6"><div class="card bg-dark border-secondary h-100"><div class="card-body"><h6 class="fw-bold small text-warning mb-2">Representative day (hourly, MWh)</h6>{{ charts.yield_daily|safe }}<div class="text-secondary small mt-1">Peak {{ yld.daily.peak_mw }} MW &middot; {{ yld.daily.daylight_hours }} h daylight</div></div></div></div>
+      <div class="col-lg-6"><div class="card bg-dark border-secondary h-100"><div class="card-body"><h6 class="fw-bold small text-warning mb-2">Monthly generation (MWh)</h6>{{ charts.yield_monthly|safe }}</div></div></div>
+      <div class="col-12"><div class="card bg-dark border-secondary"><div class="card-body"><h6 class="fw-bold small text-warning mb-2">Annual generation over {{ yld.years }} years (MWh, with degradation)</h6>{{ charts.yield_annual|safe }}<div class="text-secondary small mt-1">{{ yld.basis }}</div></div></div></div>
+    </div>
+    {% else %}
+    <div class="text-secondary small">Complete Step 7 (PV Design) to see the generation-yield charts.</div>
+    {% endif %}
+  </div>
+
+  {# ================= CASH FLOW ================= #}
+  <div class="tab-pane fade" id="tab-cash">
+    {% if cash.available %}
+    <div class="card bg-dark border-secondary mb-2"><div class="card-body">
+      <h6 class="fw-bold small text-warning mb-2">Annual cash flow &amp; cumulative position ({{ currency }})</h6>
+      {{ charts.cashflow|safe }}
+      <div class="text-secondary small mt-1">Bars = net annual cash flow (year 0 = equity outflow). Line = cumulative cash position.</div>
+    </div></div>
+    <div class="row g-2">
+      <div class="col-6 col-md-3"><div class="card bg-dark border-secondary p-2"><div class="text-secondary" style="font-size:10px">CAPEX</div><div class="fw-bold text-light">{{ money(cash.capex_local) }}</div></div></div>
+      <div class="col-6 col-md-3"><div class="card bg-dark border-secondary p-2"><div class="text-secondary" style="font-size:10px">EQUITY</div><div class="fw-bold text-light">{{ money(cash.equity_local) }}</div></div></div>
+      <div class="col-6 col-md-3"><div class="card bg-dark border-secondary p-2"><div class="text-secondary" style="font-size:10px">NPV</div><div class="fw-bold text-light">{% if cash.npv_local is not none %}{{ money(cash.npv_local) }}{% else %}&mdash;{% endif %}</div></div></div>
+      <div class="col-6 col-md-3"><div class="card bg-dark border-secondary p-2"><div class="text-secondary" style="font-size:10px">IRR / PAYBACK</div><div class="fw-bold text-light">{% if cash.irr_pct is not none %}{{ '%.1f'|format(cash.irr_pct) }}%{% else %}&mdash;{% endif %}{% if cash.payback_years is not none %} / {{ '%.1f'|format(cash.payback_years) }}y{% endif %}</div></div></div>
+    </div>
+    {% else %}
+    <div class="text-secondary small">Complete Step 8 (Financial Engineering) to see the cash-flow projection.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
