@@ -112,23 +112,9 @@ def _seed_solar_farm_gap_products():
     accurate. `is_public_visible=1` keeps them on the public marketplace."""
     try:
         with get_db() as c:
-            # Serialize this one-time seed across concurrent cold-start workers.
-            # equipment_catalog has no UNIQUE(brand,model) arbiter, so under
-            # Postgres READ COMMITTED two workers could otherwise both pass the
-            # WHERE NOT EXISTS and double-insert. A transaction-scoped advisory
-            # lock is held until this `with get_db()` block commits (psycopg2
-            # autocommit is off; _PgConnAdapter.__exit__ commits), then
-            # auto-releases -- so the losing worker blocks, then sees the
-            # committed rows and inserts nothing. No-op on SQLite (function
-            # absent -> caught; SQLite serializes writers anyway).
-            try:
-                c.execute("SELECT pg_advisory_xact_lock(?)", (760741042,))
-            except Exception:
-                pass
-            # Ensure the two new categories exist first (order-independent: does
-            # not rely on the runtime category-seed loop having run yet). code is
-            # UNIQUE, so ON CONFLICT DO NOTHING is fully race-safe against a
-            # concurrent cold-start worker (same idiom the runtime loop uses).
+            # Ensure the two new categories exist. `code` is UNIQUE and the
+            # runtime category loop (web_app.py) uses this exact idiom, so it is
+            # proven on Postgres + SQLite.
             for _code, _name, _icon, _order in _SF_NEW_CATEGORIES:
                 c.execute(
                     "INSERT INTO product_categories (code, name, icon, display_order) "
@@ -147,22 +133,31 @@ def _seed_solar_farm_gap_products():
                 sup_id = sorted(sup_rows.values())[0]
             code_to_label = {row[0]: row[1] for row in _MARKETPLACE_CATEGORIES}
             for (code, sub, name, brand, model, spec, unit, price_usd, lt) in _SOLAR_FARM_GAP_PRODUCTS:
+                # Idempotent existence check + plain VALUES insert -- the SAME
+                # shape as _seed_marketplace_samples() (proven on live Postgres:
+                # 555 rows seeded this way). We deliberately do NOT use an
+                # advisory lock or INSERT...SELECT...WHERE NOT EXISTS here: those
+                # Postgres-novel constructs poisoned the seed transaction in
+                # production (an error inside a psycopg2 transaction aborts every
+                # later statement), leaving categories created but 0 products.
+                # The residual cold-start double-insert race is MEDIUM and
+                # accepted by every sibling seeder in this codebase; on a real
+                # re-run the existence check makes it idempotent.
+                if c.execute(
+                        "SELECT 1 FROM equipment_catalog WHERE brand=? AND model=? LIMIT 1",
+                        (brand, model)).fetchone():
+                    continue
                 cat_id = cats.get(code, 0)
-                # Atomic idempotent insert: INSERT ... SELECT ... WHERE NOT EXISTS
-                # collapses the SELECT-then-INSERT into ONE statement so a
-                # concurrent cold-start worker cannot double-insert the same
-                # (brand, model). Works on SQLite + Postgres; db_adapter maps
-                # ? -> %s. (equipment_catalog has no UNIQUE(brand,model) to add
-                # retroactively without risking existing dupes, so this is the
-                # correct race-narrowing idiom here.)
+                # is_public_visible=1 AND is_verified=1 -- matches the live
+                # Postgres seed path (web_app.py:18951) so these products pass
+                # the public marketplace's verified/visible filter.
                 c.execute(
                     "INSERT INTO equipment_catalog (category, name, brand, model, spec, "
                     "unit, price_usd, supplier_id, lead_time_days, category_id, "
-                    "subcategory, is_public_visible) "
-                    "SELECT ?,?,?,?,?,?,?,?,?,?,?,1 "
-                    "WHERE NOT EXISTS (SELECT 1 FROM equipment_catalog WHERE brand=? AND model=?)",
+                    "subcategory, is_public_visible, is_verified) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,1,1)",
                     (code_to_label.get(code, ""), name, brand, model, spec, unit,
-                     price_usd, sup_id, lt, cat_id, sub, brand, model))
+                     price_usd, sup_id, lt, cat_id, sub))
     except Exception as e:
         try: app.logger.warning("solar-farm gap product seed failed: %s", e)
         except Exception: pass
