@@ -974,8 +974,297 @@ def _ci_cashflow_plan(fin_cfg) -> dict:
     return out
 
 
+# Bankability hurdles for an emerging-market utility IPP (lenders' rules of
+# thumb). Tunable via env without a redeploy.
+_CI_BANK_DSCR_STRONG = float(os.environ.get("CI_BANK_DSCR_STRONG", "1.35"))
+_CI_BANK_DSCR_MIN = float(os.environ.get("CI_BANK_DSCR_MIN", "1.20"))
+_CI_BANK_IRR_STRONG = float(os.environ.get("CI_BANK_IRR_STRONG", "15.0"))
+_CI_BANK_IRR_MIN = float(os.environ.get("CI_BANK_IRR_MIN", "10.0"))
+
+
+def _ci_bankability(computed) -> dict:
+    """Determine project bankability from the Step-8 finance-engine output
+    (finance_config.computed) -- READ ONLY, no re-modelling. Scores six lender
+    metrics (min-DSCR, project IRR, NPV, LCOE-vs-tariff margin, payback ratio,
+    downside P90 IRR), each weighted, into a 0-100 bankability score with a
+    verdict band (Bankable / Conditionally Bankable / Not Yet Bankable) plus the
+    strengths, risks and financing conditions a credit committee would list.
+
+    Returns {available, score, rating, rating_class, metrics[], strengths[],
+    risks[], conditions[]}. `available` is False until Step 8 has computed."""
+    out = {"available": False, "score": 0, "rating": "Not assessed",
+           "rating_class": "secondary", "metrics": [], "strengths": [],
+           "risks": [], "conditions": []}
+    if not isinstance(computed, dict) or not computed:
+        return out
+
+    def _f(key):
+        try:
+            v = computed.get(key)
+            return float(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    dscr_min = _f("dscr_min")
+    dscr_avg = _f("dscr_avg")
+    irr = _f("irr_pct")
+    npv = _f("npv_local")
+    lcoe = _f("lcoe_local_per_kwh")
+    tariff = _f("tariff_local_per_kwh")
+    payback = _f("payback_years")
+    life = _f("project_life_yr") or 25.0
+    mc = computed.get("monte_carlo") if isinstance(computed.get("monte_carlo"), dict) else {}
+    p90_irr = None
+    try:
+        p90_irr = float(mc.get("irr_p90_pct")) if mc.get("irr_p90_pct") is not None else None
+    except (TypeError, ValueError):
+        p90_irr = None
+
+    metrics, strengths, risks, conditions = [], [], [], []
+    earned = 0.0
+    assessable = 0.0
+
+    def add(label, weight, ratio, value_txt, note, verdict):
+        nonlocal earned, assessable
+        assessable += weight
+        earned += weight * max(0.0, min(1.0, ratio))
+        metrics.append({"label": label, "value": value_txt, "note": note,
+                        "verdict": verdict, "weight": weight})
+
+    # 1. Minimum DSCR (30) -- the single most important lender metric.
+    if dscr_min is not None:
+        if dscr_min >= _CI_BANK_DSCR_STRONG:
+            r, v = 1.0, "strong"; strengths.append(
+                f"Min DSCR {dscr_min:.2f}x clears the {_CI_BANK_DSCR_STRONG:.2f}x lender floor.")
+        elif dscr_min >= _CI_BANK_DSCR_MIN:
+            r, v = 0.6, "adequate"; conditions.append(
+                f"Min DSCR {dscr_min:.2f}x is thin -- size a DSRA and cash sweep to hold >= {_CI_BANK_DSCR_STRONG:.2f}x.")
+        else:
+            r, v = 0.15, "weak"; risks.append(
+                f"Min DSCR {dscr_min:.2f}x is below the {_CI_BANK_DSCR_MIN:.2f}x floor -- reduce gearing or tenor.")
+        add("Minimum DSCR", 30, r, f"{dscr_min:.2f}x",
+            f"avg {dscr_avg:.2f}x" if dscr_avg else "", v)
+
+    # 2. Project IRR (20).
+    if irr is not None:
+        if irr >= _CI_BANK_IRR_STRONG:
+            r, v = 1.0, "strong"; strengths.append(f"Project IRR {irr:.1f}% is attractive.")
+        elif irr >= _CI_BANK_IRR_MIN:
+            r, v = 0.6, "adequate"
+        else:
+            r, v = 0.2, "weak"; risks.append(
+                f"Project IRR {irr:.1f}% is below the {_CI_BANK_IRR_MIN:.0f}% equity hurdle.")
+        add("Project IRR", 20, r, f"{irr:.1f}%", "", v)
+
+    # 3. NPV sign (15).
+    if npv is not None:
+        if npv > 0:
+            r, v = 1.0, "positive"; strengths.append("NPV is positive at the project discount rate.")
+        else:
+            r, v = 0.0, "negative"; risks.append("NPV is negative -- the project destroys value at the current tariff/CAPEX.")
+        add("NPV", 15, r, f"{npv:,.0f}", "", v)
+
+    # 4. LCOE vs tariff margin (15).
+    if lcoe is not None and tariff and tariff > 0:
+        margin = (tariff - lcoe) / tariff
+        if margin >= 0.25:
+            r, v = 1.0, "strong"; strengths.append(
+                f"Tariff sits {margin*100:.0f}% above LCOE -- healthy revenue headroom.")
+        elif margin >= 0.10:
+            r, v = 0.6, "adequate"
+        elif margin > 0:
+            r, v = 0.3, "thin"; conditions.append(
+                "LCOE-to-tariff margin is thin -- a PPA escalator or tariff floor is advisable.")
+        else:
+            r, v = 0.0, "negative"; risks.append(
+                "LCOE exceeds tariff -- revenues do not cover the levelised cost.")
+        add("LCOE vs tariff", 15, r, f"{lcoe:.2f} vs {tariff:.2f}",
+            f"{margin*100:+.0f}% headroom", v)
+
+    # 5. Payback vs life (10).
+    if payback is not None and life > 0:
+        ratio = payback / life
+        if ratio <= 0.40:
+            r, v = 1.0, "fast"
+        elif ratio <= 0.60:
+            r, v = 0.6, "moderate"
+        else:
+            r, v = 0.25, "slow"; conditions.append(
+                f"Payback {payback:.1f}y is a large share of the {life:.0f}y life -- lenders will want a shorter tenor buffer.")
+        add("Payback / life", 10, r, f"{payback:.1f}y / {life:.0f}y", "", v)
+
+    # 6. Downside resilience -- Monte-Carlo P90 IRR (10).
+    if p90_irr is not None:
+        if p90_irr >= _CI_BANK_IRR_MIN:
+            r, v = 1.0, "resilient"; strengths.append(
+                f"Even at P90 the IRR holds {p90_irr:.1f}% -- robust to downside.")
+        elif p90_irr >= 0:
+            r, v = 0.5, "sensitive"; conditions.append(
+                "Returns are sensitive on the downside (P90) -- stress-test the resource and availability assumptions.")
+        else:
+            r, v = 0.1, "fragile"; risks.append("P90 IRR turns negative -- the base case has little margin for error.")
+        add("Downside P90 IRR", 10, r, f"{p90_irr:.1f}%", "Monte Carlo", v)
+
+    if assessable <= 0:
+        return out   # nothing computed yet -> not assessed
+
+    score = int(round(earned / assessable * 100.0))
+    if score >= 75:
+        rating, rclass = "Bankable", "success"
+    elif score >= 55:
+        rating, rclass = "Conditionally Bankable", "warning"
+    else:
+        rating, rclass = "Not Yet Bankable", "danger"
+    if not conditions and rating != "Bankable":
+        conditions.append("Firm up the PPA, EPC price and resource data before a lender term sheet.")
+    out.update({"available": True, "score": score, "rating": rating,
+                "rating_class": rclass, "metrics": metrics,
+                "strengths": strengths, "risks": risks, "conditions": conditions})
+    return out
+
+
+# Refined chart palette (replaces the old amber/yellow deck accents 2026-07-03).
+# Cool, premium tones that read well on the dark cards; the donut cycles through
+# the full list. Accent = teal.
+_CI_CHART_PALETTE: list[str] = [
+    "#38bdf8", "#34d399", "#a78bfa", "#f472b6", "#22d3ee", "#fb923c",
+    "#4ade80", "#818cf8", "#e879f9", "#2dd4bf", "#facc15", "#60a5fa",
+]
+_CI_ACCENT = "#2dd4bf"     # teal accent (was #f5c518/#f5a623 yellow)
+_CI_ACCENT2 = "#38bdf8"    # sky-blue secondary
+
+
+def _svg_donut(rows, *, size: int = 240, thickness: int = 40,
+               palette: list | None = None, money: bool = True,
+               center_label: str = "", center_sub: str = "") -> str:
+    """Circular donut/pie chart as inline SVG (CSP-safe). `rows` =
+    [{label, value, pct?}]; slices cycle through the palette. Renders the ring +
+    a compact legend beneath it + an optional centre total. Returns an <svg>
+    string (mark |safe)."""
+    import html as _html
+    import math as _math
+    rows = [r for r in (rows or []) if isinstance(r, dict)
+            and float(r.get("value") or 0) > 0]
+    if not rows:
+        return '<div class="text-secondary small py-2">No data yet.</div>'
+    pal = palette or _CI_CHART_PALETTE
+    total = sum(float(r.get("value") or 0) for r in rows) or 1.0
+    r = (size - thickness) / 2.0
+    cx = cy = size / 2.0
+    circ = 2 * _math.pi * r
+    # Legend height: one row per slice (cap the ring at 12 slices, roll the rest
+    # into an "Other" wedge so the chart stays legible).
+    show = rows[:11]
+    rest = rows[11:]
+    if rest:
+        show = show + [{"label": f"Other ({len(rest)})",
+                        "value": sum(float(x.get("value") or 0) for x in rest)}]
+    legend_h = len(show) * 16 + 6
+    height = size + legend_h
+    out = [f'<svg viewBox="0 0 {size} {height}" width="100%" '
+           f'style="max-width:{size}px;font:11px sans-serif" role="img" '
+           f'preserveAspectRatio="xMinYMin meet">']
+    out.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" '
+               f'stroke="#22273a" stroke-width="{thickness}"/>')
+    offset = 0.0
+    for i, row in enumerate(show):
+        val = float(row.get("value") or 0)
+        frac = val / total
+        seg = frac * circ
+        color = pal[i % len(pal)]
+        # dash: draw `seg`, gap the rest; rotate so slices start at 12 o'clock.
+        out.append(
+            f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" '
+            f'stroke="{color}" stroke-width="{thickness}" '
+            f'stroke-dasharray="{seg:.2f} {circ - seg:.2f}" '
+            f'stroke-dashoffset="{-offset:.2f}" '
+            f'transform="rotate(-90 {cx} {cy})"/>')
+        offset += seg
+    if center_label:
+        out.append(
+            f'<text x="{cx}" y="{cy - 2}" text-anchor="middle" '
+            f'fill="#e8e8f5" style="font-size:15px;font-weight:700">'
+            f'{_html.escape(center_label)}</text>')
+    if center_sub:
+        out.append(
+            f'<text x="{cx}" y="{cy + 15}" text-anchor="middle" '
+            f'fill="#9090b0" style="font-size:10px">'
+            f'{_html.escape(center_sub)}</text>')
+    ly = size + 12
+    for i, row in enumerate(show):
+        color = pal[i % len(pal)]
+        val = float(row.get("value") or 0)
+        pct = row.get("pct")
+        if pct is None:
+            pct = val / total * 100.0
+        label = _html.escape(str(row.get("label") or "")[:30])
+        vtxt = f"{val:,.0f}" if money else f"{val:g}"
+        out.append(f'<rect x="4" y="{ly - 9}" width="10" height="10" rx="2" '
+                   f'fill="{color}"/>')
+        out.append(f'<text x="20" y="{ly}" fill="#c9c9e0">{label}</text>')
+        out.append(f'<text x="{size - 4}" y="{ly}" text-anchor="end" '
+                   f'fill="#e8e8f5">{vtxt}  {float(pct):.1f}%</text>')
+        ly += 16
+    out.append('</svg>')
+    return "".join(out)
+
+
+def _svg_scurve(labels, values, *, width: int = 560, height: int = 220,
+                color: str = _CI_ACCENT2, money: bool = True) -> str:
+    """Cumulative cost S-curve as inline SVG: an area-filled line of the running
+    total across `labels` (e.g. bills / buildings). `values` are the per-step
+    amounts; the curve plots their cumulative sum. CSP-safe, no external libs."""
+    import html as _html
+    vals = [float(v or 0) for v in (values or [])]
+    if not vals:
+        return '<div class="text-secondary small py-2">No data yet.</div>'
+    labels = [str(l) for l in (labels or [])]
+    cum, run = [], 0.0
+    for v in vals:
+        run += v
+        cum.append(run)
+    vmax = max(cum) or 1.0
+    pl, pr, pt, pb = 52, 12, 14, 40
+    pw, ph = width - pl - pr, height - pt - pb
+    n = len(cum)
+    step = pw / max(1, (n - 1)) if n > 1 else pw
+
+    def xof(i):
+        return pl + (i * step if n > 1 else pw / 2)
+
+    def yof(v):
+        return pt + (1 - v / vmax) * ph
+
+    pts = [(xof(i), yof(v)) for i, v in enumerate(cum)]
+    line_pts = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
+    area_pts = (f"{pl:.1f},{pt + ph:.1f} " + line_pts +
+                f" {xof(n - 1):.1f},{pt + ph:.1f}")
+    out = [f'<svg viewBox="0 0 {width} {height}" width="100%" '
+           f'style="max-width:{width}px;font:10px sans-serif" role="img" '
+           f'preserveAspectRatio="xMinYMin meet">']
+    # gridlines at 0/50/100%
+    for frac in (0.0, 0.5, 1.0):
+        gy = pt + (1 - frac) * ph
+        out.append(f'<line x1="{pl}" y1="{gy:.1f}" x2="{width - pr}" '
+                   f'y2="{gy:.1f}" stroke="#2a2f45" stroke-width="1"/>')
+        out.append(f'<text x="{pl - 5}" y="{gy + 3:.1f}" text-anchor="end" '
+                   f'fill="#9090b0">{vmax * frac:,.0f}</text>')
+    out.append(f'<polygon points="{area_pts}" fill="{color}" '
+               f'fill-opacity="0.14"/>')
+    out.append(f'<polyline points="{line_pts}" fill="none" stroke="{color}" '
+               f'stroke-width="2.5"/>')
+    for i, (x, y) in enumerate(pts):
+        out.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.6" fill="{color}"/>')
+        if n <= 14 or i % 2 == 0:
+            out.append(f'<text x="{x:.1f}" y="{height - 8}" '
+                       f'text-anchor="middle" fill="#9090b0">'
+                       f'{_html.escape(labels[i][:8]) if i < len(labels) else ""}</text>')
+    out.append('</svg>')
+    return "".join(out)
+
+
 def _svg_hbars(rows, *, width: int = 560, row_h: int = 24, gap: int = 6,
-               pad_left: int = 150, color: str = "#f5c518",
+               pad_left: int = 150, color: str = "#38bdf8",
                money: bool = True) -> str:
     """Horizontal bar chart as inline SVG (CSP-safe, no external libs) for the
     cost-distribution infographics. `rows` = [{label, value, pct?}]. Bars scale
@@ -1015,8 +1304,8 @@ def _svg_hbars(rows, *, width: int = 560, row_h: int = 24, gap: int = 6,
 
 
 def _svg_columns(labels, values, *, line=None, width: int = 560,
-                 height: int = 210, color: str = "#4ea1f5",
-                 line_color: str = "#f5c518", every: int = 1) -> str:
+                 height: int = 210, color: str = "#38bdf8",
+                 line_color: str = "#2dd4bf", every: int = 1) -> str:
     """Vertical column chart as inline SVG, with an optional overlaid line
     (e.g. cumulative cash flow). Handles negative values (columns drop below a
     zero baseline). `labels`/`values` equal length; `line` optional same length.
@@ -1488,94 +1777,339 @@ def _ci_derive_boq_services(fac_cfg: dict, tech_cfg: dict,
 # basic_local). qty_key pulls from the sizing dict; a float is a fixed quantity;
 # a ("per_kwp", factor) tuple scales by installed DC kWp.
 # ===========================================================================
+# Full 12-bill utility-PV FARM BOQ (Codex template 2026-07-03, see
+# docs/SOLAR_FARM_BOQ_TEMPLATE_2026-07-03.md). Each tuple is
+#   (bill_no, bill_name, section, service_slug, description, unit, qty_key, basic_local)
+# where qty_key is a STRING naming a key in the `derived` dict computed by
+# _ci_solar_boq_rows() (all size_utility_pv fields + farm-derived counts), OR a
+# float/int fixed quantity, OR a legacy ("per_kwp", factor) tuple. basic_local is
+# the indicative SUPPLY unit rate in LOCAL currency (GHS) at fx=12 GHS/USD -- i.e.
+# the USD band midpoint from the template x12; boq_rate_v3 then layers
+# Supply/Install/OH/Profit/VAT exactly like the facilities autobuild. Tracker rows
+# key on `tracker_kwp`/`tracker_rows`, which resolve to 0 for fixed-tilt plants so
+# those lines auto-skip (qty<=0 -> continue). Quantities the design does not yet
+# emit (piles, land ha, road/perimeter, pole counts) use the concept-derived
+# defaults documented in the design doc until Step 7 computes them.
 _CI_SOLAR_BOQ_SECTIONS: list[tuple] = [
-    # --- PV modules ---
-    ("PV Modules & Array", "solar_modules",
-     "PV module, mono c-Si half-cut ~550Wp, Tier-1, IEC 61215/61730",
-     "No.", "n_modules", 1800.0),
-    ("PV Modules & Array", "solar_modules",
-     "Module-level DC connectors & inline fuses (per module set)",
-     "Set", "n_modules", 45.0),
-    # --- Mounting / tracker ---
-    ("Mounting Structure & Tracker", "solar_mounting",
-     "Ground-mount steel structure, hot-dip galvanised (per kWp)",
-     "kWp", "dc_kwp_actual", 720.0),
-    ("Mounting Structure & Tracker", "solar_mounting",
-     "Pile foundation / ramming & civil anchoring (per kWp)",
-     "kWp", "dc_kwp_actual", 240.0),
-    ("Mounting Structure & Tracker", "solar_mounting",
-     "Single-axis tracker drive & controller (optional, per kWp)",
-     "kWp", "dc_kwp_actual", 360.0),
-    # --- DC system ---
-    ("DC Collection System", "solar_dc",
-     "DC string cable, 1x6mm2 PV1-F, UV-rated (metres)",
-     "m", "dc_cable_m_est", 36.0),
-    ("DC Collection System", "solar_dc",
-     "String combiner box, IP65, with DC SPD, fuses & isolator",
-     "No.", "combiners", 4800.0),
-    ("DC Collection System", "solar_dc",
-     "DC cable trenching, ducting & cable trays (per kWp)",
-     "kWp", "dc_kwp_actual", 90.0),
-    # --- Inverters ---
-    ("Inverters", "solar_inverter",
-     "Central/string inverter station (per unit, ~1500kW class)",
-     "No.", "n_central_inv", 720000.0),
-    ("Inverters", "solar_inverter",
-     "Inverter LV AC connection, protection & auxiliary supply (per unit)",
-     "No.", "n_central_inv", 36000.0),
-    # --- MV / AC system ---
-    ("MV / AC Power System", "solar_mv",
-     "Inverter step-up transformer, LV/MV oil-immersed (per inverter)",
-     "No.", "n_central_inv", 300000.0),
-    ("MV / AC Power System", "solar_mv",
-     "MV ring main unit / switchgear panel",
-     "No.", "n_central_inv", 240000.0),
-    ("MV / AC Power System", "solar_mv",
-     "MV collection cable, XLPE armoured (metres)",
+    # ---- Bill 1: PV Array Field ----
+    (1, "PV Array Field", "PV Modules", "solar_modules",
+     "Tier-1 mono/bifacial PV module, IEC 61215/61730 (module_wp Wp)",
+     "No.", "n_modules", 1560.0),
+    (1, "PV Array Field", "PV Modules", "solar_modules",
+     "Module barcode/serial QA & flash-test file registration",
+     "No.", "n_modules", 7.2),
+    (1, "PV Array Field", "PV Modules", "solar_modules",
+     "Module DC connector pair, 1500 Vdc compatible",
+     "Pair", "n_modules", 48.0),
+    (1, "PV Array Field", "PV Modules", "solar_modules",
+     "Spare PV modules, commissioning stock",
+     "No.", "spare_modules", 1560.0),
+    # ---- Bill 2: Mounting System ----
+    (2, "Mounting System", "Fixed-Tilt Structure", "solar_mounting",
+     "Galvanised fixed-tilt mounting structure, rails, purlins, braces",
+     "kWp", "fixed_mount_kwp", 780.0),
+    (2, "Mounting System", "Fixed-Tilt Structure", "solar_mounting",
+     "Driven steel piles / posts",
+     "No.", "fixed_pile_count", 360.0),
+    (2, "Mounting System", "Fixed-Tilt Structure", "solar_mounting",
+     "Mid/end clamps, bolts, grounding washers",
+     "Set", "fixed_clamps", 72.0),
+    (2, "Mounting System", "Fixed-Tilt Structure", "solar_mounting",
+     "Row set-out, pull testing & pile-refusal allowance",
+     "kWp", "fixed_mount_kwp", 72.0),
+    (2, "Mounting System", "Tracker (optional)", "solar_tracker",
+     "Single-axis tracker torque tube, bearings & posts",
+     "kWp", "tracker_kwp", 1320.0),
+    (2, "Mounting System", "Tracker (optional)", "solar_tracker",
+     "Tracker drive motor & slew gear",
+     "No.", "tracker_rows", 9600.0),
+    (2, "Mounting System", "Tracker (optional)", "solar_tracker",
+     "Tracker row controller, power supply & sensors",
+     "No.", "tracker_rows", 6000.0),
+    (2, "Mounting System", "Tracker (optional)", "solar_tracker",
+     "Tracker commissioning & stow calibration",
+     "kWp", "tracker_kwp", 96.0),
+    # ---- Bill 3: DC Collection ----
+    (3, "DC Collection", "Stringing", "solar_dc",
+     "String cable PV1-F 1C 6mm2, UV-rated, 1500 Vdc",
+     "m", "dc_cable_m_est", 14.4),
+    (3, "DC Collection", "Stringing", "solar_dc",
+     "String home-run cable PV1-F 1C 10/16mm2 allowance",
+     "m", "dc_homerun_m", 36.0),
+    (3, "DC Collection", "Combiners", "solar_dc",
+     "String combiner box with fuses, SPD, isolator & monitoring",
+     "No.", "combiners", 24000.0),
+    (3, "DC Collection", "Combiners", "solar_dc",
+     "DC string fuses / fuse holders",
+     "No.", "dc_fuses", 84.0),
+    (3, "DC Collection", "Surge Protection", "solar_dc",
+     "DC SPD cartridges, Type II 1500 Vdc",
+     "No.", "dc_spd", 840.0),
+    (3, "DC Collection", "Connectors", "solar_dc",
+     "MC4 branch / field connector allowance",
+     "Pair", "mc4_pairs", 48.0),
+    (3, "DC Collection", "Cable Routes", "solar_dc",
+     "DC cable trays, ducts, warning tape & markers",
+     "m", "dc_tray_m", 120.0),
+    (3, "DC Collection", "Cable Routes", "solar_dc",
+     "DC trenching, backfill & reinstatement",
+     "m", "dc_trench_m", 180.0),
+    # ---- Bill 4: Inverter Stations ----
+    (4, "Inverter Stations", "Inverters", "solar_inverter",
+     "Central inverter, central_inverter_kw kWac class",
+     "No.", "n_central_inv", 960000.0),
+    (4, "Inverter Stations", "Stations", "solar_inverter",
+     "Inverter skid/container, LV panel, HVAC & fire detection",
+     "No.", "n_central_inv", 420000.0),
+    (4, "Inverter Stations", "Auxiliary", "solar_inverter",
+     "Inverter auxiliary transformer / UPS / AC DB",
+     "No.", "n_central_inv", 120000.0),
+    (4, "Inverter Stations", "Civil", "solar_inverter",
+     "Inverter station foundation plinth + oil/fire separation",
+     "No.", "n_central_inv", 168000.0),
+    (4, "Inverter Stations", "Spares", "solar_inverter",
+     "Inverter spare fans, boards, filters & consumables",
+     "Set", "n_central_inv", 48000.0),
+    # ---- Bill 5: MV Collector System ----
+    (5, "MV Collector System", "Transformers", "solar_mv",
+     "LV/MV step-up transformer per inverter station",
+     "No.", "n_central_inv", 840000.0),
+    (5, "MV Collector System", "Transformers", "solar_mv",
+     "Transformer bund, plinth, fire wall / stone pit",
+     "No.", "n_central_inv", 216000.0),
+    (5, "MV Collector System", "Switchgear", "solar_mv",
+     "MV RMU / switchgear panel per inverter station",
+     "No.", "n_central_inv", 540000.0),
+    (5, "MV Collector System", "Cable", "solar_mv",
+     "MV collector cable, XLPE armoured",
+     "m", "ac_cable_m_est", 600.0),
+    (5, "MV Collector System", "Cable", "solar_mv",
+     "MV cable terminations & straight joints",
+     "Set", "mv_terminations", 7200.0),
+    (5, "MV Collector System", "Cable", "solar_mv",
+     "MV trenching, ducts, tiles & markers",
      "m", "ac_cable_m_est", 300.0),
-    # --- Grid interconnection ---
-    ("Grid Interconnection & Substation", "solar_grid",
-     "Grid substation, HV switchyard & interconnection works (lump sum)",
-     "Item", 1.0, 3600000.0),
-    ("Grid Interconnection & Substation", "solar_grid",
-     "Revenue & check metering, protection relays & CTs/VTs (lump sum)",
-     "Item", 1.0, 480000.0),
-    # --- Earthing & lightning ---
-    ("Array Earthing & Lightning Protection", "solar_earthing",
-     "Array earthing grid, bonding conductors & earth electrodes (per kWp)",
-     "kWp", "dc_kwp_actual", 60.0),
-    ("Array Earthing & Lightning Protection", "solar_earthing",
-     "Lightning protection air terminals & down conductors (per kWp)",
-     "kWp", "dc_kwp_actual", 30.0),
-    # --- Plant SCADA & monitoring ---
-    ("Plant SCADA & Monitoring", "solar_scada",
-     "Plant SCADA, PPC & string monitoring system (lump sum)",
-     "Item", 1.0, 960000.0),
-    ("Plant SCADA & Monitoring", "solar_scada",
-     "Weather / meteorological station (irradiance, temp, wind)",
-     "No.", 2.0, 180000.0),
-    # --- Site civil & security ---
-    ("Site Civil, Roads & Security", "solar_civil",
-     "Internal access roads, drainage & site grading (per kWp)",
-     "kWp", "dc_kwp_actual", 120.0),
-    ("Site Civil, Roads & Security", "solar_civil",
-     "Perimeter security fence, gates & CCTV interface (per kWp)",
-     "kWp", "dc_kwp_actual", 84.0),
-    # --- Testing & commissioning ---
-    ("Testing, Commissioning & Grid Compliance", "solar_commissioning",
-     "Testing, commissioning, grid-code compliance & handover (per kWp)",
-     "kWp", "dc_kwp_actual", 96.0),
+    (5, "MV Collector System", "Protection", "solar_mv",
+     "MV protection relays + CT/VT interfaces",
+     "Set", "n_central_inv", 72000.0),
+    # ---- Bill 6: Grid Substation ----
+    (6, "Grid Substation", "Transformer", "solar_grid",
+     "Main / grid step-up transformer, plant export class",
+     "Item", 1.0, 10800000.0),
+    (6, "Grid Substation", "HV Yard", "solar_grid",
+     "HV/MV switchyard, breakers, isolators & gantries",
+     "Item", 1.0, 9600000.0),
+    (6, "Grid Substation", "Metering", "solar_grid",
+     "Revenue + check metering & power-quality meter",
+     "Item", 1.0, 1080000.0),
+    (6, "Grid Substation", "Protection", "solar_grid",
+     "Grid protection, intertrip, synchronising & RTU",
+     "Item", 1.0, 1800000.0),
+    (6, "Grid Substation", "Interconnection", "solar_grid",
+     "Grid interconnection studies & utility interface allowance",
+     "Item", 1.0, 1440000.0),
+    # ---- Bill 7: SCADA & Communications ----
+    (7, "SCADA & Communications", "SCADA", "solar_scada",
+     "Plant SCADA server, HMI, historian & engineering workstation",
+     "Item", 1.0, 1080000.0),
+    (7, "SCADA & Communications", "PPC", "solar_scada",
+     "Power Plant Controller, grid-code active/reactive control",
+     "Item", 1.0, 1080000.0),
+    (7, "SCADA & Communications", "Monitoring", "solar_scada",
+     "Inverter / string monitoring integration",
+     "No.", "monitoring_pts", 1200.0),
+    (7, "SCADA & Communications", "Network", "solar_scada",
+     "Fibre-optic ring, switches, patch panels & cabinets",
+     "m", "fibre_m", 48.0),
+    (7, "SCADA & Communications", "Weather", "solar_scada",
+     "Weather station mast: POA/GHI irradiance, temp & wind",
+     "No.", "weather_masts", 216000.0),
+    (7, "SCADA & Communications", "Security", "solar_scada",
+     "CCTV / NVR integration to SCADA / security room",
+     "Item", 1.0, 360000.0),
+    # ---- Bill 8: Earthing & Lightning Protection ----
+    (8, "Earthing & Lightning Protection", "Earth Grid", "solar_earthing",
+     "Array earthing grid, bare copper / galvanised steel",
+     "m", "earth_grid_m", 48.0),
+    (8, "Earthing & Lightning Protection", "Bonding", "solar_earthing",
+     "Module frame bonding jumpers / lugs",
+     "No.", "n_modules", 12.0),
+    (8, "Earthing & Lightning Protection", "Electrodes", "solar_earthing",
+     "Earth rods / electrodes & inspection pits",
+     "No.", "earthing_pits", 3000.0),
+    (8, "Earthing & Lightning Protection", "Earth Bar", "solar_earthing",
+     "Main earth bar & transformer/inverter bonds",
+     "Set", "earth_bar", 9600.0),
+    (8, "Earthing & Lightning Protection", "Lightning", "solar_earthing",
+     "Lightning masts / air terminals / down conductors",
+     "No.", "lightning_masts", 14400.0),
+    (8, "Earthing & Lightning Protection", "Testing", "solar_earthing",
+     "Soil resistivity & earth resistance testing",
+     "Item", 1.0, 60000.0),
+    # ---- Bill 9: Civil Works ----
+    (9, "Civil Works", "Earthworks", "solar_civil",
+     "Site clearing, grading & compaction",
+     "ha", "land_ha", 120000.0),
+    (9, "Civil Works", "Roads", "solar_civil",
+     "Internal spine road, gravel/laterite, 4 m wide",
+     "m", "road_m", 1800.0),
+    (9, "Civil Works", "Hardstand", "solar_civil",
+     "Inverter / transformer access hardstand",
+     "No.", "n_central_inv", 96000.0),
+    (9, "Civil Works", "Drainage", "solar_civil",
+     "Drainage swales, culverts & erosion protection",
+     "ha", "land_ha", 72000.0),
+    (9, "Civil Works", "Cable Civil", "solar_civil",
+     "Cable-route excavation & reinstatement allowance",
+     "m", "cable_civil_m", 240.0),
+    # ---- Bill 10: Security & Site Services ----
+    (10, "Security & Site Services", "Fence", "solar_security",
+     "Perimeter security fence, 2.4 m anti-climb",
+     "m", "perimeter_m", 660.0),
+    (10, "Security & Site Services", "Gates", "solar_security",
+     "Main gate & maintenance gate",
+     "Set", 1.0, 120000.0),
+    (10, "Security & Site Services", "CCTV", "solar_security",
+     "CCTV pole with camera & network drop",
+     "No.", "cctv_poles", 24000.0),
+    (10, "Security & Site Services", "Lighting", "solar_security",
+     "Perimeter lighting pole with LED luminaire",
+     "No.", "lighting_poles", 18000.0),
+    (10, "Security & Site Services", "Signage", "solar_security",
+     "Security signage, danger labels & wayfinding",
+     "Set", 1.0, 60000.0),
+    # ---- Bill 11: Spares & Consumables ----
+    (11, "Spares & Consumables", "Commissioning", "solar_spares",
+     "Commissioning spares: fuses, SPDs, connectors & labels",
+     "Set", 1.0, 300000.0),
+    (11, "Spares & Consumables", "O&M", "solar_spares",
+     "Two-year O&M critical-spares allowance",
+     "kWp", "dc_kwp_actual", 36.0),
+    # ---- Bill 12: Testing & Handover ----
+    (12, "Testing & Handover", "DC Testing", "solar_commissioning",
+     "Module/string polarity, Voc, insulation & IV-curve tests",
+     "String", "strings", 360.0),
+    (12, "Testing & Handover", "Combiner", "solar_commissioning",
+     "Combiner functional & monitoring tests",
+     "No.", "combiners", 1800.0),
+    (12, "Testing & Handover", "Inverter", "solar_commissioning",
+     "Inverter commissioning & performance test",
+     "No.", "n_central_inv", 30000.0),
+    (12, "Testing & Handover", "MV", "solar_commissioning",
+     "Transformer/MV testing, relay injection, cable VLF/HiPot",
+     "Set", "n_central_inv", 96000.0),
+    (12, "Testing & Handover", "Grid Compliance", "solar_commissioning",
+     "Grid-code compliance, PPC tuning & utility witness tests",
+     "Item", 1.0, 1080000.0),
+    (12, "Testing & Handover", "Handover", "solar_commissioning",
+     "As-built drawings, O&M manuals, training & handover dossier",
+     "Item", 1.0, 300000.0),
 ]
+
+
+def _ci_solar_derived_terms(sizing: dict) -> dict:
+    """Compute the full set of farm quantities the 12-bill BOQ references, from
+    size_utility_pv() output plus concept-derived defaults (land ha, perimeter,
+    road, pole counts) for quantities Step 7 does not yet emit. Pure. Tracker
+    quantities are zero unless the plant's mounting is a tracker (so tracker rows
+    auto-skip on fixed-tilt). See docs/SOLAR_FARM_BOQ_TEMPLATE_2026-07-03.md."""
+    import math
+    sz = dict(sizing or {})
+
+    def _f(key, d=0.0):
+        try:
+            return float(sz.get(key) or 0.0)
+        except (TypeError, ValueError):
+            return d
+
+    n_inv = sz.get("n_central_inv") or sz.get("n_central_inverters") or 0
+    try:
+        n_inv = int(n_inv)
+    except (TypeError, ValueError):
+        n_inv = 0
+    n_modules = int(_f("n_modules"))
+    dc_kwp = _f("dc_kwp_actual") or _f("kwp")
+    kwp_input = _f("kwp_input") or dc_kwp
+    strings = int(_f("strings"))
+    combiners = int(_f("combiners"))
+    dc_m = _f("dc_cable_m_est")
+    ac_m = _f("ac_cable_m_est")
+
+    # Concept-derived site geometry (same density family as the 3D twin).
+    land_ha = max(kwp_input / 800.0, 5.0) if kwp_input > 0 else 0.0
+    land_side_m = math.sqrt(land_ha * 10000.0) if land_ha > 0 else 0.0
+    road_m = max(0.0, land_side_m - 20.0)
+    perimeter_m = max(0.0, 4.0 * (land_side_m - 2.0))
+
+    # Tracker gating: mounting stored at pv_config top level, threaded in by the
+    # callers as `mounting_type`/`mounting`. Trackers -> single/dual axis.
+    mounting = str(sz.get("mounting_type") or sz.get("mounting") or "").lower()
+    is_tracker = ("track" in mounting) or (mounting in ("single_axis", "dual_axis"))
+    tracker_rows = int(math.ceil(n_modules / 60.0)) if (is_tracker and n_modules) else 0
+    tracker_kwp = dc_kwp if is_tracker else 0.0
+
+    # Mounting quantities. `pile_count`/`clamps` remain full-plant totals for any
+    # generic references, but the Bill-2 FIXED-TILT structure lines must resolve
+    # to ZERO on a tracker plant -- otherwise a tracker project pays for both the
+    # fixed-tilt racking AND the tracker racking (Codex MED, double-count). The
+    # dedicated fixed_* keys carry the fixed-tilt structure quantity and collapse
+    # to 0 when is_tracker; the tracker rows (tracker_kwp/tracker_rows) cover the
+    # tracker structure instead. Fixed-tilt plants are unaffected (is_tracker=False).
+    pile_count = int(sz.get("pile_count") or math.ceil(n_modules / 2.0))
+    clamps = n_modules
+    fixed_mount_kwp = 0.0 if is_tracker else dc_kwp
+    fixed_pile_count = 0 if is_tracker else pile_count
+    fixed_clamps = 0 if is_tracker else clamps
+
+    return {
+        # direct sizing pass-through (so plain-key catalog rows still resolve)
+        "n_modules": n_modules, "dc_kwp_actual": dc_kwp, "n_central_inv": n_inv,
+        "strings": strings, "combiners": combiners,
+        "dc_cable_m_est": dc_m, "ac_cable_m_est": ac_m,
+        # PV array
+        "spare_modules": math.ceil(n_modules * 0.005),
+        # mounting -- full-plant totals + fixed-tilt-only variants (zeroed on tracker)
+        "pile_count": pile_count,
+        "clamps": clamps,
+        "fixed_mount_kwp": fixed_mount_kwp,
+        "fixed_pile_count": fixed_pile_count,
+        "fixed_clamps": fixed_clamps,
+        "tracker_rows": tracker_rows, "tracker_kwp": tracker_kwp,
+        # DC collection
+        "dc_homerun_m": round(dc_m * 0.25, 2),
+        "dc_fuses": strings * 2,
+        "dc_spd": combiners * 2,
+        "mc4_pairs": strings * 2,
+        "dc_tray_m": round(dc_m * 0.35, 2),
+        "dc_trench_m": round(dc_m * 0.20, 2),
+        # MV
+        "mv_terminations": n_inv * 4,
+        # SCADA / comms
+        "monitoring_pts": combiners + n_inv,
+        "fibre_m": round((dc_m + ac_m) * 0.10, 2),
+        "weather_masts": 2,
+        # earthing / LPS
+        "earth_grid_m": round(dc_m * 0.35, 2),
+        "earthing_pits": max(1, n_inv + 1),
+        "earth_bar": n_inv + 1,
+        "lightning_masts": max(4, int(math.ceil(dc_kwp / 2500.0))) if dc_kwp > 0 else 4,
+        # civil
+        "land_ha": round(land_ha, 2),
+        "road_m": round(road_m, 0),
+        "cable_civil_m": round(dc_m * 0.20 + ac_m, 2),
+        # security
+        "perimeter_m": round(perimeter_m, 0),
+        "cctv_poles": 4,
+        "lighting_poles": 6,
+    }
 
 
 def _ci_solar_boq_rows(sizing: dict) -> list[dict]:
     """Derive solar-farm BOQ line items from size_utility_pv() output. Returns a
-    list of dicts {section, service_code, desc, unit, qty, basic}. Skips any line
-    whose derived quantity rounds to zero. Pure -- no DB, no side effects."""
+    list of dicts {bill_no, bill_name, section, service_code, desc, unit, qty,
+    basic}. Skips any line whose derived quantity rounds to zero. Pure -- no DB,
+    no side effects."""
     sz = dict(sizing or {})
-    # size_utility_pv() emits `n_central_inverters`; the catalog keys on the
-    # shorter `n_central_inv`. Alias so inverter/transformer/MV rows are NOT
-    # silently dropped (Codex HIGH-2). Local copy -> never mutates the caller.
     if not sz.get("n_central_inv"):
         sz["n_central_inv"] = sz.get("n_central_inverters") or 0
     try:
@@ -1585,29 +2119,30 @@ def _ci_solar_boq_rows(sizing: dict) -> list[dict]:
     # Require a real PV array (Step 7 completed) before building ANY solar rows.
     # Otherwise the fixed-quantity lump sums (grid substation, SCADA, weather)
     # would still insert and falsely report a "priced" solar BOQ that silently
-    # omits every module/inverter/MV line (Supervisor MED). No array -> no BOQ,
-    # so Step 9 shows the "complete Step 7" prompt instead.
+    # omits every module/inverter/MV line (Supervisor MED). No array -> no BOQ.
     try:
         _n_mod = float(sz.get("n_modules") or 0)
     except (TypeError, ValueError):
         _n_mod = 0.0
     if kwp <= 0 and _n_mod <= 0:
         return []
+    derived = _ci_solar_derived_terms(sz)
     rows: list[dict] = []
-    for section, slug, desc, unit, qkey, basic in _CI_SOLAR_BOQ_SECTIONS:
+    for bill_no, bill_name, section, slug, desc, unit, qkey, basic in _CI_SOLAR_BOQ_SECTIONS:
         if isinstance(qkey, tuple) and qkey and qkey[0] == "per_kwp":
             qty = kwp * float(qkey[1])
         elif isinstance(qkey, (int, float)):
             qty = float(qkey)
         else:
             try:
-                qty = float(sz.get(qkey) or 0.0)
+                qty = float(derived.get(qkey) or 0.0)
             except (TypeError, ValueError):
                 qty = 0.0
         qty = round(qty, 2)
         if qty <= 0:
             continue
-        rows.append({"section": section, "service_code": slug, "desc": desc,
+        rows.append({"bill_no": int(bill_no), "bill_name": bill_name,
+                     "section": section, "service_code": slug, "desc": desc,
                      "unit": unit, "qty": qty, "basic": float(basic)})
     return rows
 
@@ -1655,9 +2190,12 @@ def _ci_build_solar_farm_items(get_db, fid, bid, pid, uid, tenant_id, sizing):
             section = (r["section"] or "").strip()[:80]
             svc = (r["service_code"] or "")[:40]
             unit = (r["unit"] or "No.").strip()[:20] or "No."
-            sec_key = section
-            # Item number = next in this section; assigned only AFTER a
-            # successful insert so a failed row never leaves a gap (Supervisor).
+            bill_no = int(r.get("bill_no") or 0)
+            bill_name = (r.get("bill_name") or "SOLAR FARM 20MWp").strip()[:80]
+            # Number items per (bill, section) so each section restarts at 1 under
+            # its own bill. Assigned only AFTER a successful insert so a failed row
+            # never leaves a gap (Supervisor).
+            sec_key = (bill_no, section)
             item_no_disp = str(next_no.get(sec_key, 0) + 1)
             try:
                 cur = c.execute(
@@ -1672,7 +2210,7 @@ def _ci_build_solar_farm_items(get_db, fid, bid, pid, uid, tenant_id, sizing):
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (fid, bid, pid, uid, tenant_id,
                      svc, section, "",
-                     0, "SOLAR FARM", "", "",
+                     bill_no, bill_name, "", "",
                      item_no_disp, item_no_disp,
                      desc[:500], "", unit, qty,
                      total_rate, total,
@@ -2208,7 +2746,36 @@ def _build_report_markdown(key: str, proj: dict[str, Any],
     elif key == "bankability":
         title = f"Bankability Report - {proj['project_name']}"
         mc = computed.get("monte_carlo") or {}
-        md = header + (
+        # Bankability DETERMINATION (weighted lender scorecard) from the finance
+        # engine -- same result the Cost Plan Deck shows, so report == UI.
+        bank = _ci_bankability(computed)
+        if bank.get("available"):
+            det = (
+                "## Bankability determination\n\n"
+                f"**Verdict: {bank['rating']}  -  score {bank['score']}/100**\n\n"
+                "| Metric | Value | Weight | Verdict |\n"
+                "|---|---|---:|---|\n"
+                + "".join(
+                    f"| {m['label']} | {m['value']}"
+                    + (f" ({m['note']})" if m['note'] else "")
+                    + f" | {m['weight']} | {m['verdict']} |\n"
+                    for m in bank["metrics"])
+                + "\n"
+                + ("**Strengths**\n\n"
+                   + "".join(f"- {s}\n" for s in bank["strengths"]) + "\n"
+                   if bank["strengths"] else "")
+                + ("**Risks**\n\n"
+                   + "".join(f"- {s}\n" for s in bank["risks"]) + "\n"
+                   if bank["risks"] else "")
+                + ("**Financing conditions**\n\n"
+                   + "".join(f"- {s}\n" for s in bank["conditions"]) + "\n"
+                   if bank["conditions"] else "")
+            )
+        else:
+            det = ("## Bankability determination\n\n"
+                   "_Complete Step 8 (Financial Engineering) to compute the "
+                   "bankability score._\n\n")
+        md = header + det + (
             "## Bankability report\n\n"
             "### Base-case metrics\n\n"
             f"- NPV: {_fmt_money(computed.get('npv_local'), cur)}\n"
@@ -5276,7 +5843,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                                 " roof_level_included, external_area_included) "
                                 "VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
                                 (new_solar_pid, tenant_id,
-                                 "Solar Farm - 20MWp PV Array", "SOLAR_FARM",
+                                 "Solar Farm 20MWp - Generation Assets", "SOLAR_FARM",
                                  "infrastructure", "solar_farm", 0, 1, 0, 0, 1))
                             _sbr = sbcur.fetchone()
                             s_bid = int(_sbr[0]) if _sbr else int(
@@ -5289,7 +5856,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                                     " building_code, number_of_floors) "
                                     "VALUES (?,?,?,?) RETURNING id",
                                     (new_solar_pid,
-                                     "Solar Farm - 20MWp PV Array",
+                                     "Solar Farm 20MWp - Generation Assets",
                                      "SOLAR_FARM", 1))
                                 _sbr2 = sbcur.fetchone()
                                 s_bid = int(_sbr2[0]) if _sbr2 else int(
@@ -5306,7 +5873,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                                     " floor_name, floor_level, floor_type) "
                                     "VALUES (?,?,?,?,?,?) RETURNING id",
                                     (s_bid, new_solar_pid, tenant_id,
-                                     "Array Field", 0, "ground"))
+                                     "Farm BOQ Zone - Array Field & Balance of Plant", 0, "solar_farm_zone"))
                                 _sfr = sfcur.fetchone()
                                 s_fid = int(_sfr[0]) if _sfr else int(
                                     sfcur.lastrowid or 0)
@@ -5317,8 +5884,8 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                                         "(building_id, project_id, floor_name, "
                                         " floor_level, floor_type) "
                                         "VALUES (?,?,?,?,?) RETURNING id",
-                                        (s_bid, new_solar_pid, "Array Field", 0,
-                                         "ground"))
+                                        (s_bid, new_solar_pid, "Farm BOQ Zone - Array Field & Balance of Plant", 0,
+                                         "solar_farm_zone"))
                                     _sfr2 = sfcur.fetchone()
                                     s_fid = int(_sfr2[0]) if _sfr2 else int(
                                         sfcur.lastrowid or 0)
@@ -5401,9 +5968,11 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             solar_items = 0
             if _CI_STEP9_PREPRICE and solar_ctx:
                 _spid, _sbid, _sfid = solar_ctx
+                # Thread the plant mounting so tracker BOQ rows gate correctly.
+                _sizing_m = dict(sizing or {}); _sizing_m["mounting"] = pv_cfg.get("mounting")
                 try:
                     solar_items = int(_ci_build_solar_farm_items(
-                        get_db, _sfid, _sbid, _spid, uid, tenant_id, sizing) or 0)
+                        get_db, _sfid, _sbid, _spid, uid, tenant_id, _sizing_m) or 0)
                 except Exception:
                     try:
                         from flask import current_app
@@ -5610,7 +6179,8 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                         (int(s_pid), uid)).fetchone()
                 if srow and has_solar is None:
                     pv_cfg = _safe_json(proj.get("pv_config"))
-                    sizing = pv_cfg.get("sizing") or {}
+                    sizing = dict(pv_cfg.get("sizing") or {})
+                    sizing["mounting"] = pv_cfg.get("mounting")   # tracker gating
                     solar_built = int(_ci_build_solar_farm_items(
                         get_db, int(srow[1]), int(srow[0]), int(s_pid),
                         uid, tenant_id, sizing) or 0)
@@ -5903,35 +6473,50 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                              extra_project_ids=[proj.get("boq_solar_project_id")])
         yld = _ci_yield_profile(pv_cfg, gps_lat=proj.get("gps_lat")) or {}
         cash = _ci_cashflow_plan(fin_cfg)
+        # Bankability verdict + financial-engineering read-out from Step-8 output.
+        bank = _ci_bankability((fin_cfg or {}).get("computed") or {})
 
+        by_bldg = cost["distribution"]["by_building"]
+        _t = cost.get("totals") or {}
         daily = yld.get("daily") or {}
         charts = {
+            # Circular pie / donut of the cost split by building (owner request).
+            "cost_donut": _svg_donut(
+                [{"label": d["label"], "value": d["total_local"], "pct": d["pct"]}
+                 for d in by_bldg],
+                center_label=f"{cur} {(_t.get('grand_total_local') or 0):,.0f}",
+                center_sub="total cost"),
             "cost_by_building": _svg_hbars(
                 [{"label": d["label"], "value": d["total_local"],
-                  "pct": d["pct"]} for d in cost["distribution"]["by_building"]]),
+                  "pct": d["pct"]} for d in by_bldg]),
             "cost_by_service": _svg_hbars(
                 [{"label": d["label"], "value": d["total_local"],
                   "pct": d["pct"]}
                  for d in cost["distribution"]["by_service"][:14]]),
+            # Cost S-curve: cumulative spend across buildings (owner request).
+            "cost_curve": _svg_scurve(
+                [d["label"] for d in by_bldg],
+                [d["total_local"] for d in by_bldg]),
             "yield_daily": _svg_columns(
                 [str(h) for h in daily.get("hours", [])],
-                daily.get("mwh", []), color="#f5a623", every=3),
+                daily.get("mwh", []), color=_CI_ACCENT2, every=3),
             "yield_monthly": _svg_columns(
                 [m["month"] for m in yld.get("monthly", [])],
-                [m["mwh"] for m in yld.get("monthly", [])], color="#f5a623"),
+                [m["mwh"] for m in yld.get("monthly", [])], color=_CI_ACCENT2),
             "yield_annual": _svg_columns(
                 [str(a["year"]) for a in yld.get("annual_series", [])],
                 [a["mwh"] for a in yld.get("annual_series", [])],
-                color="#f5a623"),
+                color=_CI_ACCENT2),
             "cashflow": (_svg_columns(
                 [str(y) for y in cash["years"]], cash["net"],
-                line=cash["cumulative"], color="#4ea1f5")
+                line=cash["cumulative"], color=_CI_ACCENT2,
+                line_color=_CI_ACCENT)
                 if cash.get("available") else ""),
         }
         return render_template(
             "capital_investment/cost_plan.html",
             user=current_user(), proj=proj, progress=_wp(proj),
-            cost=cost, yld=yld, cash=cash, charts=charts, currency=cur,
+            cost=cost, yld=yld, cash=cash, bank=bank, charts=charts, currency=cur,
         )
 
     # ------------------------------------------------------------------

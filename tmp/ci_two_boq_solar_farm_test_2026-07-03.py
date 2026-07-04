@@ -89,8 +89,17 @@ with web_app.get_db() as cx:
     n_bldg_priced2 = cx.execute("SELECT COUNT(DISTINCT building_id) FROM boq_floor_items WHERE project_id=?", (fac_pid,)).fetchone()[0]
     sol_items2 = cx.execute("SELECT COUNT(*) FROM boq_floor_items WHERE project_id=?", (sol_pid,)).fetchone()[0]
     sol_src = cx.execute("SELECT DISTINCT source_type FROM boq_floor_items WHERE project_id=?", (sol_pid,)).fetchall()
+    # New 12-bill farm BOQ (Codex template 2026-07-03): distinct bill_no values.
+    sol_bills = cx.execute("SELECT COUNT(DISTINCT bill_no) FROM boq_floor_items WHERE project_id=?", (sol_pid,)).fetchone()[0]
+    sol_bldg_name = cx.execute("SELECT building_name FROM boq_buildings WHERE project_id=?", (sol_pid,)).fetchone()
+    sol_floor_name = cx.execute("SELECT floor_name FROM boq_floors f JOIN boq_buildings b ON b.id=f.building_id WHERE b.project_id=?", (sol_pid,)).fetchone()
 ck("ALL 8 facility buildings priced after finish clicks", n_bldg_priced2 == 8, n_bldg_priced2)
-ck("solar BOQ has 20MWp items after finish", sol_items2 >= 20, sol_items2)
+ck("solar farm BOQ is the full 12-bill catalog (>=50 items)", sol_items2 >= 50, sol_items2)
+ck("solar farm BOQ spans all 12 bills", sol_bills == 12, sol_bills)
+ck("solar building reads as a farm, not a building",
+   sol_bldg_name and "Generation Assets" in (sol_bldg_name[0] or ""), sol_bldg_name)
+ck("solar floor reads as a farm zone",
+   sol_floor_name and "Farm BOQ Zone" in (sol_floor_name[0] or ""), sol_floor_name)
 ck("solar rows tagged capital_solar_autobuild",
    [x[0] for x in sol_src] == ["capital_solar_autobuild"], [x[0] for x in sol_src])
 
