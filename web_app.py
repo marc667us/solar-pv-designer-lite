@@ -35438,7 +35438,7 @@ def boq_floor_build_all_save(pid, bid, fid):
 # Step 9 auto-build is a LEAN STARTER BOQ, not the full catalog. Seed a small
 # representative sample per section (the user expands via Build-all). Tune here.
 _CI_MAX_ITEMS_PER_SECTION = 1
-_CI_MAX_ITEMS_PER_FLOOR = 500
+_CI_MAX_ITEMS_PER_FLOOR = max(1, int(os.environ.get("CI_MAX_ITEMS_PER_FLOOR", "45")))
 
 
 def _ci_autobuild_floor_items(fid, bid, pid, uid, service_codes):
