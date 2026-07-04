@@ -28,38 +28,34 @@ def _gap_seed_diag():
             out["mcb_A9F74116_present_before"] = cnt
     except Exception as e:
         out["db_state_error"] = repr(e)
-    # Run the seed steps INLINE (bypassing the seed's own try/except that
-    # swallows + rolls back) so the real failing statement surfaces.
+    # One-shot cleanup: run the real idempotent seed (fills any remaining gap
+    # products) then DEDUPE any duplicate (brand,model) gap rows a prior diag
+    # test-insert created, keeping the lowest id. Elevated to admin for RLS.
     out["steps"] = []
+    try:
+        _seed_solar_farm_gap_products()
+        out["steps"].append("real_seed_ran")
+    except Exception:
+        out["steps"].append("real_seed_exc:" + traceback.format_exc())
     try:
         with get_db() as c:
             try:
                 c.execute("SELECT set_config('app.current_role', 'admin', true)")
-                out["steps"].append("role_elevated")
-            except Exception as _e:
-                out["steps"].append("role_set_failed:%r" % _e)
-            for _code, _name, _icon, _order in _SF_NEW_CATEGORIES:
-                c.execute(
-                    "INSERT INTO product_categories (code, name, icon, display_order) "
-                    "VALUES (?,?,?,?) ON CONFLICT (code) DO NOTHING",
-                    (_code, _name, _icon, _order))
-            out["steps"].append("category_insert_ok")
-            cats = {r["code"]: r["id"] for r in c.execute(
-                "SELECT id, code FROM product_categories").fetchall()}
-            out["steps"].append("cats_has_cb=%s" % ("circuit_breakers" in cats))
-            code, sub, name, brand, model, spec, unit, price_usd, lt = _SOLAR_FARM_GAP_PRODUCTS[0]
-            cat_id = cats.get(code, 0)
-            c.execute(
-                "INSERT INTO equipment_catalog (category, name, brand, model, spec, "
-                "unit, price_usd, supplier_id, lead_time_days, category_id, "
-                "subcategory, is_public_visible, is_verified) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,1,1)",
-                ("Circuit Breakers", name, brand, model, spec, unit,
-                 price_usd, 0, lt, cat_id, sub))
-            out["steps"].append("product_insert_ok")
-        out["inline_committed"] = True
+            except Exception:
+                pass
+            removed = 0
+            for (_code, _sub, _name, _brand, _model, *_rest) in _SOLAR_FARM_GAP_PRODUCTS:
+                rows = c.execute(
+                    "SELECT id FROM equipment_catalog WHERE brand=? AND model=? ORDER BY id",
+                    (_brand, _model)).fetchall()
+                ids = [ (r[0] if not hasattr(r,'keys') else r["id"]) for r in rows ]
+                for dup_id in ids[1:]:
+                    c.execute("DELETE FROM equipment_catalog WHERE id=?", (dup_id,))
+                    removed += 1
+            out["dedupe_removed"] = removed
+        out["dedupe_committed"] = True
     except Exception:
-        out["inline_exception"] = traceback.format_exc()
+        out["dedupe_exception"] = traceback.format_exc()
     # DB state after
     try:
         with get_db() as c:
