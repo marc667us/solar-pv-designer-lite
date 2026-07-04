@@ -629,9 +629,20 @@ _CI_AUTOBUILD_SOURCE: str = "capital_autobuild"
 # the worker limit; raise via env only on a paid tier with headroom.
 try:
     _CI_MAX_AUTOBUILD_FLOORS: int = max(1, int(
-        os.environ.get("CI_MAX_AUTOBUILD_FLOORS", "2")))
+        os.environ.get("CI_MAX_AUTOBUILD_FLOORS", "1")))
 except Exception:
-    _CI_MAX_AUTOBUILD_FLOORS = 2
+    _CI_MAX_AUTOBUILD_FLOORS = 1
+
+# How many facility floors Step 9 itself pre-prices SYNCHRONOUSLY. Measured on
+# the live free tier: Postgres does ~275ms per insert, so ONE busy floor (a
+# control room ~77 items => ~154 inserts) already costs ~42s, and pricing more
+# than one floor plus the solar BOQ in a single Step-9 request killed the sole
+# worker (502/503). So by default Step 9 only creates the BOQ STRUCTURE (fast,
+# always succeeds) and the user prices it in ~1-floor batches via the "Finish
+# BOQ pricing" button. Set CI_STEP9_PREPRICE=1 on a paid tier to pre-price up to
+# _CI_MAX_AUTOBUILD_FLOORS floors in the Step-9 request itself.
+_CI_STEP9_PREPRICE: bool = (
+    os.environ.get("CI_STEP9_PREPRICE", "0").strip().lower() in ("1", "true", "yes"))
 
 
 def _ci_boq_actuals(get_db, boq_project_id, uid, fx: float = 12.0,
@@ -5357,10 +5368,12 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             # inserted above) and the user finishes them with BOQ "Build-all".
             items_built = 0
             deferred_floors = 0
-            try:
-                from web_app import _ci_autobuild_floor_items as _autobuild
-            except Exception:
-                _autobuild = None
+            _autobuild = None
+            if _CI_STEP9_PREPRICE:
+                try:
+                    from web_app import _ci_autobuild_floor_items as _autobuild
+                except Exception:
+                    _autobuild = None
             if _autobuild:
                 for _idx, (_bid, _fid, _svcs) in enumerate(built_floors):
                     if _idx >= _CI_MAX_AUTOBUILD_FLOORS:
@@ -5377,12 +5390,16 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                                 "capital step9 autobuild floor=%s failed", _fid)
                         except Exception:
                             pass
+            else:
+                # Default free-tier path: defer ALL floor pricing to "Finish BOQ
+                # pricing" (bounded, ~1 floor/click) so the Step-9 request itself
+                # is always fast and never kills the worker.
+                deferred_floors = len(built_floors)
 
-            # Pre-price the SOLAR-FARM BOQ from the Step-7 sizing (one floor, so it
-            # never threatens the worker timeout). Separate boq_project, so it is
-            # additive and isolated from the facilities BOQ.
+            # Pre-price the SOLAR-FARM BOQ only when synchronous pricing is enabled;
+            # otherwise the solar floor is priced by "Finish BOQ pricing" too.
             solar_items = 0
-            if solar_ctx:
+            if _CI_STEP9_PREPRICE and solar_ctx:
                 _spid, _sbid, _sfid = solar_ctx
                 try:
                     solar_items = int(_ci_build_solar_farm_items(
@@ -5402,30 +5419,35 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                 notes.append(
                     f"solar-farm BOQ #{solar_ctx[0]} created with {solar_items} "
                     f"20MWp equipment line item(s)")
-            elif solar_ctx and not solar_items:
+            elif solar_ctx and _CI_STEP9_PREPRICE and not solar_items:
                 notes.append(
                     "solar-farm BOQ created but not priced - complete Step 7 (PV "
                     "design) so the 20MWp equipment quantities are available")
-            if deferred_floors:
-                notes.append(
-                    f"{deferred_floors} more facility floor(s) linked but not yet "
-                    f"priced (free-tier batch cap) - click \"Finish BOQ pricing\" "
-                    f"on the project page to complete them")
             suffix = (" (" + "; ".join(notes) + ")") if notes else ""
-            if service_codes and items_built == 0:
+            if deferred_floors and items_built == 0:
+                # Default free-tier path: structure created, pricing deferred.
+                flash(
+                    f"Two BOQs created for #{new_boq_pid} - Facilities/Technology "
+                    f"({len(selected_buildings)} building(s), {len(service_codes)} "
+                    f"service(s)) + the 20MWp Solar Farm. Click \"Finish BOQ "
+                    f"pricing\" on the project page to populate the line items "
+                    f"(processed in small batches so it never times out)." + suffix,
+                    "success")
+            elif service_codes and items_built == 0:
                 flash(
                     f"Linked BOQ project #{new_boq_pid} created with "
                     f"{len(selected_buildings)} building(s) and "
                     f"{len(service_codes)} service(s), but line items could NOT "
-                    f"be auto-priced - open the BOQ and use Build-all." + suffix,
-                    "warning")
+                    f"be auto-priced - open the project and click Finish BOQ "
+                    f"pricing." + suffix, "warning")
             else:
+                _more = (f"; {deferred_floors} more via Finish BOQ pricing"
+                         if deferred_floors else "")
                 flash(
                     f"Linked BOQ project #{new_boq_pid} created: "
                     f"{len(selected_buildings)} building(s), "
                     f"{len(service_codes)} service(s), {items_built} priced "
-                    f"line item(s) pre-loaded (a lean starter - expand each "
-                    f"section in Build-all)." + suffix, "success")
+                    f"line item(s) pre-loaded{_more}." + suffix, "success")
             return redirect(url_for("capital_investment_project", pid=pid))
 
         # GET
@@ -5550,10 +5572,15 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                     except Exception:
                         pass
 
-        # Solar floor: build if the solar BOQ exists but is empty.
+        # Solar floor: build if the solar BOQ exists but is empty -- but ONLY when
+        # no facility floor was priced this request. On the free tier one heavy
+        # facility floor (~42s) already fills the request budget, so the solar
+        # floor (its own ~12s of inserts) is priced on a SUBSEQUENT click once the
+        # facility floors are done, keeping every request well under the worker
+        # limit (Supervisor / live-check finding 2026-07-03).
         solar_built = 0
         s_pid = proj.get("boq_solar_project_id")
-        if s_pid:
+        if s_pid and built_facilities == 0:
             try:
                 tenant_id = None
                 try:
@@ -5595,14 +5622,33 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                 except Exception:
                     pass
 
+        # Is the solar-farm BOQ still awaiting pricing? (deferred whenever a
+        # facility floor was priced this click). Cheap single-row check.
+        solar_pending = False
+        if s_pid and not solar_built:
+            try:
+                with get_db() as c:
+                    _sp = c.execute(
+                        "SELECT 1 FROM boq_floor_items WHERE project_id=? "
+                        "AND user_id=? LIMIT 1", (int(s_pid), uid)).fetchone()
+                solar_pending = _sp is None
+            except Exception:
+                solar_pending = False
+
         msg = (f"Priced {built_facilities} facility floor(s) "
                f"({items_added} item(s))")
         if solar_built:
             msg += f" + {solar_built} solar-farm item(s)"
+        pend = []
         if remaining:
-            msg += (f"; {remaining} facility floor(s) still pending - click "
-                    f"Finish BOQ pricing again to continue")
-        flash(msg + ".", "success" if (items_added or solar_built) else "info")
+            pend.append(f"{remaining} more facility floor(s)")
+        if solar_pending:
+            pend.append("the solar-farm BOQ")
+        if pend:
+            msg += ("; " + " and ".join(pend) + " still pending - click Finish "
+                    "BOQ pricing again to continue")
+        flash(msg + ".",
+              "success" if (items_added or solar_built) else "info")
         return redirect(url_for("capital_investment_project", pid=pid))
 
     # ------------------------------------------------------------------

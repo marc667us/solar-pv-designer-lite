@@ -9,6 +9,7 @@ sys.path.insert(0, REPO)
 os.environ.setdefault("SOLARPRO_ADMIN_PASSWORD", "test-admin-pw-123")
 os.environ.setdefault("SOLARPRO_OWNER_PASSWORD", "test-owner-pw-123")
 os.environ["DB_PATH"] = os.path.join(REPO, "tmp", "_phase2_swap.db")
+os.environ["CI_STEP9_PREPRICE"] = "1"   # test the synchronous pre-price path
 try:
     os.remove(os.environ["DB_PATH"])
 except OSError:

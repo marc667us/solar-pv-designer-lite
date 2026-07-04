@@ -13,6 +13,7 @@ os.environ.setdefault("SOLARPRO_ADMIN_PASSWORD", "test-admin-pw-123")
 os.environ.setdefault("SOLARPRO_OWNER_PASSWORD", "test-owner-pw-123")
 os.environ["DB_PATH"] = os.path.join(REPO, "tmp", "_step9cap_swap.db")
 os.environ["CI_MAX_AUTOBUILD_FLOORS"] = "1"   # <-- force the cap
+os.environ["CI_STEP9_PREPRICE"] = "1"         # <-- exercise the pre-price path
 try:
     os.remove(os.environ["DB_PATH"])
 except OSError:
@@ -84,8 +85,7 @@ c.post(f"/large-scale-solar/{pid}/step8", data={
 r = c.post(f"/large-scale-solar/{pid}/step9", data={"_csrf": "tok"},
            follow_redirects=True)
 check("step9 generate 200 (followed)", r.status_code == 200, r.status_code)
-check("flash: extra floor linked-but-not-priced",
-      b"not yet\npriced" in r.data or b"not yet priced" in r.data or b"linked but not" in r.data, "flash missing")
+check("flash: extra floor deferred", b"more via Finish" in r.data or b"still pending" in r.data, "flash missing")
 check("flash: points to Finish BOQ pricing", b"Finish BOQ pricing" in r.data, "no Finish hint")
 
 with web_app.get_db() as db:

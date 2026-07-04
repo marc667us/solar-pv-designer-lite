@@ -52,8 +52,8 @@ print("live pid =", pid)
 spost("step3", {"terrain": "flat", "slope": "lt_3", "soil": "loam", "flood_risk": "low",
     "wind_zone": "z2_medium", "seismic_zone": "zone_1", "access": "paved",
     "water": "borehole", "land_area_ha": "50"})
-spost("step4", {"buildings": ["control_room", "om_building", "security_gate", "battery_room",
-    "inverter_room", "switchgear_bldg", "transformer_bldg", "scada_bldg"],
+# 3 buildings keeps the live finish-click loop to ~4 clicks (~3 min).
+spost("step4", {"buildings": ["control_room", "om_building", "security_gate"],
     "external_works": ["pv_field", "fence"]})
 spost("step5", {"technologies": ["scada", "string_mon", "bms"]})
 spost("step6", {"services": ["internal_installation", "power_supply", "fire_alarm", "earthing"]})
@@ -64,8 +64,11 @@ spost("step7", {"module_tech": "mono_topcon", "module_wp": "600", "mounting": "s
 spost("step8", {"tariff_local_per_kwh": "1.5", "fx_local_per_usd": "12", "revenue_model": "ppa",
     "project_life_yr": "25", "discount_rate_pct": "10", "debt_ratio_pct": "70",
     "debt_rate_pct": "10", "debt_tenor_yr": "12", "tax_rate_pct": "25", "monte_carlo_runs": "0"})
+import time
+t0 = time.time()
 r = spost("step9", {})
-ck("step9 generate redirects (no 500)", r.status_code in (302, 303), r.status_code)
+ck("step9 generate FAST + no 502 (structure only)",
+   r.status_code in (302, 303), f"{r.status_code} in {time.time()-t0:.1f}s")
 
 # --- overview shows BOTH BOQs ---
 ov = get(f"/large-scale-solar/{pid}").text
@@ -73,11 +76,20 @@ ck("overview shows Facilities BOQ link", "Facilities &amp; Technology BOQ" in ov
 ck("overview shows Solar Farm 20MWp BOQ link", "Solar Farm 20MWp BOQ" in ov, "missing")
 ck("overview shows Finish BOQ pricing button", "Finish BOQ pricing" in ov, "missing")
 
-# --- Finish BOQ pricing (prices deferred facility floors + solar) ---
-ftok = csrf(ov)
-rf = s.post(f"{BASE}/large-scale-solar/{pid}/boq/finish", data={"_csrf": ftok},
-            timeout=180, allow_redirects=False)
-ck("finish BOQ pricing redirects", rf.status_code in (302, 303), rf.status_code)
+# --- Finish BOQ pricing: one floor per click; loop until nothing pending ---
+finish_ok = True
+for clk in range(1, 9):
+    ftok = csrf(get(f"/large-scale-solar/{pid}").text)
+    tc = time.time()
+    rf = s.post(f"{BASE}/large-scale-solar/{pid}/boq/finish", data={"_csrf": ftok},
+                timeout=200, allow_redirects=True)   # follow -> flash on the page
+    dt = time.time() - tc
+    print(f"  finish click {clk}: {rf.status_code} in {dt:.1f}s")
+    if rf.status_code != 200:
+        finish_ok = False; break
+    if ("still pending" not in rf.text) and ("more via Finish" not in rf.text):
+        break   # nothing left to price
+ck("finish BOQ pricing clicks all succeed (no 502)", finish_ok, "a click failed")
 
 # --- 5 new reports render valid PDFs ---
 for key in ("wiring", "single_line", "energy_impact", "economic_impact", "implementation_plan"):

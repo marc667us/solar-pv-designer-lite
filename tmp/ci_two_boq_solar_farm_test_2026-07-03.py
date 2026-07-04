@@ -64,27 +64,35 @@ with web_app.get_db() as cx:
               cx.execute("SELECT id, project_type FROM boq_projects WHERE user_id=?", (uid,)).fetchall()}
     ck("facilities project_type", ptypes.get(fac_pid) == "capital_facilities", ptypes.get(fac_pid))
     ck("solar project_type", ptypes.get(sol_pid) == "capital_solar_farm", ptypes.get(sol_pid))
+    # Default free-tier path: Step 9 defers pricing (structure only), so both
+    # BOQs are linked but empty until "Finish BOQ pricing" runs.
     fac_items = cx.execute("SELECT COUNT(*) FROM boq_floor_items WHERE project_id=?", (fac_pid,)).fetchone()[0]
     sol_items = cx.execute("SELECT COUNT(*) FROM boq_floor_items WHERE project_id=?", (sol_pid,)).fetchone()[0]
-    ck("facilities BOQ has items", fac_items > 0, fac_items)
-    ck("solar BOQ has 20MWp items", sol_items >= 10, sol_items)
-    sol_src = cx.execute("SELECT DISTINCT source_type FROM boq_floor_items WHERE project_id=?", (sol_pid,)).fetchall()
-    ck("solar rows tagged capital_solar_autobuild",
-       [x[0] for x in sol_src] == ["capital_solar_autobuild"], [x[0] for x in sol_src])
-    # priced facility buildings (cap=6 -> 6 of 8 priced pre-finish)
-    n_bldg_priced = cx.execute(
-        "SELECT COUNT(DISTINCT building_id) FROM boq_floor_items WHERE project_id=?", (fac_pid,)).fetchone()[0]
-    ck("<=6 facility buildings priced before finish (cap works)", n_bldg_priced <= 6, n_bldg_priced)
+    ck("step9 defers pricing (facilities empty)", fac_items == 0, fac_items)
+    ck("step9 defers pricing (solar empty)", sol_items == 0, sol_items)
     n_bldg_total = cx.execute("SELECT COUNT(*) FROM boq_buildings WHERE project_id=?", (fac_pid,)).fetchone()[0]
     ck("all 8 facility buildings linked", n_bldg_total == 8, n_bldg_total)
 
-# --- finish route: price the deferred facility floors ---
-r = c.post(f"/large-scale-solar/{pid}/boq/finish", data={"_csrf":"tok"}, follow_redirects=False)
-ck("finish route redirects", r.status_code == 302, r.status_code)
+# --- finish route: price deferred facility floors + solar over repeated clicks
+# (each click prices <= CI_MAX_AUTOBUILD_FLOORS facility floors OR the solar
+# floor, never both) ---
+for _click in range(1, 8):
+    r = c.post(f"/large-scale-solar/{pid}/boq/finish", data={"_csrf":"tok"}, follow_redirects=False)
+    if r.status_code != 302:
+        ck(f"finish click {_click} redirects", False, r.status_code); break
+    with web_app.get_db() as cx:
+        nb = cx.execute("SELECT COUNT(DISTINCT building_id) FROM boq_floor_items WHERE project_id=?", (fac_pid,)).fetchone()[0]
+        si = cx.execute("SELECT COUNT(*) FROM boq_floor_items WHERE project_id=?", (sol_pid,)).fetchone()[0]
+    if nb == 8 and si > 0:
+        break
 with web_app.get_db() as cx:
-    n_bldg_priced2 = cx.execute(
-        "SELECT COUNT(DISTINCT building_id) FROM boq_floor_items WHERE project_id=?", (fac_pid,)).fetchone()[0]
-    ck("ALL 8 facility buildings priced after finish", n_bldg_priced2 == 8, n_bldg_priced2)
+    n_bldg_priced2 = cx.execute("SELECT COUNT(DISTINCT building_id) FROM boq_floor_items WHERE project_id=?", (fac_pid,)).fetchone()[0]
+    sol_items2 = cx.execute("SELECT COUNT(*) FROM boq_floor_items WHERE project_id=?", (sol_pid,)).fetchone()[0]
+    sol_src = cx.execute("SELECT DISTINCT source_type FROM boq_floor_items WHERE project_id=?", (sol_pid,)).fetchall()
+ck("ALL 8 facility buildings priced after finish clicks", n_bldg_priced2 == 8, n_bldg_priced2)
+ck("solar BOQ has 20MWp items after finish", sol_items2 >= 20, sol_items2)
+ck("solar rows tagged capital_solar_autobuild",
+   [x[0] for x in sol_src] == ["capital_solar_autobuild"], [x[0] for x in sol_src])
 
 # --- Excel export: Summary + service sheets + Solar Farm sheet ---
 r = c.get(f"/large-scale-solar/{pid}/cost-plan.xlsx")
