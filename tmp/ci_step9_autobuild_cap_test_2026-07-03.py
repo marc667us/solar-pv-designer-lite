@@ -85,8 +85,8 @@ r = c.post(f"/large-scale-solar/{pid}/step9", data={"_csrf": "tok"},
            follow_redirects=True)
 check("step9 generate 200 (followed)", r.status_code == 200, r.status_code)
 check("flash: extra floor linked-but-not-priced",
-      b"not pre-priced" in r.data, "flash missing")
-check("flash: points to Build-all", b"Build-all" in r.data, "no Build-all hint")
+      b"not yet\npriced" in r.data or b"not yet priced" in r.data or b"linked but not" in r.data, "flash missing")
+check("flash: points to Finish BOQ pricing", b"Finish BOQ pricing" in r.data, "no Finish hint")
 
 with web_app.get_db() as db:
     bpid = db.execute("SELECT boq_project_id FROM capital_investment_projects "

@@ -618,19 +618,20 @@ _CI_AUTOBUILD_SOURCE: str = "capital_autobuild"
 
 # Free-tier worker safety cap: the Step 9 BOQ links a floor per selected
 # facility, then pre-prices each floor's starter rows SYNCHRONOUSLY via the
-# standard engine. On the single-worker Render free tier a very large campus
-# (many facilities) could exceed even the raised gunicorn --timeout, killing
-# the sole worker mid-build (503 blip for other users). We therefore auto-price
-# at most this many floors inside the request; any beyond the cap are still
-# fully LINKED (boq_buildings + boq_floors + capital_investment_boq_links) and
-# the user finishes them with the BOQ "Build-all" button. Input: none (module
-# constant). Chosen so a typical 1-6 facility project prices fully in-request,
-# while a 10+ facility campus can never hang the worker. Tune via env override.
+# standard engine. On the single-worker Render free tier a busy facility (e.g.
+# a control room with ~11 services => ~77 line items + rate-buildup rows) costs
+# ~10-12s of PG round-trips; pricing 6 such floors in one request measured ~69s
+# on live and KILLED the sole worker (502/503 cascade for everyone). So we
+# auto-price at most this many floors PER REQUEST; any beyond the cap stay fully
+# LINKED (boq_buildings + boq_floors + capital_investment_boq_links) and the user
+# completes them in bounded batches via the "Finish BOQ pricing" button (each
+# click prices up to this many more). Default 2 keeps every request well under
+# the worker limit; raise via env only on a paid tier with headroom.
 try:
     _CI_MAX_AUTOBUILD_FLOORS: int = max(1, int(
-        os.environ.get("CI_MAX_AUTOBUILD_FLOORS", "6")))
+        os.environ.get("CI_MAX_AUTOBUILD_FLOORS", "2")))
 except Exception:
-    _CI_MAX_AUTOBUILD_FLOORS = 6
+    _CI_MAX_AUTOBUILD_FLOORS = 2
 
 
 def _ci_boq_actuals(get_db, boq_project_id, uid, fx: float = 12.0,
@@ -5407,9 +5408,9 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                     "design) so the 20MWp equipment quantities are available")
             if deferred_floors:
                 notes.append(
-                    f"{deferred_floors} additional facility floor(s) linked but "
-                    f"not pre-priced (large campus safety cap) - open the BOQ and "
-                    f"use Build-all to price them")
+                    f"{deferred_floors} more facility floor(s) linked but not yet "
+                    f"priced (free-tier batch cap) - click \"Finish BOQ pricing\" "
+                    f"on the project page to complete them")
             suffix = (" (" + "; ".join(notes) + ")") if notes else ""
             if service_codes and items_built == 0:
                 flash(
