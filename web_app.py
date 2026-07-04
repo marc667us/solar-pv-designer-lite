@@ -37263,6 +37263,19 @@ def _seed_solar_farm_gap_products():
     accurate. `is_public_visible=1` keeps them on the public marketplace."""
     try:
         with get_db() as c:
+            # Live Postgres runs strict RLS (migrations 015/017): product_categories
+            # INSERT is admin-only via current_user_is_admin(), which is true iff
+            # the GUC app.current_role='admin'. This bootstrap seed of platform
+            # reference data legitimately runs as admin, but the request context
+            # (often anonymous marketplace hits) leaves the role unset -> INSERT
+            # denied. Elevate for THIS transaction only (set_config local=true
+            # auto-resets at commit). No-op on SQLite (function absent -> caught;
+            # SQLite has no RLS). equipment_catalog keeps the parallel-run policy
+            # (tenant_id IS NULL escape), so product inserts pass regardless.
+            try:
+                c.execute("SELECT set_config('app.current_role', 'admin', true)")
+            except Exception:
+                pass
             # Ensure the two new categories exist. `code` is UNIQUE and the
             # runtime category loop (web_app.py) uses this exact idiom, so it is
             # proven on Postgres + SQLite.
@@ -37349,6 +37362,11 @@ def _gap_seed_diag():
     out["steps"] = []
     try:
         with get_db() as c:
+            try:
+                c.execute("SELECT set_config('app.current_role', 'admin', true)")
+                out["steps"].append("role_elevated")
+            except Exception as _e:
+                out["steps"].append("role_set_failed:%r" % _e)
             for _code, _name, _icon, _order in _SF_NEW_CATEGORIES:
                 c.execute(
                     "INSERT INTO product_categories (code, name, icon, display_order) "

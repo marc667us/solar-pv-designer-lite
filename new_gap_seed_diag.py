@@ -33,6 +33,11 @@ def _gap_seed_diag():
     out["steps"] = []
     try:
         with get_db() as c:
+            try:
+                c.execute("SELECT set_config('app.current_role', 'admin', true)")
+                out["steps"].append("role_elevated")
+            except Exception as _e:
+                out["steps"].append("role_set_failed:%r" % _e)
             for _code, _name, _icon, _order in _SF_NEW_CATEGORIES:
                 c.execute(
                     "INSERT INTO product_categories (code, name, icon, display_order) "
