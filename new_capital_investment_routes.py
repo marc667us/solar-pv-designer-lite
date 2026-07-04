@@ -2153,6 +2153,83 @@ def _ci_solar_boq_rows(sizing: dict) -> list[dict]:
     return rows
 
 
+# ---------------------------------------------------------------------------
+# Slice 2 (2026-07-04): price solar-farm BOQ lines from the MARKETPLACE.
+# Each line's service slug maps to a marketplace category; a line is priced from
+# the median price of public+verified products in that category with the SAME
+# unit, converted to local at _CI_SOLAR_FX. Lines with no unit-matched product
+# fall back to the engineered reference `basic` (owner: "price from marketplace
+# ... reference-price fallback + manual override in rate build-up"). The rate
+# build-up row still lets the estimator override any line by hand afterwards.
+# ---------------------------------------------------------------------------
+_CI_SOLAR_FX = 12.0  # GHS per USD -- same basis as the reference `basic` rates.
+_CI_SOLAR_SLUG_TO_MARKET_CAT: dict[str, str] = {
+    "solar_modules":  "solar_equipment",
+    "solar_mounting": "solar_equipment",
+    "solar_tracker":  "solar_equipment",
+    "solar_dc":       "solar_equipment",
+    "solar_inverter": "solar_equipment",
+    "solar_mv":       "transformers",
+    "solar_grid":     "transformers",
+    "solar_scada":    "plant_control",
+    "solar_earthing": "earthing",
+}
+
+
+def _ci_solar_market_rates(c) -> dict:
+    """Median local rates from public + verified marketplace products, keyed at
+    two grains so each solar-farm BOQ line prices as precisely as the catalogue
+    allows: ('SUB', category, subcategory, unit) is tried first (a line's BOQ
+    section name mirrors the marketplace subcategory, e.g. 'PV Modules'), then
+    ('CU', category, unit). Local rate = median(price_usd) * _CI_SOLAR_FX. Lines
+    matching neither keep their engineered reference `basic`. Never raises
+    (returns {} on any error -> every line uses its reference)."""
+    cats = set(_CI_SOLAR_SLUG_TO_MARKET_CAT.values())
+    if not cats:
+        return {}
+    try:
+        ph = ",".join("?" for _ in cats)
+        rows = c.execute(
+            "SELECT LOWER(COALESCE(pc.code,'')) AS cat, "
+            "       LOWER(COALESCE(ec.subcategory,'')) AS sub, "
+            "       LOWER(COALESCE(ec.unit,'')) AS unit, ec.price_usd AS price "
+            "FROM equipment_catalog ec "
+            "LEFT JOIN product_categories pc ON pc.id = ec.category_id "
+            "WHERE ec.is_active=1 AND ec.is_public_visible=1 "
+            "  AND ec.is_verified=1 AND COALESCE(ec.price_usd,0) > 0 "
+            "  AND pc.code IN (%s)" % ph, tuple(sorted(cats))).fetchall()
+    except Exception:
+        return {}
+    cu_b: dict = {}
+    sub_b: dict = {}
+    for r in rows:
+        d = dict(r)
+        try:
+            p = float(d.get("price") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if p <= 0:
+            continue
+        cat = d.get("cat") or ""
+        unit = (d.get("unit") or "").strip()
+        sub = (d.get("sub") or "").strip()
+        cu_b.setdefault((cat, unit), []).append(p)
+        if sub:
+            sub_b.setdefault((cat, sub, unit), []).append(p)
+
+    def _median(vals: list) -> float:
+        vals = sorted(vals)
+        n = len(vals)
+        return vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2.0
+
+    out: dict = {}
+    for (cat, unit), vals in cu_b.items():
+        out[("CU", cat, unit)] = round(_median(vals) * _CI_SOLAR_FX, 2)
+    for (cat, sub, unit), vals in sub_b.items():
+        out[("SUB", cat, sub, unit)] = round(_median(vals) * _CI_SOLAR_FX, 2)
+    return out
+
+
 def _ci_build_solar_farm_items(get_db, fid, bid, pid, uid, tenant_id, sizing):
     """Insert the solar-farm BOQ line items (CELL level) for one floor, REUSING
     the standard rate engine (boq_rate_v3, same OH/Profit/VAT/Supply/Install as
@@ -2179,12 +2256,29 @@ def _ci_build_solar_farm_items(get_db, fid, bid, pid, uid, tenant_id, sizing):
             existing = None
         if existing is not None:
             return 0
+        # Slice 2: marketplace rate table (category, unit) -> local rate.
+        mrates = _ci_solar_market_rates(c)
         for r in rows:
             basic = float(r["basic"] or 0.0)
             qty = float(r["qty"] or 0.0)
             desc = (r["desc"] or "").strip()
             if not desc or qty <= 0 or basic <= 0:
                 continue
+            # Price from the marketplace when a matching product exists in this
+            # line's mapped category - subcategory (section) first, then
+            # category+unit; else keep the engineered reference rate.
+            _mcat = _CI_SOLAR_SLUG_TO_MARKET_CAT.get(r.get("service_code") or "")
+            _mrate = None
+            if _mcat:
+                _u = (r.get("unit") or "").strip().lower()
+                _s = (r.get("section") or "").strip().lower()
+                _mrate = (mrates.get(("SUB", _mcat, _s, _u))
+                          or mrates.get(("CU", _mcat, _u)))
+            if _mrate and _mrate > 0:
+                basic = float(_mrate)
+                spec_note = "Marketplace-priced (median, %s)" % _mcat
+            else:
+                spec_note = "Reference rate (no marketplace match)"
             if boq_rate_v3:
                 supply_amt, install_amt, total_rate = boq_rate_v3(
                     basic, sp, ip, oh, prf, vat, vat_in_basic=bool(vinb))
@@ -2218,7 +2312,7 @@ def _ci_build_solar_farm_items(get_db, fid, bid, pid, uid, tenant_id, sizing):
                      svc, section, "",
                      bill_no, bill_name, "", "",
                      item_no_disp, item_no_disp,
-                     desc[:500], "", unit, qty,
+                     desc[:500], spec_note[:200], unit, qty,
                      total_rate, total,
                      "capital_solar_autobuild", "project_only"))
                 new_id = int(cur.lastrowid or 0)
