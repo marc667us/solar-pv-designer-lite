@@ -6036,6 +6036,110 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         )
 
     # ------------------------------------------------------------------
+    # POST /large-scale-solar/<pid>/boq/clear -- delete the generated BOQ build
+    # (facilities + 20MWp solar-farm BOQ projects and every child row) and reset
+    # the linkage so Step 9 offers "Generate" again. This is the "clear BOQ
+    # build history" control (owner 2026-07-04). Destructive => POST-only + CSRF
+    # + ownership-scoped; never a state-mutating GET.
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/<int:pid>/boq/clear", methods=["POST"],
+               endpoint="capital_investment_boq_clear")
+    @login_required
+    def _boq_clear(pid: int):
+        if (g := _gate(CI_LEVEL_SETUP)) is not None:
+            return g
+        proj = _load_project(pid)          # 404s unless owned by this user
+        csrf_protect()
+        uid = session.get("user_id")
+        tenant_id = _tenant_id()           # app-layer tenant scope; RLS is the
+                                           # DB-layer backstop on live Postgres.
+        # The two-BOQ split stores up to three ids: legacy boq_project_id
+        # (== facilities), boq_facilities_project_id, boq_solar_project_id.
+        boq_ids = set()
+        for _k in ("boq_project_id", "boq_facilities_project_id",
+                   "boq_solar_project_id"):
+            _v = proj.get(_k)
+            if _v:
+                boq_ids.add(int(_v))
+        if not boq_ids:
+            flash("No BOQ build to clear.", "info")
+            return redirect(url_for("capital_investment_step9", pid=pid))
+        # Ensure the link table exists BEFORE the destructive txn so its cleanup
+        # runs INSIDE the same transaction without a blanket try/except that
+        # would otherwise orphan link rows on a real error (Codex HIGH).
+        try:
+            links_ready = bool(
+                _ensure_capital_investment_boq_links_schema(get_db))
+        except Exception:
+            links_ready = False
+        deleted = 0
+        try:
+            with get_db() as c:
+                for _bpid in boq_ids:
+                    # Defence in depth: only cascade BOQ projects owned by this
+                    # user AND (when known) this tenant - matches the canonical
+                    # BOQ ownership predicate; RLS is the DB-layer backstop.
+                    if tenant_id is not None:
+                        _owned = c.execute(
+                            "SELECT 1 FROM boq_projects WHERE id=? AND user_id=? "
+                            "AND tenant_id=? LIMIT 1",
+                            (_bpid, uid, tenant_id)).fetchone()
+                    else:
+                        _owned = c.execute(
+                            "SELECT 1 FROM boq_projects WHERE id=? AND user_id=? "
+                            "LIMIT 1", (_bpid, uid)).fetchone()
+                    if not _owned:
+                        continue
+                    # Same cascade order as /boq-projects/<pid>/delete.
+                    c.execute("DELETE FROM boq_floor_rate_buildup WHERE project_id=?", (_bpid,))
+                    c.execute("DELETE FROM boq_floor_items WHERE project_id=?", (_bpid,))
+                    c.execute("DELETE FROM boq_floors WHERE project_id=?", (_bpid,))
+                    c.execute("DELETE FROM boq_buildings WHERE project_id=?", (_bpid,))
+                    c.execute("DELETE FROM boq_projects WHERE id=? AND user_id=?", (_bpid, uid))
+                    deleted += 1
+                # Remove the CI<->BOQ link rows in the SAME txn (no bare except:
+                # a real failure must roll the whole clear back, not orphan rows).
+                if links_ready:
+                    if tenant_id is not None:
+                        c.execute(
+                            "DELETE FROM capital_investment_boq_links "
+                            "WHERE capital_investment_project_id=? AND user_id=? "
+                            "AND tenant_id=?", (pid, uid, tenant_id))
+                    else:
+                        c.execute(
+                            "DELETE FROM capital_investment_boq_links "
+                            "WHERE capital_investment_project_id=? AND user_id=?",
+                            (pid, uid))
+                # Reset linkage so Step 9 shows the Generate button again.
+                c.execute(
+                    "UPDATE capital_investment_projects "
+                    "SET boq_project_id=NULL, boq_facilities_project_id=NULL, "
+                    "    boq_solar_project_id=NULL "
+                    "WHERE id=? AND user_id=?", (pid, uid))
+        except Exception:
+            try:
+                from flask import current_app
+                current_app.logger.exception(
+                    "capital BOQ clear failed pid=%s", pid)
+            except Exception:
+                pass
+            flash("Could not clear the BOQ build - please try again.", "danger")
+            return redirect(url_for("capital_investment_step9", pid=pid))
+        # Audit the destructive clear (directive Section 16); best-effort.
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(get_db, uid, "capital_boq_build_cleared",
+                      "capital_investment_project", pid,
+                      "cleared %d BOQ project(s): %s" % (
+                          deleted, ",".join(str(b) for b in sorted(boq_ids))))
+        except Exception:
+            pass
+        flash(
+            f"BOQ build cleared - {deleted} BOQ project(s) deleted. "
+            f"You can regenerate the BOQ now.", "success")
+        return redirect(url_for("capital_investment_step9", pid=pid))
+
+    # ------------------------------------------------------------------
     # POST /large-scale-solar/<pid>/boq/finish -- price any facility floors that
     # Step 9 left LINKED-BUT-UNPRICED (the large-campus safety cap) AND the
     # solar-farm floor if empty. Each facility floor is built with ITS OWN service

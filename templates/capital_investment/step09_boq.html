@@ -16,9 +16,14 @@
         <div class="fw-semibold text-success"><i class="bi bi-check-circle-fill me-1"></i>BOQ linked (project #{{ boq_project_id }})</div>
         <div class="text-secondary small">Open it to review, edit rates, Build-all, or export.</div>
       </div>
-      <div class="d-flex gap-2">
+      <div class="d-flex gap-2 flex-wrap">
         <a href="/boq-projects/{{ boq_project_id }}" class="btn btn-outline-light btn-sm"><i class="bi bi-folder2-open me-1"></i>Open BOQ project</a>
         <a href="/boq-projects/{{ boq_project_id }}/boq" class="btn btn-warning btn-sm fw-bold"><i class="bi bi-file-earmark-text me-1"></i>Complete BOQ</a>
+        <form method="post" action="{{ url_for('capital_investment_boq_clear', pid=proj.id) }}" class="d-inline m-0"
+              onsubmit="return confirm('Delete the generated BOQ build (facilities + 20MWp solar-farm BOQ) and reset it so you can regenerate?\n\nThis permanently removes those BOQ projects and all their line items.');">
+          <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
+          <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash me-1"></i>Clear BOQ build</button>
+        </form>
       </div>
     </div>
   </div>
