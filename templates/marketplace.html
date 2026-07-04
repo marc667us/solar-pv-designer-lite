@@ -188,28 +188,19 @@
       {% endif %}
       {# Product literature + datasheet links (auto-found by web-crawl agent) #}
       <div class="mb-2 d-flex flex-wrap gap-2 align-items-center" style="font-size:11.5px;padding:6px 8px;background:rgba(255,255,255,.03);border-radius:6px">
-        {% if p.literature_url %}
-        <a href="{{ url_for('marketplace_product_doc_redirect', pid=p.id, kind='literature') }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" title="Opens via SolarPro reachability check">
+        {# Datasheet + Literature ALWAYS route through the smart resolver endpoint.
+           It serves the cached URL if present, else finds + caches it on the first
+           click via the web-crawl agent -- so links work for ANY product (current
+           or added in future) and self-heal after a DB reseed, with no one-time
+           bulk crawl to lose. owner ask 2026-07-04: "fix the links ... on the cards"
+           + "new products will be added in future so ensure this dont happen again". #}
+        <a href="{{ url_for('marketplace_product_doc_redirect', pid=p.id, kind='literature') }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" title="Opens the product literature/brochure (auto-found on first click if not yet cached)">
           <i class="bi bi-file-earmark-text me-1"></i>Literature
         </a>
-        {% else %}
-        {# Fallback: prefilled brand+model Google search so the card stays
-           actionable even when the crawler hasn't found a hosted PDF yet
-           (owner ask 2026-06-26: "lit/datasheet not working"). #}
-        <a href="https://www.google.com/search?q={{ ((p.brand or '') ~ ' ' ~ (p.model or p.name or '') ~ ' brochure literature filetype:pdf')|urlencode }}" target="_blank" rel="noopener nofollow" class="text-warning text-decoration-none" title="Search Google for the brand brochure / catalog PDF">
-          <i class="bi bi-file-earmark-text me-1"></i>Literature: search
-        </a>
-        {% endif %}
         <span class="text-secondary">·</span>
-        {% if p.datasheet_url %}
-        <a href="{{ url_for('marketplace_product_doc_redirect', pid=p.id, kind='datasheet') }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" title="Opens via SolarPro reachability check">
+        <a href="{{ url_for('marketplace_product_doc_redirect', pid=p.id, kind='datasheet') }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" title="Opens the manufacturer datasheet (auto-found on first click if not yet cached)">
           <i class="bi bi-file-earmark-pdf me-1"></i>Datasheet
         </a>
-        {% else %}
-        <a href="https://www.google.com/search?q={{ ((p.brand or '') ~ ' ' ~ (p.model or p.name or '') ~ ' datasheet specification filetype:pdf')|urlencode }}" target="_blank" rel="noopener nofollow" class="text-warning text-decoration-none" title="Search Google for the manufacturer datasheet PDF">
-          <i class="bi bi-file-earmark-pdf me-1"></i>Datasheet: search
-        </a>
-        {% endif %}
         {% if p.literature_url or p.datasheet_url %}
         <a href="{{ url_for('marketplace_product_docs_listing', pid=p.id) }}" target="_blank" rel="noopener" class="text-secondary small text-decoration-none ms-1" title="See the saved URLs so you can copy them if the supplier site is down">
           <i class="bi bi-link-45deg"></i>URLs

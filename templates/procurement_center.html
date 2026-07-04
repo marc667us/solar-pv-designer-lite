@@ -127,24 +127,15 @@
             {% if p.brand or p.model %}<div class="text-secondary small">{{ p.brand }}{% if p.model %} · {{ p.model }}{% endif %}</div>{% endif %}
             {% if p.spec %}<div class="text-secondary small mb-2" style="font-size:11px;line-height:1.4">{{ p.spec[:120] }}{% if p.spec|length > 120 %}…{% endif %}</div>{% endif %}
             <div class="mb-1 d-flex flex-wrap gap-2 align-items-center" style="font-size:10.5px;padding:4px 6px;background:rgba(255,255,255,.03);border-radius:5px">
-              {% if p.literature_url %}
-              <a href="{{ url_for('marketplace_product_doc_redirect', pid=p.id, kind='literature') }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" onclick="event.stopPropagation();" title="Opens via SolarPro reachability check">
+              {# Always route through the smart resolver endpoint: serves the cached
+                 URL if present, else finds + caches it on first click. Works for any
+                 product incl. future additions; self-heals after a DB reseed. #}
+              <a href="{{ url_for('marketplace_product_doc_redirect', pid=p.id, kind='literature') }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" onclick="event.stopPropagation();" title="Opens the product literature/brochure (auto-found on first click if not yet cached)">
                 <i class="bi bi-file-earmark-text me-1"></i>Literature
               </a>
-              {% else %}
-              <a href="https://www.google.com/search?q={{ ((p.brand or '') ~ ' ' ~ (p.model or p.name or '') ~ ' brochure literature filetype:pdf')|urlencode }}" target="_blank" rel="noopener nofollow" class="text-warning text-decoration-none" onclick="event.stopPropagation();" title="Search Google for the brand brochure / catalog PDF">
-                <i class="bi bi-file-earmark-text me-1"></i>Literature: search
-              </a>
-              {% endif %}
-              {% if p.datasheet_url %}
-              <a href="{{ url_for('marketplace_product_doc_redirect', pid=p.id, kind='datasheet') }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" onclick="event.stopPropagation();" title="Opens via SolarPro reachability check">
+              <a href="{{ url_for('marketplace_product_doc_redirect', pid=p.id, kind='datasheet') }}" target="_blank" rel="noopener" class="text-info fw-semibold text-decoration-none" onclick="event.stopPropagation();" title="Opens the manufacturer datasheet (auto-found on first click if not yet cached)">
                 <i class="bi bi-file-earmark-pdf me-1"></i>Datasheet
               </a>
-              {% else %}
-              <a href="https://www.google.com/search?q={{ ((p.brand or '') ~ ' ' ~ (p.model or p.name or '') ~ ' datasheet specification filetype:pdf')|urlencode }}" target="_blank" rel="noopener nofollow" class="text-warning text-decoration-none" onclick="event.stopPropagation();" title="Search Google for the manufacturer datasheet PDF">
-                <i class="bi bi-file-earmark-pdf me-1"></i>Datasheet: search
-              </a>
-              {% endif %}
             </div>
             <div class="d-flex align-items-center justify-content-between mt-2 pt-2" style="border-top:1px solid #1e1e3a">
               <div>
