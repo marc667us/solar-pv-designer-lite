@@ -2230,6 +2230,39 @@ def _ci_solar_market_rates(c) -> dict:
     return out
 
 
+def _ci_solar_sizing_for(proj: dict) -> dict:
+    """Sizing for the solar-farm BOQ. Prefer the Step-7 PV design in
+    pv_config.sizing; when that is absent or zero, REUSE the same platform PV
+    design engine (size_utility_pv) to derive the quantities from the project's
+    declared capacity (target_kwp) so the solar-farm BOQ is never silently empty
+    -- the generation station reuses the solar design instead of requiring a
+    separate PV-design pass. Always threads `mounting` so the tracker/fixed BOQ
+    rows gate correctly."""
+    pv_cfg = _safe_json(proj.get("pv_config"))
+    sizing = dict(pv_cfg.get("sizing") or {})
+    have = False
+    for _k in ("dc_kwp_actual", "n_modules", "kwp"):
+        try:
+            if float(sizing.get(_k) or 0) > 0:
+                have = True
+                break
+        except (TypeError, ValueError):
+            pass
+    if not have:
+        try:
+            _kwp = float(proj.get("target_kwp") or 0)
+        except (TypeError, ValueError):
+            _kwp = 0.0
+        if _kwp > 0:
+            try:
+                sizing = dict(size_utility_pv(kwp=_kwp))
+            except Exception:
+                sizing = {}
+    sizing["mounting"] = (pv_cfg.get("mounting")
+                          or sizing.get("mounting") or "fixed_tilt")
+    return sizing
+
+
 def _ci_build_solar_farm_items(get_db, fid, bid, pid, uid, tenant_id, sizing):
     """Insert the solar-farm BOQ line items (CELL level) for one floor, REUSING
     the standard rate engine (boq_rate_v3, same OH/Profit/VAT/Supply/Install as
@@ -6068,8 +6101,9 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             solar_items = 0
             if _CI_STEP9_PREPRICE and solar_ctx:
                 _spid, _sbid, _sfid = solar_ctx
-                # Thread the plant mounting so tracker BOQ rows gate correctly.
-                _sizing_m = dict(sizing or {}); _sizing_m["mounting"] = pv_cfg.get("mounting")
+                # Reuse the platform PV design engine for sizing (falls back to
+                # target_kwp when Step 7 was skipped); threads mounting too.
+                _sizing_m = _ci_solar_sizing_for(proj)
                 try:
                     solar_items = int(_ci_build_solar_farm_items(
                         get_db, _sfid, _sbid, _spid, uid, tenant_id, _sizing_m) or 0)
@@ -6126,6 +6160,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             planned_buildings=planned_buildings,
             selected_external=selected_external, external_works=EXTERNAL_WORKS,
             boq_project_id=boq_project_id,
+            solar_boq_project_id=proj.get("boq_solar_project_id"),
             electrical_selected=elec_cfg.get("services") or [],
         )
 
@@ -6287,73 +6322,14 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         except Exception:
             _autobuild = None
 
-        built_facilities = 0
-        items_added = 0
-        remaining = 0
-        for lk in (links or []):
-            try:
-                src_kind = (lk[1] or "").strip()
-                bpid = int(lk[2] or 0)
-                bbid = int(lk[3] or 0)
-                bfid = int(lk[4] or 0)
-                svc_csv = (lk[5] or "")
-            except Exception:
-                continue
-            # Defence in depth: the query already restricts to facility links on
-            # fac_pid, but re-check before any write.
-            if src_kind != "facility" or bpid != int(fac_pid) or not bfid:
-                continue
-            # Validate the floor really belongs to this user's facilities BOQ
-            # (join to boq_projects) before pricing it.
-            try:
-                with get_db() as c:
-                    own = c.execute(
-                        "SELECT 1 FROM boq_floors f "
-                        "JOIN boq_projects p ON p.id=f.project_id "
-                        "WHERE f.id=? AND f.project_id=? AND p.user_id=? LIMIT 1",
-                        (bfid, int(fac_pid), uid)).fetchone()
-            except Exception:
-                own = None
-            if own is None:
-                continue
-            # Already priced? skip fast.
-            try:
-                with get_db() as c:
-                    has = c.execute(
-                        "SELECT 1 FROM boq_floor_items WHERE floor_id=? LIMIT 1",
-                        (bfid,)).fetchone()
-            except Exception:
-                has = None
-            if has is not None:
-                continue
-            if built_facilities >= _CI_MAX_AUTOBUILD_FLOORS:
-                remaining += 1
-                continue
-            svcs = [s for s in svc_csv.split(",") if s] or \
-                _ci_facility_services(lk[0] or "")
-            if _autobuild:
-                try:
-                    n = int(_autobuild(bfid, bbid, bpid, uid, svcs) or 0)
-                    if n:
-                        items_added += n
-                        built_facilities += 1
-                except Exception:
-                    try:
-                        from flask import current_app
-                        current_app.logger.exception(
-                            "boq finish autobuild floor=%s failed", bfid)
-                    except Exception:
-                        pass
-
-        # Solar floor: build if the solar BOQ exists but is empty -- but ONLY when
-        # no facility floor was priced this request. On the free tier one heavy
-        # facility floor (~42s) already fills the request budget, so the solar
-        # floor (its own ~12s of inserts) is priced on a SUBSEQUENT click once the
-        # facility floors are done, keeping every request well under the worker
-        # limit (Supervisor / live-check finding 2026-07-03).
+        # SOLAR-FARM BOQ FIRST: it is the primary generation-station deliverable,
+        # so the FIRST "Finish BOQ pricing" click populates it (a solar build is
+        # ~12s of inserts, well within the free-tier worker budget). Facility
+        # floors are priced on subsequent clicks. Build only if the solar BOQ is
+        # still empty. Owner 2026-07-04: "nothing for solar" -> prioritise solar.
         solar_built = 0
         s_pid = proj.get("boq_solar_project_id")
-        if s_pid and built_facilities == 0:
+        if s_pid:
             try:
                 tenant_id = None
                 try:
@@ -6377,17 +6353,22 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                         "  AND (b.purpose_subtype='solar_farm' "
                         "       OR b.building_code='SOLAR_FARM')" + _stc +
                         " LIMIT 1", tuple(_sparams)).fetchone()
-                    has_solar = c.execute(
-                        "SELECT 1 FROM boq_floor_items WHERE project_id=? "
-                        "AND user_id=? LIMIT 1",
-                        (int(s_pid), uid)).fetchone()
+                    # Emptiness is checked on the SPECIFIC solar floor (not the
+                    # whole project) so a stray item elsewhere can never skip the
+                    # solar-farm floor forever (Codex HIGH-2).
+                    has_solar = None
+                    if srow:
+                        has_solar = c.execute(
+                            "SELECT 1 FROM boq_floor_items WHERE floor_id=? "
+                            "AND project_id=? AND user_id=? LIMIT 1",
+                            (int(srow[1]), int(s_pid), uid)).fetchone()
                 if srow and has_solar is None:
-                    pv_cfg = _safe_json(proj.get("pv_config"))
-                    sizing = dict(pv_cfg.get("sizing") or {})
-                    sizing["mounting"] = pv_cfg.get("mounting")   # tracker gating
+                    # Reuse the platform PV design engine for sizing (falls back
+                    # to target_kwp when Step 7 was skipped) so the solar-farm BOQ
+                    # is never silently empty.
                     solar_built = int(_ci_build_solar_farm_items(
                         get_db, int(srow[1]), int(srow[0]), int(s_pid),
-                        uid, tenant_id, sizing) or 0)
+                        uid, tenant_id, _ci_solar_sizing_for(proj)) or 0)
             except Exception:
                 try:
                     from flask import current_app
@@ -6395,6 +6376,83 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                         "boq finish solar build failed pid=%s", pid)
                 except Exception:
                     pass
+
+        # FACILITY FLOORS: priced only when the solar BOQ did NOT consume this
+        # click (keeps every free-tier request within the worker budget).
+        built_facilities = 0
+        items_added = 0
+        remaining = 0
+        facilities_pending = 0
+        if solar_built:
+            # Solar took this request; report how many facility floors remain so
+            # the user knows to click again.
+            try:
+                with get_db() as c:
+                    _fp = c.execute(
+                        "SELECT COUNT(*) FROM boq_floors f "
+                        "JOIN boq_projects p ON p.id=f.project_id "
+                        "WHERE f.project_id=? AND p.user_id=? "
+                        "AND NOT EXISTS (SELECT 1 FROM boq_floor_items i "
+                        "                WHERE i.floor_id=f.id)",
+                        (int(fac_pid), uid)).fetchone()
+                facilities_pending = int(_fp[0] or 0) if _fp else 0
+            except Exception:
+                facilities_pending = 0
+        else:
+            for lk in (links or []):
+                try:
+                    src_kind = (lk[1] or "").strip()
+                    bpid = int(lk[2] or 0)
+                    bbid = int(lk[3] or 0)
+                    bfid = int(lk[4] or 0)
+                    svc_csv = (lk[5] or "")
+                except Exception:
+                    continue
+                # Defence in depth: the query already restricts to facility links
+                # on fac_pid, but re-check before any write.
+                if src_kind != "facility" or bpid != int(fac_pid) or not bfid:
+                    continue
+                # Validate the floor really belongs to this user's facilities BOQ
+                # (join to boq_projects) before pricing it.
+                try:
+                    with get_db() as c:
+                        own = c.execute(
+                            "SELECT 1 FROM boq_floors f "
+                            "JOIN boq_projects p ON p.id=f.project_id "
+                            "WHERE f.id=? AND f.project_id=? AND p.user_id=? LIMIT 1",
+                            (bfid, int(fac_pid), uid)).fetchone()
+                except Exception:
+                    own = None
+                if own is None:
+                    continue
+                # Already priced? skip fast.
+                try:
+                    with get_db() as c:
+                        has = c.execute(
+                            "SELECT 1 FROM boq_floor_items WHERE floor_id=? LIMIT 1",
+                            (bfid,)).fetchone()
+                except Exception:
+                    has = None
+                if has is not None:
+                    continue
+                if built_facilities >= _CI_MAX_AUTOBUILD_FLOORS:
+                    remaining += 1
+                    continue
+                svcs = [s for s in svc_csv.split(",") if s] or \
+                    _ci_facility_services(lk[0] or "")
+                if _autobuild:
+                    try:
+                        n = int(_autobuild(bfid, bbid, bpid, uid, svcs) or 0)
+                        if n:
+                            items_added += n
+                            built_facilities += 1
+                    except Exception:
+                        try:
+                            from flask import current_app
+                            current_app.logger.exception(
+                                "boq finish autobuild floor=%s failed", bfid)
+                        except Exception:
+                            pass
 
         # Is the solar-farm BOQ still awaiting pricing? (deferred whenever a
         # facility floor was priced this click). Cheap single-row check.
@@ -6414,8 +6472,9 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         if solar_built:
             msg += f" + {solar_built} solar-farm item(s)"
         pend = []
-        if remaining:
-            pend.append(f"{remaining} more facility floor(s)")
+        _fac_pending_total = remaining + facilities_pending
+        if _fac_pending_total:
+            pend.append(f"{_fac_pending_total} more facility floor(s)")
         if solar_pending:
             pend.append("the solar-farm BOQ")
         if pend:
