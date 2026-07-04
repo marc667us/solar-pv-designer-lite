@@ -313,7 +313,13 @@ TECHNOLOGY_GROUPS: list[tuple[str, list[tuple[str, str, str]]]] = [
 TECHNOLOGY_CODES: set[str] = {c for _, items in TECHNOLOGY_GROUPS for c, _, _ in items}
 
 # -- Step 6: Electrical services -- (code, label, icon, recommended)
+# NOTE: "pv_solar_farm" is the headline generation-asset service for a utility
+# solar farm. Selecting it signals that the 20MWp PV field + balance-of-plant
+# equipment BOQ is in scope; that BOQ is built by the solar-farm engine at Step 9
+# (_ci_build_solar_farm_items) - the checkbox makes the scope visible/selectable
+# on the services page (owner 2026-07-04: "include the PV Solar Farm service").
 ELECTRICAL_SERVICES: list[tuple[str, str, str, bool]] = [
+    ("pv_solar_farm",         "PV Solar Farm (20MWp Equipment BOQ)", "bi-sun",     True),
     ("internal_installation", "Internal Electrical Installation", "bi-plug",           True),
     ("power_supply",          "Power Supply",                     "bi-lightning",      True),
     ("hv_distribution",       "HV Distribution",                  "bi-diagram-3",      True),
