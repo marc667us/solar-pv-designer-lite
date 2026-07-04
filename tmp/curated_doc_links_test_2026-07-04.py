@@ -12,8 +12,11 @@ os.chdir(REPO); sys.path.insert(0, REPO)
 os.environ.setdefault("SOLARPRO_ADMIN_PASSWORD", "x")
 os.environ.setdefault("SOLARPRO_OWNER_PASSWORD", "y")
 os.environ["DB_PATH"] = os.path.join(REPO, "tmp", "_curated_links.db")
-try: os.remove(os.environ["DB_PATH"])
-except OSError: pass
+# Remove the db AND its sqlite -wal/-shm sidecars so a briefly-locked file from
+# a back-to-back run can't leave a stale DB that gets silently reused.
+for _sfx in ("", "-wal", "-shm"):
+    try: os.remove(os.environ["DB_PATH"] + _sfx)
+    except OSError: pass
 
 import web_app
 app = web_app.app; app.config["WTF_CSRF_ENABLED"] = False
@@ -24,6 +27,18 @@ def ck(n, c, e=''):
 
 # Cold-start seed builds the catalogue; the patched chain runs the curated seed.
 web_app._ensure_marketplace_tables()
+
+# NB: web_app.DB_PATH (web_app.py:256) is a module constant that ignores the
+# DB_PATH env var, so all local tests share data/solar_web.db. The additive
+# check below writes a 'supplier.example' URL onto a curated row; normalize the
+# curated rows back to empty and re-seed so this test is deterministic across
+# back-to-back runs regardless of prior-run pollution.
+with web_app.get_db() as c:
+    for _b, _m, _ds, _lit in web_app._CURATED_DOC_LINKS:
+        c.execute("UPDATE equipment_catalog SET datasheet_url='', literature_url='', "
+                  "links_checked_at=NULL WHERE LOWER(COALESCE(brand,''))=LOWER(?) "
+                  "AND LOWER(COALESCE(model,''))=LOWER(?)", (_b, _m))
+web_app._seed_curated_doc_links()
 
 CUR = web_app._CURATED_DOC_LINKS
 ck("curated list is non-empty", len(CUR) >= 30, "n=%d" % len(CUR))
