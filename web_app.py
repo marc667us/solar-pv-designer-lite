@@ -21345,6 +21345,15 @@ def _boq_make_floors(project_id: int, building_id: int,
 def boq_projects_list():
     uid = session["user_id"]
     _boq_ensure_schema()
+    # Isolation (owner 2026-07-03 #7): Generation-Station capital BOQs share
+    # the boq_projects table but must NOT clutter the marketplace BOQ list.
+    # Default view hides them; ?scope=capital shows only them.
+    _scope = (request.args.get("scope") or "").strip().lower()
+    if _scope == "capital":
+        _type_clause = (" AND p.project_type IN ('capital_facilities','capital_solar_farm') ")
+    else:
+        _type_clause = (" AND (p.project_type IS NULL OR p.project_type NOT IN ('capital_facilities','capital_solar_farm')) ")
+    _tc, _tp = _boq_tenant_clause("p")
     with get_db() as c:
         projects = c.execute(
             "SELECT p.*, "
@@ -21352,11 +21361,11 @@ def boq_projects_list():
             "  (SELECT COUNT(*) FROM boq_floor_items i WHERE i.project_id=p.id) AS n_items, "
             "  (SELECT COALESCE(SUM(total_amount),0) FROM boq_floor_items i WHERE i.project_id=p.id) AS grand_total "
             "FROM boq_projects p "
-            "WHERE p.user_id=? "
-            "ORDER BY p.updated_at DESC, p.id DESC",
-            (uid,),
+            "WHERE p.user_id=? " + _type_clause + _tc +
+            " ORDER BY p.updated_at DESC, p.id DESC",
+            tuple([uid] + list(_tp)),
         ).fetchall()
-    return render_template("boq_projects_list.html", user=current_user(), projects=projects)
+    return render_template("boq_projects_list.html", user=current_user(), projects=projects, boq_scope=_scope)
 
 
 @app.route("/boq-projects/new", methods=["GET", "POST"])

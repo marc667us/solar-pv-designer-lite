@@ -633,12 +633,18 @@ except Exception:
     _CI_MAX_AUTOBUILD_FLOORS = 6
 
 
-def _ci_boq_actuals(get_db, boq_project_id, uid, fx: float = 12.0) -> dict:
+def _ci_boq_actuals(get_db, boq_project_id, uid, fx: float = 12.0,
+                    extra_project_ids=None) -> dict:
     """Summarise a linked Generation-Station BOQ by REUSING the boq_floor_items
     totals the standard engine already wrote (no parallel costing). Returns
     local + USD grand totals, per-facility breakdown (facility =
     boq_buildings.purpose_subtype) + a labelled facility_costs_usd map for CRM.
-    Empty (linked=False) until Step 9 links a BOQ project."""
+    Empty (linked=False) until Step 9 links a BOQ project.
+
+    Pass extra_project_ids (e.g. the solar-farm BOQ id) to include additional
+    dedicated capital BOQ projects in the totals -- used by the REPORT paths so
+    a report's BOQ total reflects facilities + solar (Codex MED-5). Step-8
+    finance reconciliation keeps calling this facilities-only (no extra ids)."""
     out = {
         "linked": False, "boq_project_id": int(boq_project_id or 0),
         "grand_total_local": 0.0, "grand_total_usd": 0.0,
@@ -651,14 +657,28 @@ def _ci_boq_actuals(get_db, boq_project_id, uid, fx: float = 12.0) -> dict:
         fx = 12.0
     if fx <= 0:
         fx = 12.0
-    if not boq_project_id:
+    pid_list = [int(boq_project_id)] if boq_project_id else []
+    for x in (extra_project_ids or []):
+        try:
+            xi = int(x)
+        except (TypeError, ValueError):
+            continue
+        if xi and xi not in pid_list:
+            pid_list.append(xi)
+    if not pid_list:
         return out
     try:
         from web_app import _boq_tenant_clause
         tclause, tparams = _boq_tenant_clause("i")
     except Exception:
         tclause, tparams = "", ()
-    params = [int(boq_project_id), int(uid), _CI_AUTOBUILD_SOURCE] + list(tparams)
+    # Scope to the DEDICATED capital BOQ project(s) (each whole project belongs to
+    # this generation station), so BOTH the lean autobuild starter rows AND any
+    # rows the user later adds via BOQ "Build-all" (source_type='build_all') are
+    # reconciled -- previously only 'capital_autobuild' rows counted, so Build-all
+    # additions silently vanished from the finance reconciliation (Codex #4).
+    _pph = ",".join("?" for _ in pid_list)
+    params = list(pid_list) + [int(uid)] + list(tparams)
     try:
         with get_db() as c:
             rows = c.execute(
@@ -667,8 +687,7 @@ def _ci_boq_actuals(get_db, boq_project_id, uid, fx: float = 12.0) -> dict:
                 "FROM boq_floor_items i "
                 "LEFT JOIN boq_buildings b "
                 "       ON b.id=i.building_id AND b.project_id=i.project_id "
-                "WHERE i.project_id=? AND i.user_id=? "
-                "  AND i.source_type=?" + tclause +
+                "WHERE i.project_id IN (" + _pph + ") AND i.user_id=?" + tclause +
                 " GROUP BY b.purpose_subtype",
                 tuple(params)).fetchall()
     except Exception:
@@ -693,7 +712,8 @@ def _ci_boq_actuals(get_db, boq_project_id, uid, fx: float = 12.0) -> dict:
     return out
 
 
-def _ci_cost_plan(get_db, boq_project_id, uid, *, fx: float = 12.0) -> dict:
+def _ci_cost_plan(get_db, boq_project_id, uid, *, fx: float = 12.0,
+                  extra_project_ids=None) -> dict:
     """Cost Plan Deck data derived ENTIRELY from the linked BOQ
     (boq_floor_items + boq_buildings) -- no parallel costing. This is the shared
     aggregation engine behind both the by-building / by-service breakdown views
@@ -731,7 +751,20 @@ def _ci_cost_plan(get_db, boq_project_id, uid, *, fx: float = 12.0) -> dict:
         fx = 12.0
     if fx <= 0:
         fx = 12.0
-    if not boq_project_id:
+    # Aggregate across the facilities BOQ AND (optionally) the solar-farm BOQ so
+    # the Cost Plan Deck reflects the WHOLE capital investment. Each id is a
+    # dedicated capital BOQ project, so we scope by project id(s) + user (+ tenant)
+    # and do NOT filter source_type -- both the lean autobuild starter and any
+    # Build-all additions are included (Codex #4/#6).
+    pid_list = [int(boq_project_id)] if boq_project_id else []
+    for x in (extra_project_ids or []):
+        try:
+            xi = int(x)
+        except (TypeError, ValueError):
+            continue
+        if xi and xi not in pid_list:
+            pid_list.append(xi)
+    if not pid_list:
         return out
 
     try:
@@ -739,7 +772,8 @@ def _ci_cost_plan(get_db, boq_project_id, uid, *, fx: float = 12.0) -> dict:
         tclause, tparams = _boq_tenant_clause("i")
     except Exception:
         tclause, tparams = "", ()
-    params = [int(boq_project_id), int(uid), _CI_AUTOBUILD_SOURCE] + list(tparams)
+    _pph = ",".join("?" for _ in pid_list)
+    params = list(pid_list) + [int(uid)] + list(tparams)
     try:
         with get_db() as c:
             rows = c.execute(
@@ -752,8 +786,7 @@ def _ci_cost_plan(get_db, boq_project_id, uid, *, fx: float = 12.0) -> dict:
                 "FROM boq_floor_items i "
                 "LEFT JOIN boq_buildings b "
                 "       ON b.id=i.building_id AND b.project_id=i.project_id "
-                "WHERE i.project_id=? AND i.user_id=? "
-                "  AND i.source_type=?" + tclause +
+                "WHERE i.project_id IN (" + _pph + ") AND i.user_id=?" + tclause +
                 " ORDER BY b.building_name, i.section, i.item_no",
                 tuple(params)).fetchall()
     except Exception:
@@ -1427,6 +1460,240 @@ def _ci_derive_boq_services(fac_cfg: dict, tech_cfg: dict,
     return _ci_order_services(codes)
 
 
+# ===========================================================================
+# SOLAR-FARM (20MWp) BOQ -- the PV field + balance-of-plant equipment BOQ that
+# the platform building-services catalog (web_app._BOQ_SERVICES) does NOT cover.
+# Owner directive 2026-07-03: "there must be a boq for the 20MWp solar equipment
+# and materials", kept SEPARATE from the facilities/technology BOQ.
+#
+# Rows are derived from size_utility_pv() output (n_modules, dc_kwp_actual,
+# inverter_ac_kw, n_central_inv, strings, combiners, dc/ac cable metres) so the
+# quantities are internally consistent with the Step-7 sizing. Basic rates are
+# indicative unit supply costs in LOCAL currency at fx=12 GHS/USD; the standard
+# rate engine (boq_rate_v3) then adds Supply/Install/OH/Profit/VAT exactly like
+# the facilities autobuild, and the user refines quantities/rates in Build-all.
+# Each item: (section_title, service_slug, description, unit, qty_key|const,
+# basic_local). qty_key pulls from the sizing dict; a float is a fixed quantity;
+# a ("per_kwp", factor) tuple scales by installed DC kWp.
+# ===========================================================================
+_CI_SOLAR_BOQ_SECTIONS: list[tuple] = [
+    # --- PV modules ---
+    ("PV Modules & Array", "solar_modules",
+     "PV module, mono c-Si half-cut ~550Wp, Tier-1, IEC 61215/61730",
+     "No.", "n_modules", 1800.0),
+    ("PV Modules & Array", "solar_modules",
+     "Module-level DC connectors & inline fuses (per module set)",
+     "Set", "n_modules", 45.0),
+    # --- Mounting / tracker ---
+    ("Mounting Structure & Tracker", "solar_mounting",
+     "Ground-mount steel structure, hot-dip galvanised (per kWp)",
+     "kWp", "dc_kwp_actual", 720.0),
+    ("Mounting Structure & Tracker", "solar_mounting",
+     "Pile foundation / ramming & civil anchoring (per kWp)",
+     "kWp", "dc_kwp_actual", 240.0),
+    ("Mounting Structure & Tracker", "solar_mounting",
+     "Single-axis tracker drive & controller (optional, per kWp)",
+     "kWp", "dc_kwp_actual", 360.0),
+    # --- DC system ---
+    ("DC Collection System", "solar_dc",
+     "DC string cable, 1x6mm2 PV1-F, UV-rated (metres)",
+     "m", "dc_cable_m_est", 36.0),
+    ("DC Collection System", "solar_dc",
+     "String combiner box, IP65, with DC SPD, fuses & isolator",
+     "No.", "combiners", 4800.0),
+    ("DC Collection System", "solar_dc",
+     "DC cable trenching, ducting & cable trays (per kWp)",
+     "kWp", "dc_kwp_actual", 90.0),
+    # --- Inverters ---
+    ("Inverters", "solar_inverter",
+     "Central/string inverter station (per unit, ~1500kW class)",
+     "No.", "n_central_inv", 720000.0),
+    ("Inverters", "solar_inverter",
+     "Inverter LV AC connection, protection & auxiliary supply (per unit)",
+     "No.", "n_central_inv", 36000.0),
+    # --- MV / AC system ---
+    ("MV / AC Power System", "solar_mv",
+     "Inverter step-up transformer, LV/MV oil-immersed (per inverter)",
+     "No.", "n_central_inv", 300000.0),
+    ("MV / AC Power System", "solar_mv",
+     "MV ring main unit / switchgear panel",
+     "No.", "n_central_inv", 240000.0),
+    ("MV / AC Power System", "solar_mv",
+     "MV collection cable, XLPE armoured (metres)",
+     "m", "ac_cable_m_est", 300.0),
+    # --- Grid interconnection ---
+    ("Grid Interconnection & Substation", "solar_grid",
+     "Grid substation, HV switchyard & interconnection works (lump sum)",
+     "Item", 1.0, 3600000.0),
+    ("Grid Interconnection & Substation", "solar_grid",
+     "Revenue & check metering, protection relays & CTs/VTs (lump sum)",
+     "Item", 1.0, 480000.0),
+    # --- Earthing & lightning ---
+    ("Array Earthing & Lightning Protection", "solar_earthing",
+     "Array earthing grid, bonding conductors & earth electrodes (per kWp)",
+     "kWp", "dc_kwp_actual", 60.0),
+    ("Array Earthing & Lightning Protection", "solar_earthing",
+     "Lightning protection air terminals & down conductors (per kWp)",
+     "kWp", "dc_kwp_actual", 30.0),
+    # --- Plant SCADA & monitoring ---
+    ("Plant SCADA & Monitoring", "solar_scada",
+     "Plant SCADA, PPC & string monitoring system (lump sum)",
+     "Item", 1.0, 960000.0),
+    ("Plant SCADA & Monitoring", "solar_scada",
+     "Weather / meteorological station (irradiance, temp, wind)",
+     "No.", 2.0, 180000.0),
+    # --- Site civil & security ---
+    ("Site Civil, Roads & Security", "solar_civil",
+     "Internal access roads, drainage & site grading (per kWp)",
+     "kWp", "dc_kwp_actual", 120.0),
+    ("Site Civil, Roads & Security", "solar_civil",
+     "Perimeter security fence, gates & CCTV interface (per kWp)",
+     "kWp", "dc_kwp_actual", 84.0),
+    # --- Testing & commissioning ---
+    ("Testing, Commissioning & Grid Compliance", "solar_commissioning",
+     "Testing, commissioning, grid-code compliance & handover (per kWp)",
+     "kWp", "dc_kwp_actual", 96.0),
+]
+
+
+def _ci_solar_boq_rows(sizing: dict) -> list[dict]:
+    """Derive solar-farm BOQ line items from size_utility_pv() output. Returns a
+    list of dicts {section, service_code, desc, unit, qty, basic}. Skips any line
+    whose derived quantity rounds to zero. Pure -- no DB, no side effects."""
+    sz = dict(sizing or {})
+    # size_utility_pv() emits `n_central_inverters`; the catalog keys on the
+    # shorter `n_central_inv`. Alias so inverter/transformer/MV rows are NOT
+    # silently dropped (Codex HIGH-2). Local copy -> never mutates the caller.
+    if not sz.get("n_central_inv"):
+        sz["n_central_inv"] = sz.get("n_central_inverters") or 0
+    try:
+        kwp = float(sz.get("dc_kwp_actual") or sz.get("kwp") or 0.0)
+    except (TypeError, ValueError):
+        kwp = 0.0
+    # Require a real PV array (Step 7 completed) before building ANY solar rows.
+    # Otherwise the fixed-quantity lump sums (grid substation, SCADA, weather)
+    # would still insert and falsely report a "priced" solar BOQ that silently
+    # omits every module/inverter/MV line (Supervisor MED). No array -> no BOQ,
+    # so Step 9 shows the "complete Step 7" prompt instead.
+    try:
+        _n_mod = float(sz.get("n_modules") or 0)
+    except (TypeError, ValueError):
+        _n_mod = 0.0
+    if kwp <= 0 and _n_mod <= 0:
+        return []
+    rows: list[dict] = []
+    for section, slug, desc, unit, qkey, basic in _CI_SOLAR_BOQ_SECTIONS:
+        if isinstance(qkey, tuple) and qkey and qkey[0] == "per_kwp":
+            qty = kwp * float(qkey[1])
+        elif isinstance(qkey, (int, float)):
+            qty = float(qkey)
+        else:
+            try:
+                qty = float(sz.get(qkey) or 0.0)
+            except (TypeError, ValueError):
+                qty = 0.0
+        qty = round(qty, 2)
+        if qty <= 0:
+            continue
+        rows.append({"section": section, "service_code": slug, "desc": desc,
+                     "unit": unit, "qty": qty, "basic": float(basic)})
+    return rows
+
+
+def _ci_build_solar_farm_items(get_db, fid, bid, pid, uid, tenant_id, sizing):
+    """Insert the solar-farm BOQ line items (CELL level) for one floor, REUSING
+    the standard rate engine (boq_rate_v3, same OH/Profit/VAT/Supply/Install as
+    the facilities autobuild). Writes source_type='capital_solar_autobuild' +
+    per-section item numbering + a rate-buildup row per item (so Build-all edits
+    and rate-buildup views work identically to facilities rows). Idempotent per
+    floor. Returns the count of line items inserted."""
+    rows = _ci_solar_boq_rows(sizing)
+    if not rows:
+        return 0
+    try:
+        from boq_rate_v3 import boq_rate_v3
+    except Exception:
+        boq_rate_v3 = None
+    oh, prf, vat, sp, ip, vinb = 10.0, 15.0, 12.5, 10.0, 15.0, 0
+    inserted = 0
+    next_no: dict = {}
+    with get_db() as c:
+        try:
+            existing = c.execute(
+                "SELECT id FROM boq_floor_items WHERE floor_id=? LIMIT 1",
+                (fid,)).fetchone()
+        except Exception:
+            existing = None
+        if existing is not None:
+            return 0
+        for r in rows:
+            basic = float(r["basic"] or 0.0)
+            qty = float(r["qty"] or 0.0)
+            desc = (r["desc"] or "").strip()
+            if not desc or qty <= 0 or basic <= 0:
+                continue
+            if boq_rate_v3:
+                supply_amt, install_amt, total_rate = boq_rate_v3(
+                    basic, sp, ip, oh, prf, vat, vat_in_basic=bool(vinb))
+            else:
+                supply_amt = basic * (sp + oh + prf + vat) / 100.0
+                install_amt = basic * ip / 100.0
+                total_rate = basic + supply_amt + install_amt
+            total = qty * total_rate
+            section = (r["section"] or "").strip()[:80]
+            svc = (r["service_code"] or "")[:40]
+            unit = (r["unit"] or "No.").strip()[:20] or "No."
+            sec_key = section
+            # Item number = next in this section; assigned only AFTER a
+            # successful insert so a failed row never leaves a gap (Supervisor).
+            item_no_disp = str(next_no.get(sec_key, 0) + 1)
+            try:
+                cur = c.execute(
+                    "INSERT INTO boq_floor_items ("
+                    "  floor_id, building_id, project_id, user_id, tenant_id, "
+                    "  service_code, section, subsection, "
+                    "  bill_no, bill_name, section_letter, subsection_label, "
+                    "  item_no, item_no_display, "
+                    "  description, specification, unit, qty, "
+                    "  final_built_up_rate, total_amount, "
+                    "  source_type, approval_status) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (fid, bid, pid, uid, tenant_id,
+                     svc, section, "",
+                     0, "SOLAR FARM", "", "",
+                     item_no_disp, item_no_disp,
+                     desc[:500], "", unit, qty,
+                     total_rate, total,
+                     "capital_solar_autobuild", "project_only"))
+                new_id = int(cur.lastrowid or 0)
+            except Exception:
+                continue
+            next_no[sec_key] = next_no.get(sec_key, 0) + 1   # commit the number
+            inserted += 1
+            try:
+                c.execute(
+                    "INSERT INTO boq_floor_rate_buildup ("
+                    "  floor_item_id, project_id, user_id, tenant_id, "
+                    "  basic_price, supply_rate, install_rate, "
+                    "  overhead_pct, profit_pct, contingency_pct, vat_pct, "
+                    "  supply_pct, install_pct, vat_in_basic, "
+                    "  final_built_up_rate, total_amount) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (new_id, pid, uid, tenant_id,
+                     basic, supply_amt, install_amt,
+                     oh, prf, 0.0, vat, sp, ip, vinb,
+                     total_rate, total))
+            except Exception:
+                pass
+        try:
+            c.execute(
+                "UPDATE boq_floors SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (fid,))
+        except Exception:
+            pass
+    return inserted
+
+
 # BOQ traceability link table (eager + VERIFIED, observable failures).
 _CIBL_SQLITE_DDL = """
 CREATE TABLE IF NOT EXISTS capital_investment_boq_links (
@@ -1737,6 +2004,12 @@ REPORT_TYPES: list[tuple[str, str, str, bool]] = [
     ("maintenance",     "Maintenance Strategy",  "bi-tools",           True),
     ("monitoring",      "Monitoring Strategy",   "bi-eye",             True),
     ("ops_manual",      "Operations Manual",     "bi-journal",         True),
+    # Parity with the residential/C&I 'New Project' report set (owner #6).
+    ("wiring",           "Wiring & Cabling Schedule", "bi-diagram-3",  True),
+    ("single_line",      "Single-Line Diagram (SLD)", "bi-diagram-2",  True),
+    ("energy_impact",    "Energy Impact & Yield",     "bi-lightning-charge", True),
+    ("economic_impact",  "Economic Impact",           "bi-graph-up-arrow",   True),
+    ("implementation_plan", "Implementation Plan",    "bi-calendar-range",   True),
 ]
 REPORT_KEYS: set[str] = {k for k, _, _, _ in REPORT_TYPES}
 FULL_REPORT_KEYS: set[str] = {k for k, _, _, full in REPORT_TYPES if full}
@@ -2153,6 +2426,207 @@ def _build_report_markdown(key: str, proj: dict[str, Any],
             "### Jurisdiction\n\n"
             f"- Regulator: {framework.get('regulator', {}).get('name', '')}\n"
             f"- Off-taker(s): {', '.join(framework.get('utility_offtakers') or [])}\n"
+        )
+    elif key == "wiring":
+        title = f"Wiring & Cabling Schedule - {proj['project_name']}"
+        dc_m = sizing.get("dc_cable_m_est") or 0
+        ac_m = sizing.get("ac_cable_m_est") or 0
+        n_str = sizing.get("strings") or 0
+        n_comb = sizing.get("combiners") or 0
+        n_inv = sizing.get("n_central_inverters") or sizing.get("n_central_inv") or 0
+        md = header + (
+            "## Wiring & cabling schedule\n\n"
+            "Derived from the Step-7 PV sizing. Quantities are indicative; confirm "
+            "against the detailed cable-pulling schedule and voltage-drop study.\n\n"
+            "### Cable schedule\n\n"
+            "| Segment | Type | Cable | Est. length |\n"
+            "|---|---|---|---|\n"
+            f"| Module -> string | DC | 1x6mm2 PV1-F (UV) | {_fmt_money(dc_m)} m |\n"
+            f"| String -> combiner | DC | 1x6mm2 / 1x10mm2 PV1-F | (in DC total) |\n"
+            f"| Combiner -> inverter | DC | 1x(35-240)mm2 DC main | (in DC total) |\n"
+            f"| Inverter -> transformer | AC LV | 4c XLPE/SWA | {_fmt_money(ac_m)} m |\n"
+            f"| Transformer -> MV switchgear | MV | XLPE armoured MV | (in MV total) |\n"
+            f"| Earthing / bonding | CU | bare CU + earth rods | array-wide grid |\n\n"
+            "### DC array wiring\n\n"
+            f"- Strings: **{n_str}**  \n"
+            f"- Combiner boxes: **{n_comb}** (with DC SPD + fuses + isolator)  \n"
+            f"- Modules per string: {pv.get('modules_per_string') or 'n/a'}  \n"
+            f"- Total DC cable: **{_fmt_money(dc_m)} m**\n\n"
+            "### AC / MV wiring\n\n"
+            f"- Central inverters: **{n_inv}**  \n"
+            f"- Inverter step-up transformers: **{n_inv}**  \n"
+            f"- Total AC/MV cable: **{_fmt_money(ac_m)} m**\n\n"
+            "### Protection & earthing\n\n"
+            "- DC: string fuses, DC SPD Type 2 at combiners + inverter input.\n"
+            "- AC: MCCB/ACB at inverter LV, MV RMU with protection relays.\n"
+            "- Earthing: array frame bonding, equipotential grid, earth electrodes;\n"
+            "  lightning protection air terminals + down conductors.\n"
+        )
+    elif key == "single_line":
+        title = f"Single-Line Diagram (SLD) - {proj['project_name']}"
+        n_inv = sizing.get("n_central_inverters") or sizing.get("n_central_inv") or 0
+        md = header + (
+            "## Single-line diagram (SLD)\n\n"
+            "Utility-scale power topology from the PV array to the grid point of "
+            "common coupling (PCC).\n\n"
+            "### Topology\n\n"
+            "```\n"
+            "  PV modules  (" + str(sizing.get("n_modules") or "n/a") + " x "
+            + str(pv.get("module_wp") or "n/a") + " Wp)\n"
+            "      |  DC strings (" + str(sizing.get("strings") or "n/a") + ")\n"
+            "      v\n"
+            "  String combiner boxes (" + str(sizing.get("combiners") or "n/a")
+            + ")  --[DC SPD + fuses]\n"
+            "      |  DC main\n"
+            "      v\n"
+            "  Central inverters (" + str(n_inv) + " x "
+            + str(pv.get("central_inverter_kw")
+                  or sizing.get("central_inverter_kw") or "n/a") + " kW)\n"
+            "      |  LV AC\n"
+            "      v\n"
+            "  Inverter step-up transformers (LV/MV, " + str(n_inv) + ")\n"
+            "      |  MV\n"
+            "      v\n"
+            "  MV switchgear / ring main unit (RMU) + protection\n"
+            "      |  MV collection\n"
+            "      v\n"
+            "  Grid substation / HV switchyard  -->  PCC / utility grid\n"
+            "```\n\n"
+            "### Component schedule\n\n"
+            "| Item | Qty | Rating |\n"
+            "|---|---|---|\n"
+            f"| PV modules | {sizing.get('n_modules') or 'n/a'} | {pv.get('module_wp') or 'n/a'} Wp |\n"
+            f"| Combiner boxes | {sizing.get('combiners') or 'n/a'} | DC, IP65 |\n"
+            f"| Central inverters | {n_inv} | {pv.get('central_inverter_kw') or sizing.get('central_inverter_kw') or 'n/a'} kW |\n"
+            f"| Step-up transformers | {n_inv} | LV/MV |\n"
+            f"| MV switchgear / RMU | {n_inv} | MV |\n"
+            f"| AC capacity | 1 | {sizing.get('inverter_ac_kw') or 'n/a'} kW |\n\n"
+            "> Protection coordination, relay settings and the grid-connection "
+            "agreement must be confirmed with the utility / regulator.\n"
+        )
+    elif key == "energy_impact":
+        title = f"Energy Impact & Yield - {proj['project_name']}"
+        try:
+            yld = _ci_yield_profile(pv, gps_lat=proj.get("gps_lat")) or {}
+        except Exception:
+            yld = {}   # never 500 the report on malformed stored JSON
+        monthly = yld.get("monthly") if isinstance(yld.get("monthly"), list) else []
+        annual10 = (yld.get("annual_series")
+                    if isinstance(yld.get("annual_series"), list) else [])
+        ann_mwh = sizing.get("annual_gen_mwh") or yld.get("annual_gen_mwh") or 0
+        life_mwh = sizing.get("lifetime_gen_mwh") or 0
+        co2 = round(float(ann_mwh or 0) * 0.40, 1)          # ~0.4 tCO2/MWh grid
+        homes = int(round(float(ann_mwh or 0) * 1000 / 1200)) if ann_mwh else 0
+        cf = 0.0
+        try:
+            ac = float(sizing.get("inverter_ac_kw") or 0)
+            if ac > 0:
+                cf = round(float(ann_mwh) * 1000 / (ac * 8760) * 100, 1)
+        except (TypeError, ValueError, ZeroDivisionError):
+            cf = 0.0
+        mrows = ""
+        for m in monthly[:12]:
+            if isinstance(m, dict):
+                mrows += f"| {m.get('month', '')} | {_fmt_money(m.get('mwh'))} |\n"
+        if not mrows:
+            mrows = "| (per-month profile unavailable) | |\n"
+        yrows = ""
+        for a in annual10:
+            if isinstance(a, dict):
+                yrows += f"| Year {a.get('year', '')} | {_fmt_money(a.get('mwh'))} |\n"
+        if not yrows:
+            yrows = "| (10-year series unavailable) | |\n"
+        md = header + (
+            "## Energy impact & yield\n\n"
+            "### Generation headline\n\n"
+            f"- **Annual generation:** {_fmt_money(ann_mwh)} MWh  \n"
+            f"- **Lifetime generation:** {_fmt_money(life_mwh)} MWh  \n"
+            f"- **Specific yield:** {sizing.get('specific_yield_kwh_per_kwp') or 'n/a'} kWh/kWp  \n"
+            f"- **Capacity factor:** {cf} %  \n\n"
+            "### Environmental & social impact\n\n"
+            f"- **CO2 avoided:** ~{_fmt_money(co2)} tCO2 / year (grid factor 0.40 tCO2/MWh)  \n"
+            f"- **Homes equivalent:** ~{_fmt_money(homes)} (at 1,200 kWh/home/yr)  \n"
+            f"- **Clean energy over life:** {_fmt_money(life_mwh)} MWh  \n\n"
+            "### Monthly generation (MWh)\n\n"
+            "| Month | Generation |\n|---|---|\n" + mrows + "\n"
+            "### Annual generation over 10 years (MWh, with degradation)\n\n"
+            "| Year | Generation |\n|---|---|\n" + yrows + "\n"
+            f"Degradation: {pv.get('annual_degradation_pct') or '0.5'} %/yr; "
+            f"availability {pv.get('availability_pct') or '98'} %; "
+            f"PR {pv.get('performance_ratio') or '0.78'}.\n"
+        )
+    elif key == "economic_impact":
+        title = f"Economic Impact - {proj['project_name']}"
+        try:
+            cash = _ci_cashflow_plan(fin) or {}
+        except Exception:
+            cash = {}   # never 500 the report on malformed stored JSON
+        _rev = cash.get("revenue") if isinstance(cash.get("revenue"), list) else []
+        _cum = cash.get("cumulative") if isinstance(cash.get("cumulative"), list) else []
+        yr1_rev = _rev[1] if len(_rev) > 1 else (_rev[0] if _rev else 0)
+        life_cum = _cum[-1] if _cum else 0
+        capex_usd = computed.get("total_capex_usd") or 0
+        ann_mwh = sizing.get("annual_gen_mwh") or 0
+        jobs_c = int(round(float(sizing.get("dc_kwp_actual") or 0) / 250)) or "n/a"
+        jobs_o = int(round(float(sizing.get("dc_kwp_actual") or 0) / 4000)) or "n/a"
+        md = header + (
+            "## Economic impact\n\n"
+            "### Investment\n\n"
+            f"- **Total CAPEX:** {_fmt_money(capex_usd, 'USD')} "
+            f"({_fmt_money(computed.get('total_capex_local'), cur)})  \n"
+            f"- **Annual OPEX:** {_fmt_money(computed.get('total_opex_usd_yr'), 'USD')}  \n"
+            f"- **NPV:** {_fmt_money(computed.get('npv_local'), cur)}  \n"
+            f"- **IRR:** {_fmt_pct(computed.get('irr_pct'))}  \n"
+            f"- **LCOE:** {computed.get('lcoe_local_per_kwh') or 'n/a'} {cur}/kWh  \n"
+            f"- **Payback:** "
+            f"{('%.1f yr' % computed['payback_years']) if computed.get('payback_years') else 'beyond project life'}  \n\n"
+            "### Local economic impact\n\n"
+            f"- **Construction jobs (peak):** ~{jobs_c}  \n"
+            f"- **Permanent O&M jobs:** ~{jobs_o}  \n"
+            f"- **Annual clean energy delivered:** {_fmt_money(ann_mwh)} MWh  \n"
+            "- **Import substitution:** reduces reliance on thermal/imported power.  \n"
+            "- **Local content:** civil works, security, O&M, logistics sourced locally.  \n\n"
+            "### Revenue & cash flow\n\n"
+            f"- Revenue model: **{(fin.get('revenue_model') or 'ppa')}**  \n"
+            f"- Year-1 revenue: {_fmt_money(yr1_rev, cur)}  \n"
+            f"- Cumulative net cash flow (life): {_fmt_money(life_cum, cur)}  \n\n"
+            "> Job and impact figures are planning estimates (per-kWp heuristics); "
+            "confirm in the ESIA / socio-economic study.\n"
+        )
+    elif key == "implementation_plan":
+        title = f"Implementation Plan - {proj['project_name']}"
+        mwp = (sizing.get("dc_kwp_actual") or proj.get("target_kwp") or 0) / 1000.0
+        md = header + (
+            "## Implementation plan\n\n"
+            f"Indicative delivery schedule for a ~{mwp:.1f} MWp utility-scale PV "
+            "plant. Durations scale with plant size, permitting and grid works.\n\n"
+            "### Phased schedule\n\n"
+            "| Phase | Key activities | Indicative duration |\n"
+            "|---|---|---|\n"
+            "| 1. Development | Land, permits, ESIA, grid-connection agreement | 3-6 months |\n"
+            "| 2. Engineering | Detailed design, SLD, geotech, procurement specs | 2-3 months |\n"
+            "| 3. Procurement | Modules, inverters, transformers, MV, BOP (long-lead) | 3-5 months |\n"
+            "| 4. Civil works | Access roads, drainage, fencing, foundations | 2-4 months |\n"
+            "| 5. Mechanical | Mounting structures / trackers, module install | 3-5 months |\n"
+            "| 6. Electrical | DC/AC wiring, combiners, inverters, transformers, MV | 3-5 months |\n"
+            "| 7. Grid & substation | Substation, HV switchyard, interconnection | 3-6 months |\n"
+            "| 8. Testing & commissioning | SAT, grid compliance, energisation | 1-2 months |\n"
+            "| 9. Handover & O&M | As-builts, training, O&M mobilisation | 1 month |\n\n"
+            "### Milestones\n\n"
+            "- **M1:** Financial close & notice to proceed (NTP).\n"
+            "- **M2:** Major equipment delivered to site.\n"
+            "- **M3:** Mechanical completion.\n"
+            "- **M4:** Grid connection energised.\n"
+            "- **M5:** Commercial operation date (COD): "
+            f"{proj.get('target_cod') or 'to be confirmed'}.\n\n"
+            "### Key dependencies & risks\n\n"
+            "- Grid-connection approval and substation availability (critical path).\n"
+            "- Long-lead procurement (transformers, MV switchgear).\n"
+            "- Weather / ground conditions during civil works.\n"
+            "- Permit / ESIA sign-off before construction start.\n\n"
+            "### Governance\n\n"
+            f"- Regulator: {framework.get('regulator', {}).get('name', '')}\n"
+            f"- ESIA authority: {framework.get('esia_authority', {}).get('name', '')}\n"
         )
     else:
         title = "Report"
@@ -3590,6 +4064,8 @@ CREATE TABLE IF NOT EXISTS capital_investment_projects (
     finance_config    TEXT DEFAULT '',
     regulatory_config TEXT DEFAULT '',
     boq_project_id    INTEGER,
+    boq_facilities_project_id INTEGER,
+    boq_solar_project_id      INTEGER,
     tenant_id         TEXT,
     schema_version    INTEGER DEFAULT 2,
     created_at        TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -3630,6 +4106,8 @@ CREATE TABLE IF NOT EXISTS capital_investment_projects (
     finance_config    TEXT DEFAULT '',
     regulatory_config TEXT DEFAULT '',
     boq_project_id    INTEGER,
+    boq_facilities_project_id INTEGER,
+    boq_solar_project_id      INTEGER,
     tenant_id         UUID,
     schema_version    INTEGER DEFAULT 2,
     created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -3647,6 +4125,11 @@ _CIP_MIGRATIONS = [
     "ALTER TABLE capital_investment_projects ADD COLUMN tenant_id TEXT",
     "ALTER TABLE capital_investment_projects ADD COLUMN schema_version INTEGER DEFAULT 2",
     "ALTER TABLE capital_investment_projects ADD COLUMN regulatory_config TEXT DEFAULT ''",
+    # Two-BOQ split (owner directive 2026-07-03): a facilities/technology/non-solar
+    # BOQ and a separate 20MWp solar-farm equipment BOQ. Legacy boq_project_id keeps
+    # pointing at the facilities BOQ for back-compat with Step-8 reconciliation.
+    "ALTER TABLE capital_investment_projects ADD COLUMN boq_facilities_project_id INTEGER",
+    "ALTER TABLE capital_investment_projects ADD COLUMN boq_solar_project_id INTEGER",
 ]
 
 # Verification state so a failed live-PG migration surfaces (never swallowed).
@@ -3681,6 +4164,25 @@ def _ensure_ci_projects_schema_verified(get_db) -> bool:
                 c.execute(ddl)
         except Exception:
             pass   # column already present / backend mismatch
+    # One-shot backfill: generation-station facilities BOQs created before the
+    # two-BOQ split were tagged project_type='campus' and would (a) still clutter
+    # the marketplace /boq-projects list and (b) not appear under ?scope=capital.
+    # Re-tag ONLY those linked from a capital_investment_project (never a
+    # standalone marketplace "Campus" BOQ, which shares the 'campus' type) +
+    # populate the new columns from the legacy id. Idempotent (Supervisor).
+    for _bf in (
+        "UPDATE boq_projects SET project_type='capital_facilities' "
+        "WHERE project_type='campus' AND id IN "
+        "(SELECT boq_project_id FROM capital_investment_projects "
+        " WHERE boq_project_id IS NOT NULL)",
+        "UPDATE capital_investment_projects SET boq_facilities_project_id=boq_project_id "
+        "WHERE boq_facilities_project_id IS NULL AND boq_project_id IS NOT NULL",
+    ):
+        try:
+            with get_db() as c:
+                c.execute(_bf)
+        except Exception:
+            pass   # boq_projects not yet created / backend mismatch
     # Verify queryable before declaring success.
     try:
         with get_db() as c:
@@ -4545,6 +5047,8 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                 return redirect(url_for("capital_investment_step4", pid=pid))
 
             tech_cfg = _safe_json(proj.get("technology_config"))
+            pv_cfg = _safe_json(proj.get("pv_config"))
+            sizing = pv_cfg.get("sizing") or {}
             service_codes = _ci_derive_boq_services(fac_cfg, tech_cfg, elec_cfg)
             services_csv = ",".join(service_codes)
             try:
@@ -4565,6 +5069,7 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                                              proj.get("country")) if x)[:300]
             external_flag = 1 if selected_external else 0
             built_floors: list = []
+            solar_ctx = None   # (solar_boq_pid, solar_building_id, solar_floor_id)
             link_errors = 0
             new_boq_pid = 0
 
@@ -4578,8 +5083,10 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                             " location, project_type, external_works_included, "
                             " infrastructure_included, services_csv) "
                             "VALUES (?,?,?,?,?,?,?,?,?) RETURNING id",
-                            (uid, tenant_id, project_name,
-                             proj.get("client_name") or "", location, "campus",
+                            (uid, tenant_id,
+                             (project_name + " - Facilities")[:300],
+                             proj.get("client_name") or "", location,
+                             "capital_facilities",
                              external_flag, 1, services_csv))
                         _rr = cur.fetchone()
                         cur = _RetId(int(_rr[0])) if _rr else cur
@@ -4590,19 +5097,24 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                             " project_type, external_works_included, "
                             " infrastructure_included) "
                             "VALUES (?,?,?,?,?,?,?) RETURNING id",
-                            (uid, project_name, proj.get("client_name") or "",
-                             location, "campus", external_flag, 1))
+                            (uid, (project_name + " - Facilities")[:300],
+                             proj.get("client_name") or "",
+                             location, "capital_facilities", external_flag, 1))
                         _rr2 = cur.fetchone()
                         if _rr2:
                             cur = _RetId(int(_rr2[0]))
                     new_boq_pid = int(cur.lastrowid or 0)
 
-                    # 2. Atomic claim - only if still unset.
+                    # 2. Atomic claim - only if still unset. Sets BOTH the legacy
+                    # boq_project_id (kept pointing at the facilities BOQ for
+                    # back-compat with Step-8 reconciliation) AND the explicit
+                    # boq_facilities_project_id (two-BOQ split, owner 2026-07-03).
                     cclaim = c.execute(
                         "UPDATE capital_investment_projects "
-                        "SET boq_project_id=? WHERE id=? AND user_id=? AND "
+                        "SET boq_project_id=?, boq_facilities_project_id=? "
+                        "WHERE id=? AND user_id=? AND "
                         "(boq_project_id IS NULL OR boq_project_id=0)",
-                        (new_boq_pid, pid, uid))
+                        (new_boq_pid, new_boq_pid, pid, uid))
                     if int(getattr(cclaim, "rowcount", 0) or 0) != 1:
                         raise _CIGenerationRaceLost()
 
@@ -4695,6 +5207,148 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                       "again; the error was logged.", "danger")
                 return redirect(url_for("capital_investment_step9", pid=pid))
 
+            # --- Solar-farm BOQ in its OWN transaction (after the facilities
+            # BOQ has committed) so a solar failure can never roll back the
+            # facilities BOQ, and a caught PG statement error stays contained
+            # to this txn (Codex HIGH-1 2026-07-03). ---
+            try:
+                with get_db() as c:
+                    # 4. SECOND BOQ -- the 20MWp solar-farm equipment BOQ, a
+                    # SEPARATE boq_projects row (project_type='capital_solar_farm')
+                    # so the PV field / balance-of-plant BOQ never mixes with the
+                    # facilities BOQ (owner 2026-07-03). One "Solar Farm" building
+                    # + "Array Field" floor; items pre-priced after the txn.
+                    try:
+                        try:
+                            scur = c.execute(
+                                "INSERT INTO boq_projects "
+                                "(user_id, tenant_id, project_name, client_name, "
+                                " location, project_type, external_works_included, "
+                                " infrastructure_included, services_csv) "
+                                "VALUES (?,?,?,?,?,?,?,?,?) RETURNING id",
+                                (uid, tenant_id,
+                                 (project_name + " - Solar Farm 20MWp")[:300],
+                                 proj.get("client_name") or "", location,
+                                 "capital_solar_farm", 0, 1, ""))
+                            _sr = scur.fetchone()
+                            new_solar_pid = int(_sr[0]) if _sr else int(
+                                scur.lastrowid or 0)
+                        except Exception:
+                            scur = c.execute(
+                                "INSERT INTO boq_projects "
+                                "(user_id, project_name, client_name, location, "
+                                " project_type, external_works_included, "
+                                " infrastructure_included) "
+                                "VALUES (?,?,?,?,?,?,?) RETURNING id",
+                                (uid, (project_name + " - Solar Farm 20MWp")[:300],
+                                 proj.get("client_name") or "", location,
+                                 "capital_solar_farm", 0, 1))
+                            _sr2 = scur.fetchone()
+                            new_solar_pid = int(_sr2[0]) if _sr2 else int(
+                                scur.lastrowid or 0)
+
+                        c.execute(
+                            "UPDATE capital_investment_projects "
+                            "SET boq_solar_project_id=? "
+                            "WHERE id=? AND user_id=?",
+                            (new_solar_pid, pid, uid))
+
+                        s_bid = 0
+                        try:
+                            sbcur = c.execute(
+                                "INSERT INTO boq_buildings "
+                                "(project_id, tenant_id, building_name, "
+                                " building_code, primary_purpose, "
+                                " purpose_subtype, building_area, "
+                                " number_of_floors, basement_included, "
+                                " roof_level_included, external_area_included) "
+                                "VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
+                                (new_solar_pid, tenant_id,
+                                 "Solar Farm - 20MWp PV Array", "SOLAR_FARM",
+                                 "infrastructure", "solar_farm", 0, 1, 0, 0, 1))
+                            _sbr = sbcur.fetchone()
+                            s_bid = int(_sbr[0]) if _sbr else int(
+                                sbcur.lastrowid or 0)
+                        except Exception:
+                            try:
+                                sbcur = c.execute(
+                                    "INSERT INTO boq_buildings "
+                                    "(project_id, building_name, "
+                                    " building_code, number_of_floors) "
+                                    "VALUES (?,?,?,?) RETURNING id",
+                                    (new_solar_pid,
+                                     "Solar Farm - 20MWp PV Array",
+                                     "SOLAR_FARM", 1))
+                                _sbr2 = sbcur.fetchone()
+                                s_bid = int(_sbr2[0]) if _sbr2 else int(
+                                    sbcur.lastrowid or 0)
+                            except Exception:
+                                s_bid = 0
+
+                        s_fid = 0
+                        if s_bid:
+                            try:
+                                sfcur = c.execute(
+                                    "INSERT INTO boq_floors "
+                                    "(building_id, project_id, tenant_id, "
+                                    " floor_name, floor_level, floor_type) "
+                                    "VALUES (?,?,?,?,?,?) RETURNING id",
+                                    (s_bid, new_solar_pid, tenant_id,
+                                     "Array Field", 0, "ground"))
+                                _sfr = sfcur.fetchone()
+                                s_fid = int(_sfr[0]) if _sfr else int(
+                                    sfcur.lastrowid or 0)
+                            except Exception:
+                                try:
+                                    sfcur = c.execute(
+                                        "INSERT INTO boq_floors "
+                                        "(building_id, project_id, floor_name, "
+                                        " floor_level, floor_type) "
+                                        "VALUES (?,?,?,?,?) RETURNING id",
+                                        (s_bid, new_solar_pid, "Array Field", 0,
+                                         "ground"))
+                                    _sfr2 = sfcur.fetchone()
+                                    s_fid = int(_sfr2[0]) if _sfr2 else int(
+                                        sfcur.lastrowid or 0)
+                                except Exception:
+                                    s_fid = 0
+                        if s_fid:
+                            solar_ctx = (new_solar_pid, s_bid, s_fid)
+
+                        if links_ready and s_fid:
+                            try:
+                                c.execute(
+                                    "INSERT INTO capital_investment_boq_links "
+                                    "(capital_investment_project_id, user_id, "
+                                    " tenant_id, facility_code, source_kind, "
+                                    " boq_project_id, boq_building_id, "
+                                    " boq_floor_id, service_codes_csv) "
+                                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                                    (pid, uid, tenant_id, "solar_farm",
+                                     "solar_farm", new_solar_pid,
+                                     s_bid or None, s_fid or None, ""))
+                            except Exception:
+                                link_errors += 1
+                    except Exception:
+                        # Solar BOQ is additive; a failure here must not roll back
+                        # the facilities BOQ that already succeeded. Log + carry on.
+                        try:
+                            from flask import current_app
+                            current_app.logger.exception(
+                                "capital step9 solar BOQ creation failed pid=%s",
+                                pid)
+                        except Exception:
+                            pass
+            except Exception:
+                # Connection-level failure opening/committing the solar txn: the
+                # facilities BOQ already committed, so just log and continue.
+                try:
+                    from flask import current_app
+                    current_app.logger.exception(
+                        "capital step9 solar txn failed pid=%s", pid)
+                except Exception:
+                    pass
+
             # Auto-build cell-level items via the STANDARD engine (outside the
             # insert transaction to avoid a nested connection). To protect the
             # single free-tier worker we pre-price at most _CI_MAX_AUTOBUILD_FLOORS
@@ -4723,9 +5377,34 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                         except Exception:
                             pass
 
+            # Pre-price the SOLAR-FARM BOQ from the Step-7 sizing (one floor, so it
+            # never threatens the worker timeout). Separate boq_project, so it is
+            # additive and isolated from the facilities BOQ.
+            solar_items = 0
+            if solar_ctx:
+                _spid, _sbid, _sfid = solar_ctx
+                try:
+                    solar_items = int(_ci_build_solar_farm_items(
+                        get_db, _sfid, _sbid, _spid, uid, tenant_id, sizing) or 0)
+                except Exception:
+                    try:
+                        from flask import current_app
+                        current_app.logger.exception(
+                            "capital step9 solar autobuild failed pid=%s", pid)
+                    except Exception:
+                        pass
+
             notes = []
             if not links_ready or link_errors:
                 notes.append("facility links unavailable - see admin diagnostics")
+            if solar_ctx and solar_items:
+                notes.append(
+                    f"solar-farm BOQ #{solar_ctx[0]} created with {solar_items} "
+                    f"20MWp equipment line item(s)")
+            elif solar_ctx and not solar_items:
+                notes.append(
+                    "solar-farm BOQ created but not priced - complete Step 7 (PV "
+                    "design) so the 20MWp equipment quantities are available")
             if deferred_floors:
                 notes.append(
                     f"{deferred_floors} additional facility floor(s) linked but "
@@ -4757,6 +5436,173 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             boq_project_id=boq_project_id,
             electrical_selected=elec_cfg.get("services") or [],
         )
+
+    # ------------------------------------------------------------------
+    # POST /large-scale-solar/<pid>/boq/finish -- price any facility floors that
+    # Step 9 left LINKED-BUT-UNPRICED (the large-campus safety cap) AND the
+    # solar-farm floor if empty. Each facility floor is built with ITS OWN service
+    # scope (capital_investment_boq_links.service_codes_csv) -- NOT the project-
+    # wide services_csv the standard Build-all uses (owner #1/#5). Bounded per
+    # request (_CI_MAX_AUTOBUILD_FLOORS) so the free-tier worker is never hung;
+    # re-run the button to finish the rest. Idempotent (skips priced floors).
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/<int:pid>/boq/finish", methods=["POST"],
+               endpoint="capital_investment_boq_finish")
+    @login_required
+    def _boq_finish(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        csrf_protect()
+        proj = _load_project(pid)
+        uid = session["user_id"]
+        fac_pid = proj.get("boq_facilities_project_id") or proj.get("boq_project_id")
+        if not fac_pid:
+            flash("Generate the BOQ on Step 9 first.", "warning")
+            return redirect(url_for("capital_investment_step9", pid=pid))
+
+        # Pull the per-facility link scope (building/floor/service codes). Scoped
+        # to THIS project's own facilities BOQ (boq_project_id=fac_pid), only
+        # 'facility' links, the owning user, and the current tenant -- so a
+        # tampered/stale link can never drive a write into another project's or
+        # tenant's BOQ floor (Codex MED-3).
+        try:
+            from web_app import _kc_current_tenant_id as _kc_tid
+            _tid = _kc_tid()
+        except Exception:
+            _tid = None
+        _tclause = " AND (tenant_id=? OR tenant_id IS NULL)" if _tid else ""
+        _lparams = [pid, uid, int(fac_pid)] + ([_tid] if _tid else [])
+        links = []
+        try:
+            with get_db() as c:
+                links = c.execute(
+                    "SELECT facility_code, source_kind, boq_project_id, "
+                    "       boq_building_id, boq_floor_id, service_codes_csv "
+                    "FROM capital_investment_boq_links "
+                    "WHERE capital_investment_project_id=? AND user_id=? "
+                    "  AND boq_project_id=? AND source_kind='facility'" + _tclause +
+                    " ORDER BY id",
+                    tuple(_lparams)).fetchall()
+        except Exception:
+            links = []
+
+        try:
+            from web_app import _ci_autobuild_floor_items as _autobuild
+        except Exception:
+            _autobuild = None
+
+        built_facilities = 0
+        items_added = 0
+        remaining = 0
+        for lk in (links or []):
+            try:
+                src_kind = (lk[1] or "").strip()
+                bpid = int(lk[2] or 0)
+                bbid = int(lk[3] or 0)
+                bfid = int(lk[4] or 0)
+                svc_csv = (lk[5] or "")
+            except Exception:
+                continue
+            # Defence in depth: the query already restricts to facility links on
+            # fac_pid, but re-check before any write.
+            if src_kind != "facility" or bpid != int(fac_pid) or not bfid:
+                continue
+            # Validate the floor really belongs to this user's facilities BOQ
+            # (join to boq_projects) before pricing it.
+            try:
+                with get_db() as c:
+                    own = c.execute(
+                        "SELECT 1 FROM boq_floors f "
+                        "JOIN boq_projects p ON p.id=f.project_id "
+                        "WHERE f.id=? AND f.project_id=? AND p.user_id=? LIMIT 1",
+                        (bfid, int(fac_pid), uid)).fetchone()
+            except Exception:
+                own = None
+            if own is None:
+                continue
+            # Already priced? skip fast.
+            try:
+                with get_db() as c:
+                    has = c.execute(
+                        "SELECT 1 FROM boq_floor_items WHERE floor_id=? LIMIT 1",
+                        (bfid,)).fetchone()
+            except Exception:
+                has = None
+            if has is not None:
+                continue
+            if built_facilities >= _CI_MAX_AUTOBUILD_FLOORS:
+                remaining += 1
+                continue
+            svcs = [s for s in svc_csv.split(",") if s] or \
+                _ci_facility_services(lk[0] or "")
+            if _autobuild:
+                try:
+                    n = int(_autobuild(bfid, bbid, bpid, uid, svcs) or 0)
+                    if n:
+                        items_added += n
+                        built_facilities += 1
+                except Exception:
+                    try:
+                        from flask import current_app
+                        current_app.logger.exception(
+                            "boq finish autobuild floor=%s failed", bfid)
+                    except Exception:
+                        pass
+
+        # Solar floor: build if the solar BOQ exists but is empty.
+        solar_built = 0
+        s_pid = proj.get("boq_solar_project_id")
+        if s_pid:
+            try:
+                tenant_id = None
+                try:
+                    from web_app import _kc_current_tenant_id as _kc_tid
+                    tenant_id = _kc_tid()
+                except Exception:
+                    tenant_id = None
+                # Validate the solar BOQ project belongs to THIS user (join to
+                # boq_projects) and match floor.project_id=building.project_id
+                # before any write -- same ownership guard as the facility path
+                # (Codex MED-3 follow-up).
+                _stc = " AND (p.tenant_id IS NULL OR p.tenant_id=?)" if tenant_id else ""
+                _sparams = [int(s_pid), uid] + ([tenant_id] if tenant_id else [])
+                with get_db() as c:
+                    srow = c.execute(
+                        "SELECT b.id, f.id FROM boq_buildings b "
+                        "JOIN boq_floors f ON f.building_id=b.id "
+                        "       AND f.project_id=b.project_id "
+                        "JOIN boq_projects p ON p.id=b.project_id "
+                        "WHERE b.project_id=? AND p.user_id=? "
+                        "  AND (b.purpose_subtype='solar_farm' "
+                        "       OR b.building_code='SOLAR_FARM')" + _stc +
+                        " LIMIT 1", tuple(_sparams)).fetchone()
+                    has_solar = c.execute(
+                        "SELECT 1 FROM boq_floor_items WHERE project_id=? "
+                        "AND user_id=? LIMIT 1",
+                        (int(s_pid), uid)).fetchone()
+                if srow and has_solar is None:
+                    pv_cfg = _safe_json(proj.get("pv_config"))
+                    sizing = pv_cfg.get("sizing") or {}
+                    solar_built = int(_ci_build_solar_farm_items(
+                        get_db, int(srow[1]), int(srow[0]), int(s_pid),
+                        uid, tenant_id, sizing) or 0)
+            except Exception:
+                try:
+                    from flask import current_app
+                    current_app.logger.exception(
+                        "boq finish solar build failed pid=%s", pid)
+                except Exception:
+                    pass
+
+        msg = (f"Priced {built_facilities} facility floor(s) "
+               f"({items_added} item(s))")
+        if solar_built:
+            msg += f" + {solar_built} solar-farm item(s)"
+        if remaining:
+            msg += (f"; {remaining} facility floor(s) still pending - click "
+                    f"Finish BOQ pricing again to continue")
+        flash(msg + ".", "success" if (items_added or solar_built) else "info")
+        return redirect(url_for("capital_investment_project", pid=pid))
 
     # ------------------------------------------------------------------
     # GET /large-scale-solar/<pid>/step10 -- Marketplace (curated category
@@ -5004,9 +5850,10 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         if fx <= 0:
             fx = 12.0
         cur = proj.get("currency") or "GHS"
-        boq_pid = proj.get("boq_project_id")
+        boq_pid = proj.get("boq_facilities_project_id") or proj.get("boq_project_id")
 
-        cost = _ci_cost_plan(get_db, boq_pid, uid, fx=fx)
+        cost = _ci_cost_plan(get_db, boq_pid, uid, fx=fx,
+                             extra_project_ids=[proj.get("boq_solar_project_id")])
         yld = _ci_yield_profile(pv_cfg, gps_lat=proj.get("gps_lat")) or {}
         cash = _ci_cashflow_plan(fin_cfg)
 
@@ -5063,7 +5910,11 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         if fx <= 0:
             fx = 12.0
         cur = proj.get("currency") or "GHS"
-        cost = _ci_cost_plan(get_db, proj.get("boq_project_id"), uid, fx=fx)
+        cost = _ci_cost_plan(
+            get_db,
+            proj.get("boq_facilities_project_id") or proj.get("boq_project_id"),
+            uid, fx=fx,
+            extra_project_ids=[proj.get("boq_solar_project_id")])
 
         import io
         import re as _re
@@ -5159,6 +6010,53 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             for col, w in zip("ABCDEFG", (22, 6, 46, 8, 10, 14, 16)):
                 sh.column_dimensions[col].width = w
 
+        # Always surface a tab for every SELECTED facility service that has NO
+        # priced rows yet (deferred floors / lean starter) so the owner never sees
+        # a genuinely-missing service at the bottom (owner #2). A service that DOES
+        # have rows (possibly under section-title sheets above) is skipped -- we
+        # check real row existence by service_code so the placeholder never lies.
+        try:
+            _sel_codes = _ci_derive_boq_services(
+                _safe_json(proj.get("facility_config")),
+                _safe_json(proj.get("technology_config")),
+                _safe_json(proj.get("electrical_config")))
+            from web_app import _BOQ_SERVICE_LABEL as _svc_lbl
+        except Exception:
+            _sel_codes, _svc_lbl = [], {}
+        _priced_svc_codes: set = set()
+        try:
+            _fpid = proj.get("boq_facilities_project_id") or proj.get("boq_project_id")
+            if _fpid:
+                with get_db() as _cc:
+                    for _rr in _cc.execute(
+                        "SELECT DISTINCT service_code FROM boq_floor_items "
+                        "WHERE project_id=? AND user_id=?",
+                            (int(_fpid), uid)).fetchall():
+                        if _rr and _rr[0]:
+                            _priced_svc_codes.add(str(_rr[0]))
+        except Exception:
+            _priced_svc_codes = set()
+        for _code in _sel_codes:
+            if _code in _priced_svc_codes:
+                continue   # this service already has priced rows somewhere
+            _lbl = (_svc_lbl.get(_code) if isinstance(_svc_lbl, dict)
+                    else None) or _code.replace("_", " ").title()
+            _key = _re.sub(r'[\[\]:\*\?/\\]', " ",
+                           str(_lbl)).strip()[:28].lower()
+            if not _key or _key in used_titles:
+                continue
+            sh = wb.create_sheet(_sheet_title(_lbl))
+            head = ["Building", "#", "Description", "Unit", "Qty",
+                    f"Rate ({cur})", f"Amount ({cur})"]
+            sh.append(head)
+            for c in range(1, len(head) + 1):
+                sh.cell(1, c).font = hdr
+                sh.cell(1, c).fill = fill
+            sh.append(["(no priced rows yet - open the BOQ and use Build-all to "
+                       "add items for this service)"])
+            for col, w in zip("ABCDEFG", (22, 6, 46, 8, 10, 14, 16)):
+                sh.column_dimensions[col].width = w
+
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
@@ -5195,7 +6093,11 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         if fx <= 0:
             fx = 12.0
         cur = proj.get("currency") or "GHS"
-        cost = _ci_cost_plan(get_db, proj.get("boq_project_id"), uid, fx=fx)
+        cost = _ci_cost_plan(
+            get_db,
+            proj.get("boq_facilities_project_id") or proj.get("boq_project_id"),
+            uid, fx=fx,
+            extra_project_ids=[proj.get("boq_solar_project_id")])
         yld = _ci_yield_profile(pv_cfg, gps_lat=proj.get("gps_lat")) or {}
         cash = _ci_cashflow_plan(fin_cfg)
 
@@ -5349,7 +6251,14 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         except (TypeError, ValueError):
             _rfx = 12.0
         try:
-            _rboq = _ci_boq_actuals(get_db, proj.get("boq_project_id"), uid, _rfx)
+            # Reports reflect the WHOLE capital investment: facilities BOQ +
+            # solar-farm BOQ (Codex MED-5). Finance reconciliation stays
+            # facilities-only elsewhere.
+            _rboq = _ci_boq_actuals(
+                get_db,
+                proj.get("boq_facilities_project_id") or proj.get("boq_project_id"),
+                uid, _rfx,
+                extra_project_ids=[proj.get("boq_solar_project_id")])
         except Exception:
             _rboq = None
         md, title = _build_report_markdown(report_key, proj, opp, _rboq)
