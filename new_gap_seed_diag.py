@@ -28,12 +28,33 @@ def _gap_seed_diag():
             out["mcb_A9F74116_present_before"] = cnt
     except Exception as e:
         out["db_state_error"] = repr(e)
-    # Run the seed with full traceback capture
+    # Run the seed steps INLINE (bypassing the seed's own try/except that
+    # swallows + rolls back) so the real failing statement surfaces.
+    out["steps"] = []
     try:
-        _seed_solar_farm_gap_products()
-        out["seed_ran"] = True
+        with get_db() as c:
+            for _code, _name, _icon, _order in _SF_NEW_CATEGORIES:
+                c.execute(
+                    "INSERT INTO product_categories (code, name, icon, display_order) "
+                    "VALUES (?,?,?,?) ON CONFLICT (code) DO NOTHING",
+                    (_code, _name, _icon, _order))
+            out["steps"].append("category_insert_ok")
+            cats = {r["code"]: r["id"] for r in c.execute(
+                "SELECT id, code FROM product_categories").fetchall()}
+            out["steps"].append("cats_has_cb=%s" % ("circuit_breakers" in cats))
+            code, sub, name, brand, model, spec, unit, price_usd, lt = _SOLAR_FARM_GAP_PRODUCTS[0]
+            cat_id = cats.get(code, 0)
+            c.execute(
+                "INSERT INTO equipment_catalog (category, name, brand, model, spec, "
+                "unit, price_usd, supplier_id, lead_time_days, category_id, "
+                "subcategory, is_public_visible, is_verified) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,1,1)",
+                ("Circuit Breakers", name, brand, model, spec, unit,
+                 price_usd, 0, lt, cat_id, sub))
+            out["steps"].append("product_insert_ok")
+        out["inline_committed"] = True
     except Exception:
-        out["seed_exception"] = traceback.format_exc()
+        out["inline_exception"] = traceback.format_exc()
     # DB state after
     try:
         with get_db() as c:
