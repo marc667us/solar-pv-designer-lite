@@ -7,12 +7,18 @@
   data is ever deleted. Usage in a template:
 
     {% from '_dashboard_reset.html' import reset_filters %}
-    {{ reset_filters() }}                      {# default label "Reset" #}
-    {{ reset_filters('Reset filters') }}       {# custom label #}
+    {{ reset_filters() }}                       {# default label "Reset" #}
+    {{ reset_filters('Reset filters') }}        {# custom label #}
+    {{ reset_filters(onclick="sessionStorage.removeItem('foo')") }}  {# also clear client-side state #}
+
+  The optional `onclick` runs BEFORE navigation, so a dashboard that keeps
+  selections in sessionStorage/localStorage can wipe them too (the subsequent
+  reload then starts clean). Keep the JS a single safe expression.
 #}
-{% macro reset_filters(label='Reset', size='sm') %}
+{% macro reset_filters(label='Reset', size='sm', onclick='') %}
 <a href="{{ request.path }}"
    class="btn btn-{{ size }} btn-outline-secondary"
+   {% if onclick %}onclick="{{ onclick }}"{% endif %}
    title="Clear all filters, search and selections and return to the default view. No data is deleted.">
   <i class="bi bi-arrow-counterclockwise me-1"></i>{{ label }}
 </a>

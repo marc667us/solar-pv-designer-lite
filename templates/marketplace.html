@@ -30,11 +30,8 @@
       </a>
     </div>
     {% else %}
-    <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
-      <div class="text-secondary small">
-        Signed in as <span class="text-warning fw-bold">{{ user.username }}</span>
-      </div>
-      {{ reset_filters('Reset') }}
+    <div class="text-secondary small">
+      Signed in as <span class="text-warning fw-bold">{{ user.username }}</span>
     </div>
     {% endif %}
   </div>
@@ -99,9 +96,9 @@
     </select>
     {% endif %}
     <button class="btn btn-warning fw-bold px-4" type="submit"><i class="bi bi-funnel me-1"></i>Filter</button>
-    {% if q or selected_category %}
-    <a href="{{ url_for('marketplace_public') }}" class="btn btn-outline-secondary"><i class="bi bi-x-circle me-1"></i>Clear</a>
-    {% endif %}
+    {# Always-visible reset at the filter bar (every marketplace visitor, signed in
+       or not): clears search / category / country / currency back to default. #}
+    {{ reset_filters('Reset', 'md') }}
   </form>
   {% if currency and currency != 'USD' %}
   <div class="rounded-3 px-3 py-2 mb-3" style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.30);font-size:12px;color:#e0e0f0">

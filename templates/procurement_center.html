@@ -12,7 +12,9 @@
       <h5 class="fw-black mb-0">Procurement Center</h5>
       <div class="text-secondary small">Search products · tick the box on each one you want · pick a document type and currency in the <span class="text-warning fw-bold">gold panel</span> · click Add</div>
     </div>
-    <div class="ms-auto">{{ reset_filters('Reset') }}</div>
+    {# Also wipe the sessionStorage-backed product selection (STORE_KEY) so a
+       reset truly clears ALL values, not just the URL search. #}
+    <div class="ms-auto">{{ reset_filters('Reset', onclick="try{sessionStorage.removeItem('procurement_center.selected')}catch(e){}") }}</div>
   </div>
 </div>
 
