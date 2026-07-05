@@ -5040,6 +5040,136 @@ FI_APP_STATUS_CLASS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Slice 10c (2026-07-05) -- extend Project Funding to REGULAR /project/<pid>
+# projects (residential / C&I), not just generation-station Capital Investment
+# projects. Regular projects store their engineering + economics as a JSON blob
+# in projects.data_json (a DIFFERENT data model from capital_investment_projects),
+# so they are BRIDGED into the SAME funding tables + institution registry rather
+# than duplicated:
+#   * their funding rows are keyed by a NAMESPACED project id -- PF_PID_OFFSET +
+#     real pid -- so a regular project #5 can never collide with generation-station
+#     project #5 on the shared (project_id, tenant_id) primary keys. The offset is
+#     far above any real AUTOINCREMENT/SERIAL id.
+#   * a denormalized display snapshot (name / client / type / kwp / currency /
+#     country / region) is stored ON the funding row so the institution workspace
+#     never has to join the residential `projects` table.
+#   * the finance metrics are ADAPTED from the residential economics dict into the
+#     same finance_config.computed shape _ci_funding_overview / _ci_bankability /
+#     _ci_funding_assessment already read -- zero re-modelling, one funding engine.
+# Nothing here changes the generation-station funding code paths.
+# ---------------------------------------------------------------------------
+PF_PID_OFFSET = 1_000_000_000    # namespace boundary for regular-project funding
+
+
+def _pf_fid(pid) -> int:
+    """Real /project/<pid> id -> namespaced funding-table project id."""
+    return PF_PID_OFFSET + int(pid)
+
+
+def _pf_is_regular(fid) -> bool:
+    """True when a funding-table project id belongs to a regular project."""
+    try:
+        return int(fid) >= PF_PID_OFFSET
+    except (TypeError, ValueError):
+        return False
+
+
+def _pf_real_pid(fid) -> int:
+    """Namespaced funding-table project id -> real /project/<pid> id."""
+    return int(fid) - PF_PID_OFFSET
+
+
+def _pf_finance_config(eco: dict) -> dict:
+    """Adapt a residential/C&I economics dict (projects.data_json['results']
+    ['economics'], produced by calc_economics) into the finance_config.computed
+    shape the funding engine reads. READ ONLY -- no re-modelling; the residential
+    finance numbers are reused verbatim so the funding view can never disagree
+    with the project's own economic report."""
+    import math as _m
+    if not isinstance(eco, dict):
+        eco = {}
+
+    def _f(v):
+        try:
+            f = float(v)
+            return f if _m.isfinite(f) else None
+        except (TypeError, ValueError):
+            return None
+    cf_rows = eco.get("cf_rows") if isinstance(eco.get("cf_rows"), list) else []
+    net_by_year, rev_by_year, opex_by_year = [], [], []
+    for row in cf_rows:
+        if not isinstance(row, dict):
+            continue
+        try:
+            if int(row.get("year", 0) or 0) <= 0:
+                continue                   # year 0 = construction, excluded
+        except (TypeError, ValueError):
+            continue
+        net_by_year.append(_f(row.get("net")) or 0.0)
+        rev_by_year.append(_f(row.get("gross")) or 0.0)
+        opex_by_year.append(_f(row.get("om")) or 0.0)
+    dscr = _f(eco.get("dscr"))
+    computed = {
+        "total_capex_local": _f(eco.get("total_local")),
+        "equity_local": _f(eco.get("equity")) or 0.0,
+        "npv_local": _f(eco.get("npv")),
+        "irr_pct": _f(eco.get("irr_pct")),
+        "payback_years": _f(eco.get("payback")),
+        "project_life_yr": 25.0,
+        "dscr_min": dscr,
+        "dscr_avg": dscr,
+    }
+    if net_by_year:
+        computed["net_by_year"] = net_by_year
+        computed["revenue_by_year"] = rev_by_year
+        computed["opex_by_year"] = opex_by_year
+    return {"computed": computed}
+
+
+def _pf_project_view(proj_row: dict) -> dict:
+    """Map a residential `projects` row (with parsed data_json under 'data') into
+    the dict shape the funding templates + helpers expect: the CI field names
+    (project_name / client_name / project_type / target_kwp[kWp] / currency /
+    country / region / user_id / tenant_id / id) plus a synthesized
+    finance_config. `id` is the NAMESPACED funding id; _pf_real_pid recovers the
+    real one. `_kind='project'` lets shared code + templates branch safely."""
+    data = proj_row.get("data") if isinstance(proj_row.get("data"), dict) else {}
+    results = data.get("results") if isinstance(data.get("results"), dict) else {}
+    eco = results.get("economics") if isinstance(results.get("economics"), dict) else {}
+    real_pid = int(proj_row.get("id"))
+
+    def _f(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+    # Residential PV size is in kW (== kWp); keep target_kwp in kWp to match the
+    # generation-station field. project_funding.html renders it as kWp.
+    kwp = _f(results.get("pv_kw")) or _f(results.get("system_kw")) \
+        or _f(data.get("pv_kw"))
+    return {
+        "id": _pf_fid(real_pid),
+        "real_pid": real_pid,
+        "_kind": "project",
+        "user_id": proj_row.get("user_id"),
+        "tenant_id": proj_row.get("tenant_id") or '',
+        "project_name": (proj_row.get("name") or data.get("project_name")
+                         or ("Project #%s" % real_pid)),
+        "client_name": (data.get("client_name") or data.get("customer_name")
+                        or data.get("client") or ''),
+        "project_type": (data.get("project_type") or data.get("building_type")
+                         or data.get("customer_type") or 'residential'),
+        "target_kwp": kwp,
+        "currency": data.get("currency") or 'GHS',
+        "country": data.get("country") or '',
+        "region": data.get("region") or '',
+        "district": data.get("district") or '',
+        "developer": '', "investor": '',
+        "finance_config": json.dumps(_pf_finance_config(eco)),
+    }
+
+
 def _ensure_ci_funding_schema(get_db) -> bool:
     """Create capital_investment_funding once (SQLite + Postgres safe)."""
     if _CI_FUNDING_STATE["ready"]:
@@ -5060,12 +5190,34 @@ def _ensure_ci_funding_schema(get_db) -> bool:
         " updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
         " PRIMARY KEY (capital_investment_project_id, tenant_id))"
     )
+    # Slice 10c -- project_kind discriminator + denormalized display snapshot for
+    # regular /project/<pid> funding rows (so the institution workspace never has
+    # to join the residential `projects` table). Added via per-column ALTER in
+    # their OWN transactions so a duplicate-column failure on Postgres aborts only
+    # that statement (house pattern, matches the selection-schema upgrades).
+    upgrades = (
+        "ALTER TABLE capital_investment_funding ADD COLUMN "
+        "project_kind TEXT NOT NULL DEFAULT 'capital'",
+        "ALTER TABLE capital_investment_funding ADD COLUMN proj_name TEXT",
+        "ALTER TABLE capital_investment_funding ADD COLUMN proj_client TEXT",
+        "ALTER TABLE capital_investment_funding ADD COLUMN proj_type TEXT",
+        "ALTER TABLE capital_investment_funding ADD COLUMN proj_kwp REAL",
+        "ALTER TABLE capital_investment_funding ADD COLUMN proj_currency TEXT",
+        "ALTER TABLE capital_investment_funding ADD COLUMN proj_country TEXT",
+        "ALTER TABLE capital_investment_funding ADD COLUMN proj_region TEXT",
+    )
     try:
         with get_db() as c:
             c.execute(ddl)
         _CI_FUNDING_STATE["ready"] = True
     except Exception:
         _CI_FUNDING_STATE["ready"] = False
+    for stmt in upgrades:
+        try:
+            with get_db() as c:
+                c.execute(stmt)
+        except Exception:
+            pass   # column already present / backend mismatch
     return bool(_CI_FUNDING_STATE["ready"])
 
 
@@ -5175,6 +5327,11 @@ def _ensure_fi_selection_schema(get_db) -> bool:
         "decided_at TIMESTAMP",
         "ALTER TABLE funding_institution_selections ADD COLUMN "
         "decided_by INTEGER",
+        # Slice 10c -- discriminates a regular /project/<pid> application from a
+        # generation-station one so the workspace read can resolve the right
+        # source without inspecting the namespaced id.
+        "ALTER TABLE funding_institution_selections ADD COLUMN "
+        "project_kind TEXT NOT NULL DEFAULT 'capital'",
     )
     try:
         with get_db() as c:
@@ -6232,6 +6389,297 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         return redirect(url_for("capital_investment_funding", pid=pid))
 
     # ==================================================================
+    # Slice 10c -- Project Funding for REGULAR /project/<pid> projects. Reuses the
+    # SAME institution registry + funding tables + institution workspace as the
+    # generation-station flow; only the project SOURCE differs (residential
+    # projects.data_json). Funding rows are namespaced by _pf_fid(pid) so they can
+    # never collide with a generation-station project of the same integer id, and
+    # a display snapshot is stored on the row so the workspace needs no join to the
+    # residential `projects` table. Every route re-loads the project user-scoped.
+    # ==================================================================
+    def _pf_load(pid: int) -> dict:
+        """Load + adapt a regular project owned by the current user, or 404."""
+        from web_app import get_project as _get_project
+        prow = _get_project(pid)          # user-scoped (WHERE id=? AND user_id=?)
+        if not prow:
+            abort(404)
+        return _pf_project_view(prow)
+
+    @app.route("/project/<int:pid>/funding",
+               methods=["GET", "POST"], endpoint="project_funding")
+    @login_required
+    def _pf_funding(pid: int):
+        proj = _pf_load(pid)               # 404 unless owned by this user
+        fid = proj["id"]                   # namespaced funding id
+        uid = session.get("user_id")
+        _ctid = _tenant_id()
+        tid_s = str(_ctid) if _ctid is not None else ''
+        ov = _ci_funding_overview(proj)
+
+        if request.method == "POST":
+            csrf_protect()
+            req_amt = ov.get("debt_local")
+            equity = ov.get("equity_local")
+            score = ov.get("funding_score") if ov.get("bank_available") else None
+            ok = False
+            if _ensure_ci_funding_schema(get_db):
+                try:
+                    with get_db() as c:
+                        # Atomic upsert incl. the denormalized display snapshot so
+                        # the institution workspace never joins `projects`.
+                        c.execute(
+                            "INSERT INTO capital_investment_funding "
+                            "(capital_investment_project_id, tenant_id, user_id, "
+                            " status, funding_requested, customer_equity, "
+                            " funding_score, project_kind, proj_name, proj_client, "
+                            " proj_type, proj_kwp, proj_currency, proj_country, "
+                            " proj_region) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                            "ON CONFLICT (capital_investment_project_id, tenant_id) "
+                            "DO UPDATE SET status='requested', "
+                            "funding_requested=EXCLUDED.funding_requested, "
+                            "customer_equity=EXCLUDED.customer_equity, "
+                            "funding_score=EXCLUDED.funding_score, "
+                            "proj_name=EXCLUDED.proj_name, "
+                            "proj_client=EXCLUDED.proj_client, "
+                            "proj_type=EXCLUDED.proj_type, "
+                            "proj_kwp=EXCLUDED.proj_kwp, "
+                            "proj_currency=EXCLUDED.proj_currency, "
+                            "proj_country=EXCLUDED.proj_country, "
+                            "proj_region=EXCLUDED.proj_region, "
+                            "updated_at=CURRENT_TIMESTAMP",
+                            (fid, tid_s, uid, "requested", req_amt, equity, score,
+                             "project", proj.get("project_name"),
+                             proj.get("client_name"), proj.get("project_type"),
+                             proj.get("target_kwp"), proj.get("currency"),
+                             proj.get("country"), proj.get("region")))
+                    ok = True
+                except Exception:
+                    ok = False
+            if ok:
+                try:
+                    from new_boq_hierarchy_schema import boq_audit
+                    boq_audit(get_db, uid, "project_funding_requested",
+                              "project", pid,
+                              "funding requested amount=%s score=%s" % (
+                                  req_amt, score))
+                except Exception:
+                    pass
+                flash("Project funding requested. Next: select a financial "
+                      "institution and submit your application.", "success")
+            else:
+                flash("Could not record the funding request - please try again.",
+                      "danger")
+            return redirect(url_for("project_funding", pid=pid))
+
+        # GET
+        fund = _ci_funding_row(fid, uid, tid_s)
+        institutions, selections = _ci_funding_institutions(fid, uid, tid_s)
+        threads, shipments = {}, {}
+        for iid in selections.keys():
+            threads[iid] = _fi_thread(fid, iid, tid_s)
+            shipments[iid] = _fi_shipments(fid, iid, tid_s)
+        return render_template(
+            "capital_investment/project_funding.html",
+            user=current_user(), proj=proj, pid=pid, ov=ov, fund=fund,
+            institutions=institutions, selections=selections, threads=threads,
+            shipments=shipments, ship_status_labels=FI_SHIP_STATUS_LABELS,
+            ship_status_class=FI_SHIP_STATUS_CLASS)
+
+    # POST /project/<pid>/funding/submit -- submit to selected APPROVED
+    # institution(s) with consent (regular-project twin of the CI submit).
+    @app.route("/project/<int:pid>/funding/submit",
+               methods=["POST"], endpoint="project_funding_submit")
+    @login_required
+    def _pf_funding_submit(pid: int):
+        proj = _pf_load(pid)
+        fid = proj["id"]
+        csrf_protect()
+        uid = session.get("user_id")
+        _ctid = _tenant_id()
+        tid_s = str(_ctid) if _ctid is not None else ''
+        f = request.form
+        if not f.get("consent"):
+            flash("You must consent to share your project reports before "
+                  "submitting to a financial institution.", "warning")
+            return redirect(url_for("project_funding", pid=pid))
+        chosen = [x for x in f.getlist("institution_id") if x]
+        chosen = list(dict.fromkeys(chosen))       # de-dup, preserve order
+        if not chosen:
+            flash("Select at least one financial institution.", "warning")
+            return redirect(url_for("project_funding", pid=pid))
+        _ensure_fi_schema(get_db)
+        _ensure_fi_selection_schema(get_db)
+        _ensure_ci_funding_schema(get_db)
+        # Only currently-approved ids are recorded/persisted -- never the raw
+        # posted list (a forged POST must not leak a rejected/suspended id).
+        approved_ids = []
+        try:
+            with get_db() as c:
+                for iid in chosen:
+                    okr = c.execute(
+                        "SELECT 1 FROM financial_institutions WHERE "
+                        "institution_id=? AND status='approved' LIMIT 1",
+                        (iid,)).fetchone()
+                    if not okr:
+                        continue
+                    # INSERT OR IGNORE is backend-safe: db_adapter rewrites it to
+                    # `ON CONFLICT DO NOTHING` on Postgres (db_adapter.py:105-119);
+                    # this mirrors the live generation-station submit exactly.
+                    c.execute(
+                        "INSERT OR IGNORE INTO funding_institution_selections "
+                        "(capital_investment_project_id, institution_id, "
+                        " tenant_id, user_id, consent, status, project_kind) "
+                        "VALUES (?,?,?,?,1,'submitted','project')",
+                        (fid, iid, tid_s, uid))
+                    approved_ids.append(iid)
+                if approved_ids:
+                    ov2 = _ci_funding_overview(proj)
+                    c.execute(
+                        "INSERT INTO capital_investment_funding "
+                        "(capital_investment_project_id, tenant_id, user_id, "
+                        " status, funding_requested, customer_equity, "
+                        " funding_score, selected_institutions, project_kind, "
+                        " proj_name, proj_client, proj_type, proj_kwp, "
+                        " proj_currency, proj_country, proj_region) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        "ON CONFLICT (capital_investment_project_id, tenant_id) "
+                        "DO UPDATE SET status='submitted', "
+                        "selected_institutions=EXCLUDED.selected_institutions, "
+                        "updated_at=CURRENT_TIMESTAMP",
+                        (fid, tid_s, uid, "submitted", ov2.get("debt_local"),
+                         ov2.get("equity_local"),
+                         ov2.get("funding_score") if ov2.get("bank_available")
+                         else None, json.dumps(approved_ids), "project",
+                         proj.get("project_name"), proj.get("client_name"),
+                         proj.get("project_type"), proj.get("target_kwp"),
+                         proj.get("currency"), proj.get("country"),
+                         proj.get("region")))
+        except Exception:
+            approved_ids = []
+        submitted_count = len(approved_ids)
+        if submitted_count:
+            try:
+                from new_boq_hierarchy_schema import boq_audit
+                boq_audit(get_db, uid, "project_funding_submitted",
+                          "project", pid,
+                          "submitted to %d institution(s)" % submitted_count)
+            except Exception:
+                pass
+            flash("Funding application submitted to %d financial "
+                  "institution(s)." % submitted_count, "success")
+        else:
+            flash("Could not submit - none of the selected institutions are "
+                  "currently approved. Please try again.", "danger")
+        return redirect(url_for("project_funding", pid=pid))
+
+    # POST /project/<pid>/funding/message -- applicant replies to an institution
+    # (owner-scoped; only consented threads to a still-approved institution).
+    @app.route("/project/<int:pid>/funding/message",
+               methods=["POST"], endpoint="project_funding_message")
+    @login_required
+    def _pf_funding_message(pid: int):
+        proj = _pf_load(pid)               # owner-scoped
+        fid = proj["id"]
+        csrf_protect()
+        uid = session.get("user_id")
+        _ctid = _tenant_id()
+        tid_s = str(_ctid) if _ctid is not None else ''
+        f = request.form
+        institution_id = (f.get("institution_id") or "").strip()
+        body = (f.get("body") or "").strip()[:5000]
+        if not body:
+            flash("Message body is required.", "warning")
+            return redirect(url_for("project_funding", pid=pid))
+        _ensure_fi_selection_schema(get_db)
+        _ensure_fi_schema(get_db)
+        allowed = False
+        try:
+            with get_db() as c:
+                r = c.execute(
+                    "SELECT 1 FROM funding_institution_selections s "
+                    "JOIN financial_institutions fi "
+                    "  ON fi.institution_id = s.institution_id "
+                    "WHERE s.capital_investment_project_id=? "
+                    "AND s.institution_id=? AND COALESCE(s.tenant_id,'')=? "
+                    "AND s.consent=1 AND fi.status='approved' LIMIT 1",
+                    (fid, institution_id, tid_s)).fetchone()
+                allowed = bool(r)
+        except Exception:
+            allowed = False
+        if not allowed:
+            flash("You can only message an approved institution you submitted "
+                  "to.", "warning")
+            return redirect(url_for("project_funding", pid=pid))
+        subject = (f.get("subject") or "").strip()[:200]
+        emailed_to, channel = None, "message"
+        if f.get("send_email"):
+            inst_email = None
+            try:
+                with get_db() as c:
+                    ir = c.execute(
+                        "SELECT email FROM financial_institutions "
+                        "WHERE institution_id=?", (institution_id,)).fetchone()
+                inst_email = _row_get(ir, "email")
+            except Exception:
+                inst_email = None
+            appl_name = proj.get("client_name") or "the applicant"
+            if inst_email and _fi_send_funding_email(
+                    inst_email, subject or "Applicant reply", body, appl_name):
+                channel, emailed_to = "email", inst_email
+            else:
+                flash("Reply saved, but the institution email could not be "
+                      "sent.", "warning")
+        ok = _fi_add_message(fid, institution_id, tid_s,
+                             sender_role="applicant", sender_uid=uid,
+                             msg_type="message", subject=subject, body=body,
+                             channel=channel, emailed_to=emailed_to)
+        flash("Reply posted%s." % (" and emailed" if emailed_to else "")
+              if ok else "Could not post the reply.",
+              "success" if ok else "danger")
+        return redirect(url_for("project_funding", pid=pid))
+
+    # POST /project/<pid>/funding/shipment -- applicant records a hard-copy
+    # dispatch to an institution they submitted to (approved + consent).
+    @app.route("/project/<int:pid>/funding/shipment",
+               methods=["POST"], endpoint="project_funding_shipment")
+    @login_required
+    def _pf_funding_shipment(pid: int):
+        proj = _pf_load(pid)               # owner-scoped
+        fid = proj["id"]
+        csrf_protect()
+        uid = session.get("user_id")
+        _ctid = _tenant_id()
+        tid_s = str(_ctid) if _ctid is not None else ''
+        institution_id = (request.form.get("institution_id") or "").strip()
+        _ensure_fi_selection_schema(get_db)
+        _ensure_fi_schema(get_db)
+        allowed = False
+        try:
+            with get_db() as c:
+                r = c.execute(
+                    "SELECT 1 FROM funding_institution_selections s "
+                    "JOIN financial_institutions fi "
+                    "  ON fi.institution_id = s.institution_id "
+                    "WHERE s.capital_investment_project_id=? "
+                    "AND s.institution_id=? AND COALESCE(s.tenant_id,'')=? "
+                    "AND s.consent=1 AND fi.status='approved' LIMIT 1",
+                    (fid, institution_id, tid_s)).fetchone()
+                allowed = bool(r)
+        except Exception:
+            allowed = False
+        if not allowed:
+            flash("You can only send documents to an approved institution you "
+                  "submitted to.", "warning")
+            return redirect(url_for("project_funding", pid=pid))
+        ok = _fi_add_shipment(fid, institution_id, tid_s, request.form,
+                              role="applicant", uid=uid,
+                              default_status="dispatched")
+        flash("Hard-copy dispatch recorded." if ok
+              else "Could not record the dispatch.",
+              "success" if ok else "danger")
+        return redirect(url_for("project_funding", pid=pid))
+
+    # ==================================================================
     # Slice 4 -- Financial Institution Workspace. An approved institution's
     # owner sees ONLY the funding applications customers explicitly submitted to
     # it (funding_institution_selections). This is a deliberate CROSS-TENANT read
@@ -6301,6 +6749,56 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             rows = []
         return rows, insts
 
+    def _pf_workspace_rows(uid):
+        """Slice 10c -- the REGULAR /project/<pid> funding applications assigned to
+        this user's approved institutions. Same auth boundary as
+        _fi_workspace_rows (owned + approved institution, consent=1); the display
+        fields come from the denormalized snapshot on capital_investment_funding
+        so there is NO join to the residential `projects` table. The CI workspace
+        query's INNER JOIN to capital_investment_projects already excludes these
+        namespaced rows, so this reads them separately and the route concatenates.
+        """
+        _ensure_fi_schema(get_db)
+        _ensure_fi_selection_schema(get_db)
+        _ensure_ci_funding_schema(get_db)
+        rows = []
+        try:
+            with get_db() as c:
+                rr = c.execute(
+                    "SELECT s.capital_investment_project_id AS pid, "
+                    " s.institution_id AS institution_id, "
+                    " s.tenant_id AS tenant_id, s.status AS app_status, "
+                    " s.submitted_at AS submitted_at, "
+                    " fi.name AS institution_name, "
+                    " fund.funding_requested AS funding_requested, "
+                    " fund.customer_equity AS customer_equity, "
+                    " fund.funding_score AS funding_score, "
+                    " fund.risk_rating AS risk_rating, "
+                    " fund.proj_name AS project_name, "
+                    " fund.proj_client AS client_name, "
+                    " fund.proj_type AS project_type, "
+                    " fund.proj_country AS country, "
+                    " fund.proj_region AS region, "
+                    " fund.proj_kwp AS target_kwp, "
+                    " fund.proj_currency AS currency "
+                    "FROM funding_institution_selections s "
+                    "JOIN financial_institutions fi "
+                    "  ON fi.institution_id = s.institution_id "
+                    "JOIN capital_investment_funding fund "
+                    "  ON fund.capital_investment_project_id = "
+                    "     s.capital_investment_project_id "
+                    " AND COALESCE(fund.tenant_id,'') = COALESCE(s.tenant_id,'') "
+                    "WHERE fi.created_by_user_id=? AND fi.status='approved' "
+                    " AND s.consent=1 AND s.project_kind='project' "
+                    "ORDER BY s.submitted_at DESC", (uid,)).fetchall()
+                rows = [dict(r) for r in rr] if rr else []
+        except Exception:
+            rows = []
+        for r in rows:
+            r["kind"] = "project"           # workspace labels kWp (not MWp)
+            r["district"] = None
+        return rows
+
     # GET /funding/workspace -- the approved institution's dashboard + list.
     @app.route("/funding/workspace",
                endpoint="funding_institution_workspace")
@@ -6308,6 +6806,12 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
     def _fi_workspace():
         uid = session.get("user_id")
         rows, insts = _fi_workspace_rows(uid)
+        for _r in rows:
+            _r.setdefault("kind", "capital")
+        # Slice 10c -- merge regular /project/<pid> applications (namespaced ids
+        # the CI query's INNER join excludes), then re-sort the unified list.
+        rows = rows + _pf_workspace_rows(uid)
+        rows.sort(key=lambda r: (r.get("submitted_at") or ""), reverse=True)
 
         # Status filter (allowlist -> no SQL injection). Filters the visible
         # table only; the dashboard metrics are always over the full set.
@@ -6397,13 +6901,33 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                     return None
                 sel = dict(sel)
                 tid = sel.get("tenant_id") or ''
-                proj = c.execute(
-                    "SELECT * FROM capital_investment_projects "
-                    "WHERE id=? AND COALESCE(CAST(tenant_id AS TEXT),'')=?",
-                    (pid, tid)).fetchone()
-                if not proj:
-                    return None
-                proj = dict(proj)
+                if _pf_is_regular(pid):
+                    # Regular /project/<pid> application (Slice 10c): load from the
+                    # residential `projects` table -- a different data model -- and
+                    # adapt it into the funding view. Authorization is ALREADY
+                    # proved above (owned+approved institution + consented
+                    # selection); the project is loaded by id here (cross-tenant,
+                    # exactly like the CI branch: the reviewing institution is a
+                    # different party from the project owner).
+                    prow = c.execute(
+                        "SELECT * FROM projects WHERE id=?",
+                        (_pf_real_pid(pid),)).fetchone()
+                    if not prow:
+                        return None
+                    prow = dict(prow)
+                    try:
+                        prow["data"] = json.loads(prow.get("data_json") or "{}")
+                    except (TypeError, ValueError):
+                        prow["data"] = {}
+                    proj = _pf_project_view(prow)
+                else:
+                    proj = c.execute(
+                        "SELECT * FROM capital_investment_projects "
+                        "WHERE id=? AND COALESCE(CAST(tenant_id AS TEXT),'')=?",
+                        (pid, tid)).fetchone()
+                    if not proj:
+                        return None
+                    proj = dict(proj)
                 fund = c.execute(
                     "SELECT * FROM capital_investment_funding "
                     "WHERE capital_investment_project_id=? "
@@ -6520,6 +7044,12 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         uid = session.get("user_id")
         actx = _fi_load_application(uid, pid, institution_id)
         if not actx:
+            abort(404)
+        # Slice 10c: the CI report builders (_build_report_markdown) model a
+        # generation-station project. Regular /project applications don't carry
+        # that shape, so the institution report grid is hidden for them in the
+        # template and this route 404s rather than render an ill-formed PDF.
+        if _pf_is_regular(pid):
             abort(404)
         if report_key not in REPORT_KEYS:
             abort(404)

@@ -127,7 +127,9 @@
           </td>
           <td class="small">{{ project_types.get(r.project_type, r.project_type or '—') }}</td>
           <td class="small">{{ (r.district ~ ' ' if r.district else '') ~ (r.region ~ ' ' if r.region else '') ~ (r.country or '—') }}</td>
-          <td class="text-end small">{% if r.target_kwp %}{{ '%.1f'|format(r.target_kwp/1000) }} MWp{% else %}—{% endif %}</td>
+          {# Slice 10c: regular /project applications carry capacity in kWp; only
+             generation-station (kind!='project') applications are MWp. #}
+          <td class="text-end small">{% if r.target_kwp %}{% if r.kind == 'project' %}{{ '%.1f'|format(r.target_kwp) }} kWp{% else %}{{ '%.1f'|format(r.target_kwp/1000) }} MWp{% endif %}{% else %}—{% endif %}</td>
           <td class="text-end small">{{ money(r.funding_requested, cur) }}</td>
           <td class="text-end small">{{ money(cost, cur) }}</td>
           <td class="text-end small">{% if r.funding_score is not none %}{{ r.funding_score }}{% else %}—{% endif %}</td>

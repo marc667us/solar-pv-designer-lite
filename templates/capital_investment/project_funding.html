@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block title %}{{ proj.project_name }} - Project Funding{% endblock %}
+{% block content %}
+{% set cur = proj.currency or 'GHS' %}
+{# Slice 10c -- Project Funding for a REGULAR /project/<pid> (residential / C&I).
+   Same institution registry + funding engine as the generation-station flow; the
+   finance figures are read from this project's own economics (nothing re-entered). #}
+<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+  <div>
+    <h5 class="fw-bold mb-0"><i class="bi bi-bank text-warning me-1"></i>Project Funding</h5>
+    <div class="text-secondary small">
+      {{ proj.project_name }}
+      {% if proj.target_kwp %}&middot; {{ '%.1f'|format(proj.target_kwp) }} kWp{% endif %}
+      &middot; {{ (proj.project_type or 'residential')|replace('_',' ')|title }}
+    </div>
+  </div>
+  <a href="{{ url_for('project_results', pid=pid) }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Back to project
+  </a>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card bg-dark border-secondary mb-3">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span class="fw-bold small"><i class="bi bi-clipboard-data me-1 text-warning"></i>Funding overview</span>
+        {% if fund %}<span class="badge bg-info text-dark">{{ fund.status|replace('_',' ')|title }}</span>{% endif %}
+      </div>
+      <div class="card-body">
+        <div class="text-secondary small mb-3">
+          <i class="bi bi-info-circle me-1"></i>Auto-filled from your existing project
+          design &amp; economics &mdash; nothing is re-entered.
+        </div>
+        <div class="row g-2">
+          {% macro cell(label, value) %}
+            <div class="col-6 col-md-4">
+              <div class="border border-secondary rounded p-2 h-100 bg-black">
+                <div class="text-secondary" style="font-size:10px;text-transform:uppercase;letter-spacing:.4px">{{ label }}</div>
+                <div class="fw-semibold text-light">{{ value }}</div>
+              </div>
+            </div>
+          {% endmacro %}
+          {{ cell('Customer', proj.client_name or '—') }}
+          {{ cell('Type', (proj.project_type or 'residential')|replace('_',' ')|title) }}
+          {{ cell('Location', (proj.region ~ ' ' if proj.region else '') ~ (proj.country or '—')) }}
+          {{ cell('Capacity', ('%.1f kWp'|format(proj.target_kwp)) if proj.target_kwp else '—') }}
+          {{ cell('Currency', cur) }}
+          {% if ov.finance_available %}
+          {{ cell('Project cost (CAPEX)', cur ~ ' ' ~ '{:,.0f}'.format(ov.capex_local) if ov.capex_local is not none else '—') }}
+          {{ cell('Customer equity', cur ~ ' ' ~ '{:,.0f}'.format(ov.equity_local) if ov.equity_local is not none else '—') }}
+          {{ cell('Funding required (debt)', cur ~ ' ' ~ '{:,.0f}'.format(ov.debt_local) if ov.debt_local is not none else '—') }}
+          {{ cell('Project IRR', ('%.1f%%'|format(ov.irr_pct)) if ov.irr_pct is not none else '—') }}
+          {{ cell('NPV', cur ~ ' ' ~ '{:,.0f}'.format(ov.npv_local) if ov.npv_local is not none else '—') }}
+          {{ cell('Payback', ('%.1f yrs'|format(ov.payback_years)) if ov.payback_years is not none else '—') }}
+          {% endif %}
+        </div>
+        {% if not ov.finance_available %}
+        <div class="alert alert-warning bg-dark border-warning text-warning small mt-3 mb-0">
+          <i class="bi bi-exclamation-triangle me-1"></i>Run this project's design &amp;
+          <strong>economic analysis</strong> to auto-fill the project cost, funding
+          requirement and readiness metrics lenders use.
+          <a href="{{ url_for('project_results', pid=pid) }}" class="text-warning fw-bold">Open the project</a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card bg-dark border-secondary mb-3">
+      <div class="card-header"><span class="fw-bold small"><i class="bi bi-speedometer2 me-1 text-warning"></i>Funding readiness</span></div>
+      <div class="card-body text-center">
+        {% if ov.bank_available %}
+        <div class="display-6 fw-bold text-{{ ov.funding_rating_class }}">{{ ov.funding_score }}<span class="fs-6 text-secondary">/100</span></div>
+        <div class="badge bg-{{ ov.funding_rating_class }} mb-2">{{ ov.funding_rating }}</div>
+        <div class="text-secondary small">Derived from your project economics (DSCR, IRR, NPV, payback).</div>
+        {% else %}
+        <div class="text-secondary small py-2">Complete the design &amp; economics to compute the funding readiness score.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card bg-dark border-secondary">
+      <div class="card-body">
+        <form method="post" action="{{ url_for('project_funding', pid=pid) }}" class="m-0">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-warning fw-bold w-100"
+                  {% if not ov.finance_available %}disabled title="Complete the project economics first"{% endif %}>
+            <i class="bi bi-send-check me-1"></i>{{ 'Update funding request' if fund else 'Request Project Funding' }}
+          </button>
+        </form>
+        <div class="text-secondary small mt-2">
+          {% if fund %}Requested {{ fund.updated_at }}. {% endif %}Next: select a
+          financial institution, give consent, and submit your application.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Select approved financial institutions + consent, then submit. #}
+<div class="card bg-dark border-secondary mt-3">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span class="fw-bold small"><i class="bi bi-building-check me-1 text-warning"></i>Financial institutions</span>
+    {% if selections %}<span class="badge bg-info text-dark">Submitted to {{ selections|length }}</span>{% endif %}
+  </div>
+  <div class="card-body">
+    {% if selections %}
+    <div class="mb-3">
+      <div class="fw-bold small text-uppercase text-secondary mb-2">Submitted to</div>
+      <div class="d-flex flex-wrap gap-2">
+        {% for iid, sel in selections.items() %}
+          {% set inst = (institutions | selectattr('institution_id','equalto',iid) | first) %}
+          <span class="badge bg-secondary">{{ inst.name if inst else iid }} &middot; {{ sel.status|replace('_',' ')|title }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if institutions %}
+    <form method="post" action="{{ url_for('project_funding_submit', pid=pid) }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="text-secondary small mb-2">Select the approved institution(s) to review this project's funding package. They only see this application after you submit.</div>
+      <div class="row g-2">
+        {% for inst in institutions %}
+        <div class="col-md-6">
+          <label class="d-flex align-items-start gap-2 border border-secondary rounded p-2 bg-black h-100">
+            <input type="checkbox" name="institution_id" value="{{ inst.institution_id }}" class="form-check-input mt-1"
+                   {% if inst.institution_id in selections %}checked{% endif %}>
+            <span>
+              <span class="fw-semibold text-light">{{ inst.name }}</span>
+              <span class="text-secondary small d-block">
+                {{ (inst.region ~ ' ' if inst.region else '') ~ (inst.country or '') }}
+                {% if inst.loan_min is not none or inst.loan_max is not none %} &middot; loan {{ '{:,.0f}'.format(inst.loan_min) if inst.loan_min is not none else '?' }}&ndash;{{ '{:,.0f}'.format(inst.loan_max) if inst.loan_max is not none else '?' }}{% endif %}
+                &middot; fee {{ '%.1f'|format(inst.fee_pct) if inst.fee_pct is not none else '2.0' }}%
+              </span>
+            </span>
+          </label>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="form-check mt-3">
+        <input type="checkbox" name="consent" id="fundConsent" value="1" class="form-check-input" required>
+        <label for="fundConsent" class="form-check-label small text-light">
+          I consent to share this project's reports, BOQ/BOM summaries and financial analysis with the selected financial institution(s).
+        </label>
+      </div>
+      <button type="submit" class="btn btn-warning fw-bold mt-3"><i class="bi bi-send-check me-1"></i>Submit to selected institutions</button>
+    </form>
+    {% else %}
+    <div class="text-secondary small">
+      No approved financial institutions are available yet.
+      <a href="{{ url_for('funding_institution_register') }}" class="text-warning fw-bold">Register an institution</a>
+      or check back once an administrator has approved one.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# Procurement handoff once any institution has approved / completed the application. #}
+{% set _approved = selections.values() | selectattr('status','in',['approved','completed']) | list %}
+{% if _approved %}
+<div class="card bg-dark border-secondary mt-3">
+  <div class="card-body d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div class="small text-light"><i class="bi bi-check-circle-fill text-success me-1"></i>Funding approved &mdash; you can proceed to procurement for this project.</div>
+    <a href="{{ url_for('project_procurement', pid=pid) }}" class="btn btn-warning btn-sm fw-bold"><i class="bi bi-cart-plus-fill me-1"></i>Proceed to Procurement</a>
+  </div>
+</div>
+{% endif %}
+
+{# Communication + hard-copy document tracking with the institutions you submitted to. #}
+{% if selections %}
+<div class="card bg-dark border-secondary mt-3">
+  <div class="card-header"><span class="fw-bold small"><i class="bi bi-chat-left-text me-1 text-warning"></i>Communication</span></div>
+  <div class="card-body">
+    {% for iid, sel in selections.items() %}
+    {% set inst = (institutions | selectattr('institution_id','equalto',iid) | first) %}
+    {% set th = threads.get(iid, []) %}
+    <div class="border border-secondary rounded p-2 mb-3 bg-black">
+      <div class="fw-semibold text-light small mb-2"><i class="bi bi-bank me-1 text-warning"></i>{{ inst.name if inst else iid }}</div>
+      {% if th %}
+      <div class="mb-2" style="max-height:260px;overflow-y:auto">
+        {% for m in th %}
+        {% set mine = m.sender_role == 'applicant' %}
+        <div class="d-flex mb-2 {{ 'justify-content-end' if mine else 'justify-content-start' }}">
+          <div class="rounded p-2 {{ 'bg-secondary bg-opacity-25' if mine else 'bg-dark border border-secondary' }}" style="max-width:80%">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="badge bg-{{ 'warning text-dark' if mine else 'info text-dark' }}" style="font-size:9px">{{ 'You' if mine else 'Institution' }}</span>
+              {% if m.msg_type and m.msg_type != 'message' %}<span class="badge bg-dark border border-secondary" style="font-size:9px">{{ m.msg_type|replace('_',' ')|title }}</span>{% endif %}
+              {% if m.channel == 'email' %}<i class="bi bi-envelope-check text-success" style="font-size:10px" title="Emailed"></i>{% endif %}
+              <span class="text-secondary ms-auto" style="font-size:10px">{{ m.created_at }}</span>
+            </div>
+            {% if m.subject %}<div class="fw-semibold text-light small">{{ m.subject }}</div>{% endif %}
+            <div class="small text-light" style="white-space:pre-wrap">{{ m.body }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="text-secondary small mb-2">No messages yet with this institution.</div>
+      {% endif %}
+      <form method="post" action="{{ url_for('project_funding_message', pid=pid) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="institution_id" value="{{ iid }}">
+        <div class="input-group input-group-sm">
+          <textarea name="body" rows="1" maxlength="5000" required class="form-control bg-black text-light border-secondary" placeholder="Reply to {{ inst.name if inst else 'this institution' }}…"></textarea>
+          <button type="submit" class="btn btn-outline-warning" title="Send reply"><i class="bi bi-send"></i></button>
+        </div>
+        <div class="form-check mt-1">
+          <input type="checkbox" name="send_email" id="applEmail_{{ iid }}" value="1" class="form-check-input">
+          <label for="applEmail_{{ iid }}" class="form-check-label text-secondary" style="font-size:11px">Also email the institution</label>
+        </div>
+      </form>
+
+      {% set sh = shipments.get(iid, []) %}
+      <div class="mt-3 pt-2 border-top border-secondary">
+        <div class="text-secondary text-uppercase fw-bold mb-2" style="font-size:10px;letter-spacing:.4px"><i class="bi bi-box-seam me-1"></i>Hard-copy documents sent to this institution</div>
+        {% if sh %}
+        <div class="d-flex flex-wrap gap-2 mb-2">
+          {% for s in sh %}
+          <span class="badge bg-dark border border-secondary text-light" title="{{ s.courier_company }} {{ s.tracking_number }}">
+            {{ s.document_type or 'Document' }} &middot;
+            <span class="text-{{ ship_status_class.get(s.verification_status,'secondary') }}">{{ ship_status_labels.get(s.verification_status, s.verification_status) }}</span>
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <form method="post" action="{{ url_for('project_funding_shipment', pid=pid) }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="institution_id" value="{{ iid }}">
+          <div class="row g-1">
+            <div class="col-6 col-md-3"><input name="document_type" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary" placeholder="Document type"></div>
+            <div class="col-6 col-md-3"><input name="courier_company" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary" placeholder="Courier"></div>
+            <div class="col-6 col-md-3"><input name="tracking_number" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary" placeholder="Tracking #"></div>
+            <div class="col-6 col-md-2"><input type="date" name="dispatch_date" class="form-control form-control-sm bg-black text-light border-secondary" title="Dispatch date"></div>
+            <div class="col-12 col-md-1 d-grid"><button type="submit" class="btn btn-outline-warning btn-sm" title="Track dispatch"><i class="bi bi-plus-lg"></i></button></div>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

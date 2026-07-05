@@ -481,6 +481,200 @@ def test_status_ordering_invariant():
     assert idx["submitted"] < idx["approved"]
 
 
+# ==========================================================================
+# Slice 10c -- Project Funding extended to REGULAR /project/<pid> projects.
+# The generation-station tables/registry are reused; regular projects are
+# namespaced by _pf_fid so they can never collide, and carry a display snapshot
+# on the funding row so the institution workspace needs no `projects` join.
+# ==========================================================================
+# The regular-project workspace read, mirrored verbatim from _pf_workspace_rows
+# (the isolation boundary under test): owner + approved institution + consent=1
+# + project_kind='project', display fields from the denormalized snapshot.
+_PF_WORKSPACE_SQL = (
+    "SELECT s.capital_investment_project_id AS pid, s.institution_id, "
+    " fund.proj_name AS project_name, fund.proj_kwp AS target_kwp "
+    "FROM funding_institution_selections s "
+    "JOIN financial_institutions fi ON fi.institution_id=s.institution_id "
+    "JOIN capital_investment_funding fund "
+    " ON fund.capital_investment_project_id=s.capital_investment_project_id "
+    " AND COALESCE(fund.tenant_id,'')=COALESCE(s.tenant_id,'') "
+    "WHERE fi.created_by_user_id=? AND fi.status='approved' "
+    " AND s.consent=1 AND s.project_kind='project' "
+    "ORDER BY s.submitted_at DESC"
+)
+
+
+def _seed_regular(conn):
+    """A residential /project #5 (owned by user 99) whose customer submitted a
+    funding application to approved institution FI-A. Keyed by the NAMESPACED id
+    so it shares the tables with generation-station project #5 without colliding.
+    """
+    fid = m._pf_fid(5)
+    conn.execute(
+        "INSERT INTO capital_investment_funding("
+        "capital_investment_project_id,tenant_id,user_id,status,"
+        "funding_requested,customer_equity,funding_score,project_kind,"
+        "proj_name,proj_client,proj_type,proj_kwp,proj_currency,proj_country,"
+        "proj_region) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (fid, 'custR', 99, 'submitted', 70000, 30000, 66, 'project',
+         'Home PV #5', 'Yaw Mensah', 'residential', 8.5, 'GHS', 'Ghana',
+         'Ashanti'))
+    conn.execute(
+        "INSERT INTO funding_institution_selections("
+        "capital_investment_project_id,institution_id,tenant_id,user_id,"
+        "consent,status,project_kind) VALUES(?,?,?,?,?,?,?)",
+        (fid, 'FI-A', 'custR', 99, 1, 'submitted', 'project'))
+    conn.commit()
+    return fid
+
+
+def test_pf_namespacing_roundtrip():
+    """Namespaced ids never collide with real project ids and round-trip."""
+    assert m._pf_fid(5) >= m.PF_PID_OFFSET
+    assert m._pf_is_regular(m._pf_fid(5)) and not m._pf_is_regular(5)
+    assert m._pf_real_pid(m._pf_fid(123)) == 123
+    # A generation-station id (small int) is never mistaken for a regular one.
+    assert not m._pf_is_regular(999999) and m._pf_is_regular(m.PF_PID_OFFSET)
+
+
+def test_pf_finance_config_adapter():
+    """calc_economics output maps into the finance_config.computed keys the
+    funding engine reads; the year-0 construction row is excluded from the
+    per-year series."""
+    eco = {'total_local': 100000, 'equity': 30000, 'npv': 45000,
+           'irr_pct': 18.5, 'payback': 6.2, 'dscr': 1.4,
+           'cf_rows': [{'year': 0, 'net': -30000, 'gross': 0, 'om': 0},
+                       {'year': 1, 'net': 12000, 'gross': 15000, 'om': 3000},
+                       {'year': 2, 'net': 12500, 'gross': 15500, 'om': 3000}]}
+    fc = m._pf_finance_config(eco)['computed']
+    assert fc['total_capex_local'] == 100000 and fc['equity_local'] == 30000
+    assert fc['dscr_min'] == 1.4 and fc['dscr_avg'] == 1.4
+    assert fc['payback_years'] == 6.2 and fc['irr_pct'] == 18.5
+    assert fc['net_by_year'] == [12000.0, 12500.0]        # year 0 dropped
+    assert fc['revenue_by_year'] == [15000.0, 15500.0]
+    # Bankability computes a real 0-100 score from the adapted metrics.
+    bank = m._ci_bankability(fc)
+    assert bank['available'] and 0 <= bank['score'] <= 100
+
+
+def test_pf_project_view_shape():
+    """A residential `projects` row maps to the CI funding view shape with a
+    namespaced id, kWp capacity and a synthesized finance_config."""
+    prow = {'id': 7, 'user_id': 3, 'name': 'Home PV',
+            'data': {'currency': 'GHS', 'client_name': 'Ama',
+                     'results': {'pv_kw': 8.5,
+                                 'economics': {'total_local': 5e4}}}}
+    pv = m._pf_project_view(prow)
+    assert pv['id'] == m._pf_fid(7) and pv['real_pid'] == 7
+    assert pv['_kind'] == 'project' and pv['target_kwp'] == 8.5
+    assert pv['client_name'] == 'Ama' and pv['currency'] == 'GHS'
+    assert json.loads(pv['finance_config'])['computed']['total_capex_local'] == 5e4
+
+
+def test_pf_snapshot_columns_exist():
+    """The additive Slice-10c columns landed on the shared tables."""
+    conn, _ = _fresh_db()
+    fcols = {r[1] for r in conn.execute(
+        "PRAGMA table_info(capital_investment_funding)").fetchall()}
+    for col in ("project_kind", "proj_name", "proj_client", "proj_type",
+                "proj_kwp", "proj_currency", "proj_country", "proj_region"):
+        assert col in fcols, col
+    scols = {r[1] for r in conn.execute(
+        "PRAGMA table_info(funding_institution_selections)").fetchall()}
+    assert "project_kind" in scols
+
+
+def test_pf_no_pk_collision():
+    """A regular project #5 and a generation-station project #5 both hold funding
+    rows in the same table without violating the (project_id, tenant) PK."""
+    conn, _ = _fresh_db()
+    _seed(conn)                       # inserts CI funding rows for pid 1 and 2
+    conn.execute("INSERT INTO capital_investment_funding("
+                 "capital_investment_project_id,tenant_id,user_id,status) "
+                 "VALUES(5,'custA',99,'submitted')")          # CI project #5
+    fid = m._pf_fid(5)
+    conn.execute("INSERT INTO capital_investment_funding("
+                 "capital_investment_project_id,tenant_id,user_id,status,"
+                 "project_kind) VALUES(?,?,?,?,?)",
+                 (fid, 'custA', 99, 'submitted', 'project'))  # regular #5
+    conn.commit()
+    n = conn.execute("SELECT COUNT(*) FROM capital_investment_funding "
+                     "WHERE capital_investment_project_id IN (5,?)",
+                     (fid,)).fetchone()[0]
+    assert n == 2                     # both coexist, no collision
+
+
+def test_pf_workspace_isolation():
+    """The regular-project workspace read returns ONLY the owning approved
+    institution's consented project applications, and is disjoint from the CI
+    read (project_kind='project')."""
+    conn, _ = _fresh_db()
+    _seed(conn)                       # CI apps (project_kind defaults 'capital')
+    fid = _seed_regular(conn)         # one regular app to FI-A (owner=user 10)
+    rows = conn.execute(_PF_WORKSPACE_SQL, (10,)).fetchall()
+    assert len(rows) == 1 and rows[0]["pid"] == fid
+    assert rows[0]["project_name"] == "Home PV #5"    # snapshot, no projects join
+    assert rows[0]["target_kwp"] == 8.5
+    # Non-owner sees nothing.
+    assert conn.execute(_PF_WORKSPACE_SQL, (20,)).fetchall() == []
+    # Withdrawn consent removes it.
+    conn.execute("UPDATE funding_institution_selections SET consent=0 "
+                 "WHERE capital_investment_project_id=?", (fid,))
+    conn.commit()
+    assert conn.execute(_PF_WORKSPACE_SQL, (10,)).fetchall() == []
+
+
+def test_pf_workspace_excludes_ci_rows():
+    """The regular read must NOT surface generation-station applications (they are
+    project_kind='capital'), proving the two workspace reads don't double-count."""
+    conn, _ = _fresh_db()
+    _seed(conn)                       # CI selections, kind defaults 'capital'
+    # user 10 owns FI-A which has a CI application (project 1) -- but via the
+    # CI-only path, so the *regular* query must return zero rows here.
+    assert conn.execute(_PF_WORKSPACE_SQL, (10,)).fetchall() == []
+
+
+def test_pf_load_application_reads_projects_table():
+    """_fi_load_application's regular branch loads the residential project from
+    `projects` by the REAL id (mirrored predicate) and adapts it -- the auth gate
+    (owned+approved institution + consent) is unchanged and proved before load."""
+    conn, _ = _fresh_db()
+    _seed(conn)
+    fid = _seed_regular(conn)
+    conn.execute("CREATE TABLE projects(id INTEGER PRIMARY KEY, user_id INT, "
+                 "name TEXT, data_json TEXT)")
+    conn.execute("INSERT INTO projects VALUES(5,99,'Home PV #5',?)",
+                 (json.dumps({"currency": "GHS", "client_name": "Yaw Mensah",
+                              "results": {"pv_kw": 8.5,
+                                          "economics": {"total_local": 70000,
+                                                        "equity": 30000,
+                                                        "npv": 12000,
+                                                        "irr_pct": 14,
+                                                        "payback": 7.0,
+                                                        "dscr": 1.3}}}),))
+    conn.commit()
+    # Auth gate (mirrors the first two queries of _fi_load_application).
+    inst = conn.execute("SELECT 1 FROM financial_institutions WHERE "
+                        "institution_id='FI-A' AND created_by_user_id=10 "
+                        "AND status='approved'").fetchone()
+    sel = conn.execute("SELECT * FROM funding_institution_selections WHERE "
+                       "capital_investment_project_id=? AND institution_id='FI-A' "
+                       "AND consent=1", (fid,)).fetchone()
+    assert inst and sel
+    # Regular branch: load the real project row and adapt it.
+    prow = conn.execute("SELECT * FROM projects WHERE id=?",
+                        (m._pf_real_pid(fid),)).fetchone()
+    assert prow is not None
+    prow = dict(prow)
+    prow["data"] = json.loads(prow["data_json"])
+    proj = m._pf_project_view(prow)
+    assert proj["_kind"] == "project" and proj["id"] == fid
+    assert proj["client_name"] == "Yaw Mensah"
+    # Overview computes from the adapted finance config (no re-modelling).
+    fc = json.loads(proj["finance_config"])["computed"]
+    assert m._ci_bankability(fc)["available"]
+
+
 def _run_all():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     passed = 0

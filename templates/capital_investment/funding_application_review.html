@@ -14,7 +14,7 @@
       <span class="badge bg-secondary me-1">{{ inst.name }}</span>
       reviewing <strong class="text-light">{{ proj.client_name or 'customer' }}</strong> &mdash;
       {{ proj.project_name }}
-      {% if proj.target_kwp %}&middot; {{ '%.1f'|format(proj.target_kwp/1000) }} MWp{% endif %}
+      {% if proj.target_kwp %}&middot; {% if proj._kind == 'project' %}{{ '%.1f'|format(proj.target_kwp) }} kWp{% else %}{{ '%.1f'|format(proj.target_kwp/1000) }} MWp{% endif %}{% endif %}
     </div>
   </div>
   <a href="{{ url_for('funding_institution_workspace') }}" class="btn btn-outline-secondary btn-sm">
@@ -89,7 +89,7 @@
           {{ cell('Developer', proj.developer or '—') }}
           {{ cell('Investor / Sponsor', proj.investor or '—') }}
           {{ cell('Location', (proj.district ~ ' ' if proj.district else '') ~ (proj.region ~ ' ' if proj.region else '') ~ (proj.country or '—')) }}
-          {{ cell('Capacity', ('%.1f MWp'|format(proj.target_kwp/1000)) if proj.target_kwp else '—') }}
+          {{ cell('Capacity', (('%.1f kWp'|format(proj.target_kwp)) if proj._kind == 'project' else ('%.1f MWp'|format(proj.target_kwp/1000))) if proj.target_kwp else '—') }}
           {{ cell('Project type', project_types.get(proj.project_type, proj.project_type or '—')) }}
           {{ cell('Project cost (CAPEX)', money(ov.capex_local) if ov.capex_local is not none else money(cost)) }}
           {{ cell('Customer equity', money(ov.equity_local) if ov.equity_local is not none else money(fund.customer_equity if fund else none)) }}
@@ -103,10 +103,18 @@
       </div>
     </div>
 
-    {# Report engine reuse — institution-scoped downloads. #}
+    {# Report engine reuse — institution-scoped downloads. Generation-station
+       applications only; a regular /project application (Slice 10c) uses a
+       different report set, so the grid is replaced with a note + the applicant
+       is asked to share reports through the Communication thread. #}
     <div class="card bg-dark border-secondary">
       <div class="card-header"><span class="fw-bold small"><i class="bi bi-journal-arrow-down me-1 text-warning"></i>Reports &amp; due diligence</span></div>
       <div class="card-body">
+        {% if proj._kind == 'project' %}
+        <div class="text-secondary small mb-0"><i class="bi bi-info-circle me-1"></i>This is a
+          standard PV project application. Ask the applicant to share their design,
+          BOQ and economic report through the Communication thread below.</div>
+        {% else %}
         <div class="text-secondary small mb-2"><i class="bi bi-shield-check me-1"></i>Generated from the applicant's real project data, shared with your consent-backed access.</div>
         <div class="row g-2">
           {% for key, label, icon, _full in report_types %}
@@ -120,6 +128,7 @@
           </div>
           {% endfor %}
         </div>
+        {% endif %}
       </div>
     </div>
   </div>
