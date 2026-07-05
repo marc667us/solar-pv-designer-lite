@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Funding Workspace - Financial Institution{% endblock %}
 {% block content %}
+{% from '_dashboard_reset.html' import reset_filters %}
 {% macro money(v, cur) -%}
   {% if v is not none %}{{ cur }} {{ '{:,.0f}'.format(v) }}{% else %}&mdash;{% endif %}
 {%- endmacro %}
@@ -17,9 +18,12 @@
       {% endif %}
     </div>
   </div>
-  <a href="{{ url_for('funding_institution_register') }}" class="btn btn-outline-secondary btn-sm">
-    <i class="bi bi-plus-circle me-1"></i>Register another institution
-  </a>
+  <div class="d-flex gap-2">
+    {% if institutions %}{{ reset_filters() }}{% endif %}
+    <a href="{{ url_for('funding_institution_register') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-plus-circle me-1"></i>Register another institution
+    </a>
+  </div>
 </div>
 
 {% if not institutions %}

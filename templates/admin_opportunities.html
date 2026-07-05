@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Solar Opportunities{% endblock %}
 {% block content %}
+{% from '_dashboard_reset.html' import reset_filters %}
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
   <div>
     <h5 class="fw-black mb-0"><i class="bi bi-broadcast text-warning me-1"></i>Solar Opportunities (RFQ / RFP)</h5>
@@ -46,6 +47,7 @@
       </button>
     </form>
     {% endif %}
+    {{ reset_filters() }}
     <a href="{{ url_for('admin_opportunities', refresh=1) }}" class="btn btn-warning btn-sm fw-bold">
       <i class="bi bi-arrow-clockwise me-1"></i>Refresh now
     </a>

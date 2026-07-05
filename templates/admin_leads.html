@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Lead Management{% endblock %}
 {% block content %}
+{% from '_dashboard_reset.html' import reset_filters %}
 <div class="container-xl py-4">
 <div class="d-flex align-items-center gap-3 mb-4">
   <div style="font-size:32px;color:var(--solar-gold)"><i class="bi bi-person-lines-fill"></i></div>
@@ -8,7 +9,8 @@
     <h4 class="fw-black mb-0">Lead Management</h4>
     <div class="text-secondary small">Track and manage sales inquiries</div>
   </div>
-  <div class="ms-auto">
+  <div class="ms-auto d-flex gap-2">
+    {{ reset_filters() }}
     <a href="{{ url_for('admin_sales') }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-arrow-left me-1"></i>Sales Dashboard
     </a>

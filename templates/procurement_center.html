@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Procurement Center — SolarPro{% endblock %}
 {% block content %}
+{% from '_dashboard_reset.html' import reset_filters %}
 
 <div class="rounded-3 p-3 mb-3" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1030 60%,#0f1a22 100%);border:1px solid #1e1e3a">
   <div class="d-flex align-items-center gap-3">
@@ -11,6 +12,7 @@
       <h5 class="fw-black mb-0">Procurement Center</h5>
       <div class="text-secondary small">Search products · tick the box on each one you want · pick a document type and currency in the <span class="text-warning fw-bold">gold panel</span> · click Add</div>
     </div>
+    <div class="ms-auto">{{ reset_filters('Reset') }}</div>
   </div>
 </div>
 

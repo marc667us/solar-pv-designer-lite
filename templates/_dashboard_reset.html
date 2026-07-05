@@ -1,0 +1,19 @@
+{#
+  Reusable dashboard "Reset" control (owner directive 2026-07-05: every main
+  dashboard must have a reset button that clears all values back to the default
+  view). NON-DESTRUCTIVE: it navigates to the page's own path with NO query
+  string, which drops every active filter / search / sort / status selection and
+  reloads the dashboard fresh (also clearing any client-side input boxes). No
+  data is ever deleted. Usage in a template:
+
+    {% from '_dashboard_reset.html' import reset_filters %}
+    {{ reset_filters() }}                      {# default label "Reset" #}
+    {{ reset_filters('Reset filters') }}       {# custom label #}
+#}
+{% macro reset_filters(label='Reset', size='sm') %}
+<a href="{{ request.path }}"
+   class="btn btn-{{ size }} btn-outline-secondary"
+   title="Clear all filters, search and selections and return to the default view. No data is deleted.">
+  <i class="bi bi-arrow-counterclockwise me-1"></i>{{ label }}
+</a>
+{% endmacro %}

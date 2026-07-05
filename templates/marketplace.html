@@ -2,6 +2,7 @@
 {% block title %}Electrical Pricing Marketplace — Free · SolarPro{% endblock %}
 
 {% block content %}
+{% from '_dashboard_reset.html' import reset_filters %}
 
 <!-- Hero / header -->
 <div class="rounded-3 p-4 mb-4" style="background:linear-gradient(135deg,#0f0f22 0%,#1a1030 60%,#0f1a22 100%);border:1px solid #1e1e3a;position:relative;overflow:hidden">
@@ -29,8 +30,11 @@
       </a>
     </div>
     {% else %}
-    <div class="text-secondary small">
-      Signed in as <span class="text-warning fw-bold">{{ user.username }}</span>
+    <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+      <div class="text-secondary small">
+        Signed in as <span class="text-warning fw-bold">{{ user.username }}</span>
+      </div>
+      {{ reset_filters('Reset') }}
     </div>
     {% endif %}
   </div>

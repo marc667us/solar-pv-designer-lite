@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}My Project — Result History{% endblock %}
 {% block content %}
+{% from '_dashboard_reset.html' import reset_filters %}
 
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <div>
@@ -19,6 +20,7 @@
                  border:1px solid rgba(34,197,94,.45);font-size:11px">
       {{ rows|length }} result{{ '' if rows|length == 1 else 's' }}
     </span>
+    {{ reset_filters() }}
     {# Batch-delete: wipes every shading_history row owned by the
        calling user in one shot. Double-confirm in JS + audit-logged
        server-side. Owner ask 2026-06-26: "bring back the red button
