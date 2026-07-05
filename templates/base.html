@@ -454,7 +454,7 @@
         <li class="nav-item">
           <a class="nav-link {% if ep == 'project_new' %}active{% endif %}"
              href="{{ url_for('project_new') }}">
-            <i class="bi bi-plus-circle me-1"></i>New Project
+            <i class="bi bi-plus-circle me-1"></i>Create Standard Project
           </a>
         </li>
 
@@ -707,7 +707,7 @@
     <nav class="nav flex-column gap-1">
       <span class="text-secondary text-uppercase fw-bold px-2 mt-1" style="font-size:10px;letter-spacing:.5px">Quick access</span>
       <a class="nav-link py-1 px-2 rounded {% if ep=='dashboard' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('dashboard') }}"><i class="bi bi-grid-3x3-gap me-2"></i>Dashboard</a>
-      <a class="nav-link py-1 px-2 rounded {% if ep=='project_new' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('project_new') }}"><i class="bi bi-plus-circle me-2"></i>New Project</a>
+      <a class="nav-link py-1 px-2 rounded {% if ep=='project_new' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('project_new') }}"><i class="bi bi-plus-circle me-2"></i>Create Standard Project</a>
       <a class="nav-link py-1 px-2 rounded {% if ep and ep.startswith('capital_investment') %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('capital_investment_landing') }}"><i class="bi bi-lightning-charge me-2 text-warning"></i>Generation Station Design</a>
       <a class="nav-link py-1 px-2 rounded {% if ep=='marketplace_public' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('marketplace_public') }}"><i class="bi bi-bag-check-fill me-2 text-warning"></i>Marketplace</a>
       <a class="nav-link py-1 px-2 rounded {% if ep in ('news_index','news_detail','newsfeed_public','public_opportunities') %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('news_index') }}"><i class="bi bi-newspaper me-2 text-warning"></i>News</a>
@@ -775,7 +775,7 @@
         <div class="d-flex flex-column gap-1">
           {% if user %}
           <a class="footer-link" href="{{ url_for('dashboard') }}">Dashboard</a>
-          <a class="footer-link" href="{{ url_for('project_new') }}">New Project</a>
+          <a class="footer-link" href="{{ url_for('project_new') }}">Create Standard Project</a>
           <a class="footer-link" href="{{ url_for('procurement') }}">Procurement</a>
           <a class="footer-link" href="{{ url_for('tickets') }}">Support</a>
           {% else %}

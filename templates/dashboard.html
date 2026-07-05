@@ -239,7 +239,7 @@
       </a>
       {% else %}
       <a href="{{ url_for('project_new') }}" class="btn btn-solar">
-        <i class="bi bi-plus-lg me-1"></i>New Project
+        <i class="bi bi-plus-lg me-1"></i>Create Standard Project
       </a>
       {% endif %}
       <a href="{{ url_for('project_open') }}" class="btn btn-sm"
@@ -282,7 +282,7 @@
 <div class="row g-2 mb-4">
   {% for href,icon,bg,title,sub in [
     (url_for('myproject_list'),    'bi-folder2-open',            '#22c55e', 'My Project',         'Result history -- searchable'),
-    (url_for('project_new'),       'bi-plus-circle-fill',        '#f59e0b', 'New Project',        'Start a solar design'),
+    (url_for('project_new'),       'bi-plus-circle-fill',        '#f59e0b', 'Create Standard Project', 'Start a solar design'),
     (url_for('procurement_center'),'bi-cart-plus-fill',          '#ea580c', 'Procurement Center', 'Build price sheets / BOMs / BOQs'),
     (url_for('project_open'),      'bi-floppy-fill',             '#0ea5e9', 'Open File',          'Restore a saved .solarpro file'),
     (url_for('assessment_request'),'bi-clipboard2-pulse-fill',   '#a78bfa', 'Site Assessment',    'Submit a client request'),
@@ -344,7 +344,7 @@
     {% endif %}
     {% if not at_limit %}
     <a href="{{ url_for('project_new') }}" class="btn btn-solar btn-sm">
-      <i class="bi bi-plus-lg me-1"></i>New Project
+      <i class="bi bi-plus-lg me-1"></i>Create Standard Project
     </a>
     {% endif %}
   </div>

@@ -32661,22 +32661,32 @@ def _bc_funding_model(bill_check_result):
     lifetime_save = max(0.0, monthly_save * 12 * 25 - sys_cost)
 
     # Headline pitch
+    # Plain-language interpretation (owner 2026-07-05: the yellow "The Pitch"
+    # band was not understandable). Short sentences, no jargon, walks the three
+    # phases: today -> while repaying the loan -> after the loan is paid off.
     if combined_outlay <= bill and loan_payment > 0:
-        pitch = (f"Use about {portion_pct:.0f}% of your current monthly bill "
-                 f"(~GHS {loan_payment:,.0f}) to repay a {rec_kwp:,.1f} kWp solar "
-                 f"loan. During the {loan_years:.0f}-year loan you stay around "
-                 f"the same monthly outlay; after the loan ends your bill drops "
-                 f"by {post_loan_drop_pct:.0f}% and you save GHS "
-                 f"{monthly_save:,.0f}/month for the rest of the 25-year system life.")
+        pitch = (f"Right now you pay about GHS {bill:,.0f} a month to the grid. "
+                 f"Instead, put roughly GHS {loan_payment:,.0f} of that toward a "
+                 f"{loan_years:.0f}-year loan for your own {rec_kwp:,.1f} kWp solar "
+                 f"system. While you repay the loan your total monthly cost stays "
+                 f"about the same as today (around GHS {combined_outlay:,.0f}), but "
+                 f"that money now buys a system you own instead of paying the grid. "
+                 f"Once the loan is paid off your bill falls by about "
+                 f"{post_loan_drop_pct:.0f}%, saving you roughly GHS "
+                 f"{monthly_save:,.0f} every month for the rest of the system's "
+                 f"25-year life.")
     elif loan_payment > 0:
-        pitch = (f"A {rec_kwp:,.1f} kWp system at GHS {cost_per_kwp:,.0f}/kWp "
-                 f"costs about GHS {loan_payment:,.0f}/mo on a {loan_years:.0f}-year "
-                 f"loan — that's around GHS {(combined_outlay - bill):,.0f}/mo more "
-                 f"than your bill today. After the loan your bill drops by "
-                 f"{post_loan_drop_pct:.0f}% (GHS {monthly_save:,.0f}/month saving).")
+        pitch = (f"Your own {rec_kwp:,.1f} kWp solar system would cost about GHS "
+                 f"{loan_payment:,.0f} a month on a {loan_years:.0f}-year loan. That "
+                 f"is roughly GHS {(combined_outlay - bill):,.0f} a month more than "
+                 f"your grid bill today, so your total cost is a little higher while "
+                 f"you repay it. Once the loan is paid off your bill drops by about "
+                 f"{post_loan_drop_pct:.0f}%, saving you around GHS {monthly_save:,.0f} "
+                 f"every month for the rest of the 25-year system life.")
     else:
-        pitch = ("Enter your bill and loan inputs to see how much of your monthly "
-                 "outlay can fund solar.")
+        pitch = ("Enter your monthly bill and loan details above and we will show, "
+                 "in plain terms, how much of what you already pay the grid could "
+                 "instead buy you your own solar system.")
 
     return {
         "headline_pitch":            pitch,
