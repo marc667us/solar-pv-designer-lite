@@ -5218,6 +5218,70 @@ def _ensure_fi_messages_schema(get_db) -> bool:
     return bool(_FI_MSG_STATE["ready"])
 
 
+# ---------------------------------------------------------------------------
+# Hard-copy document tracking -- Slice 6b (2026-07-05). SolarPro tracks the
+# STATUS of physical originals couriered DIRECTLY between the applicant and the
+# institution -- it never takes custody (spec: "SolarPro must not claim custody
+# of original physical documents"). One row per shipment.
+# ---------------------------------------------------------------------------
+_FI_SHIP_STATE = {"ready": False}
+
+FI_SHIP_STATUSES = (
+    "dispatched", "in_transit", "received", "verified", "rejected",
+)
+FI_SHIP_STATUS_LABELS = {
+    "dispatched": "Dispatched", "in_transit": "In transit",
+    "received": "Received", "verified": "Verified", "rejected": "Rejected",
+}
+FI_SHIP_STATUS_CLASS = {
+    "dispatched": "info", "in_transit": "primary", "received": "warning",
+    "verified": "success", "rejected": "danger",
+}
+
+
+def _ensure_fi_shipments_schema(get_db) -> bool:
+    """Create funding_document_shipments once (SQLite + Postgres safe)."""
+    if _FI_SHIP_STATE["ready"]:
+        return True
+    ddl = (
+        "CREATE TABLE IF NOT EXISTS funding_document_shipments ("
+        " shipment_id TEXT PRIMARY KEY,"
+        " capital_investment_project_id INTEGER NOT NULL,"
+        " institution_id TEXT NOT NULL,"
+        " tenant_id TEXT NOT NULL DEFAULT '',"
+        " created_by_role TEXT NOT NULL DEFAULT 'applicant',"
+        " created_by_user_id INTEGER,"
+        " document_type TEXT NOT NULL DEFAULT '',"
+        " courier_company TEXT NOT NULL DEFAULT '',"
+        " tracking_number TEXT NOT NULL DEFAULT '',"
+        " dispatch_date TEXT,"
+        " recipient TEXT NOT NULL DEFAULT '',"
+        " receiving_officer TEXT NOT NULL DEFAULT '',"
+        " received_date TEXT,"
+        " verification_status TEXT NOT NULL DEFAULT 'dispatched',"
+        " notes TEXT,"
+        " created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        " updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    idx = (
+        "CREATE INDEX IF NOT EXISTS idx_fi_ship_thread "
+        "ON funding_document_shipments "
+        "(capital_investment_project_id, institution_id, tenant_id)"
+    )
+    try:
+        with get_db() as c:
+            c.execute(ddl)
+        _FI_SHIP_STATE["ready"] = True
+    except Exception:
+        _FI_SHIP_STATE["ready"] = False
+    try:
+        with get_db() as c:
+            c.execute(idx)
+    except Exception:
+        pass
+    return bool(_FI_SHIP_STATE["ready"])
+
+
 # ===========================================================================
 # SECTION E -- Wizard progress (derives completion from real stored data;
 # SSS Section 2 acceptance -- no pseudo "hook" fields).
@@ -5777,14 +5841,18 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         # GET
         fund = _ci_funding_row(pid, uid, tid_s)
         institutions, selections = _ci_funding_institutions(pid, uid, tid_s)
-        # Per-institution message threads for the applicant's Communication panel.
-        threads = {}
+        # Per-institution message threads + hard-copy shipments for the
+        # applicant's Communication + Documents panels.
+        threads, shipments = {}, {}
         for iid in selections.keys():
             threads[iid] = _fi_thread(pid, iid, tid_s)
+            shipments[iid] = _fi_shipments(pid, iid, tid_s)
         return render_template(
             "capital_investment/funding.html",
             user=current_user(), proj=proj, ov=ov, fund=fund,
             institutions=institutions, selections=selections, threads=threads,
+            shipments=shipments, ship_status_labels=FI_SHIP_STATUS_LABELS,
+            ship_status_class=FI_SHIP_STATUS_CLASS,
             project_types=dict((c, L) for c, L, _ in PROJECT_TYPES),
         )
 
@@ -6105,14 +6173,18 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             abort(404)
         proj = actx["project"]
         ov = _ci_funding_overview(proj)          # reuse -- no re-modelling
-        thread = _fi_thread(pid, institution_id,
-                            actx["selection"].get("tenant_id") or '')
+        _tid = actx["selection"].get("tenant_id") or ''
+        thread = _fi_thread(pid, institution_id, _tid)
+        shipments = _fi_shipments(pid, institution_id, _tid)
         return render_template(
             "capital_investment/funding_application_review.html",
             user=current_user(), inst=actx["institution"],
             sel=actx["selection"], proj=proj, fund=actx["funding"], ov=ov,
-            report_types=REPORT_TYPES, thread=thread,
+            report_types=REPORT_TYPES, thread=thread, shipments=shipments,
             msg_types=FI_MSG_TYPES, msg_type_labels=FI_MSG_TYPE_LABELS,
+            ship_statuses=FI_SHIP_STATUSES,
+            ship_status_labels=FI_SHIP_STATUS_LABELS,
+            ship_status_class=FI_SHIP_STATUS_CLASS,
             statuses=FI_APP_STATUSES, status_labels=FI_APP_STATUS_LABELS,
             status_class=FI_APP_STATUS_CLASS,
             project_types=dict((c, L) for c, L, _ in PROJECT_TYPES))
@@ -6465,6 +6537,199 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
                 " and emailed" if emailed_to else ""), "success")
         else:
             flash("Could not post the reply.", "danger")
+        return redirect(url_for("capital_investment_funding", pid=pid))
+
+    # ==================================================================
+    # Slice 6b -- Hard-copy document tracking. Status-only record of physical
+    # originals couriered directly between applicant and institution (SolarPro
+    # never takes custody). Institution creates + advances status; applicant
+    # records a dispatch they sent. All entry points re-authorize.
+    # ==================================================================
+    def _fi_shipments(pid, institution_id, tid):
+        """All hard-copy shipments for one (project, institution, tenant)."""
+        _ensure_fi_shipments_schema(get_db)
+        try:
+            with get_db() as c:
+                rr = c.execute(
+                    "SELECT * FROM funding_document_shipments "
+                    "WHERE capital_investment_project_id=? AND institution_id=? "
+                    "AND COALESCE(tenant_id,'')=? "
+                    "ORDER BY created_at DESC, shipment_id",
+                    (pid, institution_id, tid or '')).fetchall()
+            return [dict(r) for r in rr] if rr else []
+        except Exception:
+            return []
+
+    def _fi_add_shipment(pid, institution_id, tid, f, *, role, uid,
+                         default_status="dispatched"):
+        """Insert a shipment from form `f`. Returns True on success."""
+        if not _ensure_fi_shipments_schema(get_db):
+            return False
+        vs = (f.get("verification_status") or default_status).strip()
+        if vs not in FI_SHIP_STATUSES:
+            vs = default_status
+        import uuid as _uuid
+        sid = "FS-" + _uuid.uuid4().hex[:16].upper()
+        vals = (
+            sid, pid, institution_id, tid or '', role, uid,
+            (f.get("document_type") or "").strip()[:120],
+            (f.get("courier_company") or "").strip()[:120],
+            (f.get("tracking_number") or "").strip()[:120],
+            (f.get("dispatch_date") or "").strip()[:20] or None,
+            (f.get("recipient") or "").strip()[:160],
+            (f.get("receiving_officer") or "").strip()[:120],
+            (f.get("received_date") or "").strip()[:20] or None,
+            vs,
+            (f.get("notes") or "").strip()[:1000],
+        )
+        try:
+            with get_db() as c:
+                c.execute(
+                    "INSERT INTO funding_document_shipments "
+                    "(shipment_id, capital_investment_project_id, "
+                    " institution_id, tenant_id, created_by_role, "
+                    " created_by_user_id, document_type, courier_company, "
+                    " tracking_number, dispatch_date, recipient, "
+                    " receiving_officer, received_date, verification_status, "
+                    " notes) VALUES (" + ",".join("?" * 15) + ")", vals)
+            return True
+        except Exception:
+            return False
+
+    # POST .../shipment -- institution logs / advances an inbound shipment.
+    @app.route("/funding/workspace/<int:pid>/<institution_id>/shipment",
+               methods=["POST"], endpoint="funding_application_shipment")
+    @login_required
+    def _fi_shipment_add(pid, institution_id):
+        from flask import abort
+        uid = session.get("user_id")
+        actx = _fi_load_application(uid, pid, institution_id)
+        if not actx:
+            abort(404)
+        csrf_protect()
+        tid = actx["selection"].get("tenant_id") or ''
+        ok = _fi_add_shipment(pid, institution_id, tid, request.form,
+                              role="institution", uid=uid,
+                              default_status="received")
+        if ok:
+            try:
+                from new_boq_hierarchy_schema import boq_audit
+                boq_audit(get_db, uid, "funding_shipment_logged",
+                          "capital_investment_project", pid, institution_id)
+            except Exception:
+                pass
+            flash("Hard-copy shipment recorded.", "success")
+        else:
+            flash("Could not record the shipment.", "danger")
+        return redirect(url_for("funding_application_review", pid=pid,
+                                institution_id=institution_id))
+
+    # POST .../shipment/<sid>/update -- institution advances status / receipt.
+    @app.route("/funding/workspace/<int:pid>/<institution_id>/shipment/"
+               "<shipment_id>/update", methods=["POST"],
+               endpoint="funding_application_shipment_update")
+    @login_required
+    def _fi_shipment_update(pid, institution_id, shipment_id):
+        from flask import abort
+        uid = session.get("user_id")
+        actx = _fi_load_application(uid, pid, institution_id)
+        if not actx:
+            abort(404)
+        csrf_protect()
+        tid = actx["selection"].get("tenant_id") or ''
+        f = request.form
+        vs = (f.get("verification_status") or "").strip()
+        if vs not in FI_SHIP_STATUSES:
+            flash("Invalid shipment status.", "warning")
+            return redirect(url_for("funding_application_review", pid=pid,
+                                    institution_id=institution_id))
+        recd = (f.get("received_date") or "").strip()[:20] or None
+        officer = (f.get("receiving_officer") or "").strip()[:120]
+        ok = False
+        try:
+            with get_db() as c:
+                cur = c.execute(
+                    "UPDATE funding_document_shipments "
+                    "SET verification_status=?, received_date=COALESCE(?,"
+                    " received_date), receiving_officer=CASE WHEN ?<>'' THEN ? "
+                    " ELSE receiving_officer END, updated_at=CURRENT_TIMESTAMP "
+                    "WHERE shipment_id=? AND capital_investment_project_id=? "
+                    "AND institution_id=? AND COALESCE(tenant_id,'')=?",
+                    (vs, recd, officer, officer, shipment_id, pid,
+                     institution_id, tid))
+                try:
+                    ok = (cur.rowcount == 1)
+                except Exception:
+                    ok = True
+        except Exception:
+            ok = False
+        if ok:
+            try:
+                from new_boq_hierarchy_schema import boq_audit
+                boq_audit(get_db, uid, "funding_shipment_updated",
+                          "capital_investment_project", pid,
+                          "%s %s->%s" % (institution_id, shipment_id, vs))
+            except Exception:
+                pass
+            flash("Shipment updated to '%s'." %
+                  FI_SHIP_STATUS_LABELS.get(vs, vs), "success")
+        else:
+            flash("Could not update the shipment.", "danger")
+        return redirect(url_for("funding_application_review", pid=pid,
+                                institution_id=institution_id))
+
+    # POST /large-scale-solar/<pid>/funding/shipment -- applicant records a
+    # dispatch they sent to an institution they submitted to (approved+consent).
+    @app.route("/large-scale-solar/<int:pid>/funding/shipment",
+               methods=["POST"], endpoint="capital_investment_funding_shipment")
+    @login_required
+    def _funding_shipment(pid):
+        if (g := _gate(CI_LEVEL_SETUP)) is not None:
+            return g
+        proj = _load_project(pid)          # owner-scoped
+        _ctid = _tenant_id()
+        if _ctid is not None and proj.get("tenant_id") not in (
+                None, _ctid, str(_ctid)):
+            from flask import abort
+            abort(404)
+        csrf_protect()
+        uid = session.get("user_id")
+        tid_s = str(_ctid) if _ctid is not None else ''
+        institution_id = (request.form.get("institution_id") or "").strip()
+        _ensure_fi_selection_schema(get_db)
+        _ensure_fi_schema(get_db)
+        allowed = False
+        try:
+            with get_db() as c:
+                r = c.execute(
+                    "SELECT 1 FROM funding_institution_selections s "
+                    "JOIN financial_institutions fi "
+                    "  ON fi.institution_id = s.institution_id "
+                    "WHERE s.capital_investment_project_id=? "
+                    "AND s.institution_id=? AND COALESCE(s.tenant_id,'')=? "
+                    "AND s.consent=1 AND fi.status='approved' LIMIT 1",
+                    (pid, institution_id, tid_s)).fetchone()
+                allowed = bool(r)
+        except Exception:
+            allowed = False
+        if not allowed:
+            flash("You can only track a shipment to an approved institution you "
+                  "submitted to.", "warning")
+            return redirect(url_for("capital_investment_funding", pid=pid))
+        ok = _fi_add_shipment(pid, institution_id, tid_s, request.form,
+                              role="applicant", uid=uid,
+                              default_status="dispatched")
+        if ok:
+            try:
+                from new_boq_hierarchy_schema import boq_audit
+                boq_audit(get_db, uid, "funding_shipment_logged",
+                          "capital_investment_project", pid,
+                          "applicant->%s" % institution_id)
+            except Exception:
+                pass
+            flash("Shipment tracking recorded.", "success")
+        else:
+            flash("Could not record the shipment.", "danger")
         return redirect(url_for("capital_investment_funding", pid=pid))
 
     # ==================================================================

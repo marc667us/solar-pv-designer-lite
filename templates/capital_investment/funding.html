@@ -207,6 +207,33 @@
           <label for="applEmail_{{ iid }}" class="form-check-label text-secondary" style="font-size:11px">Also email the institution</label>
         </div>
       </form>
+
+      {# Hard-copy document tracking (status only; you courier originals directly). #}
+      {% set sh = shipments.get(iid, []) %}
+      <div class="mt-3 pt-2 border-top border-secondary">
+        <div class="text-secondary text-uppercase fw-bold mb-2" style="font-size:10px;letter-spacing:.4px"><i class="bi bi-box-seam me-1"></i>Hard-copy documents sent to this institution</div>
+        {% if sh %}
+        <div class="d-flex flex-wrap gap-2 mb-2">
+          {% for s in sh %}
+          <span class="badge bg-dark border border-secondary text-light" title="{{ s.courier_company }} {{ s.tracking_number }}">
+            {{ s.document_type or 'Document' }} &middot;
+            <span class="text-{{ ship_status_class.get(s.verification_status,'secondary') }}">{{ ship_status_labels.get(s.verification_status, s.verification_status) }}</span>
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <form method="post" action="{{ url_for('capital_investment_funding_shipment', pid=proj.id) }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="institution_id" value="{{ iid }}">
+          <div class="row g-1">
+            <div class="col-6 col-md-3"><input name="document_type" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary" placeholder="Document type"></div>
+            <div class="col-6 col-md-3"><input name="courier_company" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary" placeholder="Courier"></div>
+            <div class="col-6 col-md-3"><input name="tracking_number" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary" placeholder="Tracking #"></div>
+            <div class="col-6 col-md-2"><input type="date" name="dispatch_date" class="form-control form-control-sm bg-black text-light border-secondary" title="Dispatch date"></div>
+            <div class="col-12 col-md-1 d-grid"><button type="submit" class="btn btn-outline-warning btn-sm" title="Track dispatch"><i class="bi bi-plus-lg"></i></button></div>
+          </div>
+        </form>
+      </div>
     </div>
     {% endfor %}
   </div>

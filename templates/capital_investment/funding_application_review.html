@@ -178,4 +178,65 @@
     </form>
   </div>
 </div>
+
+{# Slice 6b — Hard-copy document tracking (status only; no custody of originals). #}
+<div class="card bg-dark border-secondary mt-3">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span class="fw-bold small"><i class="bi bi-box-seam me-1 text-warning"></i>Hard-copy documents</span>
+    {% if shipments %}<span class="badge bg-secondary">{{ shipments|length }}</span>{% endif %}
+  </div>
+  <div class="card-body">
+    <div class="text-secondary small mb-2"><i class="bi bi-info-circle me-1"></i>Originals are couriered directly to your institution. SolarPro tracks status only and never holds the physical documents.</div>
+    {% if shipments %}
+    <div class="table-responsive mb-3">
+      <table class="table table-dark table-sm align-middle mb-0">
+        <thead><tr class="small text-secondary">
+          <th>Document</th><th>Courier</th><th>Tracking #</th><th>Dispatched</th>
+          <th>Received</th><th>Officer</th><th>Status</th><th class="text-end">Update</th>
+        </tr></thead>
+        <tbody>
+          {% for s in shipments %}
+          <tr>
+            <td class="small">{{ s.document_type or '—' }}</td>
+            <td class="small">{{ s.courier_company or '—' }}</td>
+            <td class="small">{{ s.tracking_number or '—' }}</td>
+            <td class="small">{{ s.dispatch_date or '—' }}</td>
+            <td class="small">{{ s.received_date or '—' }}</td>
+            <td class="small">{{ s.receiving_officer or '—' }}</td>
+            <td><span class="badge bg-{{ ship_status_class.get(s.verification_status,'secondary') }}">{{ ship_status_labels.get(s.verification_status, s.verification_status) }}</span></td>
+            <td class="text-end">
+              <form method="post" action="{{ url_for('funding_application_shipment_update', pid=proj.id, institution_id=inst.institution_id, shipment_id=s.shipment_id) }}" class="d-inline-flex gap-1 align-items-center">
+                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                <input type="date" name="received_date" class="form-control form-control-sm bg-black text-light border-secondary" style="width:130px" title="Received date">
+                <input name="receiving_officer" placeholder="Officer" class="form-control form-control-sm bg-black text-light border-secondary" style="width:90px">
+                <select name="verification_status" class="form-select form-select-sm bg-black text-light border-secondary" style="width:120px">
+                  {% for st in ship_statuses %}<option value="{{ st }}" {% if st==s.verification_status %}selected{% endif %}>{{ ship_status_labels.get(st, st) }}</option>{% endfor %}
+                </select>
+                <button class="btn btn-outline-warning btn-sm py-0" title="Save"><i class="bi bi-check-lg"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    <form method="post" action="{{ url_for('funding_application_shipment', pid=proj.id, institution_id=inst.institution_id) }}" class="border-top border-secondary pt-3">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="row g-2">
+        <div class="col-md-4"><label class="form-label small text-secondary mb-1">Document type</label><input name="document_type" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary" placeholder="Land title, PPA, board resolution…"></div>
+        <div class="col-md-4"><label class="form-label small text-secondary mb-1">Courier company</label><input name="courier_company" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+        <div class="col-md-4"><label class="form-label small text-secondary mb-1">Tracking number</label><input name="tracking_number" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+        <div class="col-md-3"><label class="form-label small text-secondary mb-1">Received date</label><input type="date" name="received_date" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+        <div class="col-md-3"><label class="form-label small text-secondary mb-1">Receiving officer</label><input name="receiving_officer" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+        <div class="col-md-3"><label class="form-label small text-secondary mb-1">Status</label>
+          <select name="verification_status" class="form-select form-select-sm bg-black text-light border-secondary">
+            {% for st in ship_statuses %}<option value="{{ st }}" {% if st=='received' %}selected{% endif %}>{{ ship_status_labels.get(st, st) }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end"><button type="submit" class="btn btn-warning btn-sm fw-bold w-100"><i class="bi bi-plus-lg me-1"></i>Log shipment</button></div>
+      </div>
+    </form>
+  </div>
+</div>
 {% endblock %}
