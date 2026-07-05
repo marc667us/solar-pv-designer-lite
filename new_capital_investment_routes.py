@@ -4973,6 +4973,33 @@ CI_FUNDING_STATUSES = (
     "under_review", "conditional", "approved", "rejected", "closed",
 )
 
+# Per-institution application status inside an institution's workspace (Slice 4+).
+# Each funding_institution_selections row carries one of these: the customer's
+# submission (Slice 3) sets 'submitted'; the review page (Slice 5) transitions
+# it. Kept as an allowlist so a ?status= filter can never inject SQL.
+FI_APP_STATUSES = (
+    "submitted", "under_review", "awaiting_documents", "technical_review",
+    "financial_review", "approved_in_principle", "conditional",
+    "approved", "rejected", "completed",
+)
+FI_APP_STATUS_LABELS = {
+    "submitted": "Submitted", "under_review": "Under Review",
+    "awaiting_documents": "Awaiting Documents",
+    "technical_review": "Technical Review",
+    "financial_review": "Financial Review",
+    "approved_in_principle": "Approved in Principle",
+    "conditional": "Conditional Approval", "approved": "Approved",
+    "rejected": "Rejected", "completed": "Completed",
+}
+# Bootstrap badge class per status (for the workspace chips + table badges).
+FI_APP_STATUS_CLASS = {
+    "submitted": "info", "under_review": "primary",
+    "awaiting_documents": "warning", "technical_review": "primary",
+    "financial_review": "primary", "approved_in_principle": "success",
+    "conditional": "warning", "approved": "success",
+    "rejected": "danger", "completed": "secondary",
+}
+
 
 def _ensure_ci_funding_schema(get_db) -> bool:
     """Create capital_investment_funding once (SQLite + Postgres safe)."""
@@ -5793,6 +5820,139 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             flash("Could not submit - none of the selected institutions are "
                   "currently approved. Please try again.", "danger")
         return redirect(url_for("capital_investment_funding", pid=pid))
+
+    # ==================================================================
+    # Slice 4 -- Financial Institution Workspace. An approved institution's
+    # owner sees ONLY the funding applications customers explicitly submitted to
+    # it (funding_institution_selections). This is a deliberate CROSS-TENANT read
+    # -- the institution is a different party from the customer -- bounded to the
+    # rows the customer consented to share. Isolation is enforced entirely by
+    # joining on fi.created_by_user_id = <this user> AND fi.status='approved';
+    # no client-supplied institution id is ever trusted, and there is no
+    # customer-tenant filter (by design). Read-only GET, so no CSRF.
+    # ==================================================================
+    def _fi_workspace_rows(uid):
+        """Assigned applications for every APPROVED institution this user owns.
+        Returns (rows, institutions): institutions is the owner's approved list
+        (header + multi-institution labelling); rows are the assigned
+        applications joined to their funding record + project. NULL/'' tenant
+        ids are treated as equal (single-tenant / no-Keycloak mode)."""
+        _ensure_fi_schema(get_db)
+        _ensure_fi_selection_schema(get_db)
+        _ensure_ci_funding_schema(get_db)
+        rows, insts = [], []
+        try:
+            with get_db() as c:
+                ir = c.execute(
+                    "SELECT institution_id, name, inst_type, country, region, "
+                    "fee_pct FROM financial_institutions "
+                    "WHERE created_by_user_id=? AND status='approved' "
+                    "ORDER BY name", (uid,)).fetchall()
+                insts = [dict(r) for r in ir] if ir else []
+                if not insts:
+                    return [], []
+                rr = c.execute(
+                    "SELECT s.capital_investment_project_id AS pid, "
+                    " s.institution_id AS institution_id, "
+                    " s.tenant_id AS tenant_id, s.status AS app_status, "
+                    " s.submitted_at AS submitted_at, "
+                    " fi.name AS institution_name, "
+                    " fund.funding_requested AS funding_requested, "
+                    " fund.customer_equity AS customer_equity, "
+                    " fund.funding_score AS funding_score, "
+                    " fund.risk_rating AS risk_rating, "
+                    " p.project_name AS project_name, "
+                    " p.client_name AS client_name, "
+                    " p.project_type AS project_type, p.country AS country, "
+                    " p.region AS region, p.district AS district, "
+                    " p.target_kwp AS target_kwp, p.currency AS currency "
+                    "FROM funding_institution_selections s "
+                    "JOIN financial_institutions fi "
+                    "  ON fi.institution_id = s.institution_id "
+                    "JOIN capital_investment_funding fund "
+                    "  ON fund.capital_investment_project_id = "
+                    "     s.capital_investment_project_id "
+                    " AND COALESCE(fund.tenant_id,'') = COALESCE(s.tenant_id,'') "
+                    # p.tenant_id is UUID on the fresh Postgres schema while the
+                    # selection/funding tenant ids are TEXT -- CAST to TEXT so the
+                    # NULL/'' equivalence join works on both Postgres and SQLite.
+                    "JOIN capital_investment_projects p "
+                    "  ON p.id = s.capital_investment_project_id "
+                    " AND COALESCE(CAST(p.tenant_id AS TEXT),'') = "
+                    "     COALESCE(s.tenant_id,'') "
+                    # Read-side consent boundary (defence in depth): an institution
+                    # only ever sees applications the customer explicitly consented
+                    # to share, regardless of how the selection row was written.
+                    "WHERE fi.created_by_user_id=? AND fi.status='approved' "
+                    " AND s.consent=1 "
+                    "ORDER BY s.submitted_at DESC", (uid,)).fetchall()
+                rows = [dict(r) for r in rr] if rr else []
+        except Exception:
+            rows = []
+        return rows, insts
+
+    # GET /funding/workspace -- the approved institution's dashboard + list.
+    @app.route("/funding/workspace",
+               endpoint="funding_institution_workspace")
+    @login_required
+    def _fi_workspace():
+        uid = session.get("user_id")
+        rows, insts = _fi_workspace_rows(uid)
+
+        # Status filter (allowlist -> no SQL injection). Filters the visible
+        # table only; the dashboard metrics are always over the full set.
+        status = (request.args.get("status") or "").strip()
+        if status not in FI_APP_STATUSES:
+            status = ""
+
+        def _num(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        under = {"under_review", "technical_review", "financial_review"}
+        appr = {"approved", "approved_in_principle"}
+        closed = {"approved", "rejected", "completed"}
+        counts = {s: 0 for s in FI_APP_STATUSES}
+        for r in rows:
+            st = r.get("app_status")
+            if st in counts:
+                counts[st] += 1
+        scores = [_num(r.get("funding_score")) for r in rows]
+        scores = [s for s in scores if s is not None]
+        req_sum = sum((_num(r.get("funding_requested")) or 0.0) for r in rows)
+        appr_sum = sum((_num(r.get("funding_requested")) or 0.0)
+                       for r in rows if r.get("app_status") in appr)
+        pipe_sum = sum((_num(r.get("funding_requested")) or 0.0)
+                       for r in rows if r.get("app_status") not in closed)
+        # Money totals only make sense in a single currency; if the assigned
+        # projects mix currencies, show counts and mark money as mixed (FX roll-up
+        # is Slice 7's revenue job, not the workspace's).
+        currencies = {(r.get("currency") or "GHS") for r in rows}
+        money_cur = next(iter(currencies)) if len(currencies) == 1 else None
+        metrics = {
+            "assigned": len(rows),
+            "under_review": sum(counts[s] for s in under),
+            "awaiting_documents": counts["awaiting_documents"],
+            "approved": sum(counts[s] for s in appr),
+            "rejected": counts["rejected"],
+            "total_requested": req_sum,
+            "total_approved": appr_sum,
+            "pipeline_value": pipe_sum,
+            "avg_score": round(sum(scores) / len(scores)) if scores else None,
+            "money_cur": money_cur,
+        }
+        shown = [r for r in rows
+                 if (not status or r.get("app_status") == status)]
+        return render_template(
+            "capital_investment/funding_workspace.html",
+            user=current_user(), institutions=insts, rows=shown,
+            metrics=metrics, status=status,
+            statuses=FI_APP_STATUSES, status_labels=FI_APP_STATUS_LABELS,
+            status_class=FI_APP_STATUS_CLASS, status_counts=counts,
+            multi=len(insts) > 1,
+            project_types=dict((c, L) for c, L, _ in PROJECT_TYPES))
 
     # ==================================================================
     # Slice 2 -- Financial Institution registration + Platform-Admin approval.

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Funding Workspace - Financial Institution{% endblock %}
+{% block content %}
+{% macro money(v, cur) -%}
+  {% if v is not none %}{{ cur }} {{ '{:,.0f}'.format(v) }}{% else %}&mdash;{% endif %}
+{%- endmacro %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <h5 class="fw-bold mb-0"><i class="bi bi-bank text-warning me-1"></i>Funding Workspace</h5>
+    <div class="text-secondary small">
+      {% if institutions %}
+        {% for i in institutions %}<span class="badge bg-secondary me-1">{{ i.name }}</span>{% endfor %}
+        &middot; you only see applications explicitly submitted to your institution.
+      {% else %}
+        Approved financial institutions review the funding applications submitted to them here.
+      {% endif %}
+    </div>
+  </div>
+  <a href="{{ url_for('funding_institution_register') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-plus-circle me-1"></i>Register another institution
+  </a>
+</div>
+
+{% if not institutions %}
+{# Onboarding — the user owns no APPROVED institution. #}
+<div class="card bg-dark border-secondary">
+  <div class="card-body text-center py-5">
+    <i class="bi bi-bank2 text-secondary" style="font-size:2.5rem"></i>
+    <div class="fw-bold text-light mt-2">No approved institution yet</div>
+    <div class="text-secondary small mb-3">
+      Register your bank, fund or leasing company and a platform administrator will
+      approve it. Once approved, funding applications submitted to you appear here.
+    </div>
+    <a href="{{ url_for('funding_institution_register') }}" class="btn btn-warning fw-bold">
+      <i class="bi bi-send-check me-1"></i>Register as a Financial Institution
+    </a>
+  </div>
+</div>
+{% else %}
+
+{# Dashboard metric cards. #}
+<div class="row g-2 mb-3">
+  {% macro metric(label, value, sub, cls) %}
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="border border-secondary rounded p-2 h-100 bg-black">
+        <div class="text-secondary" style="font-size:10px;text-transform:uppercase;letter-spacing:.4px">{{ label }}</div>
+        <div class="fw-bold fs-5 text-{{ cls or 'light' }}">{{ value }}</div>
+        {% if sub %}<div class="text-secondary" style="font-size:10px">{{ sub }}</div>{% endif %}
+      </div>
+    </div>
+  {% endmacro %}
+  {{ metric('Applications assigned', metrics.assigned, None, 'light') }}
+  {{ metric('Under review', metrics.under_review, None, 'primary') }}
+  {{ metric('Awaiting documents', metrics.awaiting_documents, None, 'warning') }}
+  {{ metric('Approved', metrics.approved, None, 'success') }}
+  {{ metric('Rejected', metrics.rejected, None, 'danger') }}
+  {{ metric('Avg funding score', (metrics.avg_score ~ '/100') if metrics.avg_score is not none else '—', None, 'info') }}
+</div>
+<div class="row g-2 mb-3">
+  {% if metrics.money_cur %}
+  {{ metric('Total funding requested', money(metrics.total_requested, metrics.money_cur), None, 'light') }}
+  {{ metric('Total approved funding', money(metrics.total_approved, metrics.money_cur), None, 'success') }}
+  {{ metric('Funding pipeline value', money(metrics.pipeline_value, metrics.money_cur), 'active applications', 'warning') }}
+  {% else %}
+  <div class="col-12">
+    <div class="border border-secondary rounded p-2 bg-black text-secondary small">
+      <i class="bi bi-info-circle me-1"></i>Assigned applications span more than one currency &mdash;
+      per-application amounts are shown in the table below; consolidated totals appear in the
+      Revenue dashboard.
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{# Status filter chips (workspace tabs). Locked tabs arrive in later slices. #}
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a href="{{ url_for('funding_institution_workspace') }}"
+     class="btn btn-sm {{ 'btn-warning' if not status else 'btn-outline-secondary' }}">
+    All <span class="badge bg-dark ms-1">{{ metrics.assigned }}</span>
+  </a>
+  {% for s in statuses %}
+    {% if status_counts.get(s, 0) or s == status %}
+    <a href="{{ url_for('funding_institution_workspace', status=s) }}"
+       class="btn btn-sm {{ ('btn-' ~ status_class.get(s,'secondary')) if status==s else 'btn-outline-secondary' }}">
+      {{ status_labels.get(s, s) }} <span class="badge bg-dark ms-1">{{ status_counts.get(s, 0) }}</span>
+    </a>
+    {% endif %}
+  {% endfor %}
+  {% for t in ['Messages', 'Reports', 'Settings'] %}
+  <span class="btn btn-sm btn-outline-secondary disabled" style="opacity:.4" title="Coming in a later funding slice">
+    {{ t }} <i class="bi bi-lock-fill ms-1" style="font-size:9px"></i>
+  </span>
+  {% endfor %}
+</div>
+
+{# Assigned applications. Customer/project names become clickable in Slice 5
+   (Application Review page) — only for these assigned rows. #}
+<div class="card bg-dark border-secondary">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span class="fw-bold small"><i class="bi bi-folder2-open me-1 text-warning"></i>Assigned applications</span>
+    <span class="text-secondary small">{{ rows|length }} shown{{ ' · filtered' if status }}</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-dark table-sm align-middle mb-0">
+      <thead>
+        <tr class="small text-secondary">
+          <th>Customer</th><th>Project</th><th>Type</th><th>Location</th>
+          <th class="text-end">Capacity</th><th class="text-end">Funding requested</th>
+          <th class="text-end">Project cost</th><th class="text-end">Score</th>
+          {% if multi %}<th>Institution</th>{% endif %}
+          <th>Status</th><th>Submitted</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        {% set cur = r.currency or 'GHS' %}
+        {% set cost = (r.funding_requested or 0) + (r.customer_equity or 0) if (r.funding_requested is not none or r.customer_equity is not none) else none %}
+        <tr>
+          <td class="fw-semibold text-light">{{ r.client_name or '—' }}</td>
+          <td class="small">{{ r.project_name or '—' }}</td>
+          <td class="small">{{ project_types.get(r.project_type, r.project_type or '—') }}</td>
+          <td class="small">{{ (r.district ~ ' ' if r.district else '') ~ (r.region ~ ' ' if r.region else '') ~ (r.country or '—') }}</td>
+          <td class="text-end small">{% if r.target_kwp %}{{ '%.1f'|format(r.target_kwp/1000) }} MWp{% else %}—{% endif %}</td>
+          <td class="text-end small">{{ money(r.funding_requested, cur) }}</td>
+          <td class="text-end small">{{ money(cost, cur) }}</td>
+          <td class="text-end small">{% if r.funding_score is not none %}{{ r.funding_score }}{% else %}—{% endif %}</td>
+          {% if multi %}<td class="small text-secondary">{{ r.institution_name }}</td>{% endif %}
+          <td><span class="badge bg-{{ status_class.get(r.app_status,'secondary') }}">{{ status_labels.get(r.app_status, r.app_status) }}</span></td>
+          <td class="small text-secondary">{{ r.submitted_at }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ 11 if multi else 10 }}" class="text-secondary small text-center py-4">
+          {% if status %}No applications with status &ldquo;{{ status_labels.get(status, status) }}&rdquo;.{% else %}No applications have been submitted to your institution yet.{% endif %}
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

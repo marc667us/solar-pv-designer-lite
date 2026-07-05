@@ -713,6 +713,7 @@
 
       <span class="text-secondary text-uppercase fw-bold px-2 mt-2" style="font-size:10px;letter-spacing:.5px">Funding</span>
       <a class="nav-link py-1 px-2 rounded {% if ep=='funding_institution_register' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('funding_institution_register') }}"><i class="bi bi-bank2 me-2 text-warning"></i>Register as Financial Institution</a>
+      <a class="nav-link py-1 px-2 rounded {% if ep=='funding_institution_workspace' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('funding_institution_workspace') }}"><i class="bi bi-bank me-2 text-warning"></i>Funding Workspace</a>
       {% if user.is_admin or (user.role or '') == 'technical_support' %}
       <a class="nav-link py-1 px-2 rounded {% if ep=='support_dashboard' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('support_dashboard') }}"><i class="bi bi-headset me-2" style="color:#a78bfa"></i>Installation Support</a>
       {% endif %}
