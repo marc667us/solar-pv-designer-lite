@@ -117,8 +117,14 @@
         {% set cur = r.currency or 'GHS' %}
         {% set cost = (r.funding_requested or 0) + (r.customer_equity or 0) if (r.funding_requested is not none or r.customer_equity is not none) else none %}
         <tr>
-          <td class="fw-semibold text-light">{{ r.client_name or '—' }}</td>
-          <td class="small">{{ r.project_name or '—' }}</td>
+          <td class="fw-semibold">
+            <a href="{{ url_for('funding_application_review', pid=r.pid, institution_id=r.institution_id) }}"
+               class="text-warning text-decoration-none">{{ r.client_name or '—' }}</a>
+          </td>
+          <td class="small">
+            <a href="{{ url_for('funding_application_review', pid=r.pid, institution_id=r.institution_id) }}"
+               class="text-light text-decoration-none">{{ r.project_name or '—' }}</a>
+          </td>
           <td class="small">{{ project_types.get(r.project_type, r.project_type or '—') }}</td>
           <td class="small">{{ (r.district ~ ' ' if r.district else '') ~ (r.region ~ ' ' if r.region else '') ~ (r.country or '—') }}</td>
           <td class="text-end small">{% if r.target_kwp %}{{ '%.1f'|format(r.target_kwp/1000) }} MWp{% else %}—{% endif %}</td>

@@ -652,7 +652,7 @@ _CI_STEP9_PREPRICE: bool = (
 
 
 def _ci_boq_actuals(get_db, boq_project_id, uid, fx: float = 12.0,
-                    extra_project_ids=None) -> dict:
+                    extra_project_ids=None, tenant_override=None) -> dict:
     """Summarise a linked Generation-Station BOQ by REUSING the boq_floor_items
     totals the standard engine already wrote (no parallel costing). Returns
     local + USD grand totals, per-facility breakdown (facility =
@@ -685,11 +685,20 @@ def _ci_boq_actuals(get_db, boq_project_id, uid, fx: float = 12.0,
             pid_list.append(xi)
     if not pid_list:
         return out
-    try:
-        from web_app import _boq_tenant_clause
-        tclause, tparams = _boq_tenant_clause("i")
-    except Exception:
-        tclause, tparams = "", ()
+    if tenant_override is not None:
+        # Authorized CROSS-TENANT read (Slice 5 institution report): scope the
+        # BOQ to the APPLICANT's tenant, not the reviewer's session tenant --
+        # otherwise _boq_tenant_clause would filter to the reviewer's tenant and
+        # blank the totals on tenanted Postgres (Codex parity finding). NULL rows
+        # (BOQ built before Keycloak was on) still match.
+        tclause = " AND (i.tenant_id IS NULL OR CAST(i.tenant_id AS TEXT)=?)"
+        tparams = (str(tenant_override),)
+    else:
+        try:
+            from web_app import _boq_tenant_clause
+            tclause, tparams = _boq_tenant_clause("i")
+        except Exception:
+            tclause, tparams = "", ()
     # Scope to the DEDICATED capital BOQ project(s) (each whole project belongs to
     # this generation station), so BOTH the lean autobuild starter rows AND any
     # rows the user later adds via BOQ "Build-all" (source_type='build_all') are
@@ -5124,12 +5133,31 @@ def _ensure_fi_selection_schema(get_db) -> bool:
         " submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
         " PRIMARY KEY (capital_investment_project_id, institution_id, tenant_id))"
     )
+    # Slice 5 decision columns -- added via per-column ALTER so a table created
+    # by Slice 3 (before these existed) is upgraded in place. SQLite has no ADD
+    # COLUMN IF NOT EXISTS, so each ALTER runs in its OWN transaction: a
+    # duplicate-column failure on Postgres aborts only that statement, not the
+    # CREATE or the sibling ALTERs (matches _ensure_ci_projects_schema_verified).
+    upgrades = (
+        "ALTER TABLE funding_institution_selections ADD COLUMN "
+        "decision_note TEXT",
+        "ALTER TABLE funding_institution_selections ADD COLUMN "
+        "decided_at TIMESTAMP",
+        "ALTER TABLE funding_institution_selections ADD COLUMN "
+        "decided_by INTEGER",
+    )
     try:
         with get_db() as c:
             c.execute(ddl)
         _FI_SEL_STATE["ready"] = True
     except Exception:
         _FI_SEL_STATE["ready"] = False
+    for stmt in upgrades:
+        try:
+            with get_db() as c:
+                c.execute(stmt)
+        except Exception:
+            pass   # column already present / backend mismatch
     return bool(_FI_SEL_STATE["ready"])
 
 
@@ -5953,6 +5981,196 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             status_class=FI_APP_STATUS_CLASS, status_counts=counts,
             multi=len(insts) > 1,
             project_types=dict((c, L) for c, L, _ in PROJECT_TYPES))
+
+    # ==================================================================
+    # Slice 5 -- Application Review page. An approved institution opens the FULL
+    # application (project + finance + reports) for a customer that submitted to
+    # it, and moves it through the review lifecycle with a decision note. Every
+    # entry point re-authorizes via _fi_load_application (ownership + approved +
+    # consent) -- no institution ever reaches an unassigned project.
+    # ==================================================================
+    def _fi_load_application(uid, pid, institution_id):
+        """Authorize + assemble one institution's view of a funding application.
+        Returns None unless the CURRENT user owns institution_id (approved) AND
+        the customer submitted THIS project to it WITH consent. Loads the project
+        + funding rows directly by (pid, tenant) -- NOT owner-scoped -- because
+        the reviewing institution is a different party from the project owner.
+        pid is a global PK so (pid, institution_id) maps to exactly one tenant."""
+        _ensure_fi_schema(get_db)
+        _ensure_fi_selection_schema(get_db)
+        _ensure_ci_funding_schema(get_db)
+        try:
+            with get_db() as c:
+                inst = c.execute(
+                    "SELECT * FROM financial_institutions "
+                    "WHERE institution_id=? AND created_by_user_id=? "
+                    "AND status='approved'", (institution_id, uid)).fetchone()
+                if not inst:
+                    return None
+                sel = c.execute(
+                    "SELECT * FROM funding_institution_selections "
+                    "WHERE capital_investment_project_id=? AND institution_id=? "
+                    "AND consent=1", (pid, institution_id)).fetchone()
+                if not sel:
+                    return None
+                sel = dict(sel)
+                tid = sel.get("tenant_id") or ''
+                proj = c.execute(
+                    "SELECT * FROM capital_investment_projects "
+                    "WHERE id=? AND COALESCE(CAST(tenant_id AS TEXT),'')=?",
+                    (pid, tid)).fetchone()
+                if not proj:
+                    return None
+                proj = dict(proj)
+                fund = c.execute(
+                    "SELECT * FROM capital_investment_funding "
+                    "WHERE capital_investment_project_id=? "
+                    "AND COALESCE(tenant_id,'')=?", (pid, tid)).fetchone()
+                fund = dict(fund) if fund else None
+        except Exception:
+            return None
+        return {"institution": dict(inst), "selection": sel,
+                "project": proj, "funding": fund}
+
+    # GET /funding/workspace/<pid>/<institution_id> -- full application review.
+    @app.route("/funding/workspace/<int:pid>/<institution_id>",
+               endpoint="funding_application_review")
+    @login_required
+    def _fi_review(pid, institution_id):
+        uid = session.get("user_id")
+        actx = _fi_load_application(uid, pid, institution_id)
+        if not actx:
+            from flask import abort
+            abort(404)
+        proj = actx["project"]
+        ov = _ci_funding_overview(proj)          # reuse -- no re-modelling
+        return render_template(
+            "capital_investment/funding_application_review.html",
+            user=current_user(), inst=actx["institution"],
+            sel=actx["selection"], proj=proj, fund=actx["funding"], ov=ov,
+            report_types=REPORT_TYPES,
+            statuses=FI_APP_STATUSES, status_labels=FI_APP_STATUS_LABELS,
+            status_class=FI_APP_STATUS_CLASS,
+            project_types=dict((c, L) for c, L, _ in PROJECT_TYPES))
+
+    # POST /funding/workspace/<pid>/<institution_id>/decision -- transition the
+    # per-institution application status + record a decision note (audited).
+    @app.route("/funding/workspace/<int:pid>/<institution_id>/decision",
+               methods=["POST"], endpoint="funding_application_decision")
+    @login_required
+    def _fi_decision(pid, institution_id):
+        uid = session.get("user_id")
+        actx = _fi_load_application(uid, pid, institution_id)
+        if not actx:
+            from flask import abort
+            abort(404)
+        csrf_protect()
+        new_status = (request.form.get("status") or "").strip()
+        if new_status not in FI_APP_STATUSES:
+            flash("Invalid decision status.", "warning")
+            return redirect(url_for("funding_application_review", pid=pid,
+                                    institution_id=institution_id))
+        note = (request.form.get("decision_note") or "").strip()[:2000]
+        tid = actx["selection"].get("tenant_id") or ''
+        ok = False
+        try:
+            with get_db() as c:
+                # Re-prove the FULL authorization boundary atomically at write
+                # time (Codex TOCTOU hardening): still-consented selection AND the
+                # institution still approved + owned by this user. rowcount==1
+                # confirms exactly the intended row changed.
+                cur = c.execute(
+                    "UPDATE funding_institution_selections "
+                    "SET status=?, decision_note=?, "
+                    "decided_at=CURRENT_TIMESTAMP, decided_by=? "
+                    "WHERE capital_investment_project_id=? AND institution_id=? "
+                    "AND COALESCE(tenant_id,'')=? AND consent=1 "
+                    "AND institution_id IN (SELECT institution_id "
+                    " FROM financial_institutions WHERE institution_id=? "
+                    " AND created_by_user_id=? AND status='approved')",
+                    (new_status, note, uid, pid, institution_id, tid,
+                     institution_id, uid))
+                try:
+                    ok = (cur.rowcount == 1)
+                except Exception:
+                    ok = True   # backend without rowcount -> trust the auth gate
+        except Exception:
+            ok = False
+        if ok:
+            try:
+                from new_boq_hierarchy_schema import boq_audit
+                boq_audit(get_db, uid, "funding_application_decision",
+                          "capital_investment_project", pid,
+                          "%s -> %s" % (institution_id, new_status))
+            except Exception:
+                pass
+            flash("Application marked '%s'." %
+                  FI_APP_STATUS_LABELS.get(new_status, new_status), "success")
+        else:
+            flash("Could not update the application status.", "danger")
+        return redirect(url_for("funding_application_review", pid=pid,
+                                institution_id=institution_id))
+
+    # GET /funding/workspace/<pid>/<institution_id>/report/<key>.pdf --
+    # institution-scoped report reuse (same builders as the owner route, but
+    # authorized by the selection, not project ownership; access audited).
+    @app.route("/funding/workspace/<int:pid>/<institution_id>/report/"
+               "<report_key>.pdf",
+               endpoint="funding_application_report_pdf")
+    @login_required
+    def _fi_review_report(pid, institution_id, report_key):
+        from flask import abort
+        uid = session.get("user_id")
+        actx = _fi_load_application(uid, pid, institution_id)
+        if not actx:
+            abort(404)
+        if report_key not in REPORT_KEYS:
+            abort(404)
+        proj = actx["project"]
+        owner_uid = proj.get("user_id")
+        app_tenant = actx["selection"].get("tenant_id") or ''
+        # CRM opportunity + BOQ actuals belong to the project OWNER; the report
+        # reflects the owner's real project data (consented for this review).
+        opp = _load_opportunity(pid, owner_uid)
+        try:
+            _rfx = float(_safe_json(proj.get("finance_config"))
+                         .get("fx_local_per_usd") or 12.0)
+        except (TypeError, ValueError, AttributeError):
+            _rfx = 12.0
+        try:
+            # tenant_override = the APPLICANT's tenant so the BOQ totals are not
+            # blanked by the reviewer's session tenant on Postgres (Codex parity).
+            _rboq = _ci_boq_actuals(
+                get_db,
+                proj.get("boq_facilities_project_id")
+                or proj.get("boq_project_id"),
+                owner_uid, _rfx,
+                extra_project_ids=[proj.get("boq_solar_project_id")],
+                tenant_override=app_tenant)
+        except Exception:
+            _rboq = None
+        md, title = _build_report_markdown(report_key, proj, opp, _rboq)
+        try:
+            pdf_bytes = _render_pdf_bytes(md, title)
+        except Exception as e:
+            flash("Could not build the PDF - %s. markdown-pdf missing?" % e,
+                  "danger")
+            return redirect(url_for("funding_application_review", pid=pid,
+                                    institution_id=institution_id))
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(get_db, uid, "funding_report_viewed",
+                      "capital_investment_project", pid,
+                      "%s report=%s" % (institution_id, report_key))
+        except Exception:
+            pass
+        from flask import make_response
+        safe = (proj.get("project_name") or "project").replace(" ", "_")[:80]
+        resp = make_response(pdf_bytes)
+        resp.headers["Content-Type"] = "application/pdf"
+        resp.headers["Content-Disposition"] = (
+            'attachment; filename="%s_%s.pdf"' % (safe, report_key))
+        return resp
 
     # ==================================================================
     # Slice 2 -- Financial Institution registration + Platform-Admin approval.

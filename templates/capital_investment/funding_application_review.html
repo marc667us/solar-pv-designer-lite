@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ proj.project_name }} - Application Review{% endblock %}
+{% block content %}
+{% set cur = proj.currency or 'GHS' %}
+{% macro money(v) -%}
+  {% if v is not none %}{{ cur }} {{ '{:,.0f}'.format(v) }}{% else %}&mdash;{% endif %}
+{%- endmacro %}
+{% set cost = (fund.funding_requested or 0) + (fund.customer_equity or 0) if fund and (fund.funding_requested is not none or fund.customer_equity is not none) else none %}
+
+<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+  <div>
+    <h5 class="fw-bold mb-0"><i class="bi bi-file-earmark-text text-warning me-1"></i>Application Review</h5>
+    <div class="text-secondary small">
+      <span class="badge bg-secondary me-1">{{ inst.name }}</span>
+      reviewing <strong class="text-light">{{ proj.client_name or 'customer' }}</strong> &mdash;
+      {{ proj.project_name }}
+      {% if proj.target_kwp %}&middot; {{ '%.1f'|format(proj.target_kwp/1000) }} MWp{% endif %}
+    </div>
+  </div>
+  <a href="{{ url_for('funding_institution_workspace') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Back to workspace
+  </a>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    {# Application overview. #}
+    <div class="card bg-dark border-secondary mb-3">
+      <div class="card-header"><span class="fw-bold small"><i class="bi bi-clipboard-data me-1 text-warning"></i>Applicant &amp; project</span></div>
+      <div class="card-body">
+        <div class="row g-2">
+          {% macro cell(label, value) %}
+            <div class="col-6 col-md-4">
+              <div class="border border-secondary rounded p-2 h-100 bg-black">
+                <div class="text-secondary" style="font-size:10px;text-transform:uppercase;letter-spacing:.4px">{{ label }}</div>
+                <div class="fw-semibold text-light">{{ value }}</div>
+              </div>
+            </div>
+          {% endmacro %}
+          {{ cell('Customer', proj.client_name or '—') }}
+          {{ cell('Developer', proj.developer or '—') }}
+          {{ cell('Investor / Sponsor', proj.investor or '—') }}
+          {{ cell('Location', (proj.district ~ ' ' if proj.district else '') ~ (proj.region ~ ' ' if proj.region else '') ~ (proj.country or '—')) }}
+          {{ cell('Capacity', ('%.1f MWp'|format(proj.target_kwp/1000)) if proj.target_kwp else '—') }}
+          {{ cell('Project type', project_types.get(proj.project_type, proj.project_type or '—')) }}
+          {{ cell('Project cost (CAPEX)', money(ov.capex_local) if ov.capex_local is not none else money(cost)) }}
+          {{ cell('Customer equity', money(ov.equity_local) if ov.equity_local is not none else money(fund.customer_equity if fund else none)) }}
+          {{ cell('Funding requested (debt)', money(ov.debt_local) if ov.debt_local is not none else money(fund.funding_requested if fund else none)) }}
+          {{ cell('Project IRR', ('%.1f%%'|format(ov.irr_pct)) if ov.irr_pct is not none else '—') }}
+          {{ cell('NPV', money(ov.npv_local)) }}
+          {{ cell('Payback', ('%.1f yrs'|format(ov.payback_years)) if ov.payback_years is not none else '—') }}
+          {{ cell('Min DSCR', ('%.2f'|format(ov.dscr_min)) if ov.dscr_min is not none else '—') }}
+          {{ cell('Currency', cur) }}
+        </div>
+      </div>
+    </div>
+
+    {# Report engine reuse — institution-scoped downloads. #}
+    <div class="card bg-dark border-secondary">
+      <div class="card-header"><span class="fw-bold small"><i class="bi bi-journal-arrow-down me-1 text-warning"></i>Reports &amp; due diligence</span></div>
+      <div class="card-body">
+        <div class="text-secondary small mb-2"><i class="bi bi-shield-check me-1"></i>Generated from the applicant's real project data, shared with your consent-backed access.</div>
+        <div class="row g-2">
+          {% for key, label, icon, _full in report_types %}
+          <div class="col-md-6 col-lg-4">
+            <a class="btn btn-outline-secondary btn-sm w-100 text-start d-flex align-items-center"
+               href="{{ url_for('funding_application_report_pdf', pid=proj.id, institution_id=inst.institution_id, report_key=key) }}"
+               target="_blank" rel="noopener">
+              <i class="bi {{ icon }} me-2 text-warning"></i><span class="text-truncate">{{ label }}</span>
+              <i class="bi bi-download ms-auto"></i>
+            </a>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    {# Funding readiness. #}
+    <div class="card bg-dark border-secondary mb-3">
+      <div class="card-header"><span class="fw-bold small"><i class="bi bi-speedometer2 me-1 text-warning"></i>Funding readiness</span></div>
+      <div class="card-body text-center">
+        {% if ov.bank_available %}
+        <div class="display-6 fw-bold text-{{ ov.funding_rating_class }}">{{ ov.funding_score }}<span class="fs-6 text-secondary">/100</span></div>
+        <div class="badge bg-{{ ov.funding_rating_class }} mb-2">{{ ov.funding_rating }}</div>
+        <div class="text-secondary small">Bankability score from the applicant's finance engine (DSCR, IRR, NPV, LCOE margin, payback, downside P90).</div>
+        {% else %}
+        <div class="text-secondary small py-2">The applicant has not completed the financial model yet.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Decision panel. #}
+    <div class="card bg-dark border-secondary">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span class="fw-bold small"><i class="bi bi-check2-square me-1 text-warning"></i>Decision</span>
+        <span class="badge bg-{{ status_class.get(sel.status,'secondary') }}">{{ status_labels.get(sel.status, sel.status) }}</span>
+      </div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('funding_application_decision', pid=proj.id, institution_id=inst.institution_id) }}" class="m-0">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <label class="form-label small text-secondary mb-1">Move application to</label>
+          <select name="status" class="form-select form-select-sm bg-black text-light border-secondary mb-2">
+            {% for s in statuses %}
+            <option value="{{ s }}" {% if s == sel.status %}selected{% endif %}>{{ status_labels.get(s, s) }}</option>
+            {% endfor %}
+          </select>
+          <label class="form-label small text-secondary mb-1">Decision note (optional)</label>
+          <textarea name="decision_note" rows="3" maxlength="2000"
+                    class="form-control form-control-sm bg-black text-light border-secondary mb-2"
+                    placeholder="Conditions, missing documents, committee remarks…">{{ sel.decision_note or '' }}</textarea>
+          <button type="submit" class="btn btn-warning fw-bold w-100"><i class="bi bi-save me-1"></i>Update application</button>
+        </form>
+        <div class="text-secondary small mt-2">
+          Submitted {{ sel.submitted_at }}.
+          {% if sel.decided_at %}<br>Last decision {{ sel.decided_at }}.{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
