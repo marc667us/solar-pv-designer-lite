@@ -111,9 +111,16 @@
       <div class="card-header"><span class="fw-bold small"><i class="bi bi-journal-arrow-down me-1 text-warning"></i>Reports &amp; due diligence</span></div>
       <div class="card-body">
         {% if proj._kind == 'project' %}
+        {% if proj.bill_check %}
+          {# The applicant's verified Check My Bill result, delivered to the
+             lender (owner 2026-07-05: results must reach the bank). #}
+          {% set d = {'bill_check': proj.bill_check, 'symbol': (proj.currency ~ ' ') if proj.currency else 'GHS '} %}
+          {% include "_bill_check_report_section.html" %}
+        {% endif %}
         <div class="text-secondary small mb-0"><i class="bi bi-info-circle me-1"></i>This is a
-          standard PV project application. Ask the applicant to share their design,
-          BOQ and economic report through the Communication thread below.</div>
+          standard PV project application. The verified bill above is attached; ask the
+          applicant to share their full design, BOQ and economic report through the
+          Communication thread below.</div>
         {% else %}
         <div class="text-secondary small mb-2"><i class="bi bi-shield-check me-1"></i>Generated from the applicant's real project data, shared with your consent-backed access.</div>
         <div class="row g-2">

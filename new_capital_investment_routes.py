@@ -5167,6 +5167,9 @@ def _pf_project_view(proj_row: dict) -> dict:
         "district": data.get("district") or '',
         "developer": '', "investor": '',
         "finance_config": json.dumps(_pf_finance_config(eco)),
+        # Slice 10c: the saved Check My Bill snapshot travels with the funding
+        # view so the institution review page shows the applicant's verified bill.
+        "bill_check": data.get("bill_check"),
     }
 
 

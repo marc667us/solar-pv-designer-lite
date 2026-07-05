@@ -4807,7 +4807,7 @@ def export_pdf_energy(pid):
 | Grid Offset | {"100" if d.get("system_type")=="off-grid" else "~80"} | % |
 
 ---
-
+{_bill_check_md(d)}
 # Monthly Energy Generation & Savings
 
 | Month | Generation (kWh) | Grid Offset (kWh) | Utility Offset (%) | Savings ({sym}) |
@@ -4898,6 +4898,7 @@ def export_pdf_economic(pid):
 
 ### Project Assessment
 """
+    md += _bill_check_md(d)
     for reason in eco["verdict_reasons"]:
         md += f"- {reason}\n"
 
@@ -32513,8 +32514,10 @@ def bill_check_save(pid):
         return jsonify({"error": "computation failed", "detail": str(e)}), 400
     data = proj.get("data", {}) or {}
     history = data.setdefault("bill_check_history", [])
-    history.append({"saved_at": datetime.now().isoformat(timespec="seconds"), **result})
+    _bc_saved_at = datetime.now().isoformat(timespec="seconds")
+    history.append({"saved_at": _bc_saved_at, **result})
     data["bill_check_history"] = history[-20:]
+    result["saved_at"] = _bc_saved_at
     data["bill_check"] = result
     save_project_data(pid, data)
     try:
@@ -32631,6 +32634,9 @@ def bill_check_lead():
 #   5. Invite friends with a pre-filled try-it link
 
 import base64
+
+from bill_check_report import bill_check_md as _bill_check_md
+
 
 def _bc_funding_model(bill_check_result):
     """Augment a _bc_compute() result with a "fund solar from your bill" block.
