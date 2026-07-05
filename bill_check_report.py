@@ -24,13 +24,21 @@ def bill_check_md(d) -> str:
     exp = bc.get("expected") or {}
     en = bc.get("energy") or {}
     tm = bc.get("tariff_meta") or {}
+    actual = bc.get("actual_bill") or 0
     rows = [
         ("Customer category", str(exp.get("category_applied") or "-")),
         ("Estimated monthly consumption",
          "{:,.0f} kWh".format(en.get("monthly_kwh") or 0)),
         ("Expected PURC bill", "{}{:,.2f}".format(sym, exp.get("total") or 0)),
-        ("Actual bill", "{}{:,.2f}".format(sym, bc.get("actual_bill") or 0)),
     ]
+    # Only report an actual bill when the customer entered one. Running Check My
+    # Bill from the load schedule alone leaves actual_bill = 0; printing "GHS 0.00"
+    # reads as a broken/zero bill in a lender-facing report (owner 2026-07-05).
+    if actual > 0:
+        rows.append(("Actual bill", "{}{:,.2f}".format(sym, actual)))
+    else:
+        rows.append(("Actual bill",
+                     "Not provided - expected PURC bill used as the baseline"))
     if bc.get("difference") is not None:
         dp = bc.get("difference_pct")
         extra = " ({:+.1f}%)".format(dp) if dp is not None else ""

@@ -26,7 +26,15 @@
         {% if _in.get('meter_type') %}<tr><th scope="row">Meter type</th><td>{{ _in.get('meter_type')|title }}{% if _in.get('completeness') %} &middot; load schedule {{ _in.get('completeness') }}{% endif %}</td></tr>{% endif %}
         <tr><th scope="row">Estimated monthly consumption</th><td>{{ (_en.get('monthly_kwh') or 0)|fmt(0) }} kWh</td></tr>
         <tr><th scope="row">Expected PURC bill (energy + service)</th><td>{{ sym }}{{ (_exp.get('total') or 0)|fmt(2) }}</td></tr>
+        {# Only show an "Actual bill" figure when the customer actually entered one.
+           Running Check My Bill from the load schedule alone leaves actual_bill = 0;
+           printing "GHS 0.00" reads as a broken/zero bill in a lender-facing report
+           (owner 2026-07-05). When absent, the expected PURC bill is the baseline. #}
+        {% if (bc.get('actual_bill') or 0) > 0 %}
         <tr><th scope="row">Actual bill</th><td>{{ sym }}{{ (bc.get('actual_bill') or 0)|fmt(2) }}</td></tr>
+        {% else %}
+        <tr><th scope="row">Actual bill</th><td class="text-secondary">Not provided &mdash; expected PURC bill used as the baseline</td></tr>
+        {% endif %}
         {% if bc.get('difference') is not none %}
         <tr><th scope="row">Difference (actual &minus; expected)</th>
           <td class="{{ 'text-danger' if (bc.get('difference') or 0) > 0 else 'text-success' }}">

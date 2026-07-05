@@ -32554,7 +32554,10 @@ def bill_check_report(pid):
     md += f"| Expected PURC Energy Charge | {sym}{r['expected']['energy']:,.2f} |\n"
     md += f"| Service Charge | {sym}{r['expected']['service']:,.2f} |\n"
     md += f"| Expected PURC Bill (energy + service) | {sym}{r['expected']['total']:,.2f} |\n"
-    md += f"| Actual Bill | {sym}{r['actual_bill']:,.2f} |\n"
+    if (r.get('actual_bill') or 0) > 0:
+        md += f"| Actual Bill | {sym}{r['actual_bill']:,.2f} |\n"
+    else:
+        md += "| Actual Bill | Not provided - expected PURC bill used as baseline |\n"
     if r.get("difference") is not None:
         md += f"| Difference (Actual − Expected) | {sym}{r['difference']:,.2f} ({r['difference_pct']:+.2f}%) |\n"
     if r.get("effective_tariff") is not None:
@@ -32889,7 +32892,10 @@ def _bc_build_report_markdown(result, share_url=None, contact_email=None):
     md += f"| Expected PURC Energy Charge | {sym}{result['expected']['energy']:,.2f} |\n"
     md += f"| Service Charge | {sym}{result['expected']['service']:,.2f} |\n"
     md += f"| Expected PURC Bill (energy + service) | {sym}{result['expected']['total']:,.2f} |\n"
-    md += f"| Actual Bill | {sym}{result['actual_bill']:,.2f} |\n"
+    if (result.get('actual_bill') or 0) > 0:
+        md += f"| Actual Bill | {sym}{result['actual_bill']:,.2f} |\n"
+    else:
+        md += "| Actual Bill | Not provided - expected PURC bill used as baseline |\n"
     if result.get("difference") is not None:
         md += f"| Difference (Actual − Expected) | {sym}{result['difference']:,.2f} ({result['difference_pct']:+.2f}%) |\n"
     if result.get("effective_tariff") is not None:
