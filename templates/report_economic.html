@@ -77,6 +77,24 @@
   {% endif %}
 </div>
 
+{# Auto-adjust to bankable (owner 2026-07-05). Shown when the project is not
+   APPROVED, or (for loan-funded projects) not BANKABLE. Tunes the financial
+   parameters only; the engineering design is unchanged. #}
+{% if eco.verdict != 'APPROVED' or (eco.get('funding_mode','loan') == 'loan' and eco.bankability != 'BANKABLE') %}
+<div class="solar-card p-3 mb-4 no-print" style="border-left:4px solid #f59e0b">
+  <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
+    <div>
+      <div class="fw-bold" style="color:#f59e0b"><i class="bi bi-magic me-1"></i>Make this project bankable</div>
+      <div class="text-secondary small">Automatically tune the financial parameters (equipment cost per kWp, install rate, supply markup, funding structure) to reach an <strong>APPROVED / BANKABLE</strong> verdict where feasible. Your system design is not changed &mdash; only its costing and financing. Reversible.</div>
+    </div>
+    <form method="post" action="{{ url_for('project_optimize_bankability', pid=project.id) }}" class="m-0">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-warning fw-bold text-nowrap"><i class="bi bi-arrow-repeat me-1"></i>Update Project</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 <!-- KPIs -->
 <div class="row g-2 mb-4">
   {% for lbl,val,unit,color in [
