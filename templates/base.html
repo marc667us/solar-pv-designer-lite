@@ -595,6 +595,13 @@
                 <i class="bi bi-box-seam me-2 text-success"></i>Product Catalogue
               </a>
             </li>
+            <li><hr class="dropdown-divider"></li>
+            <li><span class="dropdown-header text-secondary" style="font-size:11px;letter-spacing:.5px;color:#9090c0!important">FUNDING</span></li>
+            <li>
+              <a class="dropdown-item {% if ep == 'funding_institutions_admin' %}active{% endif %}" href="{{ url_for('funding_institutions_admin') }}">
+                <i class="bi bi-bank me-2 text-warning"></i>Financial Institutions
+              </a>
+            </li>
           </ul>
         </li>
         {% endif %}
@@ -703,6 +710,9 @@
       <span class="text-secondary text-uppercase fw-bold px-2 mt-2" style="font-size:10px;letter-spacing:.5px">Workspace</span>
       <a class="nav-link py-1 px-2 rounded {% if ep in ('folders_index','folder_detail') %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('folders_index') }}"><i class="bi bi-folder2-open me-2"></i>Folders</a>
       <a class="nav-link py-1 px-2 rounded" href="#" data-bs-toggle="modal" data-bs-target="#platformShareModal" data-platform-share="1"><i class="bi bi-megaphone-fill me-2 text-warning"></i>Share SolarPro</a>
+
+      <span class="text-secondary text-uppercase fw-bold px-2 mt-2" style="font-size:10px;letter-spacing:.5px">Funding</span>
+      <a class="nav-link py-1 px-2 rounded {% if ep=='funding_institution_register' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('funding_institution_register') }}"><i class="bi bi-bank2 me-2 text-warning"></i>Register as Financial Institution</a>
       {% if user.is_admin or (user.role or '') == 'technical_support' %}
       <a class="nav-link py-1 px-2 rounded {% if ep=='support_dashboard' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('support_dashboard') }}"><i class="bi bi-headset me-2" style="color:#a78bfa"></i>Installation Support</a>
       {% endif %}

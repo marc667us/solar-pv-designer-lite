@@ -5003,6 +5003,76 @@ def _ensure_ci_funding_schema(get_db) -> bool:
     return bool(_CI_FUNDING_STATE["ready"])
 
 
+# ---------------------------------------------------------------------------
+# Financial Institutions -- Slice 2 (2026-07-05). A PLATFORM-GLOBAL registry:
+# banks / leasing / funds register, Platform Admin approves, and customers across
+# tenants select from the approved set (mirrors how the marketplace supplier
+# registry is shared). created_by_user_id + tenant_id are recorded for provenance
+# only -- institution visibility is NOT tenant-filtered. UUID TEXT PK avoids the
+# AUTOINCREMENT/SERIAL cross-DB translation.
+# ---------------------------------------------------------------------------
+_FI_STATE = {"ready": False}
+
+FI_TYPES = [
+    ("commercial_bank", "Commercial Bank"),
+    ("development_bank", "Development Bank"),
+    ("leasing", "Leasing Company"),
+    ("investment_fund", "Investment Fund"),
+    ("infrastructure_fund", "Infrastructure Fund"),
+    ("climate_fund", "Climate Fund"),
+    ("private_equity", "Private Equity"),
+    ("govt_agency", "Government Funding Agency"),
+]
+FI_TYPE_CODES = {c for c, _ in FI_TYPES}
+FI_STATUSES = ("pending", "approved", "rejected", "suspended")
+# Admin action -> resulting status.
+FI_ACTIONS = {"approve": "approved", "reject": "rejected",
+              "suspend": "suspended", "reactivate": "approved"}
+
+
+def _ensure_fi_schema(get_db) -> bool:
+    """Create financial_institutions once (SQLite + Postgres safe)."""
+    if _FI_STATE["ready"]:
+        return True
+    ddl = (
+        "CREATE TABLE IF NOT EXISTS financial_institutions ("
+        " institution_id TEXT PRIMARY KEY,"
+        " name TEXT NOT NULL,"
+        " inst_type TEXT NOT NULL DEFAULT '',"
+        " country TEXT NOT NULL DEFAULT '',"
+        " region TEXT NOT NULL DEFAULT '',"
+        " contact_person TEXT NOT NULL DEFAULT '',"
+        " position TEXT NOT NULL DEFAULT '',"
+        " email TEXT NOT NULL DEFAULT '',"
+        " phone TEXT NOT NULL DEFAULT '',"
+        " website TEXT NOT NULL DEFAULT '',"
+        " licence_no TEXT NOT NULL DEFAULT '',"
+        " regulator TEXT NOT NULL DEFAULT '',"
+        " loan_min REAL,"
+        " loan_max REAL,"
+        " tenor_months INTEGER,"
+        " interest_min REAL,"
+        " interest_max REAL,"
+        " supported_project_types TEXT NOT NULL DEFAULT '',"
+        " funding_products TEXT NOT NULL DEFAULT '',"
+        " fee_pct REAL NOT NULL DEFAULT 2.0,"
+        " agreement_ref TEXT NOT NULL DEFAULT '',"
+        " agreement_status TEXT NOT NULL DEFAULT 'none',"
+        " status TEXT NOT NULL DEFAULT 'pending',"
+        " created_by_user_id INTEGER,"
+        " tenant_id TEXT NOT NULL DEFAULT '',"
+        " created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        " updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    try:
+        with get_db() as c:
+            c.execute(ddl)
+        _FI_STATE["ready"] = True
+    except Exception:
+        _FI_STATE["ready"] = False
+    return bool(_FI_STATE["ready"])
+
+
 # ===========================================================================
 # SECTION E -- Wizard progress (derives completion from real stored data;
 # SSS Section 2 acceptance -- no pseudo "hook" fields).
@@ -5566,6 +5636,169 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             user=current_user(), proj=proj, ov=ov, fund=fund,
             project_types=dict((c, L) for c, L, _ in PROJECT_TYPES),
         )
+
+    # ==================================================================
+    # Slice 2 -- Financial Institution registration + Platform-Admin approval.
+    # ==================================================================
+    def _fi_admin_ok() -> bool:
+        """True only for platform admins (mirrors the app's is_admin check)."""
+        try:
+            return bool(int(_row_get(current_user(), "is_admin", 0) or 0))
+        except Exception:
+            return False
+
+    # GET/POST /funding/institutions/register -- self-service registration.
+    @app.route("/funding/institutions/register", methods=["GET", "POST"],
+               endpoint="funding_institution_register")
+    @login_required
+    def _fi_register():
+        _ensure_fi_schema(get_db)
+        if request.method == "POST":
+            csrf_protect()
+            f = request.form
+            name = (f.get("name") or "").strip()[:200]
+            email = (f.get("email") or "").strip()[:200]
+            if not name or not email:
+                flash("Institution name and contact email are required.",
+                      "warning")
+                return redirect(url_for("funding_institution_register"))
+            import uuid as _uuid
+            iid = "FI-" + _uuid.uuid4().hex[:12].upper()
+            inst_type = (f.get("inst_type") or "").strip()
+            if inst_type not in FI_TYPE_CODES:
+                inst_type = ""
+            spt = ",".join(_multi(f, "supported_project_types",
+                                  PROJECT_TYPE_CODES))
+            tenor = _n(f, "tenor_months")
+            vals = (
+                iid, name, inst_type,
+                (f.get("country") or "").strip()[:80],
+                (f.get("region") or "").strip()[:80],
+                (f.get("contact_person") or "").strip()[:120],
+                (f.get("position") or "").strip()[:120],
+                email,
+                (f.get("phone") or "").strip()[:60],
+                (f.get("website") or "").strip()[:200],
+                (f.get("licence_no") or "").strip()[:120],
+                (f.get("regulator") or "").strip()[:120],
+                _n(f, "loan_min"), _n(f, "loan_max"),
+                int(tenor) if tenor else None,
+                _n(f, "interest_min"), _n(f, "interest_max"),
+                spt,
+                (f.get("funding_products") or "").strip()[:1000],
+                (f.get("agreement_ref") or "").strip()[:120],
+                session.get("user_id"),
+                str(_tenant_id()) if _tenant_id() is not None else '',
+            )
+            ok = False
+            if _ensure_fi_schema(get_db):
+                try:
+                    with get_db() as c:
+                        c.execute(
+                            "INSERT INTO financial_institutions "
+                            "(institution_id, name, inst_type, country, region, "
+                            " contact_person, position, email, phone, website, "
+                            " licence_no, regulator, loan_min, loan_max, "
+                            " tenor_months, interest_min, interest_max, "
+                            " supported_project_types, funding_products, "
+                            " agreement_ref, created_by_user_id, tenant_id) "
+                            "VALUES (" + ",".join("?" * 22) + ")", vals)
+                    ok = True
+                except Exception:
+                    ok = False
+            if ok:
+                try:
+                    from new_boq_hierarchy_schema import boq_audit
+                    boq_audit(get_db, session.get("user_id"),
+                              "funding_institution_registered",
+                              "financial_institution", 0,
+                              "registered %s (%s)" % (name, iid))
+                except Exception:
+                    pass
+                flash("Registration submitted. A platform administrator will "
+                      "review and approve your institution.", "success")
+                return redirect(url_for("funding_institution_register"))
+            flash("Could not submit the registration - please try again.",
+                  "danger")
+            return redirect(url_for("funding_institution_register"))
+        # GET
+        return render_template(
+            "capital_investment/funding_institution_register.html",
+            user=current_user(), fi_types=FI_TYPES, project_types=PROJECT_TYPES)
+
+    # GET /admin/funding/institutions -- Platform-Admin review queue.
+    @app.route("/admin/funding/institutions",
+               endpoint="funding_institutions_admin")
+    @login_required
+    def _fi_admin_list():
+        if not _fi_admin_ok():
+            from flask import abort
+            abort(403)
+        _ensure_fi_schema(get_db)
+        status = (request.args.get("status") or "").strip()
+        rows, counts = [], {s: 0 for s in FI_STATUSES}
+        try:
+            with get_db() as c:
+                if status in FI_STATUSES:
+                    rr = c.execute(
+                        "SELECT * FROM financial_institutions WHERE status=? "
+                        "ORDER BY created_at DESC", (status,)).fetchall()
+                else:
+                    rr = c.execute(
+                        "SELECT * FROM financial_institutions "
+                        "ORDER BY created_at DESC").fetchall()
+                rows = [dict(r) for r in rr] if rr else []
+                for gr in c.execute(
+                        "SELECT status, COUNT(*) AS n FROM "
+                        "financial_institutions GROUP BY status").fetchall() or []:
+                    counts[_row_get(gr, "status")] = _row_get(gr, "n", 0)
+        except Exception:
+            rows = []
+        return render_template(
+            "capital_investment/funding_institutions_admin.html",
+            user=current_user(), institutions=rows, counts=counts,
+            status=status, fi_types=dict(FI_TYPES), fi_statuses=FI_STATUSES)
+
+    # POST /admin/funding/institutions/<iid>/action -- approve/reject/suspend.
+    @app.route("/admin/funding/institutions/<iid>/action", methods=["POST"],
+               endpoint="funding_institution_action")
+    @login_required
+    def _fi_action(iid):
+        if not _fi_admin_ok():
+            from flask import abort
+            abort(403)
+        csrf_protect()
+        action = (request.form.get("action") or "").strip()
+        new_status = FI_ACTIONS.get(action)
+        if not new_status:
+            flash("Unknown action.", "warning")
+            return redirect(url_for("funding_institutions_admin"))
+        ok = False
+        if _ensure_fi_schema(get_db):
+            try:
+                with get_db() as c:
+                    c.execute(
+                        "UPDATE financial_institutions SET status=?, "
+                        "updated_at=CURRENT_TIMESTAMP WHERE institution_id=?",
+                        (new_status, iid))
+                ok = True
+            except Exception:
+                ok = False
+        if ok:
+            try:
+                from new_boq_hierarchy_schema import boq_audit
+                boq_audit(get_db, session.get("user_id"),
+                          "funding_institution_" + action,
+                          "financial_institution", 0,
+                          "%s -> %s" % (iid, new_status))
+            except Exception:
+                pass
+            flash("Institution %s." % new_status, "success")
+        else:
+            flash("Could not update the institution.", "danger")
+        back = (request.form.get("return_status") or "").strip()
+        return redirect(url_for("funding_institutions_admin",
+                                status=back if back in FI_STATUSES else None))
 
     # -- step navigation helper (forward-safe: skip to overview if the next
     #    step's phase has not shipped yet) --------------------------------

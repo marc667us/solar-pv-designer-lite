@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Register as a Financial Institution - SolarPro{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+  <div>
+    <h5 class="fw-bold mb-0"><i class="bi bi-bank2 text-warning me-1"></i>Register as a Financial Institution</h5>
+    <div class="text-secondary small">Banks, leasing companies, investors and funds &mdash; register to review and fund SolarPro projects. A platform administrator approves before access is granted.</div>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('funding_institution_register') }}" class="card bg-dark border-secondary">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <div class="card-body">
+    <div class="fw-bold small text-uppercase text-secondary mb-2"><i class="bi bi-building me-1"></i>Institution</div>
+    <div class="row g-2 mb-3">
+      <div class="col-md-6"><label class="form-label small">Institution name *</label><input name="name" required maxlength="200" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-md-3"><label class="form-label small">Type</label>
+        <select name="inst_type" class="form-select form-select-sm bg-black text-light border-secondary">
+          <option value="">Select…</option>
+          {% for code, label in fi_types %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3"><label class="form-label small">Regulator</label><input name="regulator" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-md-4"><label class="form-label small">Country</label><input name="country" maxlength="80" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-md-4"><label class="form-label small">Region</label><input name="region" maxlength="80" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-md-4"><label class="form-label small">Banking / business licence no.</label><input name="licence_no" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+    </div>
+
+    <div class="fw-bold small text-uppercase text-secondary mb-2"><i class="bi bi-person-badge me-1"></i>Contact</div>
+    <div class="row g-2 mb-3">
+      <div class="col-md-4"><label class="form-label small">Contact person</label><input name="contact_person" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-md-2"><label class="form-label small">Position</label><input name="position" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-md-3"><label class="form-label small">Email *</label><input type="email" name="email" required maxlength="200" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-md-3"><label class="form-label small">Phone</label><input name="phone" maxlength="60" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-md-6"><label class="form-label small">Website</label><input name="website" maxlength="200" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+    </div>
+
+    <div class="fw-bold small text-uppercase text-secondary mb-2"><i class="bi bi-cash-coin me-1"></i>Funding profile</div>
+    <div class="row g-2 mb-3">
+      <div class="col-md-3"><label class="form-label small">Min loan amount</label><input type="number" step="any" min="0" name="loan_min" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-md-3"><label class="form-label small">Max loan amount</label><input type="number" step="any" min="0" name="loan_max" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-md-2"><label class="form-label small">Max tenor (months)</label><input type="number" min="0" name="tenor_months" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-md-2"><label class="form-label small">Interest % (min)</label><input type="number" step="any" min="0" name="interest_min" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-md-2"><label class="form-label small">Interest % (max)</label><input type="number" step="any" min="0" name="interest_max" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-12"><label class="form-label small">Funding products (free text)</label><input name="funding_products" maxlength="1000" placeholder="Green finance, project finance, asset finance, lease finance…" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+      <div class="col-md-6"><label class="form-label small">Commercial agreement reference (if any)</label><input name="agreement_ref" maxlength="120" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+    </div>
+
+    <div class="fw-bold small text-uppercase text-secondary mb-2"><i class="bi bi-diagram-3 me-1"></i>Supported project types</div>
+    <div class="row g-1 mb-2">
+      {% for code, label, _icon in project_types %}
+      <div class="col-6 col-md-4 col-lg-3">
+        <label class="d-flex align-items-center gap-1 small text-light">
+          <input type="checkbox" name="supported_project_types" value="{{ code }}" class="form-check-input mt-0"> {{ label }}
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="text-secondary small">The default SolarPro success fee is 2% of the approved loan amount, configurable per institution once a commercial agreement is in place.</div>
+  </div>
+  <div class="card-footer d-flex justify-content-end gap-2">
+    <button type="submit" class="btn btn-warning fw-bold"><i class="bi bi-send-check me-1"></i>Submit for approval</button>
+  </div>
+</form>
+{% endblock %}
