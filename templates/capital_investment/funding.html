@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ proj.project_name }} - Project Funding{% endblock %}
+{% block content %}
+{% set cur = proj.currency or 'GHS' %}
+<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+  <div>
+    <h5 class="fw-bold mb-0"><i class="bi bi-bank text-warning me-1"></i>Project Funding</h5>
+    <div class="text-secondary small">
+      {{ proj.project_name }}
+      {% if proj.target_kwp %}&middot; {{ '%.1f'|format(proj.target_kwp/1000) }} MWp{% endif %}
+      &middot; {{ project_types.get(proj.project_type, proj.project_type or 'Unclassified') }}
+    </div>
+  </div>
+  <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>Back to project
+  </a>
+</div>
+
+{# Funding tabs (spec section 3) — only Overview is live in Slice 1. #}
+<ul class="nav nav-pills gap-1 mb-3 small">
+  <li class="nav-item"><span class="nav-link active bg-warning text-dark fw-bold py-1 px-2">Overview</span></li>
+  {% for t in ['Applicant', 'Sponsor', 'Institutions', 'Risk', 'Reports', 'Documents', 'Communication', 'Status', 'Success Fees', 'Audit'] %}
+  <li class="nav-item"><span class="nav-link text-secondary py-1 px-2" style="opacity:.5" title="Coming in the next funding slice">{{ t }}<i class="bi bi-lock-fill ms-1" style="font-size:9px"></i></span></li>
+  {% endfor %}
+</ul>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card bg-dark border-secondary mb-3">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span class="fw-bold small"><i class="bi bi-clipboard-data me-1 text-warning"></i>Funding overview</span>
+        {% if fund %}<span class="badge bg-info text-dark">{{ fund.status|replace('_',' ')|title }}</span>{% endif %}
+      </div>
+      <div class="card-body">
+        <div class="text-secondary small mb-3">
+          <i class="bi bi-info-circle me-1"></i>Auto-filled from your existing project &amp; Step-8 finance
+          data &mdash; nothing is re-entered.
+        </div>
+        <div class="row g-2">
+          {% macro cell(label, value) %}
+            <div class="col-6 col-md-4">
+              <div class="border border-secondary rounded p-2 h-100 bg-black">
+                <div class="text-secondary" style="font-size:10px;text-transform:uppercase;letter-spacing:.4px">{{ label }}</div>
+                <div class="fw-semibold text-light">{{ value }}</div>
+              </div>
+            </div>
+          {% endmacro %}
+          {{ cell('Customer', proj.client_name or '—') }}
+          {{ cell('Developer', proj.developer or '—') }}
+          {{ cell('Investor / Sponsor', proj.investor or '—') }}
+          {{ cell('Location', (proj.district ~ ' ' if proj.district else '') ~ (proj.region ~ ' ' if proj.region else '') ~ (proj.country or '—')) }}
+          {{ cell('Capacity', ('%.1f MWp'|format(proj.target_kwp/1000)) if proj.target_kwp else '—') }}
+          {{ cell('Currency', cur) }}
+          {% if ov.finance_available %}
+          {{ cell('Project cost (CAPEX)', cur ~ ' ' ~ '{:,.0f}'.format(ov.capex_local) if ov.capex_local is not none else '—') }}
+          {{ cell('Customer equity', cur ~ ' ' ~ '{:,.0f}'.format(ov.equity_local) if ov.equity_local is not none else '—') }}
+          {{ cell('Funding required (debt)', cur ~ ' ' ~ '{:,.0f}'.format(ov.debt_local) if ov.debt_local is not none else '—') }}
+          {{ cell('Project IRR', ('%.1f%%'|format(ov.irr_pct)) if ov.irr_pct is not none else '—') }}
+          {{ cell('NPV', cur ~ ' ' ~ '{:,.0f}'.format(ov.npv_local) if ov.npv_local is not none else '—') }}
+          {{ cell('Payback', ('%.1f yrs'|format(ov.payback_years)) if ov.payback_years is not none else '—') }}
+          {{ cell('Min DSCR', ('%.2f'|format(ov.dscr_min)) if ov.dscr_min is not none else '—') }}
+          {% endif %}
+        </div>
+        {% if not ov.finance_available %}
+        <div class="alert alert-warning bg-dark border-warning text-warning small mt-3 mb-0">
+          <i class="bi bi-exclamation-triangle me-1"></i>Complete <strong>Step 8 &mdash; Financial
+          Engineering</strong> to auto-fill the project cost, funding requirement and bankability
+          metrics used by lenders.
+          <a href="{{ url_for('capital_investment_project', pid=proj.id) }}" class="text-warning fw-bold">Open the project</a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card bg-dark border-secondary mb-3">
+      <div class="card-header"><span class="fw-bold small"><i class="bi bi-speedometer2 me-1 text-warning"></i>Funding readiness</span></div>
+      <div class="card-body text-center">
+        {% if ov.bank_available %}
+        <div class="display-6 fw-bold text-{{ ov.funding_rating_class }}">{{ ov.funding_score }}<span class="fs-6 text-secondary">/100</span></div>
+        <div class="badge bg-{{ ov.funding_rating_class }} mb-2">{{ ov.funding_rating }}</div>
+        <div class="text-secondary small">Derived from the bankability engine (DSCR, IRR, NPV, LCOE margin, payback, downside P90).</div>
+        {% else %}
+        <div class="text-secondary small py-2">Complete Step 8 to compute the funding readiness score.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card bg-dark border-secondary">
+      <div class="card-body">
+        <form method="post" action="{{ url_for('capital_investment_funding', pid=proj.id) }}" class="m-0">
+          <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
+          <button type="submit" class="btn btn-warning fw-bold w-100"
+                  {% if not ov.finance_available %}disabled title="Complete Step 8 first"{% endif %}>
+            <i class="bi bi-send-check me-1"></i>{{ 'Update funding request' if fund else 'Request Project Funding' }}
+          </button>
+        </form>
+        <div class="text-secondary small mt-2">
+          {% if fund %}Requested {{ fund.updated_at }}. {% endif %}Next: register or select a
+          financial institution, give consent, and submit the package to lenders.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

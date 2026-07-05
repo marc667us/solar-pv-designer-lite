@@ -53,6 +53,12 @@
          class="btn btn-warning btn-sm fw-bold">
         <i class="bi bi-clipboard-data me-1"></i>Cost Plan Deck
       </a>
+      {% if fund_available %}
+      <a href="{{ url_for('capital_investment_funding', pid=proj.id) }}"
+         class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-bank me-1"></i>Project Funding
+      </a>
+      {% endif %}
       {% if reg_available %}
       <a href="{{ url_for('capital_investment_regulatory', pid=proj.id) }}"
          class="btn btn-outline-warning btn-sm">

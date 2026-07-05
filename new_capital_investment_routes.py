@@ -4958,6 +4958,51 @@ def _ensure_ci_recent_hidden_schema(get_db) -> bool:
     return bool(_CI_RECENT_HIDDEN_STATE["ready"])
 
 
+# ---------------------------------------------------------------------------
+# Project Funding module -- Slice 1 foundation (2026-07-05, spec
+# pvsolar1/sponsors page1.txt). ONE funding application per generation-station
+# project, keyed by (project_id, tenant_id) so no autoincrement/SERIAL is needed
+# (cross-DB safe) and tenants stay isolated. Later slices add institutions,
+# selections, revenue. All money columns are in the project's own currency.
+# ---------------------------------------------------------------------------
+_CI_FUNDING_STATE = {"ready": False}
+
+# Funding application lifecycle (spec sections 9/13). Slice 1 uses draft/requested.
+CI_FUNDING_STATUSES = (
+    "draft", "requested", "package_prepared", "submitted",
+    "under_review", "conditional", "approved", "rejected", "closed",
+)
+
+
+def _ensure_ci_funding_schema(get_db) -> bool:
+    """Create capital_investment_funding once (SQLite + Postgres safe)."""
+    if _CI_FUNDING_STATE["ready"]:
+        return True
+    ddl = (
+        "CREATE TABLE IF NOT EXISTS capital_investment_funding ("
+        " capital_investment_project_id INTEGER NOT NULL,"
+        " tenant_id TEXT NOT NULL DEFAULT '',"
+        " user_id INTEGER NOT NULL,"
+        " status TEXT NOT NULL DEFAULT 'draft',"
+        " funding_requested REAL,"
+        " customer_equity REAL,"
+        " funding_score INTEGER,"
+        " risk_rating TEXT,"
+        " selected_institutions TEXT NOT NULL DEFAULT '[]',"
+        " remarks TEXT,"
+        " created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        " updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        " PRIMARY KEY (capital_investment_project_id, tenant_id))"
+    )
+    try:
+        with get_db() as c:
+            c.execute(ddl)
+        _CI_FUNDING_STATE["ready"] = True
+    except Exception:
+        _CI_FUNDING_STATE["ready"] = False
+    return bool(_CI_FUNDING_STATE["ready"])
+
+
 # ===========================================================================
 # SECTION E -- Wizard progress (derives completion from real stored data;
 # SSS Section 2 acceptance -- no pseudo "hook" fields).
@@ -5389,6 +5434,136 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             user=current_user(), proj=proj, progress=progress,
             reg_available=("capital_investment_regulatory" in vf),
             dt_available=("capital_investment_digital_twin" in vf),
+            fund_available=("capital_investment_funding" in vf),
+            project_types=dict((c, L) for c, L, _ in PROJECT_TYPES),
+        )
+
+    # ------------------------------------------------------------------
+    # Project Funding (Slice 1) -- GET overview (auto-populated from existing
+    # project + Step-8 finance data + the bankability funding-readiness score)
+    # and POST "Request Project Funding" (records/updates the funding row). The
+    # page REUSES the finance engine output; it never re-models. Institution
+    # selection + submission arrive in Slices 2-3.
+    # ------------------------------------------------------------------
+    def _ci_funding_row(pid: int, uid, tid_s: str):
+        """Return the funding application dict for this project/tenant, or None."""
+        if not _ensure_ci_funding_schema(get_db):
+            return None
+        try:
+            with get_db() as c:
+                r = c.execute(
+                    "SELECT status, funding_requested, customer_equity, "
+                    "funding_score, risk_rating, selected_institutions, remarks, "
+                    "updated_at FROM capital_investment_funding "
+                    "WHERE capital_investment_project_id=? AND tenant_id=? "
+                    "AND user_id=? LIMIT 1", (pid, tid_s, uid)).fetchone()
+            return dict(r) if r else None
+        except Exception:
+            return None
+
+    def _ci_funding_overview(proj: dict):
+        """Assemble the read-only funding overview from existing project data --
+        no re-modelling (spec: 'do not ask the user to re-enter data')."""
+        fin_cfg = _safe_json(proj.get("finance_config"))
+        computed = fin_cfg.get("computed") if isinstance(fin_cfg, dict) else {}
+        computed = computed if isinstance(computed, dict) else {}
+        cash = _ci_cashflow_plan(fin_cfg)
+        bank = _ci_bankability(computed)
+
+        def _f(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+        capex = _f(cash.get("capex_local"))
+        equity = _f(cash.get("equity_local"))
+        debt = None
+        if capex is not None:
+            debt = round(max(capex - (equity or 0.0), 0.0), 2)
+        return {
+            "finance_available": bool(cash.get("available")),
+            "capex_local": capex, "equity_local": equity, "debt_local": debt,
+            "npv_local": _f(cash.get("npv_local")),
+            "irr_pct": _f(cash.get("irr_pct")),
+            "payback_years": _f(cash.get("payback_years")),
+            "dscr_min": _f(computed.get("dscr_min")),
+            "bank_available": bool(bank.get("available")),
+            "funding_score": bank.get("score"),
+            "funding_rating": bank.get("rating"),
+            "funding_rating_class": bank.get("rating_class", "secondary"),
+        }
+
+    @app.route("/large-scale-solar/<int:pid>/funding",
+               methods=["GET", "POST"], endpoint="capital_investment_funding")
+    @login_required
+    def _funding(pid: int):
+        if (g := _gate(CI_LEVEL_SETUP)) is not None:
+            return g
+        proj = _load_project(pid)          # 404s unless owned by this user
+        # Defence in depth: _load_project scopes only user_id, so also reject a
+        # cross-tenant project (same user in another tenant) before exposing its
+        # finance data or writing funding rows (Codex High).
+        _ctid = _tenant_id()
+        if _ctid is not None and proj.get("tenant_id") not in (
+                None, _ctid, str(_ctid)):
+            from flask import abort
+            abort(404)
+        uid = session.get("user_id")
+        tid_s = str(_ctid) if _ctid is not None else ''
+        ov = _ci_funding_overview(proj)
+
+        if request.method == "POST":
+            csrf_protect()
+            # Record / refresh the funding application (status -> requested). The
+            # funding amount defaults to the debt portion (CAPEX - equity); the
+            # readiness score + equity are snapshotted from the finance engine.
+            req_amt = ov.get("debt_local")
+            equity = ov.get("equity_local")
+            score = ov.get("funding_score") if ov.get("bank_available") else None
+            ok = False
+            if _ensure_ci_funding_schema(get_db):
+                try:
+                    with get_db() as c:
+                        # Atomic upsert in ONE statement -- safe under a concurrent
+                        # double-submit (no SELECT-then-INSERT race). ON CONFLICT
+                        # DO UPDATE is supported by SQLite 3.24+ and Postgres; the
+                        # conflict target is the PK (project_id, tenant_id).
+                        c.execute(
+                            "INSERT INTO capital_investment_funding "
+                            "(capital_investment_project_id, tenant_id, user_id, "
+                            " status, funding_requested, customer_equity, "
+                            " funding_score) VALUES (?,?,?,?,?,?,?) "
+                            "ON CONFLICT (capital_investment_project_id, tenant_id) "
+                            "DO UPDATE SET status='requested', "
+                            "funding_requested=EXCLUDED.funding_requested, "
+                            "customer_equity=EXCLUDED.customer_equity, "
+                            "funding_score=EXCLUDED.funding_score, "
+                            "updated_at=CURRENT_TIMESTAMP",
+                            (pid, tid_s, uid, "requested", req_amt, equity, score))
+                    ok = True
+                except Exception:
+                    ok = False
+            if ok:
+                try:
+                    from new_boq_hierarchy_schema import boq_audit
+                    boq_audit(get_db, uid, "capital_funding_requested",
+                              "capital_investment_project", pid,
+                              "funding requested amount=%s score=%s" % (
+                                  req_amt, score))
+                except Exception:
+                    pass
+                flash("Project funding requested. Next: register/select a "
+                      "financial institution (coming soon).", "success")
+            else:
+                flash("Could not record the funding request - please try again.",
+                      "danger")
+            return redirect(url_for("capital_investment_funding", pid=pid))
+
+        # GET
+        fund = _ci_funding_row(pid, uid, tid_s)
+        return render_template(
+            "capital_investment/funding.html",
+            user=current_user(), proj=proj, ov=ov, fund=fund,
             project_types=dict((c, L) for c, L, _ in PROJECT_TYPES),
         )
 
