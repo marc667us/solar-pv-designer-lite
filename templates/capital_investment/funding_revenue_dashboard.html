@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Funding Revenue - Admin{% endblock %}
+{% block content %}
+{% macro amt(cur, v) -%}{{ cur }} {{ '{:,.0f}'.format(v or 0) }}{%- endmacro %}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <div>
+    <h5 class="fw-bold mb-0"><i class="bi bi-graph-up-arrow text-warning me-1"></i>Funding Revenue</h5>
+    <div class="text-secondary small">SolarPro success-fee analytics across all funding applications. Amounts are grouped by currency (no cross-currency conversion).</div>
+  </div>
+  <a href="{{ url_for('funding_institutions_admin') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-bank me-1"></i>Institutions</a>
+</div>
+
+{% if not rows %}
+<div class="card bg-dark border-secondary"><div class="card-body text-secondary small text-center py-5">
+  <i class="bi bi-receipt" style="font-size:2rem"></i>
+  <div class="mt-2">No funding revenue yet. Success-fee invoices appear here once an institution confirms Approved + Agreement + First Disbursement.</div>
+</div></div>
+{% else %}
+
+{# Headline totals per currency. #}
+{% for cur, d in agg.by_ccy.items() %}
+<div class="mb-2"><span class="badge bg-secondary">{{ cur }}</span> <span class="text-secondary small">{{ d.n }} application{{ 's' if d.n != 1 }}</span></div>
+<div class="row g-2 mb-3">
+  {% macro card(label, value, cls) %}
+  <div class="col-6 col-md-3 col-xl-2"><div class="border border-secondary rounded p-2 h-100 bg-black">
+    <div class="text-secondary" style="font-size:10px;text-transform:uppercase;letter-spacing:.4px">{{ label }}</div>
+    <div class="fw-bold fs-6 text-{{ cls or 'light' }}">{{ value }}</div>
+  </div></div>
+  {% endmacro %}
+  {{ card('Approved loan value', amt(cur, d.loan), 'light') }}
+  {{ card('Success fees earned', amt(cur, d.fee), 'success') }}
+  {{ card('Fees this month', amt(cur, d.fee_month), 'info') }}
+  {{ card('Fees this year', amt(cur, d.fee_year), 'info') }}
+  {{ card('Avg loan size', amt(cur, agg.avg_loan.get(cur, 0)), 'light') }}
+  {{ card('Avg success fee', amt(cur, agg.avg_fee.get(cur, 0)), 'light') }}
+</div>
+{% endfor %}
+
+{# Outstanding vs paid. #}
+<div class="row g-2 mb-3">
+  <div class="col-md-6"><div class="border border-warning rounded p-2 bg-black h-100">
+    <div class="text-warning fw-bold small"><i class="bi bi-hourglass-split me-1"></i>Outstanding invoices ({{ agg.pay.outstanding.n }})</div>
+    <div class="d-flex flex-wrap gap-2 mt-1">{% for cur, v in agg.pay.outstanding.amt.items() %}<span class="badge bg-dark border border-warning text-warning">{{ amt(cur, v) }}</span>{% else %}<span class="text-secondary small">none</span>{% endfor %}</div>
+  </div></div>
+  <div class="col-md-6"><div class="border border-success rounded p-2 bg-black h-100">
+    <div class="text-success fw-bold small"><i class="bi bi-check2-circle me-1"></i>Paid invoices ({{ agg.pay.paid.n }})</div>
+    <div class="d-flex flex-wrap gap-2 mt-1">{% for cur, v in agg.pay.paid.amt.items() %}<span class="badge bg-dark border border-success text-success">{{ amt(cur, v) }}</span>{% else %}<span class="text-secondary small">none</span>{% endfor %}</div>
+  </div></div>
+</div>
+
+{# Breakdown / top lists. #}
+<div class="row g-3 mb-3">
+  {% macro breakdown(title, icon, items) %}
+  <div class="col-md-6 col-xl-3">
+    <div class="card bg-dark border-secondary h-100">
+      <div class="card-header py-1"><span class="fw-bold small"><i class="bi {{ icon }} me-1 text-warning"></i>{{ title }}</span></div>
+      <div class="table-responsive"><table class="table table-dark table-sm mb-0 small">
+        <thead><tr class="text-secondary"><th>{{ title.split(' ')[-1] }}</th><th class="text-end">Deals</th><th class="text-end">Fees</th></tr></thead>
+        <tbody>
+          {% for it in items %}
+          <tr><td class="text-truncate" style="max-width:130px">{{ it.name }}</td><td class="text-end">{{ it.n }}</td><td class="text-end">{{ amt(it.currency, it.fee) }}</td></tr>
+          {% else %}<tr><td colspan="3" class="text-secondary text-center py-2">none</td></tr>{% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+  {% endmacro %}
+  {{ breakdown('Top Institutions', 'bi-bank', agg.by_inst) }}
+  {{ breakdown('Revenue by Country', 'bi-globe', agg.by_country) }}
+  {{ breakdown('Revenue by Type', 'bi-diagram-3', agg.by_type) }}
+  {{ breakdown('Top Developers', 'bi-person-badge', agg.by_dev) }}
+</div>
+
+{# Invoice ledger + payment actions. #}
+<div class="card bg-dark border-secondary">
+  <div class="card-header"><span class="fw-bold small"><i class="bi bi-receipt me-1 text-warning"></i>Invoice ledger</span></div>
+  <div class="table-responsive">
+    <table class="table table-dark table-sm align-middle mb-0 small">
+      <thead><tr class="text-secondary">
+        <th>Invoice</th><th>Customer</th><th>Institution</th><th>Project</th>
+        <th class="text-end">Loan</th><th class="text-end">Fee</th><th>Status</th><th class="text-end">Payment</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        {% set cur = r.currency or 'GHS' %}
+        <tr>
+          <td>{{ r.invoice_number or '—' }}<div class="text-secondary" style="font-size:10px">{{ r.invoice_date or '' }}</div></td>
+          <td>{{ r.customer or '—' }}</td>
+          <td>{{ r.institution_name or r.institution_id }}</td>
+          <td class="text-truncate" style="max-width:150px">{{ r.project_name or '—' }}</td>
+          <td class="text-end">{% if r.approved_loan_amount is not none %}{{ amt(cur, r.approved_loan_amount) }}{% else %}—{% endif %}</td>
+          <td class="text-end">{% if r.fee_amount is not none %}{{ amt(cur, r.fee_amount) }} <span class="text-secondary">({{ '%.1f'|format(r.fee_pct) }}%)</span>{% else %}<span class="text-secondary">pending</span>{% endif %}</td>
+          <td><span class="badge bg-{{ 'success' if r.payment_status == 'paid' else ('warning' if r.invoice_number else 'secondary') }}">{{ (r.payment_status|title) if r.invoice_number else 'Not issued' }}</span></td>
+          <td class="text-end">
+            {% if r.invoice_number %}
+            <form method="post" action="{{ url_for('funding_revenue_payment', pid=r.capital_investment_project_id, institution_id=r.institution_id) }}" class="d-inline-flex gap-1 align-items-center justify-content-end">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <input type="hidden" name="tenant_id" value="{{ r.tenant_id or '' }}">
+              {% if r.payment_status == 'paid' %}
+              <input type="hidden" name="payment_status" value="outstanding">
+              <button class="btn btn-outline-warning btn-sm py-0 px-1" style="font-size:11px" title="Reopen as outstanding">Mark unpaid</button>
+              {% else %}
+              <input type="hidden" name="payment_status" value="paid">
+              <input type="date" name="payment_date" class="form-control form-control-sm bg-black text-light border-secondary" style="width:130px">
+              <button class="btn btn-outline-success btn-sm py-0 px-1" style="font-size:11px">Mark paid</button>
+              {% endif %}
+            </form>
+            {% else %}<span class="text-secondary">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

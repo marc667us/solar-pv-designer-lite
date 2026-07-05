@@ -5282,6 +5282,66 @@ def _ensure_fi_shipments_schema(get_db) -> bool:
     return bool(_FI_SHIP_STATE["ready"])
 
 
+# ---------------------------------------------------------------------------
+# Funding revenue / success fee -- Slice 7 (2026-07-05). SolarPro's success fee
+# (default 2%, per-institution configurable via financial_institutions.fee_pct)
+# is charged to the institution ONLY after Approved + Agreement Executed + First
+# Disbursement. One revenue/invoice row per (project, institution, tenant); the
+# invoice number materialises only when all three milestones are met.
+# ---------------------------------------------------------------------------
+_FI_REV_STATE = {"ready": False}
+
+# selection.status values that satisfy the "Funding Approved" milestone.
+FI_APPROVED_GATE = ("approved", "completed")
+FI_PAYMENT_STATUSES = ("outstanding", "paid")
+
+
+def _ensure_fi_revenue_schema(get_db) -> bool:
+    """Create funding_revenue once (SQLite + Postgres safe)."""
+    if _FI_REV_STATE["ready"]:
+        return True
+    ddl = (
+        "CREATE TABLE IF NOT EXISTS funding_revenue ("
+        " capital_investment_project_id INTEGER NOT NULL,"
+        " institution_id TEXT NOT NULL,"
+        " tenant_id TEXT NOT NULL DEFAULT '',"
+        " project_name TEXT NOT NULL DEFAULT '',"
+        " customer TEXT NOT NULL DEFAULT '',"
+        " developer TEXT NOT NULL DEFAULT '',"
+        " institution_name TEXT NOT NULL DEFAULT '',"
+        " country TEXT NOT NULL DEFAULT '',"
+        " region TEXT NOT NULL DEFAULT '',"
+        " project_type TEXT NOT NULL DEFAULT '',"
+        " currency TEXT NOT NULL DEFAULT 'GHS',"
+        " approved_loan_amount REAL,"
+        " approved_project_value REAL,"
+        " fee_pct REAL NOT NULL DEFAULT 2.0,"
+        " fee_amount REAL,"
+        " vat REAL NOT NULL DEFAULT 0,"
+        " invoice_number TEXT,"
+        " invoice_date TEXT,"
+        " invoice_status TEXT NOT NULL DEFAULT 'pending',"
+        " payment_status TEXT NOT NULL DEFAULT 'outstanding',"
+        " payment_date TEXT,"
+        " agreement_reference TEXT NOT NULL DEFAULT '',"
+        " agreement_executed INTEGER NOT NULL DEFAULT 0,"
+        " first_disbursement INTEGER NOT NULL DEFAULT 0,"
+        " disbursement_date TEXT,"
+        " remarks TEXT,"
+        " created_by_user_id INTEGER,"
+        " created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        " updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        " PRIMARY KEY (capital_investment_project_id, institution_id, tenant_id))"
+    )
+    try:
+        with get_db() as c:
+            c.execute(ddl)
+        _FI_REV_STATE["ready"] = True
+    except Exception:
+        _FI_REV_STATE["ready"] = False
+    return bool(_FI_REV_STATE["ready"])
+
+
 # ===========================================================================
 # SECTION E -- Wizard progress (derives completion from real stored data;
 # SSS Section 2 acceptance -- no pseudo "hook" fields).
@@ -6176,11 +6236,14 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         _tid = actx["selection"].get("tenant_id") or ''
         thread = _fi_thread(pid, institution_id, _tid)
         shipments = _fi_shipments(pid, institution_id, _tid)
+        revenue = _fi_revenue_row(pid, institution_id, _tid)
+        fee_ready = actx["selection"].get("status") in FI_APPROVED_GATE
         return render_template(
             "capital_investment/funding_application_review.html",
             user=current_user(), inst=actx["institution"],
             sel=actx["selection"], proj=proj, fund=actx["funding"], ov=ov,
             report_types=REPORT_TYPES, thread=thread, shipments=shipments,
+            revenue=revenue, fee_ready=fee_ready,
             msg_types=FI_MSG_TYPES, msg_type_labels=FI_MSG_TYPE_LABELS,
             ship_statuses=FI_SHIP_STATUSES,
             ship_status_labels=FI_SHIP_STATUS_LABELS,
@@ -6731,6 +6794,291 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         else:
             flash("Could not record the shipment.", "danger")
         return redirect(url_for("capital_investment_funding", pid=pid))
+
+    # ==================================================================
+    # Slice 7 -- Success Fee + Revenue. The institution records the commercial
+    # milestones (approved loan, agreement executed, first disbursement); when
+    # all three are met SolarPro auto-calculates the success fee and issues an
+    # invoice. Platform Admin gets a Funding Revenue Dashboard.
+    # ==================================================================
+    def _fi_revenue_row(pid, iid, tid):
+        """The single funding_revenue row for one (project, institution, tenant)."""
+        _ensure_fi_revenue_schema(get_db)
+        try:
+            with get_db() as c:
+                r = c.execute(
+                    "SELECT * FROM funding_revenue "
+                    "WHERE capital_investment_project_id=? AND institution_id=? "
+                    "AND COALESCE(tenant_id,'')=?",
+                    (pid, iid, tid or '')).fetchone()
+            return dict(r) if r else None
+        except Exception:
+            return None
+
+    # POST .../revenue -- institution records milestones; fee/invoice materialise
+    # only once Approved + Agreement Executed + First Disbursement are all true.
+    @app.route("/funding/workspace/<int:pid>/<institution_id>/revenue",
+               methods=["POST"], endpoint="funding_application_revenue")
+    @login_required
+    def _fi_revenue(pid, institution_id):
+        from flask import abort
+        uid = session.get("user_id")
+        actx = _fi_load_application(uid, pid, institution_id)
+        if not actx:
+            abort(404)
+        csrf_protect()
+        f = request.form
+        proj = actx["project"]
+        sel = actx["selection"]
+        fund = actx["funding"] or {}
+        tid = sel.get("tenant_id") or ''
+
+        import math as _math
+
+        def _num(v):
+            # Reject non-finite (inf/nan) so a crafted amount can't poison the
+            # fee/invoice maths (Codex financial-input hardening).
+            try:
+                x = float(v)
+            except (TypeError, ValueError):
+                return None
+            return x if _math.isfinite(x) else None
+        loan = _num(f.get("approved_loan_amount"))
+        pval = _num(f.get("approved_project_value"))
+        if pval is None:
+            _r, _e = fund.get("funding_requested"), fund.get("customer_equity")
+            if _r is not None or _e is not None:
+                pval = round((_r or 0) + (_e or 0), 2)
+        try:
+            fee_pct = float(actx["institution"].get("fee_pct") or 2.0)
+        except (TypeError, ValueError):
+            fee_pct = 2.0
+        vat = _num(f.get("vat")) or 0.0
+        agreement_ref = (f.get("agreement_reference") or "").strip()[:120]
+        agr_exec = 1 if f.get("agreement_executed") else 0
+        disb = 1 if f.get("first_disbursement") else 0
+        disb_date = (f.get("disbursement_date") or "").strip()[:20] or None
+        remarks = (f.get("remarks") or "").strip()[:1000]
+        # The fee is only chargeable after Approved + Agreement + Disbursement.
+        approved = sel.get("status") in FI_APPROVED_GATE
+        all_met = bool(approved and agr_exec and disb and loan and loan > 0)
+        existing = _fi_revenue_row(pid, institution_id, tid)
+        import uuid as _uuid
+        import datetime as _dt
+        if all_met:
+            fee_amount = round(loan * fee_pct / 100.0, 2)
+            inv_no = ((existing or {}).get("invoice_number")
+                      or "SPF-%d-%s" % (pid, _uuid.uuid4().hex[:6].upper()))
+            inv_date = ((existing or {}).get("invoice_date")
+                        or _dt.date.today().isoformat())
+            inv_status = "issued"
+        else:
+            fee_amount = None
+            inv_no = (existing or {}).get("invoice_number")
+            inv_date = (existing or {}).get("invoice_date")
+            inv_status = "issued" if inv_no else "pending"
+        cur = proj.get("currency") or "GHS"
+        ok = False
+        if _ensure_fi_revenue_schema(get_db):
+            try:
+                with get_db() as c:
+                    c.execute(
+                        "INSERT INTO funding_revenue "
+                        "(capital_investment_project_id, institution_id, "
+                        " tenant_id, project_name, customer, developer, "
+                        " institution_name, country, region, project_type, "
+                        " currency, approved_loan_amount, approved_project_value,"
+                        " fee_pct, fee_amount, vat, invoice_number, invoice_date, "
+                        " invoice_status, agreement_reference, agreement_executed,"
+                        " first_disbursement, disbursement_date, remarks, "
+                        " created_by_user_id) VALUES (" + ",".join("?" * 25) + ") "
+                        "ON CONFLICT (capital_investment_project_id, "
+                        " institution_id, tenant_id) DO UPDATE SET "
+                        "project_name=EXCLUDED.project_name, "
+                        "customer=EXCLUDED.customer, developer=EXCLUDED.developer,"
+                        "institution_name=EXCLUDED.institution_name, "
+                        "country=EXCLUDED.country, region=EXCLUDED.region, "
+                        "project_type=EXCLUDED.project_type, "
+                        "currency=EXCLUDED.currency, "
+                        "approved_loan_amount=EXCLUDED.approved_loan_amount, "
+                        "approved_project_value=EXCLUDED.approved_project_value, "
+                        "fee_pct=EXCLUDED.fee_pct, fee_amount=EXCLUDED.fee_amount, "
+                        "vat=EXCLUDED.vat, "
+                        "invoice_number=EXCLUDED.invoice_number, "
+                        "invoice_date=EXCLUDED.invoice_date, "
+                        "invoice_status=EXCLUDED.invoice_status, "
+                        "agreement_reference=EXCLUDED.agreement_reference, "
+                        "agreement_executed=EXCLUDED.agreement_executed, "
+                        "first_disbursement=EXCLUDED.first_disbursement, "
+                        "disbursement_date=EXCLUDED.disbursement_date, "
+                        "remarks=EXCLUDED.remarks, updated_at=CURRENT_TIMESTAMP",
+                        (pid, institution_id, tid,
+                         proj.get("project_name") or '',
+                         proj.get("client_name") or '',
+                         proj.get("developer") or '',
+                         actx["institution"].get("name") or '',
+                         proj.get("country") or '', proj.get("region") or '',
+                         proj.get("project_type") or '', cur, loan, pval,
+                         fee_pct, fee_amount, vat, inv_no, inv_date, inv_status,
+                         agreement_ref, agr_exec, disb, disb_date, remarks, uid))
+                ok = True
+            except Exception:
+                ok = False
+        if ok:
+            try:
+                from new_boq_hierarchy_schema import boq_audit
+                boq_audit(get_db, uid, "funding_revenue_recorded",
+                          "capital_investment_project", pid,
+                          "%s fee=%s inv=%s" % (institution_id, fee_amount,
+                                                inv_no or "-"))
+            except Exception:
+                pass
+            if all_met:
+                flash("Success fee invoice %s issued: %s %s (%.2f%%)." % (
+                    inv_no, cur, "{:,.2f}".format(fee_amount), fee_pct),
+                    "success")
+            else:
+                flash("Milestones saved. The success-fee invoice is issued "
+                      "automatically once Approved + Agreement Executed + First "
+                      "Disbursement are all confirmed with a loan amount.",
+                      "info")
+        else:
+            flash("Could not record the funding revenue.", "danger")
+        return redirect(url_for("funding_application_review", pid=pid,
+                                institution_id=institution_id))
+
+    # GET /admin/funding/revenue -- Platform-Admin Funding Revenue Dashboard.
+    @app.route("/admin/funding/revenue", endpoint="funding_revenue_dashboard")
+    @login_required
+    def _fi_revenue_admin():
+        if not _fi_admin_ok():
+            from flask import abort
+            abort(403)
+        _ensure_fi_revenue_schema(get_db)
+        rows = []
+        try:
+            with get_db() as c:
+                rr = c.execute("SELECT * FROM funding_revenue "
+                               "ORDER BY created_at DESC").fetchall()
+            rows = [dict(r) for r in rr] if rr else []
+        except Exception:
+            rows = []
+        import datetime as _dt
+        ym = _dt.date.today().strftime("%Y-%m")
+        yy = _dt.date.today().strftime("%Y")
+
+        def _f(v):
+            try:
+                return float(v or 0)
+            except (TypeError, ValueError):
+                return 0.0
+        ptypes = dict((c, L) for c, L, _ in PROJECT_TYPES)
+        # Money is aggregated PER CURRENCY (never summed across currencies).
+        by_ccy, by_inst, by_country, by_type, by_dev = {}, {}, {}, {}, {}
+        pay = {"outstanding": {"n": 0, "amt": {}},
+               "paid": {"n": 0, "amt": {}}}
+
+        def _bump(dct, key, cur, loan, fee):
+            e = dct.setdefault((key or "—", cur),
+                               {"loan": 0.0, "fee": 0.0, "n": 0})
+            e["loan"] += loan
+            e["fee"] += fee
+            e["n"] += 1
+        for r in rows:
+            cur = r.get("currency") or "GHS"
+            loan = _f(r.get("approved_loan_amount"))
+            fee = _f(r.get("fee_amount"))
+            d = by_ccy.setdefault(cur, {"loan": 0.0, "fee": 0.0,
+                                        "fee_month": 0.0, "fee_year": 0.0,
+                                        "n": 0})
+            d["loan"] += loan
+            d["fee"] += fee
+            d["n"] += 1
+            idate = r.get("invoice_date") or ""
+            if idate[:7] == ym:
+                d["fee_month"] += fee
+            if idate[:4] == yy:
+                d["fee_year"] += fee
+            if r.get("invoice_number"):
+                st = "paid" if (r.get("payment_status") == "paid") \
+                    else "outstanding"
+                pay[st]["n"] += 1
+                pay[st]["amt"][cur] = pay[st]["amt"].get(cur, 0.0) + fee
+            _bump(by_inst, r.get("institution_name"), cur, loan, fee)
+            _bump(by_country, r.get("country"), cur, loan, fee)
+            _bump(by_type, ptypes.get(r.get("project_type"),
+                                      r.get("project_type")), cur, loan, fee)
+            _bump(by_dev, r.get("developer"), cur, loan, fee)
+
+        def _top(dct, n=8):
+            items = [{"name": k[0], "currency": k[1], **v}
+                     for k, v in dct.items()]
+            items.sort(key=lambda x: x["fee"], reverse=True)
+            return items[:n]
+        agg = {
+            "by_ccy": by_ccy, "pay": pay,
+            "by_inst": _top(by_inst), "by_country": _top(by_country),
+            "by_type": _top(by_type), "by_dev": _top(by_dev),
+            "avg_loan": {c: (v["loan"] / v["n"] if v["n"] else 0.0)
+                         for c, v in by_ccy.items()},
+            "avg_fee": {c: (v["fee"] / v["n"] if v["n"] else 0.0)
+                        for c, v in by_ccy.items()},
+        }
+        return render_template(
+            "capital_investment/funding_revenue_dashboard.html",
+            user=current_user(), rows=rows, agg=agg,
+            pay_statuses=FI_PAYMENT_STATUSES,
+            project_types=ptypes)
+
+    # POST /admin/funding/revenue/<pid>/<institution_id>/payment -- admin marks
+    # a success-fee invoice paid / outstanding (row scoped by pid+inst+tenant).
+    @app.route("/admin/funding/revenue/<int:pid>/<institution_id>/payment",
+               methods=["POST"], endpoint="funding_revenue_payment")
+    @login_required
+    def _fi_revenue_payment(pid, institution_id):
+        from flask import abort
+        if not _fi_admin_ok():
+            abort(403)
+        csrf_protect()
+        f = request.form
+        pay = (f.get("payment_status") or "").strip()
+        if pay not in FI_PAYMENT_STATUSES:
+            flash("Invalid payment status.", "warning")
+            return redirect(url_for("funding_revenue_dashboard"))
+        tid = (f.get("tenant_id") or "").strip()
+        import datetime as _dt
+        pdate = None
+        if pay == "paid":
+            pdate = ((f.get("payment_date") or "").strip()[:20]
+                     or _dt.date.today().isoformat())
+        ok = False
+        try:
+            with get_db() as c:
+                cur = c.execute(
+                    "UPDATE funding_revenue SET payment_status=?, "
+                    "payment_date=?, updated_at=CURRENT_TIMESTAMP "
+                    "WHERE capital_investment_project_id=? AND institution_id=? "
+                    "AND COALESCE(tenant_id,'')=?",
+                    (pay, pdate, pid, institution_id, tid))
+                try:
+                    ok = (cur.rowcount == 1)
+                except Exception:
+                    ok = True
+        except Exception:
+            ok = False
+        if ok:
+            try:
+                from new_boq_hierarchy_schema import boq_audit
+                boq_audit(get_db, session.get("user_id"),
+                          "funding_invoice_payment",
+                          "capital_investment_project", pid,
+                          "%s %s" % (institution_id, pay))
+            except Exception:
+                pass
+            flash("Invoice marked %s." % pay, "success")
+        else:
+            flash("Could not update the invoice.", "danger")
+        return redirect(url_for("funding_revenue_dashboard"))
 
     # ==================================================================
     # Slice 2 -- Financial Institution registration + Platform-Admin approval.

@@ -239,4 +239,47 @@
     </form>
   </div>
 </div>
+
+{# Slice 7 — Origination / Success Fee. Fee is chargeable only after
+   Approved + Agreement Executed + First Disbursement. #}
+<div class="card bg-dark border-secondary mt-3">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span class="fw-bold small"><i class="bi bi-cash-stack me-1 text-warning"></i>Origination &amp; success fee</span>
+    {% if revenue and revenue.invoice_number %}
+      <span class="badge bg-{{ 'success' if revenue.payment_status == 'paid' else 'warning' }}">Invoice {{ revenue.invoice_number }} · {{ revenue.payment_status|title }}</span>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    {% set cur = proj.currency or 'GHS' %}
+    {% if not fee_ready %}
+    <div class="alert alert-secondary bg-dark border-secondary text-secondary small mb-3">
+      <i class="bi bi-lock me-1"></i>Mark the application <strong>Approved</strong> in the decision panel before the success fee can be invoiced.
+    </div>
+    {% endif %}
+    {% if revenue %}
+    <div class="row g-2 mb-3">
+      <div class="col-6 col-md-3"><div class="border border-secondary rounded p-2 bg-black"><div class="text-secondary" style="font-size:10px;text-transform:uppercase">Approved loan</div><div class="fw-semibold text-light">{% if revenue.approved_loan_amount is not none %}{{ cur }} {{ '{:,.0f}'.format(revenue.approved_loan_amount) }}{% else %}—{% endif %}</div></div></div>
+      <div class="col-6 col-md-3"><div class="border border-secondary rounded p-2 bg-black"><div class="text-secondary" style="font-size:10px;text-transform:uppercase">Fee ({{ '%.2f'|format(revenue.fee_pct) }}%)</div><div class="fw-semibold text-{{ 'success' if revenue.fee_amount is not none else 'secondary' }}">{% if revenue.fee_amount is not none %}{{ cur }} {{ '{:,.0f}'.format(revenue.fee_amount) }}{% else %}pending{% endif %}</div></div></div>
+      <div class="col-6 col-md-3"><div class="border border-secondary rounded p-2 bg-black"><div class="text-secondary" style="font-size:10px;text-transform:uppercase">Agreement</div><div class="fw-semibold text-light">{{ '✓ executed' if revenue.agreement_executed else '—' }}</div></div></div>
+      <div class="col-6 col-md-3"><div class="border border-secondary rounded p-2 bg-black"><div class="text-secondary" style="font-size:10px;text-transform:uppercase">First disbursement</div><div class="fw-semibold text-light">{{ '✓ ' ~ (revenue.disbursement_date or 'confirmed') if revenue.first_disbursement else '—' }}</div></div></div>
+    </div>
+    {% endif %}
+    <form method="post" action="{{ url_for('funding_application_revenue', pid=proj.id, institution_id=inst.institution_id) }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="row g-2">
+        <div class="col-md-4"><label class="form-label small text-secondary mb-1">Approved loan amount ({{ cur }})</label><input type="number" step="any" min="0" name="approved_loan_amount" value="{{ revenue.approved_loan_amount if revenue and revenue.approved_loan_amount is not none else '' }}" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+        <div class="col-md-4"><label class="form-label small text-secondary mb-1">Approved project value ({{ cur }})</label><input type="number" step="any" min="0" name="approved_project_value" value="{{ revenue.approved_project_value if revenue and revenue.approved_project_value is not none else '' }}" class="form-control form-control-sm bg-black text-light border-secondary" placeholder="defaults to loan + equity"></div>
+        <div class="col-md-4"><label class="form-label small text-secondary mb-1">Agreement reference</label><input name="agreement_reference" maxlength="120" value="{{ revenue.agreement_reference if revenue else '' }}" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+        <div class="col-md-4"><label class="form-label small text-secondary mb-1">First disbursement date</label><input type="date" name="disbursement_date" value="{{ revenue.disbursement_date if revenue and revenue.disbursement_date else '' }}" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+        <div class="col-md-2"><label class="form-label small text-secondary mb-1">VAT ({{ cur }})</label><input type="number" step="any" min="0" name="vat" value="{{ revenue.vat if revenue and revenue.vat else '' }}" class="form-control form-control-sm bg-black text-light border-secondary"></div>
+        <div class="col-md-6 d-flex align-items-end gap-3 flex-wrap">
+          <div class="form-check"><input type="checkbox" name="agreement_executed" id="agrExec" value="1" class="form-check-input" {% if revenue and revenue.agreement_executed %}checked{% endif %}><label for="agrExec" class="form-check-label small text-light">Agreement executed</label></div>
+          <div class="form-check"><input type="checkbox" name="first_disbursement" id="firstDisb" value="1" class="form-check-input" {% if revenue and revenue.first_disbursement %}checked{% endif %}><label for="firstDisb" class="form-check-label small text-light">First disbursement confirmed</label></div>
+        </div>
+      </div>
+      <div class="text-secondary small mt-2">Success fee defaults to <strong>{{ '%.2f'|format(inst.fee_pct if inst.fee_pct is not none else 2.0) }}%</strong> of the approved loan; the invoice is issued automatically once all three milestones are confirmed.</div>
+      <button type="submit" class="btn btn-warning btn-sm fw-bold mt-2"><i class="bi bi-receipt me-1"></i>Save milestones{{ ' / issue invoice' if fee_ready }}</button>
+    </form>
+  </div>
+</div>
 {% endblock %}
