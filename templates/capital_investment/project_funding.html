@@ -19,6 +19,23 @@
   </a>
 </div>
 
+{# Bill-check gate (owner 2026-07-05): the customer must run + save "Check My
+   Bill" before the application can be sent to a bank, so the verified bill/tariff
+   rides along in the economic + energy reports. #}
+{% if bill_checked %}
+<div class="alert alert-success bg-dark border-success text-success small d-flex align-items-center gap-2 mb-3">
+  <i class="bi bi-check-circle-fill"></i>
+  <span><strong>Bill verified.</strong> Your Check My Bill result is attached to the economic &amp; energy reports lenders will review.</span>
+</div>
+{% else %}
+<div class="alert alert-warning bg-dark border-warning text-warning small d-flex align-items-center justify-content-between gap-2 mb-3 flex-wrap">
+  <span><i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Run Check My Bill first.</strong> Lenders need your verified bill and tariff in the economic &amp; energy reports before you apply.</span>
+  <button type="button" class="btn btn-warning btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#billCheckModal">
+    <i class="bi bi-receipt-cutoff me-1"></i>Run Check My Bill
+  </button>
+</div>
+{% endif %}
+
 <div class="row g-3">
   <div class="col-lg-8">
     <div class="card bg-dark border-secondary mb-3">
@@ -145,7 +162,13 @@
           I consent to share this project's reports, BOQ/BOM summaries and financial analysis with the selected financial institution(s).
         </label>
       </div>
-      <button type="submit" class="btn btn-warning fw-bold mt-3"><i class="bi bi-send-check me-1"></i>Submit to selected institutions</button>
+      <button type="submit" class="btn btn-warning fw-bold mt-3"
+              {% if not bill_checked %}disabled title="Run Check My Bill first"{% endif %}>
+        <i class="bi bi-send-check me-1"></i>Submit to selected institutions
+      </button>
+      {% if not bill_checked %}
+      <div class="text-warning small mt-2"><i class="bi bi-lock-fill me-1"></i>Run <strong>Check My Bill</strong> (above) to unlock submission &mdash; the bank needs it in your reports.</div>
+      {% endif %}
     </form>
     {% else %}
     <div class="text-secondary small">
@@ -242,4 +265,8 @@
   </div>
 </div>
 {% endif %}
+
+{# Check My Bill modal — the route passes bc_project_id / bc_currency /
+   bc_loads_json so the modal's "Save to project" persists data['bill_check']. #}
+{% include "_bill_check_modal.html" %}
 {% endblock %}

@@ -6405,6 +6405,20 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             abort(404)
         return _pf_project_view(prow)
 
+    def _pf_bill_check(pid: int):
+        """The saved "Check My Bill" snapshot (data['bill_check']) for a regular
+        project owned by this user, or None. Persisted by /project/<pid>/bill-check
+        /save. Used to gate the funding application + surface bill verification in
+        the economic/energy reports."""
+        try:
+            from web_app import get_project as _get_project
+            prow = _get_project(pid)
+            if not prow:
+                return None
+            return (prow.get("data") or {}).get("bill_check")
+        except Exception:
+            return None
+
     @app.route("/project/<int:pid>/funding",
                methods=["GET", "POST"], endpoint="project_funding")
     @login_required
@@ -6478,12 +6492,19 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         for iid in selections.keys():
             threads[iid] = _fi_thread(fid, iid, tid_s)
             shipments[iid] = _fi_shipments(fid, iid, tid_s)
+        # Bill-check gate (owner 2026-07-05): the customer must run "Check My Bill"
+        # on the project and save it BEFORE the application is sent to a bank, so
+        # the verified bill/tariff rides along in the economic + energy reports.
+        bill_check = _pf_bill_check(pid)
         return render_template(
             "capital_investment/project_funding.html",
             user=current_user(), proj=proj, pid=pid, ov=ov, fund=fund,
             institutions=institutions, selections=selections, threads=threads,
             shipments=shipments, ship_status_labels=FI_SHIP_STATUS_LABELS,
-            ship_status_class=FI_SHIP_STATUS_CLASS)
+            ship_status_class=FI_SHIP_STATUS_CLASS,
+            bill_check=bill_check, bill_checked=bool(bill_check),
+            bc_project_id=pid, bc_currency=(proj.get("currency") or "GHS"),
+            bc_loads_json="null")
 
     # POST /project/<pid>/funding/submit -- submit to selected APPROVED
     # institution(s) with consent (regular-project twin of the CI submit).
@@ -6501,6 +6522,14 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         if not f.get("consent"):
             flash("You must consent to share your project reports before "
                   "submitting to a financial institution.", "warning")
+            return redirect(url_for("project_funding", pid=pid))
+        # Gate: the customer must run + save "Check My Bill" first, so the verified
+        # bill/tariff is embedded in the economic + energy reports the bank sees
+        # (owner 2026-07-05). No bank submission without it.
+        if not _pf_bill_check(pid):
+            flash("Run 'Check My Bill' on this project and save it before applying "
+                  "for funding - the bank needs your verified bill and tariff in the "
+                  "economic and energy reports.", "warning")
             return redirect(url_for("project_funding", pid=pid))
         chosen = [x for x in f.getlist("institution_id") if x]
         chosen = list(dict.fromkeys(chosen))       # de-dup, preserve order

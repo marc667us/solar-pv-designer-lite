@@ -22,6 +22,10 @@
   </div>
 </div>
 
+{# Bill Verification (Check My Bill) — the verified consumption baseline behind
+   these energy figures, written in when the customer has run + saved a check. #}
+{% include "_bill_check_report_section.html" %}
+
 <!-- KPI Strip -->
 {% set offset_factor = 1.0 if d.system_type == 'off-grid' else 0.8 %}
 <div class="row g-2 mb-4">

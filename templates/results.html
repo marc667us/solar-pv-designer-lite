@@ -440,6 +440,13 @@
      style="background:#a78bfa18;border:1px solid #a78bfa44;color:#a78bfa">
     <i class="bi bi-box-seam me-1"></i>Procurement Plan
   </a>
+  {# Check My Bill — run this first; saving it feeds the economic & energy
+     reports and is required before a funding application can go to a bank. #}
+  <button type="button" class="btn btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#billCheckModal"
+          style="background:#22c55e18;border:1px solid #22c55e44;color:#22c55e"
+          title="Audit your ECG bill vs the PURC tariff and refine ROI — run this before applying for funding">
+    <i class="bi bi-receipt-cutoff me-1"></i>Check My Bill
+  </button>
   <a href="{{ url_for('project_funding', pid=project.id) }}" class="btn btn-sm fw-bold"
      style="background:#eab30818;border:1px solid #eab30844;color:#eab308">
     <i class="bi bi-bank me-1"></i>Project Funding
@@ -707,5 +714,14 @@
     </table>
   </div>
 </div>
+
+{# Check My Bill modal (owner 2026-07-05: must appear on the standard project
+   results page next to Project Funding). Saving a result stores data['bill_check'],
+   which the Economic + Energy Impact reports display and which the funding
+   application requires before it can be submitted to a financial institution. #}
+{% set bc_project_id = project.id %}
+{% set bc_currency = d.currency or 'GHS' %}
+{% set bc_loads_json = 'null' %}
+{% include "_bill_check_modal.html" %}
 
 {% endblock %}

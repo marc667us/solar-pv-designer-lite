@@ -1,0 +1,43 @@
+{#
+  Bill Verification section (owner 2026-07-05: "Check My Bill" results must be
+  written into the Economic and Energy Impact reports). Renders the saved
+  data['bill_check'] snapshot (persisted by /project/<pid>/bill-check/save) as a
+  read-only verification panel. Included by report_economic.html and
+  report_energy.html; renders nothing until the customer has run + saved a check.
+#}
+{% set bc = d.bill_check if d else None %}
+{% if bc %}
+{% set _exp = bc.get('expected') or {} %}
+{% set _en  = bc.get('energy') or {} %}
+{% set _in  = bc.get('inputs') or {} %}
+{% set _tm  = bc.get('tariff_meta') or {} %}
+{% set sym  = (d.symbol if (d and d.symbol) else 'GHS ') %}
+<div class="solar-card p-4 mb-4" style="border-left:4px solid #22c55e">
+  <div class="section-head"><i class="bi bi-receipt-cutoff me-2"></i>Bill Verification &mdash; Check My Bill</div>
+  <p class="text-secondary small mb-3">
+    The customer's electricity bill audited against the PURC tariff{% if _tm.get('effective_from') %}
+    (effective {{ _tm.get('effective_from') }}){% endif %}. This verified baseline underpins the
+    energy and savings figures in this report and is shared with lenders when the project applies for funding.
+  </p>
+  <div class="table-responsive">
+    <table class="table table-sm table-dark table-bordered mb-0 small">
+      <tbody>
+        <tr><th scope="row" style="width:45%">Customer category</th><td>{{ _exp.get('category_applied') or '&mdash;'|safe }}</td></tr>
+        {% if _in.get('meter_type') %}<tr><th scope="row">Meter type</th><td>{{ _in.get('meter_type')|title }}{% if _in.get('completeness') %} &middot; load schedule {{ _in.get('completeness') }}{% endif %}</td></tr>{% endif %}
+        <tr><th scope="row">Estimated monthly consumption</th><td>{{ (_en.get('monthly_kwh') or 0)|fmt(0) }} kWh</td></tr>
+        <tr><th scope="row">Expected PURC bill (energy + service)</th><td>{{ sym }}{{ (_exp.get('total') or 0)|fmt(2) }}</td></tr>
+        <tr><th scope="row">Actual bill</th><td>{{ sym }}{{ (bc.get('actual_bill') or 0)|fmt(2) }}</td></tr>
+        {% if bc.get('difference') is not none %}
+        <tr><th scope="row">Difference (actual &minus; expected)</th>
+          <td class="{{ 'text-danger' if (bc.get('difference') or 0) > 0 else 'text-success' }}">
+            {{ sym }}{{ (bc.get('difference') or 0)|fmt(2) }}{% if bc.get('difference_pct') is not none %} ({{ '%+.1f'|format(bc.get('difference_pct')) }}%){% endif %}
+          </td></tr>
+        {% endif %}
+        {% if bc.get('effective_tariff') is not none %}<tr><th scope="row">Effective tariff</th><td>{{ sym }}{{ '%.4f'|format(bc.get('effective_tariff')) }}/kWh</td></tr>{% endif %}
+        {% if bc.get('confidence') %}<tr><th scope="row">Estimate confidence</th><td>{{ bc.get('confidence')|title }}</td></tr>{% endif %}
+        {% if bc.get('saved_at') %}<tr><th scope="row">Checked on</th><td>{{ bc.get('saved_at') }}</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
