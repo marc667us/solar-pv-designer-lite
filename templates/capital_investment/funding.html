@@ -163,4 +163,53 @@
     {% endif %}
   </div>
 </div>
+
+{# Slice 6a — Communication: message threads with the institutions you submitted to. #}
+{% if selections %}
+<div class="card bg-dark border-secondary mt-3">
+  <div class="card-header"><span class="fw-bold small"><i class="bi bi-chat-left-text me-1 text-warning"></i>Communication</span></div>
+  <div class="card-body">
+    {% for iid, sel in selections.items() %}
+    {% set inst = (institutions | selectattr('institution_id','equalto',iid) | first) %}
+    {% set th = threads.get(iid, []) %}
+    <div class="border border-secondary rounded p-2 mb-3 bg-black">
+      <div class="fw-semibold text-light small mb-2"><i class="bi bi-bank me-1 text-warning"></i>{{ inst.name if inst else iid }}</div>
+      {% if th %}
+      <div class="mb-2" style="max-height:260px;overflow-y:auto">
+        {% for m in th %}
+        {% set mine = m.sender_role == 'applicant' %}
+        <div class="d-flex mb-2 {{ 'justify-content-end' if mine else 'justify-content-start' }}">
+          <div class="rounded p-2 {{ 'bg-secondary bg-opacity-25' if mine else 'bg-dark border border-secondary' }}" style="max-width:80%">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="badge bg-{{ 'warning text-dark' if mine else 'info text-dark' }}" style="font-size:9px">{{ 'You' if mine else 'Institution' }}</span>
+              {% if m.msg_type and m.msg_type != 'message' %}<span class="badge bg-dark border border-secondary" style="font-size:9px">{{ m.msg_type|replace('_',' ')|title }}</span>{% endif %}
+              {% if m.channel == 'email' %}<i class="bi bi-envelope-check text-success" style="font-size:10px" title="Emailed"></i>{% endif %}
+              <span class="text-secondary ms-auto" style="font-size:10px">{{ m.created_at }}</span>
+            </div>
+            {% if m.subject %}<div class="fw-semibold text-light small">{{ m.subject }}</div>{% endif %}
+            <div class="small text-light" style="white-space:pre-wrap">{{ m.body }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="text-secondary small mb-2">No messages yet with this institution.</div>
+      {% endif %}
+      <form method="post" action="{{ url_for('capital_investment_funding_message', pid=proj.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="institution_id" value="{{ iid }}">
+        <div class="input-group input-group-sm">
+          <textarea name="body" rows="1" maxlength="5000" required class="form-control bg-black text-light border-secondary" placeholder="Reply to {{ inst.name if inst else 'this institution' }}…"></textarea>
+          <button type="submit" class="btn btn-outline-warning" title="Send reply"><i class="bi bi-send"></i></button>
+        </div>
+        <div class="form-check mt-1">
+          <input type="checkbox" name="send_email" id="applEmail_{{ iid }}" value="1" class="form-check-input">
+          <label for="applEmail_{{ iid }}" class="form-check-label text-secondary" style="font-size:11px">Also email the institution</label>
+        </div>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 {% endblock %}

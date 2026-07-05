@@ -5161,6 +5161,63 @@ def _ensure_fi_selection_schema(get_db) -> bool:
     return bool(_FI_SEL_STATE["ready"])
 
 
+# ---------------------------------------------------------------------------
+# Funding application communication -- Slice 6a (2026-07-05). One thread per
+# (project, institution, tenant): the two-way message history between an
+# approved institution and the applicant, plus document/info requests and the
+# audit copy of any email dispatched via the existing _send_email service. UUID
+# TEXT PK avoids the AUTOINCREMENT/SERIAL cross-DB translation.
+# ---------------------------------------------------------------------------
+_FI_MSG_STATE = {"ready": False}
+
+# Message types an institution/applicant can post (allowlisted -> no injection
+# into the type filter or badge lookups).
+FI_MSG_TYPES = ("message", "info_request", "document_request")
+FI_MSG_TYPE_LABELS = {
+    "message": "Message",
+    "info_request": "Information request",
+    "document_request": "Document request",
+}
+
+
+def _ensure_fi_messages_schema(get_db) -> bool:
+    """Create funding_application_messages once (SQLite + Postgres safe)."""
+    if _FI_MSG_STATE["ready"]:
+        return True
+    ddl = (
+        "CREATE TABLE IF NOT EXISTS funding_application_messages ("
+        " message_id TEXT PRIMARY KEY,"
+        " capital_investment_project_id INTEGER NOT NULL,"
+        " institution_id TEXT NOT NULL,"
+        " tenant_id TEXT NOT NULL DEFAULT '',"
+        " sender_role TEXT NOT NULL DEFAULT 'system',"
+        " sender_user_id INTEGER,"
+        " channel TEXT NOT NULL DEFAULT 'message',"
+        " msg_type TEXT NOT NULL DEFAULT 'message',"
+        " subject TEXT,"
+        " body TEXT NOT NULL DEFAULT '',"
+        " emailed_to TEXT,"
+        " created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    idx = (
+        "CREATE INDEX IF NOT EXISTS idx_fi_msg_thread "
+        "ON funding_application_messages "
+        "(capital_investment_project_id, institution_id, tenant_id, created_at)"
+    )
+    try:
+        with get_db() as c:
+            c.execute(ddl)
+        _FI_MSG_STATE["ready"] = True
+    except Exception:
+        _FI_MSG_STATE["ready"] = False
+    try:
+        with get_db() as c:
+            c.execute(idx)
+    except Exception:
+        pass
+    return bool(_FI_MSG_STATE["ready"])
+
+
 # ===========================================================================
 # SECTION E -- Wizard progress (derives completion from real stored data;
 # SSS Section 2 acceptance -- no pseudo "hook" fields).
@@ -5720,10 +5777,14 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         # GET
         fund = _ci_funding_row(pid, uid, tid_s)
         institutions, selections = _ci_funding_institutions(pid, uid, tid_s)
+        # Per-institution message threads for the applicant's Communication panel.
+        threads = {}
+        for iid in selections.keys():
+            threads[iid] = _fi_thread(pid, iid, tid_s)
         return render_template(
             "capital_investment/funding.html",
             user=current_user(), proj=proj, ov=ov, fund=fund,
-            institutions=institutions, selections=selections,
+            institutions=institutions, selections=selections, threads=threads,
             project_types=dict((c, L) for c, L, _ in PROJECT_TYPES),
         )
 
@@ -6044,11 +6105,14 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             abort(404)
         proj = actx["project"]
         ov = _ci_funding_overview(proj)          # reuse -- no re-modelling
+        thread = _fi_thread(pid, institution_id,
+                            actx["selection"].get("tenant_id") or '')
         return render_template(
             "capital_investment/funding_application_review.html",
             user=current_user(), inst=actx["institution"],
             sel=actx["selection"], proj=proj, fund=actx["funding"], ov=ov,
-            report_types=REPORT_TYPES,
+            report_types=REPORT_TYPES, thread=thread,
+            msg_types=FI_MSG_TYPES, msg_type_labels=FI_MSG_TYPE_LABELS,
             statuses=FI_APP_STATUSES, status_labels=FI_APP_STATUS_LABELS,
             status_class=FI_APP_STATUS_CLASS,
             project_types=dict((c, L) for c, L, _ in PROJECT_TYPES))
@@ -6171,6 +6235,237 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         resp.headers["Content-Disposition"] = (
             'attachment; filename="%s_%s.pdf"' % (safe, report_key))
         return resp
+
+    # ==================================================================
+    # Slice 6a -- Communication. Two-way message history between an institution
+    # and the applicant, one thread per (project, institution, tenant), plus
+    # info/document requests and best-effort email dispatch via _send_email.
+    # ==================================================================
+    def _fi_thread(pid, institution_id, tid):
+        """Ordered message history for one (project, institution, tenant)."""
+        _ensure_fi_messages_schema(get_db)
+        try:
+            with get_db() as c:
+                rr = c.execute(
+                    "SELECT message_id, sender_role, sender_user_id, channel, "
+                    "msg_type, subject, body, emailed_to, created_at "
+                    "FROM funding_application_messages "
+                    "WHERE capital_investment_project_id=? AND institution_id=? "
+                    "AND COALESCE(tenant_id,'')=? "
+                    "ORDER BY created_at, message_id",
+                    (pid, institution_id, tid or '')).fetchall()
+            return [dict(r) for r in rr] if rr else []
+        except Exception:
+            return []
+
+    def _fi_applicant_contact(owner_uid):
+        """(email, name) of the project owner = applicant, for email dispatch."""
+        try:
+            with get_db() as c:
+                r = c.execute("SELECT email, name FROM users WHERE id=?",
+                              (owner_uid,)).fetchone()
+            if r:
+                return (_row_get(r, "email"), _row_get(r, "name"))
+        except Exception:
+            pass
+        return (None, None)
+
+    def _fi_add_message(pid, institution_id, tid, *, sender_role, sender_uid,
+                        msg_type, subject, body, channel="message",
+                        emailed_to=None):
+        """Insert one thread message (UUID PK). Returns True on success."""
+        if not _ensure_fi_messages_schema(get_db):
+            return False
+        import uuid as _uuid
+        mid = "FM-" + _uuid.uuid4().hex[:16].upper()
+        try:
+            with get_db() as c:
+                c.execute(
+                    "INSERT INTO funding_application_messages "
+                    "(message_id, capital_investment_project_id, "
+                    " institution_id, tenant_id, sender_role, sender_user_id, "
+                    " channel, msg_type, subject, body, emailed_to) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (mid, pid, institution_id, tid or '', sender_role,
+                     sender_uid, channel, msg_type, subject, body, emailed_to))
+            return True
+        except Exception:
+            return False
+
+    def _fi_send_funding_email(to_addr, subject, body, from_label):
+        """Best-effort dispatch via the platform email service WITH the standard
+        injection guards (_safe_email_subject strips CR/LF; _safe_email_text
+        html-escapes). Lazy import avoids the web_app<->this circular import.
+        Returns True only if the send call succeeded."""
+        if not to_addr:
+            return False
+        try:
+            from web_app import (_send_email, _safe_email_subject,
+                                 _safe_email_text)
+        except Exception:
+            return False
+        safe_subj = _safe_email_subject(
+            "[SolarPro Funding] " + (subject or "Message"))
+        safe_from = _safe_email_text(from_label or "SolarPro")
+        safe_body_html = _safe_email_text(body or "").replace("\n", "<br>")
+        html = (
+            "<p>You have a new funding message from <strong>%s</strong>:</p>"
+            "<blockquote style=\"border-left:3px solid #f0ad4e;"
+            "padding-left:10px;color:#333\">%s</blockquote>"
+            "<p style=\"color:#888;font-size:12px\">Reply inside SolarPro to "
+            "keep the conversation attached to the funding application.</p>"
+        ) % (safe_from, safe_body_html)
+        try:
+            # _send_email delegates to api_manager and returns (ok, message) --
+            # honour it so a delivery/config failure is NOT recorded as emailed
+            # (Codex: audit accuracy).
+            res = _send_email(to_addr, safe_subj, html, text_body=(body or ""))
+            if isinstance(res, (tuple, list)):
+                return bool(res[0]) if res else False
+            return bool(res)
+        except Exception:
+            return False
+
+    # POST /funding/workspace/<pid>/<institution_id>/message -- institution posts
+    # a message / info request / document request to the applicant (+ optional
+    # email). Authorized by the same _fi_load_application gate as the review page.
+    @app.route("/funding/workspace/<int:pid>/<institution_id>/message",
+               methods=["POST"], endpoint="funding_application_message")
+    @login_required
+    def _fi_message(pid, institution_id):
+        from flask import abort
+        uid = session.get("user_id")
+        actx = _fi_load_application(uid, pid, institution_id)
+        if not actx:
+            abort(404)
+        csrf_protect()
+        f = request.form
+        msg_type = (f.get("msg_type") or "message").strip()
+        if msg_type not in FI_MSG_TYPES:
+            msg_type = "message"
+        subject = (f.get("subject") or "").strip()[:200]
+        body = (f.get("body") or "").strip()[:5000]
+        if not body:
+            flash("Message body is required.", "warning")
+            return redirect(url_for("funding_application_review", pid=pid,
+                                    institution_id=institution_id))
+        proj = actx["project"]
+        tid = actx["selection"].get("tenant_id") or ''
+        emailed_to, channel = None, "message"
+        if f.get("send_email"):
+            appl_email, _appl_name = _fi_applicant_contact(proj.get("user_id"))
+            if appl_email and _fi_send_funding_email(
+                    appl_email, subject or FI_MSG_TYPE_LABELS.get(msg_type),
+                    body, actx["institution"].get("name")):
+                channel, emailed_to = "email", appl_email
+            else:
+                flash("Message saved, but the applicant email could not be "
+                      "sent.", "warning")
+        ok = _fi_add_message(pid, institution_id, tid,
+                             sender_role="institution", sender_uid=uid,
+                             msg_type=msg_type, subject=subject, body=body,
+                             channel=channel, emailed_to=emailed_to)
+        if ok:
+            try:
+                from new_boq_hierarchy_schema import boq_audit
+                boq_audit(get_db, uid, "funding_message_sent",
+                          "capital_investment_project", pid,
+                          "%s %s%s" % (institution_id, msg_type,
+                                       " (emailed)" if emailed_to else ""))
+            except Exception:
+                pass
+            flash("Message posted%s." % (
+                " and emailed to the applicant" if emailed_to else ""),
+                "success")
+        else:
+            flash("Could not post the message.", "danger")
+        return redirect(url_for("funding_application_review", pid=pid,
+                                institution_id=institution_id))
+
+    # POST /large-scale-solar/<pid>/funding/message -- the APPLICANT replies to
+    # an institution they submitted to (owner-scoped; only consented threads).
+    @app.route("/large-scale-solar/<int:pid>/funding/message",
+               methods=["POST"], endpoint="capital_investment_funding_message")
+    @login_required
+    def _funding_message(pid):
+        if (g := _gate(CI_LEVEL_SETUP)) is not None:
+            return g
+        proj = _load_project(pid)          # owner-scoped
+        _ctid = _tenant_id()
+        if _ctid is not None and proj.get("tenant_id") not in (
+                None, _ctid, str(_ctid)):
+            from flask import abort
+            abort(404)
+        csrf_protect()
+        uid = session.get("user_id")
+        tid_s = str(_ctid) if _ctid is not None else ''
+        f = request.form
+        institution_id = (f.get("institution_id") or "").strip()
+        body = (f.get("body") or "").strip()[:5000]
+        if not body:
+            flash("Message body is required.", "warning")
+            return redirect(url_for("capital_investment_funding", pid=pid))
+        # Applicant may only message an institution they submitted to WITH
+        # consent AND that is still APPROVED (a stale consent row must not reach a
+        # suspended/rejected institution -- mirrors the institution-side gate).
+        _ensure_fi_selection_schema(get_db)
+        _ensure_fi_schema(get_db)
+        allowed = False
+        try:
+            with get_db() as c:
+                r = c.execute(
+                    "SELECT 1 FROM funding_institution_selections s "
+                    "JOIN financial_institutions fi "
+                    "  ON fi.institution_id = s.institution_id "
+                    "WHERE s.capital_investment_project_id=? "
+                    "AND s.institution_id=? AND COALESCE(s.tenant_id,'')=? "
+                    "AND s.consent=1 AND fi.status='approved' LIMIT 1",
+                    (pid, institution_id, tid_s)).fetchone()
+                allowed = bool(r)
+        except Exception:
+            allowed = False
+        if not allowed:
+            flash("You can only message an approved institution you submitted "
+                  "to.", "warning")
+            return redirect(url_for("capital_investment_funding", pid=pid))
+        subject = (f.get("subject") or "").strip()[:200]
+        emailed_to, channel = None, "message"
+        if f.get("send_email"):
+            inst_email = None
+            try:
+                with get_db() as c:
+                    ir = c.execute(
+                        "SELECT email FROM financial_institutions "
+                        "WHERE institution_id=?", (institution_id,)).fetchone()
+                inst_email = _row_get(ir, "email")
+            except Exception:
+                inst_email = None
+            appl_name = proj.get("client_name") or "the applicant"
+            if inst_email and _fi_send_funding_email(
+                    inst_email, subject or "Applicant reply", body, appl_name):
+                channel, emailed_to = "email", inst_email
+            else:
+                flash("Reply saved, but the institution email could not be "
+                      "sent.", "warning")
+        ok = _fi_add_message(pid, institution_id, tid_s,
+                             sender_role="applicant", sender_uid=uid,
+                             msg_type="message", subject=subject, body=body,
+                             channel=channel, emailed_to=emailed_to)
+        if ok:
+            try:
+                from new_boq_hierarchy_schema import boq_audit
+                boq_audit(get_db, uid, "funding_message_sent",
+                          "capital_investment_project", pid,
+                          "applicant->%s%s" % (
+                              institution_id,
+                              " (emailed)" if emailed_to else ""))
+            except Exception:
+                pass
+            flash("Reply posted%s." % (
+                " and emailed" if emailed_to else ""), "success")
+        else:
+            flash("Could not post the reply.", "danger")
+        return redirect(url_for("capital_investment_funding", pid=pid))
 
     # ==================================================================
     # Slice 2 -- Financial Institution registration + Platform-Admin approval.
