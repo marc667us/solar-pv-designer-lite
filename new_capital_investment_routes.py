@@ -2638,22 +2638,52 @@ CREATE INDEX IF NOT EXISTS idx_cio_stage   ON capital_investment_opportunities(u
 """
 
 
+# Slice 9 (2026-07-05) -- funding fields carried on the CRM opportunity (= the
+# pipeline entry), added via per-statement ALTER so existing rows upgrade in
+# place. Each runs in its own transaction (dup-column on Postgres aborts only
+# itself). "REAL"/"INTEGER"/"TEXT" are accepted by both SQLite and Postgres.
+_CIO_FUNDING_MIGRATIONS = (
+    "ALTER TABLE capital_investment_opportunities ADD COLUMN "
+    "funding_requested REAL",
+    "ALTER TABLE capital_investment_opportunities ADD COLUMN "
+    "funding_amount REAL",
+    "ALTER TABLE capital_investment_opportunities ADD COLUMN "
+    "funding_selected_institutions TEXT",
+    "ALTER TABLE capital_investment_opportunities ADD COLUMN "
+    "funding_status TEXT",
+    "ALTER TABLE capital_investment_opportunities ADD COLUMN "
+    "funding_score INTEGER",
+    "ALTER TABLE capital_investment_opportunities ADD COLUMN "
+    "funding_approval_date TEXT",
+    "ALTER TABLE capital_investment_opportunities ADD COLUMN "
+    "expected_close_date TEXT",
+    "ALTER TABLE capital_investment_opportunities ADD COLUMN "
+    "funding_success_fee REAL",
+)
+
+
 def _ensure_opportunities_schema(get_db) -> None:
     """Idempotent opportunities-table creation; per-statement transactions so a
     Postgres failure doesn't cascade."""
     try:
         with get_db() as c:
             c.executescript(_CIO_SQLITE_DDL)
-        return
     except Exception:
-        pass
-    for stmt in _CIO_POSTGRES_DDL.split(";"):
-        s = stmt.strip()
-        if not s:
-            continue
+        for stmt in _CIO_POSTGRES_DDL.split(";"):
+            s = stmt.strip()
+            if not s:
+                continue
+            try:
+                with get_db() as c:
+                    c.execute(s)
+            except Exception:
+                pass
+    # Funding columns (Slice 9) -- each ALTER isolated so a duplicate-column
+    # failure on an already-upgraded table doesn't abort the others.
+    for stmt in _CIO_FUNDING_MIGRATIONS:
         try:
             with get_db() as c:
-                c.execute(s)
+                c.execute(stmt)
         except Exception:
             pass
 
@@ -6066,12 +6096,16 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         for iid in selections.keys():
             threads[iid] = _fi_thread(pid, iid, tid_s)
             shipments[iid] = _fi_shipments(pid, iid, tid_s)
+        # CRM / pipeline handoff (Slice 9): current opportunity + funding snapshot.
+        crm = _load_opportunity(pid, uid)
+        crm_snap = _ci_funding_crm_snapshot(pid, uid, tid_s)
         return render_template(
             "capital_investment/funding.html",
             user=current_user(), proj=proj, ov=ov, fund=fund,
             institutions=institutions, selections=selections, threads=threads,
             shipments=shipments, ship_status_labels=FI_SHIP_STATUS_LABELS,
             ship_status_class=FI_SHIP_STATUS_CLASS,
+            crm=crm, crm_snap=crm_snap,
             project_types=dict((c, L) for c, L, _ in PROJECT_TYPES),
         )
 
@@ -7327,6 +7361,194 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             flash("Could not run the funding assessment.", "danger")
         return redirect(url_for("funding_application_review", pid=pid,
                                 institution_id=institution_id))
+
+    # ==================================================================
+    # Slice 9 -- CRM + Sales Pipeline + Marketplace handoff. Funding state is
+    # projected onto the existing CRM opportunity (= the pipeline entry) so the
+    # sales pipeline reflects funding; an approved project can proceed to the
+    # existing procurement centre. No parallel CRM -- reuse only.
+    # ==================================================================
+    def _ci_funding_crm_snapshot(pid, uid, tid):
+        """Funding fields for the CRM handoff, read from this project's funding
+        app + consented selections + revenue (owner reads their OWN project)."""
+        _ensure_ci_funding_schema(get_db)
+        _ensure_fi_selection_schema(get_db)
+        _ensure_fi_revenue_schema(get_db)
+        _ensure_fi_schema(get_db)
+        out = {"funding_requested": None, "funding_amount": None,
+               "selected_institutions": "", "funding_status": None,
+               "funding_score": None, "funding_approval_date": None,
+               "success_fee": None, "approved": False}
+        try:
+            with get_db() as c:
+                fr = c.execute(
+                    "SELECT funding_requested, funding_score, status "
+                    "FROM capital_investment_funding "
+                    "WHERE capital_investment_project_id=? "
+                    "AND COALESCE(tenant_id,'')=?",
+                    (pid, tid or '')).fetchone()
+                if fr:
+                    out["funding_requested"] = _row_get(fr, "funding_requested")
+                    out["funding_score"] = _row_get(fr, "funding_score")
+                    out["funding_status"] = _row_get(fr, "status")
+                srows = c.execute(
+                    "SELECT s.institution_id, s.status, fi.name "
+                    "FROM funding_institution_selections s "
+                    "LEFT JOIN financial_institutions fi "
+                    "  ON fi.institution_id = s.institution_id "
+                    "WHERE s.capital_investment_project_id=? "
+                    "AND COALESCE(s.tenant_id,'')=? AND s.consent=1",
+                    (pid, tid or '')).fetchall()
+                names, statuses = [], []
+                for r in srows or []:
+                    names.append(_row_get(r, "name")
+                                 or _row_get(r, "institution_id"))
+                    statuses.append(_row_get(r, "status"))
+                out["selected_institutions"] = ", ".join(n for n in names if n)
+                # Most-advanced per-institution status = the funding status.
+                order = {s: i for i, s in enumerate(FI_APP_STATUSES)}
+                if statuses:
+                    best = max(statuses, key=lambda s: order.get(s, -1))
+                    out["funding_status"] = best or out["funding_status"]
+                # The actual funder's approved loan + our success fee + date.
+                rv = c.execute(
+                    "SELECT approved_loan_amount, fee_amount, invoice_date "
+                    "FROM funding_revenue WHERE capital_investment_project_id=? "
+                    "AND COALESCE(tenant_id,'')=? "
+                    "AND approved_loan_amount IS NOT NULL "
+                    "ORDER BY approved_loan_amount DESC LIMIT 1",
+                    (pid, tid or '')).fetchone()
+                if rv:
+                    out["funding_amount"] = _row_get(rv, "approved_loan_amount")
+                    out["success_fee"] = _row_get(rv, "fee_amount")
+                    out["funding_approval_date"] = _row_get(rv, "invoice_date")
+        except Exception:
+            pass
+        out["approved"] = bool(out["funding_status"] in ("approved", "completed")
+                               or out["funding_amount"] is not None)
+        return out
+
+    # POST /large-scale-solar/<pid>/funding/sync-crm -- project funding onto the
+    # owner's CRM opportunity + mirror into the platform sales pipeline.
+    @app.route("/large-scale-solar/<int:pid>/funding/sync-crm",
+               methods=["POST"], endpoint="capital_investment_funding_sync_crm")
+    @login_required
+    def _funding_sync_crm(pid):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        proj = _load_project(pid)          # owner-scoped
+        _ctid = _tenant_id()
+        if _ctid is not None and proj.get("tenant_id") not in (
+                None, _ctid, str(_ctid)):
+            from flask import abort
+            abort(404)
+        csrf_protect()
+        uid = session.get("user_id")
+        tid_s = str(_ctid) if _ctid is not None else ''
+        _ensure_opportunities_schema(get_db)
+        snap = _ci_funding_crm_snapshot(pid, uid, tid_s)
+        opp = _load_opportunity(pid, uid)
+        # Create the opportunity from project data if the developer never opened
+        # Step 11 (reuse build_opportunity_from_project -- no parallel CRM).
+        if opp is None:
+            d = build_opportunity_from_project(proj)
+            try:
+                with get_db() as c:
+                    c.execute(
+                        "INSERT INTO capital_investment_opportunities "
+                        "(capital_investment_project_id, user_id, project_name, "
+                        " investor, developer, client, location, country, "
+                        " currency, capacity_mwp, capex_local, capex_usd, "
+                        " revenue_y1_local, annual_gen_mwh, npv_local, irr_pct, "
+                        " lcoe_local_per_kwh, payback_years, dscr_avg, stage, "
+                        " tenant_id) VALUES (" + ",".join("?" * 21) + ")",
+                        (d["capital_investment_project_id"], d["user_id"],
+                         d["project_name"], d["investor"], d["developer"],
+                         d["client"], d["location"], d["country"], d["currency"],
+                         d["capacity_mwp"], d["capex_local"], d["capex_usd"],
+                         d["revenue_y1_local"], d["annual_gen_mwh"],
+                         d["npv_local"], d["irr_pct"], d["lcoe_local_per_kwh"],
+                         d["payback_years"], d["dscr_avg"], "lead", _ctid))
+            except Exception:
+                try:                       # legacy schema without tenant_id
+                    with get_db() as c:
+                        c.execute(
+                            "INSERT INTO capital_investment_opportunities "
+                            "(capital_investment_project_id, user_id, "
+                            " project_name, investor, developer, client, "
+                            " location, country, currency, capacity_mwp, "
+                            " capex_local, capex_usd, revenue_y1_local, "
+                            " annual_gen_mwh, npv_local, irr_pct, "
+                            " lcoe_local_per_kwh, payback_years, dscr_avg, "
+                            " stage) VALUES (" + ",".join("?" * 20) + ")",
+                            (d["capital_investment_project_id"], d["user_id"],
+                             d["project_name"], d["investor"], d["developer"],
+                             d["client"], d["location"], d["country"],
+                             d["currency"], d["capacity_mwp"], d["capex_local"],
+                             d["capex_usd"], d["revenue_y1_local"],
+                             d["annual_gen_mwh"], d["npv_local"], d["irr_pct"],
+                             d["lcoe_local_per_kwh"], d["payback_years"],
+                             d["dscr_avg"], "lead"))
+                except Exception:
+                    pass
+            opp = _load_opportunity(pid, uid)
+        ok = False
+        try:
+            with get_db() as c:
+                cur = c.execute(
+                    "UPDATE capital_investment_opportunities SET "
+                    "funding_requested=?, funding_amount=?, "
+                    "funding_selected_institutions=?, funding_status=?, "
+                    "funding_score=?, funding_approval_date=?, "
+                    "funding_success_fee=?, updated_at=CURRENT_TIMESTAMP "
+                    "WHERE capital_investment_project_id=? AND user_id=?",
+                    (snap["funding_requested"], snap["funding_amount"],
+                     snap["selected_institutions"], snap["funding_status"],
+                     snap["funding_score"], snap["funding_approval_date"],
+                     snap["success_fee"], pid, uid))
+                try:
+                    ok = (cur.rowcount >= 1)
+                except Exception:
+                    ok = True
+        except Exception:
+            ok = False
+        # Mirror the funding update into the platform sales pipeline (non-raising).
+        try:
+            from web_app import _capture_pipeline_lead
+            u = current_user() or {}
+            _capture_pipeline_lead(
+                name=(_row_get(u, "full_name")
+                      or _row_get(u, "username") or "")[:120],
+                email=_row_get(u, "email") or "",
+                country=proj.get("country") or "",
+                region=proj.get("region") or "", system_type="industrial",
+                company=proj.get("investor") or proj.get("developer") or "",
+                interest="generation-station-funding",
+                message=("Funding update: %s -- status %s, %d institution(s), "
+                         "score %s" % (
+                             proj.get("project_name") or "project",
+                             snap.get("funding_status") or "n/a",
+                             len([x for x in (snap.get("selected_institutions")
+                                              or "").split(",") if x.strip()]),
+                             snap.get("funding_score")))[:500],
+                source="generation_station_funding_sync",
+                pipeline_stage="assessment_submitted")
+        except Exception:
+            pass
+        if ok:
+            try:
+                from new_boq_hierarchy_schema import boq_audit
+                boq_audit(get_db, uid, "funding_crm_synced",
+                          "capital_investment_project", pid,
+                          "status=%s amount=%s" % (snap.get("funding_status"),
+                                                   snap.get("funding_amount")))
+            except Exception:
+                pass
+            flash("Funding synced to your CRM opportunity and the sales "
+                  "pipeline.", "success")
+        else:
+            flash("Could not sync funding to the CRM.", "danger")
+        return redirect(url_for("capital_investment_funding", pid=pid))
 
     # ==================================================================
     # Slice 2 -- Financial Institution registration + Platform-Admin approval.

@@ -164,6 +164,44 @@
   </div>
 </div>
 
+{# Slice 9 — CRM / Sales Pipeline handoff + procurement. #}
+{% if fund or selections %}
+<div class="card bg-dark border-secondary mt-3">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span class="fw-bold small"><i class="bi bi-kanban me-1 text-warning"></i>CRM &amp; sales pipeline</span>
+    {% if crm %}<span class="badge bg-info text-dark">Pipeline: {{ (crm.stage or 'lead')|replace('_',' ')|title }}</span>{% endif %}
+  </div>
+  <div class="card-body">
+    {% set cur = proj.currency or 'GHS' %}
+    <div class="row g-2 mb-3">
+      {% macro fcell(label, value) %}
+      <div class="col-6 col-md-3"><div class="border border-secondary rounded p-2 h-100 bg-black"><div class="text-secondary" style="font-size:10px;text-transform:uppercase;letter-spacing:.4px">{{ label }}</div><div class="fw-semibold text-light">{{ value }}</div></div></div>
+      {% endmacro %}
+      {{ fcell('Funding status', (crm_snap.funding_status or 'not submitted')|replace('_',' ')|title) }}
+      {{ fcell('Institutions', crm_snap.selected_institutions or '—') }}
+      {{ fcell('Funding requested', (cur ~ ' ' ~ '{:,.0f}'.format(crm_snap.funding_requested)) if crm_snap.funding_requested is not none else '—') }}
+      {{ fcell('Approved amount', (cur ~ ' ' ~ '{:,.0f}'.format(crm_snap.funding_amount)) if crm_snap.funding_amount is not none else '—') }}
+      {{ fcell('Funding score', (crm_snap.funding_score ~ '/100') if crm_snap.funding_score is not none else '—') }}
+      {{ fcell('Approval date', crm_snap.funding_approval_date or '—') }}
+      {{ fcell('Success fee', (cur ~ ' ' ~ '{:,.0f}'.format(crm_snap.success_fee)) if crm_snap.success_fee is not none else '—') }}
+      {{ fcell('Synced to CRM', crm.updated_at if crm else 'not yet') }}
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <form method="post" action="{{ url_for('capital_investment_funding_sync_crm', pid=proj.id) }}" class="m-0">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-warning btn-sm fw-bold"><i class="bi bi-arrow-repeat me-1"></i>Sync funding to CRM &amp; pipeline</button>
+      </form>
+      {% if crm_snap.approved %}
+      <a href="{{ url_for('procurement_center') }}" class="btn btn-warning btn-sm fw-bold"><i class="bi bi-cart-plus-fill me-1"></i>Proceed to Procurement</a>
+      {% else %}
+      <span class="btn btn-outline-secondary btn-sm disabled" style="opacity:.5" title="Available once funding is approved"><i class="bi bi-cart me-1"></i>Procurement (after approval)</span>
+      {% endif %}
+    </div>
+    <div class="text-secondary small mt-2">Syncing projects your funding status, selected institutions, approved amount and success fee onto your CRM opportunity and the sales pipeline. Once approved, hand off directly to the existing Procurement Centre.</div>
+  </div>
+</div>
+{% endif %}
+
 {# Slice 6a — Communication: message threads with the institutions you submitted to. #}
 {% if selections %}
 <div class="card bg-dark border-secondary mt-3">
