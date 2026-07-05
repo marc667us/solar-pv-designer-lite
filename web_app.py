@@ -32653,14 +32653,24 @@ def _bc_funding_model(bill_check_result):
     loan_years    = float(r["loan"].get("years") or 0)
     sys_cost      = rec_kwp * cost_per_kwp
 
+    # Baseline monthly grid cost to measure the solar savings against. When
+    # the customer did not type an actual bill, fall back to the expected PURC
+    # bill computed from their usage so we never divide by a zero bill (owner
+    # 2026-07-05: the pitch claimed the bill 'drops by 0%' while still quoting a
+    # real GHS saving -- a nonsensical contradiction).
+    expected_total = float((r.get("expected") or {}).get("total") or 0)
+    baseline       = bill if bill > 0 else expected_total
+    bill_estimated = bill <= 0 and baseline > 0
+    est_note       = " (estimated from your usage)" if bill_estimated else ""
+
     # Slice of current bill that the loan payment represents
-    portion_pct = (loan_payment / bill * 100.0) if bill > 0 else 0.0
+    portion_pct = (loan_payment / baseline * 100.0) if baseline > 0 else 0.0
     # During the loan: residual grid bill (what stays after solar offsets)
-    residual_bill = max(0.0, bill - monthly_save)
+    residual_bill = max(0.0, baseline - monthly_save)
     combined_outlay = residual_bill + loan_payment
-    net_change_pct = ((combined_outlay - bill) / bill * 100.0) if bill > 0 else 0.0
+    net_change_pct = ((combined_outlay - baseline) / baseline * 100.0) if baseline > 0 else 0.0
     # After loan: only residual bill remains
-    post_loan_drop_pct = (monthly_save / bill * 100.0) if bill > 0 else 0.0
+    post_loan_drop_pct = (monthly_save / baseline * 100.0) if baseline > 0 else 0.0
     annual_save = monthly_save * 12
     simple_payback_years = (sys_cost / annual_save) if annual_save > 0 else 0.0
     # 25-year lifetime savings (no escalation, simple)
@@ -32670,8 +32680,8 @@ def _bc_funding_model(bill_check_result):
     # Plain-language interpretation (owner 2026-07-05: the yellow "The Pitch"
     # band was not understandable). Short sentences, no jargon, walks the three
     # phases: today -> while repaying the loan -> after the loan is paid off.
-    if combined_outlay <= bill and loan_payment > 0:
-        pitch = (f"Right now you pay about GHS {bill:,.0f} a month to the grid. "
+    if combined_outlay <= baseline and loan_payment > 0:
+        pitch = (f"Right now your grid electricity costs about GHS {baseline:,.0f} a month{est_note}. "
                  f"Instead, put roughly GHS {loan_payment:,.0f} of that toward a "
                  f"{loan_years:.0f}-year loan for your own {rec_kwp:,.1f} kWp solar "
                  f"system. While you repay the loan your total monthly cost stays "
@@ -32684,8 +32694,8 @@ def _bc_funding_model(bill_check_result):
     elif loan_payment > 0:
         pitch = (f"Your own {rec_kwp:,.1f} kWp solar system would cost about GHS "
                  f"{loan_payment:,.0f} a month on a {loan_years:.0f}-year loan. That "
-                 f"is roughly GHS {(combined_outlay - bill):,.0f} a month more than "
-                 f"your grid bill today, so your total cost is a little higher while "
+                 f"is roughly GHS {(combined_outlay - baseline):,.0f} a month more than "
+                 f"your grid electricity today{est_note}, so your total cost is a little higher while "
                  f"you repay it. Once the loan is paid off your bill drops by about "
                  f"{post_loan_drop_pct:.0f}%, saving you around GHS {monthly_save:,.0f} "
                  f"every month for the rest of the 25-year system life.")
@@ -32696,7 +32706,9 @@ def _bc_funding_model(bill_check_result):
 
     return {
         "headline_pitch":            pitch,
-        "current_bill":              round(bill, 2),
+        "current_bill":              round(baseline, 2),
+        "actual_bill_entered":       round(bill, 2),
+        "baseline_estimated":        bill_estimated,
         "monthly_loan_payment":      round(loan_payment, 2),
         "portion_of_bill_pct":       round(portion_pct, 2),
         "residual_bill_during_loan": round(residual_bill, 2),
@@ -32710,7 +32722,7 @@ def _bc_funding_model(bill_check_result):
         "simple_payback_years":      round(simple_payback_years, 2),
         "lifetime_saving_25yr":      round(lifetime_save, 2),
         "recommended_kwp":           rec_kwp,
-        "feasible":                  bool(loan_payment > 0 and combined_outlay <= bill),
+        "feasible":                  bool(loan_payment > 0 and combined_outlay <= baseline),
     }
 
 
