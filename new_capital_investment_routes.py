@@ -5073,6 +5073,39 @@ def _ensure_fi_schema(get_db) -> bool:
     return bool(_FI_STATE["ready"])
 
 
+# ---------------------------------------------------------------------------
+# Funding institution selections -- Slice 3 (2026-07-05). Which institution(s) a
+# customer submitted a given project's funding application to, with explicit
+# consent. One row per (project, institution, tenant); the institution only ever
+# sees applications that have a row here (isolation for Slice 4's workspace).
+# ---------------------------------------------------------------------------
+_FI_SEL_STATE = {"ready": False}
+
+
+def _ensure_fi_selection_schema(get_db) -> bool:
+    """Create funding_institution_selections once (SQLite + Postgres safe)."""
+    if _FI_SEL_STATE["ready"]:
+        return True
+    ddl = (
+        "CREATE TABLE IF NOT EXISTS funding_institution_selections ("
+        " capital_investment_project_id INTEGER NOT NULL,"
+        " institution_id TEXT NOT NULL,"
+        " tenant_id TEXT NOT NULL DEFAULT '',"
+        " user_id INTEGER NOT NULL,"
+        " consent INTEGER NOT NULL DEFAULT 0,"
+        " status TEXT NOT NULL DEFAULT 'submitted',"
+        " submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        " PRIMARY KEY (capital_investment_project_id, institution_id, tenant_id))"
+    )
+    try:
+        with get_db() as c:
+            c.execute(ddl)
+        _FI_SEL_STATE["ready"] = True
+    except Exception:
+        _FI_SEL_STATE["ready"] = False
+    return bool(_FI_SEL_STATE["ready"])
+
+
 # ===========================================================================
 # SECTION E -- Wizard progress (derives completion from real stored data;
 # SSS Section 2 acceptance -- no pseudo "hook" fields).
@@ -5631,11 +5664,135 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
 
         # GET
         fund = _ci_funding_row(pid, uid, tid_s)
+        institutions, selections = _ci_funding_institutions(pid, uid, tid_s)
         return render_template(
             "capital_investment/funding.html",
             user=current_user(), proj=proj, ov=ov, fund=fund,
+            institutions=institutions, selections=selections,
             project_types=dict((c, L) for c, L, _ in PROJECT_TYPES),
         )
+
+    def _ci_funding_institutions(pid: int, uid, tid_s: str):
+        """Return (approved_institutions, selected_map). approved_institutions is
+        the platform-global approved registry; selected_map is
+        {institution_id: {consent, status, submitted_at}} for this project."""
+        approved, selected = [], {}
+        _ensure_fi_schema(get_db)
+        _ensure_fi_selection_schema(get_db)
+        try:
+            with get_db() as c:
+                rr = c.execute(
+                    "SELECT institution_id, name, inst_type, country, region, "
+                    "fee_pct, loan_min, loan_max FROM financial_institutions "
+                    "WHERE status='approved' ORDER BY name").fetchall()
+                approved = [dict(r) for r in rr] if rr else []
+                sr = c.execute(
+                    "SELECT institution_id, consent, status, submitted_at "
+                    "FROM funding_institution_selections "
+                    "WHERE capital_investment_project_id=? AND tenant_id=? "
+                    "AND user_id=?", (pid, tid_s, uid)).fetchall()
+                for r in sr or []:
+                    selected[_row_get(r, "institution_id")] = {
+                        "consent": _row_get(r, "consent", 0),
+                        "status": _row_get(r, "status", "submitted"),
+                        "submitted_at": _row_get(r, "submitted_at"),
+                    }
+        except Exception:
+            pass
+        return approved, selected
+
+    # POST /large-scale-solar/<pid>/funding/submit -- submit the funding package
+    # to the selected APPROVED institution(s) with explicit consent (Slice 3).
+    @app.route("/large-scale-solar/<int:pid>/funding/submit",
+               methods=["POST"], endpoint="capital_investment_funding_submit")
+    @login_required
+    def _funding_submit(pid: int):
+        if (g := _gate(CI_LEVEL_SETUP)) is not None:
+            return g
+        proj = _load_project(pid)          # 404s unless owned by this user
+        _ctid = _tenant_id()
+        if _ctid is not None and proj.get("tenant_id") not in (
+                None, _ctid, str(_ctid)):
+            from flask import abort
+            abort(404)
+        csrf_protect()
+        uid = session.get("user_id")
+        tid_s = str(_ctid) if _ctid is not None else ''
+        f = request.form
+        if not f.get("consent"):
+            flash("You must consent to share your project reports before "
+                  "submitting to a financial institution.", "warning")
+            return redirect(url_for("capital_investment_funding", pid=pid))
+        chosen = [x for x in f.getlist("institution_id") if x]
+        chosen = list(dict.fromkeys(chosen))       # de-dup, preserve order
+        if not chosen:
+            flash("Select at least one financial institution.", "warning")
+            return redirect(url_for("capital_investment_funding", pid=pid))
+        _ensure_fi_schema(get_db)
+        _ensure_fi_selection_schema(get_db)
+        _ensure_ci_funding_schema(get_db)
+        # Only the ids that VALIDATE as currently-approved are recorded, counted
+        # and persisted -- never the raw posted list (Codex: a forged POST must
+        # not leak a rejected/suspended id into selected_institutions).
+        approved_ids = []
+        try:
+            with get_db() as c:
+                for iid in chosen:
+                    ok = c.execute(
+                        "SELECT 1 FROM financial_institutions WHERE "
+                        "institution_id=? AND status='approved' LIMIT 1",
+                        (iid,)).fetchone()
+                    if not ok:
+                        continue
+                    # Idempotent per (project, institution, tenant).
+                    c.execute(
+                        "INSERT OR IGNORE INTO funding_institution_selections "
+                        "(capital_investment_project_id, institution_id, "
+                        " tenant_id, user_id, consent, status) "
+                        "VALUES (?,?,?,?,1,'submitted')",
+                        (pid, iid, tid_s, uid))
+                    approved_ids.append(iid)
+                if approved_ids:
+                    # Reflect the submission on the funding application, creating
+                    # the row if the customer skipped "Request" (atomic upsert).
+                    # selected_institutions stores ONLY the validated subset.
+                    import json as _json
+                    ov2 = _ci_funding_overview(proj)
+                    c.execute(
+                        "INSERT INTO capital_investment_funding "
+                        "(capital_investment_project_id, tenant_id, user_id, "
+                        " status, funding_requested, customer_equity, "
+                        " funding_score, selected_institutions) "
+                        "VALUES (?,?,?,?,?,?,?,?) "
+                        "ON CONFLICT (capital_investment_project_id, tenant_id) "
+                        "DO UPDATE SET status='submitted', "
+                        "selected_institutions=EXCLUDED.selected_institutions, "
+                        "updated_at=CURRENT_TIMESTAMP",
+                        (pid, tid_s, uid, "submitted", ov2.get("debt_local"),
+                         ov2.get("equity_local"),
+                         ov2.get("funding_score") if ov2.get("bank_available")
+                         else None, _json.dumps(approved_ids)))
+        except Exception:
+            approved_ids = []
+        # Count = institutions in THIS submission package, not newly-inserted
+        # rows. A legitimate re-submit re-affirms the same approved lenders
+        # (INSERT OR IGNORE keeps prior rows) and must still report the true
+        # package size -- using c.rowcount here would wrongly show 0 on resubmit.
+        submitted_count = len(approved_ids)
+        if submitted_count:
+            try:
+                from new_boq_hierarchy_schema import boq_audit
+                boq_audit(get_db, uid, "capital_funding_submitted",
+                          "capital_investment_project", pid,
+                          "submitted to %d institution(s)" % submitted_count)
+            except Exception:
+                pass
+            flash("Funding application submitted to %d financial "
+                  "institution(s)." % submitted_count, "success")
+        else:
+            flash("Could not submit - none of the selected institutions are "
+                  "currently approved. Please try again.", "danger")
+        return redirect(url_for("capital_investment_funding", pid=pid))
 
     # ==================================================================
     # Slice 2 -- Financial Institution registration + Platform-Admin approval.
