@@ -4,15 +4,18 @@
   view). NON-DESTRUCTIVE: it navigates to the page's own path with NO query
   string, which drops every active filter / search / sort / status selection and
   reloads the dashboard fresh (also clearing any client-side input boxes). No
-  data is ever deleted. Usage in a template:
+  data is ever deleted.
 
-    {% from '_dashboard_reset.html' import reset_filters %}
-    {{ reset_filters() }}                       {# default label "Reset" #}
-    {{ reset_filters('Reset filters') }}        {# custom label #}
-    {{ reset_filters(onclick="sessionStorage.removeItem('foo')") }}  {# also clear client-side state #}
+  Usage in a template (do NOT put Jinja tags in this comment -- comments do not
+  nest, so a nested tag would close this block early):
+    - import:            from '_dashboard_reset.html' import reset_filters
+    - default label:     reset_filters()
+    - custom label:      reset_filters('Reset filters')
+    - bigger button:     reset_filters('Reset', 'md')
+    - clear JS state:    reset_filters(onclick="sessionStorage.removeItem('key')")
 
   The optional `onclick` runs BEFORE navigation, so a dashboard that keeps
-  selections in sessionStorage/localStorage can wipe them too (the subsequent
+  selections in sessionStorage / localStorage can wipe them too (the subsequent
   reload then starts clean). Keep the JS a single safe expression.
 #}
 {% macro reset_filters(label='Reset', size='sm', onclick='') %}
