@@ -1129,12 +1129,17 @@ def _ci_bankability(computed) -> dict:
     return out
 
 
-# Refined chart palette (replaces the old amber/yellow deck accents 2026-07-03).
-# Cool, premium tones that read well on the dark cards; the donut cycles through
-# the full list. Accent = teal.
+# Cost-split donut palette (2026-07-05). The previous set had three near-identical
+# greens + three blues that blended into each other on the dark deck ("some
+# colours not visible"). This is a CVD-safe categorical order validated with the
+# data-viz palette validator against the deck ring surface #22273a: all 8 inside
+# the dark lightness band, worst-adjacent colour-blind separation ΔE 23.6 (target
+# >=12). Order = blue, amber, aqua, violet, green, red, magenta, orange. The green
+# is a touch under 3:1 contrast, which the legend labels + the 2px inter-slice gap
+# (secondary encoding) below relieve.
 _CI_CHART_PALETTE: list[str] = [
-    "#38bdf8", "#34d399", "#a78bfa", "#f472b6", "#22d3ee", "#fb923c",
-    "#4ade80", "#818cf8", "#e879f9", "#2dd4bf", "#facc15", "#60a5fa",
+    "#3987e5", "#c98500", "#199e70", "#9085e9", "#008300", "#e66767",
+    "#d55181", "#d95926",
 ]
 _CI_ACCENT = "#2dd4bf"     # teal accent (was #f5c518/#f5a623 yellow)
 _CI_ACCENT2 = "#38bdf8"    # sky-blue secondary
@@ -1160,8 +1165,11 @@ def _svg_donut(rows, *, size: int = 240, thickness: int = 40,
     circ = 2 * _math.pi * r
     # Legend height: one row per slice (cap the ring at 12 slices, roll the rest
     # into an "Other" wedge so the chart stays legible).
-    show = rows[:11]
-    rest = rows[11:]
+    # Never cycle categorical hues: at most one slice per palette colour, roll any
+    # remainder into a single "Other" wedge (data-viz rule).
+    cap = len(pal)
+    show = rows[:cap - 1]
+    rest = rows[cap - 1:]
     if rest:
         show = show + [{"label": f"Other ({len(rest)})",
                         "value": sum(float(x.get("value") or 0) for x in rest)}]
@@ -1173,16 +1181,23 @@ def _svg_donut(rows, *, size: int = 240, thickness: int = 40,
     out.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" '
                f'stroke="#22273a" stroke-width="{thickness}"/>')
     offset = 0.0
+    # 2px surface gap between wedges (shows the dark background ring through) so
+    # adjacent slices never blend — the data-viz separator spec + secondary
+    # encoding that relieves the near-3:1 green.
+    gap = 2.0 if len(show) > 1 else 0.0
     for i, row in enumerate(show):
         val = float(row.get("value") or 0)
         frac = val / total
         seg = frac * circ
         color = pal[i % len(pal)]
-        # dash: draw `seg`, gap the rest; rotate so slices start at 12 o'clock.
+        drawn = seg - gap
+        if drawn < 0.75:                 # keep a sliver visible for tiny slices
+            drawn = min(seg, 0.75)
+        # dash: draw `drawn`, gap the rest; rotate so slices start at 12 o'clock.
         out.append(
             f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" '
             f'stroke="{color}" stroke-width="{thickness}" '
-            f'stroke-dasharray="{seg:.2f} {circ - seg:.2f}" '
+            f'stroke-dasharray="{drawn:.2f} {circ - drawn:.2f}" '
             f'stroke-dashoffset="{-offset:.2f}" '
             f'transform="rotate(-90 {cx} {cy})"/>')
         offset += seg
@@ -4907,6 +4922,42 @@ def _ensure_ci_projects_schema_verified(get_db) -> bool:
     return bool(_CIP_SCHEMA_STATE["ready"])
 
 
+# ---------------------------------------------------------------------------
+# Recent-projects "clear history" view preference (owner 2026-07-05).
+# NON-DESTRUCTIVE: hiding a project only removes it from the landing "Recent
+# projects" panel for THIS user. The capital_investment_projects row, its wizard
+# data and any linked BOQ are untouched -- the project is still reachable by URL
+# and via the marketplace/BOQ lists. A composite PK (user_id, project_id) keeps
+# the insert idempotent. Scoped by user_id (the recent query is already
+# user-scoped); tenant_id is recorded best-effort for audit parity only.
+# ---------------------------------------------------------------------------
+_CI_RECENT_HIDDEN_STATE = {"ready": False}
+
+
+def _ensure_ci_recent_hidden_schema(get_db) -> bool:
+    """Create ci_recent_hidden once (SQLite + Postgres safe). Returns readiness
+    so callers can skip the filter/insert cleanly if the DDL failed."""
+    if _CI_RECENT_HIDDEN_STATE["ready"]:
+        return True
+    # tenant_id is part of the PK (normalised to '' when no tenant) so the same
+    # user in two tenants hides independently -- Codex tenant-isolation fix.
+    ddl = (
+        "CREATE TABLE IF NOT EXISTS ci_recent_hidden ("
+        " user_id INTEGER NOT NULL,"
+        " project_id INTEGER NOT NULL,"
+        " tenant_id TEXT NOT NULL DEFAULT '',"
+        " hidden_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        " PRIMARY KEY (user_id, project_id, tenant_id))"
+    )
+    try:
+        with get_db() as c:
+            c.execute(ddl)
+        _CI_RECENT_HIDDEN_STATE["ready"] = True
+    except Exception:
+        _CI_RECENT_HIDDEN_STATE["ready"] = False
+    return bool(_CI_RECENT_HIDDEN_STATE["ready"])
+
+
 # ===========================================================================
 # SECTION E -- Wizard progress (derives completion from real stored data;
 # SSS Section 2 acceptance -- no pseudo "hook" fields).
@@ -5068,15 +5119,36 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         level = _ci_level_of(user)
         uid = session.get("user_id")
         recent: list[dict[str, Any]] = []
+        hidden_count = 0
         if uid and level >= CI_LEVEL_SETUP:
+            # Non-destructive "clear recent" hides rows from THIS user's view only,
+            # scoped to the current tenant (Codex tenant-isolation fix).
+            tid_s = str(_tenant_id()) if _tenant_id() is not None else ''
+            hidden_ready = _ensure_ci_recent_hidden_schema(get_db)
             try:
                 with get_db() as c:
-                    rows = c.execute(
-                        "SELECT id, project_name, client_name, project_type, "
-                        "project_status, currency, target_kwp, updated_at "
-                        "FROM capital_investment_projects WHERE user_id=? "
-                        "ORDER BY updated_at DESC, id DESC LIMIT 6", (uid,),
-                    ).fetchall()
+                    if hidden_ready:
+                        rows = c.execute(
+                            "SELECT id, project_name, client_name, project_type, "
+                            "project_status, currency, target_kwp, updated_at "
+                            "FROM capital_investment_projects WHERE user_id=? "
+                            "AND id NOT IN (SELECT project_id FROM ci_recent_hidden "
+                            "               WHERE user_id=? AND tenant_id=?) "
+                            "ORDER BY updated_at DESC, id DESC LIMIT 6",
+                            (uid, uid, tid_s),
+                        ).fetchall()
+                        hrow = c.execute(
+                            "SELECT COUNT(*) FROM ci_recent_hidden "
+                            "WHERE user_id=? AND tenant_id=?",
+                            (uid, tid_s)).fetchone()
+                        hidden_count = int(hrow[0]) if hrow else 0
+                    else:
+                        rows = c.execute(
+                            "SELECT id, project_name, client_name, project_type, "
+                            "project_status, currency, target_kwp, updated_at "
+                            "FROM capital_investment_projects WHERE user_id=? "
+                            "ORDER BY updated_at DESC, id DESC LIMIT 6", (uid,),
+                        ).fetchall()
                     recent = [dict(r) for r in rows] if rows else []
             except Exception:
                 recent = []
@@ -5084,8 +5156,91 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             "capital_investment/landing.html",
             user=user, tier=tier, tier_level=level,
             tier_label=CI_TIER_LABEL.get(tier, "Free"),
-            recent=recent, project_types=PROJECT_TYPES,
+            recent=recent, hidden_count=hidden_count,
+            project_types=PROJECT_TYPES,
         )
+
+    # ------------------------------------------------------------------
+    # POST /large-scale-solar/recent/clear -- non-destructive "clear recent
+    # history" (owner 2026-07-05). Hides EVERY one of this user's generation
+    # station projects from the landing "Recent projects" panel. Nothing is
+    # deleted -- rows/data/BOQ remain and are reachable by URL. POST-only + CSRF
+    # + user-scoped; reversible via /recent/restore. ("recent" is not an int so
+    # it never collides with the /<int:pid> route.)
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/recent/clear", methods=["POST"],
+               endpoint="capital_investment_recent_clear")
+    @login_required
+    def _recent_clear():
+        if (g := _gate(CI_LEVEL_SETUP)) is not None:
+            return g
+        csrf_protect()
+        uid = session.get("user_id")
+        tid_s = str(_tenant_id()) if _tenant_id() is not None else ''
+        hidden = 0
+        if _ensure_ci_recent_hidden_schema(get_db):
+            try:
+                with get_db() as c:
+                    rows = c.execute(
+                        "SELECT id FROM capital_investment_projects "
+                        "WHERE user_id=? AND id NOT IN "
+                        "(SELECT project_id FROM ci_recent_hidden "
+                        " WHERE user_id=? AND tenant_id=?)",
+                        (uid, uid, tid_s)).fetchall()
+                    for r in rows or []:
+                        # INSERT OR IGNORE -> Postgres ON CONFLICT DO NOTHING via
+                        # db_adapter, so a double-submit can't poison the txn.
+                        c.execute(
+                            "INSERT OR IGNORE INTO ci_recent_hidden "
+                            "(user_id, project_id, tenant_id) VALUES (?,?,?)",
+                            (uid, int(r[0]), tid_s))
+                        hidden += 1
+            except Exception:
+                flash("Could not clear the recent list - please try again.",
+                      "danger")
+                return redirect(url_for("capital_investment_landing"))
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(get_db, uid, "capital_recent_history_cleared",
+                      "capital_investment_recent", 0,
+                      "hid %d project(s) from recent view" % hidden)
+        except Exception:
+            pass
+        flash(
+            f"Recent list cleared - {hidden} project(s) hidden from this view. "
+            f"Your projects are NOT deleted.", "success")
+        return redirect(url_for("capital_investment_landing"))
+
+    # ------------------------------------------------------------------
+    # POST /large-scale-solar/recent/restore -- undo the clear above (un-hide
+    # every project for this user). POST-only + CSRF + user-scoped.
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/recent/restore", methods=["POST"],
+               endpoint="capital_investment_recent_restore")
+    @login_required
+    def _recent_restore():
+        if (g := _gate(CI_LEVEL_SETUP)) is not None:
+            return g
+        csrf_protect()
+        uid = session.get("user_id")
+        tid_s = str(_tenant_id()) if _tenant_id() is not None else ''
+        if _ensure_ci_recent_hidden_schema(get_db):
+            try:
+                with get_db() as c:
+                    c.execute("DELETE FROM ci_recent_hidden "
+                              "WHERE user_id=? AND tenant_id=?", (uid, tid_s))
+            except Exception:
+                flash("Could not restore the recent list - please try again.",
+                      "danger")
+                return redirect(url_for("capital_investment_landing"))
+        try:
+            from new_boq_hierarchy_schema import boq_audit
+            boq_audit(get_db, uid, "capital_recent_history_restored",
+                      "capital_investment_recent", 0, "restored recent view")
+        except Exception:
+            pass
+        flash("Recent list restored.", "success")
+        return redirect(url_for("capital_investment_landing"))
 
     # ------------------------------------------------------------------
     # GET /large-scale-solar/upgrade -- upsell

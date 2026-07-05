@@ -410,15 +410,7 @@
             <i class="bi bi-newspaper me-1 text-warning"></i>News
           </a>
         </li>
-        {% if user.is_admin or (user.role or '') == 'technical_support' %}
-        <li class="nav-item">
-          <a class="nav-link {% if ep == 'support_dashboard' %}active{% endif %}"
-             href="{{ url_for('support_dashboard') }}"
-             title="Installation-staff assignments + approved installer roster">
-            <i class="bi bi-headset me-1" style="color:#a78bfa"></i>Installation Support
-          </a>
-        </li>
-        {% endif %}
+        {# Installation Support moved into the slide-out side menu (2026-07-05) #}
         {% else %}
         {# Anonymous users — show Marketplace as a single link (no dropdown) #}
         <li class="nav-item">
@@ -449,14 +441,6 @@
 
         {% if user %}
 
-        <li class="nav-item">
-          <a class="nav-link" href="#" data-bs-toggle="modal"
-             data-bs-target="#platformShareModal" data-platform-share="1"
-             title="Share SolarPro with a colleague">
-            <i class="bi bi-megaphone-fill me-1 text-warning"></i>Share
-          </a>
-        </li>
-
         {# Helper macro — marks nav-link active when on matching endpoint #}
         {% set ep = request.endpoint or '' %}
 
@@ -474,63 +458,28 @@
           </a>
         </li>
 
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {% if ep and ep.startswith('capital_investment') %}active{% endif %}"
-             href="#" data-bs-toggle="dropdown" aria-expanded="false">
+        {# Slice 9 (2026-07-05): the two "Generation Station Design" dropdown
+           entries funnelled into the SAME design flow, so they are merged into a
+           single link to the hub (the landing page has its own create button).
+           Both capital_investment_landing and capital_investment_new routes stay
+           registered — this is a nav-template change only. #}
+        <li class="nav-item">
+          <a class="nav-link {% if ep and ep.startswith('capital_investment') %}active{% endif %}"
+             href="{{ url_for('capital_investment_landing') }}"
+             title="Utility-scale / IPP / captive generation-station design">
             <i class="bi bi-lightning-charge me-1 text-warning"></i>Generation Station Design
           </a>
-          <ul class="dropdown-menu dropdown-menu-dark" style="min-width:280px">
-            <li><span class="dropdown-header text-secondary" style="font-size:11px;letter-spacing:.5px;color:#9090c0!important">UTILITY-SCALE / IPP / CAPTIVE</span></li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('capital_investment_landing') }}">
-                <i class="bi bi-lightning-charge me-2 text-warning"></i>PV Capital Investment Design
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('capital_investment_new') }}">
-                <i class="bi bi-plus-circle me-2 text-warning"></i>Start New Generation Station
-              </a>
-            </li>
-          </ul>
         </li>
 
+        {# Slice 10 (2026-07-05): Folders + Support + Share + Installation Support
+           moved off the top bar into the slide-out side menu (#sideMenu) to
+           de-clutter the navigation. All links are preserved there. #}
         <li class="nav-item">
-          <a class="nav-link {% if ep in ('folders_index','folder_detail') %}active{% endif %}"
-             href="{{ url_for('folders_index') }}">
-            <i class="bi bi-folder2-open me-1"></i>Folders
-          </a>
-        </li>
-
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {% if ep in ('tickets','support','support_email_setup','support_user_guide') %}active{% endif %}"
-             href="#" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="bi bi-headset me-1"></i>Support
-          </a>
-          <ul class="dropdown-menu dropdown-menu-dark" style="min-width:200px">
-            <li><span class="dropdown-header text-secondary" style="font-size:11px;letter-spacing:.5px;color:#9090c0!important">HELP</span></li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('tickets') }}">
-                <i class="bi bi-chat-dots me-2 text-secondary"></i>Support Tickets
-              </a>
-            </li>
-            <li><hr class="dropdown-divider" style="border-color:#1e1e3a"></li>
-            <li><span class="dropdown-header text-secondary" style="font-size:11px;letter-spacing:.5px;color:#9090c0!important">RESOURCES</span></li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('support') }}">
-                <i class="bi bi-collection-play me-2" style="color:#a78bfa"></i>All Tutorials
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('support_user_guide') }}">
-                <i class="bi bi-book me-2" style="color:#0ea5e9"></i>Full User Guide
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('support_email_setup') }}">
-                <i class="bi bi-envelope-at me-2" style="color:#22c55e"></i>Email Setup Guide
-              </a>
-            </li>
-          </ul>
+          <button class="nav-link" type="button" style="background:none;border:0"
+                  data-bs-toggle="offcanvas" data-bs-target="#sideMenu"
+                  aria-controls="sideMenu" title="More — Folders, Support, Share">
+            <i class="bi bi-list me-1"></i>Menu
+          </button>
         </li>
 
         {# ── Admin dropdown ───────────────────────────────────────────────── #}
@@ -728,6 +677,45 @@
     </div>
   </div>
 </nav>
+
+{% if user %}
+<!-- ── Slide-out side menu (secondary nav moved off the top bar 2026-07-05) ──── -->
+<div class="offcanvas offcanvas-end no-print" tabindex="-1" id="sideMenu"
+     aria-labelledby="sideMenuLabel"
+     style="max-width:290px;background:#0f0f23;color:#e6e6f5">
+  <div class="offcanvas-header" style="border-bottom:1px solid #1e1e3a">
+    <h6 class="offcanvas-title fw-bold mb-0" id="sideMenuLabel">
+      <i class="bi bi-list me-2 text-warning"></i>Menu
+    </h6>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body p-2"
+       style="--bs-nav-link-color:#c9c9e6;--bs-nav-link-hover-color:#ffffff">
+    {% set ep = request.endpoint or '' %}
+    <nav class="nav flex-column gap-1">
+      <span class="text-secondary text-uppercase fw-bold px-2 mt-1" style="font-size:10px;letter-spacing:.5px">Quick access</span>
+      <a class="nav-link py-1 px-2 rounded {% if ep=='dashboard' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('dashboard') }}"><i class="bi bi-grid-3x3-gap me-2"></i>Dashboard</a>
+      <a class="nav-link py-1 px-2 rounded {% if ep=='project_new' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('project_new') }}"><i class="bi bi-plus-circle me-2"></i>New Project</a>
+      <a class="nav-link py-1 px-2 rounded {% if ep and ep.startswith('capital_investment') %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('capital_investment_landing') }}"><i class="bi bi-lightning-charge me-2 text-warning"></i>Generation Station Design</a>
+      <a class="nav-link py-1 px-2 rounded {% if ep=='marketplace_public' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('marketplace_public') }}"><i class="bi bi-bag-check-fill me-2 text-warning"></i>Marketplace</a>
+      <a class="nav-link py-1 px-2 rounded {% if ep in ('news_index','news_detail','newsfeed_public','public_opportunities') %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('news_index') }}"><i class="bi bi-newspaper me-2 text-warning"></i>News</a>
+
+      <span class="text-secondary text-uppercase fw-bold px-2 mt-2" style="font-size:10px;letter-spacing:.5px">Workspace</span>
+      <a class="nav-link py-1 px-2 rounded {% if ep in ('folders_index','folder_detail') %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('folders_index') }}"><i class="bi bi-folder2-open me-2"></i>Folders</a>
+      <a class="nav-link py-1 px-2 rounded" href="#" data-bs-toggle="modal" data-bs-target="#platformShareModal" data-platform-share="1"><i class="bi bi-megaphone-fill me-2 text-warning"></i>Share SolarPro</a>
+      {% if user.is_admin or (user.role or '') == 'technical_support' %}
+      <a class="nav-link py-1 px-2 rounded {% if ep=='support_dashboard' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('support_dashboard') }}"><i class="bi bi-headset me-2" style="color:#a78bfa"></i>Installation Support</a>
+      {% endif %}
+
+      <span class="text-secondary text-uppercase fw-bold px-2 mt-2" style="font-size:10px;letter-spacing:.5px">Support</span>
+      <a class="nav-link py-1 px-2 rounded {% if ep=='tickets' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('tickets') }}"><i class="bi bi-chat-dots me-2 text-secondary"></i>Support Tickets</a>
+      <a class="nav-link py-1 px-2 rounded {% if ep=='support' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('support') }}"><i class="bi bi-collection-play me-2" style="color:#a78bfa"></i>All Tutorials</a>
+      <a class="nav-link py-1 px-2 rounded {% if ep=='support_user_guide' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('support_user_guide') }}"><i class="bi bi-book me-2" style="color:#0ea5e9"></i>Full User Guide</a>
+      <a class="nav-link py-1 px-2 rounded {% if ep=='support_email_setup' %}active bg-secondary bg-opacity-25 text-white{% endif %}" href="{{ url_for('support_email_setup') }}"><i class="bi bi-envelope-at me-2" style="color:#22c55e"></i>Email Setup Guide</a>
+    </nav>
+  </div>
+</div>
+{% endif %}
 
 <!-- ── Toast notifications ────────────────────────────────────────────────── -->
 {% with msgs = get_flashed_messages(with_categories=true) %}

@@ -65,6 +65,33 @@
           </div>
         {% endfor %}
       </div>
+      {% if tier_level >= 2 and (recent or hidden_count) %}
+      {# Non-destructive: "Clear recent history" only hides these rows from this
+         panel for the current user. Projects, wizard data and BOQs are kept and
+         stay reachable by link. Reversible via "Show all". #}
+      <div class="card-footer bg-dark border-secondary d-flex align-items-center justify-content-between gap-2 flex-wrap">
+        {% if recent %}
+        <form method="post" action="{{ url_for('capital_investment_recent_clear') }}"
+              onsubmit="return confirm('Clear the recent list? This only hides these projects from this panel — nothing is deleted and they stay reachable by their link.');"
+              class="m-0">
+          <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
+          <button type="submit" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-eraser me-1"></i>Clear recent history
+          </button>
+        </form>
+        {% else %}
+        <span class="text-secondary small"><i class="bi bi-check2 me-1"></i>Recent list cleared</span>
+        {% endif %}
+        {% if hidden_count %}
+        <form method="post" action="{{ url_for('capital_investment_recent_restore') }}" class="m-0">
+          <input type="hidden" name="_csrf" value="{{ session.get('_csrf', '') }}">
+          <button type="submit" class="btn btn-link btn-sm text-warning text-decoration-none p-0">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Show all ({{ hidden_count }})
+          </button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>
