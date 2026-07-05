@@ -29,8 +29,12 @@ import math
 __all__ = ["optimize_bankability"]
 
 # Verdict / bankability ordinal ranks (higher = better) for the search score.
+# calc_economics reports "SELF-FUNDED" (not "BANKABLE") for equity/self funding --
+# an APPROVED self-funded project needs no lender and counts as a success outcome.
 _VERDICT_RANK = {"APPROVED": 3, "CONDITIONAL": 2, "REJECTED": 1}
-_BANK_RANK = {"BANKABLE": 3, "MARGINAL": 2, "NOT BANKABLE": 1}
+_BANK_RANK = {"BANKABLE": 3, "SELF-FUNDED": 3, "MARGINAL": 2, "NOT BANKABLE": 1}
+# Bankability strings that count as a solved outcome when the verdict is APPROVED.
+_OK_BANK = ("BANKABLE", "SELF-FUNDED")
 _COST_FLOOR = 400.0        # USD/kWp -- sane lower bound for competitive quotes
 _INSTALL_FLOOR = 10.0      # % of equipment
 _MARKUP_FLOOR = 5.0        # % supply markup
@@ -43,7 +47,8 @@ def _score(eco):
 
 
 def _is_bankable(eco):
-    return eco.get("verdict") == "APPROVED" and eco.get("bankability") == "BANKABLE"
+    return (eco.get("verdict") == "APPROVED"
+            and eco.get("bankability") in _OK_BANK)
 
 
 def optimize_bankability(data, calc_boq, calc_economics):

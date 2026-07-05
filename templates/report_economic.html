@@ -95,6 +95,21 @@
 </div>
 {% endif %}
 
+{# Undo — restore the original figures after an auto-adjust (reversibility). #}
+{% if d.optimize_backup %}
+<div class="solar-card p-3 mb-4 no-print" style="border-left:4px solid #64748b">
+  <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
+    <div class="text-secondary small"><i class="bi bi-clock-history me-1"></i>This project was auto-adjusted from
+      <strong>{{ d.optimize_backup.verdict }}{% if d.optimize_backup.bankability %} / {{ d.optimize_backup.bankability }}{% endif %}</strong>
+      on {{ d.optimize_backup.at }}. You can restore the original figures.</div>
+    <form method="post" action="{{ url_for('project_optimize_undo', pid=project.id) }}" class="m-0">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-secondary btn-sm text-nowrap"><i class="bi bi-arrow-counterclockwise me-1"></i>Undo &amp; restore original</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 <!-- KPIs -->
 <div class="row g-2 mb-4">
   {% for lbl,val,unit,color in [
@@ -121,7 +136,7 @@
 <div class="col-lg-5">
   <div class="solar-card p-4 mb-3">
     <div class="section-head">1. Investment Summary</div>
-    <div class="data-row"><span class="lbl">Equipment Supply (8% markup)</span><span class="val">{{ d.symbol }} {{ eco.equip_local|fmt(0) }}</span></div>
+    <div class="data-row"><span class="lbl">Equipment Supply ({{ d.get('supply_markup_pct',8)|int }}% markup)</span><span class="val">{{ d.symbol }} {{ eco.equip_local|fmt(0) }}</span></div>
     <div class="data-row"><span class="lbl">Installation Labour ({{ eco.get('install_rate_pct',15) }}%)</span><span class="val">{{ d.symbol }} {{ eco.install_local|fmt(0) }}</span></div>
     <div class="data-row total"><span class="lbl"><strong>Total Capital</strong></span><span class="val">{{ d.symbol }} {{ eco.total_local|fmt(0) }}</span></div>
     <div class="data-row"><span class="lbl">Discount Rate</span><span class="val">{{ eco.get('disc_rate_pct',12) }}%/yr ({{ 'opp. cost' if eco.get('funding_mode')=='self' else 'WACC' }})</span></div>
