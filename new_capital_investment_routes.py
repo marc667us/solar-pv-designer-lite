@@ -5342,6 +5342,165 @@ def _ensure_fi_revenue_schema(get_db) -> bool:
     return bool(_FI_REV_STATE["ready"])
 
 
+# ---------------------------------------------------------------------------
+# AI Funding Assessment -- Slice 8 (2026-07-05). A DETERMINISTIC, zero-cost
+# funding-readiness assessment that REUSES the existing finance/bankability
+# engines and the project's completeness -- the same rule-based agent pattern
+# the generation station already uses at Step-14 (the solar app is excluded from
+# the ADK resync; a full ADK migration of the whole agent layer is a separate
+# cross-cutting effort, not a per-slice change). Produces the spec's funding
+# score + readiness dimensions + risk rating + recommendation, persisted per
+# (project, institution, tenant) for the institution's review + audit.
+# ---------------------------------------------------------------------------
+_FI_ASSESS_STATE = {"ready": False}
+
+FI_RECOMMENDATIONS = ("recommend", "conditional", "decline")
+FI_RECOMMENDATION_LABELS = {
+    "recommend": "Recommend to fund",
+    "conditional": "Conditional / more due diligence",
+    "decline": "Decline",
+}
+FI_RECOMMENDATION_CLASS = {
+    "recommend": "success", "conditional": "warning", "decline": "danger",
+}
+
+
+def _ensure_fi_assessment_schema(get_db) -> bool:
+    """Create funding_assessments once (SQLite + Postgres safe)."""
+    if _FI_ASSESS_STATE["ready"]:
+        return True
+    ddl = (
+        "CREATE TABLE IF NOT EXISTS funding_assessments ("
+        " capital_investment_project_id INTEGER NOT NULL,"
+        " institution_id TEXT NOT NULL,"
+        " tenant_id TEXT NOT NULL DEFAULT '',"
+        " funding_score INTEGER,"
+        " technical_readiness INTEGER,"
+        " financial_readiness INTEGER,"
+        " documentation_readiness INTEGER,"
+        " construction_readiness INTEGER,"
+        " risk_rating TEXT,"
+        " matched INTEGER NOT NULL DEFAULT 0,"
+        " recommendation TEXT,"
+        " payload TEXT,"
+        " created_by_user_id INTEGER,"
+        " created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        " updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        " PRIMARY KEY (capital_investment_project_id, institution_id, "
+        " tenant_id))"
+    )
+    try:
+        with get_db() as c:
+            c.execute(ddl)
+        _FI_ASSESS_STATE["ready"] = True
+    except Exception:
+        _FI_ASSESS_STATE["ready"] = False
+    return bool(_FI_ASSESS_STATE["ready"])
+
+
+def _ci_funding_assessment(proj: dict, fund: dict, inst: dict) -> dict:
+    """Deterministic multi-dimension funding assessment (reuses the finance +
+    bankability engines; no re-modelling, no LLM). Returns the spec outputs:
+    funding score, technical/financial/documentation/construction readiness,
+    risk rating, institution match, recommendation + per-dimension findings."""
+    fin_cfg = _safe_json(proj.get("finance_config"))
+    computed = fin_cfg.get("computed") if isinstance(fin_cfg, dict) else {}
+    computed = computed if isinstance(computed, dict) else {}
+    bank = _ci_bankability(computed)
+    findings = {}
+
+    # Technical readiness -- completeness of the engineering steps (3-7).
+    tech_steps = ["site_config", "facility_config", "technology_config",
+                  "electrical_config", "pv_config"]
+    tdone = sum(1 for s in tech_steps
+                if _is_meaningfully_populated(s, proj.get(s)))
+    technical = int(round(100 * tdone / len(tech_steps)))
+    findings["technical"] = "%d/%d engineering steps complete" % (
+        tdone, len(tech_steps))
+
+    # Financial readiness -- from the bankability engine (or partial if only the
+    # finance model exists but isn't fully computed).
+    if bank.get("available"):
+        financial = int(bank.get("score") or 0)
+        findings["financial"] = "Bankability score %d (%s)" % (
+            financial, bank.get("rating") or "-")
+    elif _is_meaningfully_populated("finance_config",
+                                    proj.get("finance_config")):
+        financial = 55
+        findings["financial"] = "Finance model started; not fully computed"
+    else:
+        financial = 0
+        findings["financial"] = "No financial model yet"
+
+    # Construction readiness -- BOQ linked + engineering complete.
+    boq_linked = bool(proj.get("boq_project_id")
+                      or proj.get("boq_facilities_project_id")
+                      or proj.get("boq_solar_project_id"))
+    construction = max(0, min(100, (60 if boq_linked else 20)
+                              + technical // 5))
+    findings["construction"] = ("BOQ linked" if boq_linked
+                                else "No BOQ linked yet")
+
+    # Documentation readiness -- finance model + computed results present.
+    docs_ok = (_is_meaningfully_populated("finance_config",
+                                          proj.get("finance_config"))
+               and bool(computed))
+    documentation = 70 if docs_ok else 30
+    findings["documentation"] = ("Core financial documentation ready"
+                                 if docs_ok
+                                 else "Financial documentation incomplete")
+
+    # Institution match -- requested amount within the loan range + the project
+    # type is supported by the institution.
+    import math as _math
+
+    def _f(v):
+        try:
+            x = float(v)
+        except (TypeError, ValueError):
+            return None
+        return x if _math.isfinite(x) else None   # reject NaN/inf
+    req = _f((fund or {}).get("funding_requested"))
+    lmin, lmax = _f(inst.get("loan_min")), _f(inst.get("loan_max"))
+    in_range = True
+    if req is not None:
+        if lmin is not None and req < lmin:
+            in_range = False
+        if lmax is not None and req > lmax:
+            in_range = False
+    supported = [x for x in (inst.get("supported_project_types") or "").split(",")
+                 if x]
+    type_ok = (not supported) or (proj.get("project_type") in supported)
+    matched = bool(in_range and type_ok)
+    findings["match"] = ("Fits the institution's loan range and mandate"
+                         if matched
+                         else "Outside the institution's loan range / mandate")
+
+    risk_rating = bank.get("rating") if bank.get("available") else "Unrated"
+
+    # Overall funding score -- weighted blend; a mandate mismatch trims it.
+    fscore = int(round(0.35 * financial + 0.25 * technical
+                       + 0.20 * construction + 0.20 * documentation))
+    if not matched:
+        fscore = max(0, fscore - 15)
+
+    if fscore >= 70 and matched:
+        rec = "recommend"
+    elif fscore >= 55:
+        rec = "conditional"
+    else:
+        rec = "decline"
+
+    return {
+        "funding_score": fscore, "technical_readiness": technical,
+        "financial_readiness": financial,
+        "documentation_readiness": documentation,
+        "construction_readiness": construction,
+        "risk_rating": risk_rating, "matched": 1 if matched else 0,
+        "recommendation": rec, "findings": findings,
+    }
+
+
 # ===========================================================================
 # SECTION E -- Wizard progress (derives completion from real stored data;
 # SSS Section 2 acceptance -- no pseudo "hook" fields).
@@ -6238,12 +6397,17 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         shipments = _fi_shipments(pid, institution_id, _tid)
         revenue = _fi_revenue_row(pid, institution_id, _tid)
         fee_ready = actx["selection"].get("status") in FI_APPROVED_GATE
+        assessment = _fi_assessment_row(pid, institution_id, _tid)
+        if assessment and assessment.get("payload"):
+            assessment["findings_parsed"] = _safe_json(assessment.get("payload"))
         return render_template(
             "capital_investment/funding_application_review.html",
             user=current_user(), inst=actx["institution"],
             sel=actx["selection"], proj=proj, fund=actx["funding"], ov=ov,
             report_types=REPORT_TYPES, thread=thread, shipments=shipments,
-            revenue=revenue, fee_ready=fee_ready,
+            revenue=revenue, fee_ready=fee_ready, assessment=assessment,
+            recommendation_labels=FI_RECOMMENDATION_LABELS,
+            recommendation_class=FI_RECOMMENDATION_CLASS,
             msg_types=FI_MSG_TYPES, msg_type_labels=FI_MSG_TYPE_LABELS,
             ship_statuses=FI_SHIP_STATUSES,
             ship_status_labels=FI_SHIP_STATUS_LABELS,
@@ -7079,6 +7243,90 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         else:
             flash("Could not update the invoice.", "danger")
         return redirect(url_for("funding_revenue_dashboard"))
+
+    # ==================================================================
+    # Slice 8 -- AI Funding Assessment (deterministic; reuses finance/bankability
+    # engines -- see _ci_funding_assessment). The institution runs it from the
+    # review page; the latest result persists per (project, institution, tenant).
+    # ==================================================================
+    def _fi_assessment_row(pid, iid, tid):
+        _ensure_fi_assessment_schema(get_db)
+        try:
+            with get_db() as c:
+                r = c.execute(
+                    "SELECT * FROM funding_assessments "
+                    "WHERE capital_investment_project_id=? AND institution_id=? "
+                    "AND COALESCE(tenant_id,'')=?",
+                    (pid, iid, tid or '')).fetchone()
+            return dict(r) if r else None
+        except Exception:
+            return None
+
+    # POST .../assess -- run + persist the funding assessment for this pairing.
+    @app.route("/funding/workspace/<int:pid>/<institution_id>/assess",
+               methods=["POST"], endpoint="funding_application_assess")
+    @login_required
+    def _fi_assess(pid, institution_id):
+        from flask import abort
+        uid = session.get("user_id")
+        actx = _fi_load_application(uid, pid, institution_id)
+        if not actx:
+            abort(404)
+        csrf_protect()
+        tid = actx["selection"].get("tenant_id") or ''
+        a = _ci_funding_assessment(actx["project"], actx["funding"] or {},
+                                   actx["institution"])
+        ok = False
+        if _ensure_fi_assessment_schema(get_db):
+            try:
+                import json as _json
+                with get_db() as c:
+                    c.execute(
+                        "INSERT INTO funding_assessments "
+                        "(capital_investment_project_id, institution_id, "
+                        " tenant_id, funding_score, technical_readiness, "
+                        " financial_readiness, documentation_readiness, "
+                        " construction_readiness, risk_rating, matched, "
+                        " recommendation, payload, created_by_user_id) "
+                        "VALUES (" + ",".join("?" * 13) + ") "
+                        "ON CONFLICT (capital_investment_project_id, "
+                        " institution_id, tenant_id) DO UPDATE SET "
+                        "funding_score=EXCLUDED.funding_score, "
+                        "technical_readiness=EXCLUDED.technical_readiness, "
+                        "financial_readiness=EXCLUDED.financial_readiness, "
+                        "documentation_readiness=EXCLUDED.documentation_readiness,"
+                        "construction_readiness=EXCLUDED.construction_readiness, "
+                        "risk_rating=EXCLUDED.risk_rating, "
+                        "matched=EXCLUDED.matched, "
+                        "recommendation=EXCLUDED.recommendation, "
+                        "payload=EXCLUDED.payload, updated_at=CURRENT_TIMESTAMP",
+                        (pid, institution_id, tid, a["funding_score"],
+                         a["technical_readiness"], a["financial_readiness"],
+                         a["documentation_readiness"],
+                         a["construction_readiness"], a["risk_rating"],
+                         a["matched"], a["recommendation"],
+                         _json.dumps(a["findings"]), uid))
+                ok = True
+            except Exception:
+                ok = False
+        if ok:
+            try:
+                from new_boq_hierarchy_schema import boq_audit
+                boq_audit(get_db, uid, "funding_assessment_run",
+                          "capital_investment_project", pid,
+                          "%s score=%d rec=%s" % (institution_id,
+                                                  a["funding_score"],
+                                                  a["recommendation"]))
+            except Exception:
+                pass
+            flash("Funding assessment complete: score %d/100 - %s." % (
+                a["funding_score"],
+                FI_RECOMMENDATION_LABELS.get(a["recommendation"],
+                                             a["recommendation"])), "success")
+        else:
+            flash("Could not run the funding assessment.", "danger")
+        return redirect(url_for("funding_application_review", pid=pid,
+                                institution_id=institution_id))
 
     # ==================================================================
     # Slice 2 -- Financial Institution registration + Platform-Admin approval.

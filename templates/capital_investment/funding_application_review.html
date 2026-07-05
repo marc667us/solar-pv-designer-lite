@@ -22,6 +22,54 @@
   </a>
 </div>
 
+{# Slice 8 — AI Funding Assessment (deterministic; reuses the finance engine). #}
+<div class="card bg-dark border-warning mb-3">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span class="fw-bold small"><i class="bi bi-robot me-1 text-warning"></i>AI Funding Assessment</span>
+    <form method="post" action="{{ url_for('funding_application_assess', pid=proj.id, institution_id=inst.institution_id) }}" class="m-0">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-warning btn-sm fw-bold"><i class="bi bi-play-fill me-1"></i>{{ 'Re-run' if assessment else 'Run assessment' }}</button>
+    </form>
+  </div>
+  <div class="card-body">
+    {% if assessment %}
+    <div class="row g-3 align-items-center">
+      <div class="col-md-3 text-center">
+        {% set rc = recommendation_class.get(assessment.recommendation, 'secondary') %}
+        <div class="display-6 fw-bold text-{{ rc }}">{{ assessment.funding_score }}<span class="fs-6 text-secondary">/100</span></div>
+        <div class="badge bg-{{ rc }}">{{ recommendation_labels.get(assessment.recommendation, assessment.recommendation) }}</div>
+        <div class="small mt-1">
+          <span class="badge bg-{{ 'success' if assessment.matched else 'danger' }}">{{ 'Fits mandate' if assessment.matched else 'Outside mandate' }}</span>
+          <span class="badge bg-secondary">Risk: {{ assessment.risk_rating }}</span>
+        </div>
+      </div>
+      <div class="col-md-9">
+        {% macro bar(label, val) %}
+        {% set v = val or 0 %}
+        {% set cls = 'success' if v >= 70 else ('warning' if v >= 55 else 'danger') %}
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small"><span class="text-secondary">{{ label }}</span><span class="text-light fw-semibold">{{ v }}/100</span></div>
+          <div class="progress bg-black" style="height:6px"><div class="progress-bar bg-{{ cls }}" style="width:{{ v }}%"></div></div>
+        </div>
+        {% endmacro %}
+        {{ bar('Financial readiness', assessment.financial_readiness) }}
+        {{ bar('Technical readiness', assessment.technical_readiness) }}
+        {{ bar('Construction readiness', assessment.construction_readiness) }}
+        {{ bar('Documentation readiness', assessment.documentation_readiness) }}
+      </div>
+    </div>
+    {% if assessment.findings_parsed %}
+    <ul class="small text-secondary mt-3 mb-0">
+      {% for k, v in assessment.findings_parsed.items() %}<li><span class="text-light">{{ k|title }}:</span> {{ v }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    <div class="text-secondary small mt-2">Deterministic assessment from the applicant's finance model, engineering completeness and your institution's mandate. Last run {{ assessment.updated_at }}.</div>
+    {% else %}
+    <div class="text-secondary small"><i class="bi bi-info-circle me-1"></i>Run the assessment to score funding readiness across financial, technical, construction and documentation dimensions, check the fit with your mandate, and get a recommendation.</div>
+    {% endif %}
+  </div>
+</div>
+
 <div class="row g-3">
   <div class="col-lg-8">
     {# Application overview. #}
