@@ -493,6 +493,15 @@
               style="background:#f87171;font-size:8px;padding:2px 5px;min-width:16px"></span>
           </a>
         </li>
+        {# ── Notification inbox bell (admin only) ──────────────────────── #}
+        <li class="nav-item">
+          <a class="nav-link position-relative" href="{{ url_for('admin_inbox') }}"
+             title="Notification Inbox" style="padding:.35rem .5rem">
+            <i class="bi bi-inbox-fill" style="font-size:15px;color:#fbbf24"></i>
+            <span id="navInboxBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill d-none"
+              style="background:#f87171;font-size:8px;padding:2px 5px;min-width:16px"></span>
+          </a>
+        </li>
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle text-warning {% if ep.startswith('admin') %}active{% endif %}"
              href="#" data-bs-toggle="dropdown" aria-expanded="false">
@@ -509,6 +518,11 @@
             <li>
               <a class="dropdown-item" href="{{ url_for('admin_platform') }}">
                 <i class="bi bi-graph-up-arrow me-2 text-success"></i>Platform SaaS Metrics
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{{ url_for('admin_inbox') }}">
+                <i class="bi bi-inbox-fill me-2" style="color:#fbbf24"></i>Notification Inbox
               </a>
             </li>
             <li><hr class="dropdown-divider"></li>
@@ -1179,6 +1193,40 @@ document.querySelectorAll('.solar-toast').forEach(function(t){
   }
   refreshBell();
   setInterval(refreshBell, 300000); /* every 5 min */
+})();
+</script>
+<script>
+/* ── Admin notification inbox: unread badge + opt-in browser/device alerts ── */
+(function(){
+  var badge = document.getElementById('navInboxBadge');
+  var LS_KEY = 'solarpro.inbox.lastSeenId';
+  function lastSeen(){ try { return parseInt(localStorage.getItem(LS_KEY) || '0', 10) || 0; } catch(_){ return 0; } }
+  function setSeen(v){ try { localStorage.setItem(LS_KEY, String(v)); } catch(_){} }
+  function maybeNotify(j){
+    var newest = j.latest_id || 0;
+    var prev = lastSeen();
+    setSeen(newest);                 // always advance baseline
+    if (prev === 0) return;          // first-ever run: set baseline, no storm
+    if (!j.alerts_enabled) return;   // admin opt-in off
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (newest > prev && j.unread > 0){
+      var top = (j.latest && j.latest[0]) ? j.latest[0].title : (j.unread + ' new notification(s)');
+      try {
+        new Notification('SolarPro — ' + j.unread + ' unread', { body: top, tag: 'solarpro-inbox' });
+      } catch(_){}
+    }
+  }
+  function refreshInbox(){
+    fetch('/admin/inbox/status').then(function(r){ return r.json(); }).then(function(j){
+      if (badge){
+        if (j.unread > 0){ badge.textContent = j.unread > 99 ? '99+' : j.unread; badge.classList.remove('d-none'); }
+        else { badge.classList.add('d-none'); }
+      }
+      maybeNotify(j);
+    }).catch(function(){});
+  }
+  refreshInbox();
+  setInterval(refreshInbox, 60000); /* every 60s */
 })();
 </script>
 {% endif %}

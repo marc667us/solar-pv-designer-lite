@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Notification Inbox — SolarPro Admin{% endblock %}
+{% block content %}
+{# Admin Notification Inbox (owner feature #3). App issues + fault
+   notifications aggregated here; opt-in browser/device alerting. #}
+<div class="container py-4" style="max-width:960px">
+
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <h4 class="mb-0 text-warning"><i class="bi bi-inbox-fill me-2"></i>Notification Inbox</h4>
+    {% if unread %}
+      <span class="badge rounded-pill" style="background:#f87171">{{ unread }} unread</span>
+    {% else %}
+      <span class="badge rounded-pill bg-secondary">all clear</span>
+    {% endif %}
+    <div class="ms-auto btn-group btn-group-sm" role="group">
+      <a class="btn btn-outline-light {% if show != 'unread' %}active{% endif %}"
+         href="{{ url_for('admin_inbox') }}">All</a>
+      <a class="btn btn-outline-warning {% if show == 'unread' %}active{% endif %}"
+         href="{{ url_for('admin_inbox', show='unread') }}">Unread</a>
+    </div>
+    {% if unread %}
+    <form method="POST" action="{{ url_for('admin_inbox_mark_all_read') }}" class="d-inline">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="btn btn-sm btn-outline-info"><i class="bi bi-check2-all"></i> Mark all read</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {# ── Browser / device alert opt-in ─────────────────────────────────────── #}
+  <div class="card bg-dark border-secondary mb-4">
+    <div class="card-body">
+      <h6 class="text-info mb-2"><i class="bi bi-bell-fill me-1"></i>Device alerting</h6>
+      <p class="small text-muted mb-3">
+        When enabled, this browser shows a desktop/mobile notification the moment a
+        new inbox item arrives (checked every 60 seconds while any SolarPro tab is
+        open). You must also grant the browser notification permission on this device.
+      </p>
+      <form method="POST" action="{{ url_for('admin_inbox_settings') }}" class="d-flex flex-wrap align-items-center gap-3">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" id="browserAlerts"
+                 name="browser_alerts" value="1" {% if alerts_enabled %}checked{% endif %}
+                 onchange="this.form.submit()">
+          <label class="form-check-label" for="browserAlerts">
+            Browser alerts {% if alerts_enabled %}<span class="text-success">ON</span>{% else %}<span class="text-muted">off</span>{% endif %}
+          </label>
+        </div>
+      </form>
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        <button type="button" class="btn btn-sm btn-outline-info" id="grantNotifBtn">
+          <i class="bi bi-shield-check"></i> Grant notification permission
+        </button>
+        <form method="POST" action="{{ url_for('admin_inbox_test') }}" class="d-inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-outline-warning"><i class="bi bi-send"></i> Send test notification</button>
+        </form>
+        <span id="notifPermState" class="small text-muted align-self-center"></span>
+      </div>
+    </div>
+  </div>
+
+  {# ── Notification list ──────────────────────────────────────────────────── #}
+  {% if not notifications %}
+    <div class="text-center text-muted py-5">
+      <i class="bi bi-inbox" style="font-size:2rem;opacity:.5"></i>
+      <p class="mt-2 mb-0">No notifications{% if show == 'unread' %} unread{% endif %}.</p>
+    </div>
+  {% else %}
+    <div class="list-group">
+      {% for n in notifications %}
+      {% set sev = n.severity or 'info' %}
+      {% set border = 'border-danger' if sev == 'critical' else ('border-warning' if sev == 'warning' else 'border-secondary') %}
+      <div class="list-group-item bg-dark text-light {{ border }} border-start border-3 mb-2 rounded"
+           style="{% if not n.read_at %}background:#1a1f2e!important{% endif %}">
+        <div class="d-flex align-items-start gap-2">
+          <div class="flex-grow-1">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+              {% if sev == 'critical' %}<span class="badge bg-danger">critical</span>
+              {% elif sev == 'warning' %}<span class="badge bg-warning text-dark">warning</span>
+              {% else %}<span class="badge bg-secondary">info</span>{% endif %}
+              <span class="badge" style="background:#334155">{{ n.source or 'system' }}</span>
+              {% if not n.read_at %}<span class="badge rounded-pill" style="background:#f87171">new</span>{% endif %}
+              <strong>{{ n.title }}</strong>
+            </div>
+            {% if n.body %}<div class="small text-muted" style="white-space:pre-wrap">{{ n.body }}</div>{% endif %}
+            <div class="small text-secondary mt-1">
+              <i class="bi bi-clock"></i> {{ n.created_at }}
+              {% if n.ref_type == 'error_log' and n.ref_id %}
+                · <a href="{{ url_for('admin_errors_list') }}" class="text-info">view error #{{ n.ref_id }}</a>
+              {% endif %}
+            </div>
+          </div>
+          {% if not n.read_at %}
+          <form method="POST" action="{{ url_for('admin_inbox_mark_read', nid=n.id) }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-light" title="Mark read"><i class="bi bi-check2"></i></button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if page > 1 or has_next %}
+    <div class="d-flex justify-content-between mt-3">
+      <a class="btn btn-sm btn-outline-light {% if page <= 1 %}disabled{% endif %}"
+         href="{{ url_for('admin_inbox', page=page-1, show=show) }}">&larr; Newer</a>
+      <a class="btn btn-sm btn-outline-light {% if not has_next %}disabled{% endif %}"
+         href="{{ url_for('admin_inbox', page=page+1, show=show) }}">Older &rarr;</a>
+    </div>
+    {% endif %}
+  {% endif %}
+</div>
+
+<script>
+(function(){
+  // Reflect current Notification permission and let the admin grant it.
+  var stateEl = document.getElementById('notifPermState');
+  var btn = document.getElementById('grantNotifBtn');
+  function render(){
+    if (!('Notification' in window)) {
+      if (stateEl) stateEl.textContent = 'This browser does not support notifications.';
+      if (btn) btn.disabled = true;
+      return;
+    }
+    var p = Notification.permission;
+    if (stateEl) stateEl.textContent = 'Permission: ' + p;
+    if (btn) btn.disabled = (p === 'granted');
+  }
+  if (btn) {
+    btn.addEventListener('click', function(){
+      if (!('Notification' in window)) return;
+      Notification.requestPermission().then(function(){ render(); });
+    });
+  }
+  render();
+})();
+</script>
+{% endblock %}
