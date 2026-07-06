@@ -314,9 +314,9 @@
 
       <div class="modal-footer border-secondary">
         <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Close</button>
-        <a class="btn btn-outline-warning btn-sm" data-bc-action="design"
+        <a class="btn btn-warning btn-sm" data-bc-action="design"
            href="{% if bc_project_id %}{{ url_for('project_location', pid=bc_project_id) }}{% else %}{{ url_for('landing') }}#assess{% endif %}">
-          <i class="bi bi-tools"></i> Design Solar System
+          <i class="bi bi-tools"></i> {% if bc_project_id %}Design Solar System{% else %}Design my system now{% endif %}
         </a>
         {% if bc_project_id %}
           <button type="button" class="btn btn-outline-info btn-sm" data-bc-action="save">
@@ -601,6 +601,41 @@
     }
   }
 
+  // ── Auto-design: turn the current bill into a finished solar design ──────
+  // Standalone / anonymous only (an in-project design keeps its wizard link).
+  // A real <form> POST is used, not fetch(), because the server responds with a
+  // redirect either to /project/<pid>/results (logged-in) or through
+  // registration with ?next=/bill-check/design/continue (anonymous) — the
+  // browser must follow those navigations itself.
+  function autoDesign() {
+    const p = payload();
+    if (!(p.actual_bill > 0)) {
+      alert("Enter your monthly bill and calculate first, then design your system.");
+      return;
+    }
+    const f = document.createElement("form");
+    f.method = "POST";
+    f.action = "/bill-check/design";
+    const add = (k, v) => {
+      if (v === null || v === undefined) return;
+      const i = document.createElement("input");
+      i.type = "hidden"; i.name = k; i.value = v;
+      f.appendChild(i);
+    };
+    add("_csrf", CTX.csrf);
+    add("actual_bill", p.actual_bill);
+    add("actual_kwh", p.actual_kwh);
+    add("category", p.category);
+    add("meter_type", p.meter_type);
+    add("completeness", p.completeness);
+    add("target_reduction_pct", p.target_reduction_pct);
+    add("system_cost_per_kwp", p.system_cost_per_kwp);
+    add("loan_years", p.loan_years);
+    add("loan_interest_pct", p.loan_interest_pct);
+    document.body.appendChild(f);
+    f.submit();
+  }
+
   async function copyShare() {
     const url = shareUrl();
     try {
@@ -619,6 +654,11 @@
     if (!t || !root().contains(t)) return;
     const a = t.getAttribute("data-bc-action");
     if (a === "calculate" || a === "recalculate") calculate();
+    else if (a === "design") {
+      // In-project: follow the link into that project's wizard (unchanged).
+      // Standalone/anon: intercept and auto-design from the entered bill.
+      if (!CTX.projectId) { e.preventDefault(); autoDesign(); }
+    }
     else if (a === "save") save();
     else if (a === "report") report();
     else if (a === "lead") lead();
