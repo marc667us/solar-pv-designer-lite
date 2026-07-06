@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Backup &amp; Restore — SolarPro Admin{% endblock %}
+{% block content %}
+{# Admin Backup / Restore (owner feature #2). Encrypted, off-box: backups are
+   generated in-process, encrypted with an admin passphrase, and streamed as a
+   download. Nothing is persisted on the server. #}
+<div class="container py-4" style="max-width:820px">
+
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <h4 class="mb-0 text-warning"><i class="bi bi-shield-lock-fill me-2"></i>Backup &amp; Restore</h4>
+    <span class="badge bg-secondary ms-auto">Database: {{ backend }}</span>
+  </div>
+
+  <div class="alert alert-dark border-secondary small">
+    Backups are encrypted with a passphrase you choose and downloaded straight to
+    your device — <strong>nothing is stored on the server</strong>. The passphrase
+    is never saved; if you lose it the backup cannot be restored. Keep the file
+    somewhere safe (it contains all platform data). If a table cannot be read the
+    whole backup fails rather than producing a silent partial. Restore validates
+    every table/column against the live schema and runs in one transaction that
+    rolls back completely on any error.
+  </div>
+
+  {# ── Create backup ─────────────────────────────────────────────────────── #}
+  <div class="card bg-dark border-success mb-4">
+    <div class="card-body">
+      <h6 class="text-success mb-3"><i class="bi bi-download me-1"></i>Create encrypted backup</h6>
+      <form method="POST" action="{{ url_for('admin_backup_create') }}" class="row g-2 align-items-end">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="col-sm-8">
+          <label class="form-label small">Encryption passphrase <span class="text-muted">(min 8 chars, not stored)</span></label>
+          <input type="password" name="passphrase" class="form-control" minlength="8"
+                 autocomplete="new-password" placeholder="Choose a strong passphrase" required>
+        </div>
+        <div class="col-sm-4">
+          <button class="btn btn-success w-100"><i class="bi bi-download"></i> Create &amp; download</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# ── Restore backup ────────────────────────────────────────────────────── #}
+  <div class="card bg-dark border-danger">
+    <div class="card-body">
+      <h6 class="text-danger mb-2"><i class="bi bi-exclamation-triangle-fill me-1"></i>Restore from backup</h6>
+      <div class="alert alert-danger small py-2">
+        <strong>Destructive.</strong> Restoring REPLACES all current data with the
+        contents of the backup file. Type <code>RESTORE</code> to confirm.
+      </div>
+      <form method="POST" action="{{ url_for('admin_backup_restore') }}" enctype="multipart/form-data" class="row g-2 align-items-end">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="col-sm-6">
+          <label class="form-label small">Backup file (.solarbak)</label>
+          <input type="file" name="backup_file" class="form-control" accept=".solarbak" required>
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label small">Passphrase</label>
+          <input type="password" name="passphrase" class="form-control" autocomplete="off" required>
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label small">Type RESTORE</label>
+          <input type="text" name="confirm" class="form-control" autocomplete="off" placeholder="RESTORE" required>
+        </div>
+        <div class="col-12 mt-2">
+          <button class="btn btn-outline-danger"
+                  onclick="return confirm('This REPLACES all current data with the backup. Continue?')">
+            <i class="bi bi-upload"></i> Restore (replaces all data)
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
