@@ -336,7 +336,7 @@
     <td><input name="load_name[]" class="form-control form-control-sm" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" placeholder="Load name" required/></td>
     <td><input name="load_watt[]" type="number" min="0" step="1" class="form-control form-control-sm watt" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="100" onchange="recalc(this)"/></td>
     <td><input name="load_qty[]" type="number" min="1" step="1" class="form-control form-control-sm qty" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="1" onchange="recalc(this)"/></td>
-    <td><input name="load_hours[]" type="number" min="0" max="24" step="0.5" class="form-control form-control-sm hrs" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="8" onchange="recalc(this)"/></td>
+    <td><input name="load_hours[]" type="number" min="0" max="24" step="0.5" class="form-control form-control-sm hrs" style="background:#0a0a18;border-color:#2e2e50;color:#c8c8e8;font-size:12px" value="" placeholder="auto" onchange="recalc(this)"/></td>
     <td>
       <input name="load_df[]" type="number" min="10" max="100" step="5"
              class="form-control form-control-sm df-inp"
@@ -398,6 +398,20 @@ const CAT_DF = {
   "Other":       70
 };
 
+// Default daily operating hours ("timer") per category (mirrors server-side
+// DEFAULT_HOURS). Suggested when the hours field is empty; the operator's own
+// value always wins.
+const CAT_HOURS = {
+  "Lighting":    14,
+  "Cooling":     10,
+  "Appliances":  4,
+  "Electronics": 5,
+  "Pumps":       3,
+  "Heating":     2,
+  "Office":      8,
+  "Other":       4
+};
+
 function updateDot(sel){
   const row = sel.closest('tr');
   const dot = row.querySelector('.cat-dot');
@@ -405,6 +419,12 @@ function updateDot(sel){
   // Auto-fill demand factor for this category
   const dfInp = row.querySelector('.df-inp');
   if(dfInp){ dfInp.value = CAT_DF[sel.value] ?? 70; }
+  // Suggest default operating hours only when the operator has left it blank,
+  // so a typed value is never clobbered by changing the category.
+  const hrInp = row.querySelector('.hrs');
+  if(hrInp && (hrInp.value === '' || parseFloat(hrInp.value) <= 0)){
+    hrInp.value = CAT_HOURS[sel.value] ?? 4;
+  }
   recalcRow(row);
   updateSummary();
 }

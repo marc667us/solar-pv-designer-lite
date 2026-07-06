@@ -1202,6 +1202,28 @@ DEMAND_FACTORS = {
     "Other":       0.70,   # General diversity allowance
 }
 
+# Assumed daily operating hours ("timer") per appliance category. Used as a
+# fallback so a load never enters the design calculation at 0 hours; a value
+# entered during design always overrides these. (Owner directive 2026-07-06.)
+DEFAULT_HOURS = {
+    "Lighting":    14.0,  # owner-specified daily on-time
+    "Cooling":     10.0,  # fans (owner-specified daily on-time)
+    "Appliances":  4.0,   # mixed kitchen / laundry duty cycles
+    "Electronics": 5.0,   # TV / audio / chargers
+    "Pumps":       3.0,   # intermittent water pumping
+    "Heating":     2.0,   # water heaters / short heating bursts
+    "Office":      8.0,   # a working day
+    "Other":       4.0,   # general default
+}
+
+def _default_hours_for(category):
+    """Assumed daily operating hours for a load category, applied when the
+    operator has not entered a value. User-entered hours take precedence."""
+    try:
+        return float(DEFAULT_HOURS.get(category, 4.0))
+    except (TypeError, ValueError):
+        return 4.0
+
 def inverter_brand(inv_kw):
     for threshold, brand in INVERTER_BRANDS:
         if inv_kw <= threshold:
@@ -3186,12 +3208,21 @@ def project_loads(pid):
             except (ValueError, IndexError):
                 df_val = df_default
             df_val = max(0.10, min(1.0, df_val))
+            # Operating hours ("timer"): use the value entered during
+            # design; if blank or 0, fall back to the category default so
+            # the calculation never runs a load at 0 hours.
+            try:
+                _h = float(hours[i]) if (i < len(hours) and str(hours[i]).strip() != "") else 0.0
+            except (ValueError, IndexError):
+                _h = 0.0
+            if _h <= 0:
+                _h = _default_hours_for(cat)
             loads.append({
                 "name":          names[i],
                 "category":      cat,
                 "wattage":       float(watts[i]) if i < len(watts) else 0,
                 "quantity":      float(qtys[i]) if i < len(qtys) else 1,
-                "hours":         float(hours[i]) if i < len(hours) else 0,
+                "hours":         _h,
                 "demand_factor": round(df_val, 2),
                 "critical":      str(i) in critical or names[i] in critical,
             })
