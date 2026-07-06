@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Lighting &amp; Fan Circuit Schedule — {{ project.name }}{% endblock %}
+{% block content %}
+{# Lighting & Fan Circuit Schedule (owner directive 2026-07-06). Read-only view:
+   groups Lighting + Cooling(fan) loads onto sub-circuits of up to N points, sums
+   each circuit's connected load to size the MCB, and shows the shared timer. Does
+   NOT change the solar/energy sizing or the costed BOQ. #}
+<div class="container py-4" style="max-width:960px">
+
+  <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+    <h4 class="mb-0 text-warning">
+      <i class="bi bi-diagram-2-fill me-2"></i>Lighting &amp; Fan Circuit Schedule
+    </h4>
+    <a href="{{ url_for('project_results', pid=project.id) }}"
+       class="btn btn-sm btn-outline-secondary ms-auto">
+      <i class="bi bi-arrow-left"></i> Back to results
+    </a>
+  </div>
+  <div class="text-secondary mb-3" style="font-size:13px">{{ project.name }}</div>
+
+  <div class="alert alert-dark border-secondary small">
+    Lighting and fan points are grouped onto final sub-circuits of up to
+    <strong>{{ sched.max_points }} points</strong> each. Each circuit's connected
+    load is <strong>summed</strong>, the design current is derived at
+    <strong>{{ '%.0f'|format(sched.voltage) }} V single-phase</strong>, and the
+    smallest standard MCB ({{ sched.mcb_sizes|join(' / ') }} A) at or above that
+    current is selected. Lights and fans on a circuit share one timer (lights
+    14 h, fans 10 h). This schedule sizes the protective breakers &amp; timers;
+    it does not change the solar energy sizing.
+  </div>
+
+  {% if not sched.circuits %}
+    <div class="alert alert-secondary">
+      No lighting or fan loads found on this project. Add loads in the
+      <strong>Lighting</strong> or <strong>Cooling</strong> categories to build a
+      circuit schedule.
+    </div>
+  {% else %}
+
+  {# ── Summary ──────────────────────────────────────────────────────────── #}
+  <div class="row g-2 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="card bg-dark border-secondary h-100"><div class="card-body py-2">
+        <div class="text-secondary" style="font-size:11px">CIRCUITS</div>
+        <div class="h5 mb-0 text-info">{{ sched.summary.circuit_count }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card bg-dark border-secondary h-100"><div class="card-body py-2">
+        <div class="text-secondary" style="font-size:11px">POINTS</div>
+        <div class="h5 mb-0">{{ sched.summary.total_points }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card bg-dark border-secondary h-100"><div class="card-body py-2">
+        <div class="text-secondary" style="font-size:11px">CONNECTED LOAD</div>
+        <div class="h5 mb-0">{{ '%.0f'|format(sched.summary.total_w) }} W</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card bg-dark border-secondary h-100"><div class="card-body py-2">
+        <div class="text-secondary" style="font-size:11px">BREAKERS (MCB)</div>
+        <div class="h6 mb-0 text-success">
+          {% for b in sched.summary.breaker_bom %}
+            <span class="badge bg-success-subtle text-success border border-success me-1">{{ b.count }}×{{ b.rating }}A</span>
+          {% endfor %}
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  {% if sched.summary.truncated %}
+  <div class="alert alert-info small py-2">
+    <i class="bi bi-info-circle-fill me-1"></i>
+    This schedule was capped at a safety limit on the number of points; some
+    fixtures beyond the cap were omitted. Split the design into multiple projects
+    if you genuinely need this many lighting/fan points.
+  </div>
+  {% endif %}
+
+  {% if sched.summary.overloaded %}
+  <div class="alert alert-warning small py-2">
+    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+    One or more circuits exceed the largest standard {{ sched.mcb_sizes[-1] }} A MCB.
+    Split those circuits further or move the heavy load to a dedicated feeder
+    (they are flagged below).
+  </div>
+  {% endif %}
+
+  {# ── Circuit table ───────────────────────────────────────────────────── #}
+  <div class="table-responsive">
+    <table class="table table-dark table-sm align-middle" style="font-size:13px">
+      <thead>
+        <tr class="text-secondary" style="font-size:11px">
+          <th>Circuit</th><th>Type</th><th class="text-end">Points</th>
+          <th>Fixtures</th><th class="text-end">Load</th>
+          <th class="text-end">Current</th><th class="text-end">MCB</th>
+          <th class="text-end">Timer</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in sched.circuits %}
+        <tr {% if c.overloaded %}class="table-warning text-dark"{% endif %}>
+          <td class="fw-bold">{{ c.ref }}</td>
+          <td>{{ c.type }}</td>
+          <td class="text-end">{{ c.points }}</td>
+          <td style="font-size:11px">
+            {% for b in c.breakdown %}{{ b.qty }}× {{ b.name }} ({{ '%.0f'|format(b.watt_each) }} W){% if not loop.last %}, {% endif %}{% endfor %}
+          </td>
+          <td class="text-end">{{ '%.0f'|format(c.total_w) }} W</td>
+          <td class="text-end">{{ '%.1f'|format(c.current_a) }} A</td>
+          <td class="text-end fw-bold {% if not c.overloaded %}text-success{% endif %}">
+            {{ c.breaker_a }} A{% if c.overloaded %} <i class="bi bi-exclamation-triangle-fill"></i>{% endif %}
+          </td>
+          <td class="text-end">{{ '%.0f'|format(c.timer_h) }} h</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="text-secondary mt-2" style="font-size:11px">
+    Design current I = ΣW / {{ '%.0f'|format(sched.voltage) }} V. Breaker = smallest
+    standard MCB ≥ I. Grouping: up to {{ sched.max_points }} points per circuit.
+  </div>
+
+  {% endif %}
+</div>
+{% endblock %}
