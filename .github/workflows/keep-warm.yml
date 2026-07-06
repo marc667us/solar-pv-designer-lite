@@ -34,17 +34,23 @@ permissions:
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 6   # 3 URLs x up to 90s cold wake = ~4.5 min worst case
     steps:
-      - name: Warm /api/ping
+      - name: Warm app + Keycloak
         run: |
-          # -f fails on HTTP 4xx/5xx; --max-time bounds the call so a cold-start
-          # hang doesn't burn workflow minutes.
-          set -e
+          # Keep BOTH free-tier services warm. The app cold-wakes in ~25 s, but
+          # Keycloak (auth.aiappinvent.com) — which /login redirects to — cold-
+          # wakes in ~50 s, so a cold KC is what makes login "not work". Ping its
+          # discovery endpoint too. --max-time 90 covers a full KC cold wake so
+          # the ping actually lands (and wakes it) instead of timing out first.
+          # We do NOT use -f here: KC discovery is 200 and app ping is 200, but
+          # any <500 response still proves the container is awake.
+          set +e
           for URL in \
             "https://solarpro.aiappinvent.com/api/ping" \
-            "https://solarpro-global.onrender.com/api/ping"; do
+            "https://solarpro-global.onrender.com/api/ping" \
+            "https://auth.aiappinvent.com/realms/solarpro/.well-known/openid-configuration"; do
             echo "Pinging $URL"
-            curl -fsS --max-time 60 -o /dev/null -w "  HTTP %{http_code} in %{time_total}s\n" "$URL" || \
+            curl -sS --max-time 90 -o /dev/null -w "  HTTP %{http_code} in %{time_total}s\n" "$URL" || \
               echo "  WARN: ping failed for $URL"
           done

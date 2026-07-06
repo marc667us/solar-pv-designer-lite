@@ -46,6 +46,15 @@
       <div class="text-secondary small">Platform management, monitoring &amp; operations</div>
     </div>
     <div class="ms-auto d-flex gap-2 flex-wrap">
+      {# Clear All — resets the notification/alert indicators (bell badge +
+         Notifications tile). Does not touch ticket/feedback/lead KPIs. #}
+      <form method="POST" action="{{ url_for('admin_indicators_clear') }}" class="d-inline"
+            onsubmit="return confirm('Clear all notification/alert indicators? This marks every admin notification as read.');">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-sm" style="background:#ef444418;border:1px solid #ef444444;color:#ef4444">
+          <i class="bi bi-bell-slash me-1"></i>Clear All
+        </button>
+      </form>
       <a href="{{ url_for('admin_sales') }}"    class="btn btn-sm" style="background:#f59e0b18;border:1px solid #f59e0b44;color:#f59e0b">
         <i class="bi bi-megaphone me-1"></i>Sales
       </a>
