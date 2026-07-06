@@ -715,6 +715,89 @@
   </div>
 </div>
 
+{# ─── Energy Coverage Analysis (Solar Designer ↔ Check My Bill) 2026-07-06 ───
+   Reads d.coverage (persisted by _bc_refresh_coverage). Shows what % of the
+   customer's estimated FULL monthly demand this design covers, and — from the
+   customer's ACTUAL bill — the monthly savings/funding capacity. #}
+{% set cov = d.coverage %}
+<div class="card mb-4" style="background:#111827;border:1px solid #f59e0b30">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="mb-0" style="color:#f59e0b;font-weight:800">Energy Coverage Analysis</h5>
+      {% if cov and cov.available %}
+        {% set _cmap = {'Partial Load Design':'warning','Near Full Load Design':'info','Full Load Design':'success','Oversized or Future Load Design':'secondary'} %}
+        <span class="badge bg-{{ _cmap.get(cov.coverage_status,'secondary') }}">{{ cov.coverage_status }}</span>
+      {% endif %}
+    </div>
+
+    {% if cov and cov.available %}
+    <p class="text-secondary small mb-3">
+      This design's monthly energy vs. your estimated full monthly consumption
+      (independently derived from your bill using the live PURC {{ cov.purc_quarter }} tariff).
+    </p>
+    <div class="row g-3 text-center mb-3">
+      <div class="col-6 col-md-3">
+        <div style="font-size:26px;font-weight:900;color:#f59e0b">{{ cov.coverage_pct }}%</div>
+        <div class="text-secondary small">Energy Coverage</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div style="font-size:20px;font-weight:800">{{ cov.designer_monthly_kwh|fmt(0) }}</div>
+        <div class="text-secondary small">Design load kWh/mo</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div style="font-size:20px;font-weight:800">{{ cov.bill_monthly_kwh|fmt(0) }}</div>
+        <div class="text-secondary small">Bill-estimated kWh/mo</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div style="font-size:20px;font-weight:800">{{ cov.remaining_kwh|fmt(0) }}</div>
+        <div class="text-secondary small">Remaining grid kWh/mo</div>
+      </div>
+    </div>
+
+    {% if cov.bill_provided %}
+    <div class="row g-3 text-center mb-3">
+      <div class="col-6">
+        <div style="font-size:20px;font-weight:800;color:#22c55e">GHS {{ cov.estimated_monthly_savings|fmt(2) }}</div>
+        <div class="text-secondary small">Expected bill reduction once commissioned (from your GHS {{ cov.actual_monthly_bill|fmt(2) }} bill)</div>
+      </div>
+      <div class="col-6">
+        <div style="font-size:20px;font-weight:800;color:#22c55e">GHS {{ cov.loan_repayment_capacity|fmt(2) }}</div>
+        <div class="text-secondary small">Suggested monthly repayment capacity (post-commissioning)</div>
+      </div>
+    </div>
+    <div class="alert alert-info small py-2 mb-3">
+      During design and installation you keep paying your full grid bill of GHS {{ cov.actual_monthly_bill|fmt(2) }}.
+      Only after the system is installed, commissioned and operating does your bill reduce by about
+      GHS {{ cov.estimated_monthly_savings|fmt(2) }}/month — that reduction is what funds the loan repayment.
+    </div>
+    {% else %}
+    <div class="alert alert-warning small py-2">
+      No actual bill was entered in Check My Bill, so savings and loan-repayment capacity are not
+      shown. Enter your monthly bill to size funding from your current electricity spend.
+    </div>
+    {% endif %}
+
+    {% set _msg = {
+      'Partial Load Design':'Your solar design appears to cover only part of your estimated monthly electricity consumption. This may mean only some loads were entered into the Solar Designer. You may continue with a partial-load design or update the load schedule for a full-building design.',
+      'Near Full Load Design':'Your solar design covers most of your estimated electricity consumption. Review any missing loads before finalising.',
+      'Full Load Design':'Your solar design closely matches your estimated monthly electricity consumption from your bill.',
+      'Oversized or Future Load Design':'Your solar design exceeds the estimated consumption from your bill. This may be intentional (future loads, EV charging, battery charging, expansion or export). Otherwise, review the bill amount, tariff category, and load schedule.'
+    } %}
+    <div class="alert alert-{{ _cmap.get(cov.coverage_status,'secondary') }} small mb-0">
+      {{ _msg.get(cov.coverage_status,'') }}
+    </div>
+
+    {% else %}
+    <p class="text-secondary small mb-2">
+      Run <strong>Check My Bill</strong> below and enter your actual monthly ECG bill to see what
+      percentage of your full energy demand this design covers, and how much of your current bill
+      could fund the installation.
+    </p>
+    {% if cov and cov.warning %}<div class="alert alert-secondary small mb-0">{{ cov.warning }}</div>{% endif %}
+    {% endif %}
+  </div>
+</div>
+
 {# Check My Bill modal (owner 2026-07-05: must appear on the standard project
    results page next to Project Funding). Saving a result stores data['bill_check'],
    which the Economic + Energy Impact reports display and which the funding

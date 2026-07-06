@@ -1097,8 +1097,8 @@ INVERTER_BRANDS = [
     (9999,"Huawei SUN2000-20KTL, SMA Sunny Tripower CORE1, Sungrow SG25CX"),
 ]
 
-# ─── Ghana PURC Tariff Schedule (Q2 2026, effective April 1 2026) ─────
-# Source: PURC "2026 Second Quarter Tariff Review Decision", 13-03-2026.
+# ─── Ghana PURC Tariff Schedule (Q3 2026, effective July 1 2026) ─────
+# Source: PURC "2026 Third Quarter Tariff Review Decision" (+3.49% electricity, eff. 1 Jul 2026).
 # PDF: https://www.purc.com.gh/attachment/288818-20260313090334.pdf
 # Rates in GHS/kWh; service charge in GHS/month. Lifeline is a *customer
 # class*, not a band: if monthly use ≤ 30 kWh the lifeline rate applies
@@ -1106,87 +1106,87 @@ INVERTER_BRANDS = [
 # 301+ bands and the lifeline rate no longer applies to any unit.
 GHANA_PURC_TARIFFS = {
     "Residential Lifeline (≤ 30 kWh/month)": {
-        "rate_ghc":   0.8690,
-        "fixed_ghc":  2.13,
+        "rate_ghc":   0.8993,
+        "fixed_ghc":  2.2043,
         "description": "Lifeline class — households whose TOTAL monthly use is 30 kWh or less.",
         "bldg_hint":  ["low_income", "single_room"],
     },
     "Residential Standard (0-300 kWh/month)": {
-        "rate_ghc":   1.9688,
-        "fixed_ghc":  10.7309,
+        "rate_ghc":   2.0375,
+        "fixed_ghc":  11.1054,
         "description": "Non-lifeline residential, first 300 kWh band.",
         "bldg_hint":  ["residential", "apartment", "bungalow", "villa", "duplex"],
     },
     "Residential High Use (>300 kWh/month)": {
-        "rate_ghc":   2.6015,
-        "fixed_ghc":  10.7309,
+        "rate_ghc":   2.6923,
+        "fixed_ghc":  11.1054,
         "description": "Non-lifeline residential, units above 300 kWh in a month.",
         "bldg_hint":  ["mansion", "estate"],
     },
     "Non-Residential Standard (0-300 kWh/month)": {
-        "rate_ghc":   1.7775,
-        "fixed_ghc":  12.4282,
+        "rate_ghc":   1.8395,
+        "fixed_ghc":  12.8619,
         "description": "Small offices, shops, clinics — first 300 kWh band.",
         "bldg_hint":  ["office", "retail", "shop", "clinic", "small_commercial"],
     },
     "Non-Residential High Use (>300 kWh/month)": {
-        "rate_ghc":   2.1649,
-        "fixed_ghc":  12.4282,
+        "rate_ghc":   2.2405,
+        "fixed_ghc":  12.8619,
         "description": "Larger commercial users (hotels, supermarkets) — units above 300.",
         "bldg_hint":  ["commercial", "hotel", "supermarket", "restaurant", "church"],
     },
     "Special Load - LV (hospitals, schools)": {
-        "rate_ghc":   2.3211,
-        "fixed_ghc":  500.00,
+        "rate_ghc":   2.4021,
+        "fixed_ghc":  517.45,
         "description": "SLT-LV — hospitals, schools, government buildings on low-voltage supply.",
         "bldg_hint":  ["hospital", "school", "government", "institution", "university"],
     },
     "Special Load - MV (medium voltage)": {
-        "rate_ghc":   2.0160,
-        "fixed_ghc":  500.00,
+        "rate_ghc":   2.0864,
+        "fixed_ghc":  517.45,
         "description": "SLT-MV — medium-voltage commercial / industrial supply.",
         "bldg_hint":  ["medium_industry", "campus"],
     },
     "Special Load - MV-2 (medium voltage, large)": {
-        "rate_ghc":   1.3204,
-        "fixed_ghc":  500.00,
+        "rate_ghc":   1.3665,
+        "fixed_ghc":  517.45,
         "description": "SLT-MV-2 — large medium-voltage users.",
         "bldg_hint":  ["large_industry"],
     },
     "Special Load - HV (large facilities)": {
-        "rate_ghc":   1.8212,
-        "fixed_ghc":  500.00,
+        "rate_ghc":   1.8848,
+        "fixed_ghc":  517.45,
         "description": "SLT-HV — large facilities on high-voltage supply.",
         "bldg_hint":  [],
     },
     "Industrial - LV (factories, warehouses)": {
-        "rate_ghc":   2.0160,
-        "fixed_ghc":  500.00,
-        "description": "Industrial LV — billed under SLT-MV in PURC Q2 2026.",
+        "rate_ghc":   2.0864,
+        "fixed_ghc":  517.45,
+        "description": "Industrial LV — billed under SLT-MV in PURC Q3 2026.",
         "bldg_hint":  ["industrial", "factory", "warehouse", "manufacturing"],
     },
     "Industrial - HV (large industries)": {
-        "rate_ghc":   1.8212,
-        "fixed_ghc":  500.00,
-        "description": "Industrial HV — billed under SLT-HV in PURC Q2 2026.",
+        "rate_ghc":   1.8848,
+        "fixed_ghc":  517.45,
+        "description": "Industrial HV — billed under SLT-HV in PURC Q3 2026.",
         "bldg_hint":  [],
     },
     "EV Charging Station": {
-        "rate_ghc":   2.0160,
-        "fixed_ghc":  500.00,
-        "description": "Commercial EV charging station (new class in PURC Q2 2026).",
+        "rate_ghc":   2.0864,
+        "fixed_ghc":  517.45,
+        "description": "Commercial EV charging station (new class in PURC Q3 2026).",
         "bldg_hint":  ["ev_station", "petrol_station"],
     },
 }
 
 # Effective date + revision metadata for the dict above.
 GHANA_PURC_TARIFF_META = {
-    "effective_from":   "2026-04-01",
-    "published_on":     "2026-03-13",
-    "quarter":          "Q2 2026",
-    "source_url":       "https://www.purc.com.gh/attachment/288818-20260313090334.pdf",
-    "source_title":     "PURC 2026 Second Quarter Tariff Review Decision",
-    "adjustment_note": "Residential -1.66% vs Q1 2026; SLT-LV -13.96%; HV -15.43%.",
+    "effective_from":   "2026-07-01",
+    "published_on":     "2026-06-22",
+    "quarter":          "Q3 2026",
+    "source_url":       "https://ecg.com.gh/index.php/en/services/billing-centre/current-tariff",
+    "source_title":     "PURC 2026 Third Quarter Tariff Review Decision",
+    "adjustment_note": "Q3 2026: electricity +3.49% flat vs Q2 (eff. 1 Jul 2026). Lifeline 89.93 p/kWh published exact; other bands scaled +3.49% pending per-category gazette PDF.",
 }
 
 # ─── Demand Factors by load category ─────────────────────────────────────────
@@ -3320,6 +3320,7 @@ def project_loads(pid):
             "boq_grand":    boq_grand,
             "ac_cables":    ac_cables,
         }
+        _bc_refresh_coverage(data)
         save_project_data(pid, data)
         return redirect(url_for("project_results", pid=pid))
 
@@ -3338,6 +3339,11 @@ def project_results(pid):
         return redirect(url_for("project_loads", pid=pid))
     r    = project["data"]["results"]
     recs = calc_recommendations(r["economics"], project["data"], r)
+    if project["data"].get("bill_check") and not project["data"].get("coverage"):
+        try:
+            _bc_refresh_coverage(project["data"])  # in-memory display only
+        except Exception:
+            pass
     return render_template("results.html", user=current_user(),
                            project=project, d=project["data"],
                            r=r, recommendations=recs)
@@ -3904,7 +3910,7 @@ def api_solar(country, region):
 @app.route("/api/purc-tariffs")
 @limiter.limit("120 per minute")
 def api_purc_tariffs():
-    """Return Ghana PURC Q2 2026 tariff schedule as JSON."""
+    """Return Ghana PURC Q3 2026 tariff schedule as JSON."""
     result = {}
     for cat, info in GHANA_PURC_TARIFFS.items():
         result[cat] = {
@@ -4808,7 +4814,7 @@ def export_pdf_energy(pid):
 
 ---
 {_bill_check_md(d)}
-# Monthly Energy Generation & Savings
+{_coverage_md(d)}# Monthly Energy Generation & Savings
 
 | Month | Generation (kWh) | Grid Offset (kWh) | Utility Offset (%) | Savings ({sym}) |
 |---|---|---|---|---|
@@ -4899,6 +4905,7 @@ def export_pdf_economic(pid):
 ### Project Assessment
 """
     md += _bill_check_md(d)
+    md += _coverage_md(d)
     for reason in eco["verdict_reasons"]:
         md += f"- {reason}\n"
 
@@ -7189,7 +7196,7 @@ Every report page (/project/<pid>/report/pv, /report/boq, /report/cable, /report
 
 === CHECK MY BILL (since 2026-06-27, anonymous) ===
 
-/bill-check -- public landing page. FREE, no signup, ~60 seconds. User enters their monthly bill in GHS, picks a customer category (Home / Lifeline / Shop / Industry), and the tool back-derives kWh from the **live PURC Q2 2026 tariff** (effective 2026-04-01, 12 customer categories including Residential Lifeline, Standard, High Use, Non-Residential, Special Load LV/MV/MV-2/HV, Industrial LV/HV, EV Charging). Hero shows 3 outcomes side-by-side: today's bill, during a 5-yr solar loan, after loan. PDF download / email-me / invite-friends / copy-share-link all anonymous. Logged-in users can also save the result onto a SolarPro project. The shareable URL takes a ?b=<base64> param that prefills the modal.
+/bill-check -- public landing page. FREE, no signup, ~60 seconds. User enters their monthly bill in GHS, picks a customer category (Home / Lifeline / Shop / Industry), and the tool back-derives kWh from the **live PURC Q3 2026 tariff** (effective 2026-07-01, 12 customer categories including Residential Lifeline, Standard, High Use, Non-Residential, Special Load LV/MV/MV-2/HV, Industrial LV/HV, EV Charging). Hero shows 3 outcomes side-by-side: today's bill, during a 5-yr solar loan, after loan. PDF download / email-me / invite-friends / copy-share-link all anonymous. Logged-in users can also save the result onto a SolarPro project. The shareable URL takes a ?b=<base64> param that prefills the modal.
 
 === MARKETPLACE COUNTRY COMPLIANCE (since 2026-06-27) ===
 
@@ -7507,7 +7514,7 @@ def assistant_chat():
          "Admins: /admin/opportunities lists live solar RFPs/RFQs/IPPs pulled from Google News across 8 procurement-language queries (500+ items typical). Filter by country / type / source. Each row has 3 actions: **See full details** (eye icon, opens modal with the full body), **Open source page** (external link), **Add to leads** (single-row CRM). The header has a **Save all to CRM** button that bulk-saves every visible opportunity to leads with gnews:url as the dedup key. Add ?refresh=1 to bust the 1-hour cache."),
         # --BILL CHECK (2026-06-27) --
         (["bill check","check my bill","check now","my bill","ecg bill","purc","tariff audit","bill audit","electricity bill","electricity tariff"],
-         "**Check My Bill** is at /bill-check (FREE, no signup, ~60 seconds). Enter your monthly ECG bill in GHS, pick a customer category (Home / Lifeline / Shop / Industry), and the tool back-derives your kWh from the live **PURC Q2 2026 tariff** (effective 2026-04-01, 12 customer categories). Shows three numbers: what you pay today, during a 5-year solar loan, and after. Download a PDF report, email it to yourself, or invite friends with your numbers prefilled."),
+         "**Check My Bill** is at /bill-check (FREE, no signup, ~60 seconds). Enter your monthly ECG bill in GHS, pick a customer category (Home / Lifeline / Shop / Industry), and the tool back-derives your kWh from the live **PURC Q3 2026 tariff** (effective 2026-07-01, 12 customer categories). Shows three numbers: what you pay today, during a 5-year solar loan, and after. Download a PDF report, email it to yourself, or invite friends with your numbers prefilled."),
         (["bill check share","bill check pdf","bill check email","invite friends","share bill check"],
          "From the Check My Bill modal: **Download PDF** (anonymous, no project needed), **Email me a copy** (delivered via Resend/Brevo), **Invite friends** (sends the prefilled tool to people you nominate), or **Copy share link** (base64-encoded payload in the ?b= param). Logged-in users can also **Save to project** to pin it to a SolarPro design project."),
         # --MARKETPLACE COUNTRY COMPLIANCE (2026-06-27) --
@@ -32221,7 +32228,7 @@ def growth_proposal_beautifier(pid):
 
 # ─── Check My Electricity Bill — feature ─────────────────────────────────────
 # Spec: Documents/pvsolar1/check my bill.txt (added 2026-06-27)
-# Tariff: GHANA_PURC_TARIFFS (PURC Q2 2026, effective 2026-04-01)
+# Tariff: GHANA_PURC_TARIFFS (PURC Q3 2026, effective 2026-07-01)
 #
 # Lifeline note: PURC treats lifeline as a CUSTOMER CLASS, not a band. A
 # household whose total monthly use is ≤ 30 kWh pays the lifeline rate on
@@ -32519,6 +32526,7 @@ def bill_check_save(pid):
     data["bill_check_history"] = history[-20:]
     result["saved_at"] = _bc_saved_at
     data["bill_check"] = result
+    _bc_refresh_coverage(data)
     save_project_data(pid, data)
     try:
         _log_marketplace_action(
@@ -33057,7 +33065,7 @@ def bill_check_email():
           <a href="{share}" style="color:#b45309">{share}</a>
         </p>
         <p style="margin:20px 0 6px;font-size:12px;color:#6b7280">
-          The numbers in this report use PURC&apos;s Q2 2026 tariff schedule (effective 2026-04-01)
+          The numbers in this report use PURC&apos;s Q3 2026 tariff schedule (effective 2026-07-01)
           and a simple loan amortisation. Real savings depend on tariff escalation and system performance.
         </p>
       </div>
@@ -33136,7 +33144,7 @@ def bill_check_invite():
             <strong>SolarPro Design · 60-second bill check</strong>
           </div>
           <div style="border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 6px 6px">
-            <p>{sender_name} just checked their electricity bill against the PURC Q2 2026 tariff and figured out how much of their bill could fund a solar system.</p>
+            <p>{sender_name} just checked their electricity bill against the PURC Q3 2026 tariff and figured out how much of their bill could fund a solar system.</p>
             {('<p>For their numbers: about a <strong>' + str(int(round(kwp))) + ' kWp</strong> system would drop their bill by <strong>' + str(int(round(drop))) + '%</strong> after the loan ends.</p>') if kwp and drop else ''}
             <p style="margin:18px 0"><a href="{share}" style="background:#1e1e3a;color:#fbbf24;padding:10px 18px;border-radius:4px;text-decoration:none;font-weight:700">Run it for your own bill →</a></p>
             <p style="font-size:12px;color:#6b7280">No signup needed. Free. Open in your browser:<br>{share}</p>
@@ -33268,7 +33276,7 @@ Every project goes through these steps:
 
 ## 3. Check My Bill — the conversion magnet
 
-`/bill-check` is a free, anonymous, ~60-second tool that audits an ECG bill against the **PURC Q2 2026 tariff** (12 customer categories). Visitors enter their bill in GHS, pick a category, and see what a 5-year solar loan would cost vs. their current bill. Outputs: PDF, email-yourself, invite-friends, copy-share-link. Share any /bill-check link to get prefill-loaded leads.
+`/bill-check` is a free, anonymous, ~60-second tool that audits an ECG bill against the **PURC Q3 2026 tariff** (12 customer categories). Visitors enter their bill in GHS, pick a category, and see what a 5-year solar loan would cost vs. their current bill. Outputs: PDF, email-yourself, invite-friends, copy-share-link. Share any /bill-check link to get prefill-loaded leads.
 
 ## 4. Marketplace
 
@@ -37469,6 +37477,247 @@ def project_optimize_undo(pid):
     flash("Reverted to the original project figures (%s / %s)." % (
         bk.get("verdict") or "original", bk.get("bankability") or ""), "success")
     return redirect(url_for("report_economic", pid=pid))
+
+
+
+# ─── Energy Coverage Analysis (Solar Designer ↔ Check My Bill integration) ───
+# Added 2026-07-06. Determines what % of a customer's estimated FULL monthly
+# energy demand the solar design covers, so partial-load designs are flagged and
+# the customer's own bill can be used to size funding capacity.
+#
+# Owner directives baked in:
+#   1. PURC rates are the LIVE GHANA_PURC_TARIFFS (verified Q3 2026) — no assumptions.
+#   2. The bill→kWh estimate is derived INDEPENDENTLY here by inverting the PURC
+#      banded tariff on the customer's actual bill — it does NOT trust Check My
+#      Bill's own flat-rate kWh (which can be circular when run from the load
+#      schedule). Only a genuine user-entered meter reading is reused.
+#
+# Supervisor note (basis): calc_loads() returns DIVERSIFIED daily energy (each
+# load × demand factor). A monthly bill reflects ACTUAL (undiversified) energy,
+# so the designer side of the coverage ratio must also be undiversified energy —
+# the raw sum of the entered loads (w·q·h), NOT results['daily_kwh']. Otherwise a
+# fully-entered load schedule would read ~70% and be mislabelled "Partial".
+#
+# All functions are pure/module-level and unit-testable.
+
+def _bc_bill_to_kwh(actual_bill, category="Residential Standard (0-300 kWh/month)"):
+    """Invert the PURC banded tariff.
+
+    Input : actual monthly bill in GHS (treated as PURC energy + service charge,
+            the same simplification the Check My Bill estimator uses — levies not
+            separated), and the customer tariff category.
+    Output: estimated monthly consumption in kWh (float, >= 0).
+    Uses the live GHANA_PURC_TARIFFS so it always tracks the current schedule.
+    """
+    bill = max(0.0, float(actual_bill or 0))
+    if bill <= 0:
+        return 0.0
+
+    # Residential non-lifeline: first 300 kWh @ standard rate, remainder @ high rate.
+    if "Residential" in category and "Non-" not in category and "Lifeline" not in category:
+        std = GHANA_PURC_TARIFFS["Residential Standard (0-300 kWh/month)"]
+        hi  = GHANA_PURC_TARIFFS["Residential High Use (>300 kWh/month)"]
+        energy = bill - std["fixed_ghc"]
+        if energy <= 0:
+            return 0.0
+        band1 = 300.0 * std["rate_ghc"]
+        if energy <= band1:
+            return energy / std["rate_ghc"]
+        return 300.0 + (energy - band1) / hi["rate_ghc"]
+
+    # Non-residential: same two-band shape.
+    if category.startswith("Non-Residential"):
+        std = GHANA_PURC_TARIFFS["Non-Residential Standard (0-300 kWh/month)"]
+        hi  = GHANA_PURC_TARIFFS["Non-Residential High Use (>300 kWh/month)"]
+        energy = bill - std["fixed_ghc"]
+        if energy <= 0:
+            return 0.0
+        band1 = 300.0 * std["rate_ghc"]
+        if energy <= band1:
+            return energy / std["rate_ghc"]
+        return 300.0 + (energy - band1) / hi["rate_ghc"]
+
+    # Lifeline + all flat categories (SLT-LV/MV/HV, industrial, EV): single rate.
+    info = GHANA_PURC_TARIFFS.get(category)
+    if info:
+        energy = bill - info["fixed_ghc"]
+        if energy <= 0:
+            return 0.0
+        kwh = energy / info["rate_ghc"]
+        # Lifeline is a customer CLASS capped at 30 kWh; above that the customer
+        # is billed on the Residential Standard/High bands (mirrors the forward
+        # logic in _bc_expected_purc_bill).
+        if "Lifeline" in category and kwh > 30.0:
+            return _bc_bill_to_kwh(bill, "Residential Standard (0-300 kWh/month)")
+        return kwh
+
+    # Unknown category → residential standard fallback.
+    return _bc_bill_to_kwh(bill, "Residential Standard (0-300 kWh/month)")
+
+
+def _bc_designer_monthly_kwh(data):
+    """Undiversified monthly energy of the loads the customer ENTERED into the
+    designer (raw w·q·h, no demand factor) — the correct apples-to-apples basis
+    for comparison against a bill (see the basis note above). Falls back to the
+    diversified results['daily_kwh'] only when the load list is unavailable."""
+    loads = (data or {}).get("loads") or []
+    raw_daily = 0.0
+    for ld in loads:
+        raw_daily += (float(ld.get("wattage", 0) or 0)
+                      * float(ld.get("quantity", 1) or 0)
+                      * float(ld.get("hours", 0) or 0)) / 1000.0
+    if raw_daily > 0:
+        return raw_daily * 30.44
+    res = (data or {}).get("results") or {}
+    return float(res.get("daily_kwh") or 0) * 30.44
+
+
+def _bc_coverage(designer_monthly_kwh, actual_bill,
+                 category="Residential Standard (0-300 kWh/month)",
+                 bill_monthly_kwh=None):
+    """Compare designer monthly energy with the bill-estimated FULL monthly
+    consumption and return the Energy Coverage dict.
+
+    designer_monthly_kwh : undiversified monthly energy of the entered design
+                           (use _bc_designer_monthly_kwh()).
+    actual_bill          : customer's actual monthly bill (GHS) from Check My Bill.
+    category             : PURC tariff category.
+    bill_monthly_kwh     : optional override — pass ONLY a genuine user-entered
+                           meter reading; otherwise the bill is inverted via PURC.
+
+    savings + loan capacity are derived from the customer's ACTUAL monthly bill
+    (owner directive), not the designer-estimated or PURC-expected bill.
+    """
+    out = {"available": False, "warning": None}
+
+    designer_monthly = float(designer_monthly_kwh or 0)
+    if designer_monthly <= 0:
+        out["warning"] = ("Solar design result is required before energy "
+                          "coverage can be calculated.")
+        return out
+
+    bill = max(0.0, float(actual_bill or 0))
+
+    if bill_monthly_kwh and float(bill_monthly_kwh) > 0:
+        bill_monthly = float(bill_monthly_kwh)         # genuine meter reading
+        basis = "meter_reading"
+    else:
+        bill_monthly = _bc_bill_to_kwh(bill, category)  # independent PURC inversion
+        basis = "purc_bill_inversion"
+
+    if bill_monthly <= 0:
+        out["warning"] = ("Estimated utility energy could not be calculated. "
+                          "Please check the bill amount and tariff category.")
+        return out
+
+    coverage_pct = designer_monthly / bill_monthly * 100.0
+    remaining = max(bill_monthly - designer_monthly, 0.0)
+    excess    = max(designer_monthly - bill_monthly, 0.0)
+
+    if coverage_pct < 80:
+        status = "Partial Load Design"
+    elif coverage_pct < 95:
+        status = "Near Full Load Design"
+    elif coverage_pct <= 105:
+        status = "Full Load Design"
+    else:
+        status = "Oversized or Future Load Design"
+
+    # Savings/funding capacity keyed off the customer's ACTUAL monthly bill.
+    savings = bill * min(coverage_pct, 100.0) / 100.0
+
+    out.update({
+        "available":                 True,
+        "designer_monthly_kwh":      round(designer_monthly, 2),
+        "bill_monthly_kwh":          round(bill_monthly, 2),
+        "coverage_pct":              round(coverage_pct, 1),
+        "remaining_kwh":             round(remaining, 2),
+        "excess_kwh":                round(excess, 2),
+        "coverage_status":           status,
+        "actual_monthly_bill":       round(bill, 2),
+        "estimated_monthly_savings": round(savings, 2),
+        "loan_repayment_capacity":   round(savings, 2),
+        "tariff_category":           category,
+        "estimate_basis":            basis,
+        "purc_quarter":              GHANA_PURC_TARIFF_META.get("quarter"),
+        "bill_provided":             bill > 0,
+    })
+    return out
+
+
+def _bc_refresh_coverage(data):
+    """Recompute data['coverage'] from the current design + saved bill_check.
+    No-op unless BOTH exist. Designer side is undiversified entered-load energy;
+    bill side is derived independently from the actual bill + live PURC bands
+    (except a genuine user-entered meter reading)."""
+    bc  = data.get("bill_check")
+    res = data.get("results")
+    if not bc or not res:
+        return
+    energy = bc.get("energy") or {}
+    override = energy.get("monthly_kwh") if energy.get("source") == "user_provided_kwh" else None
+    category = (bc.get("inputs") or {}).get("category") or "Residential Standard (0-300 kWh/month)"
+    data["coverage"] = _bc_coverage(_bc_designer_monthly_kwh(data), bc.get("actual_bill"),
+                                    category, bill_monthly_kwh=override)
+
+
+
+
+
+def _coverage_md(d):
+    """Markdown 'Energy Coverage and Bill Comparison Analysis' section for the
+    engineering/economic/proposal reports. Returns '' unless coverage is
+    available. If coverage was not persisted (legacy project) but both a design
+    and a saved bill_check exist, it is computed in-memory here — so reports are
+    self-sufficient and NO state-mutating write is needed on any GET route.
+    The bill-funded repayment capacity (coverage% of the customer's ACTUAL
+    monthly bill) is surfaced as the suggested monthly installment amount."""
+    d = d or {}
+    cov = d.get("coverage")
+    if (not cov or not cov.get("available")) and d.get("bill_check") and d.get("results"):
+        try:
+            _bc_refresh_coverage(d)          # in-memory only; not persisted
+            cov = d.get("coverage")
+        except Exception:
+            cov = None
+    if not cov or not cov.get("available"):
+        return ""
+    lines = [
+        "## Energy Coverage and Bill Comparison Analysis",
+        "",
+        "| Metric | Value |",
+        "|---|---|",
+        f"| Estimated full monthly consumption (from bill) | {cov['bill_monthly_kwh']:,.0f} kWh |",
+        f"| Solar design monthly energy | {cov['designer_monthly_kwh']:,.0f} kWh |",
+        f"| Energy coverage | {cov['coverage_pct']}% |",
+        f"| Remaining grid energy | {cov['remaining_kwh']:,.0f} kWh |",
+        f"| Coverage status | {cov['coverage_status']} |",
+    ]
+    if cov.get("bill_provided"):
+        lines += [
+            f"| Customer actual monthly bill (paid in full during design & install) | GHS {cov['actual_monthly_bill']:,.2f} |",
+            f"| Expected bill reduction once commissioned & operating | GHS {cov['estimated_monthly_savings']:,.2f}/month |",
+            f"| **Suggested monthly repayment capacity (post-commissioning, bill-funded)** | **GHS {cov['loan_repayment_capacity']:,.2f}** |",
+        ]
+    lines += [
+        "",
+        (f"_Coverage compares this design against the customer's estimated full monthly demand, "
+         f"independently derived from their electricity bill using the live PURC "
+         f"{cov.get('purc_quarter','')} tariff._"),
+    ]
+    if cov.get("bill_provided"):
+        lines += [
+            "",
+            (f"_During the design and installation stage the customer continues to pay the full "
+             f"grid bill. Only after the system is installed, commissioned and operating is the "
+             f"monthly bill expected to reduce by approximately GHS "
+             f"{cov['estimated_monthly_savings']:,.2f} (about {cov['coverage_pct']}% of the "
+             f"current bill) — that reduction is what can be redirected toward the loan "
+             f"repayment. Figures are indicative only; final approval rests with the financing "
+             f"institution._"),
+        ]
+    lines.append("")
+    return "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":
