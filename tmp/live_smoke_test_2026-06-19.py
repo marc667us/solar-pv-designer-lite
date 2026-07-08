@@ -10,11 +10,12 @@ Sections:
   E. BOQ Compliance Review panel
 """
 
+import os
 import urllib.request, urllib.parse, urllib.error, http.cookiejar, re, sys, json
 
 BASE = "https://solarpro.aiappinvent.com"
 USERNAME = "marc667us"
-PASSWORD = "ember-lantern-cedar-river"
+PASSWORD = os.environ.get("SOLARPRO_ADMIN_PASSWORD", "")
 
 results = []
 def check(name, cond, detail=""):

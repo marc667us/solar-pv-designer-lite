@@ -5,7 +5,7 @@ import os, re, sys, requests
 
 BASE = "https://solarpro.aiappinvent.com"
 ADMIN_USER = "admin"
-ADMIN_PW   = os.environ.get("SOLARPRO_ADMIN_PASSWORD") or "marble-willow-poppy-river"
+ADMIN_PW   = os.environ.get("SOLARPRO_ADMIN_PASSWORD") or ""
 TIMEOUT = 30
 
 OK, WARN, FAIL = "[+] PASS", "[~] WARN", "[-] FAIL"

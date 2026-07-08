@@ -19,7 +19,7 @@ import requests
 
 BASE = os.environ.get("SMOKE_BASE", "http://localhost:5000")
 ADMIN_USER = "admin"
-ADMIN_PASS = os.environ.get("SOLARPRO_ADMIN_PASSWORD", "robin-grain-aware-prairie")
+ADMIN_PASS = os.environ.get("SOLARPRO_ADMIN_PASSWORD", "")
 
 
 def get_csrf(s, path="/login"):

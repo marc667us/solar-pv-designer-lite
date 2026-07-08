@@ -21,8 +21,8 @@ db_path = os.path.join(tmpdir, "smoke.db")
 os.environ["DB_PATH"] = db_path
 os.environ.setdefault("SECRET_KEY", "smoke-secret-12345")
 # Seed env vars (already set if you sourced .env, but be defensive)
-os.environ.setdefault("SOLARPRO_ADMIN_PASSWORD", "robin-grain-aware-prairie")
-os.environ.setdefault("SOLARPRO_OWNER_PASSWORD", "eagle-ginger-boat-north")
+os.environ.setdefault("SOLARPRO_ADMIN_PASSWORD", "")
+os.environ.setdefault("SOLARPRO_OWNER_PASSWORD", "")
 
 import web_app as wa
 wa.DB_PATH = db_path

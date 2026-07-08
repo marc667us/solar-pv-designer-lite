@@ -25,6 +25,7 @@ Run:
 from __future__ import annotations
 
 import argparse
+import os
 import secrets
 import string
 import sys
@@ -119,7 +120,7 @@ def main() -> int:
         try:
             page.goto(f"{BASE}/login?legacy=1", wait_until="networkidle", timeout=45000)
             page.fill('input[name="username"]', "admin")
-            page.fill('input[name="password"]', "marble-willow-poppy-river")
+            page.fill('input[name="password"]', os.environ.get("SOLARPRO_ADMIN_PASSWORD", ""))
             page.click('button[type="submit"]')
             page.wait_for_load_state("networkidle", timeout=30000)
             if "/dashboard" in page.url:

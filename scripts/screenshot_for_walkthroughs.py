@@ -38,7 +38,7 @@ SCREENS.mkdir(parents=True, exist_ok=True)
 
 BASE = "https://solarpro-global.onrender.com"
 USERNAME = os.environ.get("SOLARPRO_ADMIN_USERNAME", "admin")
-PASSWORD = os.environ.get("SOLARPRO_ADMIN_PASSWORD", "marble-willow-poppy-river")
+PASSWORD = os.environ.get("SOLARPRO_ADMIN_PASSWORD", "")
 
 VIEWPORT = {"width": 1280, "height": 720}
 

@@ -4,10 +4,11 @@
 test project, walk steps 3-9, then verify: two BOQ links on the overview, the 5
 new report PDFs, cost-plan.xlsx, Finish-BOQ-pricing, and /boq-projects isolation.
 Single login attempt (no retry) to avoid KC lockout."""
+import os
 import re, sys, html, requests
 
 BASE = "https://solarpro.aiappinvent.com"
-KC_USER, KC_PASS = "marc667us@yahoo.com", "ember-lantern-cedar-river"
+KC_USER, KC_PASS = os.environ.get("KC_USER", "marc667us@yahoo.com"), os.environ.get("SOLARPRO_ADMIN_PASSWORD", "")
 s = requests.Session(); s.headers["User-Agent"] = "TwoBOQ-LiveCheck/1.0"
 fails = []
 def ck(n, c, e=""):

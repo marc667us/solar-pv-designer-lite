@@ -13,11 +13,12 @@ Proves the on-demand resolve+cache fix end to end:
      FALLBACK -> REAL prove the self-heal (cache now populated for everyone).
 
 No writes beyond the intended cache-populate on live products. Read-mostly."""
+import os
 import urllib.request, urllib.parse, urllib.error, http.cookiejar, re, sys, time
 
 BASE = "https://solarpro.aiappinvent.com"
 EMAIL = "marc667us@yahoo.com"
-PW = "ember-lantern-cedar-river"
+PW = os.environ.get("SOLARPRO_ADMIN_PASSWORD", "")
 
 def opener():
     cj = http.cookiejar.CookieJar()

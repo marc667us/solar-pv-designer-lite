@@ -23,6 +23,7 @@ Defaults match the live deploy + admin credentials in MEMORY.md.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import time
@@ -37,7 +38,7 @@ except ImportError:
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "https://solarpro.aiappinvent.com"
 USER = sys.argv[2] if len(sys.argv) > 2 else "admin"
-PASS = sys.argv[3] if len(sys.argv) > 3 else "marble-willow-poppy-river"
+PASS = sys.argv[3] if len(sys.argv) > 3 else os.environ.get("SOLARPRO_ADMIN_PASSWORD", "")
 PID  = int(sys.argv[4]) if len(sys.argv) > 4 else 8
 
 

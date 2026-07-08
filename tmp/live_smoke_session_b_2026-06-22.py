@@ -15,7 +15,7 @@ BASE = "https://solarpro.aiappinvent.com"
 TIMEOUT = 25
 # 4-word passphrase from project memory (may have rotated since).
 ADMIN_USER = "admin"
-ADMIN_PW   = os.environ.get("SOLARPRO_ADMIN_PASSWORD") or "marble-willow-poppy-river"
+ADMIN_PW   = os.environ.get("SOLARPRO_ADMIN_PASSWORD") or ""
 
 OK   = "[+] PASS"
 WARN = "[~] WARN"
