@@ -43,7 +43,7 @@ SCHEMA_VERSION = "dt_scene_v2"
 # (Phase 7). Colours mirror DT_LAYER_PALETTE where a layer maps 1:1.
 # ---------------------------------------------------------------------------
 MATERIALS: dict[str, dict[str, Any]] = {
-    "pv_glass":       {"color": "#12305f", "roughness": 0.32, "metalness": 0.10},
+    "pv_glass":       {"color": "#0e2350", "roughness": 0.14, "metalness": 0.45},
     "aluminum_frame": {"color": "#9aa3ad", "roughness": 0.45, "metalness": 0.80},
     "concrete":       {"color": "#b8b2a6", "roughness": 0.90, "metalness": 0.02},
     "asphalt":        {"color": "#4a4a4a", "roughness": 0.95, "metalness": 0.00},

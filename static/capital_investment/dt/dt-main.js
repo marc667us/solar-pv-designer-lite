@@ -51,10 +51,38 @@
     t.camera.position.set(200, 160, 200);
 
     t.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-    t.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    t.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     t.renderer.setSize(w, h);
-    if (t.renderer.shadowMap) t.renderer.shadowMap.enabled = (DT.state.graphicsTier !== 'low');
+    // Physically-based colour pipeline: filmic tone-mapping + sRGB output turns
+    // the flat, video-gamey look into a photographic one. Guarded for r147
+    // (outputColorSpace) vs older (outputEncoding) builds.
+    t.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    t.renderer.toneMappingExposure = 1.05;
+    if ('outputColorSpace' in t.renderer && THREE.SRGBColorSpace) {
+      t.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    } else if ('outputEncoding' in t.renderer && THREE.sRGBEncoding) {
+      t.renderer.outputEncoding = THREE.sRGBEncoding;
+    }
+    if (t.renderer.shadowMap) {
+      t.renderer.shadowMap.enabled = (DT.state.graphicsTier !== 'low');
+      if (THREE.PCFSoftShadowMap) t.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    }
     vp.appendChild(t.renderer.domElement);
+
+    // Image-based lighting: turn the sky gradient into a pre-filtered
+    // environment map so panel glass, aluminium frames and steel pick up real
+    // sky reflections. scene.environment auto-applies to every StandardMaterial
+    // -- the single biggest realism win, and cheap (2px equirect source).
+    try {
+      if (THREE.PMREMGenerator) {
+        var eq = _skyGradientTexture(THREE, ZENITH, HORIZON);
+        eq.mapping = THREE.EquirectangularReflectionMapping;
+        var pmrem = new THREE.PMREMGenerator(t.renderer);
+        pmrem.compileEquirectangularShader();
+        t.scene.environment = pmrem.fromEquirectangular(eq).texture;
+        eq.dispose(); pmrem.dispose();
+      }
+    } catch (e) { /* env map optional -- scene still renders without it */ }
 
     t.controls = new THREE.OrbitControls(t.camera, t.renderer.domElement);
     t.controls.enableDamping = true;
@@ -63,15 +91,23 @@
     t.controls.target.set(0, 0, 0);
     t.controls.update();
 
-    t.ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    // Env map already provides soft sky fill, so keep ambient low to preserve
+    // contrast (a high ambient is what makes primitive scenes look flat).
+    t.ambientLight = new THREE.AmbientLight(0xffffff, 0.18);
     t.scene.add(t.ambientLight);
-    t.hemiLight = new THREE.HemisphereLight(0xbcd4ec, 0x4e6b32, 0.45);
+    t.hemiLight = new THREE.HemisphereLight(0xbcd4ec, 0x4e6b32, 0.35);
     t.scene.add(t.hemiLight);
-    t.sunLight = new THREE.DirectionalLight(0xfff2d6, 1.0);
-    t.sunLight.position.set(100, 300, 100);
+    t.sunLight = new THREE.DirectionalLight(0xfff1d0, 2.2);
+    t.sunLight.position.set(600, 700, 400);
     if (t.sunLight.shadow && DT.state.graphicsTier !== 'low') {
       t.sunLight.castShadow = true;
-      t.sunLight.shadow.mapSize.set(1024, 1024);
+      t.sunLight.shadow.mapSize.set(2048, 2048);
+      var sc = t.sunLight.shadow.camera;
+      sc.near = 10; sc.far = 3500;
+      sc.left = -900; sc.right = 900; sc.top = 900; sc.bottom = -900;
+      sc.updateProjectionMatrix();
+      t.sunLight.shadow.bias = -0.0004;
+      t.sunLight.shadow.normalBias = 0.6;
     }
     t.scene.add(t.sunLight);
 

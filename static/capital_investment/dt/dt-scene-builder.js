@@ -34,6 +34,57 @@
 
   function tierShadows() { return (DT.state.graphicsTier || 'medium') !== 'low'; }
 
+  // ---- procedural textures (self-contained; CSP blocks external images) ----
+  var _texCache = {};
+
+  // Tiled grass: base green with per-pixel noise speckle + faint mottling so the
+  // ground reads as vegetation instead of a flat plane. Cached + repeat-wrapped.
+  function grassTexture() {
+    if (_texCache.grass) return _texCache.grass;
+    var THREE = window.THREE, S = 256;
+    var c = document.createElement('canvas'); c.width = c.height = S;
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = '#5f7f3d'; ctx.fillRect(0, 0, S, S);
+    var img = ctx.getImageData(0, 0, S, S), d = img.data;
+    for (var i = 0; i < d.length; i += 4) {
+      var n = (Math.random() - 0.5) * 46;          // fine grain
+      var m = (Math.random() < 0.04) ? -28 : 0;    // sparse darker tufts
+      d[i] = Math.max(0, Math.min(255, d[i] + n * 0.7 + m));
+      d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + n + m));
+      d[i + 2] = Math.max(0, Math.min(255, d[i + 2] + n * 0.5 + m));
+    }
+    ctx.putImageData(img, 0, 0);
+    var tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    _texCache.grass = tex;
+    return tex;
+  }
+
+  // PV module face: dark-blue cell grid with thin silver mullions + a bright
+  // specular streak, so a panel reads as glass-over-cells rather than a blue box.
+  function panelTexture() {
+    if (_texCache.panel) return _texCache.panel;
+    var THREE = window.THREE, W = 256, H = 128;
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = '#0e2350'; ctx.fillRect(0, 0, W, H);
+    var cols = 12, rows = 6, gx = W / cols, gy = H / rows;
+    for (var r = 0; r < rows; r++) for (var k = 0; k < cols; k++) {
+      ctx.fillStyle = (r + k) % 2 ? '#12305f' : '#0d1f47';
+      ctx.fillRect(k * gx + 1.5, r * gy + 1.5, gx - 3, gy - 3);
+    }
+    ctx.strokeStyle = 'rgba(190,205,225,0.55)'; ctx.lineWidth = 1.2;
+    for (var x = 0; x <= W; x += gx) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (var y = 0; y <= H; y += gy) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    var tex = new THREE.CanvasTexture(c);
+    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    _texCache.panel = tex;
+    return tex;
+  }
+
   // ---- individual object meshes ----
   function buildBox(o) {
     var THREE = window.THREE;
@@ -65,7 +116,19 @@
     var THREE = window.THREE, dm = o.dimensions || {};
     var side = dm.w || 300;
     var geom = new THREE.PlaneGeometry(side, side, 1, 1);
-    var mesh = new THREE.Mesh(geom, DT.materials.get('soil'));
+    // Own material (not the shared 'soil') so we can hang the tiled grass map on
+    // it without affecting other soil-coloured objects. One tile ~= 10 m.
+    var base = DT.materials.get('soil');
+    var mat = base.clone();
+    if (DT.state.graphicsTier !== 'low') {
+      var g = grassTexture();
+      var reps = Math.max(4, Math.round(side / 10));
+      g.repeat.set(reps, reps);
+      mat.map = g;
+      mat.color.set('#ffffff');   // let the texture supply the colour
+      mat.needsUpdate = true;
+    }
+    var mesh = new THREE.Mesh(geom, mat);
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.y = -0.02;
     mesh.receiveShadow = tierShadows();
@@ -102,6 +165,13 @@
     var first = rows[0].dimensions || {};
     var geom = new THREE.BoxGeometry(first.w || 2, first.h || 0.06, first.l || 100);
     var mat = DT.materials.get('pv_glass');
+    // Give the shared panel material a cell-grid map once so every instanced
+    // module reads as glass-over-cells (mullions + specular) rather than a box.
+    if (DT.state.graphicsTier !== 'low' && !mat.map) {
+      mat = mat.clone();
+      mat.map = panelTexture();
+      mat.needsUpdate = true;
+    }
     var inst = new THREE.InstancedMesh(geom, mat, rows.length);
     inst.castShadow = tierShadows();
     inst.receiveShadow = false;
@@ -126,6 +196,53 @@
     DT.three.instanced.pv_row = inst;
   }
 
+  // ---- decorative scenery (trees ring + distant hills) ----
+  // Adds life + depth around the farm to match the reference aerial. Purely
+  // decorative: not pickable, not indexed, lives in its own 'scenery' layer.
+  function buildScenery() {
+    if (DT.state.graphicsTier === 'low') return;
+    var THREE = window.THREE;
+    var site = (DT.scene && DT.scene.site) || {};
+    var half = (site.land_side_m || 600) / 2;
+    var g = group('scenery');
+
+    // Trees: two instanced meshes (trunk + canopy) scattered in a ring just
+    // outside the fence line.
+    var N = 96, d = new THREE.Object3D();
+    var trunkMat = new THREE.MeshStandardMaterial({ color: '#6b4a2b', roughness: 1 });
+    var canopyMat = new THREE.MeshStandardMaterial({ color: '#3f6b2e', roughness: 1, flatShading: true });
+    var trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.75, 4, 6), trunkMat, N);
+    var canopies = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.4, 0), canopyMat, N);
+    trunks.castShadow = canopies.castShadow = tierShadows();
+    for (var i = 0; i < N; i++) {
+      var ang = (i / N) * Math.PI * 2 + Math.random() * 0.5;
+      var rad = half * (1.14 + Math.random() * 0.9);
+      var x = Math.cos(ang) * rad, z = Math.sin(ang) * rad, s = 0.7 + Math.random() * 1.3;
+      d.rotation.set(0, Math.random() * 6.28, 0);
+      d.scale.set(s, s, s);
+      d.position.set(x, 2 * s, z); d.updateMatrix(); trunks.setMatrixAt(i, d.matrix);
+      d.position.set(x, 6.4 * s, z); d.updateMatrix(); canopies.setMatrixAt(i, d.matrix);
+    }
+    trunks.instanceMatrix.needsUpdate = canopies.instanceMatrix.needsUpdate = true;
+    g.add(trunks); g.add(canopies);
+
+    // Distant hills fading into the horizon haze (fog does the blending).
+    var hillMat = new THREE.MeshStandardMaterial({ color: '#819670', roughness: 1, flatShading: true });
+    var hills = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 6), hillMat, 16);
+    var hd = new THREE.Object3D();
+    for (var j = 0; j < 16; j++) {
+      var ha = (j / 16) * Math.PI * 2 + Math.random();
+      var hr = half * (4 + Math.random() * 2.5);
+      var hw = 500 + Math.random() * 700, hh = 160 + Math.random() * 260;
+      hd.rotation.set(0, Math.random() * 6.28, 0);
+      hd.scale.set(hw, hh, hw);
+      hd.position.set(Math.cos(ha) * hr, 0.5 * hh - 40, Math.sin(ha) * hr);
+      hd.updateMatrix(); hills.setMatrixAt(j, hd.matrix);
+    }
+    hills.instanceMatrix.needsUpdate = true;
+    g.add(hills);
+  }
+
   // ---- public build / rebuild ----
   function build() {
     var t = DT.three;
@@ -144,6 +261,7 @@
       var e = DT.objectIndex.get(o.id); if (e) e.mesh = mesh;
     });
     buildPvRows(rows);
+    buildScenery();
     DT.bus.emit('scene:built', DT.scene);
   }
 
