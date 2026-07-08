@@ -115,6 +115,13 @@ check("diag/schema", "/large-scale-solar/diag/schema", "gated")
 print("\n[E] Engineering deliverables exist + protected (2026-07-08)")
 check("electrical-sld", "/large-scale-solar/%d/electrical-sld" % PID, "gated")
 check("design-report", "/large-scale-solar/%d/design-report" % PID, "gated")
+check("photoreal showcase", "/large-scale-solar/%d/showcase" % PID, "gated")
+check("plant layout / plot plan", "/large-scale-solar/%d/site-layout" % PID, "gated")
+
+print("\n[F] Showcase scene assets (expect 200)")
+for f in ["farm-aerial", "scene-inverter", "scene-substation", "scene-panels", "scene-night"]:
+    check("hero %s.jpg" % f, "/static/capital_investment/hero/%s.jpg" % f, "asset")
+check("showcase.js", "/static/capital_investment/showcase.js", "asset")
 
 print("\n" + "=" * 68)
 print("RESULT: %d passed, %d failed" % (len(PASS), len(FAIL)))
