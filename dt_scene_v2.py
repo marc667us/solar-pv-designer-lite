@@ -47,7 +47,7 @@ MATERIALS: dict[str, dict[str, Any]] = {
     "aluminum_frame": {"color": "#9aa3ad", "roughness": 0.45, "metalness": 0.80},
     "concrete":       {"color": "#b8b2a6", "roughness": 0.90, "metalness": 0.02},
     "asphalt":        {"color": "#4a4a4a", "roughness": 0.95, "metalness": 0.00},
-    "soil":           {"color": "#3a4a2a", "roughness": 1.00, "metalness": 0.00},
+    "soil":           {"color": "#5f7f3d", "roughness": 1.00, "metalness": 0.00},
     "steel":          {"color": "#8892a0", "roughness": 0.40, "metalness": 0.85},
     "fence_metal":    {"color": "#c0a060", "roughness": 0.55, "metalness": 0.60},
     "building_wall":  {"color": "#e0c080", "roughness": 0.80, "metalness": 0.05},

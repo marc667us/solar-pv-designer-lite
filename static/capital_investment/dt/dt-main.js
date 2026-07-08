@@ -12,6 +12,25 @@
   var lastFrame = (window.performance || Date).now ? performance.now() : 0;
   var fpsAcc = 0, frames = 0;
 
+  // Build a vertical sky-gradient texture (zenith at top -> horizon haze at the
+  // bottom) for scene.background. A 2px-wide tall canvas is enough -- the GPU
+  // stretches it across the viewport, giving a smooth atmospheric sky rather
+  // than a flat colour. Colours are passed as 0xRRGGBB ints.
+  function _skyGradientTexture(THREE, zenithHex, horizonHex) {
+    var c = document.createElement('canvas'); c.width = 2; c.height = 512;
+    var ctx = c.getContext('2d');
+    function hex(n) { return '#' + ('000000' + n.toString(16)).slice(-6); }
+    var g = ctx.createLinearGradient(0, 0, 0, 512);
+    g.addColorStop(0.0, hex(zenithHex));
+    g.addColorStop(0.55, hex(zenithHex));
+    g.addColorStop(1.0, hex(horizonHex));
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 2, 512);
+    var tex = new THREE.CanvasTexture(c);
+    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    return tex;
+  }
+
   // ---------- three.js bootstrap ----------
   function init() {
     var THREE = window.THREE;
@@ -20,8 +39,13 @@
     var w = vp.clientWidth || 800, h = vp.clientHeight || 500;
     var t = DT.three;
     t.scene = new THREE.Scene();
-    t.scene.background = new THREE.Color(0x9ec6e6);
-    t.scene.fog = new THREE.Fog(0x9ec6e6, 400, 6000);
+    // Atmospheric sky: a vertical gradient (deep blue zenith -> pale haze at the
+    // horizon) instead of a flat fill, which read as a bad wall of colour behind
+    // the farm. The fog colour matches the horizon so distant ground melts into
+    // the haze the same way it does in the reference aerial.
+    var HORIZON = 0xdfeaf2, ZENITH = 0x5b8fc9;
+    t.scene.background = _skyGradientTexture(THREE, ZENITH, HORIZON);
+    t.scene.fog = new THREE.Fog(HORIZON, 600, 7000);
 
     t.camera = new THREE.PerspectiveCamera(45, w / h, 0.5, 12000);
     t.camera.position.set(200, 160, 200);
@@ -41,7 +65,7 @@
 
     t.ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
     t.scene.add(t.ambientLight);
-    t.hemiLight = new THREE.HemisphereLight(0x9ec6e6, 0x334422, 0.4);
+    t.hemiLight = new THREE.HemisphereLight(0xbcd4ec, 0x4e6b32, 0.45);
     t.scene.add(t.hemiLight);
     t.sunLight = new THREE.DirectionalLight(0xfff2d6, 1.0);
     t.sunLight.position.set(100, 300, 100);
@@ -78,15 +102,31 @@
   // ---------- labels (Phase 7, distance-culled) ----------
   function makeLabel(text, pos) {
     var THREE = window.THREE;
-    var c = document.createElement('canvas'); c.width = 256; c.height = 64;
+    // Render the label canvas at high resolution (4x the old 256x64) so the
+    // sprite text stays crisp when the camera is close -- the previous 256x64
+    // texture was magnified onto the sprite and looked blurred. Font scales
+    // with the canvas; rounded pill background reads cleaner than a hard rect.
+    var W = 1024, H = 256, pad = 28, r = 40;
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
     var ctx = c.getContext('2d');
-    ctx.fillStyle = 'rgba(10,16,21,0.75)'; ctx.fillRect(0, 0, 256, 64);
-    ctx.fillStyle = '#ffd54a'; ctx.font = 'bold 22px sans-serif';
-    ctx.fillText(String(text).slice(0, 22), 10, 40);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(10,16,21,0.82)';
+    // rounded-rect pill
+    ctx.beginPath();
+    ctx.moveTo(r, 0); ctx.arcTo(W, 0, W, H, r); ctx.arcTo(W, H, 0, H, r);
+    ctx.arcTo(0, H, 0, 0, r); ctx.arcTo(0, 0, W, 0, r); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffd54a';
+    ctx.font = 'bold 88px "Segoe UI", Arial, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(text).slice(0, 22), pad, H / 2 + 4);
     var tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;   // no mipmaps -> no shimmer, stays sharp
+    tex.magFilter = THREE.LinearFilter;
+    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
     var spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
     spr.position.set(pos[0], pos[1] + 6, pos[2]);
-    spr.scale.set(24, 6, 1);
+    spr.scale.set(28, 7, 1);   // world size; texture aspect 4:1 matches 28:7
     spr.visible = false;
     return spr;
   }
