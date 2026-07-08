@@ -91,6 +91,9 @@ for f in ["dt-state", "dt-materials", "dt-scene-builder", "dt-selection",
     check("module %s.js" % f, "/static/capital_investment/dt/%s.js" % f, "asset")
 check("three.min.js (r147 UMD)", "/static/vendor/three-r147-umd/three.min.js", "asset")
 check("OrbitControls.js", "/static/vendor/three-r147-umd/OrbitControls.js", "asset")
+check("GLTFLoader.js (r147)", "/static/vendor/three-r147-umd/GLTFLoader.js", "asset")
+check("dt-glb-models.js", "/static/capital_investment/dt/dt-glb-models.js", "asset")
+check("plant-kit.glb", "/static/capital_investment/dt/models/plant-kit.glb", "asset")
 
 print("\n[C] 3D Digital Twin routes exist + protected (expect 302, never 404/5xx)")
 check("digital-twin page", "/large-scale-solar/%d/digital-twin" % PID, "gated")
