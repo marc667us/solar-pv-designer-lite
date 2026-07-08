@@ -18,12 +18,22 @@
       <a class="btn btn-outline-warning {% if show == 'unread' %}active{% endif %}"
          href="{{ url_for('admin_inbox', show='unread') }}">Unread</a>
     </div>
-    {% if unread %}
-    <form method="POST" action="{{ url_for('admin_inbox_mark_all_read') }}" class="d-inline">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      <button class="btn btn-sm btn-outline-info"><i class="bi bi-check2-all"></i> Mark all read</button>
-    </form>
-    {% endif %}
+    <div class="d-flex gap-2">
+      {% if unread %}
+      <form method="POST" action="{{ url_for('admin_inbox_mark_all_read') }}" class="d-inline">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-info"><i class="bi bi-check2-all"></i> Mark all read</button>
+      </form>
+      {% endif %}
+      {% if total %}
+      <form method="POST" action="{{ url_for('admin_inbox_delete_all') }}" class="d-inline"
+            onsubmit="return confirm('Permanently delete {{ 'all unread' if show == 'unread' else 'ALL' }} notification messages in this inbox? This cannot be undone.');">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="show" value="{{ show }}">
+        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Delete all</button>
+      </form>
+      {% endif %}
+    </div>
   </div>
 
   {# ── Browser / device alert opt-in ─────────────────────────────────────── #}
@@ -90,12 +100,21 @@
               {% endif %}
             </div>
           </div>
-          {% if not n.read_at %}
-          <form method="POST" action="{{ url_for('admin_inbox_mark_read', nid=n.id) }}">
-            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-            <button class="btn btn-sm btn-outline-light" title="Mark read"><i class="bi bi-check2"></i></button>
-          </form>
-          {% endif %}
+          <div class="d-flex flex-column gap-1">
+            {% if not n.read_at %}
+            <form method="POST" action="{{ url_for('admin_inbox_mark_read', nid=n.id) }}">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-light w-100" title="Mark read"><i class="bi bi-check2"></i></button>
+            </form>
+            {% endif %}
+            <form method="POST" action="{{ url_for('admin_inbox_delete', nid=n.id) }}"
+                  onsubmit="return confirm('Delete this notification message?');">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+              <input type="hidden" name="show" value="{{ show }}">
+              <input type="hidden" name="page" value="{{ page }}">
+              <button class="btn btn-sm btn-outline-danger w-100" title="Delete"><i class="bi bi-trash"></i></button>
+            </form>
+          </div>
         </div>
       </div>
       {% endfor %}

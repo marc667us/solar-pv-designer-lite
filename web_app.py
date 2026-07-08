@@ -18593,6 +18593,10 @@ def _mp_pg_exec(sql_list):
     for sql in sql_list:
         try:
             with get_db() as c:
+                try:
+                    c.execute("SET LOCAL lock_timeout = '4s'")
+                except Exception:
+                    pass
                 c.execute(sql)
         except Exception as e:
             # Log and continue — duplicates/idempotency errors are expected.
@@ -18760,6 +18764,21 @@ def _ensure_marketplace_schema_postgres():
     ]
 
     _mp_pg_exec(create_stmts)
+    # 2026-07-07: widen free-text cols to TEXT so no product/RFQ/BOM value
+    # can ever overflow a legacy narrow VARCHAR on live Postgres.
+    _mp_pg_exec([
+        "ALTER TABLE rfqs ALTER COLUMN title TYPE TEXT",
+        "ALTER TABLE rfqs ALTER COLUMN delivery_country TYPE TEXT",
+        "ALTER TABLE rfqs ALTER COLUMN deadline_date TYPE TEXT",
+        "ALTER TABLE rfqs ALTER COLUMN sent_at TYPE TEXT",
+        "ALTER TABLE rfq_items ALTER COLUMN custom_name TYPE TEXT",
+        "ALTER TABLE rfq_items ALTER COLUMN unit TYPE TEXT",
+        "ALTER TABLE marketplace_boms ALTER COLUMN title TYPE TEXT",
+        "ALTER TABLE marketplace_boms ALTER COLUMN project_name TYPE TEXT",
+        "ALTER TABLE marketplace_boms ALTER COLUMN client_name TYPE TEXT",
+        "ALTER TABLE marketplace_bom_items ALTER COLUMN custom_name TYPE TEXT",
+        "ALTER TABLE marketplace_bom_items ALTER COLUMN unit TYPE TEXT",
+    ])
 
     # Seed the 18+ categories if empty. Plain INSERT idempotency via the
     # UNIQUE(code) constraint plus ON CONFLICT DO NOTHING — works on both
@@ -20272,6 +20291,13 @@ def _ensure_price_sheet_tables():
                 created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
             "CREATE INDEX IF NOT EXISTS idx_marketplace_price_sheet_items_sheet ON marketplace_price_sheet_items(sheet_id)",
+            "ALTER TABLE marketplace_price_sheets ALTER COLUMN title TYPE TEXT",
+            "ALTER TABLE marketplace_price_sheet_items ALTER COLUMN custom_name TYPE TEXT",
+            "ALTER TABLE marketplace_price_sheet_items ALTER COLUMN unit TYPE TEXT",
+            "ALTER TABLE marketplace_price_sheet_items ALTER COLUMN supplier_name TYPE TEXT",
+            "ALTER TABLE marketplace_price_sheet_items ALTER COLUMN supplier_brand TYPE TEXT",
+            "ALTER TABLE marketplace_price_sheet_items ALTER COLUMN supplier_phone TYPE TEXT",
+            "ALTER TABLE marketplace_price_sheet_items ALTER COLUMN supplier_email TYPE TEXT",
         ]:
             try:
                 with get_db() as c:
@@ -20519,12 +20545,12 @@ def procurement_center_add():
                     " supplier_email, supplier_address) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
-                        sheet_id, r["id"], r["name"], r["unit"] or "No.",
+                        sheet_id, r["id"], (r["name"] or "")[:300], (r["unit"] or "No.")[:20],
                         round(price_in_currency, 2),
-                        r["supplier_name"] or "",
-                        r["brand"] or "",
-                        r["supplier_phone"] or "",
-                        r["supplier_email"] or "",
+                        (r["supplier_name"] or "")[:200],
+                        (r["brand"] or "")[:120],
+                        (r["supplier_phone"] or "")[:40],
+                        (r["supplier_email"] or "")[:200],
                         r["supplier_address"] or "",
                     ),
                 )
@@ -20546,7 +20572,7 @@ def procurement_center_add():
                     "INSERT INTO marketplace_bom_items "
                     "(bom_id, product_id, custom_name, qty, unit) "
                     "VALUES (?, ?, ?, ?, ?)",
-                    (bom_id, r["id"], r["name"], 1, r["unit"] or "No."),
+                    (bom_id, r["id"], (r["name"] or "")[:300], 1, (r["unit"] or "No.")[:20]),
                 )
         flash(f"BOM created with {len(rows)} item{'s' if len(rows) != 1 else ''}.", "success")
         return redirect(url_for("boms_view", bom_id=bom_id))
@@ -20565,7 +20591,7 @@ def procurement_center_add():
                 "INSERT INTO marketplace_bom_items "
                 "(bom_id, product_id, custom_name, qty, unit) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (bom_id, r["id"], r["name"], 1, r["unit"] or "No."),
+                (bom_id, r["id"], (r["name"] or "")[:300], 1, (r["unit"] or "No.")[:20]),
             )
     flash(
         f"BOQ draft created with {len(rows)} item"
@@ -33587,6 +33613,11 @@ _BOQ_USER_OVERRIDES_ALTERS_PG = [
     "ALTER TABLE boq_user_item_overrides ADD COLUMN IF NOT EXISTS supply_pct REAL DEFAULT 0",
     "ALTER TABLE boq_user_item_overrides ADD COLUMN IF NOT EXISTS install_pct REAL DEFAULT 0",
     "ALTER TABLE boq_user_item_overrides ADD COLUMN IF NOT EXISTS last_qty REAL DEFAULT 0",
+    # 2026-07-07: widen free-text cols to TEXT (see StringDataRightTruncation
+    # incident note) so a legacy narrow VARCHAR can't overflow on live PG.
+    "ALTER TABLE boq_user_item_overrides ALTER COLUMN description_key TYPE TEXT",
+    "ALTER TABLE boq_user_item_overrides ALTER COLUMN unit TYPE TEXT",
+    "ALTER TABLE boq_user_item_overrides ALTER COLUMN last_description TYPE TEXT",
 ]
 
 
@@ -33594,17 +33625,21 @@ def _boq_ensure_overrides_table():
     """Idempotent bootstrap. Same pattern as ensure_boq_hierarchy_schema."""
     try:
         is_pg = bool(os.environ.get("DATABASE_URL"))
-        with get_db() as c:
-            if is_pg:
-                for stmt in _BOQ_USER_OVERRIDES_DDL_PG.strip().split(";"):
-                    s = stmt.strip()
-                    if s:
-                        try: c.execute(s)
+        if is_pg:
+            # Each DDL/ALTER in its OWN transaction: on Postgres a failed
+            # statement aborts the current txn and would skip the rest
+            # (Codex HIGH, 2026-07-07). Mirrors _mp_pg_exec.
+            _pg_ddl = [s.strip() for s in
+                      _BOQ_USER_OVERRIDES_DDL_PG.strip().split(";") if s.strip()]
+            for stmt in _pg_ddl + list(_BOQ_USER_OVERRIDES_ALTERS_PG):
+                try:
+                    with get_db() as c:
+                        try: c.execute("SET LOCAL lock_timeout = '4s'")
                         except Exception: pass
-                for stmt in _BOQ_USER_OVERRIDES_ALTERS_PG:
-                    try: c.execute(stmt)
-                    except Exception: pass
-            else:
+                        c.execute(stmt)
+                except Exception: pass
+        else:
+            with get_db() as c:
                 c.executescript(_BOQ_USER_OVERRIDES_DDL_SQLITE)
                 for stmt in _BOQ_USER_OVERRIDES_ALTERS:
                     try: c.execute(stmt)
@@ -38374,6 +38409,63 @@ def admin_inbox_mark_all_read():
         pass
     flash("All notifications marked as read.", "success")
     return redirect(url_for("admin_inbox"))
+
+
+@app.route("/admin/inbox/<int:nid>/delete", methods=["POST"])
+@admin_required
+def admin_inbox_delete(nid):
+    """Permanently delete a single admin notification message from the inbox.
+    Admin-only + CSRF-protected + audit-logged. Idempotent: deleting an
+    already-gone row is a no-op. Returns JSON for fetch callers, else redirects
+    back to the same inbox view (show/page preserved)."""
+    csrf_protect()
+    try:
+        with get_db() as c:
+            _ensure_admin_notifications_table(c)
+            c.execute("DELETE FROM admin_notifications WHERE id=?", (nid,))
+    except Exception:
+        app.logger.exception("admin_inbox_delete failed")
+    try:
+        _write_audit_event("admin_inbox_delete", user_id=session.get("user_id"))
+    except Exception:
+        pass
+    if request.is_json or request.headers.get("X-Requested-With") == "fetch":
+        return jsonify({"ok": True, "unread": _inbox_unread_count()})
+    return redirect(url_for("admin_inbox",
+                            show=request.form.get("show", "all"),
+                            page=request.form.get("page", 1)))
+
+
+@app.route("/admin/inbox/delete-all", methods=["POST"])
+@admin_required
+def admin_inbox_delete_all():
+    """Permanently delete inbox messages. Honours the current view: the
+    'unread' filter deletes only unread rows; any other view clears the whole
+    inbox. Admin-only + CSRF-protected + audit-logged."""
+    csrf_protect()
+    show = request.form.get("show", "all")
+    deleted = 0
+    try:
+        with get_db() as c:
+            _ensure_admin_notifications_table(c)
+            if show == "unread":
+                cur = c.execute(
+                    "DELETE FROM admin_notifications WHERE read_at IS NULL")
+            else:
+                cur = c.execute("DELETE FROM admin_notifications")
+            try:
+                deleted = int(cur.rowcount or 0)
+            except Exception:
+                deleted = 0
+    except Exception:
+        app.logger.exception("admin_inbox_delete_all failed")
+    try:
+        _write_audit_event("admin_inbox_delete_all", user_id=session.get("user_id"))
+    except Exception:
+        pass
+    flash(("Deleted %d unread notification(s)." % deleted) if show == "unread"
+          else ("Deleted %d notification(s)." % deleted), "success")
+    return redirect(url_for("admin_inbox", show=show))
 
 
 @app.route("/admin/inbox/settings", methods=["POST"])

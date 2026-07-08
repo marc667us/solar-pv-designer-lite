@@ -429,14 +429,51 @@ _PG_ALTERS_RATE_V3 = [
 
 
 # 2026-06-29: Build by Template retired -- see _SQLITE_ALTERS_BUILD_MODE.
-# subsection_label widened to 200 chars: spec-derived service skeletons
-# include subsections like "Temperature / humidity / CO2 / pressure /
-# occupancy / air-quality" (65 chars) that don't fit the legacy
-# VARCHAR(20). On SQLite TEXT has no width so no parallel ALTER needed.
+# subsection_label was previously widened to VARCHAR(200); as of 2026-07-07 it
+# is widened all the way to TEXT in _PG_ALTERS_WIDEN_TEXT. The old
+# `ALTER COLUMN subsection_label TYPE VARCHAR(200)` was REMOVED here because,
+# once the column is TEXT, re-narrowing it to VARCHAR(200) on the next cold
+# start would fail on any >200-char value and (in a shared transaction) abort
+# the widening block -- the exact "incident persists" trap Codex flagged.
 _PG_ALTERS_BUILD_MODE = [
     "ALTER TABLE boq_projects ADD COLUMN IF NOT EXISTS build_mode VARCHAR(40) DEFAULT 'complete_boq'",
     "ALTER TABLE boq_floor_items ADD COLUMN IF NOT EXISTS service_code VARCHAR(40) DEFAULT ''",
-    "ALTER TABLE boq_floor_items ALTER COLUMN subsection_label TYPE VARCHAR(200)",
+]
+
+
+# 2026-07-07: Live incident — StringDataRightTruncation ("value too long for
+# type character varying(N)") on the Generation Center / Large-Scale-Solar BOQ
+# save path. Spec-derived item descriptions (e.g. "Supply, install, test and
+# commission ..." + concatenated specification text) routinely exceed the
+# legacy VARCHAR(500) on boq_floor_items.description, and long building /
+# section / subsection names overflow their columns too. Widening every
+# free-text column to unbounded TEXT makes truncation structurally impossible.
+# `ALTER COLUMN ... TYPE TEXT` is a no-op when the column is already TEXT, so
+# this is safe to run on every cold start via _try_each (errors swallowed).
+_PG_ALTERS_WIDEN_TEXT = [
+    "ALTER TABLE boq_projects   ALTER COLUMN project_name TYPE TEXT",
+    "ALTER TABLE boq_projects   ALTER COLUMN client_name  TYPE TEXT",
+    "ALTER TABLE boq_projects   ALTER COLUMN location      TYPE TEXT",
+    "ALTER TABLE boq_buildings  ALTER COLUMN building_name              TYPE TEXT",
+    "ALTER TABLE boq_buildings  ALTER COLUMN building_code              TYPE TEXT",
+    "ALTER TABLE boq_buildings  ALTER COLUMN purpose_subtype            TYPE TEXT",
+    "ALTER TABLE boq_buildings  ALTER COLUMN other_purpose_description  TYPE TEXT",
+    "ALTER TABLE boq_floors     ALTER COLUMN floor_name TYPE TEXT",
+    "ALTER TABLE boq_floor_items ALTER COLUMN section         TYPE TEXT",
+    "ALTER TABLE boq_floor_items ALTER COLUMN subsection      TYPE TEXT",
+    "ALTER TABLE boq_floor_items ALTER COLUMN item_no         TYPE TEXT",
+    "ALTER TABLE boq_floor_items ALTER COLUMN description     TYPE TEXT",
+    "ALTER TABLE boq_floor_items ALTER COLUMN unit            TYPE TEXT",
+    "ALTER TABLE boq_floor_items ALTER COLUMN source_type     TYPE TEXT",
+    "ALTER TABLE boq_floor_items ALTER COLUMN approval_status TYPE TEXT",
+    "ALTER TABLE boq_floor_items ALTER COLUMN subsection_label TYPE TEXT",
+    "ALTER TABLE boq_floor_items ALTER COLUMN service_code    TYPE TEXT",
+    "ALTER TABLE boq_floor_items ALTER COLUMN bill_name       TYPE TEXT",
+    "ALTER TABLE boq_floor_items ALTER COLUMN section_letter  TYPE TEXT",
+    "ALTER TABLE boq_floor_items ALTER COLUMN item_no_display TYPE TEXT",
+    "ALTER TABLE boq_section_meta ALTER COLUMN custom_title TYPE TEXT",
+    "ALTER TABLE boq_audit_log  ALTER COLUMN action      TYPE TEXT",
+    "ALTER TABLE boq_audit_log  ALTER COLUMN target_kind TYPE TEXT",
 ]
 
 
@@ -446,6 +483,29 @@ def _try_each(c, stmts: Iterable[str]) -> None:
     for s in stmts:
         try:
             c.execute(s)
+        except Exception:
+            pass
+
+
+def _try_each_isolated(get_db_fn, stmts: Iterable[str]) -> None:
+    """Like _try_each, but each statement runs in its OWN transaction.
+
+    On Postgres a failed DDL aborts the *current* transaction, so a shared-
+    connection loop (_try_each) silently skips every remaining statement with
+    InFailedSqlTransaction. That is fatal for the widening block below: one bad
+    ALTER must not stop the rest. Opening a fresh `with get_db_fn()` per
+    statement gives each its own txn (mirrors web_app._mp_pg_exec). A short
+    lock_timeout keeps a metadata-only varchar->text change from queueing
+    behind long-running live traffic; if it times out we just retry next boot.
+    """
+    for s in stmts:
+        try:
+            with get_db_fn() as c:
+                try:
+                    c.execute("SET LOCAL lock_timeout = '4s'")
+                except Exception:
+                    pass
+                c.execute(s)
         except Exception:
             pass
 
@@ -461,6 +521,10 @@ def ensure_boq_hierarchy_schema(get_db_fn) -> None:
             _try_each(c, _PG_CREATE_TABLES)
             _try_each(c, _PG_ALTERS_RATE_V3)
             _try_each(c, _PG_ALTERS_BUILD_MODE)
+        # Widen free-text columns to TEXT in per-statement transactions so one
+        # failed ALTER can't abort the rest (Codex HIGH, 2026-07-07). Runs
+        # AFTER the shared-txn block above has committed/closed.
+        _try_each_isolated(get_db_fn, _PG_ALTERS_WIDEN_TEXT)
         _BOQ_SCHEMA_DONE["pg"] = True
         return
 

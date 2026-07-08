@@ -264,12 +264,12 @@ def procurement_center_add():
                     " supplier_email, supplier_address) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
-                        sheet_id, r["id"], r["name"], r["unit"] or "No.",
+                        sheet_id, r["id"], (r["name"] or "")[:300], (r["unit"] or "No.")[:20],
                         round(price_in_currency, 2),
-                        r["supplier_name"] or "",
-                        r["brand"] or "",
-                        r["supplier_phone"] or "",
-                        r["supplier_email"] or "",
+                        (r["supplier_name"] or "")[:200],
+                        (r["brand"] or "")[:120],
+                        (r["supplier_phone"] or "")[:40],
+                        (r["supplier_email"] or "")[:200],
                         r["supplier_address"] or "",
                     ),
                 )
@@ -291,7 +291,7 @@ def procurement_center_add():
                     "INSERT INTO marketplace_bom_items "
                     "(bom_id, product_id, custom_name, qty, unit) "
                     "VALUES (?, ?, ?, ?, ?)",
-                    (bom_id, r["id"], r["name"], 1, r["unit"] or "No."),
+                    (bom_id, r["id"], (r["name"] or "")[:300], 1, (r["unit"] or "No.")[:20]),
                 )
         flash(f"BOM created with {len(rows)} item{'s' if len(rows) != 1 else ''}.", "success")
         return redirect(url_for("boms_view", bom_id=bom_id))
@@ -310,7 +310,7 @@ def procurement_center_add():
                 "INSERT INTO marketplace_bom_items "
                 "(bom_id, product_id, custom_name, qty, unit) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (bom_id, r["id"], r["name"], 1, r["unit"] or "No."),
+                (bom_id, r["id"], (r["name"] or "")[:300], 1, (r["unit"] or "No.")[:20]),
             )
     flash(
         f"BOQ draft created with {len(rows)} item"
