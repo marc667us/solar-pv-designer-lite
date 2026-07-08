@@ -272,7 +272,7 @@
           <svg viewBox="0 0 100 100" style="width:82px;height:82px;flex:0 0 auto">
             {% set ns = namespace(off=0.0) %}
             {% set C = 251.2 %}
-            {% for it in L.items %}
+            {% for it in L['items'] %}
               {% set seg = C * it.pct / L.total_pct %}
               <circle cx="50" cy="50" r="40" fill="none" stroke="{{ it.color }}" stroke-width="15"
                       stroke-dasharray="{{ '%.1f'|format(seg) }} {{ '%.1f'|format(C - seg) }}"
@@ -284,7 +284,7 @@
             <text x="50" y="60" text-anchor="middle" fill="#94a3b8" font-size="7">Total losses</text>
           </svg>
           <div class="flex-grow-1" style="font-size:9px;line-height:1.55">
-            {% for it in L.items %}
+            {% for it in L['items'] %}
             <div class="d-flex justify-content-between">
               <span><span style="display:inline-block;width:8px;height:8px;background:{{ it.color }};border-radius:2px;margin-right:4px"></span>{{ it.label }}</span>
               <span class="text-secondary">{{ '%.1f'|format(it.pct) }}%</span>
