@@ -4286,9 +4286,9 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
     pv_field_w = max(pv_field_x_end - pv_field_x_start, 20.0)
 
     # Row layout: single-axis tracker rows aligned N-S; row pitch = 6m;
-    # row width = 2m; row length spans the plot with 5m gap at either end.
+    # row width = 4m; row length spans the plot with 5m gap at either end.
     row_pitch = float(pv_cfg.get("row_pitch_m") or 6.0)
-    row_width = 2.0
+    row_width = 4.0
     row_length = max(pv_field_w - 10.0, 10.0)
     # Number of rows we can physically fit.
     max_rows = max(1, int(pv_field_l / row_pitch))

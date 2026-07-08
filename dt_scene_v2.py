@@ -287,16 +287,16 @@ def camera_presets(land_side_m: float) -> dict[str, dict[str, Any]]:
                         "fov": 45, "label": "West"},
         "birdseye":    {"position": [s * 0.7, s * 0.5, s * 0.7], "target": [0, 0, 0],
                         "fov": 45, "label": "Bird's eye"},
-        "drone":       {"position": [s * 0.4, s * 0.25, s * 0.4], "target": [0, 5, 0],
-                        "fov": 55, "label": "Drone"},
+        "drone":       {"position": [s * 0.30, s * 0.34, s * 0.58], "target": [0, 3, -s * 0.06],
+                        "fov": 52, "label": "Drone"},
         "walkthrough": {"position": [-half + 10, 2.0, half - 10], "target": [0, 2, 0],
                         "fov": 65, "label": "Ground walkthrough"},
         "technician":  {"position": [half - 25, 3.0, half - 25], "target": [half - 20, 2, half - 20],
                         "fov": 60, "label": "Technician"},
         "maintenance": {"position": [0, 6, half - 15], "target": [0, 1.5, 0],
                         "fov": 60, "label": "Maintenance route"},
-        "investor":    {"position": [s * 0.85, s * 0.45, s * 0.85], "target": [0, 0, 0],
-                        "fov": 40, "label": "Investor aerial"},
+        "investor":    {"position": [s * 0.35, s * 0.18, s * 0.62], "target": [0, 6, -s * 0.08],
+                        "fov": 44, "label": "Investor aerial"},
         "construction":{"position": [s * 0.5, s * 0.4, -s * 0.5], "target": [0, 0, 0],
                         "fov": 50, "label": "Construction"},
         "night":       {"position": [s * 0.6, s * 0.4, s * 0.6], "target": [0, 0, 0],
@@ -316,7 +316,7 @@ def simulation_modes_meta() -> dict[str, dict[str, Any]]:
     return {
         "plan_2d":     {"label": "2D Plan", "camera": "top", "lighting": "flat",
                         "labels": True, "layers": "all", "analysis": "properties"},
-        "three_d":     {"label": "3D View", "camera": "birdseye", "lighting": "day",
+        "three_d":     {"label": "3D View", "camera": "drone", "lighting": "day",
                         "labels": True, "layers": "all", "analysis": "properties"},
         "sun_path":    {"label": "Sun Path", "camera": "birdseye", "lighting": "day",
                         "labels": False, "layers": "all", "analysis": "sun"},
@@ -377,10 +377,17 @@ def _editable_parameters(scene: dict[str, Any]) -> dict[str, Any]:
 
 
 def _recommended_tier(n_modules: int, n_objects: int) -> str:
-    """Pick a default graphics tier from scene weight (low|medium|high)."""
-    if n_modules >= 60000 or n_objects >= 600:
+    """Pick a default graphics tier from scene weight (low|medium|high).
+
+    PV modules are drawn as a SINGLE InstancedMesh, so module count is nearly
+    free and must NOT force the low tier (that was stripping textures, shadows,
+    grass, scenery and the mounting structure from every large farm, leaving it
+    a flat wash of thin lines). Fidelity is gated on the number of individually
+    drawn objects (buildings/inverters/masts), which is what actually costs.
+    """
+    if n_objects >= 900:
         return "low"
-    if n_modules >= 8000 or n_objects >= 150:
+    if n_objects >= 350:
         return "medium"
     return "high"
 
@@ -418,10 +425,15 @@ def augment_scene_v2(scene: dict[str, Any],
         "marketplace": "/marketplace",
         "reports":     f"/large-scale-solar/{pid}/step13",
     }
+    # Count only INDIVIDUALLY drawn objects for the tier heuristic -- PV rows
+    # collapse into one InstancedMesh, so they must not push a big farm to low.
+    n_drawn = sum(1 for o in objects
+                  if o.get("layer") not in ("pv_row", "pv_array"))
     scene["performance"] = {
-        "recommended_tier": _recommended_tier(n_modules, len(objects)),
+        "recommended_tier": _recommended_tier(n_modules, n_drawn),
         "estimated_modules": n_modules,
         "estimated_objects": len(objects),
+        "estimated_drawn_objects": n_drawn,
     }
     scene["camera_presets"] = camera_presets(
         (scene.get("terrain") or {}).get("side_m")

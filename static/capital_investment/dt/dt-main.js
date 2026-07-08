@@ -286,12 +286,13 @@
       var fps = Math.round(1000 * 30 / fpsAcc); fpsAcc = 0;
       var el = document.getElementById('hud-fps'); if (el) el.textContent = fps + ' fps';
     }
-    // Distance-cull labels.
+    // Distance-cull labels -- scaled to the site so a big farm's equipment
+    // labels don't vanish (a flat 600 m cut hid every building on a 775 m site).
     if (DT.state.labelsVisible && t.labelSprites.length) {
       var cp = t.camera.position;
+      var cull = Math.max(700, (((DT.scene || {}).terrain || {}).side_m || 400) * 2.5);
       t.labelSprites.forEach(function (s) {
-        var d = s.position.distanceTo(cp);
-        s.visible = d < 600;
+        s.visible = s.position.distanceTo(cp) < cull;
       });
     }
     if (t.controls) t.controls.update();
