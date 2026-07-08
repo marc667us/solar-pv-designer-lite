@@ -10380,6 +10380,25 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             report=build_design_report(proj),
         )
 
+    # ------------------------------------------------------------------
+    # GET /large-scale-solar/<pid>/showcase -- customer-facing PHOTOREAL
+    # showcase (self-hosted scene imagery + live project KPIs/callouts).
+    # Reuses build_showcase_model (sizing + Step-8 finance); no new engine.
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/<int:pid>/showcase",
+               endpoint="capital_investment_showcase")
+    @login_required
+    def _showcase(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        proj = _load_project(pid)
+        from dt_showcase import build_showcase_model
+        return render_template(
+            "capital_investment/showcase.html",
+            user=current_user(), proj=proj, progress=_wp(proj),
+            show=build_showcase_model(proj),
+        )
+
     @app.route("/large-scale-solar/<int:pid>/dt/scene.json",
                endpoint="capital_investment_dt_scene")
     @login_required
