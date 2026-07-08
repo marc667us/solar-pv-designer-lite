@@ -168,11 +168,18 @@ def _obj_from_legacy(o: dict[str, Any], pid: Any,
     meta = o.get("meta") or {}
     tilt = float(o.get("tilt_deg") or 0.0)
     az = float(o.get("azimuth_deg") or 0.0)
-    # PV rows tilt about the East-West (X) axis and yaw to face their azimuth;
-    # everything else sits axis-aligned. rotation_deg is [x, y, z] in degrees.
-    rot = [(-tilt if layer in ("pv_row", "pv_array") else 0.0),
-           (-(az - 180.0) if layer in ("pv_row", "pv_array") else 0.0),
-           0.0]
+    _w = float(o.get("w") or 0.0)
+    _l = float(o.get("l") or 0.0)
+    # PV rows must tilt about their LONG horizontal axis so the narrow module
+    # face angles up (a tilted table); tilting the long axis instead turns the
+    # row into a flat ramp that reads as a "band of lines" from above. Pick the
+    # axis from the footprint: a row long in Z tilts about Z, a row long in X
+    # tilts about X. Yaw orients it to the azimuth. rotation_deg is [x,y,z] deg.
+    if layer in ("pv_row", "pv_array"):
+        yaw = -(az - 180.0)
+        rot = [0.0, yaw, tilt] if _l >= _w else [-tilt, yaw, 0.0]
+    else:
+        rot = [0.0, 0.0, 0.0]
     return {
         "id":    o.get("id") or f"{layer}_obj",
         "type":  layer,

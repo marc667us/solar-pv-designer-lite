@@ -79,6 +79,7 @@
     for (var x = 0; x <= W; x += gx) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
     for (var y = 0; y <= H; y += gy) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
     var tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;   // tile along the row length
     if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 8;
     _texCache.panel = tex;
@@ -163,13 +164,20 @@
     if (!rows.length) return;
     var THREE = window.THREE;
     var first = rows[0].dimensions || {};
-    var geom = new THREE.BoxGeometry(first.w || 2, first.h || 0.06, first.l || 100);
+    // Thin panel slab, but tall enough (0.12 m) to read as a table edge. Tilt
+    // comes from the server rotation_deg (about the row's long axis).
+    var rowW = first.w || 2, rowL = first.l || 100;
+    var geom = new THREE.BoxGeometry(rowW, Math.max(first.h || 0.06, 0.12), rowL);
     var mat = DT.materials.get('pv_glass');
-    // Give the shared panel material a cell-grid map once so every instanced
-    // module reads as glass-over-cells (mullions + specular) rather than a box.
+    // Give the shared panel material a cell-grid map + repeat it along the row
+    // so each row reads as a TABLE OF MODULES (many cells) instead of one box.
     if (DT.state.graphicsTier !== 'low' && !mat.map) {
       mat = mat.clone();
-      mat.map = panelTexture();
+      var ptex = panelTexture();
+      var mods = ((rows[0].meta || {}).modules) || Math.max(8, Math.round(rowL / 2));
+      // baked grid = 6 cells across V per tile; tile so total V-cells ~= modules.
+      ptex.repeat.set(1, Math.max(1, Math.round(mods / 6)));
+      mat.map = ptex;
       mat.needsUpdate = true;
     }
     var inst = new THREE.InstancedMesh(geom, mat, rows.length);

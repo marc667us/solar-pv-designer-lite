@@ -78,8 +78,15 @@ def test_pv_rows_marked_instanced_and_rotated():
     assert len(rows) == 5
     for r in rows:
         assert r["render"]["instanced"] is True
-        # tilt 12 -> rotation_deg[0] == -12 (panels tilt about the X axis)
-        assert r["transform"]["rotation_deg"][0] == pytest.approx(-12.0)
+        # Panels tilt about their LONG horizontal axis so the module face angles
+        # up (a tilted table), not the long axis (which would be a flat ramp
+        # reading as a "band of lines"). The fixture rows are long in Z (l=180,
+        # w=2), so tilt 12 -> rotation_deg[2] == 12, rotation_deg[0] == 0.
+        rot = r["transform"]["rotation_deg"]
+        dim = r["dimensions"]
+        long_axis_idx = 2 if dim["l"] >= dim["w"] else 0
+        assert rot[long_axis_idx] == pytest.approx(12.0)
+        assert rot[2 if long_axis_idx == 0 else 0] == pytest.approx(0.0)
 
 
 def test_top_level_v2_blocks_present():

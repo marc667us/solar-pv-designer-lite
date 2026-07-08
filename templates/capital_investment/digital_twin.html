@@ -194,28 +194,119 @@
   </div>
 </div>
 
-{# ================= SUMMARY CARDS ================= #}
+{# ============= SUMMARY + ANALYTICS ROW (reference bottom strip) ============= #}
 <div class="row g-2 mt-2">
-  <div class="col-md-6">
-    <div class="solar-card p-2">
+
+  {# ---- PROJECT SUMMARY ---- #}
+  <div class="col-lg-3 col-md-6">
+    <div class="solar-card p-2 h-100">
       <div class="text-secondary" style="font-size:10px;letter-spacing:.5px">PROJECT SUMMARY</div>
-      <div class="d-flex flex-wrap gap-3 mt-1">
+      <div class="d-flex flex-wrap gap-3 mt-2">
         {{ sumcard('AC Capacity','dt-sum-ac') }}{{ sumcard('DC Capacity','dt-sum-dc') }}
         {{ sumcard('Modules','dt-sum-modules') }}{{ sumcard('Inverters','dt-sum-inv') }}
         {{ sumcard('PV Rows','dt-sum-rows') }}{{ sumcard('Land Area','dt-sum-land') }}
       </div>
     </div>
   </div>
-  <div class="col-md-6">
-    <div class="solar-card p-2">
-      <div class="text-secondary" style="font-size:10px;letter-spacing:.5px">ENGINEERING NOTE</div>
-      <div class="small text-secondary mt-1">
-        Every object is generated from project data and linked to the existing BOQ,
-        Marketplace and Financial workspaces. Parameter changes re-run the existing
-        sizing engine and rebuild the scene live. Shadow figures are row-level
-        engineering estimates, not a bankable PVsyst trace.
+
+  {# ---- FINANCIAL SUMMARY (live from Step-8 finance engine) ---- #}
+  <div class="col-lg-3 col-md-6">
+    <div class="solar-card p-2 h-100">
+      <div class="text-secondary" style="font-size:10px;letter-spacing:.5px">FINANCIAL SUMMARY</div>
+      {% if metrics.finance.available %}
+      {% set f = metrics.finance %}
+      <div class="row g-2 mt-1 small">
+        <div class="col-6"><div class="text-secondary" style="font-size:9px">CAPEX</div>
+          <div class="fw-bold text-light">{{ f.currency }} {{ '{:,.0f}'.format(f.capex) if f.capex else '--' }}</div></div>
+        <div class="col-6"><div class="text-secondary" style="font-size:9px">ANNUAL ENERGY</div>
+          <div class="fw-bold text-light">{{ '{:,.0f}'.format(f.annual_energy_mwh) if f.annual_energy_mwh else '--' }} MWh</div></div>
+        <div class="col-6"><div class="text-secondary" style="font-size:9px">LCOE</div>
+          <div class="fw-bold text-warning">{{ f.currency }} {{ '%.3f'|format(f.lcoe) if f.lcoe else '--' }}<span class="text-secondary">/kWh</span></div></div>
+        <div class="col-6"><div class="text-secondary" style="font-size:9px">PROJECT IRR</div>
+          <div class="fw-bold text-success">{{ '%.1f'|format(f.irr_pct) if f.irr_pct is not none else '--' }}%</div></div>
       </div>
+      {% else %}
+      <div class="text-secondary small mt-2">Run <strong>Step 8 · Finance</strong> to populate CAPEX, LCOE and IRR.</div>
+      {% endif %}
     </div>
+  </div>
+
+  {# ---- ENERGY PRODUCTION (representative-day yield curve) ---- #}
+  <div class="col-lg-3 col-md-6">
+    <div class="solar-card p-2 h-100">
+      <div class="d-flex justify-content-between">
+        <div class="text-secondary" style="font-size:10px;letter-spacing:.5px">ENERGY PRODUCTION</div>
+        <div class="text-secondary" style="font-size:9px">representative day</div>
+      </div>
+      {% if metrics.energy.daily and metrics.energy.daily.mwh %}
+        {% set d = metrics.energy.daily %}
+        {% set pk = d.peak_mw if d.peak_mw and d.peak_mw > 0 else 1 %}
+        <svg viewBox="0 0 240 84" style="width:100%;height:74px" preserveAspectRatio="none">
+          {% for i in range(d.hours|length) %}
+            {% set h = d.hours[i] %}
+            {% if h >= 4 and h <= 20 %}
+              {% set bh = (d.mwh[i] / pk * 70) %}
+              <rect x="{{ (h-4)*14 + 3 }}" y="{{ 76 - bh }}" width="11"
+                    height="{{ '%.1f'|format(bh if bh > 0.5 else 0.5) }}" rx="1" fill="#4ade80" opacity="0.9"></rect>
+            {% endif %}
+          {% endfor %}
+          <line x1="0" y1="76" x2="240" y2="76" stroke="#334155" stroke-width="1"></line>
+        </svg>
+        <div class="d-flex justify-content-between text-secondary" style="font-size:9px">
+          <span>04h</span><span>peak {{ '%.1f'|format(d.peak_mw) }} MW</span><span>20h</span>
+        </div>
+      {% else %}
+        <div class="text-secondary small mt-2">Complete <strong>Step 7 · PV sizing</strong> to see the yield curve.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ---- SYSTEM LOSSES donut (total real, category split modelled) ---- #}
+  <div class="col-lg-3 col-md-6">
+    <div class="solar-card p-2 h-100">
+      <div class="text-secondary" style="font-size:10px;letter-spacing:.5px">SYSTEM LOSSES
+        <span class="text-secondary" style="font-size:8px">· modelled split</span></div>
+      {% if metrics.losses.available %}
+        {% set L = metrics.losses %}
+        <div class="d-flex align-items-center gap-2 mt-1">
+          <svg viewBox="0 0 100 100" style="width:82px;height:82px;flex:0 0 auto">
+            {% set ns = namespace(off=0.0) %}
+            {% set C = 251.2 %}
+            {% for it in L.items %}
+              {% set seg = C * it.pct / L.total_pct %}
+              <circle cx="50" cy="50" r="40" fill="none" stroke="{{ it.color }}" stroke-width="15"
+                      stroke-dasharray="{{ '%.1f'|format(seg) }} {{ '%.1f'|format(C - seg) }}"
+                      stroke-dashoffset="{{ '%.1f'|format(-ns.off) }}"
+                      transform="rotate(-90 50 50)"></circle>
+              {% set ns.off = ns.off + seg %}
+            {% endfor %}
+            <text x="50" y="47" text-anchor="middle" fill="#f1f5f9" font-size="16" font-weight="bold">{{ '%.1f'|format(L.total_pct) }}%</text>
+            <text x="50" y="60" text-anchor="middle" fill="#94a3b8" font-size="7">Total losses</text>
+          </svg>
+          <div class="flex-grow-1" style="font-size:9px;line-height:1.55">
+            {% for it in L.items %}
+            <div class="d-flex justify-content-between">
+              <span><span style="display:inline-block;width:8px;height:8px;background:{{ it.color }};border-radius:2px;margin-right:4px"></span>{{ it.label }}</span>
+              <span class="text-secondary">{{ '%.1f'|format(it.pct) }}%</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% else %}
+        <div class="text-secondary small mt-2">Performance ratio not set — complete <strong>Step 7 · sizing</strong>.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ---- engineering provenance note (slim, full width) ---- #}
+<div class="solar-card p-2 mt-2">
+  <div class="small text-secondary">
+    Every object is generated from project data and linked to the existing BOQ,
+    Marketplace and Financial workspaces. Finance figures read live from Step 8;
+    the energy curve derives from the Step-7 sizing yield; the loss stack applies
+    conventional PVsyst-style category shares to the project performance ratio
+    (the total is the real project figure, the category split is modelled).
   </div>
 </div>
 
