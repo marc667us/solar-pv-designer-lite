@@ -10399,6 +10399,25 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             show=build_showcase_model(proj),
         )
 
+    # ------------------------------------------------------------------
+    # GET /large-scale-solar/<pid>/site-layout -- scaled plot plan of the
+    # physical plant arrangement. Reuses build_site_layout_model (sizing via
+    # build_sld_model); no new engine.
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/<int:pid>/site-layout",
+               endpoint="capital_investment_site_layout")
+    @login_required
+    def _site_layout(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        proj = _load_project(pid)
+        from dt_site_layout import build_site_layout_model
+        return render_template(
+            "capital_investment/site_layout.html",
+            user=current_user(), proj=proj, progress=_wp(proj),
+            report=build_site_layout_model(proj),
+        )
+
     @app.route("/large-scale-solar/<int:pid>/dt/scene.json",
                endpoint="capital_investment_dt_scene")
     @login_required

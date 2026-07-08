@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Plant Layout / Plot Plan - {{ proj.project_name }}{% endblock %}
+{% block content %}
+{# ===================================================================
+   Plant LAYOUT / PLOT PLAN. Scaled top-down site arrangement rendered from
+   dt_site_layout.build_site_layout_model(proj), which REUSES the committed PV
+   sizing (size_utility_pv via build_sld_model) -- no new sizing engine.
+   All geometry is in site metres; the SVG viewBox is the site envelope.
+   =================================================================== #}
+<style>
+  .pp-wrap { max-width: 1120px; margin: 0 auto; }
+  .pp-card { background:#0f1826; border:1px solid #1c2a3d; border-radius:12px; padding:14px 16px; }
+  .pp-svg { width:100%; height:auto; background:#0b1220; border:1px solid #1c2a3d; border-radius:10px; display:block; }
+  .pp-legend { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:10px; }
+  .pp-legend div { font-size:11.5px; color:#cbd5e1; display:flex; align-items:center; gap:6px; }
+  .pp-legend .sw { width:14px; height:11px; border-radius:2px; display:inline-block; border:1px solid #33507f; }
+  .std-chip { display:inline-block; background:#14233a; border:1px solid #24405f; color:#9db8d6;
+    font-size:9.5px; border-radius:6px; padding:1px 6px; margin:2px 3px 0 0; }
+  .pp-table th, .pp-table td { font-size:11.5px; padding:4px 8px; }
+  @media print { .no-print { display:none !important; } body { background:#fff; } }
+</style>
+
+{% set s = report.site %}
+{% set f = report.fence %}
+<div class="pp-wrap">
+  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="fw-black mb-0"><i class="bi bi-map text-warning me-1"></i>Plant Layout / Plot Plan</h5>
+      <div class="text-secondary small">{{ report.project.name }} &middot;
+        {{ '%.0f'|format(report.project.ac_mw) }} MWac &middot;
+        {{ '%.1f'|format(s.area_ha) }} ha &middot;
+        {{ report.project.n_blocks }} inverter blocks</div>
+    </div>
+    <div class="d-flex gap-2 no-print">
+      <a href="{{ url_for('capital_investment_electrical_sld', pid=proj.id) }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-diagram-2 me-1"></i>Electrical SLD</a>
+      <a href="{{ url_for('capital_investment_showcase', pid=proj.id) }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-camera-reels me-1"></i>Showcase</a>
+      <button onclick="window.print()" class="btn btn-sm btn-outline-warning"><i class="bi bi-printer me-1"></i>Print / PDF</button>
+    </div>
+  </div>
+
+  <div class="pp-card mb-3">
+    {# viewBox padded so dimension labels + north arrow have room #}
+    <svg class="pp-svg" viewBox="-70 -70 {{ s.w_m + 140 }} {{ s.h_m + 150 }}"
+         preserveAspectRatio="xMidYMid meet" role="img" aria-label="Plant plot plan">
+      <!-- site ground -->
+      <rect x="0" y="0" width="{{ s.w_m }}" height="{{ s.h_m }}" fill="#0e2417" stroke="#2c3a24" stroke-width="2"/>
+
+      <!-- perimeter fence (dashed) -->
+      <rect x="{{ f.x }}" y="{{ f.y }}" width="{{ f.w }}" height="{{ f.h }}"
+            fill="none" stroke="#94a3b8" stroke-width="3" stroke-dasharray="14 8"/>
+
+      <!-- access roads -->
+      {% for rd in report.roads %}
+      <polyline points="{% for px, py in rd.points %}{{ '%.1f'|format(px) }},{{ '%.1f'|format(py) }} {% endfor %}"
+                fill="none" stroke="#6b7280" stroke-width="{{ 9 if rd.kind=='ring' else 7 }}" stroke-linejoin="round"/>
+      <polyline points="{% for px, py in rd.points %}{{ '%.1f'|format(px) }},{{ '%.1f'|format(py) }} {% endfor %}"
+                fill="none" stroke="#9aa3af" stroke-width="1.5" stroke-dasharray="10 10"/>
+      {% endfor %}
+
+      <!-- PV array blocks with row hatching -->
+      {% for b in report.blocks %}
+      <g>
+        <rect x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h }}"
+              fill="#16324f" stroke="#3b6ea5" stroke-width="1.2" rx="1.5"/>
+        {% set nlines = 5 %}
+        {% for i in range(1, nlines) %}
+        <line x1="{{ b.x + 2 }}" y1="{{ (b.y + b.h * i / nlines)|round(1) }}"
+              x2="{{ b.x + b.w - 2 }}" y2="{{ (b.y + b.h * i / nlines)|round(1) }}"
+              stroke="#24507f" stroke-width="0.8"/>
+        {% endfor %}
+      </g>
+      {% endfor %}
+
+      <!-- inverter + transformer skids -->
+      {% for k in report.skids %}
+      <rect x="{{ k.x - 5 }}" y="{{ k.y - 4 }}" width="10" height="8" fill="#f59e0b" stroke="#7a4d06" stroke-width="0.6" rx="1"/>
+      {% endfor %}
+
+      <!-- substation compound -->
+      {% set sub = report.substation %}
+      <rect x="{{ sub.x }}" y="{{ sub.y }}" width="{{ sub.w }}" height="{{ sub.h }}"
+            fill="#3b5a7a" stroke="#8fb3d6" stroke-width="2" rx="2"/>
+      {% for i in range(1,4) %}
+      <line x1="{{ sub.x + sub.w * i/4 }}" y1="{{ sub.y }}" x2="{{ sub.x + sub.w * i/4 }}" y2="{{ sub.y + sub.h }}" stroke="#5f83a8" stroke-width="1"/>
+      {% endfor %}
+      <text x="{{ sub.x + sub.w/2 }}" y="{{ sub.y + sub.h/2 }}" fill="#eaf2fb" font-size="18" font-weight="700" text-anchor="middle" dominant-baseline="middle">SUBSTATION</text>
+
+      <!-- control / O&M building -->
+      {% set ct = report.control %}
+      <rect x="{{ ct.x }}" y="{{ ct.y }}" width="{{ ct.w }}" height="{{ ct.h }}"
+            fill="#5b8fb0" stroke="#bcd6ea" stroke-width="1.5" rx="2"/>
+      <text x="{{ ct.x + ct.w/2 }}" y="{{ ct.y + ct.h/2 }}" fill="#0b1220" font-size="10" font-weight="700" text-anchor="middle" dominant-baseline="middle">CONTROL / O&amp;M</text>
+
+      <!-- entrance gate -->
+      <rect x="{{ report.gate.x - 22 }}" y="{{ report.gate.y - 4 }}" width="44" height="8" fill="#e2e8f0" stroke="#334155" stroke-width="1"/>
+      <text x="{{ report.gate.x }}" y="{{ report.gate.y - 12 }}" fill="#cbd5e1" font-size="15" text-anchor="middle">MAIN GATE</text>
+
+      <!-- overall dimensions -->
+      <line x1="0" y1="-26" x2="{{ s.w_m }}" y2="-26" stroke="#7ea2cc" stroke-width="1"/>
+      <line x1="0" y1="-31" x2="0" y2="-21" stroke="#7ea2cc" stroke-width="1"/>
+      <line x1="{{ s.w_m }}" y1="-31" x2="{{ s.w_m }}" y2="-21" stroke="#7ea2cc" stroke-width="1"/>
+      <text x="{{ s.w_m/2 }}" y="-32" fill="#9db8d6" font-size="17" text-anchor="middle">{{ '%.0f'|format(s.w_m) }} m</text>
+      <line x1="-26" y1="0" x2="-26" y2="{{ s.h_m }}" stroke="#7ea2cc" stroke-width="1"/>
+      <line x1="-31" y1="0" x2="-21" y2="0" stroke="#7ea2cc" stroke-width="1"/>
+      <line x1="-31" y1="{{ s.h_m }}" x2="-21" y2="{{ s.h_m }}" stroke="#7ea2cc" stroke-width="1"/>
+      <text x="-34" y="{{ s.h_m/2 }}" fill="#9db8d6" font-size="17" text-anchor="middle" transform="rotate(-90 -34 {{ s.h_m/2 }})">{{ '%.0f'|format(s.h_m) }} m</text>
+
+      <!-- north arrow (top-right) -->
+      <g transform="translate({{ s.w_m + 34 }}, 44)">
+        <circle r="26" fill="#0b1220" stroke="#33507f" stroke-width="1.5"/>
+        <polygon points="0,-20 7,6 0,0 -7,6" fill="#f59e0b" stroke="#7a4d06" stroke-width="0.6"/>
+        <text x="0" y="-24" fill="#e6edf3" font-size="15" text-anchor="middle" font-weight="700">N</text>
+      </g>
+
+      <!-- graphic scale bar (bottom-left, 200 m) -->
+      <g transform="translate(0, {{ s.h_m + 34 }})">
+        <rect x="0" y="0" width="100" height="9" fill="#e6edf3"/>
+        <rect x="100" y="0" width="100" height="9" fill="#0b1220" stroke="#e6edf3" stroke-width="1"/>
+        <text x="0" y="26" fill="#9db8d6" font-size="15">0</text>
+        <text x="100" y="26" fill="#9db8d6" font-size="15" text-anchor="middle">100</text>
+        <text x="200" y="26" fill="#9db8d6" font-size="15" text-anchor="middle">200 m</text>
+      </g>
+    </svg>
+
+    <div class="pp-legend">
+      {% for lg in report.legend %}
+      <div><span class="sw" style="background:{{ lg.fill }}"></span>{{ lg.label }}</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-lg-7">
+      <div class="pp-card h-100">
+        <div class="fw-bold text-warning mb-2" style="font-size:12px;letter-spacing:.5px">LAYOUT SCHEDULE</div>
+        <table class="table table-dark table-sm pp-table mb-0">
+          <tbody>
+            {% for label, val, unit in report.schedule %}
+            <tr><td class="text-secondary">{{ label }}</td><td class="text-end fw-bold">{{ val }}</td>
+              <td class="text-secondary" style="width:64px">{{ unit }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="pp-card h-100">
+        <div class="fw-bold text-warning mb-2" style="font-size:12px;letter-spacing:.5px">BASIS &amp; STANDARDS</div>
+        <div class="small text-secondary mb-2">
+          Block count = one array subfield per central inverter station; each block
+          carries its inverter + LV/MV step-up transformer skid. Dimensions are
+          indicative (~1.2 ha/MWp) and refine against the topographic survey,
+          setbacks and the grid-connection agreement.
+        </div>
+        <div>{% for st in report.standards %}<span class="std-chip">{{ st }}</span>{% endfor %}</div>
+        <div class="mt-3 no-print">
+          <a href="{{ url_for('capital_investment_design_report', pid=proj.id) }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-journal-richtext me-1"></i>Design Report</a>
+          <a href="{{ url_for('capital_investment_digital_twin', pid=proj.id) }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-badge-3d me-1"></i>3D Twin</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
