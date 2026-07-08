@@ -90,6 +90,8 @@
         {{ '{:,}'.format(sld.project.n_modules) }} modules</div>
     </div>
     <div class="d-flex gap-2 no-print">
+      <a href="{{ url_for('capital_investment_design_report', pid=proj.id) }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-journal-richtext me-1"></i>Design Report</a>
       <a href="{{ url_for('capital_investment_digital_twin', pid=proj.id) }}" class="btn btn-sm btn-outline-secondary">
         <i class="bi bi-badge-3d me-1"></i>3D Twin</a>
       <button onclick="window.print()" class="btn btn-sm btn-outline-warning"><i class="bi bi-printer me-1"></i>Print / PDF</button>

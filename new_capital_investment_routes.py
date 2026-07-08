@@ -10360,6 +10360,26 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             sld=build_sld_model(proj),
         )
 
+    # ------------------------------------------------------------------
+    # GET /large-scale-solar/<pid>/design-report -- comprehensive,
+    # calculation-showing engineering design report for client + government
+    # engineers. Reuses build_design_report (which consumes size_utility_pv
+    # + the SLD model); no new sizing engine. Ghana + IEC cited per calc.
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/<int:pid>/design-report",
+               endpoint="capital_investment_design_report")
+    @login_required
+    def _design_report(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        proj = _load_project(pid)
+        from dt_design_report import build_design_report
+        return render_template(
+            "capital_investment/design_report.html",
+            user=current_user(), proj=proj, progress=_wp(proj),
+            report=build_design_report(proj),
+        )
+
     @app.route("/large-scale-solar/<int:pid>/dt/scene.json",
                endpoint="capital_investment_dt_scene")
     @login_required

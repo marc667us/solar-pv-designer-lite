@@ -188,6 +188,8 @@
          class="btn btn-sm btn-outline-secondary text-start"><i class="bi bi-file-earmark-text me-1"></i>Reports</a>
       <a href="{{ url_for('capital_investment_electrical_sld', pid=proj.id) }}"
          class="btn btn-sm btn-outline-secondary text-start"><i class="bi bi-diagram-2 me-1"></i>Electrical SLD</a>
+      <a href="{{ url_for('capital_investment_design_report', pid=proj.id) }}"
+         class="btn btn-sm btn-outline-secondary text-start"><i class="bi bi-journal-richtext me-1"></i>Design Report</a>
       <a href="{{ url_for('capital_investment_step8', pid=proj.id) }}"
          class="btn btn-sm btn-outline-secondary text-start"><i class="bi bi-graph-up me-1"></i>Financials</a>
       <button id="exp-png" class="btn btn-sm btn-outline-warning text-start"><i class="bi bi-image me-1"></i>Export PNG</button>

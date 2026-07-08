@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}Engineering Design Report - {{ proj.project_name }}{% endblock %}
+{% block content %}
+{# ===================================================================
+   Comprehensive engineering DESIGN REPORT (client + government engineers).
+   Server-rendered from dt_design_report.build_design_report(proj), which
+   REUSES the committed PV sizing (size_utility_pv) + the SLD model -- no new
+   sizing engine. Every calculation shows formula / inputs / result / standard
+   so an independent reviewer can reproduce each number. Ghana + IEC cited.
+   =================================================================== #}
+<style>
+  .dr-wrap { max-width: 1080px; margin: 0 auto; }
+  .dr-sec { background:#0f1826; border:1px solid #1c2a3d; border-radius:12px;
+    padding:14px 16px; margin-bottom:18px; }
+  .dr-sec h6 { color:#f59e0b; font-weight:800; font-size:12.5px; letter-spacing:.5px;
+    text-transform:uppercase; margin-bottom:10px; }
+  .dr-calc { border-top:1px solid #1c2a3d; padding:9px 0; }
+  .dr-calc:first-of-type { border-top:none; }
+  .dr-calc .t { font-weight:700; color:#e6edf3; font-size:12.5px; }
+  .dr-calc .f { font-family:ui-monospace,Menlo,Consolas,monospace; color:#9db8d6;
+    font-size:11.5px; background:#0b1220; border:1px solid #1c2a3d; border-radius:6px;
+    padding:3px 8px; display:inline-block; margin:3px 0; }
+  .dr-calc .i { color:#8aa0b4; font-size:11px; }
+  .dr-calc .r { color:#7ee0a6; font-weight:700; font-size:12.5px; }
+  .dr-calc .r.warn { color:#ffb454; }
+  .std-chip { display:inline-block; background:#14233a; border:1px solid #24405f;
+    color:#9db8d6; font-size:9.5px; border-radius:6px; padding:1px 6px; margin:2px 3px 0 0; }
+  .dr-table th, .dr-table td { font-size:11.5px; padding:4px 8px; }
+  .dr-kpi { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:10px; margin-bottom:6px; }
+  .dr-kpi .k { background:#0b1220; border:1px solid #1c2a3d; border-radius:10px;
+    padding:10px 12px; }
+  .dr-kpi .k .v { color:#f59e0b; font-weight:800; font-size:18px; }
+  .dr-kpi .k .l { color:#8aa0b4; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; }
+  .ref-grid { columns:2; column-gap:26px; }
+  .ref-grid div { break-inside:avoid; font-size:11.5px; margin-bottom:5px; color:#cbd5e1; }
+  .ref-grid code { color:#f59e0b; }
+  @media print { .no-print { display:none !important; } body { background:#fff; } }
+</style>
+
+<div class="dr-wrap">
+  {# ---------------- HEADER ---------------- #}
+  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="fw-black mb-0"><i class="bi bi-journal-richtext text-warning me-1"></i>Engineering Design Report</h5>
+      <div class="text-secondary small">{{ report.project.name }} &middot;
+        {{ '%.0f'|format(report.project.dc_kwp) }} kWp DC &middot;
+        {{ '%.1f'|format(report.project.ac_mw) }} MWac &middot;
+        {{ '{:,}'.format(report.project.n_modules) }} modules</div>
+    </div>
+    <div class="d-flex gap-2 no-print">
+      <a href="{{ url_for('capital_investment_electrical_sld', pid=proj.id) }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-diagram-2 me-1"></i>Electrical SLD</a>
+      <a href="{{ url_for('capital_investment_digital_twin', pid=proj.id) }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-badge-3d me-1"></i>3D Twin</a>
+      <button onclick="window.print()" class="btn btn-sm btn-outline-warning"><i class="bi bi-printer me-1"></i>Print / PDF</button>
+    </div>
+  </div>
+
+  {# ---------------- HEADLINE KPIs ---------------- #}
+  {% set y = report.yield.summary %}
+  <div class="dr-kpi">
+    <div class="k"><div class="v">{{ '%.0f'|format(report.yield.pr * 100) }}%</div><div class="l">Performance Ratio</div></div>
+    <div class="k"><div class="v">{{ '{:,.0f}'.format(y.specific_yield) }}</div><div class="l">kWh/kWp/yr</div></div>
+    <div class="k"><div class="v">{{ '{:,.0f}'.format(y.annual_mwh) }}</div><div class="l">MWh / year</div></div>
+    <div class="k"><div class="v">{{ '%.1f'|format(y.capacity_factor) }}%</div><div class="l">Capacity factor</div></div>
+    <div class="k"><div class="v">{{ '{:,.0f}'.format(y.lifetime_gwh) }}</div><div class="l">GWh (25-yr)</div></div>
+  </div>
+
+  <div class="dr-sec">
+    <div class="small text-secondary">{{ report.generated_note }}</div>
+    {% if report.flags %}
+    <div class="alert alert-warning py-2 px-3 mt-2 mb-0 small">
+      <i class="bi bi-exclamation-triangle me-1"></i>
+      {% for f in report.flags %}{{ f }}{% if not loop.last %}; {% endif %}{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  {# ---------------- CALCULATION SECTIONS ---------------- #}
+  {% for sec in report.sections %}
+  <div class="dr-sec">
+    <h6>{{ loop.index }}. {{ sec.title }}</h6>
+
+    {% if sec.calcs %}
+      {% for c in sec.calcs %}
+      <div class="dr-calc">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <span class="t">{{ c.title }}</span>
+          <span class="r {{ 'warn' if 'REVIEW' in c.result else '' }}">{{ c.result }}</span>
+        </div>
+        <div><span class="f">{{ c.formula }}</span></div>
+        <div class="i">{{ c.inputs }}</div>
+        <div><span class="std-chip">{{ c.standard }}</span></div>
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    {# Earthing section carries components/target instead of calcs #}
+    {% if sec.components %}
+      <div class="small text-light mb-1">{{ sec.system }}</div>
+      <ul class="small text-secondary mb-2" style="padding-left:1.1rem">
+        {% for comp in sec.components %}<li>{{ comp }}</li>{% endfor %}
+      </ul>
+      <div class="small text-warning mb-2">{{ sec.target }}</div>
+      <div>{% for st in sec.standards %}<span class="std-chip">{{ st }}</span>{% endfor %}</div>
+    {% endif %}
+
+    {# Cable schedule under the cabling section #}
+    {% if sec.schedule %}
+      <div class="table-responsive mt-2">
+      <table class="table table-dark table-sm dr-table mb-0">
+        <thead><tr><th>Segment</th><th>Type</th><th>Size</th><th class="text-end">Length</th><th>Std</th></tr></thead>
+        <tbody>
+          {% for cab in sec.schedule %}
+          <tr><td>{{ cab.segment }}</td><td>{{ cab.type }}</td><td>{{ cab.size }}</td>
+            <td class="text-end">{% if cab.length_m %}{{ '{:,}'.format(cab.length_m) }} m{% else %}&mdash;{% endif %}</td>
+            <td class="text-secondary" style="font-size:10px">{{ cab.standard }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    {% endif %}
+
+    {# Loss breakdown table under the yield section #}
+    {% if sec.loss_rows %}
+      <div class="table-responsive mt-2">
+      <table class="table table-dark table-sm dr-table mb-0">
+        <thead><tr><th>Loss mechanism</th><th class="text-end">%</th><th>Basis</th></tr></thead>
+        <tbody>
+          {% for lr in sec.loss_rows %}
+          <tr><td>{{ lr.name }}</td><td class="text-end fw-bold text-warning">{{ '%.1f'|format(lr.pct) }}%</td>
+            <td class="text-secondary" style="font-size:10.5px">{{ lr.basis }}</td></tr>
+          {% endfor %}
+          <tr class="table-active"><td class="fw-bold">Performance Ratio (product)</td>
+            <td class="text-end fw-bold text-success">{{ '%.1f'|format(sec.pr * 100) }}%</td>
+            <td class="text-secondary" style="font-size:10.5px">PR = &prod;(1 &minus; loss)</td></tr>
+        </tbody>
+      </table>
+      </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {# ---------------- PV MOUNTING DETAIL ---------------- #}
+  {% set mt = report.mounting %}
+  <div class="dr-sec">
+    <h6>{{ report.sections|length + 1 }}. PV mounting &amp; support detail</h6>
+    <div class="row g-3 align-items-center">
+      <div class="col-md-6">
+        <svg viewBox="0 0 360 200" style="width:100%;max-width:420px;background:#0b1220;border:1px solid #1c2a3d;border-radius:8px">
+          <rect x="0" y="150" width="360" height="50" fill="#243318"/>
+          <line x1="0" y1="150" x2="360" y2="150" stroke="#4b5b2e" stroke-width="2"/>
+          <rect x="96" y="92" width="7" height="58" fill="#8892a0"/>
+          <rect x="250" y="120" width="7" height="30" fill="#8892a0"/>
+          <line x1="99.5" y1="150" x2="99.5" y2="185" stroke="#8892a0" stroke-width="7" stroke-dasharray="3 3" opacity="0.6"/>
+          <line x1="253.5" y1="150" x2="253.5" y2="180" stroke="#8892a0" stroke-width="7" stroke-dasharray="3 3" opacity="0.6"/>
+          <line x1="92" y1="96" x2="256" y2="124" stroke="#b9c2cf" stroke-width="5"/>
+          <polygon points="86,86 262,116 260,124 84,94" fill="#12305f" stroke="#6f86ad" stroke-width="1.5"/>
+          {% for i in range(1,7) %}
+          <line x1="{{ 86 + i*29 }}" y1="{{ 86 + i*5 }}" x2="{{ 84 + i*29 }}" y2="{{ 94 + i*5 }}" stroke="#33507f" stroke-width="0.8"/>
+          {% endfor %}
+          <line x1="86" y1="90" x2="150" y2="90" stroke="#f59e0b" stroke-width="1" stroke-dasharray="4 3"/>
+          <text x="132" y="86" fill="#f59e0b" font-size="10">{{ '%.0f'|format(mt.tilt_deg) }}&deg;</text>
+          <line x1="300" y1="118" x2="300" y2="150" stroke="#94a3b8" stroke-width="1"/>
+          <text x="304" y="138" fill="#94a3b8" font-size="9">{{ '%.1f'|format(mt.ground_clearance_m) }} m</text>
+          <text x="150" y="70" fill="#cbd5e1" font-size="10" text-anchor="middle">PV modules (2P)</text>
+          <text x="178" y="140" fill="#9db8d6" font-size="9">torque tube</text>
+          <text x="70" y="176" fill="#9db8d6" font-size="9">driven pile</text>
+        </svg>
+      </div>
+      <div class="col-md-6">
+        <table class="table table-dark table-sm dr-table mb-1">
+          <tbody>
+            <tr><td class="text-secondary">Structure</td><td>{{ mt.structure }}</td></tr>
+            <tr><td class="text-secondary">Tilt / azimuth</td><td>{{ '%.0f'|format(mt.tilt_deg) }}&deg; / {{ '%.0f'|format(mt.azimuth_deg) }}&deg;</td></tr>
+            <tr><td class="text-secondary">Modules per table</td><td>{{ mt.modules_per_table }} ({{ mt.module_orientation }})</td></tr>
+            <tr><td class="text-secondary">Posts / foundation</td><td>{{ mt.posts }}; {{ mt.foundation }}</td></tr>
+            <tr><td class="text-secondary">Ground clearance / pitch</td><td>{{ '%.1f'|format(mt.ground_clearance_m) }} m / {{ '%.1f'|format(mt.row_pitch_m) }} m</td></tr>
+            <tr><td class="text-secondary">Design loads</td><td>{{ mt.design_loads }}</td></tr>
+          </tbody>
+        </table>
+        <div>{% for st in mt.standards %}<span class="std-chip">{{ st }}</span>{% endfor %}</div>
+      </div>
+    </div>
+  </div>
+
+  {# ---------------- INPUT VARIABLE REGISTER ---------------- #}
+  <div class="row g-3 mb-3">
+    <div class="col-lg-6">
+      <div class="dr-sec h-100">
+        <h6>Site &amp; resource inputs</h6>
+        <table class="table table-dark table-sm dr-table mb-0">
+          <tbody>
+            {% for label, val, unit in report.site_inputs %}
+            <tr><td class="text-secondary">{{ label }}</td><td class="text-end fw-bold">{{ val }}</td>
+              <td class="text-secondary" style="width:80px">{{ unit }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="dr-sec h-100">
+        <h6>Design inputs &amp; ratings</h6>
+        <table class="table table-dark table-sm dr-table mb-0">
+          <tbody>
+            {% for label, val, unit in report.design_inputs %}
+            <tr><td class="text-secondary">{{ label }}</td><td class="text-end fw-bold">{{ val }}</td>
+              <td class="text-secondary" style="width:52px">{{ unit }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {# ---------------- REFERENCES ---------------- #}
+  <div class="dr-sec">
+    <h6>Applicable standards &amp; references (Ghana + IEC)</h6>
+    <div class="ref-grid">
+      {% for r in report.references %}<div><code>{{ r.code }}</code> &mdash; {{ r.title }}</div>{% endfor %}
+    </div>
+  </div>
+
+  {# ---------------- ASSUMPTIONS + SIGN-OFF ---------------- #}
+  <div class="dr-sec">
+    <h6>Assumptions, limitations &amp; verification</h6>
+    <ul class="small text-secondary" style="padding-left:1.1rem">
+      <li>All quantities are reproduced from the project's committed PV sizing (Step&nbsp;7); this report adds no separate sizing engine.</li>
+      <li>Resource (PSH/GHI) and temperatures use the site configuration where provided, else conservative Ghana defaults &mdash; confirm against a bankable meteo dataset (e.g. Meteonorm / NASA POWER / SolarGIS) before financial close.</li>
+      <li>Cable sizes and voltage-drops are indicative at the stated route lengths; final selection follows a full IEC&nbsp;60287 ampacity + IEC&nbsp;60364-5-52 drop study per feeder.</li>
+      <li>Loss factors are typical hot-climate fixed-tilt values; a site-specific PVsyst/SAM yield model should confirm the Performance Ratio before contract.</li>
+      <li>Grid-interface settings (protection, LVRT, P/Q) are subject to the GRIDCo/ECG connection agreement and Energy Commission licensing.</li>
+    </ul>
+    <div class="row g-3 mt-1 small">
+      <div class="col-md-4"><div class="text-secondary">Prepared by</div>
+        <div style="border-bottom:1px solid #33507f;height:26px"></div>
+        <div class="text-secondary" style="font-size:10px">Design engineer &middot; date</div></div>
+      <div class="col-md-4"><div class="text-secondary">Checked / verified</div>
+        <div style="border-bottom:1px solid #33507f;height:26px"></div>
+        <div class="text-secondary" style="font-size:10px">Reviewing engineer &middot; date</div></div>
+      <div class="col-md-4"><div class="text-secondary">Approved (client / authority)</div>
+        <div style="border-bottom:1px solid #33507f;height:26px"></div>
+        <div class="text-secondary" style="font-size:10px">Authority engineer &middot; date</div></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
