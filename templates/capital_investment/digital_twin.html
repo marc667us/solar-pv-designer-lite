@@ -453,11 +453,14 @@
   window.DT_ACTION_URL   = "{{ url_for('capital_investment_dt_object_action', pid=proj.id) }}";
   window.DT_SHADOW_URL   = "{{ url_for('capital_investment_dt_shadow', pid=proj.id) }}";
   window.DT_SCHEDULE_URL = "{{ url_for('capital_investment_dt_object_schedule', pid=proj.id) }}";
+  // Photoreal equipment models (GLB). Additive + guarded; set false to disable.
+  window.DT_GLB_ENABLED  = true;
 </script>
 
 {# ---- vendored Three.js (self-hosted, no external CDN) ---- #}
 <script src="/static/vendor/three-r147-umd/three.min.js"></script>
 <script src="/static/vendor/three-r147-umd/OrbitControls.js"></script>
+<script src="/static/vendor/three-r147-umd/GLTFLoader.js"></script>
 
 {# ---- Digital Twin modules (dependency order; dt-main starts last) ---- #}
 <script src="{{ url_for('static', filename='capital_investment/dt/dt-state.js') }}"></script>
@@ -475,5 +478,8 @@
 
 {# ---- tool-rail + object-tooltip wiring (layout-local; uses public DT API) ---- #}
 <script src="{{ url_for('static', filename='capital_investment/dt/dt-toolrail.js') }}"></script>
+
+{# ---- OPTIONAL photoreal equipment models (GLB); guarded, uses public DT API ---- #}
+<script src="{{ url_for('static', filename='capital_investment/dt/dt-glb-models.js') }}"></script>
 
 {% endblock %}
