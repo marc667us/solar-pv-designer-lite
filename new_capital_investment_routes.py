@@ -10341,6 +10341,25 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             metrics=_ci_dt_metrics(proj),
         )
 
+    # ------------------------------------------------------------------
+    # GET /large-scale-solar/<pid>/electrical-sld -- Single-Line Diagram
+    # + PV mounting detail. Reuses pv_config.sizing via dt_electrical_sld
+    # (no new sizing engine); Ghana + IEC referenced for the design report.
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/<int:pid>/electrical-sld",
+               endpoint="capital_investment_electrical_sld")
+    @login_required
+    def _electrical_sld(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        proj = _load_project(pid)
+        from dt_electrical_sld import build_sld_model
+        return render_template(
+            "capital_investment/electrical_sld.html",
+            user=current_user(), proj=proj, progress=_wp(proj),
+            sld=build_sld_model(proj),
+        )
+
     @app.route("/large-scale-solar/<int:pid>/dt/scene.json",
                endpoint="capital_investment_dt_scene")
     @login_required
