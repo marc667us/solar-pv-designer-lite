@@ -206,6 +206,84 @@
     DT.three.instanced.pv_row = inst;
   }
 
+  // ---- PV mounting structure (torque tube + support legs) ----
+  // Real utility arrays are TABLES on posts, not floating slabs -- the single
+  // biggest realism gap. Built as two instanced meshes (one tube per row, two
+  // legs per row) added to the 'pv_row' group so they toggle + shadow with the
+  // panels. Decorative only: not pickable, not indexed. Tier/size gated so a
+  // 100 MW (low-tier) farm skips it and never pays the instance cost.
+  function buildPvSupports(rows) {
+    if (DT.state.graphicsTier === 'low') return;
+    if (!rows.length || rows.length > 4000) return;    // hard perf cap
+    var THREE = window.THREE;
+    var first = rows[0].dimensions || {};
+    var rowW = first.w || 2, rowL = first.l || 100;
+    var rowH = Math.max(first.h || 0.06, 0.12);
+    var longZ = rowL >= rowW;                          // long axis is Z when l>=w
+    var steel = DT.materials.get('steel');
+    // Support structure casts shadows only on the high tier -- the extra shadow
+    // passes are the one place this could bite a weak GPU at the row cap.
+    var supShadow = tierShadows() && (DT.state.graphicsTier === 'high');
+    var ZERO = new THREE.Matrix4().makeScale(0, 0, 0);   // hide mismatched rows
+
+    // Torque tube: a slim beam the length of the row, sunk just below the
+    // modules. It shares each panel's full matrix (so it inherits the tilt);
+    // the downward offset is baked into the geometry.
+    var tubeLen = (longZ ? rowL : rowW) * 0.98;
+    var tubeGeom = longZ ? new THREE.BoxGeometry(0.14, 0.14, tubeLen)
+                         : new THREE.BoxGeometry(tubeLen, 0.14, 0.14);
+    tubeGeom.translate(0, -(rowH / 2 + 0.16), 0);
+    var tubes = new THREE.InstancedMesh(tubeGeom, steel, rows.length);
+    tubes.castShadow = supShadow; tubes.receiveShadow = false;
+
+    // Two vertical legs per row, standing on the ground under the long-axis
+    // ends. Their x/z footprint is read from the panel matrix (points on the
+    // long-axis centre-line are invariant to tilt-about-long-axis, so this is
+    // correct whichever rotation convention the server used).
+    var legs = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.07, 0.09, 1, 6), steel, rows.length * 2);
+    legs.castShadow = supShadow; legs.receiveShadow = false;
+
+    var dP = new THREE.Object3D(), dL = new THREE.Object3D();
+    var end = new THREE.Vector3(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
+    var li = 0;
+    rows.forEach(function (o, i) {
+      var p = (o.transform || {}).position || [0, 0, 0];
+      var rot = euler((o.transform || {}).rotation_deg);
+      var dm = o.dimensions || {};
+      // The shared tube geometry is oriented for the row[0] long axis. If a row
+      // ever flips orientation (heterogeneous scene), hide its supports rather
+      // than lay them along the wrong axis.
+      if (((dm.l || rowL) >= (dm.w || rowW)) !== longZ) {
+        tubes.setMatrixAt(i, ZERO); legs.setMatrixAt(li++, ZERO); legs.setMatrixAt(li++, ZERO);
+        return;
+      }
+      // tube shares panel placement + length-scale along the long axis
+      dP.position.set(p[0], p[1], p[2]);
+      dP.setRotationFromEuler(rot);
+      dP.scale.set(longZ ? 1 : (dm.w || rowW) / rowW, 1, longZ ? (dm.l || rowL) / rowL : 1);
+      dP.updateMatrix();
+      tubes.setMatrixAt(i, dP.matrix);
+      // legs: world footprint of the two long-axis ends
+      q.setFromEuler(rot);
+      m4.compose(dP.position, q, new THREE.Vector3(1, 1, 1));
+      var panelY = Math.max(p[1], 0.4);
+      [-1, 1].forEach(function (s) {
+        var half = (longZ ? (dm.l || rowL) : (dm.w || rowW)) * 0.45 * s;
+        end.set(longZ ? 0 : half, 0, longZ ? half : 0).applyMatrix4(m4);
+        dL.position.set(end.x, panelY / 2, end.z);
+        dL.rotation.set(0, 0, 0);
+        dL.scale.set(1, panelY, 1);
+        dL.updateMatrix();
+        legs.setMatrixAt(li++, dL.matrix);
+      });
+    });
+    tubes.instanceMatrix.needsUpdate = true;
+    legs.instanceMatrix.needsUpdate = true;
+    var g = group('pv_row');
+    g.add(tubes); g.add(legs);
+  }
+
   // ---- decorative scenery (trees ring + distant hills) ----
   // Adds life + depth around the farm to match the reference aerial. Purely
   // decorative: not pickable, not indexed, lives in its own 'scenery' layer.
@@ -271,6 +349,7 @@
       var e = DT.objectIndex.get(o.id); if (e) e.mesh = mesh;
     });
     buildPvRows(rows);
+    buildPvSupports(rows);
     buildScenery();
     DT.bus.emit('scene:built', DT.scene);
   }
