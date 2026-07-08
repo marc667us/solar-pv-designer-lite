@@ -1,80 +1,159 @@
 {% extends "base.html" %}
-{% block title %}Digital Twin Studio - {{ proj.project_name }}{% endblock %}
+{% block title %}3D Simulation & Digital Twin - {{ proj.project_name }}{% endblock %}
 {% block content %}
 {# ===================================================================
-   3D Digital Twin Studio (dt_scene_v2) -- engineering interaction layer.
-   Rendering + interaction is delivered by the vendored Three.js global and
-   the dt-*.js modules under /static/capital_investment/dt/. The server ships
-   a fully-augmented scene graph (objects/materials/links/camera_presets/
-   simulation_modes/parameters); this template is layout + wiring only. It does
-   NOT rebuild the design/BOQ/finance/marketplace engines.
+   3D Simulation & Digital Twin -- layout matched to the approved mockup
+   `pvsolar1/farm 3d interface updated.png`. Rendering + interaction is
+   delivered by the vendored Three.js global and the dt-*.js modules under
+   /static/capital_investment/dt/. The server ships a fully-augmented scene
+   graph (objects/materials/links/camera_presets/simulation_modes/parameters);
+   this template is layout + wiring only. It does NOT rebuild the design/BOQ/
+   finance/marketplace engines. Every id/class the dt-*.js modules bind to is
+   preserved verbatim (dt-viewport, dt-param-body, dt-run-sim, .dt-layer-cb,
+   .dt-cam-btn, .dt-mode-btn, .dt-vr-card, .dt-analysis-*, tl-*, exp-*, dt-sum-*).
    =================================================================== #}
 
-{% macro sumcard(label, id) %}
-<div class="text-center">
-  <div class="text-warning fw-bold" id="{{ id }}" style="font-size:15px">--</div>
-  <div class="text-secondary" style="font-size:10px">{{ label }}</div>
-</div>
-{% endmacro %}
+<style>
+  /* ---- Digital Twin studio chrome (scoped) ---- */
+  #dt-studio { display:grid; grid-template-columns:264px 1fr 336px;
+    grid-template-rows:1fr auto; gap:8px; height:calc(100vh - 176px);
+    min-height:600px; font-size:13px; }
+  .dt-card-title { font-size:11px; letter-spacing:.6px; font-weight:700;
+    color:#f59e0b; text-transform:uppercase; }
+  .dt-field-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .dt-field-row label { font-size:11px; color:#9aa7b5; min-width:88px; }
+  .dt-field-row .dt-ro { font-size:12px; color:#e6edf3; margin-left:auto;
+    background:#0d1420; border:1px solid #223; border-radius:4px;
+    padding:2px 8px; min-width:104px; text-align:left; }
+  .dt-group-hdr { font-size:10px; letter-spacing:.5px; color:#6b7885;
+    text-transform:uppercase; margin:10px 0 5px; border-top:1px solid #182234;
+    padding-top:8px; }
+  .dt-group-hdr:first-child { border-top:none; padding-top:0; }
 
-<div class="d-flex align-items-center justify-content-between mb-2">
-  <div>
-    <h5 class="fw-black mb-0">
-      <i class="bi bi-diagram-3 text-warning me-1"></i>{{ proj.project_name }}
-      <span class="badge bg-warning text-dark ms-1" style="font-size:10px">3D DIGITAL TWIN</span>
-    </h5>
-    <div class="text-secondary small">
-      {% if scene.site.kwp %}{{ '%.1f'|format(scene.site.kwp/1000.0) }} MWp{% endif %}
-      {% if scene.site.land_area_ha %} &middot; {{ '%.1f'|format(scene.site.land_area_ha) }} ha{% endif %}
-      {% if scene.pv.meta.n_rows %} &middot; {{ scene.pv.meta.n_rows }} PV rows{% endif %}
-      {% if scene.inverters %} &middot; {{ scene.inverters | length }} inverters{% endif %}
+  /* Segmented 2D / 3D / VR primary view toggle (top-right of mockup) */
+  .dt-viewseg { display:inline-flex; background:#0d1522; border:1px solid #223349;
+    border-radius:8px; overflow:hidden; }
+  .dt-viewseg .dt-mode-btn { border:none!important; border-radius:0!important;
+    padding:6px 16px; font-size:12px; font-weight:600; letter-spacing:.3px; }
+
+  /* viewport tool rail */
+  #dt-toolrail { position:absolute; top:14px; left:14px; display:flex;
+    flex-direction:column; gap:2px; background:rgba(13,20,30,.82);
+    border:1px solid #2a3a50; border-radius:8px; padding:4px; z-index:5; }
+  #dt-toolrail button { width:32px; height:32px; border:none; background:transparent;
+    color:#c9d4df; border-radius:6px; font-size:15px; line-height:1;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  #dt-toolrail button:hover { background:#1c2a3d; color:#fff; }
+  #dt-toolrail button.active { background:#f59e0b; color:#111; }
+
+  /* floating object tooltip cards over the 3D */
+  #dt-obj-tips { position:absolute; inset:0; pointer-events:none; z-index:4; }
+  .dt-obj-tip { position:absolute; background:rgba(13,20,30,.9);
+    border:1px solid #33465e; border-radius:6px; padding:6px 10px; min-width:120px;
+    color:#e6edf3; font-size:11px; box-shadow:0 4px 14px rgba(0,0,0,.5); }
+  .dt-obj-tip .t { color:#f59e0b; font-weight:700; font-size:11px;
+    letter-spacing:.4px; margin-bottom:2px; }
+  .dt-obj-tip .r { color:#9aa7b5; }
+
+  /* bottom timeline overlaid on the viewport */
+  #dt-timeline-ov { position:absolute; left:14px; right:14px; bottom:12px;
+    background:rgba(13,20,30,.85); border:1px solid #2a3a50; border-radius:10px;
+    padding:8px 14px; z-index:5; }
+
+  /* right-column analysis cards -- always visible (matches mockup) */
+  .dt-analysis-pane { background:#0f1826; border:1px solid #1c2a3d;
+    border-radius:10px; padding:10px; margin-bottom:8px; }
+  .dt-analysis-pane.dt-focus { border-color:#f59e0b; box-shadow:0 0 0 1px #f59e0b33; }
+
+  /* ENTER VR card */
+  #dt-vr-hero { background:linear-gradient(135deg,#12233f 0%,#0c1626 100%);
+    border:1px solid #24405f; border-radius:10px; padding:12px; }
+
+  /* VR impression thumbnails */
+  .dt-vr-card { position:relative; width:150px; height:82px; border-radius:8px;
+    overflow:hidden; border:2px solid transparent; cursor:pointer; padding:0;
+    background-size:cover; background-position:center; }
+  .dt-vr-card.active { border-color:#22c55e; }
+  .dt-vr-card .cap { position:absolute; left:0; right:0; bottom:0;
+    background:linear-gradient(0deg,rgba(0,0,0,.82),transparent);
+    color:#fff; font-size:9px; font-weight:700; letter-spacing:.5px;
+    text-align:center; padding:10px 2px 4px; }
+
+  /* bottom stat bar icons */
+  .dt-stat { text-align:center; min-width:74px; }
+  .dt-stat i { font-size:19px; color:#f59e0b; }
+  .dt-stat .v { font-weight:800; color:#e6edf3; font-size:15px; line-height:1.1; }
+  .dt-stat .l { font-size:9px; letter-spacing:.4px; color:#6b7885; text-transform:uppercase; }
+</style>
+
+{# ---------------- HEADER ROW ---------------- #}
+<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+  <div class="d-flex align-items-center gap-2">
+    <a href="{{ url_for('capital_investment_project', pid=proj.id) }}"
+       class="text-secondary" title="Back to project"><i class="bi bi-chevron-left"></i></a>
+    <div>
+      <h5 class="fw-black mb-0"><i class="bi bi-diagram-3 text-warning me-1"></i>3D Simulation &amp; Digital Twin</h5>
+      <div class="text-secondary" style="font-size:11px">
+        {{ proj.project_name }}
+        {% if scene.site.kwp %} &middot; {{ '%.1f'|format(scene.site.kwp/1000.0) }} MWp{% endif %}
+        {% if scene.site.land_area_ha %} &middot; {{ '%.0f'|format(scene.site.land_area_ha) }} ha{% endif %}
+      </div>
     </div>
   </div>
   <div class="d-flex align-items-center gap-2">
-    <select id="dt-tier" class="form-select form-select-sm" style="width:auto"
-            title="Graphics quality">
+    <select id="dt-tier" class="form-select form-select-sm" style="width:auto" title="Graphics quality">
       <option value="low">Low graphics</option>
       <option value="medium" selected>Medium graphics</option>
       <option value="high">High graphics</option>
     </select>
-    <a href="{{ url_for('capital_investment_project', pid=proj.id) }}"
-       class="text-secondary small">Back to project</a>
+    {# Primary view toggle -- 2D PLAN | 3D VIEW | VR MODE (data-driven ids kept) #}
+    <div class="dt-viewseg" role="group" aria-label="View mode">
+      <button class="btn btn-sm btn-outline-warning dt-mode-btn" data-mode="plan_2d">2D PLAN</button>
+      <button class="btn btn-sm btn-warning dt-mode-btn" data-mode="three_d">3D VIEW</button>
+      <button class="btn btn-sm btn-outline-warning dt-mode-btn" data-mode="investor">VR MODE</button>
+    </div>
   </div>
 </div>
 
 <div id="dt-flash" class="alert py-1 px-2 small" style="display:none"></div>
 
-{# ---- simulation-mode bar (data-driven from scene.simulation_modes) ---- #}
+{# Secondary analysis-mode chips (Sun Path / Shadow / Energy / Maintenance / ...) #}
 <div class="d-flex flex-wrap gap-1 mb-2">
   {% for key, m in scene.simulation_modes.items() %}
-    <button class="btn btn-sm dt-mode-btn {{ 'btn-warning' if key=='three_d' else 'btn-outline-warning' }}"
-            data-mode="{{ key }}">{{ m.label }}</button>
+    {% if key not in ['plan_2d','three_d','investor'] %}
+    <button class="btn btn-sm btn-outline-warning dt-mode-btn" data-mode="{{ key }}"
+            style="font-size:11px;padding:2px 10px">{{ m.label }}</button>
+    {% endif %}
   {% endfor %}
 </div>
 
-<div id="dt-studio" style="display:grid;
-     grid-template-columns:270px 1fr 320px;grid-template-rows:1fr auto auto;
-     gap:6px;height:calc(100vh - 210px);min-height:560px;font-size:13px">
+<div id="dt-studio">
 
-  {# ================= LEFT COLUMN ================= #}
-  <div class="solar-card" style="overflow-y:auto;padding:10px;grid-row:1 / span 3">
+  {# ================= LEFT COLUMN : DESIGN PARAMETERS ================= #}
+  <div class="solar-card" style="overflow-y:auto;padding:12px;grid-row:1 / span 2">
+    <div class="dt-card-title mb-2">Design Parameters</div>
 
-    {# ---- Design Parameters (Phase 3) ---- #}
-    <div class="fw-bold text-warning mb-2" style="font-size:11px;letter-spacing:.5px">
-      DESIGN PARAMETERS
-    </div>
+    {# read-only SITE block (matches mockup SITE group; live from scene.site) #}
+    <div class="dt-group-hdr">Site</div>
+    <div class="dt-field-row"><label>Location</label>
+      <span class="dt-ro">{{ scene.site.location or proj.get('country') or '--' }}</span></div>
+    <div class="dt-field-row"><label>Latitude</label>
+      <span class="dt-ro">{{ '%.3f'|format(proj.get('gps_lat') or 0) }}&deg;</span></div>
+    <div class="dt-field-row"><label>Longitude</label>
+      <span class="dt-ro">{{ '%.3f'|format(proj.get('gps_lon') or 0) }}&deg;</span></div>
+
+    {# live editable parameters (server-authoritative round-trip via dt-param-panel) #}
     <div id="dt-param-body" class="mb-2"></div>
-    <button id="dt-run-sim" class="btn btn-sm btn-warning w-100 mb-3">
-      <i class="bi bi-play-fill me-1"></i>Run Simulation
+    <button id="dt-run-sim" class="btn btn-success w-100 fw-bold mb-3">
+      <i class="bi bi-play-fill me-1"></i>RUN SIMULATION
     </button>
 
-    {# ---- Layers ---- #}
-    <div class="fw-bold text-warning mb-2" style="font-size:11px;letter-spacing:.5px">LAYERS</div>
+    {# Layers #}
+    <div class="dt-card-title mb-2">Layers</div>
     {% for grp in layer_groups %}
       <div class="mb-2">
-        <div class="text-secondary" style="font-size:10px;letter-spacing:.5px;text-transform:uppercase">
-          <i class="{{ grp.icon }} me-1 text-warning"></i>{{ grp.label }}
-        </div>
+        <div class="dt-group-hdr" style="border:none;padding-top:0;margin-top:4px">
+          <i class="{{ grp.icon }} me-1 text-warning"></i>{{ grp.label }}</div>
         {% for code in grp.codes %}
           {% set color = scene.palette.get(code, '#cccccc') %}
           <div class="form-check" style="padding-left:1.6rem;margin:2px 0;font-size:12px">
@@ -83,16 +162,14 @@
             <label class="form-check-label" for="cb_{{ code }}">
               <span style="display:inline-block;width:9px;height:9px;background:{{ color }};
                            border:1px solid #333;vertical-align:middle;margin-right:4px"></span>
-              {{ code.replace('_', ' ') }}
-            </label>
+              {{ code.replace('_', ' ') }}</label>
           </div>
         {% endfor %}
       </div>
     {% endfor %}
 
-    {# ---- Cameras (Phase 4) ---- #}
-    <hr style="border-color:#1e1e3a">
-    <div class="fw-bold text-warning mb-2" style="font-size:11px;letter-spacing:.5px">CAMERAS</div>
+    {# Cameras #}
+    <div class="dt-card-title mb-2 mt-2">Cameras</div>
     <div class="d-flex flex-wrap gap-1">
       {% for key, c in scene.camera_presets.items() %}
         <button class="btn btn-sm btn-outline-secondary dt-cam-btn" data-cam="{{ key }}"
@@ -100,9 +177,8 @@
       {% endfor %}
     </div>
 
-    {# ---- Outputs / Exports (Phase 8) ---- #}
-    <hr style="border-color:#1e1e3a">
-    <div class="fw-bold text-warning mb-2" style="font-size:11px;letter-spacing:.5px">OUTPUTS</div>
+    {# Outputs / Exports #}
+    <div class="dt-card-title mb-2 mt-3">Outputs</div>
     <div class="d-grid gap-1">
       <a href="{{ url_for('capital_investment_step9', pid=proj.id) }}"
          class="btn btn-sm btn-outline-secondary text-start"><i class="bi bi-list-check me-1"></i>BOQ</a>
@@ -122,100 +198,178 @@
   {# ================= CENTRE VIEWPORT ================= #}
   <div class="solar-card" style="position:relative;overflow:hidden;padding:0;grid-row:1">
     <div id="dt-viewport" style="width:100%;height:100%;background:#0a1015"></div>
-    <div id="dt-hud-top" style="position:absolute;top:8px;left:12px;right:12px;
-         display:flex;justify-content:space-between;pointer-events:none">
-      <div class="text-secondary" style="font-size:11px;text-shadow:0 0 4px #000">
+
+    {# left tool rail (select / pan / orbit / zoom / measure / top / fullscreen) #}
+    <div id="dt-toolrail">
+      <button id="tool-select" class="active" title="Select"><i class="bi bi-cursor"></i></button>
+      <button id="tool-pan" title="Pan"><i class="bi bi-arrows-move"></i></button>
+      <button id="tool-orbit" title="Orbit"><i class="bi bi-arrow-repeat"></i></button>
+      <button id="tool-zoom-in" title="Zoom in"><i class="bi bi-zoom-in"></i></button>
+      <button id="tool-zoom-out" title="Zoom out"><i class="bi bi-zoom-out"></i></button>
+      <button id="tool-top" title="Top / plan view"><i class="bi bi-grid-3x3"></i></button>
+      <button id="tool-labels" title="Toggle labels"><i class="bi bi-tag"></i></button>
+      <button id="tool-fit" title="Fit to site"><i class="bi bi-aspect-ratio"></i></button>
+      <button id="tool-full" title="Fullscreen"><i class="bi bi-fullscreen"></i></button>
+    </div>
+
+    {# HUD sun info + fps #}
+    <div id="dt-hud-top" style="position:absolute;top:14px;right:16px;left:60px;
+         display:flex;justify-content:space-between;pointer-events:none;z-index:3">
+      <div class="text-light" style="font-size:11px;text-shadow:0 0 5px #000">
         <span id="hud-sun-info">Sun -- month 6, hour 12.0</span></div>
-      <div class="text-secondary" style="font-size:11px;text-shadow:0 0 4px #000">
+      <div class="text-light" style="font-size:11px;text-shadow:0 0 5px #000">
         <span id="hud-fps">--</span></div>
     </div>
+
+    {# floating object tooltips (positioned client-side over pickable objects) #}
+    <div id="dt-obj-tips"></div>
+
     <div id="dt-hud-loading" style="position:absolute;top:50%;left:50%;
-         transform:translate(-50%,-50%);color:#f59e0b;font-size:14px">
+         transform:translate(-50%,-50%);color:#f59e0b;font-size:14px;z-index:6">
       <i class="bi bi-hourglass-split me-1"></i>Loading 3D scene...
+    </div>
+
+    {# timeline scrubber overlaid on the 3D (bottom) #}
+    <div id="dt-timeline-ov">
+      <div class="d-flex align-items-center gap-3">
+        <button id="tl-play" class="btn btn-sm btn-warning"><i class="bi bi-play-fill"></i></button>
+        <div class="text-center" style="min-width:96px">
+          <div class="text-secondary" style="font-size:9px;letter-spacing:.5px">MONTH / HOUR</div>
+          <div class="text-warning fw-bold" style="font-size:13px">
+            <span id="tl-month-val">6</span> &middot; <span id="tl-hour-val">12.00</span>h</div>
+        </div>
+        <div class="flex-grow-1">
+          <input type="range" id="tl-month" class="form-range" min="1" max="12" step="1" value="6" style="width:100%">
+          <input type="range" id="tl-hour" class="form-range" min="5" max="19" step="0.25" value="12" style="width:100%">
+        </div>
+        <div class="text-secondary small" id="tl-sun-summary" style="min-width:150px;text-align:right">alt --, az --</div>
+      </div>
     </div>
   </div>
 
-  {# ================= RIGHT ANALYSIS PANEL ================= #}
-  <div class="solar-card" style="overflow-y:auto;padding:10px;grid-row:1">
-    <div class="btn-group btn-group-sm w-100 mb-2" role="group">
-      <button class="btn btn-outline-warning active dt-analysis-tab" data-tab="properties">Props</button>
-      <button class="btn btn-outline-warning dt-analysis-tab" data-tab="sun">Sun</button>
-      <button class="btn btn-outline-warning dt-analysis-tab" data-tab="shadow">Shadow</button>
-      <button class="btn btn-outline-warning dt-analysis-tab" data-tab="ai">AI</button>
+  {# ================= RIGHT COLUMN : ANALYSIS STACK (always visible) ================= #}
+  <div style="overflow-y:auto;grid-row:1 / span 2;padding-right:2px">
+
+    {# SUN PATH #}
+    <div class="dt-analysis-pane" data-pane="sun">
+      <div class="dt-card-title mb-1">Sun Path</div>
+      <div id="dt-sunpath-chart" style="text-align:center"></div>
+      <div id="dt-sunpath-body" class="mt-1"></div>
     </div>
+
+    {# SHADOW ANALYSIS #}
+    <div class="dt-analysis-pane" data-pane="shadow">
+      <div class="dt-card-title mb-1">Shadow Analysis</div>
+      <div class="d-flex flex-wrap gap-2 mb-2" style="font-size:10px">
+        <span class="text-secondary"><span style="display:inline-block;width:10px;height:10px;background:#ef4444;border-radius:2px;margin-right:3px"></span>High Shadow</span>
+        <span class="text-secondary"><span style="display:inline-block;width:10px;height:10px;background:#f59e0b;border-radius:2px;margin-right:3px"></span>Medium</span>
+        <span class="text-secondary"><span style="display:inline-block;width:10px;height:10px;background:#22c55e;border-radius:2px;margin-right:3px"></span>Low</span>
+        <span class="text-secondary"><span style="display:inline-block;width:10px;height:10px;background:#3b82f6;border-radius:2px;margin-right:3px"></span>No Shadow</span>
+      </div>
+      <div id="dt-shadow-body"><div class="text-secondary small">Move the time slider or open
+        Shadow Analysis mode to compute row-by-row shading.</div></div>
+    </div>
+
+    {# ENERGY PRODUCTION #}
+    <div class="dt-analysis-pane" data-pane="energy">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <div class="dt-card-title">Energy Production</div>
+        <span class="text-secondary" style="font-size:9px">representative day</span>
+      </div>
+      {% if metrics.energy.daily and metrics.energy.daily.mwh %}
+        {% set d = metrics.energy.daily %}
+        {% set pk = d.peak_mw if d.peak_mw and d.peak_mw > 0 else 1 %}
+        <div class="fw-black text-light" style="font-size:22px;line-height:1">
+          {{ '%.1f'|format(d.mwh|sum) }} <span class="text-secondary" style="font-size:12px">MWh</span></div>
+        <svg viewBox="0 0 240 84" style="width:100%;height:78px" preserveAspectRatio="none">
+          {% for i in range(d.hours|length) %}
+            {% set h = d.hours[i] %}
+            {% if h >= 4 and h <= 20 %}
+              {% set bh = (d.mwh[i] / pk * 70) %}
+              <rect x="{{ (h-4)*14 + 3 }}" y="{{ 76 - bh }}" width="11"
+                    height="{{ '%.1f'|format(bh if bh > 0.5 else 0.5) }}" rx="1" fill="#4ade80" opacity="0.92"></rect>
+            {% endif %}
+          {% endfor %}
+          <line x1="0" y1="76" x2="240" y2="76" stroke="#334155" stroke-width="1"></line>
+        </svg>
+        <div class="d-flex justify-content-between text-secondary" style="font-size:9px">
+          <span>06h</span><span>peak {{ '%.1f'|format(d.peak_mw) }} MW</span><span>18h</span>
+        </div>
+      {% else %}
+        <div class="text-secondary small mt-2">Complete <strong>Step 7 &middot; PV sizing</strong> to see the yield curve.</div>
+      {% endif %}
+    </div>
+
+    {# ENTER VR MODE #}
+    <div id="dt-vr-hero">
+      <div class="dt-card-title mb-1">Enter VR Mode</div>
+      <div class="text-secondary small mb-2">Experience your solar farm design in an immersive walk-through.</div>
+      <button id="dt-launch-vr" class="btn btn-success btn-sm fw-bold w-100">
+        <i class="bi bi-badge-vr me-1"></i>LAUNCH VR</button>
+    </div>
+
+    {# SELECTED OBJECT (kept so dt-selection can render; mockup shows this as a tip) #}
     <div class="dt-analysis-pane" data-pane="properties">
-      <div class="fw-bold text-warning mb-2" style="font-size:11px;letter-spacing:.5px">SELECTED OBJECT</div>
-      <div id="dt-props"></div>
+      <div class="dt-card-title mb-1">Selected Object</div>
+      <div id="dt-props"><div class="text-secondary small">Click any object in the 3D scene to
+        inspect its specification, BOQ, marketplace and maintenance links.</div></div>
     </div>
-    <div class="dt-analysis-pane" data-pane="sun" style="display:none">
-      <div class="fw-bold text-warning mb-2" style="font-size:11px;letter-spacing:.5px">SUN PATH</div>
-      <div id="dt-sunpath-body"></div>
-    </div>
-    <div class="dt-analysis-pane" data-pane="shadow" style="display:none">
-      <div class="fw-bold text-warning mb-2" style="font-size:11px;letter-spacing:.5px">SHADOW ANALYSIS</div>
-      <div id="dt-shadow-body"><div class="text-secondary small">Switch to Shadow mode or move the
-        time slider to compute shading.</div></div>
-    </div>
-    <div class="dt-analysis-pane" data-pane="ai" style="display:none">
-      <div class="fw-bold text-warning mb-2" style="font-size:11px;letter-spacing:.5px">AI RECOMMENDATIONS</div>
+
+    {# AI RECOMMENDATIONS #}
+    <div class="dt-analysis-pane" data-pane="ai">
+      <div class="dt-card-title mb-1">AI Recommendations</div>
       <div id="dt-ai-body"></div>
     </div>
   </div>
 
-  {# ================= BOTTOM TIMELINE ================= #}
-  <div class="solar-card" style="grid-column:2;padding:6px 12px">
-    <div class="d-flex align-items-center gap-3">
-      <button id="tl-play" class="btn btn-sm btn-warning"><i class="bi bi-play-fill"></i></button>
-      <div class="flex-grow-1">
-        <div class="d-flex align-items-center gap-2 small">
-          <span class="text-secondary" style="min-width:44px">Month</span>
-          <input type="range" id="tl-month" class="form-range" min="1" max="12" step="1" value="6" style="flex-grow:1">
-          <span id="tl-month-val" class="text-warning fw-bold" style="min-width:24px;text-align:right">6</span>
-        </div>
-        <div class="d-flex align-items-center gap-2 small">
-          <span class="text-secondary" style="min-width:44px">Hour</span>
-          <input type="range" id="tl-hour" class="form-range" min="5" max="19" step="0.25" value="12" style="flex-grow:1">
-          <span id="tl-hour-val" class="text-warning fw-bold" style="min-width:38px;text-align:right">12.00</span>
-        </div>
-      </div>
-      <div class="text-secondary small" id="tl-sun-summary" style="min-width:170px;text-align:right">alt --, az --</div>
-    </div>
-  </div>
-
-  {# ================= VR IMPRESSIONS STRIP (camera moves) ================= #}
-  <div class="solar-card" style="grid-column:2;padding:6px 12px">
-    <div class="text-secondary mb-1" style="font-size:10px;letter-spacing:.5px">VIRTUAL REALITY IMPRESSIONS (camera moves)</div>
+  {# ================= VR IMPRESSIONS STRIP ================= #}
+  <div class="solar-card" style="grid-column:2;padding:8px 12px">
+    <div class="text-secondary mb-2" style="font-size:10px;letter-spacing:.6px;font-weight:700">
+      VIRTUAL REALITY IMPRESSIONS <span class="text-muted">(each card flies the camera)</span></div>
     <div class="d-flex gap-2 flex-wrap">
-      {% for vr in [('aerial','Aerial','bi-airplane'),('ground','Ground','bi-person-walking'),('inverter','Inverter','bi-cpu'),('substation','Substation','bi-lightning-charge'),('night','Night','bi-moon-stars')] %}
-        <button class="btn btn-sm btn-outline-secondary dt-vr-card" data-vr="{{ vr[0] }}">
-          <i class="bi {{ vr[2] }} me-1"></i>{{ vr[1] }}</button>
+      {% set vrcards = [
+        ('aerial','AERIAL VIEW','bi-airplane','linear-gradient(135deg,#1e4620,#0f2d16)'),
+        ('ground','GROUND VIEW','bi-person-walking','linear-gradient(135deg,#274060,#122033)'),
+        ('inverter','INVERTER STATION','bi-cpu','linear-gradient(135deg,#3a3a4d,#1c1c28)'),
+        ('substation','SUBSTATION VIEW','bi-lightning-charge','linear-gradient(135deg,#4a4a52,#25252b)'),
+        ('night','NIGHT VIEW','bi-moon-stars','linear-gradient(135deg,#0b1836,#05070f)') ] %}
+      {% for vr in vrcards %}
+        <button class="dt-vr-card {{ 'active' if vr[0]=='aerial' else '' }}" data-vr="{{ vr[0] }}"
+                style="background-image:{{ vr[3] }}">
+          <span style="position:absolute;top:8px;left:10px;color:#fff;opacity:.85;font-size:18px">
+            <i class="bi {{ vr[2] }}"></i></span>
+          <span class="cap">{{ vr[1] }}</span>
+        </button>
       {% endfor %}
     </div>
   </div>
 </div>
 
-{# ============= SUMMARY + ANALYTICS ROW (reference bottom strip) ============= #}
+{# ============= BOTTOM STAT BAR (PROJECT / FINANCIAL / SYSTEM LOSSES) ============= #}
 <div class="row g-2 mt-2">
 
   {# ---- PROJECT SUMMARY ---- #}
-  <div class="col-lg-3 col-md-6">
-    <div class="solar-card p-2 h-100">
-      <div class="text-secondary" style="font-size:10px;letter-spacing:.5px">PROJECT SUMMARY</div>
-      <div class="d-flex flex-wrap gap-3 mt-2">
-        {{ sumcard('AC Capacity','dt-sum-ac') }}{{ sumcard('DC Capacity','dt-sum-dc') }}
-        {{ sumcard('Modules','dt-sum-modules') }}{{ sumcard('Inverters','dt-sum-inv') }}
-        {{ sumcard('PV Rows','dt-sum-rows') }}{{ sumcard('Land Area','dt-sum-land') }}
+  <div class="col-lg-5">
+    <div class="solar-card p-3 h-100">
+      <div class="text-secondary mb-2" style="font-size:10px;letter-spacing:.6px;font-weight:700">PROJECT SUMMARY</div>
+      <div class="d-flex flex-wrap justify-content-between gap-2">
+        <div class="dt-stat"><i class="bi bi-plug"></i><div class="v" id="dt-sum-ac">--</div><div class="l">AC Capacity</div></div>
+        <div class="dt-stat"><i class="bi bi-lightning-charge"></i><div class="v" id="dt-sum-dc">--</div><div class="l">DC Capacity</div></div>
+        <div class="dt-stat"><i class="bi bi-grid-3x3-gap"></i><div class="v" id="dt-sum-modules">--</div><div class="l">Modules</div></div>
+        <div class="dt-stat"><i class="bi bi-cpu"></i><div class="v" id="dt-sum-inv">--</div><div class="l">Inverters</div></div>
+        <div class="dt-stat"><i class="bi bi-collection"></i><div class="v" id="dt-sum-rows">--</div><div class="l">PV Rows</div></div>
+        <div class="dt-stat"><i class="bi bi-bounding-box"></i><div class="v" id="dt-sum-land">--</div><div class="l">Land Area</div></div>
       </div>
     </div>
   </div>
 
-  {# ---- FINANCIAL SUMMARY (live from Step-8 finance engine) ---- #}
-  <div class="col-lg-3 col-md-6">
-    <div class="solar-card p-2 h-100">
-      <div class="text-secondary" style="font-size:10px;letter-spacing:.5px">FINANCIAL SUMMARY</div>
+  {# ---- FINANCIAL SUMMARY ---- #}
+  <div class="col-lg-4">
+    <div class="solar-card p-3 h-100">
+      <div class="text-secondary mb-2" style="font-size:10px;letter-spacing:.6px;font-weight:700">FINANCIAL SUMMARY</div>
       {% if metrics.finance.available %}
       {% set f = metrics.finance %}
-      <div class="row g-2 mt-1 small">
+      <div class="row g-2 small">
         <div class="col-6"><div class="text-secondary" style="font-size:9px">CAPEX</div>
           <div class="fw-bold text-light">{{ f.currency }} {{ '{:,.0f}'.format(f.capex) if f.capex else '--' }}</div></div>
         <div class="col-6"><div class="text-secondary" style="font-size:9px">ANNUAL ENERGY</div>
@@ -226,50 +380,20 @@
           <div class="fw-bold text-success">{{ '%.1f'|format(f.irr_pct) if f.irr_pct is not none else '--' }}%</div></div>
       </div>
       {% else %}
-      <div class="text-secondary small mt-2">Run <strong>Step 8 · Finance</strong> to populate CAPEX, LCOE and IRR.</div>
+      <div class="text-secondary small">Run <strong>Step 8 &middot; Finance</strong> to populate CAPEX, LCOE and IRR.</div>
       {% endif %}
     </div>
   </div>
 
-  {# ---- ENERGY PRODUCTION (representative-day yield curve) ---- #}
-  <div class="col-lg-3 col-md-6">
-    <div class="solar-card p-2 h-100">
-      <div class="d-flex justify-content-between">
-        <div class="text-secondary" style="font-size:10px;letter-spacing:.5px">ENERGY PRODUCTION</div>
-        <div class="text-secondary" style="font-size:9px">representative day</div>
-      </div>
-      {% if metrics.energy.daily and metrics.energy.daily.mwh %}
-        {% set d = metrics.energy.daily %}
-        {% set pk = d.peak_mw if d.peak_mw and d.peak_mw > 0 else 1 %}
-        <svg viewBox="0 0 240 84" style="width:100%;height:74px" preserveAspectRatio="none">
-          {% for i in range(d.hours|length) %}
-            {% set h = d.hours[i] %}
-            {% if h >= 4 and h <= 20 %}
-              {% set bh = (d.mwh[i] / pk * 70) %}
-              <rect x="{{ (h-4)*14 + 3 }}" y="{{ 76 - bh }}" width="11"
-                    height="{{ '%.1f'|format(bh if bh > 0.5 else 0.5) }}" rx="1" fill="#4ade80" opacity="0.9"></rect>
-            {% endif %}
-          {% endfor %}
-          <line x1="0" y1="76" x2="240" y2="76" stroke="#334155" stroke-width="1"></line>
-        </svg>
-        <div class="d-flex justify-content-between text-secondary" style="font-size:9px">
-          <span>04h</span><span>peak {{ '%.1f'|format(d.peak_mw) }} MW</span><span>20h</span>
-        </div>
-      {% else %}
-        <div class="text-secondary small mt-2">Complete <strong>Step 7 · PV sizing</strong> to see the yield curve.</div>
-      {% endif %}
-    </div>
-  </div>
-
-  {# ---- SYSTEM LOSSES donut (total real, category split modelled) ---- #}
-  <div class="col-lg-3 col-md-6">
-    <div class="solar-card p-2 h-100">
-      <div class="text-secondary" style="font-size:10px;letter-spacing:.5px">SYSTEM LOSSES
-        <span class="text-secondary" style="font-size:8px">· modelled split</span></div>
+  {# ---- SYSTEM LOSSES ---- #}
+  <div class="col-lg-3">
+    <div class="solar-card p-3 h-100">
+      <div class="text-secondary mb-2" style="font-size:10px;letter-spacing:.6px;font-weight:700">SYSTEM LOSSES
+        <span class="text-muted" style="font-size:8px">&middot; modelled split</span></div>
       {% if metrics.losses.available %}
         {% set L = metrics.losses %}
-        <div class="d-flex align-items-center gap-2 mt-1">
-          <svg viewBox="0 0 100 100" style="width:82px;height:82px;flex:0 0 auto">
+        <div class="d-flex align-items-center gap-2">
+          <svg viewBox="0 0 100 100" style="width:76px;height:76px;flex:0 0 auto">
             {% set ns = namespace(off=0.0) %}
             {% set C = 251.2 %}
             {% for it in L['items'] %}
@@ -283,7 +407,7 @@
             <text x="50" y="47" text-anchor="middle" fill="#f1f5f9" font-size="16" font-weight="bold">{{ '%.1f'|format(L.total_pct) }}%</text>
             <text x="50" y="60" text-anchor="middle" fill="#94a3b8" font-size="7">Total losses</text>
           </svg>
-          <div class="flex-grow-1" style="font-size:9px;line-height:1.55">
+          <div class="flex-grow-1" style="font-size:9px;line-height:1.5">
             {% for it in L['items'] %}
             <div class="d-flex justify-content-between">
               <span><span style="display:inline-block;width:8px;height:8px;background:{{ it.color }};border-radius:2px;margin-right:4px"></span>{{ it.label }}</span>
@@ -293,20 +417,20 @@
           </div>
         </div>
       {% else %}
-        <div class="text-secondary small mt-2">Performance ratio not set — complete <strong>Step 7 · sizing</strong>.</div>
+        <div class="text-secondary small">Performance ratio not set — complete <strong>Step 7 &middot; sizing</strong>.</div>
       {% endif %}
     </div>
   </div>
 </div>
 
-{# ---- engineering provenance note (slim, full width) ---- #}
+{# ---- engineering provenance note ---- #}
 <div class="solar-card p-2 mt-2">
   <div class="small text-secondary">
-    Every object is generated from project data and linked to the existing BOQ,
-    Marketplace and Financial workspaces. Finance figures read live from Step 8;
-    the energy curve derives from the Step-7 sizing yield; the loss stack applies
-    conventional PVsyst-style category shares to the project performance ratio
-    (the total is the real project figure, the category split is modelled).
+    Every object is interactive geometry generated from project data and linked to the existing
+    BOQ, Marketplace and Financial workspaces — not a static image. Finance figures read live from
+    Step 8; the energy curve derives from the Step-7 sizing yield; the loss stack applies
+    conventional PVsyst-style category shares to the project performance ratio (the total is the
+    real project figure, the category split is modelled).
   </div>
 </div>
 
@@ -340,5 +464,8 @@
 <script src="{{ url_for('static', filename='capital_investment/dt/dt-ai-actions.js') }}"></script>
 <script src="{{ url_for('static', filename='capital_investment/dt/dt-exports.js') }}"></script>
 <script src="{{ url_for('static', filename='capital_investment/dt/dt-main.js') }}"></script>
+
+{# ---- tool-rail + object-tooltip wiring (layout-local; uses public DT API) ---- #}
+<script src="{{ url_for('static', filename='capital_investment/dt/dt-toolrail.js') }}"></script>
 
 {% endblock %}

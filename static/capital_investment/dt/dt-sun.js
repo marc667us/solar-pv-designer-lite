@@ -9,6 +9,53 @@
   'use strict';
   var DT = window.DT = window.DT || {};
   var arc = null;
+  var _polarSamples = [];   // daytime arc samples for the right-panel compass
+
+  // ---- polar sun-path compass (right panel, matches mockup) ----------------
+  // Stereographic-style plot: zenith at centre, horizon at the rim. Azimuth is
+  // measured clockwise from North (up); altitude sets the radius. Drawn as an
+  // SVG string so there is no extra dependency and it re-renders cheaply when
+  // the time slider moves the current-sun marker.
+  function polarPoint(cx, cy, R, alt, az) {
+    var r = (90 - Math.max(alt, 0)) / 90 * R;   // 90deg alt -> centre, 0 -> rim
+    var a = az * Math.PI / 180;
+    return [cx + r * Math.sin(a), cy - r * Math.cos(a)];
+  }
+  function plabel(x, y, txt) {
+    return '<text x="' + x + '" y="' + y + '" text-anchor="middle" ' +
+      'fill="#94a3b8" font-size="9" font-weight="bold">' + txt + '</text>';
+  }
+  function renderPolar() {
+    var host = document.getElementById('dt-sunpath-chart');
+    if (!host) return;
+    var W = 172, cx = W / 2, cy = W / 2, R = 66;
+    var s = '<svg viewBox="0 0 ' + W + ' ' + W + '" style="width:100%;max-width:196px;height:auto">';
+    s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="#0b1220" stroke="#334155" stroke-width="1"/>';
+    s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (R * 2 / 3).toFixed(1) + '" fill="none" stroke="#1c2a3d" stroke-width="1"/>';
+    s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (R / 3).toFixed(1) + '" fill="none" stroke="#1c2a3d" stroke-width="1"/>';
+    s += '<line x1="' + cx + '" y1="' + (cy - R) + '" x2="' + cx + '" y2="' + (cy + R) + '" stroke="#1c2a3d"/>';
+    s += '<line x1="' + (cx - R) + '" y1="' + cy + '" x2="' + (cx + R) + '" y2="' + cy + '" stroke="#1c2a3d"/>';
+    s += plabel(cx, cy - R - 3, 'N') + plabel(cx + R + 5, cy + 3, 'E') +
+      plabel(cx, cy + R + 10, 'S') + plabel(cx - R - 5, cy + 3, 'W');
+    var pts = [];
+    _polarSamples.forEach(function (o) {
+      if (!o.is_daylight) return;
+      pts.push(polarPoint(cx, cy, R, o.altitude_deg, o.azimuth_deg));
+    });
+    if (pts.length > 1) {
+      s += '<polyline points="' + pts.map(function (p) {
+        return p[0].toFixed(1) + ',' + p[1].toFixed(1);
+      }).join(' ') + '" fill="none" stroke="#ffd54a" stroke-width="1.6" stroke-dasharray="3 2"/>';
+    }
+    var cs = DT.state.sun;
+    if (cs.isDaylight) {
+      var sp = polarPoint(cx, cy, R, cs.altitudeDeg, cs.azimuthDeg);
+      s += '<circle cx="' + sp[0].toFixed(1) + '" cy="' + sp[1].toFixed(1) +
+        '" r="5" fill="#ffd54a" stroke="#fff" stroke-width="1"/>';
+    }
+    s += '</svg>';
+    host.innerHTML = s;
+  }
 
   // Convert a server sun dict into a Three.js light direction * distance.
   function sunVector(sun, dist) {
@@ -67,6 +114,8 @@
     if (!window.DT_SUN_ARC_URL) return;
     DT.util.getJSON(window.DT_SUN_ARC_URL + '?month=' + month).then(function (data) {
       if (arc) { t.scene.remove(arc); if (arc.geometry) arc.geometry.dispose(); arc = null; }
+      _polarSamples = data.samples || [];      // feed the right-panel compass
+      renderPolar();
       var arr = [];
       (data.samples || []).forEach(function (s) {
         if (!s.is_daylight) return;                 // only the daytime span
@@ -97,10 +146,12 @@
       DT.state.sun.isDaylight = sun.is_daylight;
       applyLighting(sun);
       updateHud(sun);
+      renderPolar();                 // move the current-sun marker on the compass
       DT.bus.emit('sun:changed', sun);
       return sun;
     }).catch(function () { /* keep last-known sun on transient error */ });
   }
 
-  DT.sun = { update: update, buildArc: buildArc, sunVector: sunVector };
+  DT.sun = { update: update, buildArc: buildArc, sunVector: sunVector,
+             renderPolar: renderPolar };
 })();

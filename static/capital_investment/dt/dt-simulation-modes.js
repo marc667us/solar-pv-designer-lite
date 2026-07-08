@@ -52,11 +52,27 @@
     DT.three.labelSprites.forEach(function (s) { s.visible = vis; });
   }
 
+  // The right-column analysis cards are ALL visible at once (matches the
+  // approved mockup), so switching modes no longer hides panes -- it just
+  // highlights + scrolls the relevant card into view. Legacy tab buttons, if
+  // present, still receive the .active class so nothing breaks.
   function setAnalysisTab(tab) {
-    var tabs = document.querySelectorAll('.dt-analysis-tab');
     var panes = document.querySelectorAll('.dt-analysis-pane');
-    tabs.forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
-    panes.forEach(function (p) { p.style.display = p.getAttribute('data-pane') === tab ? '' : 'none'; });
+    var focused = null;
+    panes.forEach(function (p) {
+      var on = p.getAttribute('data-pane') === tab;
+      p.classList.toggle('dt-focus', on);
+      if (on) focused = p;
+    });
+    document.querySelectorAll('.dt-analysis-tab').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-tab') === tab);
+    });
+    // Don't auto-scroll for the default 'properties' pane (fires on initial
+    // page load) -- that would push the Sun/Shadow cards out of view. Only
+    // scroll when the user switches to an analysis-specific mode.
+    if (focused && tab !== 'properties' && focused.scrollIntoView) {
+      try { focused.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { }
+    }
     if (tab === 'shadow' && DT.shadow) DT.shadow.refresh();
   }
 
