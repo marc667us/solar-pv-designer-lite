@@ -44,7 +44,7 @@
     var THREE = window.THREE, S = 256;
     var c = document.createElement('canvas'); c.width = c.height = S;
     var ctx = c.getContext('2d');
-    ctx.fillStyle = '#5f7f3d'; ctx.fillRect(0, 0, S, S);
+    ctx.fillStyle = '#3f6f28'; ctx.fillRect(0, 0, S, S);   // richer field green
     var img = ctx.getImageData(0, 0, S, S), d = img.data;
     for (var i = 0; i < d.length; i += 4) {
       var n = (Math.random() - 0.5) * 46;          // fine grain

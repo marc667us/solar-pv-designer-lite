@@ -72,10 +72,17 @@
     var v = sunVector(sun, t.sunDistance);
     t.sunLight.position.set(v[0], v[1], v[2]);
     var day = !!sun.is_daylight;
-    t.sunLight.intensity = day ? 1.0 : 0.04;
-    if (t.ambientLight) t.ambientLight.intensity = day ? 0.4 : 0.12;
-    if (t.scene) t.scene.background = new THREE.Color(day ? 0x9ec6e6 : 0x05060f);
-    if (t.scene && t.scene.fog) t.scene.fog.color = new THREE.Color(day ? 0x9ec6e6 : 0x05060f);
+    t.sunLight.intensity = day ? 1.6 : 0.04;
+    if (t.ambientLight) t.ambientLight.intensity = day ? 0.32 : 0.12;
+    if (t.scene) {
+      // Keep the atmospheric gradient sky on daytime updates (the old code
+      // flattened it to a single pale blue every tick, which washed the whole
+      // scene into a "white board"). Only night swaps to a dark flat sky.
+      if (day && t.skyTexture) t.scene.background = t.skyTexture;
+      else t.scene.background = new THREE.Color(day ? 0x9ec6e6 : 0x05060f);
+      if (t.scene.fog) t.scene.fog.color =
+        new THREE.Color(day ? (t.horizonHex || 0xc4d8e6) : 0x05060f);
+    }
   }
 
   function updateHud(sun) {

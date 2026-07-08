@@ -4210,13 +4210,15 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
         "meta":  {"perimeter_m": round(4 * (land_side_m - 2.0), 1)},
     }
 
-    # --- Buildings (arranged in a strip along the northern edge) ---
+    # --- Buildings (clustered compound along the south / foreground edge) ---
     selected_buildings = fac_cfg.get("buildings") or []
     buildings = []
-    strip_z = -land_side_m / 2.0 + 25.0   # 25m from north edge
-    strip_x0 = -land_side_m / 2.0 + 15.0
+    strip_z = land_side_m / 2.0 - 45.0   # equipment compound on the south (foreground) edge
+    strip_x0 = -land_side_m * 0.25
     x_cursor = strip_x0
-    building_gap = 8.0
+    _brow = 0
+    _compound_xmax = land_side_m * 0.5   # X budget before wrapping to a new row
+    building_gap = 10.0
     building_dim_defaults: dict[str, dict[str, float]] = {
         "control_room":     {"w": 15, "l": 12, "h": 6},
         "om_building":      {"w": 20, "l": 12, "h": 5},
@@ -4238,18 +4240,21 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
         "parking":          {"w": 30, "l": 15, "h": 0.2},
     }
     for b in selected_buildings:
-        dims = building_dim_defaults.get(b, {"w": 12, "l": 8, "h": 5})
+        _bd = building_dim_defaults.get(b, {"w": 12, "l": 8, "h": 5})
+        dims = {"w": _bd["w"] * 2.0, "l": _bd["l"] * 2.0, "h": _bd["h"] * 1.6}
         # Layer key is the building code itself so we can pick a color +
         # a left-nav toggle for it.
         layer = b if b in DT_LAYER_PALETTE else "building"
         label = next((L for c, L, _, _ in BUILDING_TYPES if c == b), b)
+        if x_cursor > strip_x0 and x_cursor + dims["w"] > strip_x0 + _compound_xmax:
+            x_cursor = strip_x0; _brow += 1
         buildings.append({
             "id":    f"bldg_{b}",
             "layer": layer,
             "kind":  "box",
             "x":     x_cursor + dims["w"] / 2.0,
             "y":     dims["h"] / 2.0,
-            "z":     strip_z,
+            "z":     strip_z - _brow * 36.0,
             "w":     dims["w"],
             "h":     dims["h"],
             "l":     dims["l"],
@@ -4267,19 +4272,19 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
             "id":    "transformer_yard",
             "layer": "transformer",
             "kind":  "box",
-            "x":      float((elec_cfg.get("transformer_pos") or {}).get("x", land_side_m / 2.0 - 20.0)),
+            "x":      float((elec_cfg.get("transformer_pos") or {}).get("x", land_side_m * 0.18)),
             "y":      3.0,
-            "z":      float((elec_cfg.get("transformer_pos") or {}).get("z", land_side_m / 2.0 - 20.0)),
-            "w":     15, "h": 6, "l": 15,
+            "z":      float((elec_cfg.get("transformer_pos") or {}).get("z", strip_z)),
+            "w":     30, "h": 10, "l": 30,
             "label": "Transformer yard",
             "meta":  {"contents": "Step-up transformer, RMU, protection"},
         })
 
     # --- PV field ---
-    # Available PV area = land_area minus a 60m northern strip for buildings
+    # Available PV area = land_area minus the south equipment-compound strip
     # and a 20m perimeter margin.
-    pv_field_z_start = strip_z + 30.0
-    pv_field_z_end   = land_side_m / 2.0 - 20.0
+    pv_field_z_start = -land_side_m / 2.0 + 20.0
+    pv_field_z_end   = max(-land_side_m / 2.0 + 40.0, strip_z - 40.0)
     pv_field_x_start = -land_side_m / 2.0 + 20.0
     pv_field_x_end   =  land_side_m / 2.0 - 20.0
     pv_field_l = max(pv_field_z_end - pv_field_z_start, 20.0)

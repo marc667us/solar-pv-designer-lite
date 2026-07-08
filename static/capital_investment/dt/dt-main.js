@@ -43,8 +43,10 @@
     // horizon) instead of a flat fill, which read as a bad wall of colour behind
     // the farm. The fog colour matches the horizon so distant ground melts into
     // the haze the same way it does in the reference aerial.
-    var HORIZON = 0xdfeaf2, ZENITH = 0x5b8fc9;
+    var HORIZON = 0xc4d8e6, ZENITH = 0x4a86c8;
     t.scene.background = _skyGradientTexture(THREE, ZENITH, HORIZON);
+    t.skyTexture = t.scene.background;   // kept so the sun update can restore it
+    t.horizonHex = HORIZON;
     t.scene.fog = new THREE.Fog(HORIZON, 600, 7000);
 
     t.camera = new THREE.PerspectiveCamera(45, w / h, 0.5, 12000);
