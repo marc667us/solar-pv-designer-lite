@@ -38,6 +38,8 @@ import json
 import os
 from typing import Any
 
+import dt_scene_v2 as _dtv2
+
 from flask import (
     render_template, request, redirect, url_for,
     session, flash, abort, jsonify,
@@ -4156,42 +4158,6 @@ DT_LAYER_GROUPS: list[tuple[str, str, list[str]]] = [
 ]
 
 
-def _sun_position(lat_deg: float, lon_deg: float,
-                  month: int, hour: float,
-                  tz_offset_h: float = 0.0) -> dict[str, float]:
-    """NOAA-simplified solar altitude / azimuth for a mid-month day.
-    Inputs are latitude, longitude (unused for local-hour convention),
-    integer month 1-12, and float hour 0-24 in local solar time.
-    Returns dict with 'altitude_deg' and 'azimuth_deg' (0=N, 90=E, 180=S, 270=W).
-    Robust enough for shading + digital twin sun-path animation."""
-    import math
-
-    # Day-of-year for the 15th of the month.
-    day_of_year_by_month = {1:15, 2:46, 3:74, 4:105, 5:135, 6:166,
-                            7:196, 8:227, 9:258, 10:288, 11:319, 12:349}
-    doy = day_of_year_by_month.get(month, 172)
-    # Declination.
-    decl = 23.45 * math.sin(math.radians(360.0 * (284 + doy) / 365.0))
-    decl_r = math.radians(decl)
-    lat_r  = math.radians(lat_deg)
-    # Local solar-time hour angle. hour=12 -> H=0.
-    H = math.radians(15.0 * (hour - 12.0))
-    sin_alt = (math.sin(lat_r) * math.sin(decl_r)
-               + math.cos(lat_r) * math.cos(decl_r) * math.cos(H))
-    sin_alt = max(-1.0, min(1.0, sin_alt))
-    alt = math.asin(sin_alt)
-    # Azimuth via atan2 - measured from North, clockwise (0=N, 90=E, 180=S).
-    y = -math.sin(H)
-    x = math.tan(decl_r) * math.cos(lat_r) - math.sin(lat_r) * math.cos(H)
-    az = math.degrees(math.atan2(y, x))
-    az = (az + 360.0) % 360.0
-    return {
-        "altitude_deg": round(math.degrees(alt), 3),
-        "azimuth_deg":  round(az, 3),
-        "month":        month,
-        "hour":         round(hour, 3),
-        "is_daylight":  math.degrees(alt) > 0.0,
-    }
 
 
 def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
@@ -4301,9 +4267,9 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
             "id":    "transformer_yard",
             "layer": "transformer",
             "kind":  "box",
-            "x":      land_side_m / 2.0 - 20.0,
+            "x":      float((elec_cfg.get("transformer_pos") or {}).get("x", land_side_m / 2.0 - 20.0)),
             "y":      3.0,
-            "z":      land_side_m / 2.0 - 20.0,
+            "z":      float((elec_cfg.get("transformer_pos") or {}).get("z", land_side_m / 2.0 - 20.0)),
             "w":     15, "h": 6, "l": 15,
             "label": "Transformer yard",
             "meta":  {"contents": "Step-up transformer, RMU, protection"},
@@ -4321,7 +4287,7 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
 
     # Row layout: single-axis tracker rows aligned N-S; row pitch = 6m;
     # row width = 2m; row length spans the plot with 5m gap at either end.
-    row_pitch = 6.0
+    row_pitch = float(pv_cfg.get("row_pitch_m") or 6.0)
     row_width = 2.0
     row_length = max(pv_field_l - 10.0, 10.0)
     # Number of rows we can physically fit.
@@ -4465,7 +4431,7 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
         })
 
     # --- Assemble scene ---
-    return {
+    scene = {
         "site": {
             "kwp":               kwp,
             "land_area_ha":      land_area_ha,
@@ -4495,6 +4461,7 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
             for g_label, g_icon, codes in DT_LAYER_GROUPS
         ],
     }
+    return _dtv2.augment_scene_v2(scene, proj)
 
 
 
@@ -5740,30 +5707,10 @@ def _wizard_progress(proj: dict[str, Any]) -> list[dict[str, Any]]:
 def _sun_position(lat_deg: float, lon_deg: float,
                   month: int, hour: float,
                   tz_offset_h: float = 0.0) -> dict[str, float]:
-    """NOAA-simplified solar altitude / azimuth for a mid-month day (drives the
-    digital-twin sun-path animation). Azimuth 0=N,90=E,180=S,270=W."""
-    import math
-    day_of_year_by_month = {1: 15, 2: 46, 3: 74, 4: 105, 5: 135, 6: 166,
-                            7: 196, 8: 227, 9: 258, 10: 288, 11: 319, 12: 349}
-    doy = day_of_year_by_month.get(month, 172)
-    decl = 23.45 * math.sin(math.radians(360.0 * (284 + doy) / 365.0))
-    decl_r = math.radians(decl)
-    lat_r = math.radians(lat_deg)
-    H = math.radians(15.0 * (hour - 12.0))
-    sin_alt = (math.sin(lat_r) * math.sin(decl_r)
-               + math.cos(lat_r) * math.cos(decl_r) * math.cos(H))
-    sin_alt = max(-1.0, min(1.0, sin_alt))
-    alt = math.asin(sin_alt)
-    y = -math.sin(H)
-    x = math.tan(decl_r) * math.cos(lat_r) - math.sin(lat_r) * math.cos(H)
-    az = (math.degrees(math.atan2(y, x)) + 360.0) % 360.0
-    return {
-        "altitude_deg": round(math.degrees(alt), 3),
-        "azimuth_deg":  round(az, 3),
-        "month":        month,
-        "hour":         round(hour, 3),
-        "is_daylight":  math.degrees(alt) > 0.0,
-    }
+    """Thin wrapper -> dt_scene_v2.sun_position (single source of truth).
+    Extended backward-compatible superset of the legacy 5-key payload; the
+    /dt/sun.json route and every caller keep working. Azimuth 0=N,90=E,180=S."""
+    return _dtv2.sun_position(lat_deg, lon_deg, month, hour, tz_offset_h)
 
 
 def _ci_normalize_proj_for_agents(proj: dict[str, Any]) -> dict[str, Any]:
@@ -10339,6 +10286,244 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         lat = proj.get("gps_lat") or 6.0
         lon = proj.get("gps_lon") or 0.0
         return jsonify(_sun_position(float(lat), float(lon), month, hour))
+
+    # ==================================================================
+    # Digital Twin v2 -- engineering interaction endpoints (ADDITIVE).
+    # Every route inherits @login_required + _gate(CI_LEVEL_FULL) + the
+    # user-scoped _load_project(), so tenant/user isolation is preserved.
+    # All heavy logic lives in the reusable dt_scene_v2 module (_dtv2).
+    # ==================================================================
+    def _dt_scene_for(pid):
+        """Load a project (user-scoped) and return its augmented v2 scene."""
+        proj = _load_project(pid)
+        return build_scene_from_project(_ci_normalize_proj_for_agents(proj))
+
+    def _dt_clamp(v, lo, hi, cur):
+        """Clamp a submitted numeric to [lo,hi]; fall back to cur on garbage."""
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return cur
+        return max(lo, min(hi, v))
+
+    def _dt_resize(pv_cfg):
+        """Re-run the EXISTING sizing engine for a pv_config so module/inverter
+        counts + energy metadata stay current after any design change. Falls
+        back to the stored sizing on any engine error (never raises)."""
+        try:
+            return size_utility_pv(
+                kwp=pv_cfg.get("kwp") or 0,
+                module_wp=pv_cfg.get("module_wp") or 550,
+                dc_ac_ratio=pv_cfg.get("dc_ac_ratio") or 1.2,
+                tilt_deg=pv_cfg.get("tilt_deg") or 12,
+                azimuth_deg=pv_cfg.get("azimuth_deg") or 180,
+                psh_daily=pv_cfg.get("psh_daily") or 5.4,
+                performance_ratio=pv_cfg.get("performance_ratio") or 0.78,
+                availability_pct=pv_cfg.get("availability_pct") or 98.0,
+                annual_degradation_pct=pv_cfg.get("annual_degradation_pct") or 0.5,
+                project_life_yr=int(pv_cfg.get("project_life_yr") or 25),
+                central_inverter_kw=pv_cfg.get("central_inverter_kw") or 1500.0,
+            )
+        except Exception:
+            return pv_cfg.get("sizing") or {}
+
+    # POST /dt/parameters -- live Design-Parameters round-trip (Phase 3).
+    # Updates the EXISTING project JSON blobs via _save_project_field and
+    # re-runs the EXISTING size_utility_pv engine; returns a fresh scene.
+    @app.route("/large-scale-solar/<int:pid>/dt/parameters",
+               methods=["POST"],
+               endpoint="capital_investment_dt_parameters")
+    @login_required
+    def _dt_parameters(pid):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        csrf_protect()
+        proj = _load_project(pid)
+        payload = request.get_json(silent=True) or {}
+        pv_in = payload.get("pv") or {}
+        pv_cfg = _safe_json(proj.get("pv_config"))
+        kwp = _dt_clamp(pv_in.get("kwp", pv_cfg.get("kwp")),
+                        0, 500000, pv_cfg.get("kwp") or 0)
+        module_wp = _dt_clamp(pv_in.get("module_wp", pv_cfg.get("module_wp")),
+                              200, 800, pv_cfg.get("module_wp") or 550)
+        tilt_deg = _dt_clamp(pv_in.get("tilt_deg", pv_cfg.get("tilt_deg")),
+                             0, 60, pv_cfg.get("tilt_deg") or 12)
+        azimuth_deg = _dt_clamp(pv_in.get("azimuth_deg", pv_cfg.get("azimuth_deg")),
+                                0, 359, pv_cfg.get("azimuth_deg") or 180)
+        row_pitch = _dt_clamp(pv_in.get("row_pitch_m", pv_cfg.get("row_pitch_m")),
+                              2, 20, pv_cfg.get("row_pitch_m") or 6)
+        # Merge the new values, then reuse the existing sizing engine (never a
+        # duplicate PV calculator) so module/inverter counts stay consistent.
+        pv_cfg.update({"kwp": kwp, "module_wp": module_wp, "tilt_deg": tilt_deg,
+                       "azimuth_deg": azimuth_deg, "row_pitch_m": row_pitch})
+        pv_cfg["sizing"] = _dt_resize(pv_cfg)
+        _save_project_field(pid, "pv_config", json.dumps(pv_cfg))
+        fac_in = payload.get("facility") or {}
+        if "battery_kwh" in fac_in:
+            fac_cfg = _safe_json(proj.get("facility_config"))
+            try:
+                fac_cfg["battery_kwh"] = max(0.0, float(fac_in["battery_kwh"]))
+                _save_project_field(pid, "facility_config", json.dumps(fac_cfg))
+            except (TypeError, ValueError):
+                pass
+        scene = _dt_scene_for(pid)
+        pv_meta = (scene.get("pv") or {}).get("meta") or {}
+        return jsonify({
+            "ok": True,
+            "scene": scene,
+            "summary": {
+                "kwp": pv_meta.get("kwp"),
+                "modules": pv_meta.get("n_modules_planned"),
+                "rows": pv_meta.get("n_rows"),
+                "land_area_ha": (scene.get("site") or {}).get("land_area_ha"),
+            },
+            "boq_dirty": True, "finance_dirty": True, "warnings": [],
+        })
+
+    # POST /dt/object-action -- controlled scene mutation (Phase 6).
+    @app.route("/large-scale-solar/<int:pid>/dt/object-action",
+               methods=["POST"],
+               endpoint="capital_investment_dt_object_action")
+    @login_required
+    def _dt_object_action(pid):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        csrf_protect()
+        proj = _load_project(pid)
+        payload = request.get_json(silent=True) or {}
+        action = (payload.get("action") or "").strip()
+        params = payload.get("params") or {}
+        allowed = {"move_transformer", "increase_row_spacing",
+                   "decrease_row_spacing", "set_tilt", "hide", "lock"}
+        if action not in allowed:
+            return jsonify({"ok": False, "error": "UNSUPPORTED_ACTION",
+                            "message": "Action '%s' not supported." % action}), 400
+        boq_dirty = False
+        finance_dirty = False
+        msg = ""
+        if action in ("increase_row_spacing", "decrease_row_spacing"):
+            pv_cfg = _safe_json(proj.get("pv_config"))
+            cur = float(pv_cfg.get("row_pitch_m") or 6.0)
+            delta = _dt_clamp(params.get("delta_m"), 0.1, 5.0, 0.5)
+            new = cur + (delta if action == "increase_row_spacing" else -delta)
+            pv_cfg["row_pitch_m"] = max(2.0, min(20.0, new))
+            _save_project_field(pid, "pv_config", json.dumps(pv_cfg))
+            boq_dirty = True
+            msg = ("Row spacing set to %.2f m; shading + cable lengths require "
+                   "recompute." % pv_cfg["row_pitch_m"])
+        elif action == "set_tilt":
+            pv_cfg = _safe_json(proj.get("pv_config"))
+            tilt = _dt_clamp(params.get("tilt_deg"), 0, 60, None)
+            if tilt is None:
+                return jsonify({"ok": False, "error": "BAD_PARAM"}), 400
+            pv_cfg["tilt_deg"] = tilt
+            # Tilt feeds the sizing engine -- re-run it so sizing/energy metadata
+            # is not left stale (parity with /dt/parameters).
+            pv_cfg["sizing"] = _dt_resize(pv_cfg)
+            _save_project_field(pid, "pv_config", json.dumps(pv_cfg))
+            boq_dirty = True
+            msg = "Tilt set to %.0f deg." % tilt
+        elif action == "move_transformer":
+            import math as _math
+            try:
+                x = float(params.get("x"))
+                z = float(params.get("z"))
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "error": "BAD_PARAM"}), 400
+            if not (_math.isfinite(x) and _math.isfinite(z)):
+                return jsonify({"ok": False, "error": "BAD_PARAM"}), 400
+            # Keep the transformer inside the site square (5 m margin) so a bad
+            # drag cannot fling it kilometres away and wreck cable quantities.
+            site_cfg = _safe_json(proj.get("site_config"))
+            pv_cfg = _safe_json(proj.get("pv_config"))
+            kwp = float((pv_cfg.get("sizing") or {}).get("kwp_input")
+                        or pv_cfg.get("kwp") or 0)
+            land_ha = float(site_cfg.get("land_area_ha") or max(kwp / 800.0, 5.0))
+            bound = _math.sqrt(land_ha * 10000.0) / 2.0 - 5.0
+            if abs(x) > bound or abs(z) > bound:
+                return jsonify({"ok": False, "error": "OUT_OF_BOUNDS",
+                                "message": "Transformer must stay within the "
+                                           "site boundary."}), 400
+            elec_cfg = _safe_json(proj.get("electrical_config"))
+            elec_cfg["transformer_pos"] = {"x": x, "z": z}
+            _save_project_field(pid, "electrical_config", json.dumps(elec_cfg))
+            boq_dirty = True
+            msg = "Transformer moved; cable quantities require recalculation."
+        else:
+            # hide / lock are client-local view state; ack without persistence.
+            msg = "%s applied (view only)." % action
+        scene = _dt_scene_for(pid)
+        return jsonify({"ok": True, "scene": scene, "boq_dirty": boq_dirty,
+                        "finance_dirty": finance_dirty, "message": msg})
+
+    # GET /dt/shadow-analysis.json -- per-row shading estimate (Phase 5).
+    @app.route("/large-scale-solar/<int:pid>/dt/shadow-analysis.json",
+               endpoint="capital_investment_dt_shadow")
+    @login_required
+    def _dt_shadow(pid):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        proj = _load_project(pid)
+        try:
+            month = max(1, min(12, int(request.args.get("month", "6"))))
+            hour = max(0.0, min(24.0, float(request.args.get("hour", "9"))))
+        except (TypeError, ValueError):
+            month, hour = 6, 9.0
+        lat = float(proj.get("gps_lat") or 6.0)
+        lon = float(proj.get("gps_lon") or 0.0)
+        scene = build_scene_from_project(_ci_normalize_proj_for_agents(proj))
+        sun = _dtv2.sun_position(lat, lon, month, hour)
+        return jsonify(_dtv2.shadow_analysis(scene, sun))
+
+    # GET /dt/object-schedule.json -- BOQ-linked object export (Phase 8).
+    @app.route("/large-scale-solar/<int:pid>/dt/object-schedule.json",
+               endpoint="capital_investment_dt_object_schedule")
+    @login_required
+    def _dt_object_schedule(pid):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        scene = _dt_scene_for(pid)
+        rows = []
+        for o in scene.get("objects") or []:
+            rows.append({
+                "id": o.get("id"), "type": o.get("type"),
+                "layer": o.get("layer"), "label": o.get("label"),
+                "quantity": (o.get("engineering") or {}).get("quantity"),
+                "w": (o.get("dimensions") or {}).get("w"),
+                "h": (o.get("dimensions") or {}).get("h"),
+                "l": (o.get("dimensions") or {}).get("l"),
+                "boq": (o.get("links") or {}).get("boq"),
+                "marketplace": (o.get("links") or {}).get("marketplace"),
+            })
+        return jsonify({"schema_version": scene.get("schema_version"),
+                        "project_id": pid, "count": len(rows), "objects": rows})
+
+    # GET /dt/sun-arc.json -- authoritative sun-path samples for the month so
+    # the client draws the arc from the SAME solar model as the light/shadows
+    # (never a hardcoded generic ellipse).
+    @app.route("/large-scale-solar/<int:pid>/dt/sun-arc.json",
+               endpoint="capital_investment_dt_sun_arc")
+    @login_required
+    def _dt_sun_arc(pid):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        proj = _load_project(pid)
+        try:
+            month = max(1, min(12, int(request.args.get("month", "6"))))
+        except (TypeError, ValueError):
+            month = 6
+        lat = float(proj.get("gps_lat") or 6.0)
+        lon = float(proj.get("gps_lon") or 0.0)
+        samples = []
+        h = 5.0
+        while h <= 19.0001:
+            s = _dtv2.sun_position(lat, lon, month, h)
+            samples.append({"hour": round(h, 2),
+                            "altitude_deg": s["altitude_deg"],
+                            "azimuth_deg": s["azimuth_deg"],
+                            "is_daylight": s["is_daylight"]})
+            h += 0.5
+        return jsonify({"month": month, "samples": samples})
 
     # ------------------------------------------------------------------
     # GET/POST /large-scale-solar/<pid>/regulatory -- Development & Regulatory
