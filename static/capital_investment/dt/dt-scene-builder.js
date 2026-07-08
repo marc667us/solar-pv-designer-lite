@@ -174,9 +174,11 @@
     if (DT.state.graphicsTier !== 'low' && !mat.map) {
       mat = mat.clone();
       var ptex = panelTexture();
-      var mods = ((rows[0].meta || {}).modules) || Math.max(8, Math.round(rowL / 2));
-      // baked grid = 6 cells across V per tile; tile so total V-cells ~= modules.
-      ptex.repeat.set(1, Math.max(1, Math.round(mods / 6)));
+      var mods = ((rows[0].meta || {}).modules) || Math.max(8, Math.round(Math.max(rowW, rowL) / 2));
+      // baked grid = 12 cells across U(x), 6 across V(z). Tile along whichever
+      // horizontal axis is the LONG one so module count runs down the row.
+      if (rowW >= rowL) ptex.repeat.set(Math.max(1, Math.round(mods / 12)), 1);
+      else ptex.repeat.set(1, Math.max(1, Math.round(mods / 6)));
       mat.map = ptex;
       mat.needsUpdate = true;
     }

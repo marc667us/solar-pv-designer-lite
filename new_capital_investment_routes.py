@@ -4289,9 +4289,9 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
     # row width = 2m; row length spans the plot with 5m gap at either end.
     row_pitch = float(pv_cfg.get("row_pitch_m") or 6.0)
     row_width = 2.0
-    row_length = max(pv_field_l - 10.0, 10.0)
+    row_length = max(pv_field_w - 10.0, 10.0)
     # Number of rows we can physically fit.
-    max_rows = max(1, int(pv_field_w / row_pitch))
+    max_rows = max(1, int(pv_field_l / row_pitch))
     # Number of rows we NEED to fit the module count.
     modules_per_row_area = int(row_length / 2.0) if row_length > 0 else 30
     modules_per_row = max(10, min(60, modules_per_row_area))
@@ -4300,17 +4300,17 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
 
     pv_rows: list[dict[str, Any]] = []
     for i in range(n_rows):
-        x_i = pv_field_x_start + row_pitch / 2.0 + i * row_pitch
+        z_i = pv_field_z_start + row_pitch / 2.0 + i * row_pitch
         pv_rows.append({
             "id":    f"row_{i+1:03d}",
             "layer": "pv_row",
             "kind":  "box",
-            "x":     x_i,
+            "x":     (pv_field_x_start + pv_field_x_end) / 2.0,
             "y":     1.5,
-            "z":     (pv_field_z_start + pv_field_z_end) / 2.0,
-            "w":     row_width,
+            "z":     z_i,
+            "w":     row_length,
             "h":     0.05,
-            "l":     row_length,
+            "l":     row_width,
             "tilt_deg": tilt_deg,
             "azimuth_deg": azimuth_deg,
             "label": f"PV row {i+1}",
@@ -4772,6 +4772,12 @@ def _ci_dt_metrics(proj) -> dict:
         except (TypeError, ValueError):
             return d
 
+    def _fn(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
     pv = _safe_json(proj.get("pv_config"))
     fin = _safe_json(proj.get("finance_config"))
     site = _safe_json(proj.get("site_config"))
@@ -4788,19 +4794,24 @@ def _ci_dt_metrics(proj) -> dict:
     losses = {"available": total_loss > 0.0, "total_pct": total_loss,
               "pr_pct": round(pr * 100.0, 1) if pr else 0.0, "items": []}
     if total_loss > 0.0:
-        losses["items"] = [
-            {"label": lbl, "pct": round(total_loss * share, 1), "color": col}
-            for (lbl, share, col) in _CI_LOSS_SHARES]
+        _items, _acc = [], 0.0
+        for _i, (lbl, share, col) in enumerate(_CI_LOSS_SHARES):
+            if _i < len(_CI_LOSS_SHARES) - 1:
+                _p = round(total_loss * share, 1); _acc += _p
+            else:
+                _p = round(total_loss - _acc, 1)   # last absorbs rounding drift
+            _items.append({"label": lbl, "pct": _p, "color": col})
+        losses["items"] = _items
 
     finance = {
         "available": bool(computed),
         "currency": cur,
-        "capex": computed.get("total_capex_local"),
-        "lcoe": computed.get("lcoe_local_per_kwh"),
-        "irr_pct": computed.get("irr_pct"),
-        "npv": computed.get("npv_local"),
-        "payback_years": computed.get("payback_years"),
-        "tariff": computed.get("tariff_local_per_kwh"),
+        "capex": _fn(computed.get("total_capex_local")),
+        "lcoe": _fn(computed.get("lcoe_local_per_kwh")),
+        "irr_pct": _fn(computed.get("irr_pct")),
+        "npv": _fn(computed.get("npv_local")),
+        "payback_years": _fn(computed.get("payback_years")),
+        "tariff": _fn(computed.get("tariff_local_per_kwh")),
         "annual_energy_mwh": round(annual_mwh, 0) if annual_mwh else None,
     }
     return {"finance": finance, "energy": energy, "losses": losses}
