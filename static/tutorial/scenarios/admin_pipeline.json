@@ -1,0 +1,42 @@
+{
+  "tutorialId": "tut-admin_pipeline",
+  "pageId": "admin_pipeline",
+  "title": "Sales Pipeline",
+  "module": "Sales Pipeline",
+  "description": "Leads by stage, with the value and age of each opportunity.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Pipeline"
+  ],
+  "covers": [],
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "Stages",
+      "description": "New, contacted, qualified, proposal, won.",
+      "voiceScript": "The pipeline groups every opportunity by its stage.",
+      "captionText": "The pipeline groups every opportunity by its stage.",
+      "targetSelector": ".solar-card, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Pipeline",
+      "fallbackMessage": "Stages: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Move a lead",
+      "description": "Moving a lead records an activity against it.",
+      "voiceScript": "Moving a lead records an activity so nothing is lost.",
+      "captionText": "Moving a lead records an activity so nothing is lost.",
+      "targetSelector": ".card, .badge",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Pipeline",
+      "fallbackMessage": "Move a lead: not visible on this screen yet.",
+      "stepNumber": 2
+    }
+  ]
+}

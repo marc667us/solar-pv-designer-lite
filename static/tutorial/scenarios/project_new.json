@@ -1,0 +1,56 @@
+{
+  "tutorialId": "tut-project_new",
+  "pageId": "project_new",
+  "title": "Create a Solar Design",
+  "module": "Solar Design",
+  "description": "Name the design, file it, then set the location that fixes irradiance and tariff.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "New project"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Project name",
+      "description": "Every design starts with a name.",
+      "voiceScript": "Start by naming the project.",
+      "captionText": "Start by naming the project.",
+      "targetSelector": "input[name=\"name\"]",
+      "action": "typeText",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New project",
+      "fallbackMessage": "Project name: not visible on this screen yet.",
+      "typeText": "Accra Rooftop 25 kWp",
+      "stepNumber": 1
+    },
+    {
+      "title": "Folder",
+      "description": "Designs are filed so you can find them later.",
+      "voiceScript": "File it in a folder so you can find it again.",
+      "captionText": "File it in a folder so you can find it again.",
+      "targetSelector": "input[name=\"folder\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New project",
+      "fallbackMessage": "Folder: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Create and set location",
+      "description": "The next screen is the globe: pick the site.",
+      "voiceScript": "Create the project. The next screen is the globe, where you pick the site. Location fixes the sun hours, the temperature and the tariff.",
+      "captionText": "Create the project. The next screen is the globe, where you pick the site. Location fixes the sun hours, the temperature and the tariff.",
+      "targetSelector": "button[type=\"submit\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New project",
+      "fallbackMessage": "Create and set location: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

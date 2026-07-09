@@ -1,0 +1,42 @@
+{
+  "tutorialId": "tut-account",
+  "pageId": "account",
+  "title": "Account & Subscription",
+  "module": "Billing",
+  "description": "Your plan, invoices, and how to change or cancel.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Account"
+  ],
+  "covers": [],
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "Your plan",
+      "description": "The trial converts without losing any work.",
+      "voiceScript": "This is your current plan. Upgrading never touches your designs.",
+      "captionText": "This is your current plan. Upgrading never touches your designs.",
+      "targetSelector": ".solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Account",
+      "fallbackMessage": "Your plan: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Manage the subscription",
+      "description": "Cancel or change plan at any time.",
+      "voiceScript": "You can change or cancel the subscription at any time.",
+      "captionText": "You can change or cancel the subscription at any time.",
+      "targetSelector": "button",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Account",
+      "fallbackMessage": "Manage the subscription: not visible on this screen yet.",
+      "stepNumber": 2
+    }
+  ]
+}

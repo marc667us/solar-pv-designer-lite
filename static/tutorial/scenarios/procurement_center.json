@@ -4,32 +4,41 @@
   "title": "Procurement Center",
   "module": "Procurement",
   "description": "Tick the products you need and generate a priced procurement list or RFQ.",
-  "version": 1,
+  "version": 2,
   "language": "en-US",
-  "estimatedDuration": 4,
+  "screens": [
+    "Procurement Center",
+    "RFQs"
+  ],
+  "covers": [
+    "rfqs_list"
+  ],
+  "estimatedDuration": 6,
   "steps": [
     {
       "title": "Pick products",
       "description": "The checkbox grid is grouped by category.",
-      "voiceScript": "Tick every product you intend to buy. They are grouped by category.",
-      "captionText": "Tick every product you intend to buy. They are grouped by category.",
+      "voiceScript": "Tick every product you intend to buy.",
+      "captionText": "Tick every product you intend to buy.",
       "targetSelector": "input[type=\"checkbox\"]",
-      "action": "highlightOnly",
+      "action": "moveCursor",
       "duration": 700,
       "delayBefore": 120,
-      "fallbackMessage": "Pick products: not visible on this page yet.",
+      "screen": "Procurement Center",
+      "fallbackMessage": "Pick products: not visible on this screen yet.",
       "stepNumber": 1
     },
     {
       "title": "Generate price sheet",
-      "description": "A ten-column sheet with supplier contact details.",
+      "description": "A ten-column sheet with supplier contacts.",
       "voiceScript": "Generate the price sheet to get supplier names, phones and addresses.",
       "captionText": "Generate the price sheet to get supplier names, phones and addresses.",
       "targetSelector": "button[type=\"submit\"], .btn-warning",
-      "action": "highlightOnly",
+      "action": "moveCursor",
       "duration": 700,
       "delayBefore": 120,
-      "fallbackMessage": "Generate price sheet: not visible on this page yet.",
+      "screen": "Procurement Center",
+      "fallbackMessage": "Generate price sheet: not visible on this screen yet.",
       "stepNumber": 2
     },
     {
@@ -37,12 +46,27 @@
       "description": "Requests for quotation go to the selected suppliers.",
       "voiceScript": "Send a request for quotation and compare the responses side by side.",
       "captionText": "Send a request for quotation and compare the responses side by side.",
-      "targetSelector": "a[href*=\"/rfqs\"]",
+      "targetSelector": "",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Procurement Center",
+      "fallbackMessage": "Send an RFQ: the next screen is not reachable from here.",
+      "href": "/rfqs",
+      "stepNumber": 3
+    },
+    {
+      "title": "RFQ list",
+      "description": "Every request and its responses.",
+      "voiceScript": "Here is every request you have raised.",
+      "captionText": "Here is every request you have raised.",
+      "targetSelector": ".solar-card, table",
       "action": "moveCursor",
       "duration": 700,
       "delayBefore": 120,
-      "fallbackMessage": "Send an RFQ: not visible on this page yet.",
-      "stepNumber": 3
+      "screen": "RFQs",
+      "fallbackMessage": "RFQ list: not visible on this screen yet.",
+      "stepNumber": 4
     }
   ]
 }

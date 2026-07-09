@@ -1,0 +1,29 @@
+{
+  "tutorialId": "tut-me_dashboard",
+  "pageId": "me_dashboard",
+  "title": "My Workspace",
+  "module": "Support",
+  "description": "The work assigned to you, and the shortcuts into it.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "My workspace"
+  ],
+  "covers": [],
+  "estimatedDuration": 1,
+  "steps": [
+    {
+      "title": "Assigned to you",
+      "description": "Tickets, RFQs and tasks in one place.",
+      "voiceScript": "Everything assigned to you appears here.",
+      "captionText": "Everything assigned to you appears here.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "My workspace",
+      "fallbackMessage": "Assigned to you: not visible on this screen yet.",
+      "stepNumber": 1
+    }
+  ]
+}

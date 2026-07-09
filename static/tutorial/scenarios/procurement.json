@@ -1,0 +1,88 @@
+{
+  "tutorialId": "tut-procurement",
+  "pageId": "procurement",
+  "title": "Procurement",
+  "module": "Procurement",
+  "description": "The catalogue, the suppliers, and the buying list built from them.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Procurement",
+    "Catalogue",
+    "Suppliers"
+  ],
+  "covers": [
+    "procurement_catalog",
+    "procurement_suppliers"
+  ],
+  "estimatedDuration": 8,
+  "steps": [
+    {
+      "title": "Procurement home",
+      "description": "Catalogue, suppliers and price sheets.",
+      "voiceScript": "Procurement brings together the catalogue, the suppliers and your buying list.",
+      "captionText": "Procurement brings together the catalogue, the suppliers and your buying list.",
+      "targetSelector": ".solar-card, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Procurement",
+      "fallbackMessage": "Procurement home: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Product Catalogue",
+      "description": "Every product available to price a job.",
+      "voiceScript": "The product catalogue lists everything available to price a job.",
+      "captionText": "The product catalogue lists everything available to price a job.",
+      "targetSelector": "",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Procurement",
+      "fallbackMessage": "Product Catalogue: the next screen is not reachable from here.",
+      "href": "/procurement/catalog",
+      "stepNumber": 2
+    },
+    {
+      "title": "Browse the catalogue",
+      "description": "Filter by category and specification.",
+      "voiceScript": "Filter by category and specification to find the part you need.",
+      "captionText": "Filter by category and specification to find the part you need.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Catalogue",
+      "fallbackMessage": "Browse the catalogue: not visible on this screen yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Suppliers",
+      "description": "Who supplies each product, and how to reach them.",
+      "voiceScript": "The supplier register shows who supplies each product.",
+      "captionText": "The supplier register shows who supplies each product.",
+      "targetSelector": "",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Catalogue",
+      "fallbackMessage": "Suppliers: the next screen is not reachable from here.",
+      "href": "/procurement/suppliers",
+      "stepNumber": 4
+    },
+    {
+      "title": "Supplier register",
+      "description": "Contact details travel into the price sheet.",
+      "voiceScript": "These contact details travel straight into your price sheet.",
+      "captionText": "These contact details travel straight into your price sheet.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Suppliers",
+      "fallbackMessage": "Supplier register: not visible on this screen yet.",
+      "stepNumber": 5
+    }
+  ]
+}

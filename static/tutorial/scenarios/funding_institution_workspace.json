@@ -1,0 +1,69 @@
+{
+  "tutorialId": "tut-funding_institution_workspace",
+  "pageId": "funding_institution_workspace",
+  "title": "Financial Institution Workspace",
+  "module": "Project Funding",
+  "description": "Every screen a bank uses: the queue, the applicant, the reports, the decision.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Workspace",
+    "Applicant"
+  ],
+  "covers": [],
+  "estimatedDuration": 6,
+  "steps": [
+    {
+      "title": "Your review queue",
+      "description": "Applications routed to your institution.",
+      "voiceScript": "Applications submitted to your institution land in this queue.",
+      "captionText": "Applications submitted to your institution land in this queue.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Workspace",
+      "fallbackMessage": "Your review queue: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Open an applicant",
+      "description": "Design, BOQ and financial model in one pack.",
+      "voiceScript": "Open an applicant to read the design, the BOQ and the financial model.",
+      "captionText": "Open an applicant to read the design, the BOQ and the financial model.",
+      "targetSelector": "a, tr",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Workspace",
+      "fallbackMessage": "Open an applicant: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Assess",
+      "description": "An AI assessment scores the application.",
+      "voiceScript": "An AI assessment scores the application against your criteria.",
+      "captionText": "An AI assessment scores the application against your criteria.",
+      "targetSelector": ".solar-card, .badge",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Applicant",
+      "fallbackMessage": "Assess: not visible on this screen yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Decide",
+      "description": "Approve in principle, request information, or decline.",
+      "voiceScript": "Approve in principle, request more information, or decline.",
+      "captionText": "Approve in principle, request more information, or decline.",
+      "targetSelector": "button, .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Applicant",
+      "fallbackMessage": "Decide: not visible on this screen yet.",
+      "stepNumber": 4
+    }
+  ]
+}

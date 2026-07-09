@@ -1,0 +1,29 @@
+{
+  "tutorialId": "tut-project_open",
+  "pageId": "project_open",
+  "title": "Open a Project",
+  "module": "Dashboard",
+  "description": "Reopen a saved design by name.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Open project"
+  ],
+  "covers": [],
+  "estimatedDuration": 1,
+  "steps": [
+    {
+      "title": "Pick a project",
+      "description": "Designs are stored per user and tenant.",
+      "voiceScript": "Pick the design you want to reopen.",
+      "captionText": "Pick the design you want to reopen.",
+      "targetSelector": "select, table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Open project",
+      "fallbackMessage": "Pick a project: not visible on this screen yet.",
+      "stepNumber": 1
+    }
+  ]
+}

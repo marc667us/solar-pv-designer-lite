@@ -1,0 +1,29 @@
+{
+  "tutorialId": "tut-news_index",
+  "pageId": "news_index",
+  "title": "Industry News",
+  "module": "Growth",
+  "description": "Solar news and tenders, filtered for relevance and refreshed daily.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "News"
+  ],
+  "covers": [],
+  "estimatedDuration": 1,
+  "steps": [
+    {
+      "title": "The feed",
+      "description": "Non-solar results are filtered out automatically.",
+      "voiceScript": "The feed carries solar news and tenders, filtered for relevance.",
+      "captionText": "The feed carries solar news and tenders, filtered for relevance.",
+      "targetSelector": ".solar-card, article",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "News",
+      "fallbackMessage": "The feed: not visible on this screen yet.",
+      "stepNumber": 1
+    }
+  ]
+}

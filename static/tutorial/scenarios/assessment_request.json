@@ -1,0 +1,42 @@
+{
+  "tutorialId": "tut-assessment_request",
+  "pageId": "assessment_request",
+  "title": "Energy Assessment",
+  "module": "Energy Assessment",
+  "description": "Capture the site's loads and consumption before designing anything.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Assessment"
+  ],
+  "covers": [],
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "Tell us about the site",
+      "description": "The assessment feeds the design's load schedule.",
+      "voiceScript": "Describe the site. This becomes the load schedule your design is sized against.",
+      "captionText": "Describe the site. This becomes the load schedule your design is sized against.",
+      "targetSelector": "form, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Assessment",
+      "fallbackMessage": "Tell us about the site: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Submit",
+      "description": "Our team reviews and returns a recommendation.",
+      "voiceScript": "Submit the assessment and we return a sizing recommendation.",
+      "captionText": "Submit the assessment and we return a sizing recommendation.",
+      "targetSelector": "button[type=\"submit\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Assessment",
+      "fallbackMessage": "Submit: not visible on this screen yet.",
+      "stepNumber": 2
+    }
+  ]
+}

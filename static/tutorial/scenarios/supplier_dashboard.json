@@ -1,0 +1,72 @@
+{
+  "tutorialId": "tut-supplier_dashboard",
+  "pageId": "supplier_dashboard",
+  "title": "Supplier Portal",
+  "module": "Marketplace",
+  "description": "List products, answer RFQs, and keep your prices current.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Supplier dashboard",
+    "Add product"
+  ],
+  "covers": [
+    "supplier_product_add"
+  ],
+  "estimatedDuration": 6,
+  "steps": [
+    {
+      "title": "Your products",
+      "description": "Verified products appear in the public catalogue.",
+      "voiceScript": "Your listed products appear in the public catalogue once verified.",
+      "captionText": "Your listed products appear in the public catalogue once verified.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Supplier dashboard",
+      "fallbackMessage": "Your products: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Add a product",
+      "description": "Category drives the required specification fields.",
+      "voiceScript": "Let us add a product. The category drives which specs are required.",
+      "captionText": "Let us add a product. The category drives which specs are required.",
+      "targetSelector": "",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Supplier dashboard",
+      "fallbackMessage": "Add a product: the next screen is not reachable from here.",
+      "href": "/supplier/products/add",
+      "stepNumber": 2
+    },
+    {
+      "title": "Specification fields",
+      "description": "Missing specs are flagged in a buyer's BOQ.",
+      "voiceScript": "Fill the required specification fields, or buyers will see them flagged.",
+      "captionText": "Fill the required specification fields, or buyers will see them flagged.",
+      "targetSelector": "form, input",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Add product",
+      "fallbackMessage": "Specification fields: not visible on this screen yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Submit for verification",
+      "description": "An admin verifies before it goes public.",
+      "voiceScript": "Submit it. An administrator verifies the listing before it goes public.",
+      "captionText": "Submit it. An administrator verifies the listing before it goes public.",
+      "targetSelector": "button[type=\"submit\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Add product",
+      "fallbackMessage": "Submit for verification: not visible on this screen yet.",
+      "stepNumber": 4
+    }
+  ]
+}

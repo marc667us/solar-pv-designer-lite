@@ -1,0 +1,42 @@
+{
+  "tutorialId": "tut-settings",
+  "pageId": "settings",
+  "title": "Settings",
+  "module": "Administration",
+  "description": "Profile, currency, country and notification preferences.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Settings"
+  ],
+  "covers": [],
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "Your profile",
+      "description": "Country and currency drive prices across the app.",
+      "voiceScript": "Your country and currency drive the prices you see everywhere.",
+      "captionText": "Your country and currency drive the prices you see everywhere.",
+      "targetSelector": "form, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Settings",
+      "fallbackMessage": "Your profile: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Save",
+      "description": "Changes apply immediately across every module.",
+      "voiceScript": "Save. The change applies immediately across every module.",
+      "captionText": "Save. The change applies immediately across every module.",
+      "targetSelector": "button[type=\"submit\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Settings",
+      "fallbackMessage": "Save: not visible on this screen yet.",
+      "stepNumber": 2
+    }
+  ]
+}

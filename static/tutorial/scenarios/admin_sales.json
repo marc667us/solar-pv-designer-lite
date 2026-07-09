@@ -1,0 +1,59 @@
+{
+  "tutorialId": "tut-admin_sales",
+  "pageId": "admin_sales",
+  "title": "Sales & CRM",
+  "module": "CRM",
+  "description": "Leads, their source, and the actions that move them along.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Sales",
+    "Pipeline"
+  ],
+  "covers": [
+    "admin_pipeline"
+  ],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "The lead list",
+      "description": "Every lead carries a source and a score.",
+      "voiceScript": "Every lead carries the source it came from and a score.",
+      "captionText": "Every lead carries the source it came from and a score.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Sales",
+      "fallbackMessage": "The lead list: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "The pipeline",
+      "description": "Leads by stage, from new to won.",
+      "voiceScript": "The pipeline shows those leads by stage.",
+      "captionText": "The pipeline shows those leads by stage.",
+      "targetSelector": "",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Sales",
+      "fallbackMessage": "The pipeline: the next screen is not reachable from here.",
+      "href": "/admin/pipeline",
+      "stepNumber": 2
+    },
+    {
+      "title": "Stages",
+      "description": "Drag a lead to move it along the pipeline.",
+      "voiceScript": "Move a lead along the pipeline as it progresses.",
+      "captionText": "Move a lead along the pipeline as it progresses.",
+      "targetSelector": ".solar-card, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Pipeline",
+      "fallbackMessage": "Stages: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

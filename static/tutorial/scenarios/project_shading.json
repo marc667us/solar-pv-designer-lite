@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-project_shading",
+  "pageId": "project_shading",
+  "title": "Shading Simulation",
+  "module": "Shading",
+  "description": "Move the sun through the year and watch obstructions shade the array.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Shading"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "The site model",
+      "description": "Buildings and obstructions are drawn to scale.",
+      "voiceScript": "This is your site with its buildings and obstructions drawn to scale.",
+      "captionText": "This is your site with its buildings and obstructions drawn to scale.",
+      "targetSelector": "svg, canvas",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Shading",
+      "fallbackMessage": "The site model: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Move the sun",
+      "description": "Scrub month and hour to sweep the sun path.",
+      "voiceScript": "Scrub the month and hour to move the sun across the sky.",
+      "captionText": "Scrub the month and hour to move the sun across the sky.",
+      "targetSelector": "input[type=\"range\"]",
+      "action": "drag",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Shading",
+      "fallbackMessage": "Move the sun: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Read the losses",
+      "description": "Row-by-row shading loss drives the yield estimate.",
+      "voiceScript": "The shading loss per row feeds straight into the yield estimate.",
+      "captionText": "The shading loss per row feeds straight into the yield estimate.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Shading",
+      "fallbackMessage": "Read the losses: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

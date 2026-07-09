@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-marketplace_product_detail",
+  "pageId": "marketplace_product_detail",
+  "title": "Product Detail",
+  "module": "Marketplace",
+  "description": "The full specification, the supplier, the datasheet and the way into a BOQ.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Product"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Specification",
+      "description": "Voltage, size, standard and compliance.",
+      "voiceScript": "This is the full specification, with the standards it complies with.",
+      "captionText": "This is the full specification, with the standards it complies with.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Product",
+      "fallbackMessage": "Specification: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Datasheet",
+      "description": "Links resolve to the manufacturer's own document.",
+      "voiceScript": "The datasheet link resolves to the manufacturer's own document.",
+      "captionText": "The datasheet link resolves to the manufacturer's own document.",
+      "targetSelector": "a[href*=\"doc\"], a[target=\"_blank\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Product",
+      "fallbackMessage": "Datasheet: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Add to BOQ",
+      "description": "The product joins your bill of quantities.",
+      "voiceScript": "Adding it puts the product into your bill of quantities.",
+      "captionText": "Adding it puts the product into your bill of quantities.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Product",
+      "fallbackMessage": "Add to BOQ: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

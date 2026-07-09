@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-project_loads",
+  "pageId": "project_loads",
+  "title": "Load Schedule",
+  "module": "Solar Design",
+  "description": "List what the building runs, and for how long, so the array can be sized.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Loads"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Add appliances",
+      "description": "Each load carries a wattage and daily hours.",
+      "voiceScript": "Add each appliance with its wattage and how many hours it runs.",
+      "captionText": "Add each appliance with its wattage and how many hours it runs.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Loads",
+      "fallbackMessage": "Add appliances: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Daily energy",
+      "description": "The total drives the PV, battery and inverter sizing.",
+      "voiceScript": "The daily energy total drives the array, battery and inverter sizing.",
+      "captionText": "The daily energy total drives the array, battery and inverter sizing.",
+      "targetSelector": ".solar-card, tfoot",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Loads",
+      "fallbackMessage": "Daily energy: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Run the design",
+      "description": "Loads, PV, battery, inverter, MPPT, cables, BOQ, economics.",
+      "voiceScript": "Run the design. The engine sizes everything from this schedule.",
+      "captionText": "Run the design. The engine sizes everything from this schedule.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Loads",
+      "fallbackMessage": "Run the design: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

@@ -1,60 +1,265 @@
 {
-  "version": 1,
+  "version": 2,
   "tutorials": [
     {
       "pageId": "dashboard",
       "title": "Dashboard",
       "module": "Dashboard",
       "steps": 4,
+      "screens": [
+        "Dashboard"
+      ],
       "estimatedDuration": 6
     },
     {
-      "pageId": "marketplace_public",
-      "title": "Marketplace",
+      "pageId": "project_new",
+      "title": "Create a Solar Design",
+      "module": "Solar Design",
+      "steps": 3,
+      "screens": [
+        "New project"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "project_location",
+      "title": "Set the Site Location",
+      "module": "Solar Design",
+      "steps": 3,
+      "screens": [
+        "Location"
+      ],
+      "estimatedDuration": 5
+    },
+    {
+      "pageId": "project_loads",
+      "title": "Load Schedule",
+      "module": "Solar Design",
+      "steps": 3,
+      "screens": [
+        "Loads"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "project_results",
+      "title": "Design Results",
+      "module": "Solar Design",
+      "steps": 3,
+      "screens": [
+        "Results",
+        "PV report"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "report_pv",
+      "title": "Engineering Reports",
+      "module": "Reports",
+      "steps": 9,
+      "screens": [
+        "PV report",
+        "Energy report",
+        "Cable report",
+        "BOQ report",
+        "Economic report"
+      ],
+      "estimatedDuration": 14
+    },
+    {
+      "pageId": "marketplace_product_detail",
+      "title": "Product Detail",
       "module": "Marketplace",
-      "steps": 5,
-      "estimatedDuration": 8
+      "steps": 3,
+      "screens": [
+        "Product"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "price_sheet_view",
+      "title": "Price Sheet",
+      "module": "Procurement",
+      "steps": 2,
+      "screens": [
+        "Price sheet"
+      ],
+      "estimatedDuration": 3
+    },
+    {
+      "pageId": "account",
+      "title": "Account & Subscription",
+      "module": "Billing",
+      "steps": 2,
+      "screens": [
+        "Account"
+      ],
+      "estimatedDuration": 3
+    },
+    {
+      "pageId": "assessment_request",
+      "title": "Energy Assessment",
+      "module": "Energy Assessment",
+      "steps": 2,
+      "screens": [
+        "Assessment"
+      ],
+      "estimatedDuration": 3
+    },
+    {
+      "pageId": "bill_check_landing",
+      "title": "Check My Bill",
+      "module": "Bill Check",
+      "steps": 3,
+      "screens": [
+        "Bill Check"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "project_shading",
+      "title": "Shading Simulation",
+      "module": "Shading",
+      "steps": 3,
+      "screens": [
+        "Shading"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "marketplace_public",
+      "title": "Marketplace → Product → Procurement",
+      "module": "Marketplace",
+      "steps": 11,
+      "screens": [
+        "Marketplace",
+        "Product",
+        "Procurement Center",
+        "RFQs"
+      ],
+      "estimatedDuration": 17
     },
     {
       "pageId": "procurement_center",
       "title": "Procurement Center",
       "module": "Procurement",
-      "steps": 3,
-      "estimatedDuration": 4
+      "steps": 4,
+      "screens": [
+        "Procurement Center",
+        "RFQs"
+      ],
+      "estimatedDuration": 6
     },
     {
-      "pageId": "boms_list",
-      "title": "Bills of Quantities",
-      "module": "BOQ",
-      "steps": 5,
-      "estimatedDuration": 8
+      "pageId": "rfqs_list",
+      "title": "Requests for Quotation",
+      "module": "Procurement",
+      "steps": 4,
+      "screens": [
+        "RFQs",
+        "New RFQ"
+      ],
+      "estimatedDuration": 6
     },
     {
-      "pageId": "capital_investment_landing",
-      "title": "Generation Station Design",
-      "module": "Generation Station",
+      "pageId": "price_sheets_list",
+      "title": "Price Sheets",
+      "module": "Procurement",
       "steps": 2,
+      "screens": [
+        "Price sheets"
+      ],
       "estimatedDuration": 3
     },
     {
-      "pageId": "capital_investment_project",
-      "title": "Generation Station Project",
+      "pageId": "boms_list",
+      "title": "BOM → BOQ → Export",
+      "module": "BOQ",
+      "steps": 7,
+      "screens": [
+        "BOMs",
+        "New BOM",
+        "BOQ"
+      ],
+      "estimatedDuration": 11
+    },
+    {
+      "pageId": "boq_projects_list",
+      "title": "BOQ Projects",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "BOQ projects",
+        "Wizard"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "rate_form",
+      "title": "Rate Build-Up",
+      "module": "Rate Build-Up",
+      "steps": 3,
+      "screens": [
+        "Rate build-up"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "capital_investment_landing",
+      "title": "Generation Station: every screen",
       "module": "Generation Station",
-      "steps": 4,
-      "estimatedDuration": 6
+      "steps": 12,
+      "screens": [
+        "Generation Station",
+        "Project",
+        "Digital twin",
+        "SLD",
+        "Funding"
+      ],
+      "estimatedDuration": 20
+    },
+    {
+      "pageId": "capital_investment_project",
+      "title": "Generation Station: the 14-step wizard",
+      "module": "Generation Station",
+      "steps": 28,
+      "screens": [
+        "Project",
+        "Step 2",
+        "Step 3",
+        "Step 4",
+        "Step 5",
+        "Step 6",
+        "Step 7",
+        "Step 8",
+        "Step 9",
+        "Step 10",
+        "Step 11",
+        "Step 12",
+        "Step 13",
+        "Step 14"
+      ],
+      "estimatedDuration": 44
     },
     {
       "pageId": "capital_investment_digital_twin",
       "title": "3D Digital Twin",
       "module": "3D Digital Twin",
-      "steps": 7,
-      "estimatedDuration": 11
+      "steps": 9,
+      "screens": [
+        "Digital twin",
+        "SLD"
+      ],
+      "estimatedDuration": 15
     },
     {
       "pageId": "capital_investment_electrical_sld",
       "title": "Electrical Single-Line Diagram",
       "module": "Reports",
       "steps": 5,
+      "screens": [
+        "SLD"
+      ],
       "estimatedDuration": 8
     },
     {
@@ -62,6 +267,234 @@
       "title": "Project Funding",
       "module": "Project Funding",
       "steps": 4,
+      "screens": [
+        "Funding"
+      ],
+      "estimatedDuration": 6
+    },
+    {
+      "pageId": "supplier_dashboard",
+      "title": "Supplier Portal",
+      "module": "Marketplace",
+      "steps": 4,
+      "screens": [
+        "Supplier dashboard",
+        "Add product"
+      ],
+      "estimatedDuration": 6
+    },
+    {
+      "pageId": "supplier_rfqs_inbox",
+      "title": "Supplier RFQ Inbox",
+      "module": "Marketplace",
+      "steps": 2,
+      "screens": [
+        "RFQ inbox"
+      ],
+      "estimatedDuration": 3
+    },
+    {
+      "pageId": "admin_sales",
+      "title": "Sales & CRM",
+      "module": "CRM",
+      "steps": 3,
+      "screens": [
+        "Sales",
+        "Pipeline"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "admin_pipeline",
+      "title": "Sales Pipeline",
+      "module": "Sales Pipeline",
+      "steps": 2,
+      "screens": [
+        "Pipeline"
+      ],
+      "estimatedDuration": 3
+    },
+    {
+      "pageId": "admin_users",
+      "title": "User Administration",
+      "module": "Administration",
+      "steps": 2,
+      "screens": [
+        "Users"
+      ],
+      "estimatedDuration": 3
+    },
+    {
+      "pageId": "me_dashboard",
+      "title": "My Workspace",
+      "module": "Support",
+      "steps": 1,
+      "screens": [
+        "My workspace"
+      ],
+      "estimatedDuration": 1
+    },
+    {
+      "pageId": "referrals_page",
+      "title": "Referrals",
+      "module": "Growth",
+      "steps": 2,
+      "screens": [
+        "Referrals"
+      ],
+      "estimatedDuration": 3
+    },
+    {
+      "pageId": "upgrade",
+      "title": "Plans & Upgrade",
+      "module": "Billing",
+      "steps": 2,
+      "screens": [
+        "Upgrade"
+      ],
+      "estimatedDuration": 3
+    },
+    {
+      "pageId": "landing",
+      "title": "Welcome to SolarPro",
+      "module": "Dashboard",
+      "steps": 2,
+      "screens": [
+        "Landing"
+      ],
+      "estimatedDuration": 3
+    },
+    {
+      "pageId": "myproject_list",
+      "title": "My Projects",
+      "module": "Dashboard",
+      "steps": 1,
+      "screens": [
+        "My projects"
+      ],
+      "estimatedDuration": 1
+    },
+    {
+      "pageId": "project_open",
+      "title": "Open a Project",
+      "module": "Dashboard",
+      "steps": 1,
+      "screens": [
+        "Open project"
+      ],
+      "estimatedDuration": 1
+    },
+    {
+      "pageId": "folders_index",
+      "title": "Document Folders",
+      "module": "Support",
+      "steps": 1,
+      "screens": [
+        "Folders"
+      ],
+      "estimatedDuration": 1
+    },
+    {
+      "pageId": "settings",
+      "title": "Settings",
+      "module": "Administration",
+      "steps": 2,
+      "screens": [
+        "Settings"
+      ],
+      "estimatedDuration": 3
+    },
+    {
+      "pageId": "tickets",
+      "title": "Support Tickets",
+      "module": "Support",
+      "steps": 2,
+      "screens": [
+        "Tickets"
+      ],
+      "estimatedDuration": 3
+    },
+    {
+      "pageId": "support_dashboard",
+      "title": "Installation Support",
+      "module": "Support",
+      "steps": 1,
+      "screens": [
+        "Installation support"
+      ],
+      "estimatedDuration": 1
+    },
+    {
+      "pageId": "news_index",
+      "title": "Industry News",
+      "module": "Growth",
+      "steps": 1,
+      "screens": [
+        "News"
+      ],
+      "estimatedDuration": 1
+    },
+    {
+      "pageId": "newsfeed_public",
+      "title": "Community Feed",
+      "module": "Growth",
+      "steps": 1,
+      "screens": [
+        "Newsfeed"
+      ],
+      "estimatedDuration": 1
+    },
+    {
+      "pageId": "public_opportunities",
+      "title": "Tenders & Opportunities",
+      "module": "Growth",
+      "steps": 1,
+      "screens": [
+        "Opportunities"
+      ],
+      "estimatedDuration": 1
+    },
+    {
+      "pageId": "growth_dashboard_page",
+      "title": "Growth",
+      "module": "Growth",
+      "steps": 1,
+      "screens": [
+        "Growth"
+      ],
+      "estimatedDuration": 1
+    },
+    {
+      "pageId": "procurement",
+      "title": "Procurement",
+      "module": "Procurement",
+      "steps": 5,
+      "screens": [
+        "Procurement",
+        "Catalogue",
+        "Suppliers"
+      ],
+      "estimatedDuration": 8
+    },
+    {
+      "pageId": "installer_register",
+      "title": "Installer Registration",
+      "module": "Growth",
+      "steps": 2,
+      "screens": [
+        "Installer registration"
+      ],
+      "estimatedDuration": 3
+    },
+    {
+      "pageId": "funding_institution_workspace",
+      "title": "Financial Institution Workspace",
+      "module": "Project Funding",
+      "steps": 4,
+      "screens": [
+        "Workspace",
+        "Applicant"
+      ],
       "estimatedDuration": 6
     },
     {
@@ -69,6 +502,9 @@
       "title": "Support & Guides",
       "module": "Support",
       "steps": 3,
+      "screens": [
+        "Support"
+      ],
       "estimatedDuration": 5
     }
   ]

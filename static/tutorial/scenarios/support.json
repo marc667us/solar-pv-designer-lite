@@ -3,9 +3,13 @@
   "pageId": "support",
   "title": "Support & Guides",
   "module": "Support",
-  "description": "Guides, the helpline assistant, and the guided tour for every page.",
-  "version": 1,
+  "description": "Guides, the helpline assistant, and the guided tour on every page.",
+  "version": 2,
   "language": "en-US",
+  "screens": [
+    "Support"
+  ],
+  "covers": [],
   "estimatedDuration": 5,
   "steps": [
     {
@@ -17,31 +21,36 @@
       "action": "moveCursor",
       "duration": 700,
       "delayBefore": 120,
-      "fallbackMessage": "Guides: not visible on this page yet.",
+      "screen": "Support",
+      "fallbackMessage": "Guides: not visible on this screen yet.",
       "stepNumber": 1
     },
     {
       "title": "Every page teaches itself",
-      "description": "Look for Help & Tutorial at the bottom-left of any page.",
-      "voiceScript": "On any page, use Help and Tutorial to run a guided tour, an auto demo, or ask the assistant to explain the page.",
-      "captionText": "On any page, use Help and Tutorial to run a guided tour, an auto demo, or ask the assistant to explain the page.",
+      "description": "Help & Tutorial sits on every page.",
+      "voiceScript": "On any page, Help and Tutorial runs a guided tour, an auto demo, or asks the assistant to explain the page.",
+      "captionText": "On any page, Help and Tutorial runs a guided tour, an auto demo, or asks the assistant to explain the page.",
       "targetSelector": ".sp-tut-launcher",
-      "action": "highlightOnly",
+      "action": "moveCursor",
       "duration": 1400,
       "delayBefore": 120,
-      "fallbackMessage": "Every page teaches itself: not visible on this page yet.",
+      "screen": "Support",
+      "fallbackMessage": "Every page teaches itself: not visible on this screen yet.",
+      "dynamic": true,
       "stepNumber": 2
     },
     {
       "title": "Record your own video",
-      "description": "The Record button exports the demo as a .webm video.",
+      "description": "The Record button exports the demo as .webm.",
       "voiceScript": "During a demo you can record the screen and export it as a video file.",
       "captionText": "During a demo you can record the screen and export it as a video file.",
       "targetSelector": ".sp-tut-launcher",
-      "action": "highlightOnly",
+      "action": "moveCursor",
       "duration": 700,
       "delayBefore": 120,
-      "fallbackMessage": "Record your own video: not visible on this page yet.",
+      "screen": "Support",
+      "fallbackMessage": "Record your own video: not visible on this screen yet.",
+      "dynamic": true,
       "stepNumber": 3
     }
   ]

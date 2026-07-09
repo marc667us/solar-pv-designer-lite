@@ -1,0 +1,56 @@
+{
+  "tutorialId": "tut-bill_check_landing",
+  "pageId": "bill_check_landing",
+  "title": "Check My Bill",
+  "module": "Bill Check",
+  "description": "Enter a utility bill, compare it against the PURC tariff, and see solar coverage.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Bill Check"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Enter your bill",
+      "description": "Type the amount from your latest electricity bill.",
+      "voiceScript": "Enter the amount on your latest electricity bill.",
+      "captionText": "Enter the amount on your latest electricity bill.",
+      "targetSelector": "input[type=\"number\"], input[name*=\"bill\"]",
+      "action": "typeText",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Bill Check",
+      "fallbackMessage": "Enter your bill: not visible on this screen yet.",
+      "typeText": "850",
+      "stepNumber": 1
+    },
+    {
+      "title": "Check it",
+      "description": "We invert the PURC tariff to find your true consumption.",
+      "voiceScript": "We compare it against the current PURC tariff to find your real consumption.",
+      "captionText": "We compare it against the current PURC tariff to find your real consumption.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Bill Check",
+      "fallbackMessage": "Check it: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Solar coverage",
+      "description": "How much of that bill a solar design would remove.",
+      "voiceScript": "The result shows how much of the bill solar would cover.",
+      "captionText": "The result shows how much of the bill solar would cover.",
+      "targetSelector": ".solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Bill Check",
+      "fallbackMessage": "Solar coverage: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

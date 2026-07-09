@@ -1,0 +1,42 @@
+{
+  "tutorialId": "tut-landing",
+  "pageId": "landing",
+  "title": "Welcome to SolarPro",
+  "module": "Dashboard",
+  "description": "What the platform does and where to start.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Landing"
+  ],
+  "covers": [],
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "What SolarPro does",
+      "description": "Design, price, procure and finance solar.",
+      "voiceScript": "SolarPro designs, prices, procures and finances solar projects.",
+      "captionText": "SolarPro designs, prices, procures and finances solar projects.",
+      "targetSelector": ".solar-card, section, h1",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Landing",
+      "fallbackMessage": "What SolarPro does: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Start free",
+      "description": "A 14-day trial opens every module.",
+      "voiceScript": "Start free. The trial opens every module for fourteen days.",
+      "captionText": "Start free. The trial opens every module for fourteen days.",
+      "targetSelector": "a[href*=\"register\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Landing",
+      "fallbackMessage": "Start free: not visible on this screen yet.",
+      "stepNumber": 2
+    }
+  ]
+}

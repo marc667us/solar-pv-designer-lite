@@ -1,0 +1,42 @@
+{
+  "tutorialId": "tut-referrals_page",
+  "pageId": "referrals_page",
+  "title": "Referrals",
+  "module": "Growth",
+  "description": "Share your link, earn credit when a referral converts.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Referrals"
+  ],
+  "covers": [],
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "Your referral link",
+      "description": "Every signup through it is attributed to you.",
+      "voiceScript": "This is your referral link. Every signup through it is credited to you.",
+      "captionText": "This is your referral link. Every signup through it is credited to you.",
+      "targetSelector": "input, code, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Referrals",
+      "fallbackMessage": "Your referral link: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Your conversions",
+      "description": "Credit is applied when a referral upgrades.",
+      "voiceScript": "Credit is applied when a referral upgrades to a paid plan.",
+      "captionText": "Credit is applied when a referral upgrades to a paid plan.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Referrals",
+      "fallbackMessage": "Your conversions: not visible on this screen yet.",
+      "stepNumber": 2
+    }
+  ]
+}

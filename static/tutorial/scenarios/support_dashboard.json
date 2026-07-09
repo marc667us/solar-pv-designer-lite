@@ -1,0 +1,29 @@
+{
+  "tutorialId": "tut-support_dashboard",
+  "pageId": "support_dashboard",
+  "title": "Installation Support",
+  "module": "Support",
+  "description": "Guidance for installers on site, from method statement to commissioning.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Installation support"
+  ],
+  "covers": [],
+  "estimatedDuration": 1,
+  "steps": [
+    {
+      "title": "Installation guidance",
+      "description": "Method statements and commissioning checks.",
+      "voiceScript": "Method statements and commissioning checks for the crew on site.",
+      "captionText": "Method statements and commissioning checks for the crew on site.",
+      "targetSelector": ".solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Installation support",
+      "fallbackMessage": "Installation guidance: not visible on this screen yet.",
+      "stepNumber": 1
+    }
+  ]
+}

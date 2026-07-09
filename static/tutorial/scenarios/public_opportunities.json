@@ -1,0 +1,29 @@
+{
+  "tutorialId": "tut-public_opportunities",
+  "pageId": "public_opportunities",
+  "title": "Tenders & Opportunities",
+  "module": "Growth",
+  "description": "Live solar tenders across Ghana and Africa, crawled and de-duplicated.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Opportunities"
+  ],
+  "covers": [],
+  "estimatedDuration": 1,
+  "steps": [
+    {
+      "title": "Live opportunities",
+      "description": "History accumulates across deployments.",
+      "voiceScript": "These are live solar tenders, crawled daily and de-duplicated.",
+      "captionText": "These are live solar tenders, crawled daily and de-duplicated.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Opportunities",
+      "fallbackMessage": "Live opportunities: not visible on this screen yet.",
+      "stepNumber": 1
+    }
+  ]
+}

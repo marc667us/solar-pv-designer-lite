@@ -1,0 +1,29 @@
+{
+  "tutorialId": "tut-growth_dashboard_page",
+  "pageId": "growth_dashboard_page",
+  "title": "Growth",
+  "module": "Growth",
+  "description": "Referrals, shares, leads and the campaigns that produced them.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Growth"
+  ],
+  "covers": [],
+  "estimatedDuration": 1,
+  "steps": [
+    {
+      "title": "Growth activity",
+      "description": "Every share and referral is attributed.",
+      "voiceScript": "Every share and referral is attributed back to the person who made it.",
+      "captionText": "Every share and referral is attributed back to the person who made it.",
+      "targetSelector": ".solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Growth",
+      "fallbackMessage": "Growth activity: not visible on this screen yet.",
+      "stepNumber": 1
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "tutorialId": "tut-myproject_list",
+  "pageId": "myproject_list",
+  "title": "My Projects",
+  "module": "Dashboard",
+  "description": "Everything you have designed, with its status and reports.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "My projects"
+  ],
+  "covers": [],
+  "estimatedDuration": 1,
+  "steps": [
+    {
+      "title": "Your projects",
+      "description": "Open one to resume, report or export.",
+      "voiceScript": "Open any project to resume it, or jump straight to its reports.",
+      "captionText": "Open any project to resume it, or jump straight to its reports.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "My projects",
+      "fallbackMessage": "Your projects: not visible on this screen yet.",
+      "stepNumber": 1
+    }
+  ]
+}

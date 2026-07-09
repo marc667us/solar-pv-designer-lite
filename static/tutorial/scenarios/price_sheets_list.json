@@ -1,0 +1,42 @@
+{
+  "tutorialId": "tut-price_sheets_list",
+  "pageId": "price_sheets_list",
+  "title": "Price Sheets",
+  "module": "Procurement",
+  "description": "Every generated price sheet, ready to send to a client or a buyer.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Price sheets"
+  ],
+  "covers": [],
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "Saved sheets",
+      "description": "Each sheet snapshots the prices at the time it was built.",
+      "voiceScript": "Each price sheet snapshots the supplier prices at the moment you built it.",
+      "captionText": "Each price sheet snapshots the supplier prices at the moment you built it.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Price sheets",
+      "fallbackMessage": "Saved sheets: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Open one",
+      "description": "Item, quantity, unit, price, supplier and contact.",
+      "voiceScript": "Open a sheet to see the items, prices and supplier contacts.",
+      "captionText": "Open a sheet to see the items, prices and supplier contacts.",
+      "targetSelector": "a",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Price sheets",
+      "fallbackMessage": "Open one: not visible on this screen yet.",
+      "stepNumber": 2
+    }
+  ]
+}

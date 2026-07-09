@@ -1,0 +1,42 @@
+{
+  "tutorialId": "tut-installer_register",
+  "pageId": "installer_register",
+  "title": "Installer Registration",
+  "module": "Growth",
+  "description": "Join the installer network and receive qualified leads.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Installer registration"
+  ],
+  "covers": [],
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "Register",
+      "description": "Verified installers receive routed leads.",
+      "voiceScript": "Register as an installer to receive leads routed to your region.",
+      "captionText": "Register as an installer to receive leads routed to your region.",
+      "targetSelector": "form, input",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Installer registration",
+      "fallbackMessage": "Register: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Submit",
+      "description": "An administrator verifies before you go live.",
+      "voiceScript": "Submit. An administrator verifies you before you go live.",
+      "captionText": "Submit. An administrator verifies you before you go live.",
+      "targetSelector": "button[type=\"submit\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Installer registration",
+      "fallbackMessage": "Submit: not visible on this screen yet.",
+      "stepNumber": 2
+    }
+  ]
+}

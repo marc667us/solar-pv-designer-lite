@@ -1,0 +1,29 @@
+{
+  "tutorialId": "tut-newsfeed_public",
+  "pageId": "newsfeed_public",
+  "title": "Community Feed",
+  "module": "Growth",
+  "description": "Installer achievements, supplier products and before/after roofs.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Newsfeed"
+  ],
+  "covers": [],
+  "estimatedDuration": 1,
+  "steps": [
+    {
+      "title": "The community feed",
+      "description": "Share your work and win referrals.",
+      "voiceScript": "Share your installations here; each post can carry a referral link.",
+      "captionText": "Share your installations here; each post can carry a referral link.",
+      "targetSelector": ".solar-card, article",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Newsfeed",
+      "fallbackMessage": "The community feed: not visible on this screen yet.",
+      "stepNumber": 1
+    }
+  ]
+}

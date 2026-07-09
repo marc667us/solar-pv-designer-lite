@@ -1,0 +1,29 @@
+{
+  "tutorialId": "tut-folders_index",
+  "pageId": "folders_index",
+  "title": "Document Folders",
+  "module": "Support",
+  "description": "Project documents, datasheets and generated reports in one place.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Folders"
+  ],
+  "covers": [],
+  "estimatedDuration": 1,
+  "steps": [
+    {
+      "title": "Your folders",
+      "description": "Reports and uploads are filed per project.",
+      "voiceScript": "Reports and uploads are filed against the project they belong to.",
+      "captionText": "Reports and uploads are filed against the project they belong to.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Folders",
+      "fallbackMessage": "Your folders: not visible on this screen yet.",
+      "stepNumber": 1
+    }
+  ]
+}

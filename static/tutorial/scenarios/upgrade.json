@@ -1,0 +1,42 @@
+{
+  "tutorialId": "tut-upgrade",
+  "pageId": "upgrade",
+  "title": "Plans & Upgrade",
+  "module": "Billing",
+  "description": "Compare plans and upgrade; the trial converts without losing your work.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Upgrade"
+  ],
+  "covers": [],
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "Compare the plans",
+      "description": "Free trial, professional, business, enterprise.",
+      "voiceScript": "Compare the plans. Your projects survive the upgrade untouched.",
+      "captionText": "Compare the plans. Your projects survive the upgrade untouched.",
+      "targetSelector": ".solar-card, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Upgrade",
+      "fallbackMessage": "Compare the plans: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Upgrade",
+      "description": "Payment is handled by Paystack or Stripe.",
+      "voiceScript": "Choose a plan and complete payment securely.",
+      "captionText": "Choose a plan and complete payment securely.",
+      "targetSelector": "button, .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Upgrade",
+      "fallbackMessage": "Upgrade: not visible on this screen yet.",
+      "stepNumber": 2
+    }
+  ]
+}

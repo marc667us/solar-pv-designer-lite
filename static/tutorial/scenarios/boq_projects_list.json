@@ -1,0 +1,59 @@
+{
+  "tutorialId": "tut-boq_projects_list",
+  "pageId": "boq_projects_list",
+  "title": "BOQ Projects",
+  "module": "BOQ",
+  "description": "Campus, building and floor BOQs with cost roll-up to a single summary.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "BOQ projects",
+    "Wizard"
+  ],
+  "covers": [
+    "boq_wizard"
+  ],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Your BOQ projects",
+      "description": "Costs roll up floor → building → campus.",
+      "voiceScript": "Costs roll up from each floor to the building and the whole campus.",
+      "captionText": "Costs roll up from each floor to the building and the whole campus.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "BOQ projects",
+      "fallbackMessage": "Your BOQ projects: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Start the wizard",
+      "description": "The wizard configures buildings, floors and services.",
+      "voiceScript": "The wizard walks you through buildings, floors and services.",
+      "captionText": "The wizard walks you through buildings, floors and services.",
+      "targetSelector": "",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "BOQ projects",
+      "fallbackMessage": "Start the wizard: the next screen is not reachable from here.",
+      "href": "/boq-projects/wizard",
+      "stepNumber": 2
+    },
+    {
+      "title": "Configure",
+      "description": "Pick the services each floor carries.",
+      "voiceScript": "Pick the services each floor carries, then generate the bills.",
+      "captionText": "Pick the services each floor carries, then generate the bills.",
+      "targetSelector": "form, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Wizard",
+      "fallbackMessage": "Configure: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

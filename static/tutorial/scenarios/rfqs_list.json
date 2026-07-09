@@ -1,0 +1,72 @@
+{
+  "tutorialId": "tut-rfqs_list",
+  "pageId": "rfqs_list",
+  "title": "Requests for Quotation",
+  "module": "Procurement",
+  "description": "Raise a quotation request, watch supplier responses arrive, and compare them.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "RFQs",
+    "New RFQ"
+  ],
+  "covers": [
+    "rfqs_new"
+  ],
+  "estimatedDuration": 6,
+  "steps": [
+    {
+      "title": "Your requests",
+      "description": "Each RFQ carries its targeted suppliers and status.",
+      "voiceScript": "Each request shows the suppliers it went to and where it stands.",
+      "captionText": "Each request shows the suppliers it went to and where it stands.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "RFQs",
+      "fallbackMessage": "Your requests: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Raise a new RFQ",
+      "description": "Pick products and suppliers.",
+      "voiceScript": "Let us raise a new request for quotation.",
+      "captionText": "Let us raise a new request for quotation.",
+      "targetSelector": "",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "RFQs",
+      "fallbackMessage": "Raise a new RFQ: the next screen is not reachable from here.",
+      "href": "/rfqs/new",
+      "stepNumber": 2
+    },
+    {
+      "title": "Choose suppliers",
+      "description": "An RFQ with no targets is rejected.",
+      "voiceScript": "Choose the suppliers who should quote. An RFQ needs at least one.",
+      "captionText": "Choose the suppliers who should quote. An RFQ needs at least one.",
+      "targetSelector": "select, input[type=checkbox]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New RFQ",
+      "fallbackMessage": "Choose suppliers: not visible on this screen yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Send it",
+      "description": "Suppliers are emailed and respond in their portal.",
+      "voiceScript": "Send it. Suppliers are notified and respond in their own portal.",
+      "captionText": "Send it. Suppliers are notified and respond in their own portal.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New RFQ",
+      "fallbackMessage": "Send it: not visible on this screen yet.",
+      "stepNumber": 4
+    }
+  ]
+}

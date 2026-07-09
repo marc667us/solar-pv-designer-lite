@@ -1,0 +1,42 @@
+{
+  "tutorialId": "tut-supplier_rfqs_inbox",
+  "pageId": "supplier_rfqs_inbox",
+  "title": "Supplier RFQ Inbox",
+  "module": "Marketplace",
+  "description": "See the quotation requests buyers sent you and respond with prices.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "RFQ inbox"
+  ],
+  "covers": [],
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "Incoming requests",
+      "description": "Each request lists the products and quantities.",
+      "voiceScript": "Each incoming request lists the products and quantities a buyer needs.",
+      "captionText": "Each incoming request lists the products and quantities a buyer needs.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "RFQ inbox",
+      "fallbackMessage": "Incoming requests: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Respond",
+      "description": "Your price and lead time go straight back to the buyer.",
+      "voiceScript": "Respond with your price and lead time.",
+      "captionText": "Respond with your price and lead time.",
+      "targetSelector": "a, button",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "RFQ inbox",
+      "fallbackMessage": "Respond: not visible on this screen yet.",
+      "stepNumber": 2
+    }
+  ]
+}

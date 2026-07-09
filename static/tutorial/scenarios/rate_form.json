@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-rate_form",
+  "pageId": "rate_form",
+  "title": "Rate Build-Up",
+  "module": "Rate Build-Up",
+  "description": "Build a unit rate from material, labour, plant, overhead and profit.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Rate build-up"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Material, labour, plant",
+      "description": "Each component is entered separately.",
+      "voiceScript": "Enter the material, labour and plant that make up the rate.",
+      "captionText": "Enter the material, labour and plant that make up the rate.",
+      "targetSelector": "input, form",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Rate build-up",
+      "fallbackMessage": "Material, labour, plant: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Overhead and profit",
+      "description": "Markup is applied on top, never inside, the cost.",
+      "voiceScript": "Overhead and profit are applied as markup on top of the cost.",
+      "captionText": "Overhead and profit are applied as markup on top of the cost.",
+      "targetSelector": "input[name*=\"markup\"], input",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Rate build-up",
+      "fallbackMessage": "Overhead and profit: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Compute",
+      "description": "The compound rate flows into every BOQ line that uses it.",
+      "voiceScript": "The computed rate flows into every bill of quantities line that uses it.",
+      "captionText": "The computed rate flows into every bill of quantities line that uses it.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Rate build-up",
+      "fallbackMessage": "Compute: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

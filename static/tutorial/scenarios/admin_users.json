@@ -1,0 +1,42 @@
+{
+  "tutorialId": "tut-admin_users",
+  "pageId": "admin_users",
+  "title": "User Administration",
+  "module": "Administration",
+  "description": "Accounts, roles and the audit trail behind every admin action.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Users"
+  ],
+  "covers": [],
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "Accounts",
+      "description": "Roles decide which modules a user can reach.",
+      "voiceScript": "Each account carries roles that decide which modules it can reach.",
+      "captionText": "Each account carries roles that decide which modules it can reach.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Users",
+      "fallbackMessage": "Accounts: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Every action is audited",
+      "description": "Admin actions are written to the audit chain.",
+      "voiceScript": "Every administrative action is written to a tamper-evident audit chain.",
+      "captionText": "Every administrative action is written to a tamper-evident audit chain.",
+      "targetSelector": ".solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Users",
+      "fallbackMessage": "Every action is audited: not visible on this screen yet.",
+      "stepNumber": 2
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-project_location",
+  "pageId": "project_location",
+  "title": "Set the Site Location",
+  "module": "Solar Design",
+  "description": "The globe fixes irradiance, temperature, tariff and currency for the design.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Location"
+  ],
+  "covers": [],
+  "estimatedDuration": 5,
+  "steps": [
+    {
+      "title": "Spin the globe",
+      "description": "Click your site, or search for it.",
+      "voiceScript": "Click your site on the globe. The marker turns green once it is set.",
+      "captionText": "Click your site on the globe. The marker turns green once it is set.",
+      "targetSelector": "canvas, #globe",
+      "action": "drag",
+      "duration": 1200,
+      "delayBefore": 120,
+      "screen": "Location",
+      "fallbackMessage": "Spin the globe: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Search instead",
+      "description": "Typing a place name flies the globe to it.",
+      "voiceScript": "You can also type a place name and the globe flies to it.",
+      "captionText": "You can also type a place name and the globe flies to it.",
+      "targetSelector": "input[type=\"text\"], input[name*=\"search\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Location",
+      "fallbackMessage": "Search instead: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Continue to loads",
+      "description": "Location fixes sun hours, temperature and tariff.",
+      "voiceScript": "Continue. Your location now fixes the sun hours, temperature and tariff.",
+      "captionText": "Continue. Your location now fixes the sun hours, temperature and tariff.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Location",
+      "fallbackMessage": "Continue to loads: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

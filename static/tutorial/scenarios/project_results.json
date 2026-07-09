@@ -1,0 +1,59 @@
+{
+  "tutorialId": "tut-project_results",
+  "pageId": "project_results",
+  "title": "Design Results",
+  "module": "Solar Design",
+  "description": "The sized system, and every report that falls out of it.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Results",
+    "PV report"
+  ],
+  "covers": [
+    "report_pv"
+  ],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "The sized system",
+      "description": "Array, inverter, battery, cables and economics.",
+      "voiceScript": "Here is the sized system: array, inverter, battery, cables and payback.",
+      "captionText": "Here is the sized system: array, inverter, battery, cables and payback.",
+      "targetSelector": ".solar-card, .kpi-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Results",
+      "fallbackMessage": "The sized system: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Open the PV report",
+      "description": "The engineering report behind the numbers.",
+      "voiceScript": "Let us open the PV report that explains those numbers.",
+      "captionText": "Let us open the PV report that explains those numbers.",
+      "targetSelector": "a[href*=\"/report/pv\"]",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Results",
+      "fallbackMessage": "Open the PV report: the next screen is not reachable from here.",
+      "hrefFromSelector": "a[href*=\"/report/pv\"]",
+      "stepNumber": 2
+    },
+    {
+      "title": "The PV report",
+      "description": "Every calculation, its inputs and its standard.",
+      "voiceScript": "Each calculation shows its inputs, its result and the standard behind it.",
+      "captionText": "Each calculation shows its inputs, its result and the standard behind it.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "PV report",
+      "fallbackMessage": "The PV report: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

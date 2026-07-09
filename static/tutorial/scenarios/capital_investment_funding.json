@@ -3,21 +3,26 @@
   "pageId": "capital_investment_funding",
   "title": "Project Funding",
   "module": "Project Funding",
-  "description": "Package the design, pick a financial institution, consent, submit and track the review.",
-  "version": 1,
+  "description": "Package the design, pick an institution, consent, submit and track the review.",
+  "version": 2,
   "language": "en-US",
+  "screens": [
+    "Funding"
+  ],
+  "covers": [],
   "estimatedDuration": 6,
   "steps": [
     {
       "title": "Funding overview",
       "description": "The pack bundles design, BOQ and financial model.",
-      "voiceScript": "The funding pack bundles your design, bill of quantities and financial model.",
-      "captionText": "The funding pack bundles your design, bill of quantities and financial model.",
+      "voiceScript": "The funding pack bundles your design, BOQ and financial model.",
+      "captionText": "The funding pack bundles your design, BOQ and financial model.",
       "targetSelector": ".solar-card",
-      "action": "highlightOnly",
+      "action": "moveCursor",
       "duration": 700,
       "delayBefore": 120,
-      "fallbackMessage": "Funding overview: not visible on this page yet.",
+      "screen": "Funding",
+      "fallbackMessage": "Funding overview: not visible on this screen yet.",
       "stepNumber": 1
     },
     {
@@ -29,31 +34,34 @@
       "action": "moveCursor",
       "duration": 700,
       "delayBefore": 120,
-      "fallbackMessage": "Choose an institution: not visible on this page yet.",
+      "screen": "Funding",
+      "fallbackMessage": "Choose an institution: not visible on this screen yet.",
       "stepNumber": 2
     },
     {
       "title": "Consent and submit",
-      "description": "You must consent before your data is shared.",
+      "description": "Nothing is shared until you consent.",
       "voiceScript": "Give consent, then submit. Nothing is shared until you consent.",
       "captionText": "Give consent, then submit. Nothing is shared until you consent.",
       "targetSelector": "button[type=\"submit\"], .btn-warning",
-      "action": "highlightOnly",
+      "action": "moveCursor",
       "duration": 700,
       "delayBefore": 120,
-      "fallbackMessage": "Consent and submit: not visible on this page yet.",
+      "screen": "Funding",
+      "fallbackMessage": "Consent and submit: not visible on this screen yet.",
       "stepNumber": 3
     },
     {
       "title": "Track the review",
-      "description": "The bank workspace shows status and any request for information.",
-      "voiceScript": "Track the review status and respond to any request for information.",
-      "captionText": "Track the review status and respond to any request for information.",
+      "description": "The bank workspace shows status and any RFI.",
+      "voiceScript": "Track the review and respond to any request for information.",
+      "captionText": "Track the review and respond to any request for information.",
       "targetSelector": ".badge, .solar-card",
-      "action": "highlightOnly",
+      "action": "moveCursor",
       "duration": 700,
       "delayBefore": 120,
-      "fallbackMessage": "Track the review: not visible on this page yet.",
+      "screen": "Funding",
+      "fallbackMessage": "Track the review: not visible on this screen yet.",
       "stepNumber": 4
     }
   ]

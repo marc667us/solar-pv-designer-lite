@@ -1,0 +1,42 @@
+{
+  "tutorialId": "tut-price_sheet_view",
+  "pageId": "price_sheet_view",
+  "title": "Price Sheet",
+  "module": "Procurement",
+  "description": "A ten-column buying sheet with supplier contact details, ready to send.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Price sheet"
+  ],
+  "covers": [],
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "The sheet",
+      "description": "Item, quantity, unit, price, supplier and contact.",
+      "voiceScript": "Each line carries the price, the supplier, and how to reach them.",
+      "captionText": "Each line carries the price, the supplier, and how to reach them.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Price sheet",
+      "fallbackMessage": "The sheet: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Send or print",
+      "description": "Prices are a snapshot from when it was built.",
+      "voiceScript": "Send or print it. The prices are a snapshot from when you built it.",
+      "captionText": "Send or print it. The prices are a snapshot from when you built it.",
+      "targetSelector": "button, a",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Price sheet",
+      "fallbackMessage": "Send or print: not visible on this screen yet.",
+      "stepNumber": 2
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "tutorialId": "tut-tickets",
+  "pageId": "tickets",
+  "title": "Support Tickets",
+  "module": "Support",
+  "description": "Raise a ticket, track it, and escalate when the assistant cannot help.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Tickets"
+  ],
+  "covers": [],
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "Your tickets",
+      "description": "Each ticket carries a priority and a status.",
+      "voiceScript": "Each ticket carries a priority and a status you can follow.",
+      "captionText": "Each ticket carries a priority and a status you can follow.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Tickets",
+      "fallbackMessage": "Your tickets: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Raise one",
+      "description": "The helpline assistant can escalate for you.",
+      "voiceScript": "Raise a ticket, or let the helpline assistant escalate for you.",
+      "captionText": "Raise a ticket, or let the helpline assistant escalate for you.",
+      "targetSelector": "a, button",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Tickets",
+      "fallbackMessage": "Raise one: not visible on this screen yet.",
+      "stepNumber": 2
+    }
+  ]
+}

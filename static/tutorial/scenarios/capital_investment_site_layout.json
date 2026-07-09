@@ -1,0 +1,120 @@
+{
+  "tutorialId": "tut-capital_investment_site_layout",
+  "pageId": "capital_investment_site_layout",
+  "title": "Capital Investment Site Layout",
+  "module": "TODO",
+  "description": "TODO: what does /large-scale-solar/<int:pid>/site-layout do for the user?",
+  "version": 1,
+  "language": "en-US",
+  "draft": true,
+  "screens": [
+    "capital_investment_site_layout"
+  ],
+  "estimatedDuration": 16,
+  "steps": [
+    {
+      "stepNumber": 1,
+      "title": "Rate The App →",
+      "description": "TODO: describe what 'Rate the app →' does.",
+      "voiceScript": "Rate the app → takes you to the next screen.",
+      "captionText": "Rate the app → takes you to the next screen.",
+      "targetSelector": "a[href=\"/rate\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "capital_investment_site_layout",
+      "fallbackMessage": "Rate the app →: not visible on this screen yet."
+    },
+    {
+      "stepNumber": 2,
+      "title": "Marketplacefree",
+      "description": "TODO: describe what 'MarketplaceFREE' does.",
+      "voiceScript": "MarketplaceFREE takes you to the next screen.",
+      "captionText": "MarketplaceFREE takes you to the next screen.",
+      "targetSelector": "a[href=\"/marketplace\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "capital_investment_site_layout",
+      "fallbackMessage": "MarketplaceFREE: not visible on this screen yet."
+    },
+    {
+      "stepNumber": 3,
+      "title": "Procurement Center",
+      "description": "TODO: describe what 'Procurement Center' does.",
+      "voiceScript": "Procurement Center takes you to the next screen.",
+      "captionText": "Procurement Center takes you to the next screen.",
+      "targetSelector": "a[href=\"/procurement-center\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "capital_investment_site_layout",
+      "fallbackMessage": "Procurement Center: not visible on this screen yet."
+    },
+    {
+      "stepNumber": 4,
+      "title": "Price Sheets",
+      "description": "TODO: describe what 'Price Sheets' does.",
+      "voiceScript": "Price Sheets takes you to the next screen.",
+      "captionText": "Price Sheets takes you to the next screen.",
+      "targetSelector": "a[href=\"/price-sheets\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "capital_investment_site_layout",
+      "fallbackMessage": "Price Sheets: not visible on this screen yet."
+    },
+    {
+      "stepNumber": 5,
+      "title": "Boms / Cost Estimates",
+      "description": "TODO: describe what 'BOMs / Cost Estimates' does.",
+      "voiceScript": "BOMs / Cost Estimates takes you to the next screen.",
+      "captionText": "BOMs / Cost Estimates takes you to the next screen.",
+      "targetSelector": "a[href=\"/boms\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "capital_investment_site_layout",
+      "fallbackMessage": "BOMs / Cost Estimates: not visible on this screen yet."
+    },
+    {
+      "stepNumber": 6,
+      "title": "Boq Projects",
+      "description": "TODO: describe what 'BOQ Projects' does.",
+      "voiceScript": "BOQ Projects takes you to the next screen.",
+      "captionText": "BOQ Projects takes you to the next screen.",
+      "targetSelector": "a[href=\"/boq-projects\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "capital_investment_site_layout",
+      "fallbackMessage": "BOQ Projects: not visible on this screen yet."
+    },
+    {
+      "stepNumber": 7,
+      "title": "Rfqs",
+      "description": "TODO: describe what 'RFQs' does.",
+      "voiceScript": "RFQs takes you to the next screen.",
+      "captionText": "RFQs takes you to the next screen.",
+      "targetSelector": "a[href=\"/rfqs\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "capital_investment_site_layout",
+      "fallbackMessage": "RFQs: not visible on this screen yet."
+    },
+    {
+      "stepNumber": 8,
+      "title": "My Procurement",
+      "description": "TODO: describe what 'My Procurement' does.",
+      "voiceScript": "My Procurement takes you to the next screen.",
+      "captionText": "My Procurement takes you to the next screen.",
+      "targetSelector": "a[href=\"/me\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "capital_investment_site_layout",
+      "fallbackMessage": "My Procurement: not visible on this screen yet."
+    }
+  ]
+}

@@ -39,6 +39,32 @@
     els: {}, timer: null, rec: null, chunks: [], stream: null, alive: false
   };
 
+  // ---------- multi-screen flows ----------
+  // A feature's tutorial spans every screen the feature touches, so a tour must
+  // survive a page navigation. Before navigating we park {flow, i, mode} in
+  // sessionStorage; on the next page the engine reloads the SAME scenario file
+  // (the flow's entry endpoint) and resumes at the next step. Stale state is
+  // ignored so a tour abandoned an hour ago never ambushes the user.
+  var FLOW_KEY = 'spTutFlow';
+  var FLOW_TTL_MS = 10 * 60 * 1000;
+
+  function saveFlow(nextIndex) {
+    try {
+      sessionStorage.setItem(FLOW_KEY, JSON.stringify({
+        flow: T.scenario.pageId, i: nextIndex, mode: T.mode, muted: T.muted,
+        speed: T.speed, ts: Date.now()
+      }));
+    } catch (e) {}
+  }
+  function clearFlow() { try { sessionStorage.removeItem(FLOW_KEY); } catch (e) {} }
+  function readFlow() {
+    try {
+      var s = JSON.parse(sessionStorage.getItem(FLOW_KEY) || 'null');
+      if (!s || !s.flow || (Date.now() - (s.ts || 0)) > FLOW_TTL_MS) return null;
+      return s;
+    } catch (e) { return null; }
+  }
+
   // ---------- tiny helpers ----------
   function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
   function el(tag, cls, html) {
@@ -194,6 +220,7 @@
   async function runStep() {
     var s = cur();
     if (!s) return finish();
+    markFlow();                       // survive a navigation from any step
     var node = q(s.targetSelector);
 
     if (!node && s.targetSelector) {
@@ -214,9 +241,10 @@
 
     if (s.delayBefore) await sleep(s.delayBefore);
 
+    // Every step that has a target shows the cursor travelling to it -- including
+    // a navigate step, so the user sees WHICH control opens the next screen.
     var act = s.action || 'highlightOnly';
-    if (node && (act === 'moveCursor' || act === 'hover' || act === 'click' ||
-                 act === 'doubleClick' || act === 'typeText' || act === 'selectOption')) {
+    if (node && act !== 'highlightOnly' && act !== 'scroll') {
       var c = centerOf(node);
       await moveCursor(c.x, c.y, 620);
     }
@@ -232,16 +260,56 @@
       // watch mode is strictly read-only: never write into a real field, even
       // if the scenario opted in with dispatch:true.
       await typeInto(node, s.typeText || '', s.dispatch === true && T.mode !== 'watch');
+    } else if (act === 'drag' || act === 'rotate3D' || act === 'pan' || act === 'zoom') {
+      await gesture(node, act);
     } else if (act === 'scroll') {
       window.scrollBy({ top: s.scrollBy || 320, behavior: 'smooth' });
       await sleep(500);
-    } else if (act === 'navigate' && s.href && T.mode !== 'watch') {
-      await speak(s.voiceScript); location.href = s.href; return;
+    } else if (act === 'navigate') {
+      // Cross-screen hop. The destination is either a literal href or resolved
+      // from a link on this page (project-scoped URLs carry an id we cannot know
+      // when the scenario is authored). Navigation is a GET, so it is safe in
+      // every mode -- showing the next screen IS the point of the tutorial.
+      var href = s.href || '';
+      if (!href && s.hrefFromSelector) {
+        var link = q(s.hrefFromSelector);
+        href = (link && link.getAttribute('href')) || '';
+      }
+      if (!href) {
+        caption(s.fallbackMessage || 'The next screen is not reachable from here.');
+        await sleep(1100);
+        return;
+      }
+      if (node) { var np = centerOf(node); ripple(np.x, np.y); }
+      await speak(s.voiceScript || s.captionText || '');
+      await sleep(280);
+      saveFlow(T.i + 1);          // resume on the next screen
+      location.href = href;
+      return 'navigated';         // stop the loop; the new page picks the tour up
     }
 
     await speak(s.voiceScript || s.captionText || '');
     await sleep(s.duration || 500);
     if (s.delayAfter) await sleep(s.delayAfter);
+  }
+
+  // Show a drag / orbit / pan / zoom gesture as cursor motion across the target.
+  // Purely visual: the engine never synthesises pointer events on the app, so a
+  // demo can rehearse a 3D orbit or a slider drag without mutating anything.
+  // in : node (Element), kind (string)   out: promise
+  async function gesture(node, kind) {
+    if (!node) return;
+    var b = node.getBoundingClientRect();
+    var cy = b.top + b.height / 2;
+    var pts = kind === 'zoom'
+      ? [[b.left + b.width * .5, cy], [b.left + b.width * .5, cy - b.height * .18],
+         [b.left + b.width * .5, cy + b.height * .18]]
+      : [[b.left + b.width * .30, cy], [b.left + b.width * .50, cy - b.height * .12],
+         [b.left + b.width * .72, cy]];
+    T.els.cursor.classList.add('down');
+    for (var i = 0; i < pts.length; i++) await moveCursor(pts[i][0], pts[i][1], 420);
+    T.els.cursor.classList.remove('down');
+    await sleep(180);
   }
 
   // Animate character-by-character typing. Only writes into the real input when
@@ -264,7 +332,8 @@
   // ---------- transport ----------
   async function loop() {
     while (T.alive && T.playing && T.i < steps().length) {
-      await runStep();
+      var r = await runStep();
+      if (r === 'navigated') return;    // the next screen resumes the tour
       if (!T.alive || !T.playing) return;
       T.i++;
     }
@@ -273,6 +342,7 @@
   function finish() {
     caption('Tutorial complete.');
     ringTo(null);
+    clearFlow();
     T.playing = false;
     setTimeout(stop, 1400);
   }
@@ -304,6 +374,9 @@
     if (T.playing) return;                    // auto loop already running
     await runStep();
   }
+  // In guided mode the user drives, so the flow index must be parked on every
+  // step -- otherwise a navigate step would resume at the wrong place.
+  function markFlow() { if (T.alive && T.scenario) saveFlow(T.i); }
 
   // ---------- recording: MediaRecorder screen capture -> .webm export ----------
   async function toggleRecord(btn) {
@@ -375,14 +448,28 @@
     T.mode = mode || 'guided';
     T.i = 0; T.alive = true;
     if (T.mode === 'explain') return explain();
+    clearFlow();
+    begin();
+  }
+  // Pick the tour back up on a new screen at the step the previous screen parked.
+  function resume(index, mode) {
+    if (!T.scenario) return;
+    T.mode = mode || 'auto';
+    T.i = Math.max(0, Math.min(steps().length - 1, index));
+    T.alive = true;
+    begin();
+  }
+  function begin() {
     buildChrome();
     T.playing = (T.mode !== 'guided');
     var tgl = T.els.bar.querySelector('[data-a=toggle]');
     tgl.textContent = T.playing ? 'Pause' : 'Play';
+    markFlow();
     if (T.playing) loop(); else runStep();
   }
   function stop() {
     T.alive = false; T.playing = false;
+    clearFlow();                       // an exited tour must not resume elsewhere
     hushSpeech(); clearTimeout(T.timer);
     if (T.rec) { try { T.rec.stop(); } catch (e) {} }
     destroyChrome();
@@ -413,19 +500,39 @@
     document.body.appendChild(b);
   }
 
-  // Fetch this page's scenario; no scenario -> the engine stays invisible.
-  fetch(BASE + encodeURIComponent(PAGE) + '.json', { credentials: 'same-origin' })
+  // Boot. If a multi-screen tour is mid-flight we reload ITS scenario (the flow's
+  // entry endpoint) and resume; otherwise we load this page's own scenario. Pages
+  // with neither never see the engine.
+  var flow = readFlow();
+  var wanted = flow ? flow.flow : PAGE;
+
+  fetch(BASE + encodeURIComponent(wanted) + '.json', { credentials: 'same-origin' })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (j) {
-      if (!j || !j.steps || !j.steps.length) return;
+      if (!j || !j.steps || !j.steps.length) {
+        if (flow) clearFlow();          // flow file vanished (route renamed)
+        return;
+      }
+      // A draft is machine-generated from the page's controls and still carries
+      // TODO narration. It exists so coverage is visible, not so users see it.
+      if (j.draft === true) { if (flow) clearFlow(); return; }
       T.scenario = j;
       mountLauncher();
       window.SolarProTutorial = { start: start, stop: stop, available: true, scenario: j };
+
+      if (flow) {
+        if (flow.i >= j.steps.length) { clearFlow(); return; }
+        T.muted = !!flow.muted;
+        T.speed = flow.speed || 1;
+        // Give the destination page a beat to paint before we hunt for targets.
+        setTimeout(function () { resume(flow.i, flow.mode); }, 900);
+        return;
+      }
       // ?tutorial=guided|auto|watch|explain deep-links a tour (used by /guides).
       var m = new URLSearchParams(location.search).get('tutorial');
       if (m) setTimeout(function () { start(m); }, 700);
     })
-    .catch(function () { /* no tutorial for this page: silent */ });
+    .catch(function () { if (flow) clearFlow(); });
 
   window.addEventListener('resize', function () { if (T.alive) { var s = cur(); ringTo(q(s && s.targetSelector)); } });
   window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && T.alive) stop(); });
