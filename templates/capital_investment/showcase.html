@@ -74,8 +74,9 @@
   {# ---------------- STAGE (hero + gallery + present go fullscreen together) ---------------- #}
   <div id="sc-stage">
     <div class="sc-hero">
-      <img id="sc-hero-img" src="{{ url_for('static', filename='capital_investment/hero/' ~ show.hero.img) }}"
-           alt="{{ show.project.name }} — photoreal solar farm">
+      <img id="sc-hero-img"
+           src="{% if show.is_design_aerial %}{{ url_for('capital_investment_showcase_aerial', pid=proj.id) }}{% else %}{{ url_for('static', filename='capital_investment/hero/' ~ show.hero.img) }}{% endif %}"
+           alt="{% if show.is_design_aerial %}{{ show.project.name }} — generated aerial of your design{% else %}{{ show.project.name }} — illustrative solar-farm reference image{% endif %}">
       <div class="sc-topfade"></div>
       <div class="sc-botfade"></div>
 
@@ -84,7 +85,8 @@
           <div class="sc-title"><i class="bi bi-badge-3d me-1"></i>{{ show.project.name }}</div>
           <div class="sc-sub">{{ '%.0f'|format(show.project.ac_mw) }} MWac &middot;
             {{ '%.0f'|format(show.project.dc_kwp / 1000.0) }} MWp DC &middot;
-            {{ '{:,}'.format(show.project.n_modules) }} modules &middot; Photoreal digital twin</div>
+            {{ '{:,}'.format(show.project.n_modules) }} modules &middot;
+            {% if show.is_design_aerial %}Generated from your design &mdash; matches the 3D twin{% else %}Illustrative preview{% endif %}</div>
         </div>
         <div class="sc-actions d-flex gap-2">
           <button id="sc-play" class="btn btn-sm btn-outline-light"><i class="bi bi-play-fill"></i></button>
@@ -112,8 +114,8 @@
         <button type="button" class="sc-thumb{{ ' active' if loop.first }}"
                 data-key="{{ s.key }}" data-label="{{ s.label }}"
                 data-caption="{{ s.caption }}"
-                data-full="{{ url_for('static', filename='capital_investment/hero/' ~ s.img) }}">
-          <img src="{{ url_for('static', filename='capital_investment/hero/' ~ s.thumb) }}" alt="{{ s.label }}">
+                data-full="{% if s.is_aerial %}{{ url_for('capital_investment_showcase_aerial', pid=proj.id) }}{% else %}{{ url_for('static', filename='capital_investment/hero/' ~ s.img) }}{% endif %}">
+          <img src="{% if s.is_aerial %}{{ url_for('capital_investment_showcase_aerial', pid=proj.id) }}{% else %}{{ url_for('static', filename='capital_investment/hero/' ~ s.thumb) }}{% endif %}" alt="{{ s.label }}">
           <div class="cap">{{ s.label }}</div>
         </button>
         {% endfor %}

@@ -10400,6 +10400,42 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         )
 
     # ------------------------------------------------------------------
+    # GET /large-scale-solar/<pid>/showcase-aerial.png -- same-origin,
+    # browser-cacheable PNG of the ACTUAL twin scene (oblique aerial). Keeps
+    # the truthful "your design" hero out of the page HTML as a large base64
+    # blob; renders on demand via the reusable dt_showcase_aerial module (no
+    # new engine). Falls back to the stock aerial jpg if the render is empty
+    # so the hero is never broken. Inherits @login_required + gate + the
+    # user-scoped _load_project(), so tenant/user isolation is preserved.
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/<int:pid>/showcase-aerial.png",
+               endpoint="capital_investment_showcase_aerial")
+    @login_required
+    def _showcase_aerial(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        proj = _load_project(pid)
+        from flask import make_response
+        import dt_showcase_aerial as _aer
+        from dt_scene_v2 import augment_scene_v2
+        png = b""
+        try:
+            scene = augment_scene_v2(
+                build_scene_from_project(_ci_normalize_proj_for_agents(proj)),
+                proj)
+            png = _aer.render_plant_aerial(scene, 1600, 900)
+        except Exception:
+            png = b""
+        if not png:
+            # never leave the hero broken -- serve the illustrative stock art
+            return redirect(url_for(
+                "static", filename="capital_investment/hero/farm-aerial.jpg"))
+        resp = make_response(png)
+        resp.headers["Content-Type"] = "image/png"
+        resp.headers["Cache-Control"] = "private, max-age=300"
+        return resp
+
+    # ------------------------------------------------------------------
     # GET /large-scale-solar/<pid>/site-layout -- scaled plot plan of the
     # physical plant arrangement. Reuses build_site_layout_model (sizing via
     # build_sld_model); no new engine.
