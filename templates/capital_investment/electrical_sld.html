@@ -98,7 +98,42 @@
     </div>
   </div>
 
-  {# ---------------- POWER-EXPORT CHAIN (single line) ---------------- #}
+  {# ---------------- THE DRAWING ITSELF ----------------
+     Server-rendered by dt_sld_drawing.render_sld_svg(sld), which reuses the same
+     build_sld_model() output the stage cards below are built from -- so the
+     drawing and the schedule can never disagree. render_sld_svg returns "" when
+     the project carries no capacity at all (nothing truthful to draw). When the
+     capacity exists but Step-7 sizing is not committed, sld_committed is false
+     and both the SVG title block and the ribbon below say the drawing is
+     indicative -- never presented as committed engineering. #}
+  {% if sld_svg %}
+  <div class="solar-card p-3 mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <div class="fw-bold small text-uppercase" style="color:#f59e0b;letter-spacing:.6px">
+        <i class="bi bi-diagram-2 me-1"></i>Single-Line Diagram
+      </div>
+      <span class="text-secondary" style="font-size:10px">
+        IEC symbols &middot; one inverter station shown typical</span>
+    </div>
+    {% if not sld_committed %}
+    <div class="alert alert-warning py-1 px-2 small mb-2" role="status">
+      <i class="bi bi-exclamation-triangle me-1"></i>
+      <strong>Indicative drawing.</strong> PV sizing is not committed yet &mdash; the
+      topology and ratings below are derived from the target capacity. Complete
+      <strong>Step 7 &middot; PV sizing</strong> to make this the as-designed diagram.
+    </div>
+    {% endif %}
+    <div style="overflow-x:auto">{{ sld_svg|safe }}</div>
+  </div>
+  {% else %}
+  <div class="solar-card p-3 mb-4 text-secondary small">
+    <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+    The single-line diagram is drawn from the project's PV capacity.
+    Set a target capacity, then complete <strong>Step 7 &middot; PV sizing</strong>.
+  </div>
+  {% endif %}
+
+  {# ---------------- POWER-EXPORT CHAIN (equipment schedule) ---------------- #}
   <div class="sld-chain mb-4">
     {% for s in sld.stages %}
     <div class="sld-stage">

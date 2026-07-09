@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-__all__ = ["build_sld_model", "GHANA_IEC_REFERENCES"]
+__all__ = ["build_sld_model", "has_committed_sizing", "GHANA_IEC_REFERENCES"]
 
 # --- Consolidated standards the SLD + design report cite (Ghana + IEC) --------
 GHANA_IEC_REFERENCES: list[dict[str, str]] = [
@@ -112,6 +112,21 @@ def _sizing_of(proj: dict) -> dict:
             "central_inverter_kw": inv_kw, "strings": strings,
             "modules_per_string": mps, "combiners": combiners,
             "strings_per_combiner": spc}
+
+
+def has_committed_sizing(proj: dict[str, Any]) -> bool:
+    """True when the project carries Step-7 COMMITTED PV sizing.
+
+    ``_sizing_of`` deliberately falls back to a sizing derived from the target
+    capacity so the SLD still renders before Step 7. Callers that must not
+    present derived numbers as committed engineering use this to tell the two
+    apart. in: project row/dict. out: bool (never raises).
+    """
+    try:
+        pv = _load(_safe(proj).get("pv_config"))
+        return bool(_safe(pv.get("sizing")).get("n_modules"))
+    except Exception:
+        return False
 
 
 def build_sld_model(proj: dict[str, Any]) -> dict[str, Any]:

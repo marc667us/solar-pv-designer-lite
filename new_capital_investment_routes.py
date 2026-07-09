@@ -10353,11 +10353,18 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         if (g := _gate(CI_LEVEL_FULL)) is not None:
             return g
         proj = _load_project(pid)
-        from dt_electrical_sld import build_sld_model
+        from dt_electrical_sld import build_sld_model, has_committed_sizing
+        from dt_sld_drawing import render_sld_svg
+        sld = build_sld_model(proj)
+        # build_sld_model derives a sizing from target capacity when Step 7
+        # is not done; the drawing must then be captioned as indicative.
+        committed = has_committed_sizing(proj)
+        # render_sld_svg never raises: "" degrades to the stage cards
         return render_template(
             "capital_investment/electrical_sld.html",
             user=current_user(), proj=proj, progress=_wp(proj),
-            sld=build_sld_model(proj),
+            sld=sld, sld_committed=committed,
+            sld_svg=render_sld_svg(sld, committed=committed),
         )
 
     # ------------------------------------------------------------------
