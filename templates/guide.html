@@ -89,9 +89,27 @@
         SolarPro Guides
       </div>
       <h1 class="guide-h mt-1 mb-0">{{ title }}</h1>
-      <div class="guide-sub">Read · Listen · Download PDF{% if video_url %} · Watch{% endif %}</div>
+      <div class="guide-sub">Read · Listen · Download PDF{% if video_url or demo_url %} · Watch{% endif %}</div>
     </div>
   </div>
+
+  {# ── Interactive demo ──────────────────────────────────────────────
+     The pre-rendered MP4 walkthroughs were retired: a recording drifts from the
+     UI the moment the UI changes. The Tutorial & Demo Engine plays the same
+     walkthrough live on the real page, and its Record button exports a .webm if
+     a file is wanted. `video_url` is only set when the owner publishes a hosted
+     recording via the GUIDE_VIDEO_URL_* env override. #}
+  {% if demo_url and not video_url %}
+  <div class="text-center my-3">
+    <a href="{{ demo_url }}" class="btn btn-warning fw-bold">
+      <i class="bi bi-play-circle me-1"></i>Watch the interactive demo
+    </a>
+    <div class="text-secondary mt-2" style="font-size:11px">
+      Runs on the live page with an animated cursor and narration ·
+      press <kbd>Esc</kbd> to exit · use <strong>Record</strong> to export a video
+    </div>
+  </div>
+  {% endif %}
 
   {# ── Tabs between the 3 guides ── #}
   <div class="guide-tabs">

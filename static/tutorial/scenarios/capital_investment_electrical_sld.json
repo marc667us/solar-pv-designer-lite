@@ -1,0 +1,72 @@
+{
+  "tutorialId": "tut-capital_investment_electrical_sld",
+  "pageId": "capital_investment_electrical_sld",
+  "title": "Electrical Single-Line Diagram",
+  "module": "Reports",
+  "description": "The as-designed one-line: array, strings, combiners, inverters, transformers, MV busbar and grid POI.",
+  "version": 1,
+  "language": "en-US",
+  "estimatedDuration": 8,
+  "steps": [
+    {
+      "title": "The single-line diagram",
+      "description": "Drawn from the same sizing that feeds the equipment schedule.",
+      "voiceScript": "This is the single-line diagram of your plant, drawn from your committed sizing.",
+      "captionText": "This is the single-line diagram of your plant, drawn from your committed sizing.",
+      "targetSelector": "svg[aria-label=\"Single-line diagram\"]",
+      "action": "highlightOnly",
+      "duration": 1400,
+      "delayBefore": 120,
+      "fallbackMessage": "The single-line diagram: not visible on this page yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "One inverter station",
+      "description": "The dashed boundary is the typical station, repeated N times.",
+      "voiceScript": "The dashed boundary shows one typical inverter station, repeated across the plant.",
+      "captionText": "The dashed boundary shows one typical inverter station, repeated across the plant.",
+      "targetSelector": "svg[aria-label=\"Single-line diagram\"]",
+      "action": "highlightOnly",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "One inverter station: not visible on this page yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Equipment schedule",
+      "description": "Every stage carries its ratings, protection and standards.",
+      "voiceScript": "Below the drawing, each stage lists its ratings, protection and the standards applied.",
+      "captionText": "Below the drawing, each stage lists its ratings, protection and the standards applied.",
+      "targetSelector": ".sld-chain",
+      "action": "highlightOnly",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Equipment schedule: not visible on this page yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Cable schedule",
+      "description": "Segment, type, size and length for every connection.",
+      "voiceScript": "The cable schedule gives the type, size and length of every connection.",
+      "captionText": "The cable schedule gives the type, size and length of every connection.",
+      "targetSelector": "table",
+      "action": "highlightOnly",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Cable schedule: not visible on this page yet.",
+      "stepNumber": 4
+    },
+    {
+      "title": "Print or export",
+      "description": "The page prints to a clean A4 PDF.",
+      "voiceScript": "Print the diagram to PDF for your submission pack.",
+      "captionText": "Print the diagram to PDF for your submission pack.",
+      "targetSelector": "button[onclick*=\"print\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Print or export: not visible on this page yet.",
+      "stepNumber": 5
+    }
+  ]
+}

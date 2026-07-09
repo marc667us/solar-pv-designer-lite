@@ -1178,6 +1178,17 @@ document.querySelectorAll('.solar-toast').forEach(function(t){
 
 {% block scripts %}{% endblock %}
 
+{# ---- Tutorial & Demo Engine (shared service) ----------------------------
+   One engine for every module. It looks up this page's scenario definition by
+   Flask endpoint name at /static/tutorial/scenarios/<endpoint>.json and, only
+   if one exists, mounts the "Help & Tutorial" launcher (guided tour / auto demo
+   / read-only watch demo / AI explain, plus .webm export). Pages that have no
+   scenario are untouched. Additive: no existing markup or script is modified.
+   Add a page's tutorial with scripts/build_tutorial_scenarios.py. #}
+<link rel="stylesheet" href="{{ url_for('static', filename='tutorial/tutorial.css') }}">
+<script src="{{ url_for('static', filename='tutorial/tutorial-engine.js') }}"
+        data-page="{{ request.endpoint or '' }}" defer></script>
+
 {% if user and user.is_admin %}
 <script>
 /* ── Prospect Agent alert bell (admin navbar, all pages) ── */

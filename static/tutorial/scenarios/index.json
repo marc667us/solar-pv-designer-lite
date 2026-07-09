@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "tutorials": [
+    {
+      "pageId": "dashboard",
+      "title": "Dashboard",
+      "module": "Dashboard",
+      "steps": 4,
+      "estimatedDuration": 6
+    },
+    {
+      "pageId": "marketplace_public",
+      "title": "Marketplace",
+      "module": "Marketplace",
+      "steps": 5,
+      "estimatedDuration": 8
+    },
+    {
+      "pageId": "procurement_center",
+      "title": "Procurement Center",
+      "module": "Procurement",
+      "steps": 3,
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boms_list",
+      "title": "Bills of Quantities",
+      "module": "BOQ",
+      "steps": 5,
+      "estimatedDuration": 8
+    },
+    {
+      "pageId": "capital_investment_landing",
+      "title": "Generation Station Design",
+      "module": "Generation Station",
+      "steps": 2,
+      "estimatedDuration": 3
+    },
+    {
+      "pageId": "capital_investment_project",
+      "title": "Generation Station Project",
+      "module": "Generation Station",
+      "steps": 4,
+      "estimatedDuration": 6
+    },
+    {
+      "pageId": "capital_investment_digital_twin",
+      "title": "3D Digital Twin",
+      "module": "3D Digital Twin",
+      "steps": 7,
+      "estimatedDuration": 11
+    },
+    {
+      "pageId": "capital_investment_electrical_sld",
+      "title": "Electrical Single-Line Diagram",
+      "module": "Reports",
+      "steps": 5,
+      "estimatedDuration": 8
+    },
+    {
+      "pageId": "capital_investment_funding",
+      "title": "Project Funding",
+      "module": "Project Funding",
+      "steps": 4,
+      "estimatedDuration": 6
+    },
+    {
+      "pageId": "support",
+      "title": "Support & Guides",
+      "module": "Support",
+      "steps": 3,
+      "estimatedDuration": 5
+    }
+  ]
+}

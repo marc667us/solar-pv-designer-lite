@@ -1,0 +1,114 @@
+/* SolarPro Tutorial & Demo Engine -- shared service chrome.
+   Scoped under .sp-tut* so it cannot collide with app styles. Everything is
+   .no-print and pointer-safe: the overlay never blocks the app once stopped. */
+
+.sp-tut-launcher {
+  position: fixed; bottom: 76px; left: 24px; z-index: 9988;
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 24px; cursor: pointer;
+  background: #12233f; color: #e6edf3; border: 1px solid #24405f;
+  font-size: 12px; font-weight: 700; letter-spacing: .3px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.45);
+}
+.sp-tut-launcher:hover { filter: brightness(1.18); }
+.sp-tut-menu {
+  position: fixed; bottom: 118px; left: 24px; z-index: 9988;
+  background: #0f1826; border: 1px solid #2a3a50; border-radius: 10px;
+  padding: 6px; display: flex; flex-direction: column; gap: 2px; min-width: 190px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.6);
+}
+.sp-tut-menu button {
+  text-align: left; font-size: 12px; padding: 7px 10px; border-radius: 6px;
+  border: none; background: transparent; color: #cbd5e1; cursor: pointer;
+}
+.sp-tut-menu button:hover { background: #1c2a3d; color: #fff; }
+
+/* darkened backdrop with a cut-out over the active target */
+.sp-tut-overlay {
+  position: fixed; inset: 0; z-index: 9992; pointer-events: none;
+  background: rgba(3, 7, 14, .72);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+  transition: opacity .18s ease;
+}
+
+.sp-tut-ring {
+  position: fixed; z-index: 9993; pointer-events: none;
+  border: 2px solid #f59e0b; border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(3, 7, 14, .72), 0 0 18px 2px rgba(245, 158, 11, .55);
+  transition: top .35s cubic-bezier(.22,.61,.36,1), left .35s cubic-bezier(.22,.61,.36,1),
+              width .35s ease, height .35s ease;
+}
+.sp-tut-ring.pulse { animation: sp-tut-pulse 1.4s ease-in-out infinite; }
+@keyframes sp-tut-pulse {
+  0%,100% { box-shadow: 0 0 0 9999px rgba(3,7,14,.72), 0 0 12px 1px rgba(245,158,11,.45); }
+  50%     { box-shadow: 0 0 0 9999px rgba(3,7,14,.72), 0 0 26px 5px rgba(245,158,11,.75); }
+}
+
+/* animated cursor */
+.sp-tut-cursor {
+  position: fixed; z-index: 9996; pointer-events: none; width: 24px; height: 24px;
+  margin: -2px 0 0 -2px; filter: drop-shadow(0 2px 5px rgba(0,0,0,.7));
+  transition: transform .06s linear;
+}
+.sp-tut-cursor.down { transform: scale(.86); }
+.sp-tut-ripple {
+  position: fixed; z-index: 9995; pointer-events: none;
+  width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
+  border: 2px solid #f59e0b; animation: sp-tut-ripple .55s ease-out forwards;
+}
+@keyframes sp-tut-ripple {
+  from { transform: scale(.4); opacity: .95; }
+  to   { transform: scale(4.2); opacity: 0; }
+}
+
+/* step tooltip */
+.sp-tut-tip {
+  position: fixed; z-index: 9997; max-width: 330px; min-width: 240px;
+  background: #0f1826; color: #e6edf3; border: 1px solid #2a3a50;
+  border-radius: 10px; padding: 12px 14px; box-shadow: 0 12px 34px rgba(0,0,0,.6);
+  font-size: 13px; line-height: 1.45;
+}
+.sp-tut-tip h6 { color: #f59e0b; font-size: 12px; letter-spacing: .5px;
+  text-transform: uppercase; font-weight: 800; margin: 0 0 4px; }
+.sp-tut-tip .sp-tut-prog { font-size: 10px; color: #6b7885; margin-top: 8px; }
+.sp-tut-tip .sp-tut-nav { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.sp-tut-tip button { font-size: 11px; padding: 4px 10px; border-radius: 6px;
+  border: 1px solid #2a3a50; background: #16223a; color: #cbd5e1; cursor: pointer; }
+.sp-tut-tip button.primary { background: #f59e0b; color: #111; border-color: #f59e0b;
+  font-weight: 700; }
+.sp-tut-tip button:hover { filter: brightness(1.15); }
+
+/* caption bar + transport controls */
+.sp-tut-bar {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+  z-index: 9997; width: min(880px, calc(100vw - 32px));
+  background: rgba(13,20,30,.95); border: 1px solid #2a3a50; border-radius: 12px;
+  padding: 10px 14px; color: #e6edf3; box-shadow: 0 10px 30px rgba(0,0,0,.55);
+}
+.sp-tut-cap { font-size: 13px; min-height: 20px; color: #e6edf3; }
+.sp-tut-ctl { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.sp-tut-ctl button, .sp-tut-ctl select {
+  font-size: 11px; padding: 4px 9px; border-radius: 6px; cursor: pointer;
+  border: 1px solid #2a3a50; background: #16223a; color: #cbd5e1;
+}
+.sp-tut-ctl .grow { flex: 1 1 auto; }
+.sp-tut-ctl .rec.on { background: #7f1d1d; border-color: #ef4444; color: #fff; }
+
+.sp-tut-toast {
+  position: fixed; left: 50%; top: 84px; transform: translateX(-50%); z-index: 9998;
+  background: #16223a; color: #e6edf3; border: 1px solid #f59e0b; border-radius: 8px;
+  padding: 8px 14px; font-size: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+}
+
+/* On phones the pill would sit over page chrome (e.g. the 3D twin's tool rail),
+   so collapse it to the "?" glyph. */
+@media (max-width: 575.98px) {
+  .sp-tut-launcher { padding: 9px 12px; bottom: 78px; }
+  .sp-tut-launcher span:last-child { display: none; }
+  .sp-tut-menu { bottom: 124px; }
+  .sp-tut-tip { max-width: calc(100vw - 24px); min-width: 0; }
+  .sp-tut-bar { bottom: 8px; padding: 8px 10px; }
+}
+
+@media print { .sp-tut-launcher, .sp-tut-overlay, .sp-tut-ring, .sp-tut-cursor,
+  .sp-tut-tip, .sp-tut-bar, .sp-tut-toast { display: none !important; } }

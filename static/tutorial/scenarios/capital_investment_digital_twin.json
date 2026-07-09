@@ -1,0 +1,96 @@
+{
+  "tutorialId": "tut-capital_investment_digital_twin",
+  "pageId": "capital_investment_digital_twin",
+  "title": "3D Digital Twin",
+  "module": "3D Digital Twin",
+  "description": "Rotate the plant, run the sun path, compute shading, inspect equipment and export the scene.",
+  "version": 1,
+  "language": "en-US",
+  "estimatedDuration": 11,
+  "steps": [
+    {
+      "title": "The 3D viewport",
+      "description": "Drag to orbit, scroll to zoom, click any object to inspect it.",
+      "voiceScript": "This is your plant in three dimensions. Drag to orbit and scroll to zoom.",
+      "captionText": "This is your plant in three dimensions. Drag to orbit and scroll to zoom.",
+      "targetSelector": "#dt-viewport",
+      "action": "highlightOnly",
+      "duration": 1100,
+      "delayBefore": 120,
+      "fallbackMessage": "The 3D viewport: not visible on this page yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Design parameters",
+      "description": "Change tilt, azimuth or row spacing and re-run the simulation.",
+      "voiceScript": "Change the tilt, azimuth or row spacing on the left.",
+      "captionText": "Change the tilt, azimuth or row spacing on the left.",
+      "targetSelector": "#dt-param-body, .dt-card-title",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Design parameters: not visible on this page yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Run the simulation",
+      "description": "The server recomputes shading, yield and the BOQ.",
+      "voiceScript": "Run the simulation. The server recomputes shading, yield and the bill of quantities.",
+      "captionText": "Run the simulation. The server recomputes shading, yield and the bill of quantities.",
+      "targetSelector": "#dt-run-sim",
+      "action": "click",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Run the simulation: not visible on this page yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Sun path and shading",
+      "description": "Scrub month and hour to see shadows move across the array.",
+      "voiceScript": "Scrub the month and hour sliders to watch shadows move across the array.",
+      "captionText": "Scrub the month and hour sliders to watch shadows move across the array.",
+      "targetSelector": "#dt-timeline-ov",
+      "action": "highlightOnly",
+      "duration": 1000,
+      "delayBefore": 120,
+      "fallbackMessage": "Sun path and shading: not visible on this page yet.",
+      "stepNumber": 4
+    },
+    {
+      "title": "Inspect equipment",
+      "description": "Click a transformer or inverter for its specification and BOQ link.",
+      "voiceScript": "Click any transformer or inverter to inspect its specification.",
+      "captionText": "Click any transformer or inverter to inspect its specification.",
+      "targetSelector": "#dt-props, .dt-analysis-pane",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Inspect equipment: not visible on this page yet.",
+      "stepNumber": 5
+    },
+    {
+      "title": "Camera presets",
+      "description": "Aerial, ground, inverter, substation and night views.",
+      "voiceScript": "The virtual reality cards fly the camera to a preset viewpoint.",
+      "captionText": "The virtual reality cards fly the camera to a preset viewpoint.",
+      "targetSelector": ".dt-vr-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Camera presets: not visible on this page yet.",
+      "stepNumber": 6
+    },
+    {
+      "title": "Export",
+      "description": "Export a PNG, the scene JSON, the object schedule or a shadow report.",
+      "voiceScript": "Export an investor image, the scene, or the shadow report.",
+      "captionText": "Export an investor image, the scene, or the shadow report.",
+      "targetSelector": "#exp-png",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Export: not visible on this page yet.",
+      "stepNumber": 7
+    }
+  ]
+}

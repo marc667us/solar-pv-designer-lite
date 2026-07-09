@@ -18,6 +18,40 @@
   #dt-studio { display:grid; grid-template-columns:264px 1fr 336px;
     grid-template-rows:1fr auto; gap:8px; height:calc(100vh - 176px);
     min-height:600px; font-size:13px; }
+
+  /* Explicit grid placement (was inline on each child). Keeping it here is what
+     lets the mobile breakpoint below override it -- inline styles cannot be. */
+  #dt-studio > .dt-col-left  { grid-column:1; grid-row:1 / span 2; }
+  #dt-studio > .dt-col-view  { grid-column:2; grid-row:1; }
+  #dt-studio > .dt-col-right { grid-column:3; grid-row:1 / span 2; }
+  #dt-studio > .dt-col-vr    { grid-column:2; grid-row:2; }
+
+  /* ---- Mobile / tablet: the three fixed columns (264 + 336 px) cannot fit a
+     phone. They forced ~804px of horizontal overflow and squeezed the 3D
+     viewport to a ~174px sliver pushed off-screen behind the parameter card.
+     Stack to one column, put the 3D FIRST, and give the viewport a real height
+     (the WebGL canvas sizes itself from the host's clientHeight, so an auto
+     row would collapse it to zero). ---- */
+  @media (max-width: 991.98px) {
+    #dt-studio { grid-template-columns:1fr; grid-template-rows:none;
+      height:auto; min-height:0; gap:10px; }
+    #dt-studio > .dt-col-left,
+    #dt-studio > .dt-col-view,
+    #dt-studio > .dt-col-right,
+    #dt-studio > .dt-col-vr { grid-column:1; grid-row:auto; }
+    #dt-studio > .dt-col-view { order:-1; height:58vh; min-height:320px; }
+    #dt-studio > .dt-col-left,
+    #dt-studio > .dt-col-right { overflow-y:visible; max-height:none; }
+    #dt-toolrail { top:8px; left:8px; }
+    #dt-toolrail button { width:28px; height:28px; font-size:13px; }
+    #dt-timeline-ov { left:8px; right:8px; bottom:8px; padding:6px 10px; }
+    .dt-vr-card { width:132px; height:74px; }
+    /* graphics-quality select + 2D/3D/VR segment must wrap, not push the page
+       25px wide on a 360px phone */
+    .dt-headctl { justify-content:flex-end; }
+    .dt-viewseg .dt-mode-btn { padding:6px 11px; }
+    #tl-sun-summary { min-width:0; }
+  }
   .dt-card-title { font-size:11px; letter-spacing:.6px; font-weight:700;
     color:#f59e0b; text-transform:uppercase; }
   .dt-field-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
@@ -100,7 +134,7 @@
       </div>
     </div>
   </div>
-  <div class="d-flex align-items-center gap-2">
+  <div class="d-flex align-items-center gap-2 flex-wrap dt-headctl">
     <select id="dt-tier" class="form-select form-select-sm" style="width:auto" title="Graphics quality">
       <option value="low">Low graphics</option>
       <option value="medium" selected>Medium graphics</option>
@@ -130,7 +164,7 @@
 <div id="dt-studio">
 
   {# ================= LEFT COLUMN : DESIGN PARAMETERS ================= #}
-  <div class="solar-card" style="overflow-y:auto;padding:12px;grid-row:1 / span 2">
+  <div class="solar-card dt-col-left" style="overflow-y:auto;padding:12px">
     <div class="dt-card-title mb-2">Design Parameters</div>
 
     {# read-only SITE block (matches mockup SITE group; live from scene.site) #}
@@ -204,7 +238,7 @@
   </div>
 
   {# ================= CENTRE VIEWPORT ================= #}
-  <div class="solar-card" style="position:relative;overflow:hidden;padding:0;grid-row:1">
+  <div class="solar-card dt-col-view" style="position:relative;overflow:hidden;padding:0">
     <div id="dt-viewport" style="width:100%;height:100%;background:#0a1015"></div>
 
     {# left tool rail (select / pan / orbit / zoom / measure / top / fullscreen) #}
@@ -256,7 +290,7 @@
   </div>
 
   {# ================= RIGHT COLUMN : ANALYSIS STACK (always visible) ================= #}
-  <div style="overflow-y:auto;grid-row:1 / span 2;padding-right:2px">
+  <div class="dt-col-right" style="overflow-y:auto;padding-right:2px">
 
     {# SUN PATH #}
     <div class="dt-analysis-pane" data-pane="sun">
@@ -331,7 +365,7 @@
   </div>
 
   {# ================= VR IMPRESSIONS STRIP ================= #}
-  <div class="solar-card" style="grid-column:2;padding:8px 12px">
+  <div class="solar-card dt-col-vr" style="padding:8px 12px">
     <div class="text-secondary mb-2" style="font-size:10px;letter-spacing:.6px;font-weight:700">
       VIRTUAL REALITY IMPRESSIONS <span class="text-muted">(each card flies the camera)</span></div>
     <div class="d-flex gap-2 flex-wrap">

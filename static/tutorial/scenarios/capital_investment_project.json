@@ -1,0 +1,60 @@
+{
+  "tutorialId": "tut-capital_investment_project",
+  "pageId": "capital_investment_project",
+  "title": "Generation Station Project",
+  "module": "Generation Station",
+  "description": "Run the wizard steps, then open the twin, the SLD, the reports and the funding pack.",
+  "version": 1,
+  "language": "en-US",
+  "estimatedDuration": 6,
+  "steps": [
+    {
+      "title": "The 14 steps",
+      "description": "Complete steps in order; each unlocks the next output.",
+      "voiceScript": "Work through the fourteen steps. Step seven commits your PV sizing.",
+      "captionText": "Work through the fourteen steps. Step seven commits your PV sizing.",
+      "targetSelector": ".card, .solar-card",
+      "action": "highlightOnly",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "The 14 steps: not visible on this page yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Cost Plan Deck",
+      "description": "A board-ready capital cost deck.",
+      "voiceScript": "The cost plan deck summarises capital cost for your investors.",
+      "captionText": "The cost plan deck summarises capital cost for your investors.",
+      "targetSelector": "a[href*=\"/cost-plan\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Cost Plan Deck: not visible on this page yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "3D Digital Twin",
+      "description": "An interactive model of the plant you designed.",
+      "voiceScript": "Open the three-D digital twin to walk through the plant you designed.",
+      "captionText": "Open the three-D digital twin to walk through the plant you designed.",
+      "targetSelector": "a[href*=\"/digital-twin\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "3D Digital Twin: not visible on this page yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Project Funding",
+      "description": "Submit the plant to a financial institution.",
+      "voiceScript": "Project funding packages your design for a financial institution.",
+      "captionText": "Project funding packages your design for a financial institution.",
+      "targetSelector": "a[href*=\"/funding\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Project Funding: not visible on this page yet.",
+      "stepNumber": 4
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "tutorialId": "tut-marketplace_public",
+  "pageId": "marketplace_public",
+  "title": "Marketplace",
+  "module": "Marketplace",
+  "description": "Browse priced equipment by category, filter by country compliance, and push items into a BOQ.",
+  "version": 1,
+  "language": "en-US",
+  "estimatedDuration": 8,
+  "steps": [
+    {
+      "title": "Product categories",
+      "description": "Products are grouped into 21 categories with a central taxonomy.",
+      "voiceScript": "Equipment is grouped by category. Each card shows the supplier price and compliance.",
+      "captionText": "Equipment is grouped by category. Each card shows the supplier price and compliance.",
+      "targetSelector": ".solar-card, .card",
+      "action": "highlightOnly",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Product categories: not visible on this page yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Filter by country",
+      "description": "Compliance badges reflect the selected country's standards.",
+      "voiceScript": "Pick your country to see which products are compliant for your market.",
+      "captionText": "Pick your country to see which products are compliant for your market.",
+      "targetSelector": "select[name=\"country\"], #country",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Filter by country: not visible on this page yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Search a product",
+      "description": "Search narrows the catalogue as you type.",
+      "voiceScript": "Search for the item you need, for example an LV cable.",
+      "captionText": "Search for the item you need, for example an LV cable.",
+      "targetSelector": "input[type=\"search\"], input[name=\"q\"]",
+      "action": "typeText",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Search a product: not visible on this page yet.",
+      "typeText": "LV cable",
+      "stepNumber": 3
+    },
+    {
+      "title": "Open a product",
+      "description": "The product page shows specification, supplier and datasheet.",
+      "voiceScript": "Open a product to see its full specification and datasheet link.",
+      "captionText": "Open a product to see its full specification and datasheet link.",
+      "targetSelector": "a[href*=\"/marketplace/product/\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Open a product: not visible on this page yet.",
+      "stepNumber": 4
+    },
+    {
+      "title": "Add to BOQ",
+      "description": "Selected products flow into your BOM, BOQ and procurement list.",
+      "voiceScript": "Add the product to a bill of quantities to price your project.",
+      "captionText": "Add the product to a bill of quantities to price your project.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning",
+      "action": "highlightOnly",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Add to BOQ: not visible on this page yet.",
+      "stepNumber": 5
+    }
+  ]
+}

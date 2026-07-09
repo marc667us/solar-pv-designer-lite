@@ -1,0 +1,48 @@
+{
+  "tutorialId": "tut-procurement_center",
+  "pageId": "procurement_center",
+  "title": "Procurement Center",
+  "module": "Procurement",
+  "description": "Tick the products you need and generate a priced procurement list or RFQ.",
+  "version": 1,
+  "language": "en-US",
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Pick products",
+      "description": "The checkbox grid is grouped by category.",
+      "voiceScript": "Tick every product you intend to buy. They are grouped by category.",
+      "captionText": "Tick every product you intend to buy. They are grouped by category.",
+      "targetSelector": "input[type=\"checkbox\"]",
+      "action": "highlightOnly",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Pick products: not visible on this page yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Generate price sheet",
+      "description": "A ten-column sheet with supplier contact details.",
+      "voiceScript": "Generate the price sheet to get supplier names, phones and addresses.",
+      "captionText": "Generate the price sheet to get supplier names, phones and addresses.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning",
+      "action": "highlightOnly",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Generate price sheet: not visible on this page yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Send an RFQ",
+      "description": "Requests for quotation go to the selected suppliers.",
+      "voiceScript": "Send a request for quotation and compare the responses side by side.",
+      "captionText": "Send a request for quotation and compare the responses side by side.",
+      "targetSelector": "a[href*=\"/rfqs\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Send an RFQ: not visible on this page yet.",
+      "stepNumber": 3
+    }
+  ]
+}

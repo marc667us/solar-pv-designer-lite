@@ -2389,11 +2389,9 @@ _SUPPORT_ASSETS = {
     "technical-guide":  ("SolarPro_Technical_Guide.pdf",  "application/pdf"),
     "portal-tutorial":  ("SolarPro_Portal_Tutorial.pdf",  "application/pdf"),
     "sales-pitch":      ("SolarPro_Sales_Pitch.pdf",      "application/pdf"),
-    # 2026-06-27: real Playwright screen recordings replacing the old
-    # static-slideshow MP4s. Built by scripts/build_walkthrough_videos.py.
-    "guide-quick-walkthrough":      ("guide_quick_walkthrough.mp4",      "video/mp4"),
-    "guide-full-user-walkthrough":  ("guide_full_user_walkthrough.mp4",  "video/mp4"),
-    "guide-technical-walkthrough":  ("guide_technical_walkthrough.mp4",  "video/mp4"),
+    # 2026-07-09: the pre-rendered MP4 walkthroughs were RETIRED. Video is now
+    # an export of the in-app Tutorial & Demo Engine, so there is no stale
+    # recording to keep in sync with the UI. See static/tutorial/.
 }
 
 @app.route("/support/asset/<slug>")
@@ -33506,19 +33504,17 @@ def guides_view(slug):
     if not g:
         abort(404)
     title, md = g
-    # 2026-06-27: real Playwright walkthrough served from docs/ via
-    # /support/asset/<slug>. Env override still wins so the owner can
-    # paste a YouTube/Loom URL if they record a better version.
-    asset_slug_map = {
-        "quick":     "guide-quick-walkthrough",
-        "full-user": "guide-full-user-walkthrough",
-        "technical": "guide-technical-walkthrough",
-    }
-    asset_slug = asset_slug_map.get(slug)
-    video_url = url_for("support_asset", slug=asset_slug) if asset_slug else ""
-    env_override = os.environ.get(f"GUIDE_VIDEO_URL_{slug.upper().replace('-', '_')}", "")
-    if env_override:
-        video_url = env_override
+    # 2026-07-09: the pre-rendered MP4 walkthroughs were retired. Video is now
+    # an EXPORT of the in-app Tutorial & Demo Engine (spec: pvsolar1/"video
+    # tutorial.txt"), so a guide deep-links the live, always-current demo for
+    # its module rather than shipping a recording that drifts from the UI.
+    # An env override still wins if the owner publishes a hosted recording.
+    demo_url = {
+        "quick":     url_for("dashboard") + "?tutorial=auto",
+        "full-user": url_for("marketplace_public") + "?tutorial=auto",
+        "technical": url_for("capital_investment_landing") + "?tutorial=auto",
+    }.get(slug, "")
+    video_url = os.environ.get(f"GUIDE_VIDEO_URL_{slug.upper().replace('-', '_')}", "")
     return render_template(
         "guide.html",
         user=current_user(),
@@ -33526,6 +33522,7 @@ def guides_view(slug):
         title=title,
         markdown=md,
         video_url=video_url,
+        demo_url=demo_url,
         listen_autoplay=(request.args.get("listen") == "1"),
     )
 

@@ -1,0 +1,60 @@
+{
+  "tutorialId": "tut-dashboard",
+  "pageId": "dashboard",
+  "title": "Dashboard",
+  "module": "Dashboard",
+  "description": "Your projects, quick actions and platform status in one place.",
+  "version": 1,
+  "language": "en-US",
+  "estimatedDuration": 6,
+  "steps": [
+    {
+      "title": "Your projects",
+      "description": "Every design you create is listed here with its status.",
+      "voiceScript": "This is your dashboard. Every solar design you create appears here.",
+      "captionText": "This is your dashboard. Every solar design you create appears here.",
+      "targetSelector": ".solar-card",
+      "action": "highlightOnly",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Your projects: not visible on this page yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Create a design",
+      "description": "Start a new residential, commercial or industrial PV design.",
+      "voiceScript": "To begin a new design, use Create Standard Project in the top navigation.",
+      "captionText": "To begin a new design, use Create Standard Project in the top navigation.",
+      "targetSelector": "a[href=\"/project/new\"], a[href*=\"new\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Create a design: not visible on this page yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Generation Station",
+      "description": "Utility-scale plants use the 14-step Generation Station wizard.",
+      "voiceScript": "For utility-scale plants, open Generation Station Design.",
+      "captionText": "For utility-scale plants, open Generation Station Design.",
+      "targetSelector": "a[href=\"/large-scale-solar\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Generation Station: not visible on this page yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Marketplace",
+      "description": "Priced equipment feeds your BOQ and procurement lists.",
+      "voiceScript": "The Marketplace supplies live equipment prices to your bills of quantities.",
+      "captionText": "The Marketplace supplies live equipment prices to your bills of quantities.",
+      "targetSelector": "a[href*=\"/marketplace\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Marketplace: not visible on this page yet.",
+      "stepNumber": 4
+    }
+  ]
+}

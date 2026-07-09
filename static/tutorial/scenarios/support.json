@@ -1,0 +1,48 @@
+{
+  "tutorialId": "tut-support",
+  "pageId": "support",
+  "title": "Support & Guides",
+  "module": "Support",
+  "description": "Guides, the helpline assistant, and the guided tour for every page.",
+  "version": 1,
+  "language": "en-US",
+  "estimatedDuration": 5,
+  "steps": [
+    {
+      "title": "Guides",
+      "description": "User, technical and portal guides, downloadable as PDF.",
+      "voiceScript": "The guides cover the platform end to end and download as PDF.",
+      "captionText": "The guides cover the platform end to end and download as PDF.",
+      "targetSelector": "a[href*=\"/guides/\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Guides: not visible on this page yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Every page teaches itself",
+      "description": "Look for Help & Tutorial at the bottom-left of any page.",
+      "voiceScript": "On any page, use Help and Tutorial to run a guided tour, an auto demo, or ask the assistant to explain the page.",
+      "captionText": "On any page, use Help and Tutorial to run a guided tour, an auto demo, or ask the assistant to explain the page.",
+      "targetSelector": ".sp-tut-launcher",
+      "action": "highlightOnly",
+      "duration": 1400,
+      "delayBefore": 120,
+      "fallbackMessage": "Every page teaches itself: not visible on this page yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Record your own video",
+      "description": "The Record button exports the demo as a .webm video.",
+      "voiceScript": "During a demo you can record the screen and export it as a video file.",
+      "captionText": "During a demo you can record the screen and export it as a video file.",
+      "targetSelector": ".sp-tut-launcher",
+      "action": "highlightOnly",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Record your own video: not visible on this page yet.",
+      "stepNumber": 3
+    }
+  ]
+}

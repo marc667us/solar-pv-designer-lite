@@ -1,0 +1,36 @@
+{
+  "tutorialId": "tut-capital_investment_landing",
+  "pageId": "capital_investment_landing",
+  "title": "Generation Station Design",
+  "module": "Generation Station",
+  "description": "The 14-step utility-scale wizard: site, buildings, PV field, SCADA, finance, BOQ, reports.",
+  "version": 1,
+  "language": "en-US",
+  "estimatedDuration": 3,
+  "steps": [
+    {
+      "title": "Create a plant",
+      "description": "Each project carries site, technology, electrical and finance config.",
+      "voiceScript": "Create a plant to start the fourteen-step utility-scale wizard.",
+      "captionText": "Create a plant to start the fourteen-step utility-scale wizard.",
+      "targetSelector": "a[href*=\"/large-scale-solar/new\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Create a plant: not visible on this page yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Your plants",
+      "description": "Open any plant to resume where you left off.",
+      "voiceScript": "Your existing plants are listed here. Open one to resume the wizard.",
+      "captionText": "Your existing plants are listed here. Open one to resume the wizard.",
+      "targetSelector": ".solar-card, .card",
+      "action": "highlightOnly",
+      "duration": 700,
+      "delayBefore": 120,
+      "fallbackMessage": "Your plants: not visible on this page yet.",
+      "stepNumber": 2
+    }
+  ]
+}
