@@ -116,6 +116,19 @@
     });
   }
 
+  // Safe insets (px) inside the viewport that a tip card may never enter. They
+  // keep the cards clear of the sibling chrome that paints ABOVE #dt-obj-tips
+  // (z-index 4): the tool rail (left, z-index 5), the timeline overlay (bottom,
+  // z-index 5) and the sun/fps HUD text (top, z-index 3). Without these a card
+  // anchored near an edge is drawn underneath that chrome and looks like it
+  // "opens in the wrong place" / hides behind another card.
+  var SAFE = { top: 36, right: 10, bottom: 96, left: 66 };
+
+  // Clamp v into [lo, hi]; if the card is bigger than the corridor, prefer lo
+  // so the card's own top-left stays visible rather than sliding off-screen.
+  // in : v, lo, hi (numbers)   out: number
+  function clamp(v, lo, hi) { return hi < lo ? lo : (v < lo ? lo : (v > hi ? hi : v)); }
+
   // Project each tip's world anchor to screen space every frame (throttled) and
   // hide it when its layer is toggled off or it falls behind the camera.
   var raf = null, lastT = 0, _vec = null;
@@ -136,9 +149,26 @@
       var x = (v.x * 0.5 + 0.5) * w, y = (-v.y * 0.5 + 0.5) * h;
       if (x < 0 || y < 0 || x > w || y > h) { tip.node.style.display = 'none'; return; }
       tip.node.style.display = '';
-      tip.node.style.left = Math.round(x) + 'px';
-      tip.node.style.top = Math.round(y) + 'px';
-      tip.node.style.transform = 'translate(-50%,-120%)';
+
+      // Position the card by its own top-left rather than by the anchor with a
+      // percentage transform: the transformed box was never measured, so it
+      // could overhang the viewport (clipped by the card's overflow:hidden) or
+      // land under the rail/timeline. Measure, place centred above the anchor,
+      // then clamp the WHOLE box into the safe rect.
+      //
+      // The card's content only changes on scene:built (which calls buildTips
+      // and drops these caches), so measure once instead of every tick --
+      // reading offsetWidth after writing style.left forces a synchronous
+      // reflow, and doing that per tip per tick is wasted layout work.
+      // offsetWidth is 0 on the first frame after display:'' , so we keep
+      // re-measuring until it reports a real box.
+      if (!tip.w) { tip.w = tip.node.offsetWidth; tip.h = tip.node.offsetHeight; }
+      var tw = tip.w, th = tip.h;
+      var bx = clamp(x - tw / 2, SAFE.left, w - SAFE.right - tw);
+      var by = clamp(y - th * 1.2, SAFE.top, h - SAFE.bottom - th);
+      tip.node.style.transform = 'none';
+      tip.node.style.left = Math.round(bx) + 'px';
+      tip.node.style.top = Math.round(by) + 'px';
     });
   }
 
