@@ -86,6 +86,33 @@
     return tex;
   }
 
+  // Asphalt road: dark bitumen with fine aggregate speckle + a dashed centre
+  // line, so access roads read as sealed roadway instead of a flat grey slab.
+  function roadTexture() {
+    if (_texCache.road) return _texCache.road;
+    var THREE = window.THREE, W = 128, H = 256;
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = '#37383c'; ctx.fillRect(0, 0, W, H);
+    var img = ctx.getImageData(0, 0, W, H), d = img.data;
+    for (var i = 0; i < d.length; i += 4) {
+      var n = (Math.random() - 0.5) * 30;            // aggregate speckle
+      d[i] = Math.max(0, Math.min(255, d[i] + n));
+      d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + n));
+      d[i + 2] = Math.max(0, Math.min(255, d[i + 2] + n));
+    }
+    ctx.putImageData(img, 0, 0);
+    // dashed centre line running the length (V axis)
+    ctx.fillStyle = 'rgba(220,200,90,0.85)';
+    for (var y = 8; y < H; y += 40) ctx.fillRect(W / 2 - 3, y, 6, 22);
+    var tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    _texCache.road = tex;
+    return tex;
+  }
+
   // ---- individual object meshes ----
   function buildBox(o) {
     var THREE = window.THREE;
@@ -137,6 +164,43 @@
     return mesh;
   }
 
+  // Cached asphalt road material, one per tier. Built ONCE and reused across
+  // every road AND every rebuild -- a stable shared singleton like DT.materials,
+  // so (a) we never clone-per-build (no leak; disposeGroup deliberately leaves
+  // shared materials alone) and (b) we never mutate a shared texture's repeat
+  // per road (no stomp between roads). Repeat is a fixed world-ish tiling set
+  // once here; the dashed centre line runs the road length via V-wrap.
+  var _roadMatCache = {};
+  function roadMaterial() {
+    var tier = DT.state.graphicsTier || 'medium';
+    if (_roadMatCache[tier]) return _roadMatCache[tier];
+    var mat = DT.materials.get('asphalt');
+    if (tier !== 'low') {
+      mat = mat.clone();
+      var tex = roadTexture();
+      tex.repeat.set(1, 6);   // fixed tiling, set once -> no per-road stomp
+      mat.map = tex; mat.color.set('#ffffff'); mat.needsUpdate = true;
+    }
+    _roadMatCache[tier] = mat;
+    return mat;
+  }
+
+  // Access road: a thin box carrying the shared asphalt material (centre-line
+  // dashes run the length via the texture's V-wrap).
+  function buildRoad(o) {
+    var THREE = window.THREE, dm = o.dimensions || {};
+    var w = dm.w || 6, h = Math.max(dm.h || 0.1, 0.06), l = dm.l || 40;
+    var geom = new THREE.BoxGeometry(w, h, l);
+    var mat = roadMaterial();
+    var mesh = new THREE.Mesh(geom, mat);
+    var p = (o.transform || {}).position || [0, 0, 0];
+    mesh.position.set(p[0], Math.max(p[1], h / 2), p[2]);
+    mesh.setRotationFromEuler(euler((o.transform || {}).rotation_deg));
+    mesh.receiveShadow = tierShadows();
+    mesh.userData = { objectId: o.id, layer: o.layer, object: o };
+    return mesh;
+  }
+
   function buildFence(o) {
     var THREE = window.THREE, g = group('fence');
     var pts = ((o.meta || {}).points || []).slice();
@@ -157,6 +221,25 @@
       DT.three.pickables.push(m);
     }
     var e = DT.objectIndex.get(o.id); if (e) e.mesh = g;
+  }
+
+  // Aluminium frame ring for a PV table: a HOLLOW rectangular rim in the panel
+  // plane so the dark glass shows through the opening (a solid oversized box
+  // would occlude the glass from above). One ExtrudeGeometry (core THREE, no
+  // BufferGeometryUtils needed), built once and instanced with the SAME per-row
+  // matrix as the panel so it inherits tilt / azimuth / per-row scale.
+  function pvFrameGeometry(THREE, w, l, rim, thick) {
+    var hw = w / 2, hl = l / 2;
+    var iw = Math.max(hw - rim, hw * 0.2), il = Math.max(hl - rim, hl * 0.2);
+    var s = new THREE.Shape();
+    s.moveTo(-hw, -hl); s.lineTo(hw, -hl); s.lineTo(hw, hl); s.lineTo(-hw, hl); s.lineTo(-hw, -hl);
+    var hole = new THREE.Path();
+    hole.moveTo(-iw, -il); hole.lineTo(iw, -il); hole.lineTo(iw, il); hole.lineTo(-iw, il); hole.lineTo(-iw, -il);
+    s.holes.push(hole);
+    var g = new THREE.ExtrudeGeometry(s, { depth: thick, bevelEnabled: false });
+    g.rotateX(-Math.PI / 2);        // shape XY plane -> panel XZ plane; extrude -> +Y
+    g.translate(0, -thick / 2, 0);  // centre the rim thickness on the row origin
+    return g;
   }
 
   // ---- instanced PV rows ----
@@ -185,6 +268,28 @@
     var inst = new THREE.InstancedMesh(geom, mat, rows.length);
     inst.castShadow = tierShadows();
     inst.receiveShadow = false;
+
+    // Aluminium frame: one instance per row sharing the panel matrix, so every
+    // table reads as a framed module (dark glass inside a metal rim) rather than
+    // a bare slab -- the biggest realism win up close. Decorative: NOT pickable,
+    // NOT indexed, and it does NOT cast shadow (the panel already casts the
+    // row's shadow), so a large farm pays no extra shadow cost. Low tier skips.
+    var frameInst = null;
+    if (DT.state.graphicsTier !== 'low') {
+      var panelH = Math.max(first.h || 0.06, 0.12);
+      // Build the rim slightly LARGER than the panel (outward overhang `ov`) and
+      // reaching `rimIn` inward over the glass, so NO frame face is coplanar with
+      // a panel face -> no grazing-angle shimmer (Codex). The rim is also a touch
+      // taller than the panel (panelH + 0.06) so its top/bottom rings clear the
+      // glass faces rather than sitting flush with them.
+      var ov = 0.04, rimIn = Math.min(rowW, rowL) * 0.04 + 0.05;
+      var fgeom = pvFrameGeometry(THREE, rowW + 2 * ov, rowL + 2 * ov,
+                                  ov + rimIn, panelH + 0.06);
+      frameInst = new THREE.InstancedMesh(fgeom, DT.materials.get('aluminum_frame'), rows.length);
+      frameInst.castShadow = false;
+      frameInst.receiveShadow = false;
+    }
+
     var dummy = new THREE.Object3D();
     var map = [];   // instanceId -> objectId
     rows.forEach(function (o, i) {
@@ -196,14 +301,20 @@
       dummy.scale.set((dm.w || 2) / (first.w || 2), 1, (dm.l || 100) / (first.l || 100));
       dummy.updateMatrix();
       inst.setMatrixAt(i, dummy.matrix);
+      if (frameInst) frameInst.setMatrixAt(i, dummy.matrix);   // frame shares panel placement
       map[i] = o.id;
       var e = DT.objectIndex.get(o.id); if (e) { e.mesh = inst; e.instanceId = i; }
     });
     inst.instanceMatrix.needsUpdate = true;
     inst.userData = { layer: 'pv_row', instancedRows: map };
     group('pv_row').add(inst);
-    DT.three.pickables.push(inst);
+    DT.three.pickables.push(inst);          // panel stays the ONLY pickable row mesh
     DT.three.instanced.pv_row = inst;
+    if (frameInst) {
+      frameInst.instanceMatrix.needsUpdate = true;
+      frameInst.userData = { layer: 'pv_row', decorative: true };
+      group('pv_row').add(frameInst);       // toggles + disposes with the panels
+    }
   }
 
   // ---- PV mounting structure (torque tube + support legs) ----
@@ -214,16 +325,23 @@
   // 100 MW (low-tier) farm skips it and never pays the instance cost.
   function buildPvSupports(rows) {
     if (DT.state.graphicsTier === 'low') return;
-    if (!rows.length || rows.length > 4000) return;    // hard perf cap
+    if (!rows.length) return;
+    // No row cap at all: tube + legs are single InstancedMeshes (draw-call cost
+    // is flat regardless of row count), and the panel loop in buildPvRows is
+    // already uncapped, so supports match it. Only shadow-casting degrades on
+    // huge farms (see supShadow below) -- geometry is NEVER dropped. This fixes
+    // the old `rows.length > 4000` cutoff that stripped ALL mounting structure
+    // off a 100 MW farm (Codex finding #3).
     var THREE = window.THREE;
     var first = rows[0].dimensions || {};
     var rowW = first.w || 2, rowL = first.l || 100;
     var rowH = Math.max(first.h || 0.06, 0.12);
     var longZ = rowL >= rowW;                          // long axis is Z when l>=w
     var steel = DT.materials.get('steel');
-    // Support structure casts shadows only on the high tier -- the extra shadow
-    // passes are the one place this could bite a weak GPU at the row cap.
-    var supShadow = tierShadows() && (DT.state.graphicsTier === 'high');
+    // Support shadows are the one place a huge farm could bite a weak GPU, so
+    // gate them on the high tier AND a moderate row count. Geometry still shows
+    // on a 100 MW farm; only its shadow-casting degrades (Codex finding #3).
+    var supShadow = tierShadows() && (DT.state.graphicsTier === 'high') && rows.length <= 3000;
     var ZERO = new THREE.Matrix4().makeScale(0, 0, 0);   // hide mismatched rows
 
     // Torque tube: a slim beam the length of the row, sunk just below the
@@ -342,6 +460,7 @@
       if (o.kind === 'line_loop') { buildFence(o); return; }
       var mesh;
       if (o.kind === 'ground' || o.layer === 'terrain') mesh = buildTerrain(o);
+      else if (o.layer === 'internal_roads') mesh = buildRoad(o);
       else if (o.kind === 'mast') mesh = buildMast(o);
       else mesh = buildBox(o);
       group(o.layer).add(mesh);

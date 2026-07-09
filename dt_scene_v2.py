@@ -55,6 +55,8 @@ MATERIALS: dict[str, dict[str, Any]] = {
     "inverter":       {"color": "#e0c020", "roughness": 0.50, "metalness": 0.55},
     "warning":        {"color": "#e02020", "roughness": 0.70, "metalness": 0.10},
     "water":          {"color": "#3a5a80", "roughness": 0.20, "metalness": 0.00},
+    "cable_trench":   {"color": "#2b2b2e", "roughness": 0.95, "metalness": 0.05},
+    "mv_line":        {"color": "#6b7280", "roughness": 0.45, "metalness": 0.75},
 }
 
 # Layer -> material key. Layers not listed fall back to "building_wall".
@@ -71,6 +73,7 @@ _LAYER_MATERIAL: dict[str, str] = {
     "control_room": "building_wall", "om_building": "building_wall",
     "scada_bldg": "steel", "security_gate": "building_wall",
     "building": "building_wall",
+    "cable_trench": "cable_trench", "grid_line": "mv_line",
 }
 
 # Layer -> marketplace category slug (reuses the existing /marketplace?cat=...).
@@ -392,6 +395,119 @@ def _recommended_tier(n_modules: int, n_objects: int) -> str:
     return "high"
 
 
+def _make_route_object(oid: str, layer: str, label: str,
+                       a: list[float], b: list[float],
+                       width: float, height: float, pid: Any,
+                       y: float = 0.08) -> dict[str, Any]:
+    """Build a v2 object for a linear route (cable trench / MV line) between two
+    ground points ``a`` and ``b`` (each [x, z]).
+
+    The client's ``buildBox`` draws a box W along +X, L along +Z, then applies
+    ``rotation_deg`` [x, y, z]. A Y-rotation of theta sends +X to
+    (cos theta, 0, -sin theta), so to point the long side (W = segment length)
+    from a to b we set yaw = atan2(-dz, dx). Never raises: degenerate a==b
+    yields a tiny stub rather than a divide-by-zero.
+    """
+    dx = float(b[0]) - float(a[0])
+    dz = float(b[1]) - float(a[1])
+    length = math.hypot(dx, dz)
+    if length < 0.5:
+        length = 0.5
+    yaw_deg = math.degrees(math.atan2(-dz, dx))
+    return {
+        "id": oid, "type": layer, "layer": layer, "label": label,
+        "kind": "box",
+        "transform": {
+            "position": [(float(a[0]) + float(b[0])) / 2.0, y,
+                         (float(a[1]) + float(b[1])) / 2.0],
+            "rotation_deg": [0.0, yaw_deg, 0.0],
+            "scale": [1.0, 1.0, 1.0],
+        },
+        "dimensions": {"w": length, "h": height, "l": width},
+        "render": {"material": _material_for(layer), "lod": "medium",
+                   "instanced": False, "cast_shadow": False,
+                   "receive_shadow": True},
+        "engineering": _engineering_for(layer, {}),
+        "links": _links_for(pid, layer),
+        "simulation": {"shadow": {"severity": "none", "loss_pct": 0.0,
+                                  "caused_by": []},
+                       "irradiance_wm2": None, "warnings": []},
+        "meta": {"route": [[a[0], a[1]], [b[0], b[1]]], "length_m": round(length, 1)},
+    }
+
+
+def _synthesize_infrastructure(objects: list[dict[str, Any]],
+                               scene: dict[str, Any],
+                               pid: Any) -> list[dict[str, Any]]:
+    """Derive the physical-infrastructure layers the base generator omits:
+    cable trenches (inverter -> nearest transformer -> nearest MV building) and
+    a grid-connection line (transformer/substation -> site boundary).
+
+    Purely additive + derived from EXISTING object positions (reuse; no new
+    engine). Never raises: any failure returns whatever was built so far, so a
+    malformed scene degrades to the legacy object set. Skipped silently when
+    there is nothing to connect.
+    """
+    extra: list[dict[str, Any]] = []
+    try:
+        def _pos(o: dict[str, Any]) -> list[float]:
+            p = (o.get("transform") or {}).get("position") or [0, 0, 0]
+            return [float(p[0]), float(p[2])]   # [x, z] ground plane
+
+        def _nearest(src: list[float], pool: list[dict[str, Any]]):
+            best, bd = None, None
+            for o in pool:
+                q = _pos(o)
+                d = math.hypot(q[0] - src[0], q[1] - src[1])
+                if bd is None or d < bd:
+                    bd, best = d, o
+            return best
+
+        inverters = [o for o in objects if o.get("layer") in ("inverter", "combiner")]
+        transformers = [o for o in objects
+                        if o.get("layer") in ("transformer", "transformer_bldg", "rmu")]
+        mv_bldgs = [o for o in objects
+                    if o.get("layer") in ("building", "control_room", "om_building",
+                                          "switchgear_bldg", "scada_bldg", "mv_switchgear")]
+
+        n = 0
+        # inverter -> nearest transformer (or nearest MV building if no transformer)
+        sinks = transformers or mv_bldgs
+        for inv in inverters:
+            tgt = _nearest(_pos(inv), sinks)
+            if not tgt:
+                break
+            extra.append(_make_route_object(
+                f"cable_trench_{n}", "cable_trench", "AC Cable Trench",
+                _pos(inv), _pos(tgt), width=0.6, height=0.15, pid=pid))
+            n += 1
+
+        # transformer -> nearest MV building (collector run)
+        for tr in transformers:
+            tgt = _nearest(_pos(tr), mv_bldgs)
+            if not tgt:
+                break
+            extra.append(_make_route_object(
+                f"cable_trench_{n}", "cable_trench", "MV Cable Trench",
+                _pos(tr), _pos(tgt), width=0.8, height=0.15, pid=pid))
+            n += 1
+
+        # grid-connection line: from the primary transformer/substation out to the
+        # site boundary (a single MV export line proxy).
+        side = float((scene.get("terrain") or {}).get("side_m")
+                     or (scene.get("site") or {}).get("land_side_m") or 300.0)
+        source = (transformers or mv_bldgs)
+        if source:
+            src = _pos(source[0])
+            boundary = [src[0], side / 2.0 * 0.98]   # run north to the fence line
+            extra.append(_make_route_object(
+                "grid_line_0", "grid_line", "Grid Connection Line",
+                src, boundary, width=0.3, height=0.3, pid=pid, y=4.0))
+    except Exception:
+        return extra
+    return extra
+
+
 def augment_scene_v2(scene: dict[str, Any],
                      proj: dict[str, Any]) -> dict[str, Any]:
     """Augment a base scene dict with the v2 engineering graph (in place).
@@ -410,6 +526,9 @@ def augment_scene_v2(scene: dict[str, Any],
     site["pid"] = pid
 
     objects = normalize_objects(scene)
+    # Slice 4: append derived infrastructure (cable trenches + grid line). Guarded
+    # inside the helper so a malformed scene falls back to the legacy object set.
+    objects = objects + _synthesize_infrastructure(objects, scene, pid)
     pv_meta = (scene.get("pv") or {}).get("meta") or {}
     n_modules = int(pv_meta.get("n_modules_planned") or 0)
 
@@ -435,9 +554,20 @@ def augment_scene_v2(scene: dict[str, Any],
         "estimated_objects": len(objects),
         "estimated_drawn_objects": n_drawn,
     }
-    scene["camera_presets"] = camera_presets(
+    _presets = camera_presets(
         (scene.get("terrain") or {}).get("side_m")
         or site.get("land_side_m") or 100.0)
+    scene["camera_presets"] = _presets
+    # Slice 5: default the FIRST-paint camera to the reference's elevated 3/4
+    # aerial (the 'investor' preset) unless the base generator already supplied
+    # one. dt-main reads scene.camera.position on start, so this frames the whole
+    # farm on load instead of the generic (200,160,200) default.
+    _cam = scene.get("camera")
+    if not isinstance(_cam, dict) or not _cam.get("position"):
+        inv = _presets.get("investor") or _presets.get("drone") or {}
+        if inv.get("position"):
+            scene["camera"] = {"position": inv["position"],
+                               "target": inv.get("target", [0, 0, 0])}
     scene["simulation_modes"] = simulation_modes_meta()
     scene["parameters"] = {"editable": _editable_parameters(scene)}
     return scene
