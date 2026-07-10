@@ -1,0 +1,106 @@
+# Clear GitHub Actions run LOGS (log content only; the run record + its
+# conclusion stay for audit). Reusable secret-hygiene tool: after a workflow
+# handles secrets, its logs can be purged even though GitHub already masks
+# secret *values*.
+#
+# SAFE BY DESIGN: DRY-RUN by default -- lists what WOULD be cleared. Only
+# deletes when confirm=APPLY. Uses the repo-scoped GITHUB_TOKEN (actions:write).
+#
+# Usage:
+#   # preview (default: today's secret-handling workflows)
+#   gh workflow run "Clear Actions Logs"
+#   # actually clear them
+#   gh workflow run "Clear Actions Logs" -f confirm=APPLY
+#   # clear ALL runs older than 7 days, keep the 3 newest per workflow
+#   gh workflow run "Clear Actions Logs" -f workflows=ALL -f older_than_days=7 -f keep_latest=3 -f confirm=APPLY
+
+name: Clear Actions Logs
+
+on:
+  workflow_dispatch:
+    inputs:
+      workflows:
+        description: "Comma list of workflow display-names to target, or ALL."
+        required: false
+        default: "Render Rotate Leaked Secrets,Sync KC Seed Passwords,Sync KC Master Admin Password"
+      older_than_days:
+        description: "Only clear runs older than N days (0 = all matching)."
+        required: false
+        default: "0"
+      keep_latest:
+        description: "Keep the N most recent runs per workflow untouched (0 = clear all)."
+        required: false
+        default: "0"
+      confirm:
+        description: "DRY-RUN by default. Type APPLY to actually delete logs."
+        required: false
+        default: ""
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  clear:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO:     ${{ github.repository }}
+      WFS:      ${{ inputs.workflows }}
+      OLDER:    ${{ inputs.older_than_days }}
+      KEEP:     ${{ inputs.keep_latest }}
+      CONFIRM:  ${{ inputs.confirm }}
+    steps:
+      - name: Resolve mode + clear logs
+        run: |
+          set -e
+          MODE=dryrun; [ "$CONFIRM" = "APPLY" ] && MODE=apply
+          echo "MODE=$MODE  workflows='$WFS'  older_than_days=$OLDER  keep_latest=$KEEP"
+          cutoff=0
+          if [ "$OLDER" != "0" ]; then cutoff=$(date -u -d "-${OLDER} days" +%s); fi
+
+          # Gather target runs (newest first, so keep_latest keeps the newest).
+          RUNS=()
+          if [ "$WFS" = "ALL" ]; then
+            while IFS= read -r line; do RUNS+=("$line"); done < <(
+              gh run list --repo "$REPO" --limit 500 \
+                --json databaseId,workflowName,createdAt \
+                --jq '.[] | "\(.databaseId)|\(.workflowName)|\(.createdAt)"')
+          else
+            IFS=',' read -ra NAMES <<< "$WFS"
+            for nm in "${NAMES[@]}"; do
+              nm="$(echo "$nm" | sed 's/^ *//;s/ *$//')"
+              [ -z "$nm" ] && continue
+              while IFS= read -r line; do RUNS+=("$line"); done < <(
+                gh run list --repo "$REPO" --limit 500 --workflow "$nm" \
+                  --json databaseId,workflowName,createdAt \
+                  --jq '.[] | "\(.databaseId)|\(.workflowName)|\(.createdAt)"')
+            done
+          fi
+
+          declare -A seen
+          matched=0; cleared=0
+          for r in "${RUNS[@]}"; do
+            id="${r%%|*}"; rest="${r#*|}"; wf="${rest%%|*}"; created="${rest##*|}"
+            seen["$wf"]=$(( ${seen["$wf"]:-0} + 1 ))
+            if [ "$KEEP" != "0" ] && [ "${seen["$wf"]}" -le "$KEEP" ]; then
+              echo "keep   $id  ($wf, among newest $KEEP)"; continue
+            fi
+            if [ "$OLDER" != "0" ]; then
+              ts=$(date -u -d "$created" +%s 2>/dev/null || echo 0)
+              if [ "$ts" -gt "$cutoff" ]; then echo "skip   $id  ($wf, newer than ${OLDER}d)"; continue; fi
+            fi
+            matched=$((matched+1))
+            if [ "$MODE" = apply ]; then
+              if gh api -X DELETE "repos/$REPO/actions/runs/$id/logs" --silent 2>/dev/null; then
+                echo "CLEARED $id  ($wf)"; cleared=$((cleared+1))
+              else
+                echo "no-logs $id  ($wf, already empty)"
+              fi
+            else
+              echo "would clear $id  ($wf, $created)"
+            fi
+          done
+          echo "=== $MODE: matched $matched runs, cleared $cleared ==="
+          [ "$MODE" = dryrun ] && echo "Re-run with -f confirm=APPLY to delete."
