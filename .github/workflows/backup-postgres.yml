@@ -1,17 +1,43 @@
 # SOC 2 M4.1 -- nightly Postgres backup.
 #
-# What it does
-#   1. Resolves solarpro-postgres via Render API.
-#   2. Captures full pg_dump (custom binary format -Fc).
-#   3. Verifies the dump (pg_restore --list integrity check).
-#   4. Uploads as a workflow artifact, retained 30 days.
-#   5. SHA-256 sums the dump and prints it for evidence.
+# WHY THIS IS A TWO-PASS DUMP
+# ---------------------------
+# solarpro-postgres hosts two tenants of a single database:
+#
+#   * `public`   -- owned by the Render primary role (the role DATABASE_URL uses)
+#   * `keycloak` -- owned by the `keycloak_app` login role, created by
+#                   migrations/006_keycloak_schema.sql
+#
+# Migration 006 deliberately runs `REVOKE ALL ON SCHEMA keycloak FROM PUBLIC`
+# so that a SQL injection against the solar app cannot read `keycloak.user_entity`.
+# A consequence is that the primary role has **no SELECT** on Keycloak's tables,
+# so a single `pg_dump` as the primary role dies with:
+#
+#   pg_dump: error: permission denied for table databasechangeloglock
+#
+# That is exactly what silently broke this workflow for 14 consecutive nights
+# from 2026-06-26, and it is why the 2026-07-09 database expiry was
+# unrecoverable. Granting the primary role access to the keycloak schema WOULD
+# make one dump work, but it would delete the isolation control above. So we
+# instead connect twice, once as each owner, and never widen any grant:
+#
+#   pass 1: primary role     -> pg_dump --exclude-schema=keycloak
+#   pass 2: keycloak_app     -> pg_dump --schema=keycloak
+#
+# `keycloak_app`'s password is generated per-deploy by deploy-keycloak.yml and
+# is NOT stored as a GitHub secret -- it lives only in the solarpro-keycloak
+# service's Render environment. We read it back through the Render REST API
+# with the RENDER_API_KEY we already hold, and mask it immediately.
+#
+# VERIFICATION
+# ------------
+# `pg_restore --list` only proves the file's table-of-contents parses. It does
+# NOT prove the dump can be replayed. So we additionally restore BOTH dumps
+# into a throwaway Postgres of the same major version and assert that known
+# tables come back with rows. A backup nobody has restored is not a backup.
 #
 # Cron: 03:00 UTC daily (low traffic).
 # Manual: workflow_dispatch with optional dry-run.
-#
-# Restore test (separate workflow `backup-restore-test.yml`) downloads the
-# latest artifact and replays it into a throwaway DB.
 
 name: Backup Postgres
 
@@ -21,7 +47,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "If 'true', resolve the DB connection but do not dump."
+        description: "If 'true', resolve credentials and connectivity but do not dump."
         required: false
         default: 'false'
 
@@ -31,99 +57,325 @@ permissions:
 jobs:
   backup:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       DRY_RUN:        ${{ inputs.dry_run }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install postgresql-client
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client
-
-      - name: Resolve solarpro-postgres
+      # --- Resolve the source database -----------------------------------
+      - name: Resolve solarpro-postgres connection string
         id: pg
         run: |
-          set -e
+          set -euo pipefail
+          [ -n "${RENDER_API_KEY:-}" ] || { echo "::error::RENDER_API_KEY is empty"; exit 1; }
           curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
             "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
           PG_ID=$(python3 -c "
           import json
-          d=json.load(open('/tmp/pg.json'))
-          for item in (d if isinstance(d,list) else []):
-              pg=item.get('postgres', item)
-              if pg.get('name')=='solarpro-postgres':
+          for item in json.load(open('/tmp/pg.json')):
+              pg = item.get('postgres', item)
+              if pg.get('name') == 'solarpro-postgres':
                   print(pg.get('id','')); break
           ")
-          if [ -z "$PG_ID" ]; then
-            echo "::error::solarpro-postgres not found"; exit 1
-          fi
+          [ -n "$PG_ID" ] || { echo "::error::solarpro-postgres not found"; exit 1; }
           curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
             "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
           EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          [ -n "$EXT" ] || { echo "::error::no externalConnectionString returned"; exit 1; }
           echo "::add-mask::$EXT"
           echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      # --- Resolve the keycloak_app credential ----------------------------
+      # deploy-keycloak.yml mints KC_DB_PASSWORD per run and pushes it straight
+      # into the Render env of solarpro-keycloak; it is never persisted to a GH
+      # secret. Read it back from the service that actually holds it.
+      - name: Resolve keycloak_app password from Render env
+        id: kc
+        run: |
+          set -euo pipefail
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services?limit=50" -o /tmp/svcs.json
+          KC_ID=$(python3 -c "
+          import json
+          for item in json.load(open('/tmp/svcs.json')):
+              s = item.get('service', item)
+              if s.get('name') == 'solarpro-keycloak':
+                  print(s.get('id','')); break
+          ")
+          [ -n "$KC_ID" ] || { echo "::error::solarpro-keycloak service not found"; exit 1; }
+
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$KC_ID/env-vars?limit=100" -o /tmp/kcenv.json
+          KC_PWD=$(python3 -c "
+          import json
+          for item in json.load(open('/tmp/kcenv.json')):
+              ev = item.get('envVar', item)
+              if ev.get('key') == 'KC_DB_PASSWORD':
+                  print(ev.get('value','')); break
+          ")
+          if [ -z "$KC_PWD" ]; then
+            echo "::error::KC_DB_PASSWORD not present in solarpro-keycloak env."
+            echo "::error::Without it the keycloak schema (all user accounts) cannot be dumped."
+            echo "::error::Re-run 'Deploy Keycloak' to re-provision the credential, then retry."
+            exit 1
+          fi
+          echo "::add-mask::$KC_PWD"
+
+          # Swap the credentials in the primary external URL for keycloak_app's.
+          # Host/port/database stay identical -- only the role changes.
+          KC_URL=$(EXT="${{ steps.pg.outputs.external }}" KC_PWD="$KC_PWD" python3 -c "
+          import os, urllib.parse as u
+          p = u.urlparse(os.environ['EXT'])
+          pwd = u.quote(os.environ['KC_PWD'], safe='')
+          netloc = f\"keycloak_app:{pwd}@{p.hostname}\" + (f\":{p.port}\" if p.port else '')
+          q = p.query
+          if 'sslmode' not in q:
+              q = (q + '&' if q else '') + 'sslmode=require'
+          print(u.urlunparse((p.scheme, netloc, p.path, p.params, q, p.fragment)))
+          ")
+          echo "::add-mask::$KC_URL"
+          echo "kc_url=$KC_URL" >> $GITHUB_OUTPUT
+
+      # --- Match client major to server major -----------------------------
+      # pg_dump refuses to dump a server newer than itself. Ubuntu's default
+      # client tracks one major behind Render often enough to matter, so pin
+      # the client to whatever the server actually reports.
+      - name: Install postgresql-client matching the server major
+        id: pgver
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client   # bootstrap psql to ask the server
+          MAJOR=$(psql "$DATABASE_URL" -Atc "SELECT current_setting('server_version_num')::int / 10000")
+          echo "Server major version: $MAJOR"
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+
+          # PGDG carries every supported major; install the exact match.
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "postgresql-client-$MAJOR"
+          "/usr/lib/postgresql/$MAJOR/bin/pg_dump" --version
 
       - name: Stamp output filename
         id: name
         run: |
           STAMP=$(date -u +"%Y-%m-%dT%H-%M-%SZ")
           echo "stamp=$STAMP" >> $GITHUB_OUTPUT
-          echo "Dump filename: solarpro-postgres-$STAMP.dump"
 
-      - name: Dry-run -- only verify connection
+      # --- Dry run: prove BOTH roles can connect, dump nothing -------------
+      - name: Dry-run -- verify both connections
         if: env.DRY_RUN == 'true'
         env:
           DATABASE_URL: ${{ steps.pg.outputs.external }}
+          KC_URL:       ${{ steps.kc.outputs.kc_url }}
+          MAJOR:        ${{ steps.pgver.outputs.major }}
         run: |
-          set -e
-          echo "DRY-RUN: pinging server..."
-          psql "$DATABASE_URL" -A -t -c "SELECT now(), pg_database_size(current_database())/1024/1024 || ' MB'"
-          echo "DRY-RUN OK."
+          set -euo pipefail
+          PSQL="/usr/lib/postgresql/$MAJOR/bin/psql"
+          echo "primary role:"
+          "$PSQL" "$DATABASE_URL" -At -c "SELECT current_user, pg_database_size(current_database())/1024/1024 || ' MB'"
+          echo "keycloak_app role:"
+          "$PSQL" "$KC_URL" -At -c "SELECT current_user, count(*) FROM keycloak.databasechangeloglock"
+          echo "DRY-RUN OK -- both roles authenticate and can read their own schema."
 
-      - name: pg_dump (Fc binary)
+      # --- Pass 1: everything except the keycloak schema -------------------
+      - name: pg_dump pass 1 (public, as primary role)
         if: env.DRY_RUN != 'true'
         env:
           DATABASE_URL: ${{ steps.pg.outputs.external }}
+          MAJOR:        ${{ steps.pgver.outputs.major }}
         run: |
-          set -e
-          OUT="/tmp/solarpro-postgres-${{ steps.name.outputs.stamp }}.dump"
-          pg_dump --format=custom --compress=9 --no-owner --no-privileges \
-                  "$DATABASE_URL" --file="$OUT"
+          set -euo pipefail
+          OUT="/tmp/app-${{ steps.name.outputs.stamp }}.dump"
+          "/usr/lib/postgresql/$MAJOR/bin/pg_dump" \
+            --format=custom --compress=9 --no-owner --no-privileges \
+            --exclude-schema=keycloak \
+            "$DATABASE_URL" --file="$OUT"
           ls -lh "$OUT"
-          echo "DUMP_PATH=$OUT" >> $GITHUB_ENV
+          echo "APP_DUMP=$OUT" >> $GITHUB_ENV
 
-      - name: Verify dump integrity
+      # --- Pass 2: the keycloak schema, as its owner -----------------------
+      - name: pg_dump pass 2 (keycloak, as keycloak_app)
+        if: env.DRY_RUN != 'true'
+        env:
+          KC_URL: ${{ steps.kc.outputs.kc_url }}
+          MAJOR:  ${{ steps.pgver.outputs.major }}
+        run: |
+          set -euo pipefail
+          OUT="/tmp/keycloak-${{ steps.name.outputs.stamp }}.dump"
+          "/usr/lib/postgresql/$MAJOR/bin/pg_dump" \
+            --format=custom --compress=9 --no-owner --no-privileges \
+            --schema=keycloak \
+            "$KC_URL" --file="$OUT"
+          ls -lh "$OUT"
+          echo "KC_DUMP=$OUT" >> $GITHUB_ENV
+
+      # --- Verify by executing the documented runbook, step for step -------
+      # This step deliberately performs the EXACT sequence printed in the
+      # artifact's MANIFEST.txt. If the runbook drifts from what is tested,
+      # the artifact is not a backup, it is a rumour.
+      - name: Verify by restoring into a throwaway Postgres
+        if: env.DRY_RUN != 'true'
+        env:
+          MAJOR: ${{ steps.pgver.outputs.major }}
+        run: |
+          set -euo pipefail
+          PGBIN="/usr/lib/postgresql/$MAJOR/bin"
+
+          # Same major as the source so the replay is representative.
+          docker run -d --name verifypg \
+            -e POSTGRES_PASSWORD=verify -e POSTGRES_DB=verify \
+            -p 5433:5432 "postgres:$MAJOR"
+          for i in $(seq 1 30); do
+            if "$PGBIN/pg_isready" -h 127.0.0.1 -p 5433 -U postgres -q; then break; fi
+            sleep 2
+          done
+          TARGET="postgresql://postgres:verify@127.0.0.1:5433/verify"
+
+          # Throwaway credential for keycloak_app inside the sandbox only.
+          VPWD=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
+          echo "::add-mask::$VPWD"
+          KCTARGET="postgresql://keycloak_app:$VPWD@127.0.0.1:5433/verify"
+          echo "::add-mask::$KCTARGET"
+
+          # RUNBOOK STEP 2 -- migration 006 creates the schema, the
+          # keycloak_app role, its grants and its search_path.
+          VPWD="$VPWD" python3 -c "
+          import os, sys
+          sql = open('migrations/006_keycloak_schema.sql').read()
+          pwd = os.environ['VPWD'].replace(chr(39), chr(39)*2)
+          sys.stdout.write(sql.replace('__KC_DB_PASSWORD__', pwd))
+          " | "$PGBIN/psql" "$TARGET" -v ON_ERROR_STOP=1 -q
+
+          # RUNBOOK STEP 3 -- app schemas, restored as the primary role.
+          # --exit-on-error: a restore that emits errors is a failed restore.
+          "$PGBIN/pg_restore" --exit-on-error --no-owner --no-privileges -d "$TARGET" "$APP_DUMP"
+
+          # RUNBOOK STEP 4 -- keycloak schema, restored *as keycloak_app* so
+          # every table it recreates is owned by keycloak_app exactly as in
+          # production. Migration 006 already created the schema, so the
+          # dump's own CREATE SCHEMA entry is filtered out of the TOC --
+          # otherwise --exit-on-error would trip on "already exists".
+          "$PGBIN/pg_restore" -l "$KC_DUMP" | grep -v 'SCHEMA - keycloak' > /tmp/kc.toc
+          "$PGBIN/pg_restore" --exit-on-error --no-owner --no-privileges \
+            -L /tmp/kc.toc -d "$KCTARGET" "$KC_DUMP"
+
+          echo "--- restored object counts ---"
+          "$PGBIN/psql" "$TARGET" -At -c "
+            SELECT 'public tables:   ' || count(*) FROM information_schema.tables
+              WHERE table_schema='public' AND table_type='BASE TABLE';"
+          "$PGBIN/psql" "$TARGET" -At -c "
+            SELECT 'keycloak tables: ' || count(*) FROM information_schema.tables
+              WHERE table_schema='keycloak' AND table_type='BASE TABLE';"
+
+          # A structurally-empty backup must not be blessed. Assert BOTH
+          # tenants came back with rows -- the app's users and Keycloak's.
+          "$PGBIN/psql" "$TARGET" -v ON_ERROR_STOP=1 -At -c "
+            DO \$\$
+            DECLARE u int; k int;
+            BEGIN
+              SELECT count(*) INTO u FROM public.users;
+              SELECT count(*) INTO k FROM keycloak.user_entity;
+              RAISE NOTICE 'public.users=% keycloak.user_entity=%', u, k;
+              IF u = 0 THEN RAISE EXCEPTION 'public.users restored empty'; END IF;
+              IF k = 0 THEN RAISE EXCEPTION 'keycloak.user_entity restored empty'; END IF;
+            END \$\$;"
+
+          # keycloak_app must own what it needs, or Keycloak will not boot.
+          "$PGBIN/psql" "$KCTARGET" -v ON_ERROR_STOP=1 -Atc \
+            "SELECT 'keycloak_app can read its own realm: ' || count(*) FROM keycloak.user_entity"
+
+          # The mig-006 isolation control must SURVIVE a restore: an ordinary
+          # unprivileged role still must not be able to read Keycloak's users.
+          "$PGBIN/psql" "$TARGET" -v ON_ERROR_STOP=1 -q -c \
+            "CREATE ROLE probe LOGIN PASSWORD 'probe'; GRANT CONNECT ON DATABASE verify TO probe;"
+          if "$PGBIN/psql" "postgresql://probe:probe@127.0.0.1:5433/verify" \
+               -Atc "SELECT count(*) FROM keycloak.user_entity" 2>/dev/null; then
+            echo "::error::ISOLATION REGRESSION -- an unprivileged role read keycloak.user_entity"
+            exit 1
+          fi
+          echo "isolation control intact: unprivileged role denied on keycloak.user_entity"
+
+          docker rm -f verifypg >/dev/null
+          echo "RESTORE VERIFIED -- the documented runbook was executed end to end."
+
+      # --- Package + evidence ----------------------------------------------
+      - name: Package and checksum
         if: env.DRY_RUN != 'true'
         run: |
-          set -e
-          # --list reads the dump's table-of-contents. If the file is
-          # truncated / corrupt this exits non-zero.
-          pg_restore --list "$DUMP_PATH" | head -10
-          BYTES=$(stat -c %s "$DUMP_PATH")
-          SHA=$(sha256sum "$DUMP_PATH" | awk '{print $1}')
-          echo "Dump size:   $BYTES bytes"
+          set -euo pipefail
+          STAMP="${{ steps.name.outputs.stamp }}"
+          TAR="/tmp/solarpro-backup-$STAMP.tar.gz"
+          cat > /tmp/MANIFEST.txt <<EOF
+          SolarPro Postgres backup $STAMP
+          server major: ${{ steps.pgver.outputs.major }}
+
+          app-$STAMP.dump       -- all schemas EXCEPT keycloak (primary role)
+          keycloak-$STAMP.dump  -- keycloak schema only (keycloak_app role)
+
+          RESTORE ORDER -- this exact sequence is executed by the workflow's
+          verify step against a throwaway postgres:${{ steps.pgver.outputs.major }}
+          before this artifact is uploaded. It is a tested procedure, not a note.
+
+            1. Provision the database. Choose a KC_DB_PASSWORD.
+
+            2. Apply migrations/006_keycloak_schema.sql (substituting
+               __KC_DB_PASSWORD__). This creates the keycloak schema, the
+               keycloak_app role, its grants and its search_path.
+
+            3. Restore the app schemas AS THE PRIMARY ROLE:
+                 pg_restore --exit-on-error --no-owner --no-privileges \\
+                   -d "\$PRIMARY_URL" app-$STAMP.dump
+
+            4. Restore the keycloak schema AS keycloak_app, so that every
+               table it recreates is owned by keycloak_app exactly as in
+               production. Step 2 already created the schema, so the dump's
+               own CREATE SCHEMA entry must be filtered out of the TOC:
+                 pg_restore -l keycloak-$STAMP.dump \\
+                   | grep -v 'SCHEMA - keycloak' > kc.toc
+                 pg_restore --exit-on-error --no-owner --no-privileges \\
+                   -L kc.toc -d "\$KEYCLOAK_APP_URL" keycloak-$STAMP.dump
+
+            5. Re-run 'Deploy Keycloak' so the live KC_DB_PASSWORD matches
+               the role password chosen in step 1.
+
+          ASSERTED BY THE VERIFY STEP
+            * both restores complete with --exit-on-error
+            * public.users and keycloak.user_entity both come back non-empty
+            * keycloak_app can read its own realm tables
+            * an unprivileged role still CANNOT read keycloak.user_entity,
+              i.e. the migration-006 isolation control survives the restore
+          EOF
+          tar -czf "$TAR" -C /tmp "MANIFEST.txt" "$(basename "$APP_DUMP")" "$(basename "$KC_DUMP")"
+          BYTES=$(stat -c %s "$TAR")
+          SHA=$(sha256sum "$TAR" | awk '{print $1}')
+          echo "Backup size: $BYTES bytes"
           echo "SHA-256:     $SHA"
-          # Evidence line -- grepped by soc2-evidence.yml
-          echo "BACKUP_EVIDENCE stamp=${{ steps.name.outputs.stamp }} bytes=$BYTES sha256=$SHA"
+          echo "BACKUP_EVIDENCE stamp=$STAMP bytes=$BYTES sha256=$SHA"
+          echo "TAR_PATH=$TAR" >> $GITHUB_ENV
 
       - name: Upload backup artifact (30 day retention)
         if: env.DRY_RUN != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: solarpro-postgres-${{ steps.name.outputs.stamp }}
-          path: ${{ env.DUMP_PATH }}
+          name: solarpro-backup-${{ steps.name.outputs.stamp }}
+          path: ${{ env.TAR_PATH }}
           retention-days: 30
           if-no-files-found: error
 
-      - name: Summary
-        if: always()
+      # A silently-failing backup is worse than no backup: it reads as safety.
+      # Make failure impossible to miss.
+      - name: Fail loudly
+        if: failure()
         run: |
-          if [ "$DRY_RUN" = "true" ]; then
-            echo "DRY-RUN complete -- no dump taken."
-          else
-            echo "Backup ${{ steps.name.outputs.stamp }} uploaded as workflow artifact."
-            echo "Retention: 30 days. Restore via backup-restore-test.yml."
-          fi
+          echo "::error::POSTGRES BACKUP FAILED. There is no verified dump for today."
+          echo "::error::Do not assume the previous night's artifact is good -- check it."
