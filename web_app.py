@@ -106,11 +106,39 @@ _obs_scrape_endpoint(app)
 
 # ─── Rate limiter ──────────────────────────────────────────────────────────────
 def _get_real_ip():
-    """Use X-Forwarded-For when behind serveo/proxy, else remote address."""
+    """Return the client IP used for rate-limit / brute-force lockout keys.
+
+    X-Forwarded-For is built left-to-right as `client, proxy1, proxy2, ...`,
+    where each proxy APPENDS the address it received the connection from. The
+    LEFTMOST value is supplied by the client and is therefore spoofable --
+    trusting it (the old behaviour) let an attacker rotate the rate-limit /
+    lockout key at will and poison the IP recorded in security logs. The
+    trustworthy entry is the one our own edge proxy appended, i.e. the
+    N-th-from-rightmost, where N = number of trusted proxy hops. We only trust
+    the header when we are actually behind a proxy we control; otherwise we use
+    the raw socket address.
+    """
+    behind_proxy = bool(
+        os.environ.get("RENDER") or os.environ.get("TRUST_PROXY_HEADERS")
+    )
     xff = request.headers.get("X-Forwarded-For", "")
-    if xff:
-        return xff.split(",")[0].strip()
+    if xff and behind_proxy:
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            try:
+                hops = int(os.environ.get("TRUSTED_PROXY_HOPS", "1"))
+            except (TypeError, ValueError):
+                hops = 1
+            hops = max(1, hops)
+            # Nth-from-rightmost trusted entry. If the observed chain is
+            # SHORTER than the configured hop count (misconfig / spoofed /
+            # missing hop), fall back to the RIGHTMOST entry (-1), never the
+            # leftmost -- the nearest-proxy-appended value is the safest we have.
+            idx = -hops if hops <= len(parts) else -1
+            return parts[idx]
     return request.remote_addr
+
+# _TRUSTED_PROXY_HOPS: documented above; env-driven, default 1 (Render).
 
 limiter = Limiter(
     _get_real_ip,
