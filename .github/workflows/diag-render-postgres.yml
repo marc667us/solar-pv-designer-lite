@@ -1,0 +1,138 @@
+# Read-only diagnosis of the Render Postgres instance behind SolarPro.
+#
+# Why: 2026-07-09 the web service entered a boot crash-loop with
+#   psycopg2.OperationalError: could not translate host name "dpg-...-a"
+# which means the DATABASE_URL points at a database host that no longer
+# resolves (expired / deleted / suspended free instance, or a stale URL).
+#
+# This workflow ONLY READS. It never creates, deletes, or mutates anything.
+# It prints metadata only -- never a connection string, user, or password --
+# because this repository's Actions logs are not guaranteed to be private.
+name: Diag Render Postgres
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+    steps:
+      # Validate the request BEFORE calling the API: a missing secret or a
+      # rejected key otherwise shows up as an empty list, which reads exactly
+      # like "the database was deleted" and would send the fix in the wrong
+      # direction. Fail loudly instead.
+      - name: Validate credentials and API reachability
+        run: |
+          set -euo pipefail
+          [ -n "${RENDER_API_KEY:-}" ]    || { echo "::error::RENDER_API_KEY secret is empty"; exit 1; }
+          [ -n "${RENDER_SERVICE_ID:-}" ] || { echo "::error::RENDER_SERVICE_ID secret is empty"; exit 1; }
+          case "$RENDER_SERVICE_ID" in
+            srv-*) ;;
+            *) echo "::error::RENDER_SERVICE_ID does not look like a Render service id (srv-...)"; exit 1 ;;
+          esac
+          code=$(curl -sS -o /tmp/svc.json -w '%{http_code}' \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID")
+          echo "GET /v1/services/<id> -> HTTP $code"
+          case "$code" in
+            200) ;;
+            401|403) echo "::error::Render API rejected the key (HTTP $code) -- rotate RENDER_API_KEY"; exit 1 ;;
+            404) echo "::error::Service $RENDER_SERVICE_ID does not exist (HTTP 404)"; exit 1 ;;
+            *)   echo "::error::Unexpected HTTP $code from the Render API"; exit 1 ;;
+          esac
+          python3 -c "
+          import json,sys
+          d = json.load(open('/tmp/svc.json'))
+          for k in ('id','name','type','suspended'):
+              if k not in d:
+                  print(f'::error::Render API response missing {k!r} -- schema changed?'); sys.exit(1)
+          print(f\"  service    = {d['name']} ({d['id']})\")
+          print(f\"  type       = {d['type']}\")
+          print(f\"  suspended  = {d['suspended']}\")
+          "
+
+      - name: List Postgres instances on the account
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/pg.json -w '%{http_code}' \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20")
+          echo "GET /v1/postgres -> HTTP $code"
+          [ "$code" = "200" ] || { echo "::error::Postgres list failed (HTTP $code)"; exit 1; }
+          python3 -c "
+          import json,sys
+          d = json.load(open('/tmp/pg.json'))
+          if not isinstance(d, list):
+              print('::error::expected a JSON array from /v1/postgres'); sys.exit(1)
+          "
+          python3 - <<'PY'
+          import json
+          rows = json.load(open('/tmp/pg.json'))
+          if not rows:
+              print("  (no Postgres instances on this account)")
+          for item in rows:
+              pg = item.get('postgres', item)
+              print(f"  id={pg.get('id')}")
+              print(f"     name       = {pg.get('name')}")
+              print(f"     status     = {pg.get('status')}")
+              print(f"     suspended  = {pg.get('suspended')}")
+              print(f"     plan       = {pg.get('plan')}   region={pg.get('region')}")
+              print(f"     version    = {pg.get('version')}")
+              print(f"     createdAt  = {pg.get('createdAt')}")
+              print(f"     expiresAt  = {pg.get('expiresAt')}")
+              print(f"     dashboard  = {pg.get('dashboardUrl')}")
+              print()
+          PY
+
+      - name: Does the service's DATABASE_URL point at a live instance?
+        run: |
+          set -euo pipefail
+          # env-vars response contains the secret; never echo the value itself.
+          code=$(curl -sS -o /tmp/env.json -w '%{http_code}' \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/env-vars?limit=100")
+          echo "GET /v1/services/<id>/env-vars -> HTTP $code"
+          [ "$code" = "200" ] || { echo "::error::env-vars fetch failed (HTTP $code)"; exit 1; }
+          python3 - <<'PY'
+          import json, re
+          envs = {e.get('envVar', e).get('key'): e.get('envVar', e).get('value')
+                  for e in json.load(open('/tmp/env.json'))}
+          url = envs.get('DATABASE_URL') or ''
+          print(f"DATABASE_URL set        : {bool(url)}")
+          if not url:
+              raise SystemExit(0)
+          m = re.search(r'@([^/:]+)', url)
+          host = m.group(1) if m else ''
+          # the host is an opaque Render id, not a credential -- safe to print
+          print(f"DATABASE_URL host       : {host}")
+          print(f"internal (no dot in host): {'.' not in host}")
+          live = []
+          for item in json.load(open('/tmp/pg.json')):
+              pg = item.get('postgres', item)
+              live.append((pg.get('id'), pg.get('name'), pg.get('status')))
+          hit = [x for x in live if x[0] and x[0][:24] in host]
+          print(f"matching live instance   : {hit or 'NONE -- the database this URL names does not exist'}")
+          PY
+
+      - name: Recent service events (why it keeps restarting)
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/ev.json -w '%{http_code}' \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/events?limit=15")
+          echo "GET /v1/services/<id>/events -> HTTP $code"
+          [ "$code" = "200" ] || { echo "::error::events fetch failed (HTTP $code)"; exit 1; }
+          python3 - <<'PY'
+          import json
+          for item in json.load(open('/tmp/ev.json')):
+              ev = item.get('event', item)
+              d = ev.get('details') or {}
+              print(f"  {ev.get('timestamp','-'):26} {ev.get('type','-'):24} {json.dumps(d)[:160]}")
+          PY
