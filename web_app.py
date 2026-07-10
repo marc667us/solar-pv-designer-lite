@@ -12157,6 +12157,7 @@ def admin_logs():
 @admin_required
 def admin_ops_backup_run():
     """Create immediate DB backup (SQLite copy)."""
+    csrf_protect()  # CSRF: guard state-changing admin POST (project convention)
     import shutil, time as _t
     try:
         backup_dir = os.path.join(os.path.dirname(DB_PATH), "backups")
@@ -12298,6 +12299,7 @@ def admin_ops_security_sessions():
 @admin_required
 def admin_ops_revoke_all_sessions():
     """Revoke all user sessions (except current admin)."""
+    csrf_protect()  # CSRF: guard state-changing admin POST (project convention)
     current_uid = session.get("user_id")
     session.clear()
     log_security(event_type="revoke_all_sessions", user_id=current_uid,
@@ -12309,6 +12311,7 @@ def admin_ops_revoke_all_sessions():
 @admin_required
 def admin_ops_db_vacuum():
     """Run VACUUM on SQLite database."""
+    csrf_protect()  # CSRF: guard state-changing admin POST (project convention)
     try:
         import time as _t
         t0 = _t.time()

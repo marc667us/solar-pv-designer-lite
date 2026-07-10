@@ -88,6 +88,22 @@ oidc_bp = Blueprint("oidc", __name__, url_prefix="/auth")
 
 # ── Config helpers ──────────────────────────────────────────────────────
 
+def _safe_relative_next(next_url, default="/dashboard"):
+    """Open-redirect guard for the post-login `next` target. Returns
+    next_url only when it is a same-origin RELATIVE path: starts with a
+    single "/", not "//" or "/\\" (protocol-relative / backslash tricks),
+    and contains no C0 control chars, whitespace, or DEL (browsers strip
+    tab/newline mid-URL, which could collapse "/\t//evil" into a
+    protocol-relative redirect). Otherwise returns `default`. Input is
+    attacker-influenced (captured from request.args["next"] at login)."""
+    if (isinstance(next_url, str)
+            and next_url.startswith("/")
+            and not next_url.startswith(("//", "/\\"))
+            and not any(ord(c) <= 0x20 or ord(c) == 0x7f for c in next_url)):
+        return next_url
+    return default
+
+
 def _keycloak_enabled() -> bool:
     """Retired 2026-06-25 (SOC 2 M1.1). Always True — Keycloak is the
     only auth path; OIDC routes always execute the real flow."""
@@ -329,7 +345,9 @@ def auth_callback():
     expected_state = session.pop("_kc_state", None)
     expected_nonce = session.pop("_kc_nonce", None)
     verifier = session.pop("_kc_verifier", None)
-    next_url = session.pop("_kc_next", "/dashboard")
+    # Open-redirect guard: coerce the stored post-login target to a safe
+    # same-origin relative path (see _safe_relative_next).
+    next_url = _safe_relative_next(session.pop("_kc_next", "/dashboard"))
 
     if not expected_state or state != expected_state:
         return _oidc_fail_redirect(
