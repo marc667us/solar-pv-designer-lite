@@ -184,7 +184,8 @@ All added in session 2026-06-02 (commit `598b071`):
 
 | Endpoint | Returns |
 |---|---|
-| `GET /api/ping` | `{"pong": true}` — note: no `"status"` key |
+| `GET /api/ping` | `{"pong": true}` — note: no `"status"` key. **Render `healthCheckPath` points here**: it touches no database, so a DB outage cannot trigger an instance restart loop. |
+| `GET /api/health/boot` | Boot/database readiness. `200` ready, `503` degraded. Reports `attempts`, `last_error`, `ready_since`. Added 2026-07-10 with `boot_state.py`. |
 | `GET /api/health` | Overall health summary |
 | `GET /api/health/database` | SQLite read/write test |
 | `GET /api/health/redis` | Redis ping (WARN on Render free tier — no Redis) |

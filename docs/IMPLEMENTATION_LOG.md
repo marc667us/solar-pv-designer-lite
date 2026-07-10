@@ -1912,3 +1912,91 @@ Free-text spec parsing for voltage/frequency is best-effort (future: structured 
 
 ## Next Recommended Step
 Open project_solar_pv_session_2026-06-26_27_full_session_close.md for the restart pointer.
+
+---
+
+# Implementation Log Entry
+Date: 2026-07-10 | Task: P0 outage recovery — verified backups + boot resilience | Status: complete (deployed)
+
+## Objective
+End the 2026-07-09 total outage class of failure, and give the platform a backup
+that has actually been restored at least once.
+
+## Files Changed
+`.github/workflows/backup-postgres.yml` (rewritten), `boot_state.py` (new),
+`wsgi.py`, `start_render.py`, `start.py`, `db_adapter.py`,
+`tests/test_boot_state.py` (new, 15 tests), `CLAUDE.md`.
+
+## What Was Completed
+
+**1. The backup was broken twice over, silently, for 14 nights.**
+   - `keycloak` schema is owned by the `keycloak_app` role; migration 006 REVOKEs
+     it from PUBLIC on purpose, so the primary role could not `pg_dump` it.
+     Fixed with a two-pass dump (one connection per owner). No grant widened, so
+     the isolation control survives.
+   - Independently, SOC 2 Phase 7 `FORCE ROW LEVEL SECURITY` made pg_dump abort.
+     `--enable-row-security` is required, but is only safe when the session
+     satisfies BOTH policy families: `app.current_tenant` unset (tenant escape)
+     AND `app.current_role=admin` (mig-015 global policies). Without the latter,
+     admin_settings / leads / beta_signups / login_failures /
+     newsletter_subscribers / assessment_requests each dump as ZERO ROWS while
+     pg_dump exits 0.
+   - A gate now asserts both escapes against the live `pg_policies` catalog
+     before every dump, whitelists the three proven-safe qual shapes, and
+     refuses any table that reads empty while `pg_stat_user_tables` says it has
+     rows. Verification restores BOTH dumps into a throwaway Postgres of the
+     same major by executing the artifact's documented runbook verbatim, and
+     compares per-table row counts against the source.
+   - First verified backup since 2026-06-26: 68 public tables, 87 keycloak
+     tables, row counts identical, isolation control intact after restore.
+
+**2. Boot resilience.** `wsgi.py` called `init_db()` at import; gunicorn imports
+   the WSGI module before binding `$PORT`, so a suspended database killed the
+   process before it could listen. New `boot_state.py`:
+   - the first attempt runs on a worker thread joined for at most
+     `DB_INIT_BOOT_TIMEOUT_SECONDS` (a database can HANG, not just raise);
+   - no request ever blocks on init — `start_attempt()` never blocks and never
+     raises, including on `RuntimeError: can't start new thread`;
+   - a stuck attempt is superseded after `DB_INIT_STUCK_SECONDS` so single-flight
+     cannot become single-forever, while the stuck window re-anchors so
+     supersession costs at most one thread per window, not one per request;
+   - while degraded, DB-backed routes return `503` + `Retry-After` instead of a
+     `relation does not exist` 500. `/api/ping`, `/api/version`, `/api/health/*`
+     and `/static/*` stay available so Render does not restart the instance;
+   - the gate is inserted at the HEAD of `before_request_funcs` so it precedes
+     `web_app._bump_last_seen`, which queries on every request;
+   - `db_adapter.open_postgres()` now passes `connect_timeout` (default 10s,
+     never 0 — libpq reads 0 as "wait forever").
+   - `start_render.py` and `start.py` carried the identical import-time
+     `init_db()` defect and now route through `boot_state.attach()`.
+
+## API Changes
+New `GET /api/health/boot` — 200 ready / 503 degraded.
+
+## Database Changes
+None. No migration, no grant, no policy change.
+
+## Security Changes
+None weakened. The backup fix specifically declines the easy path (granting the
+app role access to the keycloak schema) because it would delete the mig-006
+blast-radius control; the restore test now asserts that control survives.
+
+## Tests Added
+`tests/test_boot_state.py` — 15 tests: healthy boot unchanged, raising init,
+hanging init, /api/ping never blocked, single-flight, stuck-attempt recovery,
+no thread-per-request leak, stale attempt cannot resurrect an old error,
+thread-start failure, 503 gate, hook ordering, defensive env parsing.
+Full suite: 605 passed. Pre-existing reds unchanged (2 failures + 5 ordering
+errors also present on clean master).
+
+## Known Risks
+- `init_db()` failures are now swallowed by design; a genuinely broken migration
+  degrades silently rather than failing the deploy. `/api/health/boot` reports
+  it, but no monitor polls that endpoint yet.
+- Render free tier caps a web service at ONE instance; the owner's "2 instances"
+  request cannot be satisfied without upgrading `solarpro-global` off free.
+
+## Next Recommended Step
+Point `beta-monitor.yml` at `/api/health/boot` so a silent degraded boot pages
+someone. Then the security + token-lifecycle audits (items 7 and 8 of the
+2026-07-10 outage schedule).

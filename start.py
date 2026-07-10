@@ -16,7 +16,9 @@ PORT = 5000
 def run_waitress():
     from waitress import serve
     from web_app import app, init_db
-    init_db()
+    import boot_state
+    # Bind the port even if the database is unreachable. See boot_state.py.
+    boot_state.attach(app, init_db)
     print(f"[waitress] Listening on 0.0.0.0:{PORT}")
     serve(app, host="0.0.0.0", port=PORT, threads=8)
 

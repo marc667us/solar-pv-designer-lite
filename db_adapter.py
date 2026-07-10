@@ -321,6 +321,27 @@ class _PgConnAdapter:
         # when the variable goes out of scope.
 
 
+def _connect_timeout():
+    """Seconds to wait for a Postgres connect, parsed defensively.
+
+    This value exists to make an unreachable database fail fast. Parsing it must
+    therefore never be the thing that raises, and it must never be 0 -- libpq
+    reads 0 as "wait forever", which is precisely the hang we are bounding.
+    """
+    raw = os.environ.get("PG_CONNECT_TIMEOUT")
+    default = 10
+    if not raw:
+        return default
+    try:
+        value = int(float(raw))
+    except (TypeError, ValueError, OverflowError):
+        # int(float("inf")) raises OverflowError, not ValueError. This helper
+        # must never be the thing that raises -- it exists to make failure fast.
+        return default
+    # libpq: 0 means no timeout; values below 2 are silently raised to 2.
+    return value if value >= 2 else default
+
+
 def open_postgres(database_url: str):
     """Open a psycopg2 connection from a postgres:// or postgresql:// URL
     and return a _PgConnAdapter wrapping it. Used by web_app.py's
@@ -330,5 +351,12 @@ def open_postgres(database_url: str):
     if database_url.startswith("postgres://"):
         database_url = "postgresql://" + database_url[len("postgres://"):]
     sslmode = os.environ.get("PGSSLMODE", "require")
-    raw = psycopg2.connect(database_url, sslmode=sslmode)
+    # Bound the connect. Without connect_timeout, psycopg2 inherits the OS TCP
+    # timeout, so a blackholed or suspended database does not fail -- it HANGS,
+    # for minutes, on whatever thread called get_db(). At boot that stalls
+    # gunicorn before it binds $PORT; on a request thread it burns a worker.
+    # An unreachable database must fail fast so callers can degrade.
+    raw = psycopg2.connect(
+        database_url, sslmode=sslmode, connect_timeout=_connect_timeout()
+    )
     return _PgConnAdapter(raw)
