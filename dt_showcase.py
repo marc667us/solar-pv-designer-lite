@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dt_electrical_sld import build_sld_model, _f, _load
+from dt_electrical_sld import build_sld_model, has_committed_sizing, _f, _load
 
 __all__ = ["build_showcase_model"]
 
@@ -142,6 +142,7 @@ def build_showcase_model(proj: dict[str, Any]) -> dict[str, Any]:
     # base64 data-URI in the HTML on every page view). Never raises: any failure
     # leaves aerial_scene None and the Showcase falls back to labelled stock art.
     aerial_scene = None
+    _committed = has_committed_sizing(proj)
     try:
         from PIL import Image as _PILImage  # noqa: F401  (aerial needs Pillow)
         from new_capital_investment_routes import (build_scene_from_project,
@@ -151,11 +152,13 @@ def build_showcase_model(proj: dict[str, Any]) -> dict[str, Any]:
         _scene = augment_scene_v2(
             build_scene_from_project(_ci_normalize_proj_for_agents(proj)), proj)
         # HONESTY GATE (no-lies rule): only call it "your design" when the
-        # project actually carries design data. An empty project still yields a
-        # default placeholder plant from the scene generator -- presenting THAT
-        # as the customer's design would be a lie, so require real sizing first.
-        if (isinstance(_scene, dict) and _scene.get("objects")
-                and (n_mod > 0 or dc_kwp > 0)):
+        # project actually carries COMMITTED sizing. An empty project still
+        # yields a default placeholder plant from the scene generator, and
+        # dc_kwp alone is not proof -- build_sld_model derives it from the
+        # Step-1 target kWp, so a project with a target and nothing else would
+        # pass a `dc_kwp > 0` test while having no design at all. Reuse the
+        # SLD's committed-sizing predicate rather than inventing a second one.
+        if isinstance(_scene, dict) and _scene.get("objects") and _committed:
             aerial_scene = {
                 "key": "aerial", "label": "Your Design", "is_aerial": True,
                 "caption": ("Generated aerial of YOUR design - same arrangement "
@@ -170,11 +173,40 @@ def build_showcase_model(proj: dict[str, Any]) -> dict[str, Any]:
         aerial_scene = None
 
     if aerial_scene:
-        # design aerial is the hero + first gallery item; the stock photos become
-        # clearly-labelled illustrative equipment references (not this plant).
-        ref_scenes = [dict(s, caption="Illustrative reference - " + s["caption"])
-                      for s in _SCENES if s["key"] != "aerial"]
-        scenes = [aerial_scene] + ref_scenes
+        # EVERY gallery scene is rendered from the customer's own scene graph --
+        # the same one the 3D twin consumes -- just framed differently (array
+        # close-up, inverter station, substation, dusk). Owner: "the photo must
+        # show the actual site scene", so no stock photograph appears at all when
+        # a real design exists.
+        _design_captions = {
+            "panels": ("Your array - {rows} rows of fixed-tilt tables, "
+                       "{mods} modules"),
+            "inverter": "Your inverter stations and LV/MV step-up transformers",
+            "substation": "Your MV collection and main export substation",
+            "night": "Your plant at dusk - lit equipment compounds",
+        }
+        try:
+            _meta = ((_scene or {}).get("pv") or {}).get("meta") or {}
+            _rows = _fmt_int(_meta.get("n_rows")) if _meta.get("n_rows") else "-"
+            _mods = _fmt_int(_meta.get("n_modules_planned") or n_mod)
+        except Exception:
+            _rows, _mods = "-", _fmt_int(n_mod)
+
+        view_scenes = []
+        for s in _SCENES:
+            if s["key"] == "aerial":
+                continue
+            # a plant without (say) a substation has nothing to frame for that
+            # scene; omit it rather than show a substitute under its caption
+            if not _aer.view_available(_scene, s["key"]):
+                continue
+            cap = _design_captions.get(s["key"], s["caption"])
+            view_scenes.append({
+                "key": s["key"], "label": s["label"],
+                "is_design_view": True,
+                "caption": cap.format(rows=_rows, mods=_mods),
+            })
+        scenes = [aerial_scene] + view_scenes
         hero = aerial_scene
     else:
         # No design data yet: the page is ENTIRELY stock art. Be honest about it

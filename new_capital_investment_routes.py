@@ -10422,9 +10422,15 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         if (g := _gate(CI_LEVEL_FULL)) is not None:
             return g
         proj = _load_project(pid)
-        from flask import make_response
+        from flask import abort, make_response
+        from dt_electrical_sld import has_committed_sizing
         import dt_showcase_aerial as _aer
         from dt_scene_v2 import augment_scene_v2
+        # no-lies gate: without COMMITTED Step-7 sizing the scene builder emits
+        # a placeholder plant. Serving that under a "your design" caption would
+        # be a lie, so the design imagery simply does not exist yet.
+        if not has_committed_sizing(proj):
+            abort(404)
         png = b""
         try:
             scene = augment_scene_v2(
@@ -10434,9 +10440,62 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
         except Exception:
             png = b""
         if not png:
-            # never leave the hero broken -- serve the illustrative stock art
-            return redirect(url_for(
-                "static", filename="capital_investment/hero/farm-aerial.jpg"))
+            # the caption on this image says "your design"; substituting stock art
+            # here would put a photograph of somebody else's plant under that
+            # claim. A missing image is honest, a wrong one is not.
+            abort(404)
+        resp = make_response(png)
+        resp.headers["Content-Type"] = "image/png"
+        resp.headers["Cache-Control"] = "private, max-age=300"
+        return resp
+
+    # ------------------------------------------------------------------
+    # GET /large-scale-solar/<pid>/showcase-view/<view>.png -- the gallery
+    # scenes, each rendered from THIS project's own twin scene graph (array
+    # close-up, inverter station, substation, dusk) rather than a stock
+    # photograph. Owner rule: the picture must show the actual site scene.
+    # <view> is validated against dt_showcase_aerial.SHOWCASE_VIEWS; anything
+    # else 404s. Falls back to the labelled stock jpg only if the render is
+    # empty, so a thumbnail is never broken. Inherits @login_required + gate
+    # + user-scoped _load_project(), so tenant isolation is preserved.
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/<int:pid>/showcase-view/<view>.png",
+               endpoint="capital_investment_showcase_view")
+    @login_required
+    def _showcase_view(pid: int, view: str):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        from flask import abort, make_response
+        from dt_electrical_sld import has_committed_sizing
+        import dt_showcase_aerial as _aer
+        from dt_scene_v2 import augment_scene_v2
+        if view not in _aer.SHOWCASE_VIEWS:
+            abort(404)
+        proj = _load_project(pid)
+        # same no-lies gate as the aerial: these frames are captioned "your
+        # array" / "your substation", so they may only exist once the design does
+        if not has_committed_sizing(proj):
+            abort(404)
+        # optional ?w= lets the gallery ask for a cheap thumbnail instead of
+        # re-rendering the full 1600x900 frame four times per page view.
+        try:
+            w = int(request.args.get("w") or 1600)
+        except (TypeError, ValueError):
+            w = 1600
+        w = 320 if w < 320 else (1600 if w > 1600 else w)
+        h = int(round(w * 9.0 / 16.0))
+        png = b""
+        try:
+            scene = augment_scene_v2(
+                build_scene_from_project(_ci_normalize_proj_for_agents(proj)),
+                proj)
+            png = _aer.render_plant_view(scene, view, w, h)
+        except Exception:
+            png = b""
+        if not png:
+            # never swap in a stock photograph: the caption claims this frame is
+            # the customer's own plant (see dt_showcase._design_captions).
+            abort(404)
         resp = make_response(png)
         resp.headers["Content-Type"] = "image/png"
         resp.headers["Cache-Control"] = "private, max-age=300"
