@@ -32,8 +32,12 @@ jobs:
           echo "RAW LENGTH:"
           echo "$BODY" | jq 'length'
           echo
-          echo "RAW SHAPE (first element):"
-          echo "$BODY" | jq '.[0]'
+          echo "RAW SHAPE (first element, value redacted):"
+          # NEVER print .[0] raw -- it contains a live secret's value. The
+          # header of this file promises no values are printed; honour it.
+          # This leaked BREVO_API_KEY's value into a public Actions log before
+          # it was fixed (2026-07-10). Show only the structure.
+          echo "$BODY" | jq 'if .[0].envVar then {shape:"wrapper", key:.[0].envVar.key} else {shape:"flat", key:.[0].key} end'
           echo
           echo "KEY NAMES + VALUE LENGTHS (no values printed):"
           # For each env var, print the key + the length of its value to detect empty strings.
