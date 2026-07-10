@@ -233,6 +233,19 @@ jobs:
             echo "::error::These RLS tables have no unconditional escape for this session:"
             echo "::error::  $MISSING"
             echo "::error::Rows in them would be silently omitted. Refusing to dump."
+            echo ""
+            echo "--- live policies on those tables (for diagnosis) ---"
+            "$PSQL" "$DATABASE_URL" -c "
+              SELECT tablename, policyname, permissive, cmd, qual
+                FROM pg_policies
+               WHERE schemaname='public'
+                 AND tablename = ANY (string_to_array('$MISSING', ', '))
+               ORDER BY tablename, policyname" || true
+            echo "--- row visibility right now (0 => the escape is genuinely gone) ---"
+            for t in $(echo "$MISSING" | tr -d ' ' | tr ',' ' '); do
+              n=$("$PSQL" "$DATABASE_URL" -Atc "SELECT count(*) FROM public.$t" 2>/dev/null || echo "ERR")
+              echo "  $t = $n"
+            done
             exit 1
           fi
           echo "GATE PASSED -- the dump will see every row."
