@@ -171,6 +171,72 @@ jobs:
           STAMP=$(date -u +"%Y-%m-%dT%H-%M-%SZ")
           echo "stamp=$STAMP" >> $GITHUB_OUTPUT
 
+      # --- Gate: prove RLS cannot silently truncate the dump ---------------
+      # SOC 2 Phase 7 ran ALTER TABLE ... FORCE ROW LEVEL SECURITY on the
+      # tenant tables, which subjects even the table OWNER to its policies.
+      # pg_dump's default `row_security = off` therefore aborts rather than
+      # write a partial dump:
+      #
+      #   ERROR: query would be affected by row-level security policy for
+      #          table "admin_settings"
+      #
+      # The dump must run with --enable-row-security. That is only SAFE
+      # because every policy is PERMISSIVE and carries the parallel-run
+      # escape `current_tenant_id() IS NULL` -- with no app.current_tenant
+      # GUC set, the USING clause is TRUE for every row, so the dump is
+      # complete. Permissive policies OR together, so one escaping policy
+      # per table is sufficient.
+      #
+      # That reasoning is load-bearing: if a future migration drops the
+      # escape or adds a RESTRICTIVE policy, --enable-row-security would
+      # start writing a SILENTLY PARTIAL backup. So assert the precondition
+      # against the LIVE catalog on every run, and refuse to dump otherwise.
+      - name: Gate -- RLS policies must admit every row to this session
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+          MAJOR:        ${{ steps.pgver.outputs.major }}
+        run: |
+          set -euo pipefail
+          PSQL="/usr/lib/postgresql/$MAJOR/bin/psql"
+
+          echo "1/3 no RESTRICTIVE policies (they AND, and would subtract rows)"
+          BAD=$("$PSQL" "$DATABASE_URL" -Atc \
+            "SELECT count(*) FROM pg_policies
+              WHERE schemaname='public' AND permissive <> 'PERMISSIVE'")
+          if [ "$BAD" != "0" ]; then
+            echo "::error::$BAD RESTRICTIVE policy(ies) exist. --enable-row-security could"
+            echo "::error::silently drop rows. Refusing to write a partial backup."
+            exit 1
+          fi
+
+          echo "2/3 this session carries no tenant, so the escape is active"
+          ESC=$("$PSQL" "$DATABASE_URL" -Atc "SELECT current_tenant_id() IS NULL")
+          [ "$ESC" = "t" ] || { echo "::error::current_tenant_id() is set; dump would be tenant-scoped"; exit 1; }
+
+          echo "3/3 every RLS-forced table has a permissive SELECT escape"
+          MISSING=$("$PSQL" "$DATABASE_URL" -Atc "
+            WITH rls AS (
+              SELECT c.relname
+                FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname='public' AND c.relkind='r' AND c.relrowsecurity
+            ), escaped AS (
+              SELECT DISTINCT tablename
+                FROM pg_policies
+               WHERE schemaname='public'
+                 AND permissive='PERMISSIVE'
+                 AND cmd IN ('ALL','SELECT')
+                 AND qual ~ 'current_tenant_id\(\) IS NULL'
+            )
+            SELECT coalesce(string_agg(relname, ', ' ORDER BY relname), '')
+              FROM rls WHERE relname NOT IN (SELECT tablename FROM escaped)")
+          if [ -n "$MISSING" ]; then
+            echo "::error::These RLS tables have no unconditional escape for this session:"
+            echo "::error::  $MISSING"
+            echo "::error::Rows in them would be silently omitted. Refusing to dump."
+            exit 1
+          fi
+          echo "GATE PASSED -- the dump will see every row."
+
       # --- Dry run: prove BOTH roles can connect, dump nothing -------------
       - name: Dry-run -- verify both connections
         if: env.DRY_RUN == 'true'
@@ -195,13 +261,33 @@ jobs:
           MAJOR:        ${{ steps.pgver.outputs.major }}
         run: |
           set -euo pipefail
+          PGBIN="/usr/lib/postgresql/$MAJOR/bin"
           OUT="/tmp/app-${{ steps.name.outputs.stamp }}.dump"
-          "/usr/lib/postgresql/$MAJOR/bin/pg_dump" \
+
+          # --enable-row-security: mandatory under FORCE RLS, and proven safe
+          # by the preceding gate step. Without it pg_dump aborts; with it,
+          # and without the gate, it could quietly dump a subset.
+          "$PGBIN/pg_dump" \
             --format=custom --compress=9 --no-owner --no-privileges \
+            --enable-row-security \
             --exclude-schema=keycloak \
             "$DATABASE_URL" --file="$OUT"
           ls -lh "$OUT"
           echo "APP_DUMP=$OUT" >> $GITHUB_ENV
+
+          # Snapshot what the dumping session could see, per table. The
+          # restore is later required to reproduce these counts exactly.
+          # psql defaults to row_security=on, so this observes the same rows
+          # the dump did.
+          "$PGBIN/psql" "$DATABASE_URL" -Atc "
+            SELECT c.relname || '=' ||
+                   (xpath('/row/cnt/text()',
+                     query_to_xml(format('SELECT count(*) AS cnt FROM public.%I', c.relname),
+                                  false, true, '')))[1]::text
+              FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname='public' AND c.relkind='r'
+             ORDER BY 1" | sort > /tmp/src_counts.txt
+          echo "captured row counts for $(wc -l < /tmp/src_counts.txt) public tables"
 
       # --- Pass 2: the keycloak schema, as its owner -----------------------
       - name: pg_dump pass 2 (keycloak, as keycloak_app)
@@ -293,6 +379,26 @@ jobs:
           # keycloak_app must own what it needs, or Keycloak will not boot.
           "$PGBIN/psql" "$KCTARGET" -v ON_ERROR_STOP=1 -Atc \
             "SELECT 'keycloak_app can read its own realm: ' || count(*) FROM keycloak.user_entity"
+
+          # Every public table must come back with exactly the row count the
+          # dumping session saw. Restoring as the throwaway superuser bypasses
+          # RLS, so this also catches a restore that lost rows to a policy.
+          "$PGBIN/psql" "$TARGET" -Atc "
+            SELECT c.relname || '=' ||
+                   (xpath('/row/cnt/text()',
+                     query_to_xml(format('SELECT count(*) AS cnt FROM public.%I', c.relname),
+                                  false, true, '')))[1]::text
+              FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname='public' AND c.relkind='r'
+             ORDER BY 1" | sort > /tmp/dst_counts.txt
+
+          if ! diff -u /tmp/src_counts.txt /tmp/dst_counts.txt > /tmp/counts.diff; then
+            echo "::error::Row counts differ between the live database and the restored copy."
+            echo "::error::The backup is NOT faithful. Diff (-live +restored):"
+            cat /tmp/counts.diff
+            exit 1
+          fi
+          echo "row counts identical across all $(wc -l < /tmp/src_counts.txt) public tables"
 
           # The mig-006 isolation control must SURVIVE a restore: an ordinary
           # unprivileged role still must not be able to read Keycloak's users.
