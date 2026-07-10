@@ -1,4 +1,8 @@
-# Beta monitor: every 30 minutes, log into prod as admin and:
+# Beta monitor: every 30 minutes:
+#   0. Check /api/health/boot FIRST (unauthenticated). If the app booted but the
+#      DB init is stuck/degraded (503), email a CRITICAL alert immediately and
+#      stop — nothing else watches the degraded-boot signal (/api/ping stays 200).
+#   Then log into prod as admin and:
 #   1. Poll /admin/feedback, /admin/tickets, /admin/beta for new evaluator
 #      responses (HTML tables — count rows, diff against last-known state
 #      stored in data/response_state.json).
@@ -80,6 +84,52 @@ jobs:
 
           s = requests.Session()
           s.headers.update({"User-Agent": "SolarPro-BetaMonitor/1.0"})
+
+          # ---------- Degraded-boot check (unauthenticated; runs BEFORE login) ----------
+          # /api/health/boot returns 503 when the app is up but DB init is stuck or
+          # degraded (boot_state.py). /api/ping stays 200 in that state, so nothing
+          # else in this poller would notice — and the login step below itself needs
+          # the DB and would just fail opaquely. Page immediately if degraded.
+          def _brevo_send(subject, html):
+              import urllib.request
+              body = json.dumps({
+                  "sender": {"email": ALERT_TO, "name": "SolarPro Beta Monitor"},
+                  "to": [{"email": ALERT_TO}],
+                  "subject": subject, "htmlContent": html,
+              }).encode("utf-8")
+              req = urllib.request.Request(
+                  "https://api.brevo.com/v3/smtp/email", data=body,
+                  headers={"api-key": BREVO, "Content-Type": "application/json",
+                           "Accept": "application/json"}, method="POST")
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      print(f"boot-alert email status: {resp.status}")
+              except Exception as e:
+                  print(f"::warning::boot-alert email failed: {e}")
+
+          try:
+              br = s.get(BASE + "/api/health/boot", timeout=45)
+              try:
+                  bj = br.json()
+              except Exception:
+                  bj = {}
+              if br.status_code != 200 or bj.get("status") != "ok":
+                  msg = (f"CRITICAL: /api/health/boot DEGRADED — HTTP {br.status_code}, "
+                         f"status={bj.get('status')}, db_ready={bj.get('database_ready')}, "
+                         f"attempts={bj.get('attempts')}, last_error={bj.get('last_error')}")
+                  print(f"::error::{msg}")
+                  _brevo_send(
+                      f"SolarPro CRITICAL — degraded boot at {datetime.now(timezone.utc).isoformat()[:16]}",
+                      f"<h3>SolarPro degraded boot</h3><p>{msg}</p>"
+                      f"<pre>{json.dumps(bj, indent=2)[:1500]}</pre>"
+                      "<p>DB routes are 503 while /api/ping stays 200. Check Render logs "
+                      "+ /api/health/boot.</p>")
+                  sys.exit(1)
+              print(f"boot OK (db_ready={bj.get('database_ready')})")
+          except SystemExit:
+              raise
+          except Exception as e:
+              print(f"::warning::boot health check errored (continuing to login): {e}")
 
           # ---------- Login ----------
           # Cold-start tolerance for Render free tier: 60s on the warm-up,

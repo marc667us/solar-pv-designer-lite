@@ -412,10 +412,10 @@ def auth_callback():
             status_hint=400,
         )
 
-    # Hydrate Flask session with the bits the UI needs. Per plan §11.3
-    # the access token lives in memory (server-side session) but never
-    # gets echoed to JavaScript.
-    session["access_token"] = access_token
+    # Hydrate Flask session with the bits the UI needs. Per plan §11.3.
+    # NOTE: the access token is intentionally NOT stored in the session --
+    # Flask's session is a signed (not encrypted) CLIENT cookie, and the
+    # token was never read anywhere. Keeping JWT claims off the client.
     session["user"] = {
         "sub": claims.get("sub"),
         "preferred_username": claims.get("preferred_username"),
@@ -606,7 +606,6 @@ def auth_refresh():
     if not access_token:
         return jsonify(error="OIDC_REFRESH_INCOMPLETE"), 502
 
-    session["access_token"] = access_token
     response = make_response(jsonify(
         ok=True,
         expires_in=payload.get("expires_in"),
