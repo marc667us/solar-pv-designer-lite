@@ -1,0 +1,163 @@
+# Apply Render's documented best practices to solarpro-global.
+#
+# Render IGNORES the Procfile once a service carries an explicit startCommand,
+# so both settings below must be PATCHed through the REST API.
+#
+# WHAT THIS SETS AND WHY
+# ----------------------
+# healthCheckPath = /api/ping
+#   Render routes traffic to a new instance only once it passes its health
+#   check, and RESTARTS a running instance after 60s of consecutive failures.
+#   Render's docs suggest the check run "a simple database query to confirm
+#   connectivity". We deliberately do NOT. On 2026-07-09 a database expiry took
+#   the whole service down; coupling liveness to the database is exactly how a
+#   dependency outage becomes a restart loop. /api/ping touches no database
+#   (web_app.py:11986) and is @limiter.exempt. The database's real state is
+#   reported by /api/health/boot, which is for humans, not for the scheduler.
+#
+# --worker-class gthread --threads 4
+#   The owner asked for two instances. Render's free instance type cannot scale
+#   beyond one ("Scaling beyond a single instance" is unsupported on Free), and
+#   the owner declined the upgrade, so concurrency has to come from inside the
+#   single instance. Threads, not workers: a second worker would fork a second
+#   copy of the ~500KB web_app module and its caches into a 512 MiB box. The app
+#   already ran under waitress with threads=8 locally, so it expects threading.
+#
+# --graceful-timeout 25 (was 30)
+#   Render sends SIGTERM and sends SIGKILL 30s later. A gunicorn graceful-timeout
+#   of exactly 30 races that deadline; at 25 the worker finishes its own shutdown
+#   with five seconds to spare.
+#
+# NO --preload
+#   Tempting on a small instance, but it would run boot_state.attach() in the
+#   arbiter, and threads do not survive fork(). The background db-init thread and
+#   web_app's _monitor_thread would not exist in the forked workers, while the
+#   inflight counter WOULD be non-zero -- so each worker would refuse to retry
+#   init until the stuck window elapsed. Import per worker is the safe choice.
+#
+# Dry-run by default per the repo rule: an UPDATE workflow declares
+# inputs.confirm and mutates only when confirm=APPLY.
+
+name: Render Apply Best Practices
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type APPLY to actually PATCH and redeploy. Anything else = dry run."
+        required: true
+        default: 'dry-run'
+      start_command:
+        description: "gunicorn start command"
+        required: true
+        default: 'gunicorn wsgi:app --bind 0.0.0.0:$PORT --worker-class gthread --workers 1 --threads 4 --timeout 300 --graceful-timeout 25 --keep-alive 5 --access-logfile - --error-logfile -'
+      health_check_path:
+        description: "Render healthCheckPath (must not touch the database)"
+        required: true
+        default: '/api/ping'
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RENDER_API_KEY:    ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      CONFIRM:           ${{ inputs.confirm }}
+      START:             ${{ inputs.start_command }}
+      HEALTH:            ${{ inputs.health_check_path }}
+    steps:
+      - name: Refuse a health check that depends on the database
+        run: |
+          set -euo pipefail
+          case "$HEALTH" in
+            /api/ping|/api/version) ;;
+            *)
+              echo "::error::healthCheckPath '$HEALTH' is not on the database-free allowlist."
+              echo "::error::Render restarts an instance after 60s of failing checks. A check that"
+              echo "::error::queries the database turns a DB outage into a permanent restart loop."
+              exit 1 ;;
+          esac
+          echo "OK -- '$HEALTH' touches no database."
+
+      - name: Show current configuration
+        id: before
+        run: |
+          set -euo pipefail
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID" -o /tmp/svc.json
+          python3 - <<'PY'
+          import json
+          s = json.load(open('/tmp/svc.json'))
+          det = s.get('serviceDetails') or {}
+          esd = det.get('envSpecificDetails') or {}
+          print("name:            ", s.get('name'))
+          print("plan:            ", det.get('plan'))
+          print("numInstances:    ", det.get('numInstances'))
+          print("healthCheckPath: ", repr(det.get('healthCheckPath')))
+          print("startCommand:    ", repr(esd.get('startCommand')))
+          PY
+
+      - name: Dry run -- show the intended change and stop
+        if: env.CONFIRM != 'APPLY'
+        run: |
+          echo "DRY RUN. Nothing was changed."
+          echo "Would set healthCheckPath = $HEALTH"
+          echo "Would set startCommand    = $START"
+          echo "Re-run with confirm=APPLY to apply and redeploy."
+
+      - name: PATCH healthCheckPath + startCommand
+        if: env.CONFIRM == 'APPLY'
+        run: |
+          set -euo pipefail
+          # --arg keeps $PORT literal (no shell expansion).
+          jq -n --arg start "$START" --arg health "$HEALTH" \
+            '{serviceDetails:{healthCheckPath:$health,envSpecificDetails:{startCommand:$start}}}' \
+            > /tmp/patch.json
+          echo "=== payload ==="; cat /tmp/patch.json
+
+          HTTP=$(curl -s -o /tmp/resp.json -w "%{http_code}" -X PATCH \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID" \
+            --data @/tmp/patch.json)
+          echo "PATCH HTTP $HTTP"
+          [ "$HTTP" -ge 200 ] && [ "$HTTP" -lt 300 ] || { cat /tmp/resp.json; echo "::error::PATCH failed"; exit 1; }
+
+      - name: Verify the API actually persisted both fields
+        if: env.CONFIRM == 'APPLY'
+        run: |
+          set -euo pipefail
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID" -o /tmp/after.json
+          HEALTH="$HEALTH" START="$START" python3 - <<'PY'
+          import json, os, sys
+          s = json.load(open('/tmp/after.json'))
+          det = s.get('serviceDetails') or {}
+          esd = det.get('envSpecificDetails') or {}
+          got_health, got_start = det.get('healthCheckPath'), esd.get('startCommand')
+          print("healthCheckPath:", repr(got_health))
+          print("startCommand:   ", repr(got_start))
+          bad = False
+          if got_health != os.environ['HEALTH']:
+              print("::error::healthCheckPath did not persist (free tier may ignore it)"); bad = True
+          if got_start != os.environ['START']:
+              print("::error::startCommand did not persist"); bad = True
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: Redeploy so the new start command takes effect
+        if: env.CONFIRM == 'APPLY'
+        run: |
+          set -euo pipefail
+          HTTP=$(curl -s -o /tmp/deploy.json -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            --data '{"clearCache":"do_not_clear"}')
+          echo "DEPLOY HTTP $HTTP"
+          python3 -c "import json;d=json.load(open('/tmp/deploy.json'));print('deploy',d.get('id'),d.get('status'))" || cat /tmp/deploy.json
+          [ "$HTTP" -ge 200 ] && [ "$HTTP" -lt 300 ] || { echo "::error::deploy trigger failed"; exit 1; }
