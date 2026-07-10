@@ -1,0 +1,100 @@
+# Read-only inventory of everything this Render account runs.
+#
+# Answers one question precisely: which resources must be upgraded to end the
+# 2026-07-09 outage, and which are merely asleep? Free WEB SERVICES sleep and
+# wake; free POSTGRES instances EXPIRE after 30 days and are then suspended.
+#
+# This workflow only reads. It prints no connection strings or credentials.
+name: Diag Render Services
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - name: Validate the API request before trusting its answer
+        run: |
+          set -euo pipefail
+          [ -n "${RENDER_API_KEY:-}" ] || { echo "::error::RENDER_API_KEY secret is empty"; exit 1; }
+          code=$(curl -sS -o /tmp/svcs.json -w '%{http_code}' \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services?limit=50")
+          echo "GET /v1/services -> HTTP $code"
+          case "$code" in
+            200) ;;
+            401|403) echo "::error::Render rejected the API key (HTTP $code)"; exit 1 ;;
+            *) echo "::error::Unexpected HTTP $code"; exit 1 ;;
+          esac
+          python3 -c "
+          import json,sys
+          d=json.load(open('/tmp/svcs.json'))
+          if not isinstance(d,list): print('::error::expected a JSON array'); sys.exit(1)
+          if not d: print('::error::no services returned -- key may be scoped to another workspace'); sys.exit(1)
+          "
+
+      - name: Web / worker / cron services
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          rows = json.load(open('/tmp/svcs.json'))
+          print(f"{'name':28} {'type':14} {'plan':12} {'suspended':16} autoDeploy")
+          print("-" * 92)
+          for item in rows:
+              s = item.get('service', item)
+              det = s.get('serviceDetails') or {}
+              plan = det.get('plan') or det.get('instanceType') or '-'
+              num = det.get('numInstances')
+              extra = f"  instances={num}" if num is not None else ""
+              print(f"{s.get('name','-'):28} {s.get('type','-'):14} {plan:12} "
+                    f"{str(s.get('suspended','-')):16} {s.get('autoDeploy','-')}{extra}")
+          print()
+          print("NOTE: a FREE web service sleeps when idle but never expires.")
+          PY
+
+      - name: Postgres instances (these DO expire on the free plan)
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/pg.json -w '%{http_code}' \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20")
+          echo "GET /v1/postgres -> HTTP $code"
+          [ "$code" = "200" ] || { echo "::error::HTTP $code"; exit 1; }
+          python3 - <<'PY'
+          import json
+          for item in json.load(open('/tmp/pg.json')):
+              pg = item.get('postgres', item)
+              print(f"  {pg.get('name')}  id={pg.get('id')}")
+              print(f"     plan={pg.get('plan')}  status={pg.get('status')}  "
+                    f"suspended={pg.get('suspended')}")
+              print(f"     created={pg.get('createdAt')}  expires={pg.get('expiresAt')}")
+              print()
+          PY
+
+      - name: Redis / Key Value instances
+        run: |
+          set -euo pipefail
+          for path in redis keyvalue; do
+            code=$(curl -sS -o /tmp/$path.json -w '%{http_code}' \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/$path?limit=20" || echo 000)
+            echo "GET /v1/$path -> HTTP $code"
+            if [ "$code" = "200" ]; then
+              python3 -c "
+          import json
+          rows=json.load(open('/tmp/$path.json'))
+          if not rows: print('  (none)')
+          for item in rows:
+              r=item.get('$path', item)
+              print(f\"  {r.get('name')}  plan={r.get('plan')}  status={r.get('status')}\")
+              "
+            fi
+          done
