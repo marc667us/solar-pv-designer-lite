@@ -49,6 +49,18 @@
       {% endfor %}
     </div>
     <div class="mt-3 pt-3 border-top border-secondary d-flex flex-wrap gap-2 align-items-center">
+      <a href="{{ url_for('capital_investment_step13', pid=proj.id) }}"
+         class="btn btn-info btn-sm fw-bold">
+        <i class="bi bi-file-earmark-text me-1"></i>Reports &amp; Downloads
+      </a>
+      <a href="{{ url_for('capital_investment_design_report', pid=proj.id) }}"
+         class="btn btn-outline-info btn-sm">
+        <i class="bi bi-journal-richtext me-1"></i>Design Report
+      </a>
+      <a href="{{ url_for('capital_investment_electrical_sld', pid=proj.id) }}"
+         class="btn btn-outline-info btn-sm">
+        <i class="bi bi-diagram-2 me-1"></i>Electrical SLD
+      </a>
       <a href="{{ url_for('capital_investment_cost_plan', pid=proj.id) }}"
          class="btn btn-warning btn-sm fw-bold">
         <i class="bi bi-clipboard-data me-1"></i>Cost Plan Deck

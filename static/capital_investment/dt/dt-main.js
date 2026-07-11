@@ -235,8 +235,13 @@
       var t = DT.three;
       DT.labels.clear();
       (DT.scene.objects || []).forEach(function (o) {
+        // Don't label the high-count field objects -- PV tables, the road-line
+        // lights/CCTV, and the cable trenches -- their labels swarm the panel
+        // field. Only the major structures (buildings, substation, inverters)
+        // carry a label (owner: "too many labels on the panels, remove them").
         if (['terrain', 'internal_roads', 'fence', 'pv_row', 'pv_array',
-             'earthing_pit'].indexOf(o.layer) >= 0) return;
+             'earthing_pit', 'lighting_pole', 'cctv_pole', 'cable_trench',
+             'grid_line'].indexOf(o.layer) >= 0) return;
         var p = (o.transform || {}).position || [0, 0, 0];
         var spr = makeLabel(o.label, p);
         spr.visible = !!DT.state.labelsVisible;
