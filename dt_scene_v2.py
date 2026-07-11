@@ -228,13 +228,18 @@ def normalize_objects(scene: dict[str, Any]) -> list[dict[str, Any]]:
     pid = (scene.get("site") or {}).get("pid")
     objects: list[dict[str, Any]] = []
 
-    # Terrain (single ground plane) -> one object sized to the site square.
+    # Terrain (single ground plane) -> one object sized to the site. Rectangular
+    # sites carry w_m (E-W) + l_m (N-S); a square site (legacy) only carries
+    # side_m, so w_m/l_m fall back to it. The generator now emits rectangular
+    # extents so the twin frames the real plot, not a forced square.
     terrain = scene.get("terrain") or {}
     if terrain:
         side = float(terrain.get("side_m") or 0.0)
+        w_m = float(terrain.get("w_m") or side)
+        l_m = float(terrain.get("l_m") or side)
         t = dict(terrain)
-        t.update({"x": 0.0, "y": -0.01, "z": 0.0, "w": side, "h": 0.02,
-                  "l": side, "id": "terrain", "layer": "terrain"})
+        t.update({"x": 0.0, "y": -0.01, "z": 0.0, "w": w_m, "h": 0.02,
+                  "l": l_m, "id": "terrain", "layer": "terrain"})
         objects.append(_obj_from_legacy(t, pid, "terrain"))
 
     # Fence loop -> a single logical object (client still draws the segments).

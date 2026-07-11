@@ -4161,12 +4161,25 @@ DT_LAYER_GROUPS: list[tuple[str, str, list[str]]] = [
 
 
 def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
-    """Return a scene-graph dict consumable by the Three.js template.
-    Units: metres. Origin at site centre. +X = East, +Z = South (Three.js
-    right-handed). Buildings from facility_config, PV field sized from
-    pv_config, tacked around a rough grid layout."""
-    import math
+    """Return a scene-graph dict consumable by the Three.js digital-twin.
 
+    Units: metres. Origin at site centre. +X = East, +Z = South (Three.js
+    right-handed).
+
+    The 3D twin and the approved 2D plot plan MUST render the SAME physical
+    arrangement, so this REUSES ``dt_site_layout.build_site_layout_model`` --
+    the single source of truth for the site envelope, the inverter-block grid,
+    the skids, the substation compound, the control building, the access-road
+    network and the perimeter fence. That 2D model is expressed in top-left
+    metres (x -> east/right, y -> south/down); here we lift it into the twin's
+    centre-origin 3D frame and fill each block with real, tilted module TABLES
+    laid in rows, so the field reads as an engineered array of tables in blocks
+    -- not a flat pale band.
+
+    Never raises: build_site_layout_model degrades every field to a safe
+    default, and each render step below is defensive, so a half-built project
+    still produces a coherent (if sparse) scene.
+    """
     pv_cfg = _safe_json(proj.get("pv_config"))
     fac_cfg = _safe_json(proj.get("facility_config"))
     site_cfg = _safe_json(proj.get("site_config"))
@@ -4176,49 +4189,190 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
     sizing = pv_cfg.get("sizing") or {}
     kwp = float(sizing.get("kwp_input") or pv_cfg.get("kwp")
                 or (proj.get("target_kwp") or 0))
-    land_area_ha = float(site_cfg.get("land_area_ha") or max(kwp / 800.0, 5.0))
-    land_side_m = math.sqrt(land_area_ha * 10_000.0)   # square approximation
     tilt_deg = float(pv_cfg.get("tilt_deg") or 12.0)
     azimuth_deg = float(pv_cfg.get("azimuth_deg") or 180.0)
+    row_pitch = float(pv_cfg.get("row_pitch_m") or 6.0)
     n_modules = int(sizing.get("n_modules") or 0)
-    n_central_inv = int(sizing.get("n_central_inverters") or 0)
 
-    # --- Terrain ---
+    # --- Shared layout model (the SAME model the 2D plot plan renders) -------
+    try:
+        from dt_site_layout import build_site_layout_model, _ROADS_SETBACK_M
+        layout = build_site_layout_model(proj) or {}
+    except Exception:
+        layout, _ROADS_SETBACK_M = {}, 8.0
+    site = layout.get("site") or {}
+    site_w = float(site.get("w_m") or 0.0) or 600.0    # E-W extent (metres, X)
+    site_h = float(site.get("h_m") or 0.0) or 400.0    # N-S extent (metres, Z)
+    land_area_ha = (float(site.get("area_ha") or 0.0)
+                    or float(site_cfg.get("land_area_ha") or 0.0)
+                    or round(site_w * site_h / 10000.0, 1))
+    diag_side = max(site_w, site_h)          # square hint for camera + scenery
+
+    # Layout coords are top-left (x right, y down); the twin is centre-origin
+    # (+X east, +Z south). These lift a 2D layout point into the 3D frame.
+    def _sx(x: float) -> float:
+        return round(float(x) - site_w / 2.0, 2)
+
+    def _sz(y: float) -> float:
+        return round(float(y) - site_h / 2.0, 2)
+
+    lay_fence = layout.get("fence") or {}
+    lay_blocks = layout.get("blocks") or []
+    lay_skids = layout.get("skids") or []
+    lay_sub = layout.get("substation") or {}
+    lay_ctrl = layout.get("control") or {}
+    lay_roads = layout.get("roads") or []
+    lay_field = layout.get("field") or {}
+
+    # --- Terrain (rectangular: covers the whole site envelope) --------------
     terrain = {
         "layer": "terrain",
         "kind": "ground",
-        "side_m": land_side_m,
+        "side_m": round(diag_side, 1),      # legacy square hint (camera/scenery)
+        "w_m": round(site_w, 1),            # rectangular extent (X = E-W)
+        "l_m": round(site_h, 1),            # rectangular extent (Z = N-S)
         "label": "Site",
         "meta": {"land_area_ha": land_area_ha,
                  "terrain": site_cfg.get("terrain") or "flat",
-                 "soil":    site_cfg.get("soil") or "sandy"},
+                 "soil":    site_cfg.get("soil") or "sandy",
+                 "site_w_m": round(site_w, 1), "site_h_m": round(site_h, 1)},
     }
 
-    # --- Fence (perimeter square inset 1m) ---
-    inset = -land_side_m / 2.0 + 1.0
+    # --- Perimeter fence (rectangular, from the layout fence rect) ----------
+    if lay_fence:
+        fx, fy = float(lay_fence.get("x") or 0.0), float(lay_fence.get("y") or 0.0)
+        fw = float(lay_fence.get("w") or site_w)
+        fh = float(lay_fence.get("h") or site_h)
+    else:
+        fx = fy = 10.0
+        fw, fh = site_w - 20.0, site_h - 20.0
+    fence_pts = [
+        [_sx(fx),       _sz(fy)],
+        [_sx(fx + fw),  _sz(fy)],
+        [_sx(fx + fw),  _sz(fy + fh)],
+        [_sx(fx),       _sz(fy + fh)],
+    ]
     fence = {
         "layer": "fence",
         "kind":  "line_loop",
-        "points": [
-            [inset,               inset],
-            [-inset,              inset],
-            [-inset,             -inset],
-            [inset,              -inset],
-        ],
+        "points": fence_pts,
         "height_m": 2.4,
         "label": "Perimeter security fence",
-        "meta":  {"perimeter_m": round(4 * (land_side_m - 2.0), 1)},
+        "meta":  {"perimeter_m": round(2 * (fw + fh), 1)},
     }
 
-    # --- Buildings (clustered compound along the south / foreground edge) ---
-    selected_buildings = fac_cfg.get("buildings") or []
-    buildings = []
-    strip_z = land_side_m / 2.0 - 45.0   # equipment compound on the south (foreground) edge
-    strip_x0 = -land_side_m * 0.25
-    x_cursor = strip_x0
-    _brow = 0
-    _compound_xmax = land_side_m * 0.5   # X budget before wrapping to a new row
-    building_gap = 10.0
+    # --- PV field: tilted module TABLES laid in rows inside each block -------
+    # Each inverter block is inset by the road setback, then filled with E-W
+    # rows (long axis = X) stacked N-S (Z) at the row pitch, leaving a visible
+    # maintenance aisle between rows. Every row is segmented along X into a few
+    # discrete tables (~1 m gaps) so the field reads as a grid of tables, not a
+    # slab. The project module count is distributed evenly across every table.
+    setback = float(_ROADS_SETBACK_M)
+    table_depth = min(4.0, max(2.4, row_pitch - 2.0))   # N-S depth of one table
+    _MAX_TABLES_PER_BLOCK = 200                          # keep 100 MW renderable
+
+    # First pass: geometry of every table (module count filled in second pass).
+    # A project with no committed module count (half-built) shows an EMPTY field
+    # -- never a grid of placeholder tables with modules: 0 (Codex fix).
+    table_specs: list[dict[str, Any]] = []
+    for b in (lay_blocks if n_modules > 0 else []):
+        bn = int(b.get("n") or 0)
+        bx = float(b.get("x") or 0.0)
+        by = float(b.get("y") or 0.0)
+        bw = float(b.get("w") or 0.0)
+        bh = float(b.get("h") or 0.0)
+        # Usable footprint inside the block (road setback on every side).
+        ins = min(setback, bw * 0.2, bh * 0.2)
+        ux0, uy0 = bx + ins, by + ins
+        uw, uh = bw - 2 * ins, bh - 2 * ins
+        if uw < 4.0 or uh < table_depth:
+            continue
+        # Rows down the block (N-S), one table-band per pitch.
+        n_block_rows = max(1, int(uh // max(row_pitch, 1.0)))
+        # Segment each row into a few tables along X (~25 m target per table).
+        segs = max(1, min(4, int(round(uw / 25.0)) or 1))
+        # Coarsen (drop rows) if a single block would blow the table budget.
+        while n_block_rows * segs > _MAX_TABLES_PER_BLOCK and n_block_rows > 1:
+            n_block_rows -= 1
+        gap_x = 1.0
+        seg_w = max(4.0, (uw - (segs - 1) * gap_x) / segs)
+        for ri in range(n_block_rows):
+            cz = uy0 + row_pitch / 2.0 + ri * row_pitch
+            if cz + table_depth / 2.0 > uy0 + uh:
+                break
+            for si in range(segs):
+                cx = ux0 + seg_w / 2.0 + si * (seg_w + gap_x)
+                table_specs.append({"cx": cx, "cz": cz, "block": bn,
+                                    "w": round(seg_w, 2),
+                                    "l": round(table_depth, 2)})
+
+    n_tables = len(table_specs)
+    # Distribute modules across tables; a per-table remainder keeps the placed
+    # total as close to the plan as the geometry allows.
+    if n_tables > 0 and n_modules > 0:
+        base = n_modules // n_tables
+        extra = n_modules - base * n_tables
+    else:
+        base = extra = 0
+    pv_rows: list[dict[str, Any]] = []
+    placed = 0
+    for i, t in enumerate(table_specs):
+        mods = base + (1 if i < extra else 0)
+        placed += mods
+        pv_rows.append({
+            "id":    f"pvtbl_{i+1:04d}",
+            "layer": "pv_row",
+            "kind":  "box",
+            "x":     _sx(t["cx"]),
+            "y":     1.4,
+            "z":     _sz(t["cz"]),
+            "w":     t["w"],                 # table length (X, E-W)
+            "h":     0.06,                   # module-packet thickness
+            "l":     t["l"],                 # table depth (Z, N-S)
+            "tilt_deg": tilt_deg,
+            "azimuth_deg": azimuth_deg,
+            "label": f"PV table {i+1}",
+            "meta":  {"modules": mods,
+                      "table_index": i + 1,
+                      "block": t["block"],
+                      "tilt_deg": tilt_deg,
+                      "azimuth_deg": azimuth_deg},
+        })
+
+    pv_meta = {
+        "kwp": kwp,
+        "n_modules_planned": n_modules,
+        "n_modules_placed":  placed,
+        "n_rows": n_tables,                  # discrete PV table objects
+        "modules_per_row": base if n_tables else 0,
+        "row_pitch_m": row_pitch,
+        "tilt_deg": tilt_deg,
+        "azimuth_deg": azimuth_deg,
+        "field_w_m": round(float(lay_field.get("w") or site_w), 1),
+        "field_l_m": round(float(lay_field.get("h") or site_h), 1),
+        "n_blocks": len(lay_blocks),
+        "n_tables": n_tables,
+    }
+
+    # --- Inverter + step-up skids (one per block, at the block's south edge) -
+    inverters: list[dict[str, Any]] = []
+    for i, s in enumerate(lay_skids):
+        inverters.append({
+            "id":    f"skid_{i+1:02d}",
+            "layer": "inverter",
+            "kind":  "box",
+            "x":     _sx(float(s.get("x") or 0.0)),
+            "y":     1.6,
+            "z":     _sz(float(s.get("y") or 0.0)),
+            "w":     4.0, "h": 3.0, "l": 2.5,
+            "label": f"Inverter + step-up skid #{i+1}",
+            "meta":  {"kw": sizing.get("central_inverter_kw"),
+                      "block": i + 1,
+                      "contents": "Central inverter + MV step-up transformer"},
+        })
+
+    # --- Buildings: substation compound + control/O&M + facility buildings --
+    buildings: list[dict[str, Any]] = []
     building_dim_defaults: dict[str, dict[str, float]] = {
         "control_room":     {"w": 15, "l": 12, "h": 6},
         "om_building":      {"w": 20, "l": 12, "h": 5},
@@ -4239,216 +4393,255 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
         "washroom":         {"w": 6,  "l": 4,  "h": 3},
         "parking":          {"w": 30, "l": 15, "h": 0.2},
     }
-    for b in selected_buildings:
-        _bd = building_dim_defaults.get(b, {"w": 12, "l": 8, "h": 5})
-        dims = {"w": _bd["w"] * 2.0, "l": _bd["l"] * 2.0, "h": _bd["h"] * 1.6}
-        # Layer key is the building code itself so we can pick a color +
-        # a left-nav toggle for it.
-        layer = b if b in DT_LAYER_PALETTE else "building"
-        label = next((L for c, L, _, _ in BUILDING_TYPES if c == b), b)
-        if x_cursor > strip_x0 and x_cursor + dims["w"] > strip_x0 + _compound_xmax:
-            x_cursor = strip_x0; _brow += 1
+
+    # (a) Fenced substation compound: a ground pad + a ROW of transformers + an
+    #     MV switchgear house -- an arranged yard, NOT one bare 30x30 box.
+    if lay_sub:
+        ssx = float(lay_sub.get("x") or 0.0)
+        ssy = float(lay_sub.get("y") or 0.0)
+        ssw = float(lay_sub.get("w") or 60.0)
+        ssh = float(lay_sub.get("h") or 40.0)
+        # Honour an operator drag of the substation. The Phase-6 move_transformer
+        # action persists electrical_config.transformer_pos in SCENE coords; re-
+        # anchor the whole compound so the saved position survives a rebuild
+        # instead of snapping back to the layout default (Codex fix).
+        _tp = elec_cfg.get("transformer_pos") if isinstance(elec_cfg, dict) else None
+        if isinstance(_tp, dict) and _tp.get("x") is not None and _tp.get("z") is not None:
+            try:
+                ssx = float(_tp["x"]) + site_w / 2.0 - ssw / 2.0
+                ssy = float(_tp["z"]) + site_h / 2.0 - ssh / 2.0
+            except (TypeError, ValueError):
+                pass
         buildings.append({
-            "id":    f"bldg_{b}",
-            "layer": layer,
+            "id":    "substation_pad",
+            "layer": "internal_roads",       # gravel / concrete yard pad
             "kind":  "box",
-            "x":     x_cursor + dims["w"] / 2.0,
-            "y":     dims["h"] / 2.0,
-            "z":     strip_z - _brow * 36.0,
-            "w":     dims["w"],
-            "h":     dims["h"],
-            "l":     dims["l"],
-            "label": label,
-            "meta":  {"building_code": b,
-                      "sub_items":     BUILDING_SUB_ITEMS.get(b, []),
-                      "footprint_m2":  round(dims["w"] * dims["l"], 1)},
+            "x":     _sx(ssx + ssw / 2.0),
+            "y":     0.06,
+            "z":     _sz(ssy + ssh / 2.0),
+            "w":     round(ssw, 1), "h": 0.12, "l": round(ssh, 1),
+            "label": "Substation compound",
+            "meta":  {"role": "MV / main substation yard"},
         })
-        x_cursor += dims["w"] + building_gap
-
-    # --- Transformer yard (SE corner, only if transformer_bldg not enabled) ---
-    if "transformers" in (elec_cfg.get("selected") or []) \
-            or "transformer_bldg" not in selected_buildings:
-        buildings.append({
-            "id":    "transformer_yard",
-            "layer": "transformer",
-            "kind":  "box",
-            "x":      float((elec_cfg.get("transformer_pos") or {}).get("x", land_side_m * 0.18)),
-            "y":      3.0,
-            "z":      float((elec_cfg.get("transformer_pos") or {}).get("z", strip_z)),
-            "w":     30, "h": 10, "l": 30,
-            "label": "Transformer yard",
-            "meta":  {"contents": "Step-up transformer, RMU, protection"},
-        })
-
-    # --- PV field ---
-    # Available PV area = land_area minus the south equipment-compound strip
-    # and a 20m perimeter margin.
-    pv_field_z_start = -land_side_m / 2.0 + 20.0
-    pv_field_z_end   = max(-land_side_m / 2.0 + 40.0, strip_z - 40.0)
-    pv_field_x_start = -land_side_m / 2.0 + 20.0
-    pv_field_x_end   =  land_side_m / 2.0 - 20.0
-    pv_field_l = max(pv_field_z_end - pv_field_z_start, 20.0)
-    pv_field_w = max(pv_field_x_end - pv_field_x_start, 20.0)
-
-    # Row layout: single-axis tracker rows aligned N-S; row pitch = 6m;
-    # row width = 4m; row length spans the plot with 5m gap at either end.
-    row_pitch = float(pv_cfg.get("row_pitch_m") or 6.0)
-    row_width = 4.0
-    row_length = max(pv_field_w - 10.0, 10.0)
-    # Number of rows we can physically fit.
-    max_rows = max(1, int(pv_field_l / row_pitch))
-    # Number of rows we NEED to fit the module count.
-    modules_per_row_area = int(row_length / 2.0) if row_length > 0 else 30
-    modules_per_row = max(10, min(60, modules_per_row_area))
-    needed_rows = max(1, math.ceil(n_modules / modules_per_row))
-    n_rows = min(max_rows, needed_rows) if n_modules else 0
-
-    pv_rows: list[dict[str, Any]] = []
-    for i in range(n_rows):
-        z_i = pv_field_z_start + row_pitch / 2.0 + i * row_pitch
-        pv_rows.append({
-            "id":    f"row_{i+1:03d}",
-            "layer": "pv_row",
-            "kind":  "box",
-            "x":     (pv_field_x_start + pv_field_x_end) / 2.0,
-            "y":     1.5,
-            "z":     z_i,
-            "w":     row_length,
-            "h":     0.05,
-            "l":     row_width,
-            "tilt_deg": tilt_deg,
-            "azimuth_deg": azimuth_deg,
-            "label": f"PV row {i+1}",
-            "meta":  {"modules": modules_per_row,
-                      "row_index": i + 1,
-                      "tilt_deg": tilt_deg,
-                      "azimuth_deg": azimuth_deg},
-        })
-
-    pv_meta = {
-        "kwp": kwp,
-        "n_modules_planned": n_modules,
-        "n_modules_placed":  n_rows * modules_per_row if n_rows else 0,
-        "n_rows": n_rows,
-        "modules_per_row": modules_per_row,
-        "row_pitch_m": row_pitch,
-        "tilt_deg": tilt_deg,
-        "azimuth_deg": azimuth_deg,
-        "field_w_m": round(pv_field_w, 1),
-        "field_l_m": round(pv_field_l, 1),
-    }
-
-    # --- Central inverters (spaced through the PV field) ---
-    inverters: list[dict[str, Any]] = []
-    if n_central_inv > 0 and n_rows > 0:
-        for i in range(n_central_inv):
-            frac = (i + 0.5) / max(1, n_central_inv)
-            inv_x = pv_field_x_start + frac * (pv_field_x_end - pv_field_x_start)
-            inverters.append({
-                "id":    f"inv_{i+1:02d}",
-                "layer": "inverter",
+        n_tx = 3
+        tx_gap = 4.0
+        tx_w = max(4.0, (ssw * 0.7 - (n_tx - 1) * tx_gap) / n_tx)
+        tx_x0 = ssx + ssw * 0.15
+        tx_z = ssy + ssh * 0.35
+        tx_l = min(round(ssh * 0.3, 1), 12.0)
+        for i in range(n_tx):
+            buildings.append({
+                "id":    f"sub_transformer_{i+1}",
+                "layer": "transformer",
                 "kind":  "box",
-                "x":     inv_x,
-                "y":     1.5,
-                "z":     pv_field_z_end - 6.0,
-                "w":     4.0, "h": 2.5, "l": 3.0,
-                "label": f"Central inverter #{i+1}",
-                "meta":  {"kw": sizing.get("central_inverter_kw"),
-                          "index": i + 1},
+                "x":     _sx(tx_x0 + tx_w / 2.0 + i * (tx_w + tx_gap)),
+                "y":     3.0,
+                "z":     _sz(tx_z),
+                "w":     round(tx_w, 1), "h": 6.0, "l": tx_l,
+                "label": f"Grid transformer #{i+1}",
+                "meta":  {"contents": "Step-up power transformer + cooling"},
             })
+        buildings.append({
+            "id":    "sub_switchgear",
+            "layer": "mv_switchgear",
+            "kind":  "box",
+            "x":     _sx(ssx + ssw * 0.5),
+            "y":     2.5,
+            "z":     _sz(ssy + ssh * 0.78),
+            "w":     round(ssw * 0.5, 1), "h": 5.0,
+            "l":     min(round(ssh * 0.28, 1), 10.0),
+            "label": "MV switchgear house",
+            "meta":  {"contents": "MV switchgear, protection, metering"},
+        })
 
-    # --- Internal roads (a spine road along the eastern edge) ---
-    roads = [{
-        "id":    "spine_road",
-        "layer": "internal_roads",
-        "kind":  "box",
-        "x":     land_side_m / 2.0 - 8.0,
-        "y":     0.05,
-        "z":     0.0,
-        "w":     4.0,
-        "h":     0.1,
-        "l":     land_side_m - 20.0,
-        "label": "Internal spine road",
-        "meta":  {"length_m": round(land_side_m - 20.0, 1)},
-    }]
+    # (b) Control / O&M building from the layout control rect.
+    if lay_ctrl:
+        ccx = float(lay_ctrl.get("x") or 0.0)
+        ccy = float(lay_ctrl.get("y") or 0.0)
+        ccw = float(lay_ctrl.get("w") or 24.0)
+        cch = float(lay_ctrl.get("h") or 18.0)
+        buildings.append({
+            "id":    "control_building",
+            "layer": "control_room",
+            "kind":  "box",
+            "x":     _sx(ccx + ccw / 2.0),
+            "y":     3.0,
+            "z":     _sz(ccy + cch / 2.0),
+            "w":     round(ccw, 1), "h": 6.0, "l": round(cch, 1),
+            "label": "Control / O&M building",
+            "meta":  {"building_code": "control_room",
+                      "sub_items": BUILDING_SUB_ITEMS.get("control_room", []),
+                      "footprint_m2": round(ccw * cch, 1)},
+        })
 
-    # --- Weather station mast + perimeter CCTV poles + lighting poles ---
-    ict = []
+    # (c) Any OTHER selected facility buildings -- laid out in a TIDY ROW in the
+    #     bottom strip between the control building and the substation, wrapping
+    #     to a second row if they run out of width. Realistic footprints (NO x2
+    #     inflation), no random cluster.
+    selected_buildings = [b for b in (fac_cfg.get("buildings") or [])
+                          if b != "control_room"]
+    if selected_buildings:
+        strip_gap = 8.0
+        ctrl_right = ((float(lay_ctrl.get("x") or 0.0)
+                       + float(lay_ctrl.get("w") or 24.0))
+                      if lay_ctrl else site_w * 0.1)
+        strip_x0 = ctrl_right + strip_gap
+        strip_y = (float(lay_ctrl.get("y") or 0.0) if lay_ctrl
+                   else site_h - 60.0)
+        strip_xmax = ((float(lay_sub.get("x") or (site_w * 0.9)) - strip_gap)
+                      if lay_sub else site_w * 0.9)
+        if strip_xmax - strip_x0 < 40.0:              # thin strip: use full width
+            strip_xmax = site_w - 20.0
+        x_cursor = strip_x0
+        row_i = 0
+        for b in selected_buildings:
+            bd = building_dim_defaults.get(b, {"w": 12, "l": 8, "h": 5})
+            bw, bl, bh = float(bd["w"]), float(bd["l"]), float(bd["h"])
+            if x_cursor > strip_x0 and x_cursor + bw > strip_xmax:
+                x_cursor = strip_x0
+                row_i += 1
+            by = strip_y + row_i * 26.0
+            layer = b if b in DT_LAYER_PALETTE else "building"
+            label = next((L for c, L, _, _ in BUILDING_TYPES if c == b), b)
+            buildings.append({
+                "id":    f"bldg_{b}",
+                "layer": layer,
+                "kind":  "box",
+                "x":     _sx(x_cursor + bw / 2.0),
+                "y":     bh / 2.0,
+                "z":     _sz(by + bl / 2.0),
+                "w":     bw, "h": bh, "l": bl,
+                "label": label,
+                "meta":  {"building_code": b,
+                          "sub_items":     BUILDING_SUB_ITEMS.get(b, []),
+                          "footprint_m2":  round(bw * bl, 1)},
+            })
+            x_cursor += bw + strip_gap
+
+    # --- Access roads: render the SAME network as the 2D plot plan ----------
+    # (perimeter ring + central spine + substation link). Each layout road is a
+    # poly-line of axis-aligned segments; each segment becomes a thin road box.
+    # Axis-aligned only, so no rotation is needed (matches the plot plan).
+    road_w = 5.0
+    roads: list[dict[str, Any]] = []
+    _ri = 0
+    for road in lay_roads:
+        pts = road.get("points") or []
+        kind = road.get("kind") or "road"
+        for j in range(len(pts) - 1):
+            ax, ay = float(pts[j][0]), float(pts[j][1])
+            bx2, by2 = float(pts[j + 1][0]), float(pts[j + 1][1])
+            if abs(ay - by2) < 0.5:                   # horizontal (E-W) segment
+                length = abs(bx2 - ax)
+                if length < 1.0:
+                    continue
+                roads.append({
+                    "id":    f"road_{kind}_{_ri}",
+                    "layer": "internal_roads", "kind": "box",
+                    "x": _sx((ax + bx2) / 2.0), "y": 0.06, "z": _sz(ay),
+                    "w": round(length, 1), "h": 0.12, "l": road_w,
+                    "label": f"Access road ({kind})",
+                    "meta": {"length_m": round(length, 1), "kind": kind},
+                })
+            else:                                     # vertical (N-S) segment
+                length = abs(by2 - ay)
+                if length < 1.0:
+                    continue
+                roads.append({
+                    "id":    f"road_{kind}_{_ri}",
+                    "layer": "internal_roads", "kind": "box",
+                    "x": _sx(ax), "y": 0.06, "z": _sz((ay + by2) / 2.0),
+                    "w": road_w, "h": 0.12, "l": round(length, 1),
+                    "label": f"Access road ({kind})",
+                    "meta": {"length_m": round(length, 1), "kind": kind},
+                })
+            _ri += 1
+    if not roads:                                     # degenerate fallback
+        roads.append({
+            "id": "spine_road", "layer": "internal_roads", "kind": "box",
+            "x": 0.0, "y": 0.06, "z": 0.0,
+            "w": road_w, "h": 0.12, "l": max(site_h - 20.0, 20.0),
+            "label": "Internal spine road", "meta": {},
+        })
+
+    # --- Weather mast + perimeter CCTV poles --------------------------------
+    ict: list[dict[str, Any]] = []
     if "weather" in (tech_cfg.get("selected") or []):
+        wx = float(lay_field.get("x") or (site_w * 0.1)) + 10.0
+        wy = float(lay_field.get("y") or (site_h * 0.1)) + 10.0
         ict.append({
             "id":    "weather_mast",
             "layer": "weather_mast",
             "kind":  "mast",
-            "x": pv_field_x_start + 10.0, "y": 6.0, "z": 0.0,
+            "x": _sx(wx), "y": 6.0, "z": _sz(wy),
             "w": 0.4, "h": 12.0, "l": 0.4,
             "label": "Weather station mast",
             "meta":  {"instruments": "pyranometer + ambient + module T"},
         })
-
-    # 8 CCTV poles along fence corners + midpoints
-    corners = [(inset+1, inset+1), (-inset-1, inset+1),
-               (-inset-1, -inset-1), (inset+1, -inset-1)]
-    for i, (cx, cz) in enumerate(corners):
+    for i, (cx, cz) in enumerate(fence_pts):          # CCTV at 4 fence corners
         ict.append({
             "id":    f"cctv_{i+1}",
             "layer": "cctv_pole",
             "kind":  "mast",
-            "x": cx, "y": 4.0, "z": cz,
+            "x": round(cx * 0.99, 2), "y": 4.0, "z": round(cz * 0.99, 2),
             "w": 0.3, "h": 8.0, "l": 0.3,
             "label": f"CCTV pole #{i+1}",
             "meta":  {"coverage_m": 80},
         })
 
-    # 6 perimeter lighting poles
-    lighting = []
+    # --- Perimeter lighting poles -------------------------------------------
+    lighting: list[dict[str, Any]] = []
+    _hw, _hh = site_w / 2.0 - 6.0, site_h / 2.0 - 6.0
     perim_positions = [
-        ( land_side_m / 4.0, inset+2),
-        (-land_side_m / 4.0, inset+2),
-        ( land_side_m / 4.0, -inset-2),
-        (-land_side_m / 4.0, -inset-2),
-        ( inset+2, 0.0),
-        (-inset-2, 0.0),
+        ( _hw * 0.5, -_hh), (-_hw * 0.5, -_hh),
+        ( _hw * 0.5,  _hh), (-_hw * 0.5,  _hh),
+        (-_hw, 0.0), ( _hw, 0.0),
     ]
     for i, (lx, lz) in enumerate(perim_positions):
         lighting.append({
             "id":    f"light_{i+1}",
             "layer": "lighting_pole",
             "kind":  "mast",
-            "x": lx, "y": 3.0, "z": lz,
+            "x": round(lx, 2), "y": 3.0, "z": round(lz, 2),
             "w": 0.2, "h": 6.0, "l": 0.2,
             "label": f"Perimeter light #{i+1}",
             "meta":  {"lumens": 20000, "wattage_W": 200},
         })
 
-    # --- Earthing pit near transformer yard ---
-    safety = []
-    if selected_buildings or n_rows > 0:
+    # --- Main earthing pit near the substation compound ---------------------
+    safety: list[dict[str, Any]] = []
+    if lay_sub:
+        epx = float(lay_sub.get("x") or 0.0) - 6.0
+        epy = float(lay_sub.get("y") or 0.0) + 6.0
+    else:
+        epx, epy = site_w - 25.0, site_h - 25.0
+    if buildings or pv_rows:
         safety.append({
             "id":    "earth_pit_main",
             "layer": "earthing_pit",
             "kind":  "box",
-            "x":     land_side_m / 2.0 - 25.0,
-            "y":     0.3,
-            "z":     land_side_m / 2.0 - 25.0,
-            "w":     1.5, "h": 0.6, "l": 1.5,
+            "x": _sx(epx), "y": 0.3, "z": _sz(epy),
+            "w": 1.5, "h": 0.6, "l": 1.5,
             "label": "Main earthing pit",
             "meta":  {"resistance_ohm_target": 1.0},
         })
 
-    # --- Assemble scene ---
+    # --- Assemble scene (camera framed to the RECTANGULAR site) -------------
     scene = {
         "site": {
-            "kwp":               kwp,
-            "land_area_ha":      land_area_ha,
-            "land_side_m":       round(land_side_m, 1),
+            "kwp":          kwp,
+            "land_area_ha": land_area_ha,
+            "land_side_m":  round(diag_side, 1),   # camera/scenery framing hint
+            "site_w_m":     round(site_w, 1),
+            "site_h_m":     round(site_h, 1),
             "gps": {"lat": proj.get("gps_lat"),
                     "lon": proj.get("gps_lon")},
             "country":           proj.get("country"),
             "region":            proj.get("region"),
         },
         "camera": {
-            # Camera position and target for the initial view.
-            "position": [land_side_m * 0.7, land_side_m * 0.5, land_side_m * 0.7],
+            # Elevated 3/4 aerial that frames the whole rectangular envelope.
+            "position": [diag_side * 0.55, diag_side * 0.5, site_h * 0.75],
             "target":   [0, 0, 0],
         },
         "terrain":   terrain,

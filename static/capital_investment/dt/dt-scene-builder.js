@@ -169,15 +169,18 @@
 
   function buildTerrain(o) {
     var THREE = window.THREE, dm = o.dimensions || {};
-    var side = dm.w || 300;
-    var geom = new THREE.PlaneGeometry(side, side, 1, 1);
+    // Rectangular terrain: w = E-W (X), l = N-S (Z). PlaneGeometry(w, l) lays w
+    // along X and l along Y; the -90deg X rotation below sends Y -> Z, so the
+    // plane covers w (E-W) x l (N-S). Legacy square sites have w === l.
+    var w = dm.w || 300, l = dm.l || dm.w || 300;
+    var geom = new THREE.PlaneGeometry(w, l, 1, 1);
     // Own material (not the shared 'soil') so we can hang the tiled grass map on
     // it without affecting other soil-coloured objects. One tile ~= 10 m.
     var base = DT.materials.get('soil');
     var mat = base.clone();
     if (DT.state.graphicsTier !== 'low') {
       var g = grassTexture();
-      var reps = Math.max(4, Math.round(side / 10));
+      var reps = Math.max(4, Math.round(Math.max(w, l) / 10));
       g.repeat.set(reps, reps);
       mat.map = g;
       mat.color.set('#ffffff');   // let the texture supply the colour
