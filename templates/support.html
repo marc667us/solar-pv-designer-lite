@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block title %}Resources & Tutorials — SolarPro Design{% endblock %}
 {% block content %}
 <div class="container-xl py-4">
@@ -8,7 +8,7 @@
   <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
     <div>
       <div class="report-title"><i class="bi bi-collection-play me-2"></i>Resources & Tutorials</div>
-      <div class="text-secondary mt-1">Step-by-step guides — read, listen, or download as PDF.</div>
+      <div class="text-secondary mt-1">Every guide in four formats — read, listen, download the PDF, or watch the live walkthrough.</div>
     </div>
     <a href="{{ url_for('tickets') }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-chat-dots me-1"></i>Open a Support Ticket
@@ -16,28 +16,30 @@
   </div>
 </div>
 
-<!-- ─── 2026-06-27: 3 new guides surfaced at /support ─────────────── -->
-<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+<!-- ─── Guides: every card carries Read · Audio · PDF · Video ─────────────── -->
+<div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
   <i class="bi bi-book-fill" style="color:#22c55e;font-size:22px"></i>
   <h5 class="fw-black mb-0" style="letter-spacing:-.2px">Guides — Read · Listen · Download · Watch</h5>
-  <span class="badge" style="background:rgba(34,197,94,.20);color:#22c55e;border:1px solid #22c55e55;font-size:10px;font-weight:700;letter-spacing:.4px">NEW</span>
-  <span class="badge" style="background:linear-gradient(135deg,#fbbf24,#d97706);color:#0a0a14;font-size:11px;font-weight:900;letter-spacing:.5px;padding:4px 9px;border:1px solid #d97706">
-    v2 LAYOUT · 2026-06-27 23:50 UTC
-  </span>
 </div>
 <p class="text-secondary mb-3" style="font-size:13px">
-  Every guide is available in 4 formats: read in the browser, listen via the built-in narrator,
-  download as PDF, or watch a video walkthrough when one is recorded.
+  <strong style="color:#7c3aed">Watch</strong> plays a live in-app walkthrough — an animated cursor
+  moves across the real screens, narrates each step and changes screens for you, so it never drifts
+  from the app. <strong style="color:#22c55e">Audio</strong> reads the guide aloud in your browser.
+  <strong style="color:#ef4444">PDF</strong> downloads the full document. The two internal guides
+  below are documents, so they offer Read · Listen · PDF.
 </p>
 
-{% set _NEW_GUIDES = [
-  ('quick',     '3-Min Quick Start',     'bi-lightning-charge-fill', '#fbbf24', 'Bare minimum to get a usable design out of the platform.',     '~3 min'),
-  ('full-user', 'Full User Guide',       'bi-book-half',              '#22c55e', 'Every feature an end-user touches — accounts to share cards.', '~15 min'),
-  ('technical', 'Full Technical Guide',  'bi-cpu-fill',               '#a78bfa', 'Architecture, engine math, schema, AI stack, deployment.',     '~20 min'),
+{# slug, title, icon, colour, blurb, duration, has_video (a live product walkthrough) #}
+{% set _GUIDES = [
+  ('quick',           '3-Min Quick Start',          'bi-lightning-charge-fill', '#fbbf24', 'The bare minimum to get a usable design out of the platform — register, create, size, export.', '~3 min', true),
+  ('full-user',       'Full User Guide',            'bi-book-half',             '#22c55e', 'Every feature an end-user touches — accounts, the design flow, reports, marketplace and share cards.', '~15 min', true),
+  ('technical',       'Full Technical Guide',       'bi-cpu-fill',              '#a78bfa', 'Architecture, engine math, database schema, the AI stack and how the platform is deployed.', '~20 min', true),
+  ('portal-tutorial', 'Portal Tutorial',            'bi-mortarboard-fill',      '#f59e0b', 'Admin onboarding — invite reps, watch projects, run reports and drive the day-to-day portal.', '~12 min', false),
+  ('sales-pitch',     'Sales Pitch — Call Script',  'bi-megaphone-fill',        '#ec4899', 'For your reps — discovery questions, value framing, objection handling and the qualifying close.', '~5 min', false),
 ] %}
 <div class="row g-3 mb-4">
-{% for slug, title, icon, clr, body, dur in _NEW_GUIDES %}
-  <div class="col-md-4">
+{% for slug, title, icon, clr, body, dur, has_video in _GUIDES %}
+  <div class="col-md-6 col-xl-4">
     <div class="solar-card p-4 h-100 d-flex flex-column">
       <div class="d-flex align-items-center gap-3 mb-3">
         <div style="width:48px;height:48px;border-radius:12px;background:{{ clr }}22;border:1px solid {{ clr }}55;display:flex;align-items:center;justify-content:center;font-size:22px;color:{{ clr }};flex-shrink:0">
@@ -49,30 +51,34 @@
         </div>
       </div>
       <p class="text-secondary" style="font-size:13px;line-height:1.55">{{ body }}</p>
-      <div class="mt-auto d-grid gap-2" style="grid-template-columns:repeat(2,1fr)">
+      <div class="mt-auto d-flex flex-wrap gap-2">
         <a href="{{ url_for('guides_view', slug=slug) }}"
-           class="btn btn-sm fw-bold py-2"
+           class="btn btn-sm fw-bold py-2 flex-fill"
+           title="Read the guide in your browser"
            style="background:linear-gradient(135deg,{{ clr }},{{ clr }}cc);color:#0a0a14;border:none">
-          <i class="bi bi-book-half me-1"></i>Read article
+          <i class="bi bi-book-half me-1"></i>Read
         </a>
         <a href="{{ url_for('guides_view', slug=slug, listen=1) }}"
-           class="btn btn-sm fw-bold py-2"
-           title="Open the guide and start the browser-native audio narrator"
+           class="btn btn-sm fw-bold py-2 flex-fill"
+           title="Open the guide and start the browser audio narrator"
            style="background:linear-gradient(135deg,#16a34a,#22c55e);color:#0a0a14;border:none">
           <i class="bi bi-volume-up-fill me-1"></i>Audio
         </a>
         <a href="{{ url_for('guides_pdf', slug=slug) }}"
-           target="_blank"
-           class="btn btn-sm fw-bold py-2"
+           target="_blank" rel="noopener"
+           class="btn btn-sm fw-bold py-2 flex-fill"
+           title="Download the guide as a PDF"
            style="background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;border:none">
           <i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF
         </a>
+        {% if has_video %}
         <a href="{{ url_for('guides_view', slug=slug) }}#video"
-           class="btn btn-sm fw-bold py-2"
-           title="Embedded video walkthrough on the guide page"
+           class="btn btn-sm fw-bold py-2 flex-fill"
+           title="Launch the live in-app walkthrough — animated cursor, narration and screen changes"
            style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;border:none">
           <i class="bi bi-play-btn-fill me-1"></i>Video
         </a>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -82,20 +88,17 @@
 <hr style="border-color:#1e1e3a;margin:24px 0">
 
 <h5 class="fw-black mb-3" style="letter-spacing:-.2px">
-  <i class="bi bi-collection me-2" style="color:#9090b8"></i>Topic Guides
+  <i class="bi bi-tools me-2" style="color:#9090b8"></i>Setup Guides
 </h5>
 
-<!-- Tutorial cards (Email Setup / Portal Tutorial / Sales Pitch -- the Full
-     User + Technical Guide cards have moved into the new Guides section
-     above and are not duplicated here any more). -->
 <div class="row g-4">
 
-  <!-- Email Setup -->
+  <!-- Email / SMTP Setup -->
   <div class="col-md-6">
     <div class="solar-card p-4 h-100 d-flex flex-column">
       <div class="d-flex align-items-center gap-3 mb-3">
-        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#22c55e22,#22c55e44);border:1px solid #22c55e44;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
-          ðŸ“§
+        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#22c55e22,#22c55e44);border:1px solid #22c55e44;display:flex;align-items:center;justify-content:center;font-size:22px;color:#22c55e;flex-shrink:0">
+          <i class="bi bi-envelope-fill"></i>
         </div>
         <div>
           <div class="fw-bold" style="font-size:15px">Email / SMTP Setup Guide</div>
@@ -119,74 +122,11 @@
         </a>
         <a href="{{ url_for('support_email_setup') }}#audio" class="btn btn-sm px-3"
            style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">
-          <i class="bi bi-play-circle me-1"></i>Listen
+          <i class="bi bi-volume-up me-1"></i>Listen
         </a>
-        <a href="{{ url_for('support_email_setup_pdf') }}" class="btn btn-sm px-3"
+        <a href="{{ url_for('support_email_setup_pdf') }}" target="_blank" rel="noopener" class="btn btn-sm px-3"
            style="background:#ef444422;color:#ef4444;border:1px solid #ef444444">
           <i class="bi bi-file-earmark-pdf me-1"></i>PDF
-        </a>
-      </div>
-    </div>
-  </div>
-
-  <!-- Portal Tutorial (admin onboarding walkthrough) -->
-  <div class="col-md-6">
-    <div class="solar-card p-4 h-100 d-flex flex-column">
-      <div class="d-flex align-items-center gap-3 mb-3">
-        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#f59e0b22,#f59e0b44);border:1px solid #f59e0b44;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
-          <i class="bi bi-mortarboard-fill" style="color:#f59e0b"></i>
-        </div>
-        <div>
-          <div class="fw-bold" style="font-size:15px">Portal Tutorial</div>
-          <div class="text-secondary" style="font-size:12px">Admin onboarding — invite reps, watch projects, run reports</div>
-        </div>
-      </div>
-      <p class="text-secondary" style="font-size:13px;line-height:1.6">
-        Covers logging in for the first time, the dashboard layout, staff management,
-        the in-app tour, troubleshooting, and the June 17 shipped features
-        (shading dashboard cards, sun-on-track Bézier, manual factor override,
-        mount-aware wiring diagram).
-      </p>
-      <div class="mt-2 mb-3 d-flex flex-wrap gap-2" style="font-size:11px">
-        <span class="badge" style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44">15 Sections</span>
-        <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">Admin-Friendly</span>
-        <span class="badge" style="background:#0ea5e922;color:#0ea5e9;border:1px solid #0ea5e944">~12 min read</span>
-      </div>
-      <div class="mt-auto d-flex gap-2 flex-wrap">
-        <a href="{{ url_for('support_asset', slug='portal-tutorial') }}" class="btn btn-sm px-3 fw-bold"
-           target="_blank"
-           style="background:linear-gradient(135deg,#f59e0b,#ea580c);color:#000;border:none">
-          <i class="bi bi-file-earmark-pdf me-1"></i>Open PDF
-        </a>
-      </div>
-    </div>
-  </div>
-
-  <!-- Sales Pitch (inbound call script) -->
-  <div class="col-md-6">
-    <div class="solar-card p-4 h-100 d-flex flex-column">
-      <div class="d-flex align-items-center gap-3 mb-3">
-        <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#ec489922,#ec489944);border:1px solid #ec489944;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
-          <i class="bi bi-megaphone-fill" style="color:#ec4899"></i>
-        </div>
-        <div>
-          <div class="fw-bold" style="font-size:15px">Sales Pitch (Inbound Call Script)</div>
-          <div class="text-secondary" style="font-size:12px">For your reps — handle inbound prospect calls</div>
-        </div>
-      </div>
-      <p class="text-secondary" style="font-size:13px;line-height:1.6">
-        Discovery questions, value framing, objection handling, the 20-minute proposal demo,
-        pricing tier explanations, and the qualifying close. Ghana-tailored examples.
-      </p>
-      <div class="mt-2 mb-3 d-flex flex-wrap gap-2" style="font-size:11px">
-        <span class="badge" style="background:#ec489922;color:#ec4899;border:1px solid #ec489944">Sales Enablement</span>
-        <span class="badge" style="background:#22c55e22;color:#22c55e;border:1px solid #22c55e44">5-Minute Refresh</span>
-      </div>
-      <div class="mt-auto d-flex gap-2 flex-wrap">
-        <a href="{{ url_for('support_asset', slug='sales-pitch') }}" class="btn btn-sm px-3 fw-bold"
-           target="_blank"
-           style="background:linear-gradient(135deg,#ec4899,#db2777);color:#fff;border:none">
-          <i class="bi bi-file-earmark-pdf me-1"></i>Open PDF
         </a>
       </div>
     </div>
@@ -196,7 +136,7 @@
 
 <!-- Still need help? -->
 <div class="solar-card p-4 mt-4 d-flex align-items-center gap-4 flex-wrap">
-  <div style="font-size:28px">ðŸ’¬</div>
+  <div style="font-size:28px;color:#22c55e"><i class="bi bi-chat-dots-fill"></i></div>
   <div class="flex-grow-1">
     <div class="fw-bold mb-1">Still need help?</div>
     <div class="text-secondary" style="font-size:13px">

@@ -3,13 +3,14 @@
   "tutorials": [
     {
       "pageId": "dashboard",
-      "title": "Dashboard",
+      "title": "Quick Start — Create Your First Design",
       "module": "Dashboard",
-      "steps": 4,
+      "steps": 6,
       "screens": [
-        "Dashboard"
+        "Dashboard",
+        "New project"
       ],
-      "estimatedDuration": 6
+      "estimatedDuration": 9
     },
     {
       "pageId": "project_new",

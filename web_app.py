@@ -33521,11 +33521,52 @@ Supported asset types: `solar_savings_card`, `energy_score_card`, `boq_summary_c
 """
 
 
+_GUIDE_SRC_CACHE = {}
+
+
+def _load_src_md(fname, fallback_title):
+    # Load a guide's markdown from docs/src/<fname> -- the SAME source the
+    # collateral PDFs render from -- so Read / Audio / PDF all draw from one
+    # file and never drift. Cached per process; safe fallback if the file is
+    # missing on a given deploy.
+    cached = _GUIDE_SRC_CACHE.get(fname)
+    if cached is not None:
+        return cached
+    try:
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "docs", "src", fname)
+        with open(p, "r", encoding="utf-8") as fh:
+            md = fh.read()
+    except Exception:
+        md = "# " + fallback_title + "\n\n_This guide is being prepared._"
+    _GUIDE_SRC_CACHE[fname] = md
+    return md
+
+
+# Ordered nav rendered as tabs on every guide page: (slug, label, icon).
+_GUIDE_NAV = [
+    ("quick",           "3-min Quick",          "bi-lightning-charge-fill"),
+    ("full-user",       "Full User Guide",      "bi-book-half"),
+    ("technical",       "Full Technical Guide", "bi-cpu-fill"),
+    ("portal-tutorial", "Portal Tutorial",      "bi-mortarboard-fill"),
+    ("sales-pitch",     "Sales Pitch",          "bi-megaphone-fill"),
+]
+
+
+# Internal collateral: readable only when logged in (the 3 general guides
+# stay public for marketing). Gated in guides_view + guides_pdf below.
+_GUIDE_LOGIN_ONLY = {"portal-tutorial", "sales-pitch"}
+
+
 def _guide_lookup(slug):
     return {
         "quick":     ("Quick Start", _GUIDE_QUICK_MD),
         "full-user": ("Full User Guide", _GUIDE_FULL_USER_MD),
         "technical": ("Full Technical Guide", _GUIDE_FULL_TECHNICAL_MD),
+        "portal-tutorial": ("Portal Tutorial",
+                            _load_src_md("portal_tutorial.md", "Portal Tutorial")),
+        "sales-pitch": ("Sales Pitch (Inbound Call Script)",
+                        _load_src_md("sales_pitch.md", "Sales Pitch")),
     }.get(slug)
 
 
@@ -33540,10 +33581,12 @@ def guides_view(slug):
     # tutorial.txt"), so a guide deep-links the live, always-current demo for
     # its module rather than shipping a recording that drifts from the UI.
     # An env override still wins if the owner publishes a hosted recording.
+    if slug in _GUIDE_LOGIN_ONLY and not current_user():
+        return redirect(url_for("login"))
     demo_url = {
-        "quick":     url_for("dashboard") + "?tutorial=auto",
-        "full-user": url_for("marketplace_public") + "?tutorial=auto",
-        "technical": url_for("capital_investment_landing") + "?tutorial=auto",
+        "quick":           url_for("dashboard") + "?tutorial=auto",
+        "full-user":       url_for("marketplace_public") + "?tutorial=auto",
+        "technical":       url_for("capital_investment_landing") + "?tutorial=auto",
     }.get(slug, "")
     video_url = os.environ.get(f"GUIDE_VIDEO_URL_{slug.upper().replace('-', '_')}", "")
     return render_template(
@@ -33554,6 +33597,7 @@ def guides_view(slug):
         markdown=md,
         video_url=video_url,
         demo_url=demo_url,
+        guide_nav=_GUIDE_NAV,
         listen_autoplay=(request.args.get("listen") == "1"),
     )
 
@@ -33564,6 +33608,8 @@ def guides_pdf(slug):
     if not g:
         abort(404)
     title, md = g
+    if slug in _GUIDE_LOGIN_ONLY and not current_user():
+        return redirect(url_for("login"))
     safe = slug.replace("-", "_")
     return _render_pdf(f"SolarPro — {title}", md, f"SolarPro_Guide_{safe}.pdf")
 

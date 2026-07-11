@@ -93,27 +93,10 @@
     </div>
   </div>
 
-  {# ── Interactive demo ──────────────────────────────────────────────
-     The pre-rendered MP4 walkthroughs were retired: a recording drifts from the
-     UI the moment the UI changes. The Tutorial & Demo Engine plays the same
-     walkthrough live on the real page, and its Record button exports a .webm if
-     a file is wanted. `video_url` is only set when the owner publishes a hosted
-     recording via the GUIDE_VIDEO_URL_* env override. #}
-  {% if demo_url and not video_url %}
-  <div class="text-center my-3">
-    <a href="{{ demo_url }}" class="btn btn-warning fw-bold">
-      <i class="bi bi-play-circle me-1"></i>Watch the interactive demo
-    </a>
-    <div class="text-secondary mt-2" style="font-size:11px">
-      Runs on the live page with an animated cursor and narration ·
-      press <kbd>Esc</kbd> to exit · use <strong>Record</strong> to export a video
-    </div>
-  </div>
-  {% endif %}
-
-  {# ── Tabs between the 3 guides ── #}
+  {# ── Tabs across every guide (data-driven from guide_nav; falls back to
+       the three end-user guides if the route did not supply the list) ── #}
   <div class="guide-tabs">
-    {% for s, lbl, ic in [
+    {% for s, lbl, ic in guide_nav or [
       ('quick',     '3-min Quick',         'bi-lightning-charge-fill'),
       ('full-user', 'Full User Guide',     'bi-book-half'),
       ('technical', 'Full Technical Guide','bi-cpu-fill'),
@@ -160,12 +143,32 @@
       {% endif %}
     </div>
   </div>
+  {% elif demo_url %}
+  {# No hosted recording, but a LIVE walkthrough exists — launch the in-app
+     Tutorial & Demo Engine on the real screens. It moves an animated cursor,
+     narrates, and changes screens itself, so it is always current. This is the
+     anchor the Resources page "Video" button jumps to. #}
+  <div id="video" class="guide-video">
+    <div class="lbl"><i class="bi bi-camera-video-fill me-1"></i>Screen walkthrough</div>
+    <div class="d-flex align-items-center gap-3 flex-wrap" style="padding:8px 2px 2px">
+      <a href="{{ demo_url }}" class="tb-btn" style="text-decoration:none">
+        <i class="bi bi-play-circle-fill"></i>Watch the live walkthrough
+      </a>
+      <div class="text-secondary" style="font-size:12.5px;line-height:1.55;flex:1;min-width:220px">
+        Plays on the real screens with an <strong style="color:#fbbf24">animated cursor</strong>,
+        spoken <strong style="color:#fbbf24">narration</strong> and automatic
+        <strong style="color:#fbbf24">screen changes</strong> — a live tour that never drifts
+        from the app. Press <kbd>Esc</kbd> at any time to exit.
+      </div>
+    </div>
+  </div>
   {% else %}
   <div id="video" class="guide-video" style="border-color:#2e2e4a">
-    <div class="lbl" style="color:#9090b8"><i class="bi bi-camera-video me-1"></i>Video walkthrough — coming soon</div>
+    <div class="lbl" style="color:#9090b8"><i class="bi bi-file-earmark-text me-1"></i>A read-and-listen guide</div>
     <div class="text-secondary" style="font-size:12.5px;line-height:1.55">
-      A recorded screen walkthrough will appear here once available. Use <strong style="color:#fbbf24">Listen</strong>
-      above for the audio version of this guide in the meantime.
+      This guide is a document rather than a screen walkthrough. Use
+      <strong style="color:#fbbf24">Listen</strong> above to hear it read aloud, or download the
+      <strong style="color:#ef4444">PDF</strong> from the toolbar.
     </div>
   </div>
   {% endif %}

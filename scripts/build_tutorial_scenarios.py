@@ -100,6 +100,8 @@ def nav(title, desc, voice, *, href="", href_from="", target="", screen="",
 # `scripts/sync_tutorials.py --write` and marked {"draft": true}; the engine never
 # shows a draft to a user, so a draft is visible backlog, not a shipped tutorial.
 COVERS: dict[str, list[str]] = {
+    # The Quick Start flow walks onto the New Project screen (owner rule 1).
+    "dashboard": ["project_new"],
     "marketplace_public": ["marketplace_product_detail", "procurement_center",
                            "rfqs_list"],
     "boms_list": ["boms_new", "boms_boq"],
@@ -159,21 +161,34 @@ def wizard_steps() -> list:
 SCENARIOS: dict[str, tuple] = {
     # ---------------------------------------------------------------- core
     "dashboard": (
-        "Dashboard", "Dashboard",
-        "Your projects, the quick actions, and the way into every other module.",
+        "Quick Start — Create Your First Design", "Dashboard",
+        "The 3-minute path from an empty dashboard to a fully sized solar design. "
+        "The cursor leads and the tour walks onto the New Project screen for you.",
         [
-            step("Your projects", "Every design you create is listed here with its status.",
-                 "This is your dashboard. Every solar design you create appears here.",
+            step("Your dashboard", "Every design you create is listed here with its status.",
+                 "Welcome to SolarPro. This is your dashboard — every solar design you create "
+                 "appears here with its status.",
                  target=".solar-card", screen="Dashboard"),
-            step("Create a design", "Start a residential, commercial or industrial PV design.",
-                 "To begin a new design, use Create Standard Project.",
+            step("Where you start a design", "Residential, commercial and industrial PV all start here.",
+                 "To begin a new design you use Create Standard Project. Watch the cursor move to it.",
                  target='a[href="/project/new"], a[href*="project/new"]', screen="Dashboard"),
-            step("Generation Station", "Utility-scale plants use the 14-step wizard.",
-                 "For utility-scale plants, open Generation Station Design.",
-                 target='a[href="/large-scale-solar"]', screen="Dashboard"),
-            step("Marketplace", "Priced equipment feeds your BOQ and procurement lists.",
-                 "The Marketplace supplies live equipment prices to your bills of quantities.",
-                 target='a[href*="/marketplace"]', screen="Dashboard"),
+            nav("Open the New Project screen", "The tour now walks onto the design form.",
+                "Let us open it — the tour will now take you onto the New Project screen.",
+                href_from='a[href="/project/new"], a[href*="project/new"]', screen="Dashboard"),
+            step("Name the design", "Every design starts with a memorable name.",
+                 "On this new screen we start by naming the design — for example, "
+                 "Accra Rooftop 25 kilowatt-peak. The cursor is typing it for you now.",
+                 target='input[name="name"]', action="typeText",
+                 type_text="Accra Rooftop 25 kWp", screen="New project"),
+            step("File it in a folder", "Folders keep your growing list of designs organised.",
+                 "Next we file it in a folder so it is easy to find again later.",
+                 target='input[name="folder"]', screen="New project"),
+            step("Create and continue", "Creating the project opens the globe to set your site.",
+                 "Now we create the project. This opens the globe where you pick your site — that "
+                 "fixes your sun hours, temperature and tariff. From there you add your loads, and the "
+                 "engine sizes the array, battery, inverter and cables, with twenty-five-year economics, "
+                 "all ready as PDF reports. That is the whole quick start.",
+                 target='button[type="submit"]', screen="New project"),
         ],
     ),
     "project_new": (
