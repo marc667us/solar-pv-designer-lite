@@ -63,6 +63,32 @@
     return tex;
   }
 
+  // Ground micro-relief bump map: smoothed mid-frequency grayscale noise so the
+  // hard sun rakes across soil/grass unevenness instead of a perfectly flat
+  // sheet (the classic "toy terrain" tell). Height-only bump (not displacement),
+  // so the ground geometry stays flat and panels/legs never float. Tiles with
+  // the grass albedo. Cached + repeat-wrapped.
+  function groundBumpTexture() {
+    if (_texCache.groundBump) return _texCache.groundBump;
+    var THREE = window.THREE, S = 128;
+    var c = document.createElement('canvas'); c.width = c.height = S;
+    var ctx = c.getContext('2d');
+    // start mid-gray, drop a few dozen soft light/dark blobs, then a light grain.
+    ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, S, S);
+    for (var b = 0; b < 42; b++) {
+      var x = Math.random() * S, y = Math.random() * S, rr = 6 + Math.random() * 20;
+      var lum = Math.random() < 0.5 ? 255 : 0;
+      var rg = ctx.createRadialGradient(x, y, 0, x, y, rr);
+      rg.addColorStop(0, 'rgba(' + lum + ',' + lum + ',' + lum + ',0.16)');
+      rg.addColorStop(1, 'rgba(' + lum + ',' + lum + ',' + lum + ',0)');
+      ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(x, y, rr, 0, 6.2832); ctx.fill();
+    }
+    var tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    _texCache.groundBump = tex;
+    return tex;
+  }
+
   // PV module face: dark-blue cell grid with thin silver mullions + a bright
   // specular streak, so a panel reads as glass-over-cells rather than a blue box.
   function panelTexture() {
@@ -155,6 +181,14 @@
       g.repeat.set(reps, reps);
       mat.map = g;
       mat.color.set('#ffffff');   // let the texture supply the colour
+      // Bump map so the directional sun shades surface unevenness -- kills the
+      // flat-sheet look without moving geometry. Conservative scale; tiles with
+      // the grass albedo. Shares one cached texture, so set repeat on a clone-safe
+      // per-material basis via the map's own repeat (bump reuses the same UVs).
+      var bump = groundBumpTexture();
+      bump.repeat.set(reps, reps);
+      mat.bumpMap = bump;
+      mat.bumpScale = 0.35;
       mat.needsUpdate = true;
     }
     var mesh = new THREE.Mesh(geom, mat);
