@@ -373,7 +373,8 @@
     clearFlow();
     T.playing = false;
     T._completed = true;
-    beacon('completed', { step_index: steps().length - 1, total_steps: steps().length });
+    beacon('completed', { step_index: steps().length - 1, total_steps: steps().length,
+      duration_ms: T._t0 ? (Date.now() - T._t0) : null });
     setTimeout(stop, 1400);
   }
   function onCtl(ev) {
@@ -388,8 +389,10 @@
       if (T.i >= steps().length - 1) return finish();
       T.i += 1; return step0();
     }
-    if (k === 'prev') { hushSpeech(); clearTimeout(T.timer); T.i = Math.max(0, T.i - 1); return step0(); }
-    if (k === 'restart') { hushSpeech(); clearTimeout(T.timer); T.i = 0; return step0(); }
+    if (k === 'prev') { hushSpeech(); clearTimeout(T.timer); T.i = Math.max(0, T.i - 1);
+      beacon('step_replayed', { step_index: T.i, step_title: (cur() || {}).title, mode: T.mode }); return step0(); }
+    if (k === 'restart') { hushSpeech(); clearTimeout(T.timer); T.i = 0;
+      beacon('step_replayed', { step_index: 0, step_title: (cur() || {}).title, mode: T.mode }); return step0(); }
     if (k === 'mute') { T.muted = !T.muted; a.textContent = T.muted ? 'Unmute' : 'Mute'; if (T.muted) hushSpeech(); return; }
     if (k === 'record') return toggleRecord(a);
     if (k === 'toggle') {
@@ -478,6 +481,7 @@
     T.mode = mode || 'guided';
     T.i = 0; T.alive = true;
     T._completed = false;
+    T._t0 = Date.now();                 // tour start, for average completion time
     beacon('started', { mode: T.mode, total_steps: steps().length });
     if (T.mode === 'explain') return explain();
     clearFlow();
@@ -501,7 +505,8 @@
   }
   function stop() {
     if (T.alive && !T._completed && T.mode !== 'explain') {
-      beacon('skipped', { step_index: T.i, total_steps: steps().length });
+      beacon('skipped', { step_index: T.i, total_steps: steps().length,
+        duration_ms: T._t0 ? (Date.now() - T._t0) : null });
     }
     T.alive = false; T.playing = false;
     clearFlow();                       // an exited tour must not resume elsewhere

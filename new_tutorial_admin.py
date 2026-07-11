@@ -29,7 +29,8 @@ _TUT_DISABLED_PFX = "tutorial_disabled:"           # per-slug key: value "1"=dis
 
 # Telemetry event types we accept from the engine. Anything else is dropped so a
 # forged/garbage POST cannot pollute the analytics table.
-_TUT_EVENT_TYPES = ("started", "completed", "skipped", "step_shown", "step_failed")
+_TUT_EVENT_TYPES = ("started", "completed", "skipped", "step_shown",
+                    "step_failed", "step_replayed")
 
 # A scenario slug is a Flask endpoint name: lowercase, digits, underscore only.
 _TUT_SLUG_RE = _tut_re.compile(r"^[a-z0-9_]{1,120}$")
@@ -234,8 +235,8 @@ def tutorial_analytics_summary(limit_pages=25):
     section): started/completed/skipped totals, average completion %, most-viewed
     pages, and the most-confusing step (highest step_failed count). Read-only;
     never raises (returns a well-formed empty summary on error)."""
-    empty = {"totals": {}, "avg_completion_pct": 0, "by_page": [],
-             "most_confusing": [], "events": 0}
+    empty = {"totals": {}, "avg_completion_pct": 0, "avg_completion_seconds": 0,
+             "by_page": [], "most_confusing": [], "events": 0}
     try:
         with get_db() as c:
             _ensure_tutorial_schema(c)
@@ -269,6 +270,24 @@ def tutorial_analytics_summary(limit_pages=25):
                         pcts.append(max(0, min(100, round(100.0 * reached / int(tot)))))
                 if pcts:
                     avg_pct = round(sum(pcts) / len(pcts))
+            except Exception:
+                pass
+
+            # average completion TIME (spec ANALYTICS: "average completion time"):
+            # mean wall-clock seconds of 'completed' tours that carried a duration.
+            avg_seconds = 0
+            try:
+                rows = c.execute(
+                    "SELECT duration_ms FROM tutorial_events "
+                    "WHERE event_type='completed' AND duration_ms IS NOT NULL "
+                    "AND duration_ms > 0").fetchall()
+                durs = []
+                for r in rows:
+                    dm = r[0] if not hasattr(r, "keys") else r[0]
+                    if dm:
+                        durs.append(int(dm))
+                if durs:
+                    avg_seconds = round(sum(durs) / len(durs) / 1000.0, 1)
             except Exception:
                 pass
 
@@ -310,6 +329,7 @@ def tutorial_analytics_summary(limit_pages=25):
             return {
                 "totals": totals,
                 "avg_completion_pct": avg_pct,
+                "avg_completion_seconds": avg_seconds,
                 "by_page": by_page,
                 "most_confusing": most_confusing,
                 "events": int(sum(totals.values())) if totals else 0,
@@ -479,7 +499,9 @@ def admin_tutorials_analytics():
     <div class="container-fluid py-3">
       <h3 class="mb-3"><i class="bi bi-graph-up me-2"></i>Tutorial Analytics</h3>
       <p class="text-muted small"><a href="{{ url_for('admin_tutorials') }}">&larr; Tutorial Manager</a>
-         &nbsp;·&nbsp; {{ s.events }} events recorded &nbsp;·&nbsp; avg completion {{ s.avg_completion_pct }}%</p>
+         &nbsp;·&nbsp; {{ s.events }} events recorded &nbsp;·&nbsp; avg completion {{ s.avg_completion_pct }}%
+         {% if s.avg_completion_seconds %}&nbsp;·&nbsp; avg time {{ s.avg_completion_seconds }}s{% endif %}
+         {% if s.totals.step_replayed %}&nbsp;·&nbsp; {{ s.totals.step_replayed }} step replays{% endif %}</p>
 
       <div class="row g-2 mb-3">
         {% for k, v in s.totals.items() %}

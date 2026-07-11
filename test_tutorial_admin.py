@@ -191,6 +191,28 @@ def test_event_endpoint_drops_forged_type(app, client):
     assert r.status_code == 202 and r.get_json()["ok"] is False
 
 
+def test_step_replayed_is_recorded(app):
+    """AC12 fidelity: a Prev/Restart replay is an accepted event type."""
+    with app.app.app_context():
+        app._admin_setting_set(app._TUT_ANALYTICS_KEY, "1")
+        assert app.tutorial_record_event("dashboard", "step_replayed",
+                                         step_index=1, step_title="Create") is True
+        summary = app.tutorial_analytics_summary()
+    assert summary["totals"].get("step_replayed", 0) >= 1
+
+
+def test_avg_completion_seconds_from_duration(app):
+    """AC12 fidelity: average completion TIME comes from completed durations."""
+    page = "settings"
+    with app.app.app_context():
+        app._admin_setting_set(app._TUT_ANALYTICS_KEY, "1")
+        app.tutorial_record_event(page, "completed", step_index=3,
+                                  total_steps=4, duration_ms=8000)
+        summary = app.tutorial_analytics_summary()
+    assert "avg_completion_seconds" in summary
+    assert summary["avg_completion_seconds"] > 0
+
+
 def test_step_failed_feeds_most_confusing(app):
     page = "procurement_center"
     with app.app.app_context():
