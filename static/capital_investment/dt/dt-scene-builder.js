@@ -223,10 +223,15 @@
     return mat;
   }
 
-  // Access road: a thin box carrying the shared asphalt material (centre-line
-  // dashes run the length via the texture's V-wrap).
+  // Access road: a sealed truck carriageway -- a thin asphalt box (centre-line
+  // dashes run the length via the texture's V-wrap) PLUS a raised concrete kerb
+  // and a drainage channel down each side when the server flags them (meta.kerb
+  // / meta.drainage). Kerbs + channels are decorative children of the
+  // carriageway mesh: they inherit its (axis-aligned) placement, are not
+  // pickable, and dispose with it (disposeGroup recurses). This makes roads
+  // read as real sealed roads with kerbs + drainage, not thin grey ribbons.
   function buildRoad(o) {
-    var THREE = window.THREE, dm = o.dimensions || {};
+    var THREE = window.THREE, dm = o.dimensions || {}, meta = o.meta || {};
     var w = dm.w || 6, h = Math.max(dm.h || 0.1, 0.06), l = dm.l || 40;
     var geom = new THREE.BoxGeometry(w, h, l);
     var mat = roadMaterial();
@@ -236,6 +241,38 @@
     mesh.setRotationFromEuler(euler((o.transform || {}).rotation_deg));
     mesh.receiveShadow = tierShadows();
     mesh.userData = { objectId: o.id, layer: o.layer, object: o };
+
+    // Kerb + drainage treatment (skipped on the low tier + degenerate stubs).
+    if (DT.state.graphicsTier !== 'low' && (meta.kerb || meta.drainage)
+        && w > 0.5 && l > 0.5) {
+      var longX = w >= l;
+      var length = longX ? w : l;
+      var crossHalf = (longX ? l : w) / 2;
+      var kerbH = 0.28, kerbW = 0.18, drainW = 0.35, drainH = 0.16;
+      var kerbMat = DT.materials.get('concrete');
+      var drainMat = DT.materials.get('cable_trench');
+      [-1, 1].forEach(function (side) {
+        if (meta.kerb) {
+          var kg = longX ? new THREE.BoxGeometry(length, kerbH, kerbW)
+                         : new THREE.BoxGeometry(kerbW, kerbH, length);
+          var km = new THREE.Mesh(kg, kerbMat);
+          var koff = crossHalf + kerbW / 2;
+          km.position.set(longX ? 0 : side * koff, kerbH / 2,
+                          longX ? side * koff : 0);
+          km.receiveShadow = tierShadows();
+          mesh.add(km);
+        }
+        if (meta.drainage) {
+          var dg = longX ? new THREE.BoxGeometry(length, drainH, drainW)
+                         : new THREE.BoxGeometry(drainW, drainH, length);
+          var dmc = new THREE.Mesh(dg, drainMat);
+          var doff = crossHalf + kerbW + drainW / 2;
+          dmc.position.set(longX ? 0 : side * doff, -h / 2 + drainH / 2 - 0.02,
+                           longX ? side * doff : 0);
+          mesh.add(dmc);
+        }
+      });
+    }
     return mesh;
   }
 
@@ -295,11 +332,21 @@
     if (DT.state.graphicsTier !== 'low' && !mat.map) {
       mat = mat.clone();
       var ptex = panelTexture();
-      var mods = ((rows[0].meta || {}).modules) || Math.max(8, Math.round(Math.max(rowW, rowL) / 2));
-      // baked grid = 12 cells across U(x), 6 across V(z). Tile along whichever
-      // horizontal axis is the LONG one so module count runs down the row.
-      if (rowW >= rowL) ptex.repeat.set(Math.max(1, Math.round(mods / 12)), 1);
-      else ptex.repeat.set(1, Math.max(1, Math.round(mods / 6)));
+      // The server sizes each table from the design: meta.modules_wide modules
+      // along the row's long axis x meta.modules_high (2P) across it. The baked
+      // texture is ONE module of cells, so repeating it (wide x high) draws the
+      // table's EXACT module grid -- individual modules, count-accurate, not a
+      // guess from area. Fall back to a module-count estimate for legacy scenes.
+      var m0 = rows[0].meta || {};
+      var mWide = m0.modules_wide || 0, mHigh = m0.modules_high || 0;
+      if (mWide && mHigh) {
+        if (rowW >= rowL) ptex.repeat.set(mWide, mHigh);
+        else ptex.repeat.set(mHigh, mWide);
+      } else {
+        var mods = m0.modules || Math.max(8, Math.round(Math.max(rowW, rowL) / 2));
+        if (rowW >= rowL) ptex.repeat.set(Math.max(1, Math.round(mods / 12)), 1);
+        else ptex.repeat.set(1, Math.max(1, Math.round(mods / 6)));
+      }
       mat.map = ptex;
       mat.needsUpdate = true;
     }
@@ -513,7 +560,12 @@
   function disposeGroup(g) {
     for (var i = g.children.length - 1; i >= 0; i--) {
       var c = g.children[i];
-      if (c.geometry) c.geometry.dispose();
+      // Recurse: road carriageways now carry kerb/drainage child meshes, so
+      // dispose EVERY descendant geometry, not just the direct child, or the
+      // child geometries leak on each rebuild. Shared materials are left alone
+      // (owned by DT.materials / the road-material cache), same as before.
+      if (c.traverse) c.traverse(function (n) { if (n.geometry) n.geometry.dispose(); });
+      else if (c.geometry) c.geometry.dispose();
       g.remove(c);
     }
     if (g.parent) g.parent.remove(g);
