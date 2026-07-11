@@ -2000,3 +2000,60 @@ errors also present on clean master).
 Point `beta-monitor.yml` at `/api/health/boot` so a silent degraded boot pages
 someone. Then the security + token-lifecycle audits (items 7 and 8 of the
 2026-07-10 outage schedule).
+
+---
+
+# Implementation Log Entry
+Date: 2026-07-10 (pt3)
+Task: AI-SOC Slice 0 — kill switch + read-only foundations (automation OFF)
+Status: Implemented; Codex APPROVE + /code-review pass; 14/14 tests green. Not yet deployed.
+
+Objective: First slice of the embedded AI Support & Security Operations Centre per
+docs/AI_SOC_IMPLEMENTATION_PLAN_2026-07-10.md and the source spec
+Documents/pvsolar1/agentic support.txt. Ship the OFF-SWITCH and the schema BEFORE any
+agent can act — nothing automated in this slice.
+
+Files Changed:
+- new_soc_slice0.py (new) — soc_automation_allowed() default-deny gate; kill-switch
+  helpers (soc_enabled / soc_automation_enabled / soc_agent_paused:<agent>) reusing
+  admin_settings; _ensure_soc_schema() for 10 tables; GET /admin/soc/status (read-only)
+  + POST /admin/soc/kill-switch (admin + CSRF + audit + inbox).
+- patch_soc_slice0.py (new) — idempotent byte-level splice before __main__ tail.
+- migrations/022_soc_rls.sql (new) — admin-only RLS (mirrors 015 PART 4) + parallel-run
+  escape; gated workflow apply, not auto.
+- test_soc_slice0.py (new) — 14 tests incl. default-deny invariant, per-agent pause,
+  schema column fidelity, route admin/CSRF gating, RLS coverage.
+- docs/ARCHITECTURE_DECISIONS.md — ADR-0008 (deterministic-Python exemption from §0.1).
+- web_app.py — spliced (byte-level; not Edit-ed).
+
+Database Changes: 10 new tables (support_incidents, support_events, support_actions,
+support_approvals, support_agent_runs, support_runbooks, security_incidents,
+security_evidence, knowledge_articles, deployment_changes) created lazily on first SOC
+route hit; RLS via migration 022 (deliberate apply). admin_notifications REUSED, not
+recreated.
+
+API Changes: +GET /admin/soc/status, +POST /admin/soc/kill-switch (both @admin_required).
+
+Security Changes: default-deny automation gate; admin+CSRF on the mutating route; audit
+via log_audit/log_security + inbox mirror; RLS-ready (tenant_id + admin-only policy).
+
+Tests Added: test_soc_slice0.py (14).
+
+Documentation Updated: ADR-0008; this log; migration header.
+
+What Was Completed: Slice 0 in full — kill switch, 10-table schema (spec-faithful:
+RemediationRunbook shape L644-655 + human_reviewer per Pass C §14), RLS migration, tests.
+Gates: Codex APPROVE (1 Low carry-over), /code-review (1 bug found+fixed: kill-switch
+inbox alert dedupe-swallow), requirement re-check vs agentic support.txt = faithful.
+
+What Remains: Slice 1 (signal capture). NOTE for Slice 1: once migration 022 is applied
+with Keycloak on, a SOC-table write from a NON-admin user request context is rejected by
+RLS — the signal hook must set app.current_role=admin or use a system connection.
+Also: per-agent pause depends on callers passing the agent name (Codex Low).
+
+Known Risks: CREATE-IF-NOT-EXISTS drift — a later slice adding a column must ship an
+ALTER/migration (documented in _ensure_soc_schema docstring). Migration 022 is
+apply-gated (not auto) — irreversible-ish DDL.
+
+Next Recommended Step: Slice 1 — event-driven signal capture hooking log_error/
+log_security/log_audit (never raises, never blocks) + 5-min cron sweep of /api/health*.

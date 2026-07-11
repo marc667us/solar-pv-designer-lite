@@ -315,3 +315,44 @@ Deferred from this iteration: hill `azimuthCoverage` cone (form doesn't collect 
 - Phase column on each row maps to the 8-phase rollout (Phase 2 owns 376 rows = 73% of the work; Phase 4 owns 33; Phase 5 owns 94; Phase 7 owns 14).
 
 **Cross-references:** `docs/SECURITY_MIGRATION_KEYCLOAK.md` (the full plan), `docs/auth_inventory.csv` (Phase 0 deliverable), `docs/SECURITY_ARCHITECTURE.md` (the Q-gate gap log this ADR closes), `docs/SECRETS_ENGINE_PROPOSAL_v3.md` (Vault carries Keycloak's master admin credential + service-account secrets).
+
+---
+
+## ADR-0008 — AI-SOC built as deterministic Python services, exempt from §0.1 Google-ADK-only (2026-07-10)
+
+**Date:** 2026-07-10
+**Status:** Accepted — owner directive.
+
+**Context:** The next major deliverable is the **AI Support & Security Operations Centre (AI-SOC)** — an embedded technical-support + security-operations subsystem specified in `docs/AI_SOC_IMPLEMENTATION_PLAN_2026-07-10.md` (source spec `Documents\pvsolar1\agentic support.txt`). The plan defines seven agent roles (SupportOrchestrator, Tier1/2/3, SecurityAgent, KnowledgeAgent, NotificationAgent).
+
+Root `CLAUDE.md` §0.1 (the Agentic ADK Extension) mandates that **every agent in every app be implemented as a Google ADK `LlmAgent`/`SequentialAgent`/... with `FunctionTool` wrappers.** Building the AI-SOC "to the letter" would require the whole `app/agents/` ADK tree and real `LlmAgent`s. Three facts make that infeasible today:
+
+1. **ADK's only LLM key is exhausted** — the free-tier Gemini key at `adk-test/hello_agent/.env` returns HTTP 429 (quota 0). This is outstanding blocker #5. Real `LlmAgent`s cannot run without a paid Gemini key or a Vertex-AI service account, which the owner has not provisioned.
+2. **SolarPro is a single-file Flask app** with **zero** ADK surface — no `app/agents/` tree, no ADK dependency in `requirements.txt`. `google-adk` 2.2.0 pulls ~150 MB of transitive deps, and the app already runs near the Render free-tier 512 MiB / basic_256mb ceiling. Adding ADK risks a build/OOM failure (identical reasoning to **ADR-003**, the shading-agent soft-fallback).
+3. **The AI-SOC's classification MUST be deterministic-first** anyway (plan constraint 4): the live LLM helpline is already falling through to the rule-based fallback (blocker #1). An automation system whose severity/routing depends on an LLM would silently degrade to keyword matching — unacceptable for a security control.
+
+**Decision:** Implement the AI-SOC as **deterministic Python services** embedded in the existing app, with **optional** LLM *enrichment* calls that are always allowed to be absent. Each of the seven agent roles is a plain Python class/function behind a stable signature — **not** an ADK `LlmAgent`. This is an **owner-approved exemption from §0.1 for the AI-SOC subsystem only.** The rest of §0.1 remains binding for all other agent work in this and every sibling app.
+
+**Alternatives considered:**
+1. **Provision a paid Gemini key / Vertex SA and build real ADK `LlmAgent`s.** Rejected *for now* — owner declined the paid key ("we built this app with less from ADK, use your experience, can you do this without google adk"). Remains the upgrade path (see Consequences).
+2. **Use a competing framework (LangChain / CrewAI / hand-rolled loop).** Rejected — that would be a *real* §0.1 violation, not a deployment substitution, and adds heavier deps for no benefit.
+3. **Run the AI-SOC as a separate microservice on a tier that can carry ADK.** Deferred — adds DevOps surface area unjustified for an embedded subsystem the spec explicitly says must **not** be a separate application (spec line 771).
+4. **Skip determinism, LLM-classify everything.** Rejected — blocker #1 means the LLM is unreliable on this deployment; a security control cannot depend on it.
+
+**Reason for decision:** §0.1's *design intent* — uniform lifecycle so governance/observability/evals converge — is served here by keeping the **agent boundary a stable function signature**. The classification logic, the runbook catalogue, the approval gate, and the audit records are identical regardless of backend. When a paid Gemini key / Vertex SA lands, each deterministic service can be re-homed behind an ADK `LlmAgent` with the same signature and the same `support_agent_runs` record shape — a drop-in, per the plan's §4 note ("the agent boundary is a function signature, not a framework"). Pinning `google-adk` today would fail the cost/risk discipline (Directive §10 / §18) for marginal benefit, exactly as ADR-003 concluded for the shading agent.
+
+**Consequences:**
+- The AI-SOC ships without a `google.adk` runtime dependency; Render build risk unchanged.
+- Governance still applies in full: Codex → Supervisor → Work Reviewer → Work Scheduler four-gate per slice; every agent action writes `support_actions` + `audit_logs`; every agent run writes `support_agent_runs` with `(agent, input_hash, output_hash, status, started_at, finished_at)` — the same record ADK would have produced.
+- **Upgrade path is a single-layer change:** swap the deterministic service body for an ADK `LlmAgent` call behind the unchanged signature once blocker #5 clears. No caller changes.
+- The seven roles live in dedicated `new_soc_*.py` modules spliced via byte-level `patch_soc_*.py` (web_app.py is CRLF + mojibake — never Edit directly, per ADR-0001).
+
+**Impact on Security:** **Positive.** Deterministic classification cannot silently degrade; the kill switch (Slice 0) ships before any agent can act; auto-actions are gated by an explicit runbook `enabled` flag AND the global kill switch; no agent can deploy to production, rotate a secret, change RBAC, or delete data (plan §10).
+
+**Impact on Performance:** Negligible — detection rides the existing `log_error`/`log_security`/`log_audit` path (hooks never raise, never block, `boot_state.py` discipline) plus a 5-min GitHub Actions cron sweep. No polling fleet, no new daemon, no per-request LLM call.
+
+**Impact on Cost:** Zero recurring. Optional LLM enrichment uses the existing zero-cost OpenRouter-free/Ollama chain, never paid Anthropic/Vertex.
+
+**Impact on Maintenance:** +1 ADR, +N `new_soc_*.py` modules. The upgrade to real ADK is deferred but pre-planned; the function-signature boundary keeps it a mechanical change.
+
+**Owner sign-off:** Granted 2026-07-10 via the directive "we built this app with less from ADK, use your experience, can you do this without google adk" (recorded in memory `project-solar-pv-session-2026-07-10-pt2-secrets-rotation-audit` and `outstanding-work-schedule`). Scope of exemption: the AI-SOC subsystem only. §0.1 remains binding elsewhere.
