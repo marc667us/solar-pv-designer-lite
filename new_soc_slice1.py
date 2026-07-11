@@ -105,7 +105,10 @@ def soc_capture_signal(source, event_type, severity="P3", module=None,
             ).fetchone()
             if dup:
                 return 0  # already recorded this (module, error_code, hour)
-            c.execute(
+            # lastrowid lives on the CURSOR returned by execute(), not the
+            # connection (c). On Postgres db_adapter's _PgCursorWrap backfills it
+            # via lastval(); on SQLite it is native.
+            cur = c.execute(
                 "INSERT INTO support_events "
                 "(tenant_id, incident_id, source, event_type, severity, module, "
                 " error_code, payload, fingerprint) "
@@ -115,9 +118,9 @@ def soc_capture_signal(source, event_type, severity="P3", module=None,
                  (str(error_code)[:60] if error_code is not None else None),
                  payload, fp))
             try:
-                return int(getattr(c, "lastrowid", 0) or 0)
+                return int(getattr(cur, "lastrowid", 0) or 0)
             except Exception:
-                return 1
+                return None
     except Exception:
         # Detection must never take down the request path.
         return None
@@ -134,7 +137,17 @@ def _soc_dispatch_async(**kwargs):
     def _run():
         try:
             with app.app_context():
-                soc_capture_signal(**kwargs)
+                eid = soc_capture_signal(**kwargs)
+                # Slice 2 (if spliced): classify the new event into an incident,
+                # still off the request path. globals()-guarded so Slice 1 runs
+                # standalone if Slice 2 is absent.
+                if eid and eid > 0:
+                    _orch = globals().get("soc_orchestrate")
+                    if _orch:
+                        try:
+                            _orch(eid)
+                        except Exception:
+                            pass
         except Exception:
             pass
     try:
@@ -213,5 +226,14 @@ def api_soc_ingest():
         module=data.get("module"), error_code=data.get("error_code"),
         payload=data.get("payload"))
     # rid: int>0 new, 0 deduped, None failed/disabled.
+    incident_id = None
+    if rid and rid > 0:
+        _orch = globals().get("soc_orchestrate")  # Slice 2, if spliced
+        if _orch:
+            try:
+                incident_id = _orch(rid)
+            except Exception:
+                incident_id = None
     return jsonify({"captured": rid is not None, "deduped": rid == 0,
-                    "event_id": rid if (rid and rid > 0) else None}), 202
+                    "event_id": rid if (rid and rid > 0) else None,
+                    "incident_id": incident_id}), 202

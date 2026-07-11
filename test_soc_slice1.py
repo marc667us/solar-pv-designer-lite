@@ -91,7 +91,7 @@ def test_capture_writes_one_row_when_enabled(app):
     with app.app.app_context():
         rid = app.soc_capture_signal(source="test", event_type="unit_on",
                                      module="m_" + _RUN, error_code="500")
-    assert rid is None or rid == 0 or rid > 0
+    assert rid and rid > 0                   # returns the real new event id
     assert _count(app, "unit_on") == 1
 
 
