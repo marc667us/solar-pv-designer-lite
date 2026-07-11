@@ -22,23 +22,23 @@
   <h5 class="fw-black mb-0" style="letter-spacing:-.2px">Guides — Read · Listen · Download · Watch</h5>
 </div>
 <p class="text-secondary mb-3" style="font-size:13px">
-  <strong style="color:#7c3aed">Watch</strong> plays a live in-app walkthrough — an animated cursor
-  moves across the real screens, narrates each step and changes screens for you, so it never drifts
-  from the app. <strong style="color:#22c55e">Audio</strong> reads the guide aloud in your browser.
-  <strong style="color:#ef4444">PDF</strong> downloads the full document. The two internal guides
-  below are documents, so they offer Read · Listen · PDF.
+  <strong style="color:#7c3aed">Watch</strong> plays a live in-app walkthrough — one click drops you
+  onto the real screen where an animated cursor moves, narrates each step and changes screens for you,
+  so it never drifts from the app (press <kbd>Esc</kbd> to exit).
+  <strong style="color:#22c55e">Audio</strong> reads the guide aloud in your browser.
+  <strong style="color:#ef4444">PDF</strong> downloads the full document.
 </p>
 
-{# slug, title, icon, colour, blurb, duration, has_video (a live product walkthrough) #}
+{# slug, title, icon, colour, blurb, duration, demo_ep (endpoint the Watch button launches) #}
 {% set _GUIDES = [
-  ('quick',           '3-Min Quick Start',          'bi-lightning-charge-fill', '#fbbf24', 'The bare minimum to get a usable design out of the platform — register, create, size, export.', '~3 min', true),
-  ('full-user',       'Full User Guide',            'bi-book-half',             '#22c55e', 'Every feature an end-user touches — accounts, the design flow, reports, marketplace and share cards.', '~15 min', true),
-  ('technical',       'Full Technical Guide',       'bi-cpu-fill',              '#a78bfa', 'Architecture, engine math, database schema, the AI stack and how the platform is deployed.', '~20 min', true),
-  ('portal-tutorial', 'Portal Tutorial',            'bi-mortarboard-fill',      '#f59e0b', 'Admin onboarding — invite reps, watch projects, run reports and drive the day-to-day portal.', '~12 min', false),
-  ('sales-pitch',     'Sales Pitch — Call Script',  'bi-megaphone-fill',        '#ec4899', 'For your reps — discovery questions, value framing, objection handling and the qualifying close.', '~5 min', false),
+  ('quick',           '3-Min Quick Start',          'bi-lightning-charge-fill', '#fbbf24', 'The bare minimum to get a usable design out of the platform — register, create, size, export.', '~3 min', 'dashboard'),
+  ('full-user',       'Full User Guide',            'bi-book-half',             '#22c55e', 'Every feature an end-user touches — accounts, the design flow, reports, marketplace and share cards.', '~15 min', 'marketplace_public'),
+  ('technical',       'Full Technical Guide',       'bi-cpu-fill',              '#a78bfa', 'Architecture, engine math, database schema, the AI stack and how the platform is deployed.', '~20 min', 'capital_investment_landing'),
+  ('portal-tutorial', 'Portal Tutorial',            'bi-mortarboard-fill',      '#f59e0b', 'Admin onboarding — invite reps, watch projects, run reports and drive the day-to-day portal.', '~12 min', 'dashboard'),
+  ('sales-pitch',     'Sales Pitch — Call Script',  'bi-megaphone-fill',        '#ec4899', 'For your reps — discovery questions, value framing, objection handling and the qualifying close.', '~5 min', 'dashboard'),
 ] %}
 <div class="row g-3 mb-4">
-{% for slug, title, icon, clr, body, dur, has_video in _GUIDES %}
+{% for slug, title, icon, clr, body, dur, demo_ep in _GUIDES %}
   <div class="col-md-6 col-xl-4">
     <div class="solar-card p-4 h-100 d-flex flex-column">
       <div class="d-flex align-items-center gap-3 mb-3">
@@ -71,14 +71,12 @@
            style="background:linear-gradient(135deg,#dc2626,#ef4444);color:#fff;border:none">
           <i class="bi bi-file-earmark-pdf-fill me-1"></i>PDF
         </a>
-        {% if has_video %}
-        <a href="{{ url_for('guides_view', slug=slug) }}#video"
+        <a href="{{ url_for(demo_ep) }}?tutorial=auto"
            class="btn btn-sm fw-bold py-2 flex-fill"
-           title="Launch the live in-app walkthrough — animated cursor, narration and screen changes"
+           title="Launch the live in-app walkthrough now — animated cursor, narration and screen changes"
            style="background:linear-gradient(135deg,#7c3aed,#a78bfa);color:#fff;border:none">
           <i class="bi bi-play-btn-fill me-1"></i>Video
         </a>
-        {% endif %}
       </div>
     </div>
   </div>

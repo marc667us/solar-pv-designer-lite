@@ -33587,6 +33587,8 @@ def guides_view(slug):
         "quick":           url_for("dashboard") + "?tutorial=auto",
         "full-user":       url_for("marketplace_public") + "?tutorial=auto",
         "technical":       url_for("capital_investment_landing") + "?tutorial=auto",
+        "portal-tutorial": url_for("dashboard") + "?tutorial=auto",
+        "sales-pitch":     url_for("dashboard") + "?tutorial=auto",
     }.get(slug, "")
     video_url = os.environ.get(f"GUIDE_VIDEO_URL_{slug.upper().replace('-', '_')}", "")
     return render_template(
