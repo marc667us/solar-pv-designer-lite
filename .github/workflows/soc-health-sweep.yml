@@ -1,0 +1,65 @@
+name: AI-SOC Health Sweep
+
+# Slice 1 detection: a 5-minute cron that polls the live health endpoints and,
+# when one is degraded/unreachable, posts ONE deduped signal to /api/soc/ingest.
+# Detection only — it writes a support_events row, it never remediates.
+#
+# Fail-safe by design:
+#   * Only posts when a health check is NOT healthy (no noise on green).
+#   * The ingest endpoint is bearer-gated (METRICS_BEARER) and fail-CLOSED, and
+#     the app-side capture is gated on the soc_enabled master flag — so until the
+#     secret is set AND an admin enables the SOC, this sweep is a harmless no-op.
+#   * The dedupe key is (module, error_code, hour), so a sustained outage writes
+#     at most one row per hour, not one per 5-minute tick.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"    # every 5 minutes
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: soc-health-sweep
+  cancel-in-progress: true
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Poll health + post degraded signals
+        env:
+          BASE: https://solarpro.aiappinvent.com
+          METRICS_BEARER: ${{ secrets.METRICS_BEARER }}
+        run: |
+          set -u
+          if [ -z "${METRICS_BEARER}" ]; then
+            echo "METRICS_BEARER not set -> ingest fail-closed; sweep is a no-op. Exiting green."
+            exit 0
+          fi
+
+          post_signal () {
+            # $1=module  $2=error_code  $3=event_type
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 \
+              -X POST "${BASE}/api/soc/ingest" \
+              -H "Authorization: Bearer ${METRICS_BEARER}" \
+              -H "Content-Type: application/json" \
+              -d "{\"source\":\"cron\",\"event_type\":\"$3\",\"severity\":\"P2\",\"module\":\"$1\",\"error_code\":\"$2\",\"payload\":{\"sweep\":true}}")
+            echo "  posted signal ($1/$2) -> ingest HTTP ${code}"
+          }
+
+          # 1) Liveness — /api/ping should be 200.
+          ping=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 "${BASE}/api/ping" || echo 000)
+          echo "/api/ping -> ${ping}"
+          if [ "${ping}" != "200" ]; then post_signal "api.ping" "${ping}" "liveness_down"; fi
+
+          # 2) Boot/DB readiness — /api/health/boot must be 200 + status ok.
+          boot_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 "${BASE}/api/health/boot" || echo 000)
+          boot_body=$(curl -s --max-time 25 "${BASE}/api/health/boot" || echo "")
+          echo "/api/health/boot -> ${boot_code} ${boot_body}"
+          if [ "${boot_code}" != "200" ] || ! echo "${boot_body}" | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"'; then
+            post_signal "health.boot" "${boot_code}" "health_degraded"
+          fi
+
+          echo "sweep complete."
