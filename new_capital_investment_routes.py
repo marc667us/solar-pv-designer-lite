@@ -10902,6 +10902,29 @@ def register_capital_investment(app, *, get_db, login_required, csrf_protect,
             report=build_site_layout_model(proj),
         )
 
+    # ------------------------------------------------------------------
+    # GET /large-scale-solar/<pid>/equipment-layout -- top-down equipment
+    # General Arrangement (GA) drawings for the inverter station, the main
+    # substation and the control room. Reuses build_equipment_layout_model
+    # (equipment quantities/ratings via build_sld_model -> Step-7 sizing);
+    # no new sizing engine. Room geometry + working clearances are added here
+    # and flagged as assumptions. Never raises -> renders for a half-built
+    # project as an indicative arrangement.
+    # ------------------------------------------------------------------
+    @app.route("/large-scale-solar/<int:pid>/equipment-layout",
+               endpoint="capital_investment_equipment_layout")
+    @login_required
+    def _equipment_layout(pid: int):
+        if (g := _gate(CI_LEVEL_FULL)) is not None:
+            return g
+        proj = _load_project(pid)
+        from dt_equipment_layout import build_equipment_layout_model
+        return render_template(
+            "capital_investment/equipment_layout.html",
+            user=current_user(), proj=proj, progress=_wp(proj),
+            report=build_equipment_layout_model(proj),
+        )
+
     @app.route("/large-scale-solar/<int:pid>/dt/scene.json",
                endpoint="capital_investment_dt_scene")
     @login_required

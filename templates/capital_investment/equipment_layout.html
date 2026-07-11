@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% block title %}Equipment Layout (GA) - {{ proj.project_name }}{% endblock %}
+{% block content %}
+{# ===================================================================
+   EQUIPMENT LAYOUT / GENERAL ARRANGEMENT (GA). Three top-down equipment
+   plans -- inverter station, main substation, control room -- rendered from
+   dt_equipment_layout.build_equipment_layout_model(proj), which REUSES the
+   committed PV sizing (size_utility_pv via build_sld_model) -- no new engine.
+   All room + item geometry is in METRES; each room has its own SVG viewBox.
+   Clearances are drawn to IEC 61936-1 / IEC 60364 minimums and are flagged as
+   ASSUMPTIONS in the model (printed below each drawing).
+   =================================================================== #}
+<style>
+  .el-wrap { max-width: 1180px; margin: 0 auto; }
+  .el-card { background:#0f1826; border:1px solid #1c2a3d; border-radius:12px; padding:14px 16px; }
+  .el-svg { width:100%; height:auto; background:#0b1220; border:1px solid #1c2a3d; border-radius:10px; display:block; }
+  .el-legend { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:10px; }
+  .el-legend div { font-size:11.5px; color:#cbd5e1; display:flex; align-items:center; gap:6px; }
+  .el-legend .sw { width:14px; height:11px; border-radius:2px; display:inline-block; border:1px solid #33507f; }
+  .std-chip { display:inline-block; background:#14233a; border:1px solid #24405f; color:#9db8d6;
+    font-size:9.5px; border-radius:6px; padding:1px 6px; margin:2px 3px 0 0; }
+  .el-table th, .el-table td { font-size:11px; padding:3px 8px; vertical-align:top; }
+  .el-tag { font-family:ui-monospace,Menlo,Consolas,monospace; color:#f5b942; font-weight:700; }
+  .el-assume { font-size:10.5px; color:#9db8d6; }
+  .el-assume li { margin-bottom:2px; }
+  @media print { .no-print { display:none !important; } body { background:#fff; }
+    .el-card { break-inside: avoid; } }
+</style>
+
+<div class="el-wrap">
+  {# ---- page header + toolbar (mirrors the SLD / plot-plan siblings) ---- #}
+  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <div>
+      <h5 class="fw-black mb-0"><i class="bi bi-bounding-box text-warning me-1"></i>Equipment Layout (General Arrangement)</h5>
+      <div class="text-secondary small">{{ report.project.name }} &middot;
+        {{ '%.0f'|format(report.project.ac_mw) }} MWac &middot;
+        {{ report.project.n_inverter_stations }} inverter stations &middot;
+        inverter station &middot; substation &middot; control room</div>
+    </div>
+    <div class="d-flex gap-2 no-print">
+      <a href="{{ url_for('capital_investment_site_layout', pid=proj.id) }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-map me-1"></i>Plot Plan</a>
+      <a href="{{ url_for('capital_investment_electrical_sld', pid=proj.id) }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-diagram-2 me-1"></i>Electrical SLD</a>
+      <button onclick="window.print()" class="btn btn-sm btn-outline-warning"><i class="bi bi-printer me-1"></i>Print / PDF</button>
+    </div>
+  </div>
+
+  {% if not report.committed %}
+  <div class="alert alert-warning py-2 px-3 small mb-3" role="alert">
+    <i class="bi bi-exclamation-triangle me-1"></i>Indicative arrangement &mdash; complete
+    Step&nbsp;7 sizing to fix equipment quantities and ratings for these drawings.
+  </div>
+  {% endif %}
+
+  {% for r in report.rooms %}
+  {% set rw = r.room.w %}{% set rh = r.room.h %}
+  {# padding around the room box for dimension lines, door swing + scale bar #}
+  {% set pl = 3.4 %}{% set pt = 2.8 %}{% set pr = 3.4 %}{% set pb = 3.8 %}
+  <div class="el-card mb-3">
+    <div class="d-flex align-items-baseline justify-content-between flex-wrap gap-2 mb-2">
+      <div>
+        <div class="fw-bold text-light" style="font-size:14px">
+          <span class="badge bg-secondary me-1">{{ loop.index }}</span>{{ r.title }}</div>
+        <div class="text-secondary" style="font-size:11px">{{ r.subtitle }} &middot; {{ r.count_note }}</div>
+      </div>
+      <div class="text-secondary" style="font-size:11px">Room {{ '%.0f'|format(rw) }} &times; {{ '%.0f'|format(rh) }} m</div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-lg-8">
+        <svg class="el-svg" viewBox="{{ -pl }} {{ -pt }} {{ rw + pl + pr }} {{ rh + pt + pb }}"
+             preserveAspectRatio="xMidYMid meet" role="img"
+             aria-label="{{ r.title }} equipment general arrangement">
+
+          {# perimeter fence (substation compound only) #}
+          {% if r.fence %}
+          <rect x="-0.95" y="-0.95" width="{{ rw + 1.9 }}" height="{{ rh + 1.9 }}"
+                fill="none" stroke="#94a3b8" stroke-width="0.12" stroke-dasharray="0.6 0.4"/>
+          {% endif %}
+
+          {# room floor + wall #}
+          <rect x="-0.15" y="-0.15" width="{{ rw + 0.3 }}" height="{{ rh + 0.3 }}"
+                fill="#0e1626" stroke="#8fa4bf" stroke-width="0.3"/>
+          <rect x="0" y="0" width="{{ rw }}" height="{{ rh }}" fill="#0b1220"
+                stroke="#33507f" stroke-width="0.04"/>
+
+          {# clearance / aisle zones (empty bands) #}
+          {% for c in r.clearances %}
+          <rect x="{{ c.x }}" y="{{ c.y }}" width="{{ c.w }}" height="{{ c.h }}"
+                fill="#f59e0b" fill-opacity="0.06" stroke="#b47714" stroke-width="0.05"
+                stroke-dasharray="0.35 0.28"/>
+          <text x="{{ c.x + c.w/2 }}" y="{{ c.y + c.h/2 }}" fill="#d8b072" font-size="0.36"
+                text-anchor="middle" dominant-baseline="middle">{{ c.label }}</text>
+          {% endfor %}
+
+          {# equipment items ('items' via [] -- 'r.items' resolves to dict.items) #}
+          {% for it in r['items'] %}
+          {% set words = it.label.split() %}
+          {% set mid = (words|length + 1)//2 %}
+          {% set line1 = words[:mid]|join(' ') %}
+          {% set line2 = words[mid:]|join(' ') %}
+          <g>
+            <rect x="{{ it.x }}" y="{{ it.y }}" width="{{ it.w }}" height="{{ it.h }}"
+                  fill="{{ it.fill }}" stroke="#0b1220" stroke-width="0.05" rx="0.12"/>
+            <text x="{{ it.x + 0.16 }}" y="{{ it.y + 0.44 }}" class="el-tag"
+                  fill="{{ it.text }}" font-size="0.4">{{ it.tag }}</text>
+            {% set cy = it.y + it.h/2 %}
+            <text x="{{ it.x + it.w/2 }}" y="{{ cy - (0.24 if line2 else 0) }}"
+                  fill="{{ it.text }}" font-size="0.42" font-weight="600"
+                  text-anchor="middle" dominant-baseline="middle">{{ line1 }}</text>
+            {% if line2 %}
+            <text x="{{ it.x + it.w/2 }}" y="{{ cy + 0.24 }}" fill="{{ it.text }}"
+                  font-size="0.42" font-weight="600" text-anchor="middle"
+                  dominant-baseline="middle">{{ line2 }}</text>
+            {% endif %}
+            <text x="{{ it.x + it.w/2 }}" y="{{ it.y + it.h - 0.28 }}" fill="{{ it.text }}"
+                  font-size="0.32" fill-opacity="0.85" text-anchor="middle"
+                  dominant-baseline="middle">{{ it.size }}</text>
+          </g>
+          {% endfor %}
+
+          {# door with swing arc (side W / E / S) #}
+          {% set d = r.door %}
+          {% if d %}
+            {% if d.side == 'W' %}
+              <line x1="0" y1="{{ d.pos - d.w/2 }}" x2="{{ d.w }}" y2="{{ d.pos - d.w/2 }}" stroke="#e2e8f0" stroke-width="0.07"/>
+              <path d="M {{ d.w }} {{ d.pos - d.w/2 }} A {{ d.w }} {{ d.w }} 0 0 1 0 {{ d.pos + d.w/2 }}" fill="none" stroke="#e2e8f0" stroke-width="0.04" stroke-dasharray="0.2 0.15"/>
+            {% elif d.side == 'E' %}
+              <line x1="{{ rw }}" y1="{{ d.pos - d.w/2 }}" x2="{{ rw + d.w }}" y2="{{ d.pos - d.w/2 }}" stroke="#e2e8f0" stroke-width="0.07"/>
+              <path d="M {{ rw + d.w }} {{ d.pos - d.w/2 }} A {{ d.w }} {{ d.w }} 0 0 0 {{ rw }} {{ d.pos + d.w/2 }}" fill="none" stroke="#e2e8f0" stroke-width="0.04" stroke-dasharray="0.2 0.15"/>
+            {% elif d.side == 'S' %}
+              <line x1="{{ d.pos - d.w/2 }}" y1="{{ rh }}" x2="{{ d.pos - d.w/2 }}" y2="{{ rh + d.w }}" stroke="#e2e8f0" stroke-width="0.07"/>
+              <path d="M {{ d.pos - d.w/2 }} {{ rh + d.w }} A {{ d.w }} {{ d.w }} 0 0 0 {{ d.pos + d.w/2 }} {{ rh }}" fill="none" stroke="#e2e8f0" stroke-width="0.04" stroke-dasharray="0.2 0.15"/>
+            {% endif %}
+            <text x="{{ (d.w + 0.2) if d.side == 'W' else ((rw - d.w - 0.2) if d.side == 'E' else d.pos) }}"
+                  y="{{ (rh + d.w + 0.5) if d.side == 'S' else d.pos }}"
+                  fill="#cbd5e1" font-size="0.34"
+                  text-anchor="{{ 'start' if d.side == 'W' else ('end' if d.side == 'E' else 'middle') }}">DOOR</text>
+          {% endif %}
+
+          {# gate (substation) #}
+          {% if r.gate %}
+          <rect x="{{ r.gate.pos - r.gate.w/2 }}" y="{{ rh - 0.05 }}" width="{{ r.gate.w }}" height="0.32"
+                fill="#e2e8f0" stroke="#334155" stroke-width="0.04"/>
+          <text x="{{ r.gate.pos }}" y="{{ rh + 0.75 }}" fill="#cbd5e1" font-size="0.34" text-anchor="middle">{{ r.gate.label }}</text>
+          {% endif %}
+
+          {# cable entry marker #}
+          {% if r.cable_entry %}
+            {% set ce = r.cable_entry %}
+            {% if ce.side == 'S' %}
+            <line x1="{{ ce.pos - ce.w/2 }}" y1="{{ rh }}" x2="{{ ce.pos + ce.w/2 }}" y2="{{ rh }}" stroke="#2c7a5b" stroke-width="0.14" stroke-dasharray="0.24 0.14"/>
+            <text x="{{ ce.pos }}" y="{{ rh + 1.35 }}" fill="#77c9a3" font-size="0.32" text-anchor="middle">{{ ce.label }}</text>
+            {% elif ce.side == 'W' %}
+            <line x1="0" y1="{{ ce.pos - ce.w/2 }}" x2="0" y2="{{ ce.pos + ce.w/2 }}" stroke="#2c7a5b" stroke-width="0.14" stroke-dasharray="0.24 0.14"/>
+            <text x="-0.3" y="{{ ce.pos }}" fill="#77c9a3" font-size="0.32" text-anchor="end">{{ ce.label }}</text>
+            {% endif %}
+          {% endif %}
+
+          {# overall dimension lines (top = width, left = height) #}
+          <line x1="0" y1="-1.5" x2="{{ rw }}" y2="-1.5" stroke="#7ea2cc" stroke-width="0.05"/>
+          <line x1="0" y1="-1.75" x2="0" y2="-1.25" stroke="#7ea2cc" stroke-width="0.05"/>
+          <line x1="{{ rw }}" y1="-1.75" x2="{{ rw }}" y2="-1.25" stroke="#7ea2cc" stroke-width="0.05"/>
+          <text x="{{ rw/2 }}" y="-1.75" fill="#9db8d6" font-size="0.5" text-anchor="middle">{{ '%.1f'|format(rw) }} m</text>
+          <line x1="-1.5" y1="0" x2="-1.5" y2="{{ rh }}" stroke="#7ea2cc" stroke-width="0.05"/>
+          <line x1="-1.75" y1="0" x2="-1.25" y2="0" stroke="#7ea2cc" stroke-width="0.05"/>
+          <line x1="-1.75" y1="{{ rh }}" x2="-1.25" y2="{{ rh }}" stroke="#7ea2cc" stroke-width="0.05"/>
+          <text x="-1.95" y="{{ rh/2 }}" fill="#9db8d6" font-size="0.5" text-anchor="middle" transform="rotate(-90 -1.95 {{ rh/2 }})">{{ '%.1f'|format(rh) }} m</text>
+
+          {# north arrow (top-right) #}
+          <g transform="translate({{ rw + 1.7 }}, -1.4)">
+            <circle r="0.85" fill="#0b1220" stroke="#33507f" stroke-width="0.06"/>
+            <polygon points="0,-0.62 0.22,0.2 0,0 -0.22,0.2" fill="#f59e0b" stroke="#7a4d06" stroke-width="0.03"/>
+            <text x="0" y="-0.72" fill="#e6edf3" font-size="0.42" text-anchor="middle" font-weight="700">N</text>
+          </g>
+
+          {# graphic scale bar (bottom-left, 0-4 m) #}
+          <g transform="translate(0, {{ rh + 1.9 }})">
+            <rect x="0" y="0" width="2" height="0.26" fill="#e6edf3"/>
+            <rect x="2" y="0" width="2" height="0.26" fill="#0b1220" stroke="#e6edf3" stroke-width="0.03"/>
+            <text x="0" y="0.75" fill="#9db8d6" font-size="0.4">0</text>
+            <text x="2" y="0.75" fill="#9db8d6" font-size="0.4" text-anchor="middle">2</text>
+            <text x="4" y="0.75" fill="#9db8d6" font-size="0.4" text-anchor="middle">4 m</text>
+          </g>
+        </svg>
+
+        <div class="el-legend">
+          {% for lg in r.legend %}
+          <div><span class="sw" style="background:{{ lg.fill }}"></span>{{ lg.label }}</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {# ---- equipment schedule + metrics + assumptions ---- #}
+      <div class="col-lg-4">
+        <div class="fw-bold text-warning mb-1" style="font-size:11.5px;letter-spacing:.5px">EQUIPMENT SCHEDULE</div>
+        <table class="table table-dark table-sm el-table mb-2">
+          <thead><tr><th style="width:52px">Tag</th><th>Equipment</th><th class="text-end">Size / rating</th></tr></thead>
+          <tbody>
+            {% for it in r['items'] %}
+            <tr><td class="el-tag">{{ it.tag or '-' }}</td>
+              <td>{{ it.label }}</td>
+              <td class="text-end text-secondary">{{ it.size }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <div class="fw-bold text-warning mb-1" style="font-size:11.5px;letter-spacing:.5px">SCHEDULE</div>
+        <table class="table table-dark table-sm el-table mb-2">
+          <tbody>
+            {% for label, val, unit in r.schedule %}
+            <tr><td class="text-secondary">{{ label }}</td><td class="text-end fw-bold">{{ val }}</td>
+              <td class="text-secondary" style="width:52px">{{ unit }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <div class="fw-bold text-warning mb-1" style="font-size:11.5px;letter-spacing:.5px">CLEARANCE ASSUMPTIONS</div>
+        <ul class="el-assume ps-3 mb-2">
+          {% for a in r.assumptions %}<li>{{ a }}</li>{% endfor %}
+        </ul>
+        <div>{% for st in r.standards %}<span class="std-chip">{{ st }}</span>{% endfor %}</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  {# ---- global basis / assumptions footer ---- #}
+  <div class="el-card mb-3">
+    <div class="fw-bold text-warning mb-2" style="font-size:12px;letter-spacing:.5px">DRAWING BASIS &amp; ASSUMPTIONS</div>
+    <ul class="el-assume ps-3 mb-2">
+      {% for a in report.assumptions %}<li>{{ a }}</li>{% endfor %}
+    </ul>
+    <div>{% for st in report.standards %}<span class="std-chip">{{ st }}</span>{% endfor %}</div>
+    <div class="mt-3 no-print">
+      <a href="{{ url_for('capital_investment_design_report', pid=proj.id) }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-journal-richtext me-1"></i>Design Report</a>
+      <a href="{{ url_for('capital_investment_digital_twin', pid=proj.id) }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-badge-3d me-1"></i>3D Twin</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
