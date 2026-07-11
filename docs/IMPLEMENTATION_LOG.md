@@ -2104,3 +2104,72 @@ the SOC. Everything ships DARK (soc_enabled + automation default OFF).
 
 Next Recommended Step: enable soc_enabled in a controlled window and watch the
 inbox; then selectively enable individual low-risk runbooks.
+
+# Implementation Log Entry
+Date: 2026-07-11
+Task: Tutorial & Demo Framework — close AC11 (admin enable/disable) + AC12 (analytics)
+Status: Implemented + tested (16/16); four gates in progress
+
+Objective: The browser-first Tutorial & Demo Engine (static/tutorial/
+tutorial-engine.js, 60 scenario files, base.html loader) already met acceptance
+criteria 1-10 + 13-15 of pvsolar1/"video tutorial.txt". This closes the two
+remaining criteria WITHOUT touching the engine's playback core:
+  AC11 — admin can enable/disable tutorials (per-page + master switch).
+  AC12 — tutorial analytics recorded (started/completed/skipped/step_shown/
+         step_failed -> avg completion, most-viewed pages, most-confusing steps).
+
+Files Changed:
+- new_tutorial_admin.py  (NEW) — schema + settings helpers + analytics + 6 routes,
+  spliced before __main__ by patch_tutorial_admin.py (byte-level, CRLF-aware).
+- patch_tutorial_admin.py (NEW) — the splicer (idempotent via sentinel).
+- static/tutorial/tutorial-engine.js — additively wired by patch_tutorial_engine.py:
+  fetch /api/tutorial/config to gate the launcher on disabled tutorials; 5
+  fire-and-forget analytics beacons (started/completed/skipped/step_shown/
+  step_failed). Engine playback logic otherwise untouched.
+- patch_tutorial_engine.py (NEW) — CRLF-safe byte-editor with per-anchor
+  uniqueness asserts (a future engine refactor fails loudly, never silently skips).
+- test_tutorial_admin.py (NEW) — 16 tests.
+
+Database Changes: one new table tutorial_events (id, tenant_id, user_id, page,
+event_type, step_index, step_title, mode, total_steps, duration_ms, created_at)
++ 3 indexes (page, event_type, created_at). Backend-branched SERIAL vs
+AUTOINCREMENT via _inbox_is_pg(). Enable/disable state persists in admin_settings
+under keys tutorial_master_enabled / tutorial_analytics_enabled / tutorial_disabled.
+
+API Changes:
+- GET  /api/tutorial/config          public; {enabled, analytics, disabled[]}
+- POST /api/tutorial/event           telemetry beacon; CSRF-exempt by design
+                                     (non-mutating, allowlisted event_type,
+                                     clamped ints); anon allowed; always 202.
+- GET  /admin/tutorials              manager UI (list + toggle + switches) [admin]
+- POST /admin/tutorials/<slug>/toggle enable/disable one tutorial [admin+CSRF]
+- POST /admin/tutorials/master       flip master + analytics switches [admin+CSRF]
+- GET  /admin/tutorials/analytics    dashboard; ?format=json for raw summary [admin]
+
+Security Changes: all /admin/tutorials* routes @admin_required; mutating ones
+csrf_protect()+audit-logged (tutorial_toggle / tutorial_master). The telemetry
+sink validates slug/page (^[a-z0-9_]{1,120}$), allowlists event_type, clamps all
+ints, caps strings — a forged POST can at worst add one bounded junk row that the
+allowlist already filters. tutorial_events RLS deferred to gated migration
+023_tutorial_rls.sql (a permissive-insert / admin-read policy) so anonymous
+public-demo beacons are never rejected; admin-read is app-gated meanwhile.
+
+Tests Added: 16 (config defaults, disable/enable roundtrip + master off, bad-slug
+reject, toggle route persist+reflect-in-config, toggle RBAC+CSRF, record+summary,
+bad-type/slug reject, analytics-off stops recording, beacon endpoint accept/drop,
+step_failed -> most_confusing, manager RBAC, manager renders, analytics JSON
+shape, list-scenarios reads disk). No regressions: 244 tutorial-scenario tests +
+20 SOC tests still green.
+
+Documentation Updated: this entry.
+
+What Was Completed: all 15 acceptance criteria of "video tutorial.txt" now met.
+Not an ADK agent (admin CRUD + event logging), so §0.1 does not apply.
+What Remains: (optional) apply migration 023_tutorial_rls.sql in a window;
+(optional) i18n of narration beyond browser voices; scenario authoring for the
+45 backlog pages remains a content task, not an engine gap.
+Known Risks: _ensure_tutorial_schema runs per event POST (idempotent, cheap,
+mirrors the SOC pattern). Dotted blueprint endpoints (e.g. oidc.login) are not
+recorded — none of them ship a scenario, so no telemetry is lost.
+Next Recommended Step: after live deploy, admin visits /admin/tutorials to
+confirm the 60 scenarios list + toggle; watch /admin/tutorials/analytics fill.

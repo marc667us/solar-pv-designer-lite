@@ -39,6 +39,32 @@
     els: {}, timer: null, rec: null, chunks: [], stream: null, alive: false
   };
 
+  // ---------- admin config + analytics (spec AC11 disable, AC12 record) ----------
+  // The engine asks the server which tutorials the admin left enabled and
+  // whether to record usage. Both default ON so a failed config fetch never
+  // silently disables a working tutorial. Beacons are fire-and-forget.
+  var CFG = { enabled: true, analytics: true, disabled: {} };
+
+  function beacon(type, extra) {
+    if (!CFG.analytics) return;
+    try {
+      // Attribute every beacon of a tour to its canonical entry page (pageId),
+      // so a multi-screen flow's started/completed/step events group under ONE
+      // page and per-page completion ratios stay coherent. Falls back to the
+      // current endpoint before a scenario is loaded.
+      var payload = { page: (T.scenario && T.scenario.pageId) || PAGE, event_type: type };
+      if (extra) for (var k in extra) { if (extra[k] != null) payload[k] = extra[k]; }
+      var body = JSON.stringify(payload);
+      // sendBeacon survives page unload (navigate/close); fall back to fetch.
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('/api/tutorial/event', new Blob([body], { type: 'application/json' }));
+      } else {
+        fetch('/api/tutorial/event', { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' }, body: body, keepalive: true });
+      }
+    } catch (e) {}
+  }
+
   // ---------- multi-screen flows ----------
   // A feature's tutorial spans every screen the feature touches, so a tour must
   // survive a page navigation. Before navigating we park {flow, i, mode} in
@@ -221,10 +247,12 @@
     var s = cur();
     if (!s) return finish();
     markFlow();                       // survive a navigation from any step
+    beacon('step_shown', { step_index: T.i, step_title: s.title, mode: T.mode });
     var node = q(s.targetSelector);
 
     if (!node && s.targetSelector) {
       // Missing target must degrade, never abort (spec: handle missing target).
+      beacon('step_failed', { step_index: T.i, step_title: s.title });
       caption(s.fallbackMessage || ('Skipping: "' + (s.title || 'step') + '" is not on this page.'));
       ringTo(null); placeTip(s, null);
       await sleep(900);
@@ -344,6 +372,8 @@
     ringTo(null);
     clearFlow();
     T.playing = false;
+    T._completed = true;
+    beacon('completed', { step_index: steps().length - 1, total_steps: steps().length });
     setTimeout(stop, 1400);
   }
   function onCtl(ev) {
@@ -447,6 +477,8 @@
     closeMenu();
     T.mode = mode || 'guided';
     T.i = 0; T.alive = true;
+    T._completed = false;
+    beacon('started', { mode: T.mode, total_steps: steps().length });
     if (T.mode === 'explain') return explain();
     clearFlow();
     begin();
@@ -468,6 +500,9 @@
     if (T.playing) loop(); else runStep();
   }
   function stop() {
+    if (T.alive && !T._completed && T.mode !== 'explain') {
+      beacon('skipped', { step_index: T.i, total_steps: steps().length });
+    }
     T.alive = false; T.playing = false;
     clearFlow();                       // an exited tour must not resume elsewhere
     hushSpeech(); clearTimeout(T.timer);
@@ -506,6 +541,7 @@
   var flow = readFlow();
   var wanted = flow ? flow.flow : PAGE;
 
+  function _loadScenario() {
   fetch(BASE + encodeURIComponent(wanted) + '.json', { credentials: 'same-origin' })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (j) {
@@ -533,6 +569,25 @@
       if (m) setTimeout(function () { start(m); }, 700);
     })
     .catch(function () { if (flow) clearFlow(); });
+  }
+
+  // Respect the admin's enable/disable + analytics choices (AC11/AC12)
+  // before mounting anything. Defaults stay ON if the config call fails.
+  fetch('/api/tutorial/config', { credentials: 'same-origin' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (cfg) {
+      if (cfg) {
+        CFG.enabled = cfg.enabled !== false;
+        CFG.analytics = cfg.analytics !== false;
+        CFG.disabled = {};
+        (cfg.disabled || []).forEach(function (s) { CFG.disabled[s] = 1; });
+      }
+    })
+    .catch(function () {})
+    .then(function () {
+      if (!CFG.enabled || CFG.disabled[wanted]) { if (flow) clearFlow(); return; }
+      _loadScenario();
+    });
 
   window.addEventListener('resize', function () { if (T.alive) { var s = cur(); ringTo(q(s && s.targetSelector)); } });
   window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && T.alive) stop(); });
