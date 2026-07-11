@@ -81,6 +81,8 @@
     if (t.sunLight.color) t.sunLight.color.set(lowSun ? 0xffd39a : 0xfff3d6);
     if (t.ambientLight) t.ambientLight.intensity = day ? 0.08 : 0.12;
     if (t.hemiLight) t.hemiLight.intensity = day ? 0.16 : 0.22;
+    // External street + perimeter lights come ON at night (owner request).
+    if (DT.builder && DT.builder.setNightLights) DT.builder.setNightLights(!day);
     if (t.scene) {
       // The daylight env map carries a bright sun disc; reflecting it after dark
       // would glint a sun that isn't in the sky. Drop env reflections at night so

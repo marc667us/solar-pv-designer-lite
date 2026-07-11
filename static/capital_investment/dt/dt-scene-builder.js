@@ -14,6 +14,7 @@
   'use strict';
   var DT = window.DT = window.DT || {};
   var _sceneryMats = null;   // trunk/canopy materials, created once + reused
+  var _lampMat = null;       // shared street/perimeter lamp head (toggled at night)
 
   function group(layer) {
     var t = DT.three;
@@ -164,7 +165,35 @@
     mesh.position.set(p[0], p[1], p[2]);
     mesh.castShadow = tierShadows();
     mesh.userData = { objectId: o.id, layer: o.layer, object: o };
+    // Street/perimeter lights get a lamp head on a shared material that switches
+    // ON at night (DT.builder.setNightLights, driven by dt-sun day/night).
+    if (o.layer === 'lighting_pole') {
+      if (!_lampMat) _lampMat = new THREE.MeshStandardMaterial({
+        color: '#3a3a2e', emissive: new THREE.Color('#000000'),
+        emissiveIntensity: 0, roughness: 0.5, metalness: 0.2
+      });
+      var head = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.35, 0.5), _lampMat);
+      head.position.set(0, (dm.h || 6) / 2 - 0.2, 0.35);   // cantilevered at the top
+      mesh.add(head);
+    }
     return mesh;
+  }
+
+  // Toggle the shared street/perimeter lamp material: OFF by day, a warm glow by
+  // night, so the external lights "come on" after dark (owner request). One
+  // material -> every pole lights together, so it is cheap regardless of count.
+  function setNightLights(on) {
+    if (!_lampMat) return;
+    if (on) {
+      _lampMat.emissive.set('#ffdf9e');
+      _lampMat.emissiveIntensity = 2.6;
+      _lampMat.color.set('#fff2cf');
+    } else {
+      _lampMat.emissive.set('#000000');
+      _lampMat.emissiveIntensity = 0;
+      _lampMat.color.set('#3a3a2e');
+    }
+    _lampMat.needsUpdate = true;
   }
 
   function buildTerrain(o) {
@@ -584,5 +613,6 @@
     if (DT.labels && DT.labels.rebuild) DT.labels.rebuild();
   }
 
-  DT.builder = { build: build, rebuild: rebuild, group: group };
+  DT.builder = { build: build, rebuild: rebuild, group: group,
+                 setNightLights: setNightLights };
 })();
