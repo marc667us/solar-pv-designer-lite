@@ -112,12 +112,27 @@ def build_site_layout_model(proj: dict[str, Any]) -> dict[str, Any]:
         {"kind": "sub", "points": [(site_w / 2, strip_y),
                                    (substation["x"] + substation["w"] / 2, strip_y)]},
     ]
+    # Inter-block maintenance roads between every block column + row -- the SAME
+    # network the 3D twin draws, so the plan shows all the twin's roads (owner).
+    for c in range(1, cols):
+        gx = field["x"] + c * (bw + gap) - gap / 2.0
+        roads.append({"kind": "block",
+                      "points": [(round(gx, 1), round(field["y"], 1)),
+                                 (round(gx, 1), round(field["y"] + field["h"], 1))]})
+    for r in range(1, rows):
+        gy = field["y"] + r * (bh + gap) - gap / 2.0
+        roads.append({"kind": "block",
+                      "points": [(round(field["x"], 1), round(gy, 1)),
+                                 (round(field["x"] + field["w"], 1), round(gy, 1))]})
     gate = {"x": round(site_w / 2, 1), "y": round(fence["y"], 1)}
 
     # --- Schedule / legend ---------------------------------------------------
     block_mwp = round((dc_kwp / n_inv) / 1000.0, 2) if n_inv else 0.0
     perimeter_km = round(2 * (fence["w"] + fence["h"]) / 1000.0, 2)
-    road_km = round((2 * (rw + rh) + (strip_y - ry)) / 1000.0, 2)
+    def _polyline_len(pts):
+        return sum(math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
+                   for i in range(1, len(pts)))
+    road_km = round(sum(_polyline_len(rd["points"]) for rd in roads) / 1000.0, 2)
     schedule = [
         ("Site land area", f"{land_ha:,.1f}", "ha"),
         ("Site dimensions (approx.)", f"{site_w:,.0f} x {site_h:,.0f}", "m"),
