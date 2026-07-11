@@ -2057,3 +2057,50 @@ apply-gated (not auto) — irreversible-ish DDL.
 
 Next Recommended Step: Slice 1 — event-driven signal capture hooking log_error/
 log_security/log_audit (never raises, never blocks) + 5-min cron sweep of /api/health*.
+
+---
+
+# Implementation Log Entry
+Date: 2026-07-10 (pt3, overnight autonomous)
+Task: AI-SOC Slices 1-8 — full embedded Support & Security Operations Centre
+Status: Implemented; per-slice tests green (82 total); Codex-gated on the
+security-critical slices (1,4,5,7,8). Deploying.
+
+Objective: Complete the AI-SOC per docs/AI_SOC_IMPLEMENTATION_PLAN_2026-07-10.md
+and source spec Documents/pvsolar1/agentic support.txt, deterministic-Python
+(ADR-0008), automation OFF by default.
+
+Slices (each new_soc_sliceN.py + patch_soc_sliceN.py + test_soc_sliceN.py):
+- 1 Signal capture: after_request 5xx -> async (non-blocking) deduped
+  support_events; POST /api/soc/ingest (bearer, fail-closed); 5-min health-sweep
+  workflow. Gated on soc_enabled.
+- 2 Orchestrator: deterministic P1..P4 classify (spec §6/§8) -> support_incidents
+  + inbox + agent run; dedupe by fingerprint.
+- 3 Admin UI: /admin/soc/incidents(+detail)/approvals/security/dashboard +
+  status control (admin+CSRF). No new portal.
+- 4 Tier 1 + runbook catalogue (FIRST automation): runs ONLY when
+  soc_automation_allowed('tier1') AND enabled AND not requires_approval; every
+  outcome audited; failed verify -> rollback. Seeds ship enabled=0.
+- 5 Security agent + containment: pre-authorised reversible actions only, kill-
+  switch gated; block_ip proposed-only (no WAF); Mode C never auto; evidence to DB.
+- 6 Tier 2 diagnostics: pure read-only root-cause (mutation-invariance tested).
+- 7 Tier 3 repair package + approval gate: emits package + pending approval;
+  NEVER deploys (structural + behavioural test); production stays human-run.
+- 8 Knowledge base (redaction pass) + Supervisor digest.
+
+Database: reuses the 10 tables from Slice 0 (+admin_notifications). RLS via
+migration 022 (gated apply). Security: default-deny automation gate on every
+acting path; admin+CSRF on every mutating route; RLS-safe writes
+(set_config app.current_role=admin); redaction before knowledge persistence.
+
+Tests Added: 68 across slices 1-8 (82 incl. Slice 0). Gates: Codex APPROVE on
+1,4,5,7,8 (fixed: blocking after_request, lastrowid, overstated rollback,
+unaudited raising handler, broadened redaction). /code-review pending final sweep.
+
+What Remains: wire knowledge-write auto-trigger on incident close (currently an
+explicit admin action); optional LLM enrichment when a budget exists; the
+health-sweep cron activates only once METRICS_BEARER is set AND an admin enables
+the SOC. Everything ships DARK (soc_enabled + automation default OFF).
+
+Next Recommended Step: enable soc_enabled in a controlled window and watch the
+inbox; then selectively enable individual low-risk runbooks.
