@@ -4637,36 +4637,42 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
                  "footprint_m2": round(ctrl_w * ctrl_h, 1)},
     })
 
-    # (c) Other selected facility buildings -- tidy row between control + sub.
+    # (c) Other facilities CLUSTERED into TWO groups (owner request): an
+    #     electrical/HV cluster hugging the SUBSTATION, and an operational
+    #     cluster hugging the CONTROL / O&M ("inverter") building. Each cluster
+    #     is a tidy column so it reads as a grouped compound, not a scattered row.
+    _SUB_CLUSTER = {"switchgear_bldg", "scada_bldg", "comms_bldg",
+                    "battery_room", "transformer_bldg", "inverter_room"}
     selected_buildings = [b for b in (fac_cfg.get("buildings") or [])
                           if b != "control_room"]
-    if selected_buildings:
-        strip_gap = 8.0
-        strip_x0 = ctrl_x + ctrl_w + strip_gap
-        strip_xmax = sub_x - strip_gap
-        if strip_xmax - strip_x0 < 40.0:
-            strip_x0, strip_xmax = field_x0, site_w - pad
-        x_cursor = strip_x0
-        row_i = 0
-        for b in selected_buildings:
+    sub_cluster = [b for b in selected_buildings if b in _SUB_CLUSTER]
+    om_cluster = [b for b in selected_buildings if b not in _SUB_CLUSTER]
+
+    def _place_cluster(codes, col_x, y0, cluster_name):
+        """Stack building `codes` in a tidy left-aligned column from (col_x, y0)."""
+        cy = y0
+        for b in codes:
             bd = building_dim_defaults.get(b, {"w": 12, "l": 8, "h": 5})
             bw, bl, bh = float(bd["w"]), float(bd["l"]), float(bd["h"])
-            if x_cursor > strip_x0 and x_cursor + bw > strip_xmax:
-                x_cursor = strip_x0
-                row_i += 1
-            by = strip_top + row_i * 26.0
             layer = b if b in DT_LAYER_PALETTE else "building"
             label = next((L for c, L, _, _ in BUILDING_TYPES if c == b), b)
             buildings.append({
                 "id": f"bldg_{b}", "layer": layer, "kind": "box",
-                "x": _sx(x_cursor + bw / 2.0), "y": bh / 2.0,
-                "z": _sz(by + bl / 2.0), "w": bw, "h": bh, "l": bl,
+                "x": _sx(col_x + bw / 2.0), "y": bh / 2.0,
+                "z": _sz(cy + bl / 2.0), "w": bw, "h": bh, "l": bl,
                 "label": label,
                 "meta": {"building_code": b,
                          "sub_items": BUILDING_SUB_ITEMS.get(b, []),
-                         "footprint_m2": round(bw * bl, 1)},
+                         "footprint_m2": round(bw * bl, 1),
+                         "cluster": cluster_name},
             })
-            x_cursor += bw + strip_gap
+            cy += bl + 7.0
+    # Operational cluster just east of the control / O&M ("inverter") building.
+    _place_cluster(om_cluster, ctrl_x + ctrl_w + 10.0, strip_top, "om")
+    # Electrical cluster just west of the substation compound (kept clear of the
+    # O&M cluster on small sites).
+    _place_cluster(sub_cluster, max(ctrl_x + ctrl_w + 70.0, sub_x - 26.0),
+                   strip_top, "substation")
 
     # Station transformers render in the buildings list (layer 'transformer')
     # so they normalise + count alongside the grid transformers.
@@ -4766,22 +4772,44 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
             "label": f"CCTV pole #{i + 1}", "meta": {"coverage_m": 80},
         })
 
-    # --- Perimeter lighting poles -------------------------------------------
+    # --- Street + perimeter lighting poles (owner request) ------------------
+    # Poles at intervals down every carriageway, offset to the kerb: the
+    # perimeter access ring gives PERIMETER lights, the inter-block maintenance
+    # roads give STREET lights. Derived from the road network (already scene
+    # coords). Capped so a large plant stays renderable.
     lighting: list[dict[str, Any]] = []
-    _hw, _hh = site_w / 2.0 - 6.0, site_h / 2.0 - 6.0
-    perim_positions = [
-        (_hw * 0.5, -_hh), (-_hw * 0.5, -_hh),
-        (_hw * 0.5, _hh), (-_hw * 0.5, _hh),
-        (-_hw, 0.0), (_hw, 0.0),
-    ]
-    for i, (lx, lz) in enumerate(perim_positions):
-        lighting.append({
-            "id": f"light_{i + 1}", "layer": "lighting_pole", "kind": "mast",
-            "x": round(lx, 2), "y": 3.0, "z": round(lz, 2),
-            "w": 0.2, "h": 6.0, "l": 0.2,
-            "label": f"Perimeter light #{i + 1}",
-            "meta": {"lumens": 20000, "wattage_W": 200},
-        })
+    _LIGHT_SPACING_M = 60.0
+    _LIGHT_CAP = 160
+    _lid = 0
+    for rd in roads:
+        if _lid >= _LIGHT_CAP:
+            break
+        rc = (rd.get("meta") or {}).get("road_class")
+        if rc not in ("main", "maintenance"):
+            continue
+        is_perim = "Perimeter" in (rd.get("label") or "")
+        rx, rz, rw, rl = rd["x"], rd["z"], rd["w"], rd["l"]
+        along_x = rw >= rl
+        length = rw if along_x else rl
+        off = (rl if along_x else rw) / 2.0 + 2.0     # to the kerb line
+        n_p = max(1, int(length // _LIGHT_SPACING_M))
+        for k in range(n_p):
+            if _lid >= _LIGHT_CAP:
+                break
+            frac = (k + 0.5) / n_p
+            if along_x:
+                lx, lz = rx - length / 2.0 + frac * length, rz + off
+            else:
+                lx, lz = rx + off, rz - length / 2.0 + frac * length
+            _lid += 1
+            lighting.append({
+                "id": f"light_{_lid:03d}", "layer": "lighting_pole", "kind": "mast",
+                "x": round(lx, 2), "y": 3.5, "z": round(lz, 2),
+                "w": 0.2, "h": 7.0, "l": 0.2,
+                "label": ("Perimeter light #%d" if is_perim else "Street light #%d") % _lid,
+                "meta": {"lumens": 20000, "wattage_W": 200,
+                         "kind": "perimeter" if is_perim else "street"},
+            })
 
     # --- Main earthing pit near the substation compound ---------------------
     safety: list[dict[str, Any]] = []

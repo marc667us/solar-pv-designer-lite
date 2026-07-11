@@ -476,37 +476,37 @@ def _synthesize_infrastructure(objects: list[dict[str, Any]],
                                           "switchgear_bldg", "scada_bldg", "mv_switchgear")]
 
         n = 0
-        # inverter -> nearest transformer (or nearest MV building if no transformer)
+        # DC collection at the array: the cables from the PV blocks to their
+        # inverter are DC (owner: "the cables from the panels are DC cables").
+        # MV does NOT originate at the panels.
         sinks = transformers or mv_bldgs
         for inv in inverters:
             tgt = _nearest(_pos(inv), sinks)
             if not tgt:
                 break
             extra.append(_make_route_object(
-                f"cable_trench_{n}", "cable_trench", "AC Cable Trench",
+                f"dc_trench_{n}", "cable_trench", "DC String Cable Trench",
                 _pos(inv), _pos(tgt), width=0.6, height=0.15, pid=pid))
             n += 1
 
-        # transformer -> nearest MV building (collector run)
-        for tr in transformers:
-            tgt = _nearest(_pos(tr), mv_bldgs)
-            if not tgt:
-                break
-            extra.append(_make_route_object(
-                f"cable_trench_{n}", "cable_trench", "MV Cable Trench",
-                _pos(tr), _pos(tgt), width=0.8, height=0.15, pid=pid))
-            n += 1
+        # NO MV cable trenches are drawn across the PV field. MV cabling
+        # originates at the SUBSTATION only (owner). The old per-block
+        # transformer -> MV-building MV trenches that ran across the field are
+        # removed -- they wrongly read as "MV cables coming from the panels".
 
-        # grid-connection line: from the primary transformer/substation out to the
-        # site boundary (a single MV export line proxy).
+        # MV grid connection: from the SUBSTATION (its grid step-up transformer /
+        # MV switchgear -- never a block station skid) out to the site boundary.
         side = float((scene.get("terrain") or {}).get("side_m")
                      or (scene.get("site") or {}).get("land_side_m") or 300.0)
-        source = (transformers or mv_bldgs)
+        sub_src = [o for o in objects
+                   if o.get("layer") == "mv_switchgear"
+                   or str(o.get("id", "")).startswith("grid_transformer")]
+        source = sub_src or transformers or mv_bldgs
         if source:
             src = _pos(source[0])
             boundary = [src[0], side / 2.0 * 0.98]   # run north to the fence line
             extra.append(_make_route_object(
-                "grid_line_0", "grid_line", "Grid Connection Line",
+                "grid_line_0", "grid_line", "MV Grid Cable (from substation)",
                 src, boundary, width=0.3, height=0.3, pid=pid, y=4.0))
     except Exception:
         return extra
