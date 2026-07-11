@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_floor_view",
+  "pageId": "boq_floor_view",
+  "title": "Floor",
+  "module": "BOQ",
+  "description": "A floor's service bills — the working surface where quantities and rates meet.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Floor"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Service bills",
+      "description": "Each bill covers one service, section by section.",
+      "voiceScript": "This floor's service bills are listed here, each covering one service.",
+      "captionText": "This floor's service bills are listed here, each covering one service.",
+      "targetSelector": ".solar-card, .card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Floor",
+      "fallbackMessage": "Service bills: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Set up a section",
+      "description": "A section groups related BOQ items.",
+      "voiceScript": "Set up a section to start adding related BOQ items.",
+      "captionText": "Set up a section to start adding related BOQ items.",
+      "targetSelector": "a[href*=\"/section/new\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Floor",
+      "fallbackMessage": "Set up a section: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Generate and review",
+      "description": "The floor BOQ compiles every section's items.",
+      "voiceScript": "Generate the floor BOQ to compile every section into one reviewable bill.",
+      "captionText": "Generate the floor BOQ to compile every section into one reviewable bill.",
+      "targetSelector": "a[href*=\"/boq\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Floor",
+      "fallbackMessage": "Generate and review: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

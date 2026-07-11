@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-supplier_products",
+  "pageId": "supplier_products",
+  "title": "My Products",
+  "module": "Supplier",
+  "description": "A supplier's catalogue: the products you list for buyers to price and RFQ.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "My products"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Your catalogue",
+      "description": "Every product you have listed, with its price and status.",
+      "voiceScript": "This is your product catalogue: everything you have listed for buyers.",
+      "captionText": "This is your product catalogue: everything you have listed for buyers.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "My products",
+      "fallbackMessage": "Your catalogue: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Add a product",
+      "description": "Listed products appear in buyer searches and RFQs.",
+      "voiceScript": "Add a product. Listed products appear in buyer searches and RFQs.",
+      "captionText": "Add a product. Listed products appear in buyer searches and RFQs.",
+      "targetSelector": "a[href*=\"/products/add\"], a[href*=\"/upload\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "My products",
+      "fallbackMessage": "Add a product: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Edit a listing",
+      "description": "Keep prices and specs current so buyers trust them.",
+      "voiceScript": "Edit a listing to keep its price and specs current.",
+      "captionText": "Edit a listing to keep its price and specs current.",
+      "targetSelector": "a[href*=\"/edit\"], .btn-outline-secondary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "My products",
+      "fallbackMessage": "Edit a listing: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

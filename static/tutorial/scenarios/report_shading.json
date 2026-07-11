@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-report_shading",
+  "pageId": "report_shading",
+  "title": "Shading Report",
+  "module": "Reports",
+  "description": "The shading analysis: how nearby obstructions cut the array's yield.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Shading"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Shading analysis",
+      "description": "How buildings and objects shade the array.",
+      "voiceScript": "This report analyses how nearby obstructions shade the array.",
+      "captionText": "This report analyses how nearby obstructions shade the array.",
+      "targetSelector": ".report-title, svg, canvas, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Shading",
+      "fallbackMessage": "Shading analysis: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Yield impact",
+      "description": "The energy lost to shading, month by month.",
+      "voiceScript": "The yield impact shows the energy lost to shading through the year.",
+      "captionText": "The yield impact shows the energy lost to shading through the year.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Shading",
+      "fallbackMessage": "Yield impact: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Download",
+      "description": "The shading study supports the yield guarantee.",
+      "voiceScript": "Download the shading study to support your yield guarantee.",
+      "captionText": "Download the shading study to support your yield guarantee.",
+      "targetSelector": ".btn-primary, a[href$=\".pdf\"], .no-print",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Shading",
+      "fallbackMessage": "Download: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

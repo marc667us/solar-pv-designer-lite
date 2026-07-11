@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_section_loop",
+  "pageId": "boq_section_loop",
+  "title": "BOQ Section",
+  "module": "BOQ",
+  "description": "One section's items, added from templates and priced line by line.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Section"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Section items",
+      "description": "Each line carries a description, unit, quantity and rate.",
+      "voiceScript": "This section's items are listed here, each with its unit, quantity and rate.",
+      "captionText": "This section's items are listed here, each with its unit, quantity and rate.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Section",
+      "fallbackMessage": "Section items: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Open the grid",
+      "description": "The grid is the fast way to add many items.",
+      "voiceScript": "Open the grid to add and price many items quickly.",
+      "captionText": "Open the grid to add and price many items quickly.",
+      "targetSelector": "a[href*=\"/grid\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Section",
+      "fallbackMessage": "Open the grid: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Section total",
+      "description": "The section rolls up into the floor bill.",
+      "voiceScript": "The section total rolls up into the floor bill.",
+      "captionText": "The section total rolls up into the floor bill.",
+      "targetSelector": "tfoot, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Section",
+      "fallbackMessage": "Section total: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

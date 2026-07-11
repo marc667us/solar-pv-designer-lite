@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_project_overview",
+  "pageId": "boq_project_overview",
+  "title": "BOQ Project",
+  "module": "BOQ",
+  "description": "The home of a building-services BOQ project: its buildings, cost roll-up and exports.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "BOQ project"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Project buildings",
+      "description": "Every building in this BOQ project is listed here.",
+      "voiceScript": "This is your BOQ project. Each building you add appears here with its cost.",
+      "captionText": "This is your BOQ project. Each building you add appears here with its cost.",
+      "targetSelector": ".solar-card, .card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "BOQ project",
+      "fallbackMessage": "Project buildings: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Add a building",
+      "description": "A BOQ is built building by building, floor by floor.",
+      "voiceScript": "Add a building to start pricing its floors and services.",
+      "captionText": "Add a building to start pricing its floors and services.",
+      "targetSelector": "a[href*=\"/buildings/new\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "BOQ project",
+      "fallbackMessage": "Add a building: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Cost plan and summary",
+      "description": "The roll-up totals every building and floor.",
+      "voiceScript": "The cost plan and summary roll every floor and building into one total.",
+      "captionText": "The cost plan and summary roll every floor and building into one total.",
+      "targetSelector": "a[href*=\"/cost-plan\"], a[href*=\"/summary\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "BOQ project",
+      "fallbackMessage": "Cost plan and summary: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

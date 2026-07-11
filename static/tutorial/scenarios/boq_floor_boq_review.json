@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_floor_boq_review",
+  "pageId": "boq_floor_boq_review",
+  "title": "Floor BOQ Review",
+  "module": "BOQ",
+  "description": "The compiled floor bill with a compliance check before you export it.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Floor BOQ"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "The compiled BOQ",
+      "description": "Every section's items in one priced bill.",
+      "voiceScript": "Here is the floor's compiled bill of quantities, section by section.",
+      "captionText": "Here is the floor's compiled bill of quantities, section by section.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Floor BOQ",
+      "fallbackMessage": "The compiled BOQ: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Compliance findings",
+      "description": "Missing specs, prices and suppliers are flagged.",
+      "voiceScript": "The compliance review flags any item missing a spec, price or supplier.",
+      "captionText": "The compliance review flags any item missing a spec, price or supplier.",
+      "targetSelector": ".alert, .no-print, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Floor BOQ",
+      "fallbackMessage": "Compliance findings: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Export",
+      "description": "Export the compliant floor bill.",
+      "voiceScript": "Export the floor bill once the findings are clear.",
+      "captionText": "Export the floor bill once the findings are clear.",
+      "targetSelector": "a[href$=\".xlsx\"], a[href$=\".pdf\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Floor BOQ",
+      "fallbackMessage": "Export: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

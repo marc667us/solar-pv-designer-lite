@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-capital_investment_demo",
+  "pageId": "capital_investment_demo",
+  "title": "Generation Station Demo",
+  "module": "Generation Station",
+  "description": "A ready-made utility-scale project you can explore without building one.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Demo"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "A worked example",
+      "description": "A complete Generation Station design to explore.",
+      "voiceScript": "This is a worked utility-scale example you can explore without building one.",
+      "captionText": "This is a worked utility-scale example you can explore without building one.",
+      "targetSelector": ".solar-card, .card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Demo",
+      "fallbackMessage": "A worked example: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Walk the wizard",
+      "description": "See the 14 steps on a real project.",
+      "voiceScript": "Walk the fourteen wizard steps as they appear on a real project.",
+      "captionText": "Walk the fourteen wizard steps as they appear on a real project.",
+      "targetSelector": "a[href*=\"/step\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Demo",
+      "fallbackMessage": "Walk the wizard: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Start your own",
+      "description": "When ready, create your own Generation Station.",
+      "voiceScript": "When you are ready, create your own Generation Station design.",
+      "captionText": "When you are ready, create your own Generation Station design.",
+      "targetSelector": "a[href=\"/large-scale-solar\"], a[href*=\"/new\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Demo",
+      "fallbackMessage": "Start your own: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

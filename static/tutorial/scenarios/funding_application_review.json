@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-funding_application_review",
+  "pageId": "funding_application_review",
+  "title": "Funding Application Review",
+  "module": "Funding",
+  "description": "The institution's workspace to review one applicant's project and decide.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Review"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Applicant's project",
+      "description": "The design, its reports and its numbers.",
+      "voiceScript": "Review the applicant's project: the design, its reports and its numbers.",
+      "captionText": "Review the applicant's project: the design, its reports and its numbers.",
+      "targetSelector": ".solar-card, table, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Review",
+      "fallbackMessage": "Applicant's project: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "The reports",
+      "description": "Read the engineering and financial reports before deciding.",
+      "voiceScript": "Open the reports to read the engineering and financial case.",
+      "captionText": "Open the reports to read the engineering and financial case.",
+      "targetSelector": "a[href*=\"report\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Review",
+      "fallbackMessage": "The reports: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Decide",
+      "description": "Email the applicant and record your decision.",
+      "voiceScript": "Email the applicant and record your decision in principle.",
+      "captionText": "Email the applicant and record your decision in principle.",
+      "targetSelector": ".btn-success, .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Review",
+      "fallbackMessage": "Decide: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

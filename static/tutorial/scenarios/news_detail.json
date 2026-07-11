@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-news_detail",
+  "pageId": "news_detail",
+  "title": "News Article",
+  "module": "News",
+  "description": "A single news or update post from the SolarPro feed.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Article"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "The article",
+      "description": "The full post, headline and body.",
+      "voiceScript": "This is the full news article, headline and body.",
+      "captionText": "This is the full news article, headline and body.",
+      "targetSelector": ".solar-card, article, .report-title",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Article",
+      "fallbackMessage": "The article: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Related updates",
+      "description": "More posts from the feed.",
+      "voiceScript": "Related updates link on from here so you can keep reading.",
+      "captionText": "Related updates link on from here so you can keep reading.",
+      "targetSelector": "a[href*=\"/news\"], .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Article",
+      "fallbackMessage": "Related updates: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Back to the feed",
+      "description": "The news index lists every post.",
+      "voiceScript": "Return to the news feed to see every post.",
+      "captionText": "Return to the news feed to see every post.",
+      "targetSelector": "a[href=\"/news\"], nav",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Article",
+      "fallbackMessage": "Back to the feed: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

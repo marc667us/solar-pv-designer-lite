@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_floor_summary",
+  "pageId": "boq_floor_summary",
+  "title": "Floor Summary",
+  "module": "BOQ",
+  "description": "Every section of a floor, totalled into the floor's cost.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Floor summary"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Section totals",
+      "description": "Each section's items, priced and summed.",
+      "voiceScript": "This summary totals every section on the floor.",
+      "captionText": "This summary totals every section on the floor.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Floor summary",
+      "fallbackMessage": "Section totals: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Floor total",
+      "description": "The number that rolls into the building.",
+      "voiceScript": "The floor total rolls up into the building summary.",
+      "captionText": "The floor total rolls up into the building summary.",
+      "targetSelector": ".solar-card, tfoot",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Floor summary",
+      "fallbackMessage": "Floor total: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Export",
+      "description": "The floor summary prints for the record.",
+      "voiceScript": "Export the floor summary for the record.",
+      "captionText": "Export the floor summary for the record.",
+      "targetSelector": "a[href*=\"export\"], a[href$=\".pdf\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Floor summary",
+      "fallbackMessage": "Export: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

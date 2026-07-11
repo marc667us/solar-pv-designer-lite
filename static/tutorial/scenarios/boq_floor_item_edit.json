@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_floor_item_edit",
+  "pageId": "boq_floor_item_edit",
+  "title": "Edit BOQ Item",
+  "module": "BOQ",
+  "description": "Adjust one line's description, quantity, unit and rate.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Edit item"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Item description",
+      "description": "The wording that appears on the printed bill.",
+      "voiceScript": "Edit the item description exactly as it should read on the bill.",
+      "captionText": "Edit the item description exactly as it should read on the bill.",
+      "targetSelector": "input[name*=\"desc\"], textarea, form",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Edit item",
+      "fallbackMessage": "Item description: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Quantity and rate",
+      "description": "Quantity times rate gives the line total.",
+      "voiceScript": "Set the quantity and rate. The line total is quantity times rate.",
+      "captionText": "Set the quantity and rate. The line total is quantity times rate.",
+      "targetSelector": "input[name*=\"qty\"], input[name*=\"rate\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Edit item",
+      "fallbackMessage": "Quantity and rate: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Save the line",
+      "description": "The section and floor totals update at once.",
+      "voiceScript": "Save. The section and floor totals recalculate immediately.",
+      "captionText": "Save. The section and floor totals recalculate immediately.",
+      "targetSelector": "button[type=\"submit\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Edit item",
+      "fallbackMessage": "Save the line: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

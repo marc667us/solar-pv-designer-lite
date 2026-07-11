@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-growth_public_preview",
+  "pageId": "growth_public_preview",
+  "title": "Public Proposal Preview",
+  "module": "Growth",
+  "description": "What a prospect sees when they open your shared proposal link.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Preview"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "The public view",
+      "description": "The proposal as your prospect sees it.",
+      "voiceScript": "This is exactly what your prospect sees when they open the shared link.",
+      "captionText": "This is exactly what your prospect sees when they open the shared link.",
+      "targetSelector": ".solar-card, .report-title",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Preview",
+      "fallbackMessage": "The public view: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Key numbers",
+      "description": "Savings and payback, front and centre.",
+      "voiceScript": "The key numbers, savings and payback, sit front and centre.",
+      "captionText": "The key numbers, savings and payback, sit front and centre.",
+      "targetSelector": ".kpi-card, table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Preview",
+      "fallbackMessage": "Key numbers: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Call to action",
+      "description": "The prospect can reply or request a call.",
+      "voiceScript": "The call to action lets the prospect reply or request a call.",
+      "captionText": "The call to action lets the prospect reply or request a call.",
+      "targetSelector": ".btn-primary, a[href*=\"contact\"], form",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Preview",
+      "fallbackMessage": "Call to action: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

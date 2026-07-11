@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-marketplace_product_docs_listing",
+  "pageId": "marketplace_product_docs_listing",
+  "title": "Product Documents",
+  "module": "Marketplace",
+  "description": "The datasheets, certificates and manuals attached to a marketplace product.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Product docs"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Document list",
+      "description": "Datasheets, certificates and manuals for the product.",
+      "voiceScript": "Every document attached to this product is listed here.",
+      "captionText": "Every document attached to this product is listed here.",
+      "targetSelector": "table, .solar-card, .list-group",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Product docs",
+      "fallbackMessage": "Document list: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Open a datasheet",
+      "description": "Specs you can cite in a BOQ compliance check.",
+      "voiceScript": "Open a datasheet to read the specs you cite in a compliance check.",
+      "captionText": "Open a datasheet to read the specs you cite in a compliance check.",
+      "targetSelector": "a[target=\"_blank\"], a[href*=\"doc\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Product docs",
+      "fallbackMessage": "Open a datasheet: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Back to the product",
+      "description": "Return to add the product to a BOM or RFQ.",
+      "voiceScript": "Return to the product to add it to a bill of materials or an RFQ.",
+      "captionText": "Return to the product to add it to a bill of materials or an RFQ.",
+      "targetSelector": "a[href*=\"/marketplace/product/\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Product docs",
+      "fallbackMessage": "Back to the product: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

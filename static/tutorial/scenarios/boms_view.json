@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boms_view",
+  "pageId": "boms_view",
+  "title": "Bill of Materials",
+  "module": "Marketplace",
+  "description": "A BOM's line items, priced from the marketplace, ready to become a BOQ.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "BOM"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "BOM items",
+      "description": "Each material with its quantity and marketplace price.",
+      "voiceScript": "This bill of materials lists each item with its quantity and price.",
+      "captionText": "This bill of materials lists each item with its quantity and price.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "BOM",
+      "fallbackMessage": "BOM items: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Rate build-up",
+      "description": "See how each rate is composed.",
+      "voiceScript": "Open the rate build-up to see how each unit price is composed.",
+      "captionText": "Open the rate build-up to see how each unit price is composed.",
+      "targetSelector": "a[href*=\"/rate-buildup\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "BOM",
+      "fallbackMessage": "Rate build-up: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Turn it into a BOQ",
+      "description": "The BOM feeds the priced bill of quantities.",
+      "voiceScript": "Convert the BOM into a bill of quantities for the client.",
+      "captionText": "Convert the BOM into a bill of quantities for the client.",
+      "targetSelector": "a[href*=\"/boq\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "BOM",
+      "fallbackMessage": "Turn it into a BOQ: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

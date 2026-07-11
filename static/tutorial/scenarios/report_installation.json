@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-report_installation",
+  "pageId": "report_installation",
+  "title": "Installation Report",
+  "module": "Reports",
+  "description": "The installation method, mounting and hardware for the design.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Installation"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Installation method",
+      "description": "Mounting type sets the hardware and drawings.",
+      "voiceScript": "This report sets out the installation method for the chosen mounting type.",
+      "captionText": "This report sets out the installation method for the chosen mounting type.",
+      "targetSelector": ".report-title, .solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Installation",
+      "fallbackMessage": "Installation method: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Hardware schedule",
+      "description": "Rails, clamps, posts and earthing for the array.",
+      "voiceScript": "The hardware schedule lists rails, clamps, posts and earthing.",
+      "captionText": "The hardware schedule lists rails, clamps, posts and earthing.",
+      "targetSelector": "table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Installation",
+      "fallbackMessage": "Hardware schedule: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Open the drawings",
+      "description": "The drawings show the layout to scale.",
+      "voiceScript": "Open the installation drawings to see the layout to scale.",
+      "captionText": "Open the installation drawings to see the layout to scale.",
+      "targetSelector": "a[href*=\"/drawings\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Installation",
+      "fallbackMessage": "Open the drawings: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-project_funding",
+  "pageId": "project_funding",
+  "title": "Project Funding",
+  "module": "Funding",
+  "description": "Package a design for finance and send it to a financial institution.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Funding"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Funding overview",
+      "description": "The design's cost, savings and financing need.",
+      "voiceScript": "This is the funding view for the design: its cost, savings and financing need.",
+      "captionText": "This is the funding view for the design: its cost, savings and financing need.",
+      "targetSelector": ".solar-card, .kpi-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Funding",
+      "fallbackMessage": "Funding overview: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Generate the funding package",
+      "description": "A lender-ready pack of the numbers.",
+      "voiceScript": "Generate the funding package: a lender-ready pack of the project's numbers.",
+      "captionText": "Generate the funding package: a lender-ready pack of the project's numbers.",
+      "targetSelector": ".btn-primary, a[href*=\"funding\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Funding",
+      "fallbackMessage": "Generate the funding package: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Choose an institution",
+      "description": "Send the package to a financial institution.",
+      "voiceScript": "Choose a financial institution and submit the package for review.",
+      "captionText": "Choose a financial institution and submit the package for review.",
+      "targetSelector": "select, .btn-success",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Funding",
+      "fallbackMessage": "Choose an institution: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-growth_share_composer",
+  "pageId": "growth_share_composer",
+  "title": "Share a Proposal",
+  "module": "Growth",
+  "description": "Compose the shareable link and message for a project proposal.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Share"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Compose the share",
+      "description": "A public link plus the message that frames it.",
+      "voiceScript": "Compose the share: a public link and the message that frames it.",
+      "captionText": "Compose the share: a public link and the message that frames it.",
+      "targetSelector": "form, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Share",
+      "fallbackMessage": "Compose the share: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Personal message",
+      "description": "A line to the prospect lifts the open rate.",
+      "voiceScript": "Add a personal line to the prospect. It lifts the open rate.",
+      "captionText": "Add a personal line to the prospect. It lifts the open rate.",
+      "targetSelector": "textarea, input[type=\"text\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Share",
+      "fallbackMessage": "Personal message: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Create the link",
+      "description": "The prospect opens the public preview.",
+      "voiceScript": "Create the link. The prospect opens the public proposal preview.",
+      "captionText": "Create the link. The prospect opens the public proposal preview.",
+      "targetSelector": "button[type=\"submit\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Share",
+      "fallbackMessage": "Create the link: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

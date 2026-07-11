@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-ticket_detail",
+  "pageId": "ticket_detail",
+  "title": "Support Ticket",
+  "module": "Support",
+  "description": "One support ticket: the conversation and its status.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Ticket"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "The conversation",
+      "description": "Your message and every reply, in order.",
+      "voiceScript": "This ticket shows your message and every reply in order.",
+      "captionText": "This ticket shows your message and every reply in order.",
+      "targetSelector": ".solar-card, .card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Ticket",
+      "fallbackMessage": "The conversation: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Add a reply",
+      "description": "Keep the thread going until it is resolved.",
+      "voiceScript": "Add a reply to keep the thread going until it is resolved.",
+      "captionText": "Add a reply to keep the thread going until it is resolved.",
+      "targetSelector": "textarea, input[name*=\"message\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Ticket",
+      "fallbackMessage": "Add a reply: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Status",
+      "description": "Open, pending or resolved, tracked here.",
+      "voiceScript": "The status tracks whether the ticket is open, pending or resolved.",
+      "captionText": "The status tracks whether the ticket is open, pending or resolved.",
+      "targetSelector": ".badge, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Ticket",
+      "fallbackMessage": "Status: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

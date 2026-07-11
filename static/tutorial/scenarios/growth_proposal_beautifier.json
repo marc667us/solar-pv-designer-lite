@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-growth_proposal_beautifier",
+  "pageId": "growth_proposal_beautifier",
+  "title": "Beautified Proposal",
+  "module": "Growth",
+  "description": "A polished, shareable version of the proposal for prospects.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Proposal"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Polished proposal",
+      "description": "The proposal, styled for a prospect to read.",
+      "voiceScript": "This is the proposal, styled and polished for a prospect to read.",
+      "captionText": "This is the proposal, styled and polished for a prospect to read.",
+      "targetSelector": ".solar-card, .report-title",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Proposal",
+      "fallbackMessage": "Polished proposal: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "The story",
+      "description": "System, savings and next step, laid out to persuade.",
+      "voiceScript": "It lays out the system, the savings and the next step to persuade.",
+      "captionText": "It lays out the system, the savings and the next step to persuade.",
+      "targetSelector": "table, .kpi-card, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Proposal",
+      "fallbackMessage": "The story: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Share it",
+      "description": "Send a link the prospect can open anywhere.",
+      "voiceScript": "Share a link the prospect can open on any device.",
+      "captionText": "Share a link the prospect can open on any device.",
+      "targetSelector": ".btn-primary, a[href*=\"/s/\"], a[href*=\"/share/\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Proposal",
+      "fallbackMessage": "Share it: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

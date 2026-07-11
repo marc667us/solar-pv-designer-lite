@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-report_installation_drawings",
+  "pageId": "report_installation_drawings",
+  "title": "Installation Drawings",
+  "module": "Reports",
+  "description": "Scaled layout and mounting drawings for the installation crew.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Drawings"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Layout drawing",
+      "description": "The array laid out to scale on the roof or ground.",
+      "voiceScript": "This drawing lays the array out to scale for the installation crew.",
+      "captionText": "This drawing lays the array out to scale for the installation crew.",
+      "targetSelector": "svg, canvas, .report-title, img",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Drawings",
+      "fallbackMessage": "Layout drawing: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Mounting detail",
+      "description": "Fixings and footings suited to the mounting type.",
+      "voiceScript": "The mounting detail shows the fixings and footings for this mounting type.",
+      "captionText": "The mounting detail shows the fixings and footings for this mounting type.",
+      "targetSelector": "svg, canvas, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Drawings",
+      "fallbackMessage": "Mounting detail: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Print to scale",
+      "description": "The crew works from the printed sheet.",
+      "voiceScript": "Print the drawings to scale for the crew on site.",
+      "captionText": "Print the drawings to scale for the crew on site.",
+      "targetSelector": ".btn-primary, .no-print",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Drawings",
+      "fallbackMessage": "Print to scale: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_project_edit",
+  "pageId": "boq_project_edit",
+  "title": "Edit BOQ Project",
+  "module": "BOQ",
+  "description": "Rename the project, change its client and currency, then save.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Edit project"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Project details",
+      "description": "Name, client and currency drive every printed deliverable.",
+      "voiceScript": "Edit the project name, client and currency here.",
+      "captionText": "Edit the project name, client and currency here.",
+      "targetSelector": "form, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Edit project",
+      "fallbackMessage": "Project details: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Currency",
+      "description": "The currency shows on every bill and export.",
+      "voiceScript": "The currency you set flows onto every bill of quantities and export.",
+      "captionText": "The currency you set flows onto every bill of quantities and export.",
+      "targetSelector": "select[name*=\"currency\"], input[name*=\"currency\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Edit project",
+      "fallbackMessage": "Currency: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Save changes",
+      "description": "Saved details apply across the whole project.",
+      "voiceScript": "Save. Your changes apply across the whole project immediately.",
+      "captionText": "Save. Your changes apply across the whole project immediately.",
+      "targetSelector": "button[type=\"submit\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Edit project",
+      "fallbackMessage": "Save changes: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

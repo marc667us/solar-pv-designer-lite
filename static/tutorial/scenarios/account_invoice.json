@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-account_invoice",
+  "pageId": "account_invoice",
+  "title": "Invoice",
+  "module": "Account",
+  "description": "A single billing invoice for your subscription, ready to download.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Invoice"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Invoice detail",
+      "description": "The plan, period and amount billed.",
+      "voiceScript": "This invoice shows the plan, period and amount billed.",
+      "captionText": "This invoice shows the plan, period and amount billed.",
+      "targetSelector": ".solar-card, table, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Invoice",
+      "fallbackMessage": "Invoice detail: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Billing period",
+      "description": "The dates this charge covers.",
+      "voiceScript": "The billing period shows exactly what dates this charge covers.",
+      "captionText": "The billing period shows exactly what dates this charge covers.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Invoice",
+      "fallbackMessage": "Billing period: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Download",
+      "description": "Keep the invoice for your records.",
+      "voiceScript": "Download the invoice for your accounting records.",
+      "captionText": "Download the invoice for your accounting records.",
+      "targetSelector": ".btn-primary, a[href$=\".pdf\"], .no-print",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Invoice",
+      "fallbackMessage": "Download: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

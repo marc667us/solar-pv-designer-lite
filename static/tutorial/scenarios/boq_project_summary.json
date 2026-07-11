@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_project_summary",
+  "pageId": "boq_project_summary",
+  "title": "BOQ Project Summary",
+  "module": "BOQ",
+  "description": "The campus-level roll-up: every building and floor totalled in one place.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Summary"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Campus total",
+      "description": "Every building's cost, summed for the project.",
+      "voiceScript": "This summary rolls up every building into the project total.",
+      "captionText": "This summary rolls up every building into the project total.",
+      "targetSelector": ".solar-card, table, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Summary",
+      "fallbackMessage": "Campus total: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Per-building breakdown",
+      "description": "Drill from the total into any building.",
+      "voiceScript": "Each building's contribution is listed so you can drill into it.",
+      "captionText": "Each building's contribution is listed so you can drill into it.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Summary",
+      "fallbackMessage": "Per-building breakdown: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Export",
+      "description": "The summary prints as a client-ready cost document.",
+      "voiceScript": "Export the summary as a client-ready cost document.",
+      "captionText": "Export the summary as a client-ready cost document.",
+      "targetSelector": "a[href*=\"export\"], a[href$=\".pdf\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Summary",
+      "fallbackMessage": "Export: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

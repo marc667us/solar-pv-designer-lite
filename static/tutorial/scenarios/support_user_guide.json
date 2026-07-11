@@ -1,0 +1,56 @@
+{
+  "tutorialId": "tut-support_user_guide",
+  "pageId": "support_user_guide",
+  "title": "User Guide",
+  "module": "Support",
+  "description": "The end-to-end user guide: how to run the platform, page by page.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "User guide"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "The guide",
+      "description": "How every module works, in one place.",
+      "voiceScript": "This user guide explains how every module of the platform works.",
+      "captionText": "This user guide explains how every module of the platform works.",
+      "targetSelector": ".solar-card, .report-title, article",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "User guide",
+      "fallbackMessage": "The guide: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Read it aloud",
+      "description": "The guide can be narrated by your browser.",
+      "voiceScript": "The guide can be read aloud using your browser's voice.",
+      "captionText": "The guide can be read aloud using your browser's voice.",
+      "targetSelector": ".btn-primary, .no-print, button",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "User guide",
+      "fallbackMessage": "Read it aloud: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Every page also teaches itself",
+      "description": "Help & Tutorial runs on each page.",
+      "voiceScript": "And on any page, Help and Tutorial runs a guided tour of that screen.",
+      "captionText": "And on any page, Help and Tutorial runs a guided tour of that screen.",
+      "targetSelector": ".sp-tut-launcher",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "User guide",
+      "fallbackMessage": "Every page also teaches itself: not visible on this screen yet.",
+      "dynamic": true,
+      "stepNumber": 3
+    }
+  ]
+}

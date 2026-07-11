@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-report_circuits",
+  "pageId": "report_circuits",
+  "title": "Circuit Schedule Report",
+  "module": "Reports",
+  "description": "The final-circuit schedule: every circuit, its cable, breaker and load.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Circuits"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Circuit schedule",
+      "description": "Each circuit with its cable size, breaker and load.",
+      "voiceScript": "This report schedules every final circuit with its cable, breaker and load.",
+      "captionText": "This report schedules every final circuit with its cable, breaker and load.",
+      "targetSelector": "table, .report-title, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Circuits",
+      "fallbackMessage": "Circuit schedule: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Cable and protection",
+      "description": "Sized from the design's loads and lengths.",
+      "voiceScript": "Cable sizes and protection are sized from the design's loads and runs.",
+      "captionText": "Cable sizes and protection are sized from the design's loads and runs.",
+      "targetSelector": "table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Circuits",
+      "fallbackMessage": "Cable and protection: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Print or download",
+      "description": "The schedule prints as a signed-off document.",
+      "voiceScript": "Print or download the circuit schedule for the installation file.",
+      "captionText": "Print or download the circuit schedule for the installation file.",
+      "targetSelector": ".btn-primary, a[href$=\".pdf\"], .no-print",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Circuits",
+      "fallbackMessage": "Print or download: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-folder_detail",
+  "pageId": "folder_detail",
+  "title": "Folder",
+  "module": "Projects",
+  "description": "One folder's projects, grouped so you can find related designs fast.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Folder"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Folder contents",
+      "description": "Every project filed in this folder.",
+      "voiceScript": "This folder groups related designs so you can find them fast.",
+      "captionText": "This folder groups related designs so you can find them fast.",
+      "targetSelector": ".solar-card, table, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Folder",
+      "fallbackMessage": "Folder contents: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Open a project",
+      "description": "Jump straight into any design.",
+      "voiceScript": "Open any project to jump straight into its design.",
+      "captionText": "Open any project to jump straight into its design.",
+      "targetSelector": "a[href*=\"/project/\"], .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Folder",
+      "fallbackMessage": "Open a project: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Back to all folders",
+      "description": "The folders index lists every folder.",
+      "voiceScript": "Return to the folders index to see every folder you have.",
+      "captionText": "Return to the folders index to see every folder you have.",
+      "targetSelector": "a[href*=\"/folder\"], nav",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Folder",
+      "fallbackMessage": "Back to all folders: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

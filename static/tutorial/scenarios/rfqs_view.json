@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-rfqs_view",
+  "pageId": "rfqs_view",
+  "title": "Request for Quotation",
+  "module": "Procurement",
+  "description": "One RFQ: the items sent to suppliers and the quotes coming back.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "RFQ"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "RFQ items",
+      "description": "The materials and quantities you asked suppliers to price.",
+      "voiceScript": "This RFQ lists the items and quantities you sent out for pricing.",
+      "captionText": "This RFQ lists the items and quantities you sent out for pricing.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "RFQ",
+      "fallbackMessage": "RFQ items: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Supplier responses",
+      "description": "Compare quotes as suppliers reply.",
+      "voiceScript": "Supplier responses appear here so you can compare quotes side by side.",
+      "captionText": "Supplier responses appear here so you can compare quotes side by side.",
+      "targetSelector": ".solar-card, table, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "RFQ",
+      "fallbackMessage": "Supplier responses: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Award or add to BOQ",
+      "description": "Turn the best quote into a purchase.",
+      "voiceScript": "Take the best quote onto your bill of quantities or procurement list.",
+      "captionText": "Take the best quote onto your bill of quantities or procurement list.",
+      "targetSelector": ".btn-primary, .btn-success",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "RFQ",
+      "fallbackMessage": "Award or add to BOQ: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

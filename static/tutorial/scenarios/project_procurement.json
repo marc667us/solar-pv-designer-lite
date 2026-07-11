@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-project_procurement",
+  "pageId": "project_procurement",
+  "title": "Project Procurement",
+  "module": "Procurement",
+  "description": "Turn a design's bill of materials into a buying list and supplier RFQs.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Procurement"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Procurement list",
+      "description": "Every material the design needs to be built.",
+      "voiceScript": "This is the procurement list: every material the design needs.",
+      "captionText": "This is the procurement list: every material the design needs.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Procurement",
+      "fallbackMessage": "Procurement list: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Add to RFQ",
+      "description": "Send items to suppliers to price.",
+      "voiceScript": "Add items to an RFQ to send them to suppliers for pricing.",
+      "captionText": "Add items to an RFQ to send them to suppliers for pricing.",
+      "targetSelector": ".btn-primary, a[href*=\"rfq\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Procurement",
+      "fallbackMessage": "Add to RFQ: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Track the buy",
+      "description": "Follow items from quote to order.",
+      "voiceScript": "Track each item from quote through to order.",
+      "captionText": "Track each item from quote through to order.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Procurement",
+      "fallbackMessage": "Track the buy: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

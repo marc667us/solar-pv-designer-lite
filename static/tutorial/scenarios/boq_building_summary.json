@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_building_summary",
+  "pageId": "boq_building_summary",
+  "title": "Building Summary",
+  "module": "BOQ",
+  "description": "Every floor of a building, totalled into the building's cost.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Building summary"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Floor totals",
+      "description": "Each floor's priced bills, summed.",
+      "voiceScript": "This summary totals every floor of the building.",
+      "captionText": "This summary totals every floor of the building.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Building summary",
+      "fallbackMessage": "Floor totals: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Building total",
+      "description": "The figure that feeds the project roll-up.",
+      "voiceScript": "The building total feeds straight into the project cost plan.",
+      "captionText": "The building total feeds straight into the project cost plan.",
+      "targetSelector": ".solar-card, tfoot, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Building summary",
+      "fallbackMessage": "Building total: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Export",
+      "description": "The building summary prints for the file.",
+      "voiceScript": "Export the building summary for your project file.",
+      "captionText": "Export the building summary for your project file.",
+      "targetSelector": "a[href*=\"export\"], a[href$=\".pdf\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Building summary",
+      "fallbackMessage": "Export: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

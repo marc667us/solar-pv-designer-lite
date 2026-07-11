@@ -1,0 +1,56 @@
+{
+  "tutorialId": "tut-boq_building_new",
+  "pageId": "boq_building_new",
+  "title": "Add a Building",
+  "module": "BOQ",
+  "description": "Name the building and set its floors so its bills can be raised.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "New building"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Building name",
+      "description": "Each building is priced on its own.",
+      "voiceScript": "Name the building. Each building is priced separately.",
+      "captionText": "Name the building. Each building is priced separately.",
+      "targetSelector": "input[name=\"name\"], form input[type=\"text\"]",
+      "action": "typeText",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New building",
+      "fallbackMessage": "Building name: not visible on this screen yet.",
+      "typeText": "Block A",
+      "stepNumber": 1
+    },
+    {
+      "title": "Floors",
+      "description": "Floors carry the service bills you will price.",
+      "voiceScript": "Set the floors. Each floor carries the service bills you will price.",
+      "captionText": "Set the floors. Each floor carries the service bills you will price.",
+      "targetSelector": "input[name*=\"floor\"], form",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New building",
+      "fallbackMessage": "Floors: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Create the building",
+      "description": "The next screen lets you add its floors and bills.",
+      "voiceScript": "Create the building, then add its floors and service bills.",
+      "captionText": "Create the building, then add its floors and service bills.",
+      "targetSelector": "button[type=\"submit\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New building",
+      "fallbackMessage": "Create the building: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_section_grid",
+  "pageId": "boq_section_grid",
+  "title": "BOQ Section Grid",
+  "module": "BOQ",
+  "description": "A spreadsheet-style grid to add, quantify and rate a section's items fast.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Grid"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "The grid",
+      "description": "Rows are items; columns are unit, quantity and rate.",
+      "voiceScript": "This grid is the fast surface for a section: rows are items, columns price them.",
+      "captionText": "This grid is the fast surface for a section: rows are items, columns price them.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Grid",
+      "fallbackMessage": "The grid: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Fill quantities and rates",
+      "description": "Line totals compute as you type.",
+      "voiceScript": "Fill in quantities and rates. Each line total computes as you type.",
+      "captionText": "Fill in quantities and rates. Each line total computes as you type.",
+      "targetSelector": "input[type=\"number\"], td input",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Grid",
+      "fallbackMessage": "Fill quantities and rates: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Save the grid",
+      "description": "The section and floor totals update together.",
+      "voiceScript": "Save the grid. The section and floor totals update together.",
+      "captionText": "Save the grid. The section and floor totals update together.",
+      "targetSelector": "button[type=\"submit\"], .btn-primary, .btn-success",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Grid",
+      "fallbackMessage": "Save the grid: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_cost_plan",
+  "pageId": "boq_cost_plan",
+  "title": "Cost Plan",
+  "module": "BOQ",
+  "description": "An elemental cost plan: the project's spend grouped by building and bill.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Cost plan"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Elemental cost plan",
+      "description": "Spend grouped by building, floor and bill.",
+      "voiceScript": "The cost plan groups the project's spend by building, floor and bill.",
+      "captionText": "The cost plan groups the project's spend by building, floor and bill.",
+      "targetSelector": "table, .solar-card, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Cost plan",
+      "fallbackMessage": "Elemental cost plan: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Building contributions",
+      "description": "See which building drives the cost.",
+      "voiceScript": "Each building's share of the cost is shown so you can see the cost drivers.",
+      "captionText": "Each building's share of the cost is shown so you can see the cost drivers.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Cost plan",
+      "fallbackMessage": "Building contributions: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Export the deck",
+      "description": "The cost plan prints as a decision deck.",
+      "voiceScript": "Export the cost plan as a decision-ready deck.",
+      "captionText": "Export the cost plan as a decision-ready deck.",
+      "targetSelector": "a[href*=\"export\"], a[href$=\".pdf\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Cost plan",
+      "fallbackMessage": "Export the deck: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

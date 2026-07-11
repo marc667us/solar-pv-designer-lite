@@ -506,6 +506,456 @@
         "Support"
       ],
       "estimatedDuration": 5
+    },
+    {
+      "pageId": "boq_project_overview",
+      "title": "BOQ Project",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "BOQ project"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_project_edit",
+      "title": "Edit BOQ Project",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "Edit project"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_project_summary",
+      "title": "BOQ Project Summary",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "Summary"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_project_boq",
+      "title": "Project BOQ",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "Project BOQ"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_cost_plan",
+      "title": "Cost Plan",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "Cost plan"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_building_new",
+      "title": "Add a Building",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "New building"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_building_view",
+      "title": "Building",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "Building"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_building_summary",
+      "title": "Building Summary",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "Building summary"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_floor_view",
+      "title": "Floor",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "Floor"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_floor_summary",
+      "title": "Floor Summary",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "Floor summary"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_floor_boq_review",
+      "title": "Floor BOQ Review",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "Floor BOQ"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_floor_item_edit",
+      "title": "Edit BOQ Item",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "Edit item"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_section_setup",
+      "title": "New BOQ Section",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "New section"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_section_loop",
+      "title": "BOQ Section",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "Section"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boq_section_grid",
+      "title": "BOQ Section Grid",
+      "module": "BOQ",
+      "steps": 3,
+      "screens": [
+        "Grid"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boms_view",
+      "title": "Bill of Materials",
+      "module": "Marketplace",
+      "steps": 3,
+      "screens": [
+        "BOM"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boms_rate_buildup",
+      "title": "Rate Build-Up",
+      "module": "Marketplace",
+      "steps": 3,
+      "screens": [
+        "Rate build-up"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "boms_basic_prices",
+      "title": "Basic Prices",
+      "module": "Marketplace",
+      "steps": 3,
+      "screens": [
+        "Basic prices"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "marketplace_product_docs_listing",
+      "title": "Product Documents",
+      "module": "Marketplace",
+      "steps": 3,
+      "screens": [
+        "Product docs"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "rfqs_view",
+      "title": "Request for Quotation",
+      "module": "Procurement",
+      "steps": 3,
+      "screens": [
+        "RFQ"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "supplier_products",
+      "title": "My Products",
+      "module": "Supplier",
+      "steps": 3,
+      "screens": [
+        "My products"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "supplier_product_edit",
+      "title": "Edit Product",
+      "module": "Supplier",
+      "steps": 3,
+      "screens": [
+        "Edit product"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "supplier_upload",
+      "title": "Upload Products",
+      "module": "Supplier",
+      "steps": 3,
+      "screens": [
+        "Upload"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "supplier_register",
+      "title": "Become a Supplier",
+      "module": "Supplier",
+      "steps": 3,
+      "screens": [
+        "Register"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "supplier_rfqs_respond",
+      "title": "Respond to an RFQ",
+      "module": "Supplier",
+      "steps": 3,
+      "screens": [
+        "Respond"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "report_circuits",
+      "title": "Circuit Schedule Report",
+      "module": "Reports",
+      "steps": 3,
+      "screens": [
+        "Circuits"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "report_inspection",
+      "title": "Inspection Report",
+      "module": "Reports",
+      "steps": 3,
+      "screens": [
+        "Inspection"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "report_installation",
+      "title": "Installation Report",
+      "module": "Reports",
+      "steps": 3,
+      "screens": [
+        "Installation"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "report_installation_drawings",
+      "title": "Installation Drawings",
+      "module": "Reports",
+      "steps": 3,
+      "screens": [
+        "Drawings"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "report_proposal",
+      "title": "Proposal Report",
+      "module": "Reports",
+      "steps": 3,
+      "screens": [
+        "Proposal"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "report_shading",
+      "title": "Shading Report",
+      "module": "Reports",
+      "steps": 3,
+      "screens": [
+        "Shading"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "inspection_form",
+      "title": "Site Inspection",
+      "module": "Solar Design",
+      "steps": 3,
+      "screens": [
+        "Inspection"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "project_funding",
+      "title": "Project Funding",
+      "module": "Funding",
+      "steps": 3,
+      "screens": [
+        "Funding"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "project_procurement",
+      "title": "Project Procurement",
+      "module": "Procurement",
+      "steps": 3,
+      "screens": [
+        "Procurement"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "funding_application_review",
+      "title": "Funding Application Review",
+      "module": "Funding",
+      "steps": 3,
+      "screens": [
+        "Review"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "growth_proposal_beautifier",
+      "title": "Beautified Proposal",
+      "module": "Growth",
+      "steps": 3,
+      "screens": [
+        "Proposal"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "growth_public_preview",
+      "title": "Public Proposal Preview",
+      "module": "Growth",
+      "steps": 3,
+      "screens": [
+        "Preview"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "growth_share_composer",
+      "title": "Share a Proposal",
+      "module": "Growth",
+      "steps": 3,
+      "screens": [
+        "Share"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "account_invoice",
+      "title": "Invoice",
+      "module": "Account",
+      "steps": 3,
+      "screens": [
+        "Invoice"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "folder_detail",
+      "title": "Folder",
+      "module": "Projects",
+      "steps": 3,
+      "screens": [
+        "Folder"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "news_detail",
+      "title": "News Article",
+      "module": "News",
+      "steps": 3,
+      "screens": [
+        "Article"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "ticket_detail",
+      "title": "Support Ticket",
+      "module": "Support",
+      "steps": 3,
+      "screens": [
+        "Ticket"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "upgrade_success",
+      "title": "Upgrade Complete",
+      "module": "Account",
+      "steps": 3,
+      "screens": [
+        "Success"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "support_user_guide",
+      "title": "User Guide",
+      "module": "Support",
+      "steps": 3,
+      "screens": [
+        "User guide"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "capital_investment_demo",
+      "title": "Generation Station Demo",
+      "module": "Generation Station",
+      "steps": 3,
+      "screens": [
+        "Demo"
+      ],
+      "estimatedDuration": 4
     }
   ]
 }

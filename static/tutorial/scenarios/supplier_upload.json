@@ -1,0 +1,56 @@
+{
+  "tutorialId": "tut-supplier_upload",
+  "pageId": "supplier_upload",
+  "title": "Upload Products",
+  "module": "Supplier",
+  "description": "Add products one by one, or bulk-upload a spreadsheet, into your catalogue.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Upload"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Category and subcategory",
+      "description": "The category decides the required spec fields.",
+      "voiceScript": "Pick the category and subcategory. They set the required spec fields.",
+      "captionText": "Pick the category and subcategory. They set the required spec fields.",
+      "targetSelector": "select[name*=\"cat\"], form",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Upload",
+      "fallbackMessage": "Category and subcategory: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Product details",
+      "description": "Name, price, unit and specs make a complete listing.",
+      "voiceScript": "Enter the product name, price, unit and specs for a complete listing.",
+      "captionText": "Enter the product name, price, unit and specs for a complete listing.",
+      "targetSelector": "input[name*=\"name\"], form input[type=\"text\"]",
+      "action": "typeText",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Upload",
+      "fallbackMessage": "Product details: not visible on this screen yet.",
+      "typeText": "LV Cable 4mm2",
+      "stepNumber": 2
+    },
+    {
+      "title": "Publish to the catalogue",
+      "description": "Published products enter buyer searches.",
+      "voiceScript": "Publish. The product enters buyer searches and RFQs.",
+      "captionText": "Publish. The product enters buyer searches and RFQs.",
+      "targetSelector": "button[type=\"submit\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Upload",
+      "fallbackMessage": "Publish to the catalogue: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

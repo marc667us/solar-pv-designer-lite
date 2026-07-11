@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boms_basic_prices",
+  "pageId": "boms_basic_prices",
+  "title": "Basic Prices",
+  "module": "Marketplace",
+  "description": "The base material prices behind the BOM, sourced from the marketplace.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Basic prices"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Base prices",
+      "description": "The raw material cost before labour and markup.",
+      "voiceScript": "These are the base material prices behind the bill, before labour and markup.",
+      "captionText": "These are the base material prices behind the bill, before labour and markup.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Basic prices",
+      "fallbackMessage": "Base prices: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Source from the marketplace",
+      "description": "Live supplier prices keep the BOM current.",
+      "voiceScript": "Prices are sourced from the marketplace so the bill stays current.",
+      "captionText": "Prices are sourced from the marketplace so the bill stays current.",
+      "targetSelector": "a[href*=\"/marketplace\"], .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Basic prices",
+      "fallbackMessage": "Source from the marketplace: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Feed the rate build-up",
+      "description": "Base prices are the first layer of every rate.",
+      "voiceScript": "The base prices become the first layer of every rate build-up.",
+      "captionText": "The base prices become the first layer of every rate build-up.",
+      "targetSelector": "a[href*=\"/rate-buildup\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Basic prices",
+      "fallbackMessage": "Feed the rate build-up: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "tutorialId": "tut-supplier_register",
+  "pageId": "supplier_register",
+  "title": "Become a Supplier",
+  "module": "Supplier",
+  "description": "Register a supplier account to list products and receive RFQs.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Register"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Company details",
+      "description": "Buyers see your company name and contact.",
+      "voiceScript": "Start with your company name and contact details.",
+      "captionText": "Start with your company name and contact details.",
+      "targetSelector": "input[name*=\"company\"], input[name=\"name\"], form",
+      "action": "typeText",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Register",
+      "fallbackMessage": "Company details: not visible on this screen yet.",
+      "typeText": "Accra Solar Supplies",
+      "stepNumber": 1
+    },
+    {
+      "title": "Contact and coverage",
+      "description": "Where you supply decides which buyers see you.",
+      "voiceScript": "Set your contact and the regions you supply. It decides which buyers see you.",
+      "captionText": "Set your contact and the regions you supply. It decides which buyers see you.",
+      "targetSelector": "input[name*=\"email\"], input[name*=\"phone\"], select",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Register",
+      "fallbackMessage": "Contact and coverage: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Create the account",
+      "description": "You then reach your supplier dashboard.",
+      "voiceScript": "Create the account to reach your supplier dashboard and list products.",
+      "captionText": "Create the account to reach your supplier dashboard and list products.",
+      "targetSelector": "button[type=\"submit\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Register",
+      "fallbackMessage": "Create the account: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

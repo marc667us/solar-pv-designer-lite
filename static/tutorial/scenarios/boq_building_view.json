@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_building_view",
+  "pageId": "boq_building_view",
+  "title": "Building",
+  "module": "BOQ",
+  "description": "A building's floors, each with its own set of priced service bills.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Building"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Floors",
+      "description": "Every floor of this building is listed here.",
+      "voiceScript": "This building's floors are listed here, each priced on its own.",
+      "captionText": "This building's floors are listed here, each priced on its own.",
+      "targetSelector": ".solar-card, .card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Building",
+      "fallbackMessage": "Floors: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Open a floor",
+      "description": "A floor holds the bills for each service.",
+      "voiceScript": "Open a floor to raise and price its service bills.",
+      "captionText": "Open a floor to raise and price its service bills.",
+      "targetSelector": "a[href*=\"/floors/\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Building",
+      "fallbackMessage": "Open a floor: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Building summary",
+      "description": "The floors roll up into a building total.",
+      "voiceScript": "The building summary rolls every floor into one total.",
+      "captionText": "The building summary rolls every floor into one total.",
+      "targetSelector": "a[href*=\"/summary\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Building",
+      "fallbackMessage": "Building summary: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

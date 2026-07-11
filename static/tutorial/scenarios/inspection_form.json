@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-inspection_form",
+  "pageId": "inspection_form",
+  "title": "Site Inspection",
+  "module": "Solar Design",
+  "description": "Capture the on-site inspection that grounds the design in real conditions.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Inspection"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Site checks",
+      "description": "Roof, orientation, shading and electrical intake.",
+      "voiceScript": "Record the site checks: roof, orientation, shading and electrical intake.",
+      "captionText": "Record the site checks: roof, orientation, shading and electrical intake.",
+      "targetSelector": "form, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Inspection",
+      "fallbackMessage": "Site checks: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Photos and notes",
+      "description": "Evidence the design and the client can rely on.",
+      "voiceScript": "Attach photos and notes as evidence for the design and the client.",
+      "captionText": "Attach photos and notes as evidence for the design and the client.",
+      "targetSelector": "input[type=\"file\"], textarea",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Inspection",
+      "fallbackMessage": "Photos and notes: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Save the inspection",
+      "description": "It feeds the inspection report.",
+      "voiceScript": "Save the inspection. It feeds straight into the inspection report.",
+      "captionText": "Save the inspection. It feeds straight into the inspection report.",
+      "targetSelector": "button[type=\"submit\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Inspection",
+      "fallbackMessage": "Save the inspection: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

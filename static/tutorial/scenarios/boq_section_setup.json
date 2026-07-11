@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_section_setup",
+  "pageId": "boq_section_setup",
+  "title": "New BOQ Section",
+  "module": "BOQ",
+  "description": "Create a section under a floor's bill to group related items.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "New section"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Section letter and name",
+      "description": "Sections are lettered A, B, C within a bill.",
+      "voiceScript": "Give the section its letter and name. Sections are lettered within a bill.",
+      "captionText": "Give the section its letter and name. Sections are lettered within a bill.",
+      "targetSelector": "input[name*=\"section\"], input[name*=\"letter\"], form",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New section",
+      "fallbackMessage": "Section letter and name: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Service",
+      "description": "The service decides which template items are offered.",
+      "voiceScript": "Choose the service. It decides which template items you can add.",
+      "captionText": "Choose the service. It decides which template items you can add.",
+      "targetSelector": "select, input[name*=\"service\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New section",
+      "fallbackMessage": "Service: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Create the section",
+      "description": "The grid then lets you add and price items.",
+      "voiceScript": "Create the section, then add and price its items in the grid.",
+      "captionText": "Create the section, then add and price its items in the grid.",
+      "targetSelector": "button[type=\"submit\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New section",
+      "fallbackMessage": "Create the section: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-supplier_product_edit",
+  "pageId": "supplier_product_edit",
+  "title": "Edit Product",
+  "module": "Supplier",
+  "description": "Update one product's price, specs and documents so buyers see it correctly.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Edit product"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Price and specs",
+      "description": "The fields buyers filter and compare on.",
+      "voiceScript": "Update the price and the technical specs buyers filter and compare on.",
+      "captionText": "Update the price and the technical specs buyers filter and compare on.",
+      "targetSelector": "form, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Edit product",
+      "fallbackMessage": "Price and specs: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Required spec fields",
+      "description": "A complete spec passes the BOQ compliance check.",
+      "voiceScript": "Fill the required spec fields so the product passes buyers' compliance checks.",
+      "captionText": "Fill the required spec fields so the product passes buyers' compliance checks.",
+      "targetSelector": "input, select, textarea",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Edit product",
+      "fallbackMessage": "Required spec fields: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Save the listing",
+      "description": "Buyers see the update immediately.",
+      "voiceScript": "Save. Buyers see the updated listing immediately.",
+      "captionText": "Save. Buyers see the updated listing immediately.",
+      "targetSelector": "button[type=\"submit\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Edit product",
+      "fallbackMessage": "Save the listing: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

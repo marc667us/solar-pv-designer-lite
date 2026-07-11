@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-report_proposal",
+  "pageId": "report_proposal",
+  "title": "Proposal Report",
+  "module": "Reports",
+  "description": "The client-facing proposal: system, savings and price in one document.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Proposal"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "The proposal",
+      "description": "System summary, savings and price for the client.",
+      "voiceScript": "This is the client proposal: the system, its savings and its price.",
+      "captionText": "This is the client proposal: the system, its savings and its price.",
+      "targetSelector": ".report-title, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Proposal",
+      "fallbackMessage": "The proposal: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Savings and payback",
+      "description": "The numbers that win the decision.",
+      "voiceScript": "The savings and payback figures are the numbers that win the decision.",
+      "captionText": "The savings and payback figures are the numbers that win the decision.",
+      "targetSelector": "table, .kpi-card, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Proposal",
+      "fallbackMessage": "Savings and payback: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Send or download",
+      "description": "Deliver the proposal to your client.",
+      "voiceScript": "Download or send the proposal straight to your client.",
+      "captionText": "Download or send the proposal straight to your client.",
+      "targetSelector": ".btn-primary, a[href$=\".pdf\"], .no-print",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Proposal",
+      "fallbackMessage": "Send or download: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

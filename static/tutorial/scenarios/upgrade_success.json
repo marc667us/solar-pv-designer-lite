@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-upgrade_success",
+  "pageId": "upgrade_success",
+  "title": "Upgrade Complete",
+  "module": "Account",
+  "description": "Confirmation that your plan upgrade went through, and what unlocks next.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Success"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Payment confirmed",
+      "description": "Your upgrade is active on the account.",
+      "voiceScript": "Your payment is confirmed and the upgrade is active on your account.",
+      "captionText": "Your payment is confirmed and the upgrade is active on your account.",
+      "targetSelector": ".solar-card, .alert-success, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Success",
+      "fallbackMessage": "Payment confirmed: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "What unlocks",
+      "description": "The features your new plan opens up.",
+      "voiceScript": "Here is what your new plan unlocks across the platform.",
+      "captionText": "Here is what your new plan unlocks across the platform.",
+      "targetSelector": ".solar-card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Success",
+      "fallbackMessage": "What unlocks: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Start using it",
+      "description": "Head to the dashboard and put it to work.",
+      "voiceScript": "Head back to the dashboard and put the new plan to work.",
+      "captionText": "Head back to the dashboard and put the new plan to work.",
+      "targetSelector": "a[href=\"/dashboard\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Success",
+      "fallbackMessage": "Start using it: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

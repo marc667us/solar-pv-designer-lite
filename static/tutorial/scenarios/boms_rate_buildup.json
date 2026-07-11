@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boms_rate_buildup",
+  "pageId": "boms_rate_buildup",
+  "title": "Rate Build-Up",
+  "module": "Marketplace",
+  "description": "How each unit rate is composed: material, labour, overhead and markup.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Rate build-up"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Rate components",
+      "description": "Material, labour, overhead and margin per unit.",
+      "voiceScript": "Each rate is built from material, labour, overhead and margin.",
+      "captionText": "Each rate is built from material, labour, overhead and margin.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Rate build-up",
+      "fallbackMessage": "Rate components: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Adjust the markup",
+      "description": "The markup sets your selling rate.",
+      "voiceScript": "Adjust the markup to set your selling rate over cost.",
+      "captionText": "Adjust the markup to set your selling rate over cost.",
+      "targetSelector": "input[name*=\"markup\"], input[type=\"number\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Rate build-up",
+      "fallbackMessage": "Adjust the markup: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Apply the rates",
+      "description": "The composed rates flow onto the BOM and BOQ.",
+      "voiceScript": "Apply the rates. They flow onto the bill of materials and the BOQ.",
+      "captionText": "Apply the rates. They flow onto the bill of materials and the BOQ.",
+      "targetSelector": "button[type=\"submit\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Rate build-up",
+      "fallbackMessage": "Apply the rates: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

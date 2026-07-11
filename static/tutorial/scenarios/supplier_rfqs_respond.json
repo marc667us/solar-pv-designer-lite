@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-supplier_rfqs_respond",
+  "pageId": "supplier_rfqs_respond",
+  "title": "Respond to an RFQ",
+  "module": "Supplier",
+  "description": "Price a buyer's RFQ line by line and send your quote back.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Respond"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "The buyer's items",
+      "description": "What the buyer asked you to price, with quantities.",
+      "voiceScript": "This RFQ shows exactly what the buyer asked you to price.",
+      "captionText": "This RFQ shows exactly what the buyer asked you to price.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Respond",
+      "fallbackMessage": "The buyer's items: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Enter your prices",
+      "description": "Your unit prices become the quote the buyer compares.",
+      "voiceScript": "Enter your unit prices. They become the quote the buyer compares.",
+      "captionText": "Enter your unit prices. They become the quote the buyer compares.",
+      "targetSelector": "input[type=\"number\"], td input",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Respond",
+      "fallbackMessage": "Enter your prices: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Send the quote",
+      "description": "The buyer sees your response in their RFQ.",
+      "voiceScript": "Send the quote. It appears in the buyer's RFQ immediately.",
+      "captionText": "Send the quote. It appears in the buyer's RFQ immediately.",
+      "targetSelector": "button[type=\"submit\"], .btn-success, .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Respond",
+      "fallbackMessage": "Send the quote: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

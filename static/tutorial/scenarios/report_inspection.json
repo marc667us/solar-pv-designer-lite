@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-report_inspection",
+  "pageId": "report_inspection",
+  "title": "Inspection Report",
+  "module": "Reports",
+  "description": "The commissioning inspection record for the installed system.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Inspection"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Inspection record",
+      "description": "The checks carried out at commissioning.",
+      "voiceScript": "This report records the inspection checks carried out at commissioning.",
+      "captionText": "This report records the inspection checks carried out at commissioning.",
+      "targetSelector": ".report-title, table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Inspection",
+      "fallbackMessage": "Inspection record: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Results and notes",
+      "description": "Pass, fail and remedial notes per check.",
+      "voiceScript": "Each check carries its result and any remedial note.",
+      "captionText": "Each check carries its result and any remedial note.",
+      "targetSelector": "table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Inspection",
+      "fallbackMessage": "Results and notes: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Download",
+      "description": "The signed inspection report goes in the handover pack.",
+      "voiceScript": "Download the inspection report for the handover pack.",
+      "captionText": "Download the inspection report for the handover pack.",
+      "targetSelector": ".btn-primary, a[href$=\".pdf\"], .no-print",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Inspection",
+      "fallbackMessage": "Download: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

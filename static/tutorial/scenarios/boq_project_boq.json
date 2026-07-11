@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-boq_project_boq",
+  "pageId": "boq_project_boq",
+  "title": "Project BOQ",
+  "module": "BOQ",
+  "description": "The consolidated bill of quantities for the whole project, ready to export.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Project BOQ"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Consolidated BOQ",
+      "description": "Every priced item across every building and floor.",
+      "voiceScript": "This is the consolidated bill of quantities for the whole project.",
+      "captionText": "This is the consolidated bill of quantities for the whole project.",
+      "targetSelector": "table, .solar-card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Project BOQ",
+      "fallbackMessage": "Consolidated BOQ: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Compliance review",
+      "description": "Missing spec fields and prices are flagged.",
+      "voiceScript": "The compliance panel flags any item missing a spec field, price or supplier.",
+      "captionText": "The compliance panel flags any item missing a spec field, price or supplier.",
+      "targetSelector": ".alert, .no-print, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Project BOQ",
+      "fallbackMessage": "Compliance review: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Export to Excel or PDF",
+      "description": "The deliverable your client and QS receive.",
+      "voiceScript": "Export the BOQ to Excel or PDF for your client and quantity surveyor.",
+      "captionText": "Export the BOQ to Excel or PDF for your client and quantity surveyor.",
+      "targetSelector": "a[href$=\".xlsx\"], a[href$=\".pdf\"], .btn-primary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Project BOQ",
+      "fallbackMessage": "Export to Excel or PDF: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}
