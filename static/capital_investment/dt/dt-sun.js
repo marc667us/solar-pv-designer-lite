@@ -82,6 +82,10 @@
     if (t.ambientLight) t.ambientLight.intensity = day ? 0.08 : 0.12;
     if (t.hemiLight) t.hemiLight.intensity = day ? 0.16 : 0.22;
     if (t.scene) {
+      // The daylight env map carries a bright sun disc; reflecting it after dark
+      // would glint a sun that isn't in the sky. Drop env reflections at night so
+      // glass/metal go correctly dark (Codex fix).
+      t.scene.environment = day ? (t.envDayMap || t.scene.environment) : null;
       // Keep the atmospheric gradient sky on daytime updates (the old code
       // flattened it to a single pale blue every tick, which washed the whole
       // scene into a "white board"). Only night swaps to a dark flat sky.

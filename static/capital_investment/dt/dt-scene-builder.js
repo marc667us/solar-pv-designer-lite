@@ -13,6 +13,7 @@
 (function () {
   'use strict';
   var DT = window.DT = window.DT || {};
+  var _sceneryMats = null;   // trunk/canopy materials, created once + reused
 
   function group(layer) {
     var t = DT.three;
@@ -415,11 +416,17 @@
     // Trees: two instanced meshes (trunk + canopy) scattered in a ring just
     // outside the fence line.
     var N = 96, d = new THREE.Object3D();
-    var trunkMat = new THREE.MeshStandardMaterial({ color: '#6b4a2b', roughness: 1 });
-    // Rounded, smooth-shaded canopies (subdivided, no flatShading) read as trees
-    // instead of the faceted crystals the low-poly icosahedron produced -- the
-    // faceted blobs were pulling the scene toward the cartoon look.
-    var canopyMat = new THREE.MeshStandardMaterial({ color: '#3f6b2e', roughness: 0.95 });
+    // Scenery materials are created ONCE and reused across rebuilds. disposeGroup
+    // disposes geometries but deliberately leaves shared materials alone, so
+    // creating these per-build (as before) leaked a material + WebGL program on
+    // every parameter/object rebuild (Codex fix). Rounded smooth-shaded canopies
+    // (no flatShading) read as trees, not the faceted crystals the low-poly
+    // icosahedron produced.
+    if (!_sceneryMats) _sceneryMats = {
+      trunk: new THREE.MeshStandardMaterial({ color: '#6b4a2b', roughness: 1 }),
+      canopy: new THREE.MeshStandardMaterial({ color: '#3f6b2e', roughness: 0.95 })
+    };
+    var trunkMat = _sceneryMats.trunk, canopyMat = _sceneryMats.canopy;
     var trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.75, 4, 6), trunkMat, N);
     var canopies = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.4, 2), canopyMat, N);
     trunks.castShadow = canopies.castShadow = tierShadows();

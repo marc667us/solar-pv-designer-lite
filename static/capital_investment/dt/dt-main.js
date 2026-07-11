@@ -122,6 +122,7 @@
         var pmrem = new THREE.PMREMGenerator(t.renderer);
         pmrem.compileEquirectangularShader();
         t.scene.environment = pmrem.fromEquirectangular(eq).texture;
+        t.envDayMap = t.scene.environment;   // reused by dt-sun; nulled after dark
         eq.dispose(); pmrem.dispose();
       }
     } catch (e) { /* env map optional -- scene still renders without it */ }
