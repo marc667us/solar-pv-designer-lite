@@ -2753,6 +2753,66 @@ REPORT_TYPES: list[tuple[str, str, str, bool]] = [
 REPORT_KEYS: set[str] = {k for k, _, _, _ in REPORT_TYPES}
 FULL_REPORT_KEYS: set[str] = {k for k, _, _, full in REPORT_TYPES if full}
 
+# Per-report explanatory narrative (owner: every report must carry an executive
+# summary + explanatory narrative). Prepended, under "About this report", after a
+# shared executive-summary block -- see the tail of _build_report_markdown.
+_REPORT_NARRATIVES: dict[str, str] = {
+    "technical": "This technical report documents the engineering basis of the plant: "
+        "the PV array sizing, module and inverter selection, DC and AC architecture, "
+        "and the electrical design that underpins the yield and cost estimates. It is "
+        "the reference that every downstream report (BOQ, financials, reports) builds on.",
+    "financial": "This financial report sets out the investment case -- the capital and "
+        "operating costs, the revenue and tariff assumptions, and the resulting returns "
+        "(IRR, NPV, LCOE, payback and cash flows). It translates the engineering design "
+        "into the numbers an investor or lender needs to make a decision.",
+    "bankability": "This bankability report assesses whether the project meets the "
+        "criteria a lender applies before financing: technical soundness, contractual "
+        "and permitting readiness, revenue certainty, and the debt-service coverage that "
+        "protects the loan. It highlights the gaps that must close before financial close.",
+    "investment_memo": "This investment memorandum is the concise decision document for "
+        "the investment committee: the opportunity, the design and cost basis, the returns, "
+        "the risks and the recommended action, drawn from the detailed reports.",
+    "risk": "This risk assessment identifies the technical, financial, regulatory, "
+        "construction and operational risks to the project, rates their likelihood and "
+        "impact, and sets out the mitigations. It is the basis of the project risk register.",
+    "boq": "This bill of quantities itemises every priced element of the plant -- modules, "
+        "mounting, inverters, transformers, MV/LV, cabling, civil works and facilities -- so "
+        "the capital cost is built bottom-up and can be tendered against real supplier prices.",
+    "bom": "This bill of materials lists the physical equipment and components the design "
+        "requires, with quantities and specifications, so procurement and the marketplace "
+        "RFQ can be raised directly against it.",
+    "rfq": "This marketplace request-for-quotation packages the design's equipment needs "
+        "into a supplier-ready enquiry, so real, competitive prices can be obtained to firm "
+        "up the BOQ and the financial model.",
+    "construction_est": "This construction estimate breaks the plant into its build packages "
+        "and estimates the labour, plant and duration for each, giving the construction cost "
+        "and programme that feed the CAPEX and the implementation plan.",
+    "maintenance": "This maintenance strategy defines how the plant is kept at its designed "
+        "performance over its life: the preventive and corrective regime, spares, module "
+        "cleaning, and the resourcing that sits behind the OPEX assumptions.",
+    "monitoring": "This monitoring strategy sets out how plant performance, availability and "
+        "faults are measured and reported -- the SCADA, metering and analytics that verify "
+        "the plant is delivering the yield the financial model assumes.",
+    "ops_manual": "This operations manual is the day-to-day reference for operating the "
+        "plant safely and to specification: procedures, roles, safety rules, and the response "
+        "to alarms and abnormal conditions.",
+    "wiring": "This wiring and cabling schedule documents the DC string, AC, MV and earthing "
+        "cabling of the plant -- routes, sizes and protection -- so the installation and the "
+        "cable BOQ are unambiguous and standards-compliant.",
+    "single_line": "This single-line diagram is the electrical backbone of the plant: how "
+        "the array, combiners, inverters, transformers, MV collection and grid connection "
+        "are electrically arranged and protected. It is the primary electrical reference.",
+    "energy_impact": "This energy impact and yield report quantifies the plant's expected "
+        "annual generation, performance ratio and the losses that shape it, and the clean "
+        "energy it displaces -- the production figure the whole business case rests on.",
+    "economic_impact": "This economic impact report sets out the wider value the project "
+        "creates: jobs, local content, avoided emissions and energy-security benefits, "
+        "alongside the direct financial returns.",
+    "implementation_plan": "This implementation plan lays out how the project is delivered "
+        "from financial close to commercial operation: the phased schedule, milestones, "
+        "critical-path dependencies and the governance that keeps delivery on track.",
+}
+
 
 def _fmt_money(v: Any, currency: str = "") -> str:
     if v is None:
@@ -3399,6 +3459,39 @@ def _build_report_markdown(key: str, proj: dict[str, Any],
     else:
         title = "Report"
         md = header + "This report has not been implemented yet."
+
+    # Every report opens with an executive summary + explanatory narrative
+    # (owner requirement). The dedicated 'executive' report already leads with
+    # one, so it is left as-is; every other report gets a shared executive
+    # summary (headline design + financial figures) plus an "About this report"
+    # narrative describing what it covers and how it fits the document set.
+    if key != "executive" and md.startswith(header):
+        _cap_mwp = (sizing.get("kwp_input") or proj.get("target_kwp") or 0) / 1000.0
+        _rlabel = next((L for k, L, _, _ in REPORT_TYPES if k == key),
+                       str(key).replace("_", " ").title())
+        _place = " ".join(x for x in (proj.get("region"), proj.get("country")) if x)
+        _narr = _REPORT_NARRATIVES.get(key,
+            "This report forms part of the project's engineering and investment "
+            "documentation set and should be read together with the other reports "
+            "for a complete view of the design, cost and delivery basis.")
+        _exec = (
+            "## Executive summary\n\n"
+            f"This **{_rlabel}** is prepared for **{proj['project_name']}**, a "
+            f"{_cap_mwp:.1f} MWp utility-scale solar PV generation station"
+            + (f" in {_place}" if _place else "") + ".\n\n"
+            "**Key project figures:**\n\n"
+            f"- **Capacity:** {_cap_mwp:.1f} MWp DC\n"
+            f"- **Annual generation:** {_fmt_money(sizing.get('annual_gen_mwh'))} MWh\n"
+            f"- **Total CAPEX:** {_fmt_money(computed.get('total_capex_usd'), 'USD')} "
+            f"({_fmt_money(computed.get('total_capex_local'), cur)})\n"
+            f"- **IRR:** {_fmt_pct(computed.get('irr_pct'))} · "
+            f"**NPV:** {_fmt_money(computed.get('npv_local'), cur)} · "
+            f"**LCOE:** {computed.get('lcoe_local_per_kwh') or 'n/a'} {cur}/kWh\n\n"
+            "### About this report\n\n"
+            f"{_narr}\n\n"
+            "---\n\n"
+        )
+        md = header + _exec + md[len(header):]
 
     return md, title
 
