@@ -416,9 +416,12 @@
     // outside the fence line.
     var N = 96, d = new THREE.Object3D();
     var trunkMat = new THREE.MeshStandardMaterial({ color: '#6b4a2b', roughness: 1 });
-    var canopyMat = new THREE.MeshStandardMaterial({ color: '#3f6b2e', roughness: 1, flatShading: true });
+    // Rounded, smooth-shaded canopies (subdivided, no flatShading) read as trees
+    // instead of the faceted crystals the low-poly icosahedron produced -- the
+    // faceted blobs were pulling the scene toward the cartoon look.
+    var canopyMat = new THREE.MeshStandardMaterial({ color: '#3f6b2e', roughness: 0.95 });
     var trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.75, 4, 6), trunkMat, N);
-    var canopies = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.4, 0), canopyMat, N);
+    var canopies = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.4, 2), canopyMat, N);
     trunks.castShadow = canopies.castShadow = tierShadows();
     for (var i = 0; i < N; i++) {
       var ang = (i / N) * Math.PI * 2 + Math.random() * 0.5;
@@ -432,21 +435,11 @@
     trunks.instanceMatrix.needsUpdate = canopies.instanceMatrix.needsUpdate = true;
     g.add(trunks); g.add(canopies);
 
-    // Distant hills fading into the horizon haze (fog does the blending).
-    var hillMat = new THREE.MeshStandardMaterial({ color: '#819670', roughness: 1, flatShading: true });
-    var hills = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 6), hillMat, 16);
-    var hd = new THREE.Object3D();
-    for (var j = 0; j < 16; j++) {
-      var ha = (j / 16) * Math.PI * 2 + Math.random();
-      var hr = half * (4 + Math.random() * 2.5);
-      var hw = 500 + Math.random() * 700, hh = 160 + Math.random() * 260;
-      hd.rotation.set(0, Math.random() * 6.28, 0);
-      hd.scale.set(hw, hh, hw);
-      hd.position.set(Math.cos(ha) * hr, 0.5 * hh - 40, Math.sin(ha) * hr);
-      hd.updateMatrix(); hills.setMatrixAt(j, hd.matrix);
-    }
-    hills.instanceMatrix.needsUpdate = true;
-    g.add(hills);
+    // The old "distant hills" were 6-sided flat-shaded cones -- they read as a
+    // toy train-set backdrop and actively pulled the scene toward the cartoon
+    // look the owner rejected. Dropped: the atmospheric fog + graded horizon
+    // haze already close the scene off believably, and an empty far field looks
+    // more like a real flat solar site than faceted paper mountains.
   }
 
   // ---- public build / rebuild ----

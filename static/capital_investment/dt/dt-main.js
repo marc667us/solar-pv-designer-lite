@@ -31,6 +31,46 @@
     return tex;
   }
 
+  // Build a RICHER equirectangular sky for the ENVIRONMENT map (reflections).
+  // Unlike the 2px background gradient, this carries a bright sun disc + warm
+  // glow, a horizon haze band and a few soft clouds -- so panel glass and metal
+  // reflect a believable sky and throw a real sun GLINT, the defining "this is a
+  // solar site" cue from the air. Self-contained canvas (CSP-safe, no HDRI).
+  function _skyEnvEquirect(THREE, zenithHex, horizonHex) {
+    function hex(n) { return '#' + ('000000' + n.toString(16)).slice(-6); }
+    var W = 1024, H = 512;
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var ctx = c.getContext('2d');
+    // upper hemisphere: zenith -> horizon; lower: dim ground bounce.
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0.00, hex(zenithHex));
+    g.addColorStop(0.42, hex(zenithHex));
+    g.addColorStop(0.50, hex(horizonHex));
+    g.addColorStop(0.52, '#8f948b');
+    g.addColorStop(1.00, '#39462f');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // soft cloud smudges high in the sky (subtle -- reflection interest only).
+    ctx.globalAlpha = 0.10; ctx.fillStyle = '#ffffff';
+    [[0.18, 0.20, 120, 24], [0.44, 0.13, 92, 18], [0.72, 0.24, 150, 30],
+     [0.90, 0.17, 78, 16]].forEach(function (q) {
+      ctx.beginPath(); ctx.ellipse(q[0] * W, q[1] * H, q[2], q[3], 0, 0, 6.2832); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    // Sun: warm disc + radial glow, high in the sky -> specular glint on glass.
+    var sx = 0.62 * W, sy = 0.24 * H;
+    var glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, 200);
+    glow.addColorStop(0.00, 'rgba(255,251,238,1)');
+    glow.addColorStop(0.06, 'rgba(255,244,214,0.95)');
+    glow.addColorStop(0.32, 'rgba(255,236,190,0.32)');
+    glow.addColorStop(1.00, 'rgba(255,236,190,0)');
+    ctx.fillStyle = glow; ctx.fillRect(sx - 210, sy - 210, 420, 420);
+    ctx.beginPath(); ctx.fillStyle = '#fffdf6'; ctx.arc(sx, sy, 26, 0, 6.2832); ctx.fill();
+    var tex = new THREE.CanvasTexture(c);
+    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    return tex;
+  }
+
   // ---------- three.js bootstrap ----------
   function init() {
     var THREE = window.THREE;
@@ -77,7 +117,7 @@
     // -- the single biggest realism win, and cheap (2px equirect source).
     try {
       if (THREE.PMREMGenerator) {
-        var eq = _skyGradientTexture(THREE, ZENITH, HORIZON);
+        var eq = _skyEnvEquirect(THREE, ZENITH, HORIZON);
         eq.mapping = THREE.EquirectangularReflectionMapping;
         var pmrem = new THREE.PMREMGenerator(t.renderer);
         pmrem.compileEquirectangularShader();
@@ -95,21 +135,29 @@
 
     // Env map already provides soft sky fill, so keep ambient low to preserve
     // contrast (a high ambient is what makes primitive scenes look flat).
-    t.ambientLight = new THREE.AmbientLight(0xffffff, 0.18);
+    // Env map + a strong directional sun are the light sources; the ambient and
+    // hemisphere are only a whisper of fill so shadows stay deep and contrast
+    // reads like real outdoor midday. dt-sun.js re-applies these per time-of-day.
+    t.ambientLight = new THREE.AmbientLight(0xffffff, 0.08);
     t.scene.add(t.ambientLight);
-    t.hemiLight = new THREE.HemisphereLight(0xbcd4ec, 0x4e6b32, 0.35);
+    t.hemiLight = new THREE.HemisphereLight(0xbcd4ec, 0x4e6b32, 0.16);
     t.scene.add(t.hemiLight);
-    t.sunLight = new THREE.DirectionalLight(0xfff1d0, 2.2);
+    t.sunLight = new THREE.DirectionalLight(0xfff3d6, 3.3);
     t.sunLight.position.set(600, 700, 400);
     if (t.sunLight.shadow && DT.state.graphicsTier !== 'low') {
       t.sunLight.castShadow = true;
-      t.sunLight.shadow.mapSize.set(2048, 2048);
+      // Sharper shadow map on the high tier; a coarse 2k over a ±900 m frustum
+      // was ~0.9 m/texel and read blurry. normalBias was 0.6 -- so high it
+      // detached contact shadows and made objects look like they float; a small
+      // bias keeps panels/legs/buildings visually planted on the ground.
+      var shadowRes = (DT.state.graphicsTier === 'high') ? 4096 : 2048;
+      t.sunLight.shadow.mapSize.set(shadowRes, shadowRes);
       var sc = t.sunLight.shadow.camera;
       sc.near = 10; sc.far = 3500;
       sc.left = -900; sc.right = 900; sc.top = 900; sc.bottom = -900;
       sc.updateProjectionMatrix();
-      t.sunLight.shadow.bias = -0.0004;
-      t.sunLight.shadow.normalBias = 0.6;
+      t.sunLight.shadow.bias = -0.00015;
+      t.sunLight.shadow.normalBias = 0.035;
     }
     t.scene.add(t.sunLight);
 

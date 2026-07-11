@@ -72,8 +72,15 @@
     var v = sunVector(sun, t.sunDistance);
     t.sunLight.position.set(v[0], v[1], v[2]);
     var day = !!sun.is_daylight;
-    t.sunLight.intensity = day ? 1.6 : 0.04;
-    if (t.ambientLight) t.ambientLight.intensity = day ? 0.32 : 0.12;
+    // A real midday sun is a HARD key with deep shadows. Keep the sun strong and
+    // the flat fill (ambient + hemisphere) low so the env map is the only "sky
+    // fill" -- a high ambient is exactly what made the scene read flat/toy.
+    // Warm the key as the sun drops toward the horizon (golden-hour tint).
+    var lowSun = day && (sun.altitude_deg || 90) < 18;
+    t.sunLight.intensity = day ? (lowSun ? 2.6 : 3.3) : 0.05;
+    if (t.sunLight.color) t.sunLight.color.set(lowSun ? 0xffd39a : 0xfff3d6);
+    if (t.ambientLight) t.ambientLight.intensity = day ? 0.08 : 0.12;
+    if (t.hemiLight) t.hemiLight.intensity = day ? 0.16 : 0.22;
     if (t.scene) {
       // Keep the atmospheric gradient sky on daytime updates (the old code
       // flattened it to a single pale blue every tick, which washed the whole
