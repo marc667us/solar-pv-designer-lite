@@ -4516,11 +4516,19 @@ def build_scene_from_project(proj: dict[str, Any]) -> dict[str, Any]:
     # the design's, not a hardcoded 3.
     inverters: list[dict[str, Any]] = []
     station_tx: list[dict[str, Any]] = []
-    for bi in range(n_blocks):
-        cb, rb = bi % cols_b, bi // cols_b
+    # Render EXACTLY the design's inverter count (never fewer). Normally one per
+    # block; for the non-physical toy case where the design lists more inverters
+    # than tables (n_blocks was clamped to n_tables), extra inverters share a
+    # block position with a small offset so the twin's inverter count still
+    # equals the committed design -- an exact copy, no gap (Codex fix).
+    n_inv_render = n_inverters if (n_tables > 0 and n_inverters > 0) else n_blocks
+    for bi in range(n_inv_render):
+        _blk = (bi % n_blocks) if n_blocks > 0 else 0
+        _dup = (bi // n_blocks) if n_blocks > 0 else 0
+        cb, rb = _blk % cols_b, _blk // cols_b
         bx = field_x0 + cb * (block_w + block_gap)
         by = field_y0 + rb * (block_h + block_gap)
-        sx = bx + block_w / 2.0
+        sx = bx + block_w / 2.0 + _dup * 6.0
         sy = by + block_h - DT_BLOCK_MARGIN_M
         inverters.append({
             "id": f"skid_{bi + 1:02d}", "layer": "inverter", "kind": "box",
