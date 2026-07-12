@@ -234,22 +234,59 @@
   .text-center > .text-secondary,
   .text-center blockquote{text-align:left !important}
 
-  /* Enterprise Programme module -- readable-contrast overrides.
-     The generic bootstrap `text-muted` (~#6c757d) is too faint on the white
-     cards these pages use; the owner reported gray-on-white as unreadable.
-     Scoped to .ent-page so nothing else in the app is affected. */
-  .ent-page{color:#1f2430}
+  /* Enterprise Programme module -- WEARS THE APP'S OWN COLOURS.
+     SolarPro is a dark app (--sp-bg #0a0a14, cards --sp-card-bg, gold accent).
+     These pages were built on bootstrap's light defaults -- bg-white cards,
+     table-light heads, alert-light panels -- so they read as a different product
+     bolted onto the side of this one. The earlier fix made the WHITE more legible;
+     the real problem was the white.
+
+     So: no new palette here. Every rule below maps a bootstrap light utility onto a
+     token the rest of the app already uses, which is why one block can cover 60-odd
+     hardcoded classes across a dozen templates without touching any of them.
+     Everything is scoped to .ent-page -- no other page in the app can be affected. */
+  .ent-page{color:var(--sp-text)}
+  .ent-page .h3,.ent-page .h4,.ent-page h1,.ent-page h2,.ent-page h3,
+  .ent-page h4{color:var(--sp-text)}
+
+  /* --sp-muted (#6868a0) is genuinely too faint for body copy -- that part of the
+     owner's report was right. --sp-sub is the app's own brighter secondary. */
   .ent-page .text-muted,
   .ent-page .form-text,
-  .ent-page small.text-muted{color:#4a5160 !important}
-  .ent-page .card{border:1px solid #d9dee8;box-shadow:0 1px 3px rgba(16,24,40,.06)}
-  .ent-page .card-header{background:#f3f5f9 !important;color:#1f2430;font-weight:600}
-  .ent-page .table thead th{color:#1f2430;background:#eef1f6}
-  .ent-page .table td,.ent-page .table th{color:#1f2430}
-  .ent-page .text-uppercase.small{color:#5b6270 !important;letter-spacing:.03em}
-  .ent-page .h3,.ent-page .h4,.ent-page h1,.ent-page h2{color:#141824}
-  .ent-page a:not(.btn):not(.badge){color:#1257c9}
-  .ent-page .badge.bg-secondary{background:#5b6270 !important}
+  .ent-page small.text-muted{color:var(--sp-sub) !important}
+  .ent-page .text-uppercase.small{color:var(--sp-sub) !important;letter-spacing:.03em}
+
+  /* Surfaces */
+  .ent-page .card{background:var(--sp-card-bg);border:1px solid var(--sp-border);
+                  border-radius:var(--sp-radius)}
+  .ent-page .card-header,.ent-page .card-footer{background:rgba(255,255,255,.03) !important;
+                  color:var(--sp-text);border-color:var(--sp-border) !important}
+  .ent-page .bg-white{background:var(--sp-card-bg) !important;color:var(--sp-text)}
+  .ent-page .bg-light{background:rgba(255,255,255,.05) !important;color:var(--sp-text)}
+  .ent-page .text-dark{color:var(--sp-text) !important}
+  .ent-page .border,.ent-page .border-light{border-color:var(--sp-border) !important}
+
+  /* Tables */
+  .ent-page .table{--bs-table-bg:transparent;color:var(--sp-text);
+                   border-color:var(--sp-border)}
+  .ent-page .table thead th,
+  .ent-page .table-light,.ent-page .table-light>th,.ent-page .table-light>td{
+                   background:rgba(255,255,255,.06) !important;color:var(--sp-text) !important;
+                   border-color:var(--sp-border) !important}
+  .ent-page .table td,.ent-page .table th{color:var(--sp-text);
+                   border-color:var(--sp-border)}
+  .ent-page .table-hover>tbody>tr:hover>*{background:rgba(255,255,255,.04);
+                   color:var(--sp-text)}
+
+  /* Panels */
+  .ent-page .alert-light{background:rgba(255,255,255,.05) !important;
+                   border:1px solid var(--sp-border) !important;color:var(--sp-text) !important}
+
+  /* Accents: links and the "current" badge take the app's gold, like everywhere else. */
+  .ent-page a:not(.btn):not(.badge){color:var(--sp-accent)}
+  .ent-page .badge.bg-light,.ent-page .badge.bg-secondary{
+                   background:rgba(255,255,255,.10) !important;color:var(--sp-text) !important;
+                   border:1px solid var(--sp-border)}
 </style>
 {% block extra_head %}{% endblock %}
 <meta name="csrf-token" content="{{ csrf_token() }}">
