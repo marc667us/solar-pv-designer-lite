@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Beneficiaries - {{ programme.name }}{% endblock %}
+{% block content %}
+<div class="container py-4">
+
+  <div class="d-flex justify-content-between align-items-start flex-wrap mb-4">
+    <div>
+      <div class="text-muted small">
+        <a href="{{ url_for('enterprise_home') }}">Enterprise</a> /
+        <a href="{{ url_for('enterprise_programme_detail', programme_id=programme.id) }}">
+          {{ programme.programme_code }}
+        </a> / Beneficiaries
+      </div>
+      <h1 class="h4 mb-0">Beneficiary Register</h1>
+      <div class="text-muted small">
+        {{ total }} registered &middot; {{ programme.name }}
+      </div>
+    </div>
+    <button class="btn btn-primary" data-bs-toggle="collapse"
+            data-bs-target="#addBeneficiary">
+      <i class="bi bi-plus-lg"></i> Add beneficiary
+    </button>
+  </div>
+
+  <div class="collapse mb-4" id="addBeneficiary">
+    <div class="card shadow-sm">
+      <div class="card-header bg-white"><strong>Register a beneficiary</strong></div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Bulk spreadsheet import arrives in the next release; for now beneficiaries are
+          added one at a time.
+        </p>
+        <form method="post"
+              action="{{ url_for('enterprise_beneficiary_new', programme_id=programme.id) }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+          <div class="row">
+            <div class="col-md-5 mb-3">
+              <label class="form-label">Name <span class="text-danger">*</span></label>
+              <input type="text" name="name" class="form-control" required
+                     placeholder="e.g. Accra Girls Senior High School">
+            </div>
+            <div class="col-md-3 mb-3">
+              <label class="form-label">Type</label>
+              <select name="beneficiary_type" class="form-select">
+                {% for value, label in beneficiary_types %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Phase</label>
+              <select name="phase_id" class="form-select">
+                <option value="">Unassigned</option>
+                {% for ph in phases %}
+                <option value="{{ ph.id }}">{{ ph.sequence_no }}. {{ ph.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-3 mb-3">
+              <label class="form-label">Region</label>
+              <input type="text" name="region" class="form-control">
+            </div>
+            <div class="col-md-3 mb-3">
+              <label class="form-label">District</label>
+              <input type="text" name="district" class="form-control">
+            </div>
+            <div class="col-md-3 mb-3">
+              <label class="form-label">Latitude</label>
+              <input type="number" step="any" name="latitude" class="form-control"
+                     placeholder="5.6037">
+            </div>
+            <div class="col-md-3 mb-3">
+              <label class="form-label">Longitude</label>
+              <input type="number" step="any" name="longitude" class="form-control"
+                     placeholder="-0.1870">
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Daily load (kWh)</label>
+              <input type="number" step="any" min="0" name="load_kwh_day"
+                     class="form-control">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Target capacity (kWp)</label>
+              <input type="number" step="any" min="0" name="target_capacity_kwp"
+                     class="form-control">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Contact</label>
+              <input type="text" name="contact_name" class="form-control"
+                     placeholder="Contact person">
+            </div>
+          </div>
+
+          <button class="btn btn-primary">Register beneficiary</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    {% if beneficiaries %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Name</th><th>Type</th><th>Region</th><th>District</th>
+            <th class="text-end">kWh/day</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in beneficiaries %}
+          <tr>
+            <td>{{ b.name }}</td>
+            <td class="text-muted small">{{ b.beneficiary_type|replace('_',' ')|title }}</td>
+            <td class="text-muted small">{{ b.region or '-' }}</td>
+            <td class="text-muted small">{{ b.district or '-' }}</td>
+            <td class="text-end">{{ '{:,.1f}'.format(b.load_kwh_day or 0) }}</td>
+            <td>
+              {% set colour = {'approved':'success','rejected':'danger','archived':'dark'}
+                              .get(b.qualification_status, 'secondary') %}
+              <span class="badge bg-{{ colour }}">{{ b.qualification_status }}</span>
+            </td>
+            <td class="text-end">
+              {% if b.qualification_status != 'approved' %}
+              <form method="post" class="d-inline"
+                    action="{{ url_for('enterprise_beneficiary_status',
+                                       programme_id=programme.id, beneficiary_id=b.id) }}">
+                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                <input type="hidden" name="status" value="approved">
+                <button class="btn btn-sm btn-outline-success">Approve</button>
+              </form>
+              {% endif %}
+              {% if b.qualification_status != 'rejected' %}
+              <form method="post" class="d-inline"
+                    action="{{ url_for('enterprise_beneficiary_status',
+                                       programme_id=programme.id, beneficiary_id=b.id) }}">
+                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                <input type="hidden" name="status" value="rejected">
+                <button class="btn btn-sm btn-outline-danger">Reject</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if pages > 1 %}
+    <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+      <span class="text-muted small">Page {{ page }} of {{ pages }}</span>
+      <div class="btn-group btn-group-sm">
+        {% if page > 1 %}
+        <a class="btn btn-outline-secondary"
+           href="{{ url_for('enterprise_beneficiaries',
+                            programme_id=programme.id, page=page-1) }}">Previous</a>
+        {% endif %}
+        {% if page < pages %}
+        <a class="btn btn-outline-secondary"
+           href="{{ url_for('enterprise_beneficiaries',
+                            programme_id=programme.id, page=page+1) }}">Next</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="card-body text-center text-muted py-5">
+      <i class="bi bi-people fs-1 d-block mb-2"></i>
+      <p class="mb-0">No beneficiaries registered yet.</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

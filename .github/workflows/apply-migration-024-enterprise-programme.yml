@@ -1,0 +1,187 @@
+# Apply migrations/024_enterprise_programme_foundation.sql.
+#
+# Creates the Enterprise Solar Programme Management foundation (Phase 1):
+# 8 new tables (organisations, memberships, programmes, phases, beneficiaries,
+# project links, jobs, audit) + indexes + RLS policies + 3 feature flags seeded
+# to '0' (DARK).
+#
+# SAFETY PROFILE -- why this is a low-risk migration:
+#   * Purely ADDITIVE. It creates new tables only. It does NOT alter, drop, or
+#     backfill any existing table, and it does not touch `projects`,
+#     `capital_investment_projects`, or `users`.
+#   * The module ships DARK: with enterprise_programme_enabled='0' every
+#     /enterprise route 404s, so the tables are unreachable until the owner
+#     flips the flag.
+#   * RLS is ENABLE (not FORCE), matching migrations 015/022/023, and every
+#     policy carries a parallel-run escape -- so applying this cannot lock the
+#     app (or this workflow) out of anything.
+#   * Idempotent: IF NOT EXISTS throughout, DROP POLICY IF EXISTS before CREATE.
+#     Safe to re-run.
+#
+# Locking: CREATE TABLE takes no lock on existing tables. The only write to an
+# existing table is the flag seed into admin_settings (3 rows, ON CONFLICT DO
+# NOTHING). admin_settings is FORCE-RLS admin-only, so the migration sets
+# app.current_role='admin' inside its transaction -- without that the seed would
+# be SILENTLY DISCARDED (see migrations 015/018).
+#
+# Default mode is DRY-RUN. Apply needs -f confirm=ENTERPRISE_024_APPLY.
+
+name: Apply Migration 024 (Enterprise Programme Foundation)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type ENTERPRISE_024_APPLY to commit."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "ENTERPRISE_024_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- migration 024 commits to live PG ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN MODE -- nothing will be written ==="
+            echo "Re-run with -f confirm=ENTERPRISE_024_APPLY to commit."
+          fi
+
+      - name: Verify migration file exists
+        run: |
+          test -f migrations/024_enterprise_programme_foundation.sql
+          echo "OK: migrations/024_enterprise_programme_foundation.sql present"
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Pre-flight -- do the enterprise tables already exist?
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- existing enterprise_* tables (expect 0 on first apply) ---"
+          psql "$DATABASE_URL" -c "
+            SELECT tablename FROM pg_tables
+             WHERE schemaname='public' AND tablename LIKE 'enterprise%'
+             ORDER BY tablename;"
+          echo "--- confirming NO existing table is modified by this migration ---"
+          grep -iE '^\s*(ALTER TABLE|DROP TABLE|UPDATE|DELETE FROM)' \
+            migrations/024_enterprise_programme_foundation.sql \
+            | grep -viE 'enterprise_' || echo "  (none outside enterprise_* -- good)"
+
+      - name: Dry-run preview (only when MODE=dryrun)
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The SQL below WOULD have been applied. Nothing was."
+          echo "================================================================"
+          head -70 migrations/024_enterprise_programme_foundation.sql
+
+      - name: Apply migration 024 (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "Applying migrations/024_enterprise_programme_foundation.sql ..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f migrations/024_enterprise_programme_foundation.sql
+          echo "OK: migration 024 applied."
+
+      - name: Verify post-apply -- tables, policies, and DARK flags
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- the 8 enterprise tables ---"
+          psql "$DATABASE_URL" -c "
+            SELECT tablename FROM pg_tables
+             WHERE schemaname='public' AND tablename LIKE 'enterprise%'
+             ORDER BY tablename;"
+
+          N=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT COUNT(*) FROM pg_tables
+             WHERE schemaname='public' AND tablename LIKE 'enterprise%'")
+          if [ "$N" -lt "8" ]; then
+            echo "::error::expected 8 enterprise tables, found $N"; exit 1
+          fi
+          echo "OK: $N enterprise tables present."
+
+          echo "--- RLS policies on the new tables ---"
+          psql "$DATABASE_URL" -c "
+            SELECT tablename, policyname FROM pg_policies
+             WHERE schemaname='public' AND tablename LIKE 'enterprise%'
+             ORDER BY tablename;"
+
+          echo "--- feature flags MUST all be '0' (module ships DARK) ---"
+          psql "$DATABASE_URL" -c "
+            SELECT set_config('app.current_role','admin',true);
+            SELECT key, value FROM admin_settings
+             WHERE key LIKE 'enterprise_programme%' ORDER BY key;"
+
+          # The flag seed is the one write that can silently vanish (admin_settings
+          # is FORCE-RLS admin-only). Prove it actually landed.
+          SEEDED=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT set_config('app.current_role','admin',true);
+            SELECT COUNT(*) FROM admin_settings WHERE key LIKE 'enterprise_programme%'" | tail -1)
+          if [ "$SEEDED" -lt "3" ]; then
+            echo "::error::flag seed did not land ($SEEDED/3) -- admin GUC problem."
+            exit 1
+          fi
+          echo "OK: $SEEDED/3 flags seeded, all dark."
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " MIGRATION 024 APPLIED -- Enterprise Programme foundation."
+            echo " 8 new tables, RLS enabled, 3 flags seeded to '0' (DARK)."
+            echo " The module is NOT reachable until the owner sets"
+            echo "   enterprise_programme_enabled = '1'"
+            echo " No existing table was altered."
+            echo "================================================================"
+          else
+            echo "DRY-RUN -- no changes. Re-run with confirm=ENTERPRISE_024_APPLY."
+          fi

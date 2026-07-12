@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Enterprise Dashboard - SolarPro{% endblock %}
+{% block content %}
+<div class="container py-4">
+
+  <div class="d-flex justify-content-between align-items-center flex-wrap mb-4">
+    <div>
+      <h1 class="h4 mb-1">{{ membership.legal_name }}</h1>
+      <div class="text-muted small">
+        Enterprise Programme Portfolio &middot; your role: {{ membership.role|replace('_',' ') }}
+      </div>
+    </div>
+    <a href="{{ url_for('enterprise_programme_new') }}" class="btn btn-primary">
+      <i class="bi bi-plus-lg"></i> New Programme
+    </a>
+  </div>
+
+  {# Every tile below is a COUNT/SUM over real rows -- no invented values. #}
+  <div class="row g-3 mb-4">
+    {% set tiles = [
+      ('Programmes',        stats.programmes_total,     'bi-diagram-3'),
+      ('Active',            stats.programmes_active,    'bi-play-circle'),
+      ('Beneficiaries',     stats.beneficiaries_total,  'bi-people'),
+      ('Projects linked',   stats.projects_linked,      'bi-link-45deg')
+    ] %}
+    {% for label, value, icon in tiles %}
+    <div class="col-6 col-lg-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">{{ label }}</div>
+          <div class="h3 mb-0">{{ value }}</div>
+          <i class="bi {{ icon }} text-primary"></i>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">Target capacity</div>
+          <div class="h4 mb-0">{{ '{:,.0f}'.format(stats.target_capacity_kwp) }} kWp</div>
+          <div class="small text-muted">Sum of every programme's target.</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">Portfolio budget</div>
+          <div class="h4 mb-0">{{ '{:,.0f}'.format(stats.total_budget) }}</div>
+          <div class="small text-muted">Sum of every programme's budget.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <strong>Programmes</strong>
+      <a href="{{ url_for('enterprise_programmes') }}" class="small">View all</a>
+    </div>
+    {% if programmes %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Code</th><th>Name</th><th>Type</th><th>Strategy</th>
+            <th class="text-end">Target</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in programmes %}
+          <tr>
+            <td><code>{{ p.programme_code }}</code></td>
+            <td>
+              <a href="{{ url_for('enterprise_programme_detail', programme_id=p.id) }}">
+                {{ p.name }}
+              </a>
+            </td>
+            <td class="text-muted small">{{ p.programme_type|replace('_',' ')|title }}</td>
+            <td class="text-muted small">{{ p.design_strategy|replace('_',' ')|title }}</td>
+            <td class="text-end">{{ '{:,}'.format(p.target_beneficiaries or 0) }}</td>
+            <td><span class="badge bg-secondary">{{ p.status }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card-body text-center text-muted py-5">
+      <i class="bi bi-diagram-3 fs-1 d-block mb-2"></i>
+      <p class="mb-3">No programmes yet.</p>
+      <a href="{{ url_for('enterprise_programme_new') }}" class="btn btn-primary btn-sm">
+        Create your first programme
+      </a>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if audit %}
+  <div class="card shadow-sm">
+    <div class="card-header bg-white"><strong>Recent activity</strong></div>
+    <ul class="list-group list-group-flush">
+      {% for a in audit %}
+      <li class="list-group-item d-flex justify-content-between">
+        <span class="small">
+          <code>{{ a.action }}</code>
+          {% if a.details %}<span class="text-muted">&mdash; {{ a.details }}</span>{% endif %}
+        </span>
+        <span class="text-muted small">{{ a.created_at }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

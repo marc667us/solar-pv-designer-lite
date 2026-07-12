@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Programme Registry - SolarPro{% endblock %}
+{% block content %}
+<div class="container py-4">
+
+  <div class="d-flex justify-content-between align-items-center flex-wrap mb-4">
+    <div>
+      <h1 class="h4 mb-1">Programme Registry</h1>
+      <div class="text-muted small">
+        {{ membership.legal_name }} &middot; {{ total }} programme{{ '' if total == 1 else 's' }}
+      </div>
+    </div>
+    <div>
+      <a href="{{ url_for('enterprise_home') }}" class="btn btn-outline-secondary">Dashboard</a>
+      <a href="{{ url_for('enterprise_programme_new') }}" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> New Programme
+      </a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    {% if programmes %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Code</th><th>Name</th><th>Type</th><th>Design strategy</th>
+            <th class="text-end">Target beneficiaries</th>
+            <th class="text-end">Target kWp</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in programmes %}
+          <tr>
+            <td><code>{{ p.programme_code }}</code></td>
+            <td>
+              <a href="{{ url_for('enterprise_programme_detail', programme_id=p.id) }}">
+                {{ p.name }}
+              </a>
+            </td>
+            <td class="text-muted small">{{ p.programme_type|replace('_',' ')|title }}</td>
+            <td class="text-muted small">{{ p.design_strategy|replace('_',' ')|title }}</td>
+            <td class="text-end">{{ '{:,}'.format(p.target_beneficiaries or 0) }}</td>
+            <td class="text-end">{{ '{:,.0f}'.format(p.target_capacity_kwp or 0) }}</td>
+            <td><span class="badge bg-secondary">{{ p.status }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if pages > 1 %}
+    <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+      <span class="text-muted small">Page {{ page }} of {{ pages }}</span>
+      <div class="btn-group btn-group-sm">
+        {% if page > 1 %}
+        <a class="btn btn-outline-secondary"
+           href="{{ url_for('enterprise_programmes', page=page-1) }}">Previous</a>
+        {% endif %}
+        {% if page < pages %}
+        <a class="btn btn-outline-secondary"
+           href="{{ url_for('enterprise_programmes', page=page+1) }}">Next</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="card-body text-center text-muted py-5">
+      <i class="bi bi-diagram-3 fs-1 d-block mb-2"></i>
+      <p class="mb-3">No programmes yet.</p>
+      <a href="{{ url_for('enterprise_programme_new') }}" class="btn btn-primary btn-sm">
+        Create your first programme
+      </a>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

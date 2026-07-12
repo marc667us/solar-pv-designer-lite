@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Enterprise Programmes - SolarPro{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:760px">
+
+  <div class="text-center mb-4">
+    <h1 class="h3 mb-2">Enterprise Programme Management</h1>
+    <p class="text-muted">
+      Manage a whole portfolio of solar projects &mdash; a national schools rollout, a
+      hospital resilience programme, a rural electrification scheme &mdash; instead of one
+      project at a time.
+    </p>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header bg-white">
+      <strong>Create your enterprise workspace</strong>
+    </div>
+    <div class="card-body">
+      <p class="text-muted small">
+        Your organisation becomes the owner of every programme you create here.
+        Your existing projects are <strong>not</strong> moved or changed &mdash; you choose
+        which ones to link into a programme.
+      </p>
+
+      <form method="post" action="{{ url_for('enterprise_bootstrap') }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+        <div class="mb-3">
+          <label class="form-label">Organisation legal name <span class="text-danger">*</span></label>
+          <input type="text" name="legal_name" class="form-control" required
+                 maxlength="200" value="{{ suggested_name }}"
+                 placeholder="e.g. Ghana Education Service">
+        </div>
+
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Organisation type</label>
+            <select name="organisation_type" class="form-select">
+              <option value="government">Government</option>
+              <option value="ministry">Ministry / Agency</option>
+              <option value="utility">Utility</option>
+              <option value="development_bank">Development Bank</option>
+              <option value="commercial_bank">Commercial Bank</option>
+              <option value="ngo">NGO</option>
+              <option value="donor">Donor Organisation</option>
+              <option value="epc_contractor">EPC Contractor</option>
+              <option value="consultant">Engineering Consultant</option>
+              <option value="ipp">Independent Power Producer</option>
+              <option value="education">Educational Institution</option>
+              <option value="healthcare">Healthcare Organisation</option>
+              <option value="agriculture">Agricultural Enterprise</option>
+              <option value="industrial">Industrial Organisation</option>
+              <option value="developer">Real-Estate Developer</option>
+              <option value="community">Community Organisation</option>
+              <option value="corporate_enterprise" selected>Corporate Enterprise</option>
+            </select>
+          </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">Country</label>
+            <input type="text" name="country" class="form-control" maxlength="80"
+                   placeholder="Ghana">
+          </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">Currency</label>
+            <input type="text" name="default_currency" class="form-control"
+                   maxlength="8" value="USD">
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">
+          Create enterprise workspace
+        </button>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

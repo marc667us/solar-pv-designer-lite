@@ -356,3 +356,73 @@ Root `CLAUDE.md` §0.1 (the Agentic ADK Extension) mandates that **every agent i
 **Impact on Maintenance:** +1 ADR, +N `new_soc_*.py` modules. The upgrade to real ADK is deferred but pre-planned; the function-signature boundary keeps it a mechanical change.
 
 **Owner sign-off:** Granted 2026-07-10 via the directive "we built this app with less from ADK, use your experience, can you do this without google adk" (recorded in memory `project-solar-pv-session-2026-07-10-pt2-secrets-rotation-audit` and `outstanding-work-schedule`). Scope of exemption: the AI-SOC subsystem only. §0.1 remains binding elsewhere.
+
+---
+
+# Architecture Decision Record
+
+**ADR Number:** ADR-018
+**Title:** Enterprise Solar Programme Management Module — no Google ADK; deterministic services + existing LLM gateway
+**Date:** 2026-07-11
+**Status:** Accepted
+
+**Context:**
+
+The Enterprise Solar Programme Management Module (spec: `pvsolar1/solar programm initiation prompt.txt`,
+§29 "AI Programme Orchestration") calls for programme-level AI agents — planning, portfolio optimisation,
+beneficiary allocation, site qualification, risk, reporting.
+
+Platform rule §0.1 makes Google ADK the only permitted agent framework. ADK is currently **unusable on this
+account**: the only Gemini key (`adk-test/hello_agent/.env`) is free-tier and returns HTTP 429 with quota
+limit 0. Provisioning a paid Gemini key or a Vertex service account would breach the standing zero-cost
+constraint (`feedback_zero_cost_apis`) and would block delivery indefinitely.
+
+This is the same fork reached by the AI-SOC subsystem on 2026-07-10, which was resolved by an ADR exemption
+(see the AI-SOC ADR immediately above).
+
+**Decision:**
+
+Build the Enterprise Programme module's intelligence as **deterministic Python services**
+(`enterprise_programme_services.py`) with **optional** LLM enrichment routed exclusively through the app's
+**existing** `api_manager.py::_AIClient.chat()` gateway, which is already budget-gated by `ai_budget.py` and
+already falls back OpenRouter-free → Ollama → GitHub Models → rule-based. No Google ADK. No LangChain,
+CrewAI, AutoGen, or any other agent framework.
+
+Phase 1 ships with **zero** LLM calls: every figure on every dashboard is a COUNT/SUM over real rows
+(spec §28 forbids invented values in production views). The `enterprise_programme_ai_enabled` flag exists
+and is dark.
+
+Any AI output introduced later must be labelled a **recommendation/draft pending human approval** (spec §29:
+"Do not give AI agents unrestricted database, shell, financial approval or contract approval authority").
+
+**Alternatives Considered:**
+
+1. *Provision a paid Gemini/Vertex key and use real ADK.* Rejected for now: breaches zero-cost; blocks the build.
+2. *Defer all programme intelligence.* Rejected: deterministic scoring (site qualification, readiness, risk
+   flags) is genuinely useful and needs no LLM at all.
+3. *Adopt LangChain/CrewAI.* Rejected outright — explicitly forbidden by §0.1 and buys nothing here.
+
+**Reason for Decision:**
+
+The module's Phase 1 value (organisation tenancy, programme registry, beneficiaries, project linking,
+portfolio KPIs) requires no LLM whatsoever. Deterministic services are cheaper, testable, auditable, and
+explainable — which the spec demands of site qualification (§16: "The scoring process must be explainable
+and auditable"). Reaching for an agent framework here would add risk and cost with no user-visible gain.
+
+**Consequences:**
+
+The upgrade path to real ADK stays open: the service functions are pure(-ish) — data in, data out — so
+wrapping them as ADK `FunctionTool`s later is mechanical. §0.1 remains binding for every other module.
+
+**Impact on Security:** Positive. No autonomous agent touches the database, and no AI decision is taken
+without human approval. Phase 1 makes no LLM calls at all, so there is no prompt-injection surface.
+
+**Impact on Performance:** Positive. Deterministic SQL rollups instead of model latency.
+
+**Impact on Cost:** Zero recurring. Optional enrichment rides the existing zero-cost chain.
+
+**Impact on Maintenance:** +1 ADR, +4 `enterprise_programme_*.py` modules. No new dependency added.
+
+**Owner sign-off:** Granted 2026-07-11 via the directive *"use your experience reusable componenet and
+services is ok"* — the same call made for AI-SOC. Scope of exemption: the Enterprise Programme module only.
+§0.1 remains binding elsewhere.

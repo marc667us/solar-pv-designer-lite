@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Projects - {{ programme.name }}{% endblock %}
+{% block content %}
+<div class="container py-4">
+
+  <div class="mb-4">
+    <div class="text-muted small">
+      <a href="{{ url_for('enterprise_home') }}">Enterprise</a> /
+      <a href="{{ url_for('enterprise_programme_detail', programme_id=programme.id) }}">
+        {{ programme.programme_code }}
+      </a> / Projects
+    </div>
+    <h1 class="h4 mb-0">Programme Projects</h1>
+    <div class="text-muted small">{{ programme.name }}</div>
+  </div>
+
+  <div class="alert alert-light border small">
+    <i class="bi bi-info-circle"></i>
+    Linking adds an existing project to this programme. It does <strong>not</strong> move or
+    change the project &mdash; it stays yours and keeps working exactly as before, and
+    unlinking never deletes it. You can only link projects you own.
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white"><strong>Link a project</strong></div>
+    <div class="card-body">
+      {% if candidates.standard or candidates.generation_station %}
+      <form method="post"
+            action="{{ url_for('enterprise_project_link', programme_id=programme.id) }}"
+            class="row g-2 align-items-end">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+        <div class="col-md-3">
+          <label class="form-label">Project type</label>
+          <select name="project_kind" class="form-select" id="kindSelect">
+            <option value="standard">Standard design</option>
+            <option value="generation_station">Generation Station</option>
+          </select>
+        </div>
+
+        <div class="col-md-5">
+          <label class="form-label">Project</label>
+          <select name="project_id" class="form-select" id="projectSelect" required>
+            {% for p in candidates.standard %}
+            <option value="{{ p.id }}" data-kind="standard">
+              #{{ p.id }} &mdash; {{ p.name }}
+            </option>
+            {% endfor %}
+            {% for p in candidates.generation_station %}
+            <option value="{{ p.id }}" data-kind="generation_station" hidden>
+              #{{ p.id }} &mdash; {{ p.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Beneficiary (optional)</label>
+          <select name="beneficiary_id" class="form-select">
+            <option value="">None</option>
+            {% for b in beneficiaries %}
+            <option value="{{ b.id }}">{{ b.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-1">
+          <button class="btn btn-primary w-100">Link</button>
+        </div>
+      </form>
+      {% else %}
+      <p class="text-muted small mb-0">
+        You have no projects to link yet. Create one from the
+        <a href="/dashboard">dashboard</a> first.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header bg-white"><strong>Linked projects</strong></div>
+    {% if links %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr><th>Project</th><th>Type</th><th>Linked</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for l in links %}
+          <tr>
+            <td>
+              {% if l.project_kind == 'generation_station' %}
+              <a href="/large-scale-solar/{{ l.project_id }}">
+                Generation Station #{{ l.project_id }}
+              </a>
+              {% else %}
+              <a href="/project/{{ l.project_id }}">Project #{{ l.project_id }}</a>
+              {% endif %}
+            </td>
+            <td class="text-muted small">{{ l.project_kind|replace('_',' ')|title }}</td>
+            <td class="text-muted small">{{ l.linked_at }}</td>
+            <td class="text-end">
+              <form method="post"
+                    action="{{ url_for('enterprise_project_unlink',
+                                       programme_id=programme.id, link_id=l.id) }}"
+                    onsubmit="return confirm('Unlink this project? The project itself is not deleted.');">
+                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                <button class="btn btn-sm btn-outline-secondary">Unlink</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card-body text-muted small">No projects linked yet.</div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Show only the project options belonging to the selected project type.
+(function () {
+  var kind = document.getElementById('kindSelect');
+  var proj = document.getElementById('projectSelect');
+  if (!kind || !proj) return;
+
+  function sync() {
+    var want = kind.value, first = null;
+    Array.prototype.forEach.call(proj.options, function (opt) {
+      var match = opt.dataset.kind === want;
+      opt.hidden = !match;
+      opt.disabled = !match;
+      if (match && !first) first = opt;
+    });
+    if (first) proj.value = first.value;
+  }
+  kind.addEventListener('change', sync);
+  sync();
+})();
+</script>
+{% endblock %}

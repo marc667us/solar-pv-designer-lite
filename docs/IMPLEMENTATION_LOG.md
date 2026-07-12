@@ -2173,3 +2173,94 @@ mirrors the SOC pattern). Dotted blueprint endpoints (e.g. oidc.login) are not
 recorded — none of them ship a scenario, so no telemetry is lost.
 Next Recommended Step: after live deploy, admin visits /admin/tutorials to
 confirm the 60 scenarios list + toggle; watch /admin/tutorials/analytics fill.
+
+# Implementation Log Entry
+Date: 2026-07-11
+Task: Enterprise Solar Programme Management Module — PHASE 1 (Foundation)
+Status: Implemented; Codex gate 1 in progress; NOT yet deployed
+
+Objective:
+Turn SolarPro from a single-project design tool into a platform that can also manage a whole
+PORTFOLIO of solar projects under one programme (national schools rollout, hospital resilience
+scheme, rural electrification), per `pvsolar1/solar programm initiation.txt` (owner vision) and
+`pvsolar1/solar programm initiation prompt.txt` (52-section master prompt, controlling spec).
+
+Planning:
+Codex produced the plan + reuse matrix + Phase 1 handoff (docs/enterprise-programme/). Claude
+validated it against the repo and raised 3 corrections; Codex adjudicated them
+(docs/enterprise-programme/claude-plan-corrections.md) — CONFIRMING the RLS objection and the
+Procfile point, and REFUTING Claude's admin_settings claim (which prevented a silent-rollback bug).
+
+Files Changed:
+  NEW  migrations/024_enterprise_programme_foundation.sql
+  NEW  enterprise_programme_repository.py     (data access + the tenant boundary)
+  NEW  enterprise_programme_services.py       (validation + KPI rollups; deterministic, no LLM)
+  NEW  enterprise_programme_jobs.py           (durable job queue — foundation only)
+  NEW  enterprise_programme_routes.py         (register_enterprise_programme(...))
+  NEW  templates/enterprise_programme/*.html  (7 screens)
+  NEW  tests/test_enterprise_programme_foundation.py
+  NEW  tests/security/test_enterprise_programme_tenant_isolation.py
+  NEW  .github/workflows/apply-migration-024-enterprise-programme.yml (dry-run by default)
+  MOD  wsgi.py            (+27) — registration hook, wrapped so it can never stop the app booting
+  MOD  templates/base.html (+12) — flag-guarded nav link
+  MOD  docs/ARCHITECTURE_DECISIONS.md — ADR-018
+  web_app.py: UNTOUCHED (CRLF+mojibake — never edited).
+
+Database Changes:
+8 new tables (enterprise_organisations, _memberships, _programmes, _programme_phases,
+_beneficiaries, _programme_project_links, _programme_jobs, _programme_audit) + 9 indexes + RLS.
+Purely additive — no existing table is altered, dropped or backfilled.
+
+THE KEY ARCHITECTURAL DECISION — how tenancy was bridged without breaking anything:
+SolarPro is single-user-owned: both project loaders enforce `WHERE id=? AND user_id=?`
+(web_app.py:1043, new_capital_investment_routes.py:6320), and `tenant_id` is merely
+md5('solarpro-tenant-v1:'||user_id) — a pure function of the user, carrying no information.
+An enterprise programme needs MANY users per organisation. Rather than rewrite ownership (which
+would risk every existing user's projects), programmes **LINK** existing projects
+(enterprise_programme_project_links) and NEVER take ownership of them. A project keeps working
+exactly as before, linked or not; unlinking never deletes it. A user may only link a project they
+already own — enforced by reusing the app's own ownership predicate.
+
+Security Changes:
+  - Every enterprise route: login_required + feature flag + membership check + CSRF on POST.
+  - organisation_id ALWAYS comes from the caller's membership, never from the URL/form.
+  - RLS on all 8 tables (ENABLE, not FORCE — defence in depth; the app layer is the primary
+    boundary in Phase 1, per Codex's ruling). Policies key on a new `app.current_user_id` GUC that
+    the module publishes itself, because the existing `app.current_user` GUC carries the Keycloak
+    *sub*, not users.id (tenant_context.py:191), and is empty for session-auth users.
+  - `enterprise_memberships` is the BASE policy and queries no other enterprise table — this is
+    what prevents RLS recursion / silent-empty results.
+  - Feature-flag seed sets app.current_role='admin' inside the transaction; without it the write
+    would be silently discarded (admin_settings is FORCE-RLS admin-only).
+
+Tests Added: 19 (10 foundation + 9 tenant-isolation/IDOR), all passing.
+  Regression: 251 passed. 2 failures (test_support_user_guide 301; oidc test_callback_happy_path
+  KeyError) were REPRODUCED ON A CLEAN TREE with this work stashed — PRE-EXISTING, not caused here.
+
+Documentation Updated: ADR-018; docs/enterprise-programme/ (4 docs); this log.
+
+What Was Completed:
+Organisation bootstrap (idempotent), programme registry + CRUD, phases, manual beneficiary register
+with approve/reject, linking existing standard + generation-station projects, portfolio + programme
+KPI dashboards (every figure a COUNT/SUM over real rows — no invented values, per spec §28), audit
+trail, durable job table.
+
+What Remains (Phase 2+, deliberately NOT built):
+Bulk CSV/spreadsheet beneficiary import; automated project generation from templates (this is what
+the job queue exists for); site qualification scoring; GIS portfolio map; funding; BOQ consolidation;
+EPC packaging; FIDIC contracts; logistics; construction/commissioning; operations centre; programme
+AI agents; scenario modelling; ESG/carbon.
+
+Known Risks:
+  - RLS is ENABLE-not-FORCE, so DB-level isolation is NOT yet enforced — the app layer is. This is
+    stated honestly and must not be described as DB-enforced isolation until FORCE is applied in a
+    later slice with the GUC path proven live.
+  - The context processor calls module_enabled() on every request (one flag read). Flagged to Codex
+    as a possible performance concern on the 1-worker free tier; caching may be needed.
+  - Registration lives in wsgi.py, so `python web_app.py` (local dev server) does NOT include the
+    module. Acceptable: Render serves via `wsgi:app`.
+
+Next Recommended Step:
+Codex gate 1 verdict → fix any blocking findings → Supervisor gate → commit + push → apply migration
+024 via the gated workflow (dry-run first) → deploy → live smoke with the flag still DARK → then flip
+the flag for the owner's own account only and walk the acceptance test.

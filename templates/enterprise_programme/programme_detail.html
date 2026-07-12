@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}{{ programme.name }} - Programme{% endblock %}
+{% block content %}
+<div class="container py-4">
+
+  <div class="d-flex justify-content-between align-items-start flex-wrap mb-4">
+    <div>
+      <div class="text-muted small">
+        <a href="{{ url_for('enterprise_home') }}">Enterprise</a> /
+        <a href="{{ url_for('enterprise_programmes') }}">Programmes</a> /
+        <code>{{ programme.programme_code }}</code>
+      </div>
+      <h1 class="h4 mb-1">{{ programme.name }}</h1>
+      <span class="badge bg-secondary">{{ programme.status }}</span>
+      <span class="text-muted small ms-2">
+        {{ programme.programme_type|replace('_',' ')|title }} &middot;
+        {{ programme.design_strategy|replace('_',' ')|title }} design
+      </span>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('enterprise_beneficiaries', programme_id=programme.id) }}"
+         class="btn btn-outline-primary">
+        <i class="bi bi-people"></i> Beneficiaries
+      </a>
+      <a href="{{ url_for('enterprise_project_links', programme_id=programme.id) }}"
+         class="btn btn-outline-primary">
+        <i class="bi bi-link-45deg"></i> Projects
+      </a>
+      <a href="{{ url_for('enterprise_programme_edit', programme_id=programme.id) }}"
+         class="btn btn-outline-secondary">Edit</a>
+    </div>
+  </div>
+
+  {# KPIs. Each is a COUNT over rows this organisation owns -- see
+     enterprise_programme_services.programme_dashboard for the source of each. #}
+  <div class="row g-3 mb-4">
+    {% set tiles = [
+      ('Registered',   kpi.beneficiaries_registered, 'Beneficiaries on the register'),
+      ('Approved',     kpi.beneficiaries_approved,   'Passed qualification'),
+      ('Phases',       kpi.phases,                   'Implementation phases'),
+      ('Projects',     kpi.projects_linked,          'SolarPro projects linked')
+    ] %}
+    {% for label, value, hint in tiles %}
+    <div class="col-6 col-lg-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">{{ label }}</div>
+          <div class="h3 mb-0">{{ value }}</div>
+          <div class="small text-muted">{{ hint }}</div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if kpi.coverage_pct is not none %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <div class="d-flex justify-content-between mb-1">
+        <span class="small text-muted">
+          Registration coverage &mdash;
+          {{ kpi.beneficiaries_registered }} of {{ '{:,}'.format(kpi.beneficiaries_target) }} target
+        </span>
+        <strong class="small">{{ kpi.coverage_pct }}%</strong>
+      </div>
+      <div class="progress" style="height:8px">
+        <div class="progress-bar" role="progressbar"
+             style="width: {{ [kpi.coverage_pct, 100]|min }}%"></div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white"><strong>Implementation phases</strong></div>
+
+        {% if phases %}
+        <ul class="list-group list-group-flush">
+          {% for ph in phases %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <span class="badge bg-light text-dark">{{ ph.sequence_no }}</span>
+              {{ ph.name }}
+              {% if ph.target_beneficiaries %}
+              <span class="text-muted small">
+                &middot; {{ '{:,}'.format(ph.target_beneficiaries) }} beneficiaries
+              </span>
+              {% endif %}
+            </div>
+            <span class="badge bg-secondary">{{ ph.status }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="card-body text-muted small">No phases yet.</div>
+        {% endif %}
+
+        <div class="card-footer bg-white">
+          <form method="post"
+                action="{{ url_for('enterprise_phase_add', programme_id=programme.id) }}"
+                class="row g-2">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <div class="col-5">
+              <input type="text" name="name" class="form-control form-control-sm"
+                     placeholder="Phase name" required>
+            </div>
+            <div class="col-2">
+              <input type="number" name="sequence_no" class="form-control form-control-sm"
+                     value="{{ phase_count + 1 }}" min="1" title="Sequence">
+            </div>
+            <div class="col-3">
+              <input type="number" name="target_beneficiaries"
+                     class="form-control form-control-sm" placeholder="Target" min="0">
+            </div>
+            <div class="col-2">
+              <button class="btn btn-sm btn-outline-primary w-100">Add</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <strong>Linked projects</strong>
+          <a class="small"
+             href="{{ url_for('enterprise_project_links', programme_id=programme.id) }}">
+            Manage
+          </a>
+        </div>
+
+        {% if links %}
+        <ul class="list-group list-group-flush">
+          {% for l in links %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              {# Drill-down opens the EXISTING SolarPro project, unchanged. #}
+              {% if l.project_kind == 'generation_station' %}
+              <a href="/large-scale-solar/{{ l.project_id }}">
+                Generation Station #{{ l.project_id }}
+              </a>
+              {% else %}
+              <a href="/project/{{ l.project_id }}">Project #{{ l.project_id }}</a>
+              {% endif %}
+            </div>
+            <span class="badge bg-light text-dark">
+              {{ l.project_kind|replace('_',' ') }}
+            </span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="card-body text-muted small">
+          No projects linked yet.
+          <a href="{{ url_for('enterprise_project_links', programme_id=programme.id) }}">
+            Link one of your projects
+          </a>.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if recent_beneficiaries %}
+  <div class="card shadow-sm mt-3">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <strong>Recent beneficiaries</strong>
+      <a class="small"
+         href="{{ url_for('enterprise_beneficiaries', programme_id=programme.id) }}">
+        View register
+      </a>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0 align-middle">
+        <thead class="table-light">
+          <tr><th>Name</th><th>Type</th><th>Region</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          {% for b in recent_beneficiaries %}
+          <tr>
+            <td>{{ b.name }}</td>
+            <td class="text-muted small">{{ b.beneficiary_type|replace('_',' ')|title }}</td>
+            <td class="text-muted small">{{ b.region or '-' }}</td>
+            <td><span class="badge bg-secondary">{{ b.qualification_status }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

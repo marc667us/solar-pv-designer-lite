@@ -15,5 +15,32 @@ import boot_state
 
 boot_state.attach(app, init_db)
 
+# --- Enterprise Solar Programme Management module (Phase 1) -------------------
+# Registered HERE, not in web_app.py: web_app.py is CRLF+mojibake and must never
+# be edited. This mirrors how new_capital_investment_routes is attached
+# (web_app.py:1034) -- dependencies injected to avoid a circular import.
+#
+# The try/except is not defensive noise. Per this module's docstring above, an
+# exception raised at import time means gunicorn never binds $PORT and Render
+# restarts the process forever -- that is exactly how the 2026-07-09 Postgres
+# expiry became a total outage. A broken enterprise module must degrade to
+# "feature missing", never to "site down". The module is dark by default anyway.
+try:
+    from enterprise_programme_routes import register_enterprise_programme
+    import web_app as _wa
+
+    register_enterprise_programme(
+        app,
+        get_db=_wa.get_db,
+        login_required=_wa.login_required,
+        csrf_protect=_wa.csrf_protect,
+        current_user=_wa.current_user,
+    )
+except Exception as _e:  # pragma: no cover - boot resilience path
+    import logging
+    logging.getLogger(__name__).error(
+        "Enterprise Programme module failed to register (app still serving): %s", _e
+    )
+
 if __name__ == "__main__":
     app.run()
