@@ -97,19 +97,11 @@ CREATE OR REPLACE FUNCTION enterprise_no_identity() RETURNS BOOLEAN
     SELECT current_user_id_int() IS NULL AND current_user_sub() IS NULL
 $$;
 
--- The organisation ids the caller is an active member of.
--- Queries ONLY enterprise_memberships (the base policy table) -- never a
--- child table -- so no policy on a child table can recurse through this.
-CREATE OR REPLACE FUNCTION current_enterprise_org_ids() RETURNS INTEGER[]
-    LANGUAGE sql STABLE AS $$
-    SELECT COALESCE(array_agg(m.organisation_id), ARRAY[]::INTEGER[])
-    FROM enterprise_memberships m
-    WHERE m.status = 'active'
-      AND (
-            (current_user_id_int() IS NOT NULL AND m.user_id = current_user_id_int())
-         OR (current_user_sub()   IS NOT NULL AND m.keycloak_sub = current_user_sub())
-      )
-$$;
+-- NOTE: current_enterprise_org_ids() is deliberately NOT defined here. It reads
+-- enterprise_memberships, and Postgres parses a LANGUAGE sql function body at
+-- CREATE time -- so defining it before the table exists fails with
+-- 'relation "enterprise_memberships" does not exist'. It is created in PART 2b,
+-- immediately after the tables. (Learned the hard way: run 29189167753.)
 
 -- ---------------------------------------------------------------------
 -- PART 2 -- tables
@@ -266,6 +258,28 @@ CREATE TABLE IF NOT EXISTS enterprise_programme_audit (
     details         TEXT DEFAULT '',
     created_at      TEXT DEFAULT sqlite_ts()
 );
+
+-- ---------------------------------------------------------------------
+-- PART 2b -- the membership resolver.
+--
+-- MUST come after enterprise_memberships exists: Postgres parses a LANGUAGE sql
+-- function body at CREATE time, so this cannot live up in PART 1 with the other
+-- helpers.
+--
+-- Queries ONLY enterprise_memberships (the base policy table) -- never a child
+-- table -- so no child policy can recurse back through this.
+-- ---------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION current_enterprise_org_ids() RETURNS INTEGER[]
+    LANGUAGE sql STABLE AS $$
+    SELECT COALESCE(array_agg(m.organisation_id), ARRAY[]::INTEGER[])
+    FROM enterprise_memberships m
+    WHERE m.status = 'active'
+      AND (
+            (current_user_id_int() IS NOT NULL AND m.user_id = current_user_id_int())
+         OR (current_user_sub()   IS NOT NULL AND m.keycloak_sub = current_user_sub())
+      )
+$$;
 
 -- ---------------------------------------------------------------------
 -- PART 3 -- indexes (portfolio queries are org/programme-scoped + paginated)
