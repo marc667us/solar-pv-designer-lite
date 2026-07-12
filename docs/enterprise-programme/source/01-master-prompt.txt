@@ -1,0 +1,2210 @@
+MASTER PROMPT FOR CODEX PLANNING AND CLAUDE CODE IMPLEMENTATION
+SolarPro Enterprise Solar Programme Management Module
+
+You are operating as two coordinated senior software-engineering systems:
+
+OpenAI Codex — Architecture, repository analysis and implementation planning authority
+Claude Code — Implementation, integration, testing, remediation and deployment authority
+
+Your joint assignment is to extend the existing SolarPro application by adding a production-grade Enterprise Solar Programme Management Module.
+
+This is not a request to create a new application, a separate prototype, a disconnected micro-product or a replacement for the existing SolarPro platform.
+
+The new capability must be implemented as a native, securely integrated module that reuses existing SolarPro services, data models, workflows, engineering engines, AI agents, dashboards and enterprise controls wherever technically appropriate.
+
+The module must support national, regional, community, institutional, commercial, agricultural, residential and utility-scale solar programmes involving tens, hundreds or thousands of individual SolarPro projects.
+
+1. PRIMARY OPERATING RULE
+
+Codex must first inspect the existing repository and prepare a detailed implementation plan.
+
+Claude Code must then accept that implementation plan as the controlling delivery specification, validate it against the actual repository, improve it where technically necessary, and execute the work through development, integration, testing and deployment.
+
+Neither system may assume the application architecture, framework, database, authentication system, folder structure, deployment provider or existing feature names without inspecting the repository.
+
+Do not rebuild working capabilities.
+
+Do not duplicate existing modules.
+
+Do not create a second authentication system.
+
+Do not create a second customer registry.
+
+Do not create a second project management engine.
+
+Do not create a second equipment catalogue, supplier marketplace, BOQ engine, financial engine, reporting engine, document system or AI orchestration framework when equivalent capabilities already exist.
+
+Use adapters, service interfaces, extension points, shared domain services and reusable components to integrate the new module.
+
+2. BUSINESS OBJECTIVE
+
+Transform SolarPro from a project-level solar engineering platform into an Enterprise Solar Programme Operating System capable of initiating, designing, financing, procuring, delivering, monitoring and maintaining large portfolios of solar projects.
+
+The module must serve organisations such as:
+
+National governments
+Ministries, departments and agencies
+Regional coordinating councils
+Municipal and district assemblies
+Utilities
+Development banks
+Commercial banks
+Climate-finance institutions
+Donor agencies
+NGOs
+EPC contractors
+EPCM consultants
+Independent power producers
+Hospitals and healthcare groups
+Secondary schools
+Universities
+Agricultural enterprises
+Irrigation authorities
+Industrial estates
+Mining organisations
+Real-estate developers
+Large residential developers
+Community energy organisations
+Corporate ESG and decarbonisation programmes
+
+The application must allow a customer institution to sign up as an enterprise tenant, configure its organisation, create a solar programme, register or import beneficiaries and generate individual SolarPro projects from approved standard or generation-station designs.
+
+3. PROGRAMME EXAMPLES
+
+The module must support configurable programme types, including:
+
+National Home Energy Independence Programme
+Affordable Housing Solar Programme
+Community Rooftop Programme
+Rural Electrification Programme
+Community Solar Mini-Grid Programme
+Hospital Solar Resilience Programme
+Health Centre Solar Programme
+Secondary School Solar Programme
+University Energy Independence Programme
+Government Office Solar Programme
+Ministry Solar Programme
+Regional Office Solar Programme
+District Assembly Solar Programme
+Agricultural Irrigation Solar Programme
+Farm Energy Independence Programme
+Cold-Storage Solar Programme
+Water Supply Solar Programme
+Industrial Estate Solar Programme
+Manufacturing Solar Programme
+Mining Electrification Programme
+National Solar Farm Development Programme
+Regional Generation Station Programme
+Independent Power Producer Development Programme
+Battery Energy Storage Programme
+Hybrid Solar, Grid and Generator Programme
+Disaster Recovery Energy Programme
+
+The implementation must not hard-code the system to only these examples. Programme types must be configurable and extensible.
+
+4. CORE DOMAIN CONCEPT
+
+The principal object is a Programme, not an individual project.
+
+A programme may contain:
+
+Countries
+Regions
+Districts
+Municipalities
+Communities
+Institutions
+Sites
+Buildings
+Beneficiaries
+Energy systems
+Generation stations
+Mini-grids
+Individual SolarPro projects
+Assets
+Contracts
+Funding facilities
+Procurement packages
+Contractors
+Suppliers
+Warehouses
+Monitoring devices
+Operational records
+
+Required hierarchy:
+
+Enterprise Tenant
+→ Programme
+→ Programme Phase
+→ Geographic Area
+→ Beneficiary or Institution
+→ Site
+→ Building or Generation Facility
+→ SolarPro Project
+→ Energy System
+→ Asset
+→ Monitoring and Maintenance Record
+
+The hierarchy must remain configurable because not every programme will use every level.
+
+5. NON-NEGOTIABLE DESIGN PRINCIPLES
+
+The implementation must observe these principles:
+
+5.1 Native Module
+
+The new feature must appear inside the existing SolarPro navigation, application shell, permissions system and user experience.
+
+5.2 Reuse Before Creation
+
+Codex must identify existing reusable capabilities before proposing new ones.
+
+Claude Code must use existing components unless they are demonstrably unsuitable.
+
+5.3 Backward Compatibility
+
+Existing SolarPro users, projects, designs, BOQs, contracts, reports, assets and marketplace records must continue to work.
+
+5.4 Enterprise Multi-Tenancy
+
+Every enterprise organisation must have logically isolated data.
+
+Use the repository’s current tenancy strategy. Where row-level security exists, extend it correctly. Where tenancy is enforced through service-layer filters, preserve and strengthen those controls.
+
+5.5 Security by Default
+
+All programme resources must be tenant-scoped, role-controlled, validated and auditable.
+
+5.6 Configurable Workflows
+
+Approvals, stages, roles, templates and programme types must not be embedded as inflexible code constants.
+
+5.7 Scalable Portfolio Operations
+
+The design must support thousands of beneficiaries and projects without loading all records into memory or rendering excessively large pages.
+
+5.8 Idempotent Bulk Operations
+
+Bulk beneficiary imports, project generation, BOQ aggregation and procurement consolidation must be safely repeatable.
+
+5.9 Traceability
+
+The system must retain traceability from a programme decision to programme template, beneficiary, generated project, design revision, BOQ, procurement package, contractor, installation, test, asset and operational record.
+
+5.10 Human Approval
+
+AI agents may recommend, calculate, draft, classify and monitor, but material programme, engineering, financial, procurement, contract and commissioning decisions must support human review and approval.
+
+6. CODEX RESPONSIBILITIES
+
+Codex must perform the following work before implementation begins.
+
+6.1 Repository Discovery
+
+Inspect the complete repository, including:
+
+Root files
+Workspace configuration
+Package manifests
+Build scripts
+Application folders
+Frontend structure
+Backend structure
+Database definitions
+Migrations
+ORM schemas
+API routes
+Authentication
+Authorization
+Tenant isolation
+Existing AI agents
+Background jobs
+Message queues
+Testing tools
+CI/CD configuration
+Container configuration
+Deployment configuration
+Environment-variable examples
+Documentation
+Existing programme-like or portfolio-like functionality
+Existing project, design, customer, organisation and asset models
+
+Do not limit inspection to filenames. Read relevant implementation files.
+
+6.2 Existing Feature Inventory
+
+Prepare a reusable-component inventory covering, where present:
+
+Customer and institution registry
+Organisation signup
+User management
+RBAC
+Solar design engine
+Residential solar design
+Commercial solar design
+Building load assessment
+Generation-station design
+Large-scale solar design
+PV simulation
+Shading analysis
+3D solar designer
+Digital twin
+SCADA integration
+BOQ generation
+Cost estimation
+Product catalogue
+Equipment catalogue
+Supplier marketplace
+Installer marketplace
+Procurement
+Tendering
+CRM
+Sales pipeline
+Financial modelling
+Funding exchange
+Loan processing
+Project management
+Document management
+GIS and maps
+Asset registry
+Inspection
+Testing and commissioning
+Maintenance
+Monitoring
+Reporting
+Notifications
+Audit logging
+Workflow engine
+Approval engine
+Digital signatures
+AI agents
+Orchestration services
+
+For each reusable feature, identify:
+
+File or package location
+Public interfaces
+Data model
+Dependencies
+Current limitations
+Reuse approach
+Required extension
+Risk of modification
+Whether an adapter or direct extension is preferred
+6.3 Architecture Gap Analysis
+
+Compare the required programme module with the repository’s current capabilities.
+
+Classify every requirement as:
+
+Reuse without change
+Reuse with configuration
+Reuse with extension
+Requires adapter
+Requires new service
+Requires new database model
+Requires new UI
+Deferred integration
+Not currently feasible and why
+6.4 Implementation Plan
+
+Codex must produce a repository-specific implementation plan containing:
+
+Executive technical summary
+Current-state architecture
+Target architecture
+Reuse matrix
+Domain model
+Database changes
+API changes
+Frontend changes
+RBAC changes
+Workflow design
+AI orchestration design
+Background processing design
+Import and export design
+Integration strategy
+Migration strategy
+Testing strategy
+Security plan
+Observability plan
+Deployment plan
+Rollback plan
+Delivery phases
+File-by-file change map
+Acceptance criteria
+Risks and mitigations
+Assumptions requiring validation
+
+The plan must name actual repository paths.
+
+A generic architecture document is not acceptable.
+
+7. CODEX REQUIRED OUTPUT FILES
+
+Codex must add or generate the following planning artefacts inside the repository, using an appropriate documentation directory:
+
+enterprise-programme-implementation-plan.md
+enterprise-programme-reuse-matrix.md
+enterprise-programme-domain-model.md
+enterprise-programme-data-migration-plan.md
+enterprise-programme-api-contracts.md
+enterprise-programme-rbac-matrix.md
+enterprise-programme-test-strategy.md
+enterprise-programme-deployment-plan.md
+enterprise-programme-risk-register.md
+claude-code-implementation-handoff.md
+
+The handoff document must contain:
+
+Exact implementation sequence
+Dependencies between tasks
+Files expected to be added or modified
+Database migration order
+Feature-flag strategy
+Test commands
+Build commands
+Deployment commands
+Rollback commands
+Definition of done
+Unresolved technical risks
+8. CLAUDE CODE RESPONSIBILITIES
+
+After Codex completes the plan, Claude Code must:
+
+Read every Codex planning artefact.
+Reinspect the repository independently.
+Validate the plan against the current code.
+Record any necessary corrections.
+Preserve the agreed business scope.
+Implement the module incrementally.
+Run tests after each meaningful work package.
+repair defects before proceeding.
+Integrate with existing modules.
+prepare database migrations.
+execute build and static checks.
+run security and tenancy tests.
+deploy through the existing deployment method.
+perform post-deployment smoke tests.
+produce a final implementation report.
+
+Claude Code may improve Codex’s plan where repository evidence requires a change, but it must document:
+
+What changed
+Why it changed
+Which repository evidence justified it
+Whether the change affects scope, data or compatibility
+
+Claude Code must not silently abandon major planned requirements.
+
+9. REQUIRED MODULE NAVIGATION
+
+Integrate a new enterprise-level area into the existing SolarPro navigation.
+
+The exact labels should follow the existing design system, but the module must provide access to:
+
+Programme Dashboard
+Programme Registry
+Programme Setup
+Programme Templates
+Programme Phases
+Beneficiaries
+Site Qualification
+Standard Designs
+Generation Station Designs
+Programme Projects
+Funding and Finance
+EPC Packaging
+Procurement
+Logistics
+FIDIC Contracts
+Construction Monitoring
+Inspection and Commissioning
+Operations Centre
+Programme Assets
+GIS Portfolio
+Programme Analytics
+Risks and Issues
+Reports
+Settings
+Audit Trail
+
+Navigation visibility must be controlled by tenant entitlements and RBAC permissions.
+
+10. ENTERPRISE SIGNUP AND TENANT ONBOARDING
+
+Implement or extend institutional onboarding to support:
+
+Organisation legal name
+Organisation type
+Country
+Registration details
+Primary contact
+Billing contact
+Technical contact
+Organisation logo
+Brand settings
+Departments
+Regions or business units
+Default currency
+Default timezone
+Default unit system
+Programme operating countries
+Subscription or entitlement plan
+Data residency preference where supported
+Required approvals
+Initial programme administrator
+Invitation of additional users
+
+Supported organisation types should include:
+
+Government
+Ministry
+Utility
+Development bank
+Commercial bank
+NGO
+Donor organisation
+EPC contractor
+Engineering consultant
+Independent power producer
+Educational institution
+Healthcare organisation
+Agricultural enterprise
+Industrial organisation
+Real-estate developer
+Community organisation
+Corporate enterprise
+
+Use the current SolarPro organisation and tenant model where one exists.
+
+11. ROLE-BASED ACCESS CONTROL
+
+Extend the existing authorization system.
+
+Required roles include:
+
+Enterprise Owner
+Organisation Administrator
+Programme Sponsor
+Programme Director
+Programme Manager
+Technical Director
+Programme Engineer
+Design Engineer
+Regional Manager
+District Coordinator
+Beneficiary Officer
+Surveyor
+GIS Specialist
+Funding Manager
+Finance Officer
+Procurement Manager
+Contract Manager
+FIDIC Engineer
+EPC Contractor Administrator
+EPC Project Manager
+Site Engineer
+Site Supervisor
+Warehouse Manager
+Logistics Officer
+QA/QC Manager
+Inspector
+Commissioning Engineer
+Operations Manager
+Maintenance Engineer
+Monitoring Operator
+ESG and Carbon Officer
+Auditor
+Financier Viewer
+Donor Viewer
+Executive Viewer
+Beneficiary Representative
+Platform Support Administrator
+
+Do not make roles globally powerful by default.
+
+Define granular permissions around:
+
+Programme creation
+Programme editing
+Programme approval
+Template management
+Beneficiary import
+Beneficiary approval
+Design generation
+Engineering approval
+Project generation
+Funding access
+Procurement access
+Contract access
+Payment certification
+Variation approval
+Inspection approval
+Commissioning approval
+Operational access
+Report generation
+Cross-region access
+Cross-programme access
+Audit access
+Tenant administration
+
+Include automated authorization tests proving tenant and role isolation.
+
+12. PROGRAMME REGISTRATION
+
+Programme registration must capture:
+
+Programme name
+Programme code
+Programme type
+Description
+Sponsor
+Programme owner
+Managing institution
+Countries
+Regions
+Districts
+Communities
+Start date
+Target completion date
+Programme duration
+Objectives
+Target beneficiaries
+Target installed capacity
+Target battery capacity
+Target energy generation
+Target grid offset
+Target diesel reduction
+Target carbon reduction
+Programme budget
+Funding sources
+Programme currency
+Delivery model
+Procurement strategy
+Contract framework
+Technical standards
+Design strategy
+Programme phases
+Reporting requirements
+KPI framework
+Approval workflow
+Risk classification
+ESG requirements
+Local-content target
+Job-creation target
+Programme status
+Archive status
+
+Support programme cloning where the user has permission.
+
+13. PROGRAMME TEMPLATE ENGINE
+
+Implement a version-controlled programme-template system.
+
+Each template must be able to define:
+
+Programme category
+Beneficiary type
+Required beneficiary fields
+Required survey fields
+Typical load profile
+Standard PV capacities
+Standard battery options
+Grid, off-grid or hybrid configuration
+Generator integration
+UPS integration
+Standard equipment list
+Approved equipment alternatives
+Standard BOQ
+Standard drawings
+Standard reports
+Engineering calculation defaults
+Protection requirements
+Testing requirements
+Commissioning requirements
+O&M model
+Warranty requirements
+Funding model
+Procurement strategy
+Risk template
+Schedule template
+KPI template
+Carbon-accounting method
+Approval workflow
+Required documents
+
+Templates must support:
+
+Draft
+Review
+Approved
+Published
+Superseded
+Archived
+
+Projects created from templates must retain the template version used.
+
+Later template changes must not silently overwrite completed or approved project designs.
+
+14. DESIGN STRATEGIES
+
+Every programme must support one or both design strategies.
+
+14.1 Standard Design Strategy
+
+Use for repeatable distributed installations such as:
+
+Homes
+Schools
+Clinics
+Hospitals
+Offices
+Farms
+Shops
+Community facilities
+
+Reuse existing SolarPro functions for:
+
+Energy assessment
+Load profiling
+Roof or land assessment
+PV sizing
+Battery sizing
+Inverter sizing
+Generator integration
+Grid integration
+Protection
+Equipment selection
+BOQ generation
+Cost estimation
+Financial analysis
+Drawings
+Reports
+
+Support standard packages such as:
+
+Residential 5 kW
+Residential 10 kW
+Residential 15 kW
+School 50 kW
+School 100 kW
+Hospital 500 kW
+Hospital 1 MW
+Regional office 100 kW
+Farm irrigation 200 kW
+Cold-storage package
+
+These values must be configuration data, not hard-coded application logic.
+
+14.2 Generation Station Strategy
+
+Use for:
+
+Solar farms
+Regional generation hubs
+Industrial plants
+Universities
+Large hospitals
+Mines
+Mini-grids
+Utility installations
+
+Reuse or extend large-scale design capability for:
+
+PV array blocks
+Fixed-tilt mounting
+Single-axis trackers
+String inverters
+Central inverters
+DC collection
+AC collection
+MV stations
+Transformers
+Switchgear
+Substations
+Protection
+Metering
+SCADA
+Communications
+Grid interconnection
+Battery energy storage
+Transmission interfaces
+Roads
+Drainage
+Fencing
+Security systems
+Meteorological stations
+Control buildings
+Fire protection
+Water supply
+Auxiliary power
+
+Support configurable capacity classes including:
+
+1 MW
+5 MW
+10 MW
+20 MW
+50 MW
+100 MW
+200 MW
+
+Do not limit the data model to these capacities.
+
+15. BENEFICIARY MANAGEMENT
+
+Support individual and bulk registration of:
+
+Homes
+Schools
+Hospitals
+Clinics
+Universities
+Government offices
+Ministries
+Regional offices
+District assemblies
+Farms
+Irrigation facilities
+Cold-storage facilities
+Factories
+Mines
+Commercial properties
+Water facilities
+Communities
+Mini-grid customers
+Generation sites
+
+Required beneficiary functions:
+
+Manual registration
+Spreadsheet import
+CSV import
+GIS import where supported
+API import
+Duplicate detection
+Validation
+Draft staging
+Import preview
+Row-level error reporting
+Import correction
+Approval
+Rejection
+Assignment to programme phase
+Assignment to geographic area
+Assignment to programme template
+Project-generation eligibility
+Change history
+Archive
+Export
+
+Typical beneficiary fields:
+
+Name
+Beneficiary type
+Programme
+Region
+District
+Community
+Address
+GPS coordinates
+Contact person
+Contact details
+Ownership
+Building type
+Occupancy
+Existing energy source
+Electricity consumption
+Tariff
+Generator details
+Roof area
+Land availability
+Critical loads
+Priority loads
+Funding eligibility
+Social-impact classification
+Priority ranking
+Security risk
+Environmental risk
+Programme status
+
+Sensitive personal information must be minimised and protected.
+
+16. INTELLIGENT SITE QUALIFICATION
+
+Implement a configurable site-qualification workflow.
+
+The system should be capable of scoring:
+
+Technical suitability
+Energy need
+Financial viability
+Implementation readiness
+Grid availability
+Roof suitability
+Land suitability
+Shading
+Resource availability
+Road access
+Logistics complexity
+Communications availability
+Flood risk
+Environmental risk
+Land ownership
+Security risk
+Social impact
+Funding eligibility
+Programme priority
+
+Where live satellite, weather or GIS integrations are not already available, create provider interfaces and mock or manual-input fallbacks rather than blocking the entire module.
+
+Store:
+
+Individual score components
+Weighting model
+Total score
+Recommendation
+Disqualifying conditions
+Evidence
+Reviewer
+Approval
+Scoring-model version
+
+The scoring process must be explainable and auditable.
+
+17. AUTOMATED PROJECT GENERATION
+
+Approved beneficiaries must be convertible into individual SolarPro projects.
+
+The project-generation process must:
+
+Validate beneficiary readiness.
+Select the approved programme-template version.
+Select the design strategy.
+Copy authorised template defaults.
+Create or link the SolarPro project.
+Link the programme, phase and beneficiary.
+Generate initial design inputs.
+Generate standard tasks.
+Generate required documents.
+Generate initial BOQ where supported.
+Assign responsible team.
+Create approval records.
+Record the generation event.
+Return clear partial-failure results.
+
+Support:
+
+Single-project generation
+Selected batch generation
+Entire-phase generation
+Background processing
+Progress reporting
+Retry
+Cancellation where safe
+Idempotency
+Failure recovery
+
+Do not synchronously generate thousands of projects in one web request.
+
+18. PROGRAMME WORKFLOW ENGINE
+
+Support a configurable lifecycle such as:
+
+Programme initiation
+→ Programme approval
+→ Funding approval
+→ Regional approval
+→ Beneficiary registration
+→ Site qualification
+→ Survey
+→ Engineering
+→ Design review
+→ Procurement
+→ Manufacturing
+→ Warehousing
+→ Transportation
+→ Installation
+→ Inspection
+→ Testing
+→ Commissioning
+→ Training
+→ Handover
+→ Operations
+→ Maintenance
+→ Warranty
+→ Asset retirement
+
+The workflow engine must support:
+
+Configurable stages
+Stage entry conditions
+Stage completion conditions
+Required documents
+Required approvals
+Responsible roles
+SLA targets
+Escalation
+Notifications
+Rejection and rework
+Comments
+Attachments
+Digital signature where available
+Audit history
+Parallel approvals where supported
+Conditional paths
+
+Reuse an existing workflow engine where one is present.
+
+19. FUNDING AND FINANCE
+
+Reuse or extend the SolarPro funding and financial capabilities.
+
+Support programme- and project-level funding from:
+
+Government budget
+Development-bank funding
+Commercial loans
+Green bonds
+Climate funds
+Grants
+PPP
+Independent power producer finance
+Carbon finance
+Corporate finance
+Community contributions
+CSR funding
+Blended finance
+
+Track:
+
+Funding facility
+Commitment
+Allocation
+Disbursement
+Utilisation
+Remaining balance
+Conditions precedent
+Eligible cost categories
+Programme allocations
+Project allocations
+Currency
+Exchange-rate assumptions
+Financing cost
+Repayment
+Grant component
+Loan component
+Carbon revenue
+Budget revision
+Approval
+Audit trail
+
+Prevent financial values from being overwritten without history.
+
+Reuse the existing financial model for portfolio economics where possible.
+
+20. EPC, EPCM AND TURNKEY PACKAGING
+
+Support delivery models including:
+
+EPC
+EPCM
+Design-Build
+Turnkey
+Framework contract
+Multiple lots
+Regional packages
+District packages
+Technology packages
+Equipment-only packages
+Installation-only packages
+O&M packages
+
+The system must allow programme projects and BOQ quantities to be grouped into procurement or EPC packages using rules such as:
+
+Region
+District
+Project type
+Technology
+Capacity
+Implementation phase
+Funding source
+Contractor capacity
+Delivery date
+
+Track:
+
+Package code
+Scope
+Projects
+Quantities
+Estimated value
+Procurement status
+Tender
+Bidders
+Evaluation
+Award
+Contractor
+Start date
+Completion date
+Performance
+Variations
+Claims
+Payments
+Handover
+21. FIDIC CONTRACT INTERFACE
+
+Implement a contract-management interface capable of supporting configurable FIDIC-based workflows.
+
+Initial templates should include:
+
+Red Book
+Yellow Book
+Silver Book
+Green Book
+
+Do not present the system as replacing legal or professional contract administration.
+
+Track:
+
+Contract particulars
+Parties
+Engineer or employer representative
+Commencement
+Time for completion
+Milestones
+Securities
+Insurances
+Submittals
+Instructions
+Notices
+Interim payment certificates
+Variations
+Extension-of-time applications
+Claims
+Determinations
+Delays
+Defects
+Taking-over certificates
+Performance certificates
+Defects-notification period
+Final account
+Final completion
+
+Use configurable contract templates and workflow states rather than embedding legal terms directly into core logic.
+
+22. PROGRAMME PROCUREMENT
+
+Aggregate identical or compatible BOQ items across programme projects.
+
+Required functions:
+
+BOQ consolidation
+Unit normalisation
+Product equivalence rules
+Approved substitution rules
+Quantity aggregation
+Regional breakdown
+Phase breakdown
+Delivery forecast
+Procurement package creation
+Supplier discovery
+Supplier prequalification
+Tender preparation
+Bid comparison
+Award recommendation
+Purchase-order creation
+Delivery tracking
+Received-quantity tracking
+Rejected-material tracking
+Remaining-quantity tracking
+Price history
+Supplier performance
+
+Reuse:
+
+BOQ engine
+Product catalogue
+Equipment catalogue
+Supplier marketplace
+Tendering
+Procurement
+Financial controls
+
+Maintain traceability from consolidated quantity back to each project BOQ line.
+
+23. LOGISTICS AND WAREHOUSING
+
+Support:
+
+National warehouse
+Regional warehouse
+District warehouse
+Site stores
+Inventory
+Stock transfers
+Goods receipt
+Quality inspection
+Reservation
+Picking
+Dispatch
+Delivery confirmation
+Returns
+Damaged goods
+Serial-number tracking
+Batch tracking
+QR-code support
+RFID support where integrations exist
+Vehicle assignment
+Route tracking where integrations exist
+Proof of delivery
+
+The first release may use QR codes and manual delivery confirmation if advanced RFID or fleet systems are not already available.
+
+24. CONSTRUCTION MANAGEMENT
+
+Reuse existing project-management and site-execution functionality.
+
+Programme-level views must support:
+
+Construction schedule
+Regional rollout
+Phase progress
+Project progress
+Daily reports
+Site photos
+Drone evidence where available
+Material usage
+Labour
+Equipment
+Quality inspections
+Safety reports
+Weather impacts
+Delays
+Constraints
+Issues
+Risks
+Variations
+Claims
+Completion forecast
+Contractor performance
+
+Provide drill-down from programme to region, package, contractor and project.
+
+25. INSPECTION, TESTING AND COMMISSIONING
+
+Support configurable inspection and test plans.
+
+Track:
+
+Inspection request
+Inspection checklist
+Non-conformance
+Corrective action
+Retest
+Test certificate
+Protection testing
+Earthing testing
+Insulation testing
+Functional testing
+Inverter commissioning
+Battery commissioning
+SCADA commissioning
+Metering verification
+Grid synchronisation
+Performance testing
+Training
+Handover
+Punch list
+Taking-over status
+
+Reuse existing inspection and commissioning capabilities.
+
+26. OPERATIONS CENTRE
+
+Create programme-level operational monitoring using existing monitoring, digital-twin, IoT or SCADA capabilities.
+
+Support portfolio views for:
+
+Installed capacity
+Current generation
+Daily generation
+Monthly generation
+Consumption
+Grid import
+Grid export
+Battery state of charge
+Battery health
+Inverter status
+Meter status
+Transformer status
+Alarm status
+Communication status
+Site availability
+Performance ratio
+Downtime
+Faults
+Maintenance status
+
+Where real telemetry does not yet exist, support simulated, imported or manually entered data without misrepresenting it as live.
+
+27. GIS PORTFOLIO
+
+Provide an interactive map showing:
+
+Programme boundaries
+Countries
+Regions
+Districts
+Communities
+Beneficiaries
+Projects
+Solar farms
+Mini-grids
+Warehouses
+Contractors
+Suppliers
+Construction status
+Commissioning status
+Operational status
+Alarms
+Installed capacity
+Generation
+Carbon savings
+
+Selecting a map item must open or link to the relevant existing SolarPro project or programme record.
+
+Use clustering, pagination or map tiling for large datasets.
+
+28. EXECUTIVE DASHBOARD
+
+The dashboard must provide authorised programme KPIs including:
+
+Total programmes
+Active programmes
+Total beneficiaries
+Qualified beneficiaries
+Projects generated
+Projects under design
+Projects under construction
+Projects commissioned
+Installed PV capacity
+Installed battery capacity
+Capacity under construction
+Current energy generation
+Forecast energy generation
+Grid-energy offset
+Diesel displacement
+Carbon avoided
+Programme budget
+Budget committed
+Budget spent
+Funding secured
+Funding disbursed
+Grant utilisation
+Loan utilisation
+Procurement progress
+Delivery progress
+EPC performance
+Regional progress
+Schedule performance
+Cost performance
+Open risks
+Open issues
+Safety incidents
+Jobs created
+Women employed
+Local-content percentage
+Homes connected
+Schools completed
+Hospitals completed
+Farms supported
+Programme health score
+AI risk index
+
+Every KPI must have a documented calculation source.
+
+Do not use invented values in production views.
+
+29. AI PROGRAMME ORCHESTRATION
+
+Extend the existing SolarPro AI architecture with programme-level agents.
+
+Potential agents include:
+
+Programme Planning Agent
+Portfolio Optimisation Agent
+Beneficiary Allocation Agent
+Site Qualification Agent
+Standardisation Agent
+Funding Strategy Agent
+EPC Packaging Agent
+Procurement Agent
+Logistics Agent
+FIDIC Contract Agent
+Risk Agent
+Schedule Agent
+Programme Reporting Agent
+Performance Monitoring Agent
+Asset Reliability Agent
+Carbon and ESG Agent
+Executive Briefing Agent
+
+Use the existing orchestrator, agent framework, model gateway, prompt registry, tool registry, memory and audit system where available.
+
+Each agent must have:
+
+Defined purpose
+Allowed tools
+Input schema
+Output schema
+Permission boundaries
+Tenant scope
+Human approval requirements
+Timeout
+Retry policy
+Cost controls
+Audit logging
+Error handling
+Safe fallback
+
+AI outputs must be labelled as recommendations or drafts until approved.
+
+Do not give AI agents unrestricted database, shell, financial approval or contract approval authority.
+
+30. SCENARIO MODELLING
+
+Implement or plan a portfolio scenario engine capable of evaluating:
+
+Programme-budget changes
+Equipment-price changes
+Exchange-rate changes
+Funding delays
+Demand growth
+Battery-size changes
+PV-capacity changes
+Alternative technologies
+Supplier substitution
+Project reprioritisation
+Regional rollout changes
+Schedule delays
+Grid-tariff changes
+Diesel-cost changes
+Carbon-price changes
+
+Store scenario assumptions separately from approved programme data.
+
+Allow comparison of baseline and alternative scenarios.
+
+31. CARBON, ESG AND DEVELOPMENT IMPACT
+
+Support configurable indicators such as:
+
+Avoided grid emissions
+Avoided diesel emissions
+Renewable-energy generation
+Energy-access beneficiaries
+Schools electrified
+Hospitals electrified
+Farms supported
+Productive-use connections
+Jobs created
+Women employed
+Youth employed
+Local-content expenditure
+Community investment
+Carbon-credit eligibility
+Reporting period
+Calculation methodology
+Evidence
+Verification status
+
+Do not claim compliance with a specific carbon or ESG standard unless the implementation genuinely supports its requirements.
+
+32. REPORTING
+
+Reuse the existing reporting engine.
+
+Generate or support:
+
+National Programme Master Plan
+Programme Charter
+Programme Business Case
+Regional Rollout Plan
+Beneficiary Register
+Site Qualification Report
+Technical Standards Manual
+Standard Design Catalogue
+Programme BOQ
+Consolidated Procurement Schedule
+Funding Portfolio Report
+EPC Packaging Report
+Tender Report
+Contract Status Report
+FIDIC Administration Report
+Construction Progress Report
+Inspection Report
+Commissioning Report
+Operations Report
+Maintenance Report
+Asset Register
+Risk Report
+ESG Report
+Carbon Report
+Executive Dashboard Report
+Ministerial Briefing Pack
+Financier Report
+Donor Progress Report
+Audit Report
+
+Support existing export formats such as PDF, spreadsheet and document formats where already available.
+
+Apply tenant branding.
+
+33. DATA MODEL
+
+Codex must derive the final data model from the repository.
+
+The likely domain entities include:
+
+EnterpriseOrganisation
+EnterpriseDepartment
+Programme
+ProgrammeType
+ProgrammeTemplate
+ProgrammeTemplateVersion
+ProgrammePhase
+ProgrammeRegion
+ProgrammeDistrict
+ProgrammeCommunity
+Beneficiary
+BeneficiaryType
+BeneficiaryImport
+SiteQualification
+QualificationCriterion
+QualificationScore
+ProgrammeProjectLink
+ProgrammeDesignStrategy
+StandardDesignPackage
+GenerationStationPackage
+FundingFacility
+ProgrammeFundingAllocation
+ProjectFundingAllocation
+EPCPackage
+EPCPackageProject
+Contract
+ContractMilestone
+ContractNotice
+ContractVariation
+ContractClaim
+PaymentCertificate
+ProcurementPackage
+ConsolidatedBOQLine
+ProcurementAllocation
+Warehouse
+InventoryItem
+StockMovement
+Delivery
+ProgrammeRisk
+ProgrammeIssue
+ProgrammeKPI
+KPIObservation
+ProgrammeApproval
+ProgrammeWorkflow
+ProgrammeWorkflowInstance
+ProgrammeDocument
+ProgrammeAssetLink
+ProgrammeTelemetrySummary
+ProgrammeScenario
+ProgrammeAuditEvent
+
+Do not blindly create all entities if the repository already has equivalents.
+
+Use relationships to existing SolarPro entities.
+
+34. API REQUIREMENTS
+
+Use the existing API style.
+
+Required capability groups include:
+
+Enterprise onboarding
+Programme CRUD
+Programme template CRUD and versioning
+Programme phase management
+Beneficiary CRUD
+Bulk import
+Site qualification
+Project generation
+Programme-project linking
+Programme dashboard
+Programme GIS
+Funding
+EPC packaging
+Procurement consolidation
+Contract administration
+Logistics
+Risks and issues
+KPI reporting
+Operations summary
+Reports
+Audit history
+
+All APIs must include:
+
+Authentication
+Tenant isolation
+Permission checks
+Input validation
+Consistent errors
+Pagination
+Filtering
+Sorting where relevant
+Rate limiting where relevant
+Audit logging
+Idempotency for bulk or financial mutations
+Transaction boundaries
+OpenAPI or existing API documentation
+35. FRONTEND REQUIREMENTS
+
+Follow the current SolarPro design system.
+
+Do not introduce a visually unrelated interface.
+
+Required user-experience principles:
+
+Enterprise command-centre experience
+Clear portfolio-to-project drill-down
+Progressive disclosure
+Responsive design
+Accessible forms
+Search and filtering
+Saved views
+Bulk actions
+Import previews
+Clear workflow status
+Approval inbox
+Actionable dashboards
+Empty states
+Loading states
+Partial-error states
+Retry actions
+Unsaved-change protection
+Audit and history access
+Appropriate confirmation for destructive actions
+
+Do not render thousands of rows without server-side pagination or virtualisation.
+
+36. BACKGROUND JOBS
+
+Use the existing job-processing framework for:
+
+Beneficiary imports
+Site-scoring batches
+Project generation
+BOQ aggregation
+Procurement consolidation
+Report generation
+KPI recalculation
+Telemetry aggregation
+Notification delivery
+Large exports
+AI portfolio analysis
+
+Jobs must support:
+
+Tenant context
+Idempotency
+Progress
+Retry
+Dead-letter or failure handling
+Cancellation where safe
+Audit logs
+Structured errors
+37. SECURITY REQUIREMENTS
+
+At minimum, implement and test:
+
+Tenant-bound queries
+Object-level authorization
+Role-based permissions
+Protected administrative routes
+Validated uploads
+File-type restrictions
+Import-size limits
+Rate limits
+CSRF protection where relevant
+XSS prevention
+SQL injection prevention
+Safe ORM usage
+Secret management
+Audit logging
+Sensitive-field protection
+Secure session handling
+Secure API tokens
+Prevention of insecure direct-object reference
+Prevention of mass assignment
+Safe AI tool invocation
+Signed webhook validation where present
+
+No user should access another institution’s programmes by manipulating IDs or URLs.
+
+38. DATABASE MIGRATIONS
+
+Claude Code must:
+
+Use the repository’s existing migration system.
+Add forward migrations.
+Provide rollback guidance.
+Avoid destructive column changes unless necessary.
+Backfill tenant IDs safely where required.
+Add indexes for high-volume portfolio queries.
+Add uniqueness constraints where needed.
+Preserve existing records.
+Test migrations against a representative database.
+document expected migration duration and locking risk.
+
+Large backfills should use staged or batched approaches.
+
+39. TESTING REQUIREMENTS
+
+Claude Code must not treat successful compilation as adequate testing.
+
+39.1 Unit Tests
+
+Test:
+
+Programme validation
+Template versioning
+Site scoring
+Project generation
+BOQ consolidation
+Funding calculations
+KPI calculations
+Permission rules
+Workflow transitions
+Contract-state transitions
+Scenario calculations
+Import validation
+39.2 Integration Tests
+
+Test:
+
+Programme creation through APIs
+Beneficiary import
+Beneficiary approval
+Project generation using an existing design service
+Programme-to-project navigation
+BOQ aggregation
+Procurement package creation
+Funding allocation
+Contract creation
+Dashboard aggregation
+GIS queries
+Report generation
+Audit logging
+39.3 Tenant Isolation Tests
+
+Prove:
+
+Tenant A cannot read Tenant B programmes.
+Tenant A cannot modify Tenant B beneficiaries.
+Tenant A cannot access Tenant B reports.
+Regional users only see authorised regions.
+Contractors only see assigned packages and projects.
+Financiers only see permitted financial information.
+39.4 End-to-End Tests
+
+Required E2E scenario:
+
+Enterprise institution signs in.
+Administrator creates a programme.
+Administrator selects a programme template.
+Administrator creates a phase.
+User imports beneficiaries.
+Invalid rows are reported.
+Valid beneficiaries are approved.
+Site qualification is completed.
+Selected beneficiaries generate SolarPro projects.
+Project designs are created or linked.
+BOQs are aggregated.
+An EPC package is created.
+Funding is allocated.
+Progress appears on the dashboard.
+Executive report is generated.
+Unauthorised user access is rejected.
+
+Also test a generation-station programme.
+
+39.5 Performance Tests
+
+Test representative loads such as:
+
+10,000 beneficiaries
+5,000 generated projects
+100,000 BOQ lines
+1,000 concurrent dashboard viewers where infrastructure permits
+Large GIS query
+Large spreadsheet import
+Large report generation
+
+Use realistic, safe test data.
+
+39.6 Security Tests
+
+Run available:
+
+Dependency audit
+Static analysis
+Secret scan
+Authorization tests
+API fuzzing or schema validation
+Upload validation tests
+IDOR tests
+Injection tests
+40. FEATURE FLAGS AND RELEASE STRATEGY
+
+Implement the module behind a feature flag or entitlement if the application supports feature control.
+
+Recommended release sequence:
+
+Phase 1 — Foundation
+Enterprise entitlement
+Programme registry
+Programme templates
+Beneficiaries
+Programme-project links
+RBAC
+Audit logging
+Phase 2 — Design and Generation
+Standard-design reuse
+Generation-station reuse
+Site qualification
+Automated project generation
+Programme dashboards
+GIS portfolio
+Phase 3 — Finance and Delivery
+Funding
+EPC packaging
+BOQ consolidation
+Procurement
+Logistics
+Contract management
+Phase 4 — Construction and Operations
+Progress tracking
+Inspections
+Commissioning
+Asset roll-up
+Operations centre
+Maintenance
+Phase 5 — Intelligence
+Programme AI agents
+Predictive analytics
+Scenario modelling
+Carbon and ESG
+Executive recommendations
+
+The repository may justify a different technical sequencing, but dependencies must be respected.
+
+41. DEPLOYMENT REQUIREMENTS
+
+Claude Code must detect and use the existing deployment platform.
+
+Do not invent a new deployment stack unless the repository has no usable deployment setup.
+
+The deployment process must include:
+
+Pre-deployment backup or recovery point
+Environment-variable validation
+Migration dry run
+Build
+Automated tests
+Security checks
+Deployment to staging
+Staging smoke tests
+User-flow verification
+Production migration
+Production deployment
+Production smoke tests
+Monitoring verification
+Rollback readiness
+
+If only a development or staging environment is available, deploy there and clearly state that production deployment was not possible.
+
+Never claim successful deployment without evidence.
+
+42. OBSERVABILITY
+
+Extend existing observability to capture:
+
+Programme API errors
+Import failures
+Project-generation failures
+Background-job failures
+AI-agent failures
+Dashboard query latency
+GIS query latency
+Report-generation duration
+Tenant-isolation violations
+Permission denials
+Migration health
+Integration failures
+SCADA or telemetry failures
+Queue depth
+Retry counts
+
+Use structured logs with tenant and programme identifiers, while avoiding sensitive-data leakage.
+
+43. ROLLBACK PLAN
+
+The implementation must include rollback procedures for:
+
+Application release
+Database migrations
+Feature flags
+Background jobs
+Failed imports
+Failed project-generation batches
+Invalid programme templates
+Procurement consolidation
+KPI recalculation
+AI-agent configuration
+
+Prefer disabling the feature flag over destructive rollback where possible.
+
+44. REQUIRED SAMPLE DATA
+
+Create safe seed or fixture data for demonstration and tests.
+
+Include at least:
+
+Sample Programme A
+
+Ghana National Secondary School Solar Independence Programme
+
+16 regions
+Multiple districts
+Sample schools
+Standard 50 kW and 100 kW packages
+Three implementation phases
+Multiple EPC packages
+Funding allocation
+Programme dashboard
+Sample Programme B
+
+Regional Hospital Solar Resilience Programme
+
+Critical and non-critical loads
+PV
+Battery
+Generator integration
+UPS integration
+Standard 500 kW and 1 MW configurations
+Sample Programme C
+
+Agricultural Irrigation Solar Programme
+
+Farms
+Borehole pumps
+Irrigation pumps
+Cold storage
+Productive-use energy
+Sample Programme D
+
+20 MW Regional Solar Generation Station
+
+PV array
+Inverters
+MV collection
+Transformer
+Substation
+SCADA
+Battery option
+Grid interface
+Civil works
+
+Do not place real personal information in fixtures.
+
+45. ACCEPTANCE CRITERIA
+
+The module is complete only when all applicable criteria pass.
+
+Architecture
+Implemented inside SolarPro
+Existing modules reused
+No duplicate authentication
+No duplicate project engine
+No duplicate BOQ engine
+No duplicate marketplace
+No duplicate financial engine
+No duplicate reporting engine
+Enterprise
+Institutional tenant can access the module
+Organisation branding works
+RBAC works
+Tenant isolation is proven
+Audit history is available
+Programme
+Programme can be created
+Programme can be configured
+Programme phases can be managed
+Programme templates are versioned
+Programme status is tracked
+Beneficiaries
+Beneficiaries can be entered manually
+Beneficiaries can be imported
+Invalid rows are reported
+Duplicate handling exists
+Beneficiaries can be approved
+Engineering
+Standard designs can be assigned
+Generation-station designs can be assigned
+Existing SolarPro design services are reused
+Projects can be generated from approved beneficiaries
+Generated projects remain linked to the programme
+Portfolio
+Programme dashboard displays real calculated data
+GIS view displays authorised assets
+Drill-down reaches existing SolarPro projects
+Large result sets are paginated
+Finance and Procurement
+Funding can be recorded and allocated
+BOQ lines can be consolidated
+Procurement packages can be generated
+Quantities remain traceable to source projects
+Delivery
+EPC packages can be created
+Contractors can be assigned
+Progress can be monitored
+Inspections can be recorded
+Commissioning can be completed
+Contracts
+FIDIC-style contract template can be configured
+Milestones can be tracked
+Variations can be tracked
+Claims can be tracked
+Payment certificates can be tracked
+Operations
+Programme assets roll up correctly
+Operational summaries display
+Alarm or status data is distinguishable from simulated data
+Maintenance records can be accessed
+Quality
+Lint passes
+Type checking passes
+Build passes
+Unit tests pass
+Integration tests pass
+E2E tests pass
+Security tests pass
+Tenant-isolation tests pass
+Migrations pass
+Deployment smoke tests pass
+46. CLAUDE CODE IMPLEMENTATION METHOD
+
+Claude Code must work in controlled work packages.
+
+For every work package:
+
+Read the relevant Codex plan section.
+Inspect the affected repository files.
+State the intended change in the implementation log.
+Implement the smallest coherent vertical slice.
+Add or update tests.
+Run targeted tests.
+Run lint and type checks for affected areas.
+Review the diff.
+Fix defects.
+Update documentation.
+Commit or checkpoint if repository workflow permits.
+Proceed only when the slice is stable.
+
+Recommended vertical slices:
+
+Module entitlement and navigation
+Programme domain and migrations
+Programme APIs
+Programme UI
+Templates
+Beneficiaries and import
+Site qualification
+Project generation
+Dashboard and GIS
+Funding
+BOQ consolidation
+EPC packaging
+Contract management
+Logistics
+Construction
+Inspection and commissioning
+Operations
+AI orchestration
+Reporting
+Security hardening
+Performance
+Deployment
+47. CHANGE CONTROL
+
+If repository constraints prevent a requested feature from being fully implemented:
+
+Do not silently omit it.
+Implement the strongest feasible foundation.
+Add a documented adapter or extension point.
+Record the limitation.
+Explain the dependency.
+Provide a precise follow-on task.
+Ensure the current build remains operational.
+
+Examples include unavailable:
+
+Satellite-imagery provider
+Live weather provider
+Utility API
+SCADA provider
+Payment provider
+ERP provider
+Digital-signature provider
+Carbon registry
+
+Use provider interfaces and mocks rather than hard-coding one vendor.
+
+48. DOCUMENTATION REQUIREMENTS
+
+Claude Code must provide:
+
+Module architecture
+Setup instructions
+Environment variables
+Database migrations
+Permission model
+API documentation
+User workflows
+Administrator guide
+Template-management guide
+Beneficiary-import guide
+Project-generation guide
+Procurement guide
+Contract-management guide
+Operations guide
+AI-agent guide
+Testing guide
+Deployment guide
+Rollback guide
+Troubleshooting guide
+Known limitations
+Future integration points
+49. FINAL IMPLEMENTATION REPORT
+
+At completion, Claude Code must produce a final report containing:
+
+Executive summary
+Repository and technology stack
+Codex plan received
+Corrections made to the plan
+Features implemented
+Existing capabilities reused
+New components created
+Database changes
+API changes
+Frontend changes
+Security controls
+RBAC implementation
+Tenant-isolation evidence
+Testing performed
+Test results
+Performance results
+Deployment target
+Deployment result
+Smoke-test result
+Environment variables added
+Migration result
+Monitoring status
+Known limitations
+Deferred integrations
+Rollback procedure
+Recommended next release
+
+Include actual commands and results.
+
+Do not report unexecuted tests as passed.
+
+50. REQUIRED FINAL RESPONSE FORMAT
+
+When all work is complete, return:
+
+A. Planning Status
+Codex planning complete or incomplete
+Planning documents created
+Major architecture conclusions
+B. Implementation Status
+Completed features
+Partially completed features
+Deferred features
+C. Reuse Summary
+Existing modules reused
+Existing modules extended
+New services added
+D. Quality Status
+Build
+Lint
+Type checking
+Unit tests
+Integration tests
+E2E tests
+Security tests
+Tenant tests
+Performance tests
+E. Database Status
+Migrations created
+Migrations executed
+Backfill status
+Rollback status
+F. Deployment Status
+Environment
+Release identifier
+Deployment result
+Smoke-test result
+Monitoring result
+G. Evidence
+Files added
+Files modified
+Commands executed
+Test summaries
+Deployment evidence
+H. Remaining Work
+
+List only genuine remaining work with reasons and exact next actions.
+
+51. STARTING INSTRUCTION TO CODEX
+
+Begin now by inspecting the repository.
+
+Do not write implementation code during the initial planning stage, except for harmless analysis scripts where necessary.
+
+Create the required planning artefacts and the Claude Code handoff document.
+
+The plan must be based on the actual SolarPro repository.
+
+52. HANDOFF INSTRUCTION TO CLAUDE CODE
+
+After Codex finishes:
+
+Read claude-code-implementation-handoff.md and all supporting planning documents.
+
+Independently verify the repository state.
+
+Then implement, integrate, migrate, test, secure and deploy the Enterprise Solar Programme Management Module according to this master specification and the validated Codex plan.
+
+Do not stop after scaffolding.
+
+Do not stop after creating database tables.
+
+Do not stop after creating placeholder pages.
+
+Do not stop after unit tests alone.
+
+Continue through working vertical workflows, integration testing, end-to-end testing, deployment and post-deployment verification.
+
+The final result must be a functional, secure and integrated SolarPro enterprise module, not a design concept, mock-up or disconnected prototype.
+Use this prompt from the root of the SolarPro repository so Codex and Claude Code can inspect the actual codebase, identify reusable modules and reference real file paths.

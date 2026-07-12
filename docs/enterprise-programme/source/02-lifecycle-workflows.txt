@@ -1,0 +1,1252 @@
+Below is the programme initiation, development, implementation and operational workflow for the SolarPro Enterprise Solar Programme Management Module. It is structured to support national, regional, community, institutional, residential, agricultural and generation-station programmes while reusing the existing SolarPro design, BOQ, procurement, finance, GIS, project-management, asset and monitoring capabilities.
+
+SOLAR PROGRAMME INITIATION, DEVELOPMENT AND IMPLEMENTATION PHASES
+1. Programme Lifecycle Overview
+
+The complete lifecycle should follow this sequence:
+
+Programme Concept
+→ Programme Initiation
+→ Needs Assessment
+→ Feasibility and Business Case
+→ Programme Structuring
+→ Standard and Generation-Station Design Development
+→ Funding and Commercial Structuring
+→ Procurement and EPC Packaging
+→ Detailed Engineering
+→ Mobilisation
+→ Construction and Installation
+→ Inspection, Testing and Commissioning
+→ Handover and Programme Closeout
+→ Operations and Maintenance
+→ Performance Evaluation and Programme Expansion
+
+The platform should control this process through configurable stage gates, approvals, role assignments, document requirements and programme-level dashboards.
+
+PHASE 1: PROGRAMME CONCEPT AND OPPORTUNITY IDENTIFICATION
+Purpose
+
+Identify the energy problem, target beneficiaries, programme sponsor, strategic objectives and initial delivery concept.
+
+Main Activities
+Register the programme idea.
+Identify the sponsoring institution.
+Define the target sector.
+Define the geographical coverage.
+Identify the energy-access or energy-security problem.
+Estimate the number of potential beneficiaries.
+Select an initial programme category.
+Identify possible programme funding sources.
+Define initial expected benefits.
+Conduct an initial policy and regulatory review.
+Identify key stakeholders.
+Determine whether the programme will use:
+Standard distributed designs
+Generation-station designs
+Mini-grid designs
+Hybrid designs
+A combination of these approaches
+Prepare an initial programme concept note.
+Submit the concept for sponsor review.
+Typical Programme Concepts
+National Home Energy Independence Programme
+Secondary School Solar Programme
+Hospital Solar Resilience Programme
+Agricultural Irrigation Solar Programme
+Government Office Solar Programme
+Community Mini-Grid Programme
+Regional Generation Station Programme
+National Solar Farm Programme
+Key Outputs
+Programme concept note
+Preliminary programme title
+Programme sponsor record
+Initial objectives
+Preliminary geographical scope
+Preliminary beneficiary estimate
+Initial implementation model
+Initial risk register
+Concept approval decision
+Stage Gate
+
+Gate 1: Programme Concept Approval
+
+The programme sponsor approves, rejects or returns the concept for revision.
+
+PHASE 2: PROGRAMME INITIATION
+Purpose
+
+Formally establish the programme, appoint its leadership and define the governance and initiation structure.
+
+Main Activities
+Create the programme in SolarPro.
+Assign the enterprise tenant.
+Assign the programme sponsor.
+Appoint the programme director.
+Appoint the programme manager.
+Establish programme governance.
+Define programme departments and workstreams.
+Define programme-level roles.
+Define approval authorities.
+Establish regional and district implementation structures.
+Define programme objectives.
+Define programme scope.
+Define exclusions.
+Define programme boundaries.
+Establish preliminary budget.
+Define programme duration.
+Define programme phases.
+Establish reporting requirements.
+Define stakeholder engagement arrangements.
+Create the programme document register.
+Create the initial programme schedule.
+Establish the programme risk and issue registers.
+Create the programme communications plan.
+Define audit and assurance requirements.
+Approve the programme charter.
+Governance Structure
+
+Programme Sponsor
+→ Programme Steering Committee
+→ Programme Director
+→ Programme Management Office
+→ Technical Workstream
+→ Finance Workstream
+→ Procurement Workstream
+→ Contract Workstream
+→ Regional Implementation Teams
+→ Site Delivery Teams
+→ Operations and Maintenance Team
+
+Key Outputs
+Programme charter
+Governance structure
+Programme organisation chart
+Role and responsibility matrix
+Approval matrix
+Preliminary master schedule
+Communications plan
+Document-control plan
+Programme risk register
+Programme initiation report
+Stage Gate
+
+Gate 2: Programme Initiation Approval
+
+The steering committee confirms that the programme has a valid governance structure, sponsor, scope and management arrangement.
+
+PHASE 3: NEEDS ASSESSMENT AND BASELINE STUDY
+Purpose
+
+Establish the actual energy need, beneficiary conditions, infrastructure limitations and implementation priorities.
+
+Main Activities
+Define beneficiary categories.
+Register potential beneficiaries.
+Import beneficiary data through:
+Spreadsheet
+CSV
+GIS
+API
+Manual registration
+Validate beneficiary records.
+Remove or merge duplicates.
+Conduct preliminary site screening.
+Collect current electricity bills.
+Collect historical energy consumption.
+Record generator use.
+Record fuel consumption.
+Record outage frequency.
+Record critical loads.
+Record priority loads.
+Assess roof area.
+Assess available land.
+Assess existing electrical infrastructure.
+Assess transformer and grid capacity.
+Assess access roads.
+Assess security conditions.
+Assess flood and environmental risks.
+Assess communications coverage.
+Assess maintenance capability.
+Identify social and economic priorities.
+Categorise sites by need and suitability.
+Calculate initial site qualification scores.
+Prioritise beneficiaries.
+Develop the programme baseline.
+Site Qualification Scores
+
+Each site should receive:
+
+Technical suitability score
+Energy-need score
+Financial suitability score
+Social-impact score
+Implementation-readiness score
+Security-risk score
+Environmental-risk score
+Funding-eligibility score
+Overall priority score
+Key Outputs
+Beneficiary register
+Site register
+Energy-demand baseline
+Existing infrastructure assessment
+Critical-load schedule
+Site qualification report
+Priority list
+Regional needs assessment
+Programme baseline report
+Stage Gate
+
+Gate 3: Needs Assessment Approval
+
+The programme management team approves the validated beneficiary register and priority framework.
+
+PHASE 4: FEASIBILITY STUDY AND BUSINESS CASE
+Purpose
+
+Determine whether the programme is technically, financially, commercially, environmentally and operationally viable.
+
+Main Activities
+Define alternative programme scenarios.
+Develop preliminary demand forecasts.
+Estimate total PV capacity.
+Estimate total battery capacity.
+Estimate grid-support requirements.
+Assess possible generation-station locations.
+Assess distributed-system options.
+Evaluate rooftop, ground-mounted and hybrid options.
+Assess generator integration.
+Assess UPS integration.
+Assess mini-grid options.
+Assess grid-interconnection requirements.
+Develop preliminary technical concepts.
+Prepare preliminary equipment schedules.
+Prepare preliminary BOQs.
+Develop programme cost estimates.
+Develop CAPEX estimates.
+Develop OPEX estimates.
+Estimate lifecycle cost.
+Estimate expected energy generation.
+Estimate grid-energy savings.
+Estimate diesel savings.
+Estimate carbon reduction.
+Estimate programme revenue where applicable.
+Assess affordability.
+Assess funding options.
+Conduct financial modelling.
+Assess PPP or IPP suitability.
+Conduct economic analysis.
+Conduct preliminary environmental and social assessment.
+Assess regulatory requirements.
+Assess land and ownership constraints.
+Assess procurement options.
+Assess EPC packaging options.
+Assess implementation capacity.
+Conduct programme risk analysis.
+Recommend the preferred programme option.
+Prepare the programme business case.
+Key Outputs
+Technical feasibility report
+Financial feasibility report
+Economic assessment
+Environmental and social screening
+Preliminary programme design
+Preliminary CAPEX and OPEX
+Funding-options report
+Programme business case
+Recommended implementation model
+Feasibility approval report
+Stage Gate
+
+Gate 4: Feasibility and Business Case Approval
+
+The sponsor, steering committee and funding stakeholders approve the preferred programme option.
+
+PHASE 5: PROGRAMME STRUCTURING AND MASTER PLANNING
+Purpose
+
+Convert the approved business case into a structured, phased and measurable implementation programme.
+
+Main Activities
+Confirm programme scope.
+Confirm total target capacity.
+Confirm target beneficiaries.
+Divide the programme into phases.
+Divide the programme by region or district.
+Create implementation lots.
+Define programme workstreams.
+Define programme milestones.
+Define delivery sequence.
+Define programme dependencies.
+Define procurement strategy.
+Define EPC strategy.
+Define funding-disbursement sequence.
+Define stakeholder-engagement activities.
+Define land and permitting activities.
+Define engineering approval workflow.
+Define contract approval workflow.
+Define commissioning workflow.
+Define operational handover strategy.
+Define programme KPI framework.
+Define monitoring and evaluation requirements.
+Define reporting frequency.
+Define audit requirements.
+Define change-control procedure.
+Define programme escalation process.
+Establish programme baselines for:
+Scope
+Cost
+Schedule
+Capacity
+Beneficiaries
+Energy generation
+Carbon reduction
+Approve the programme master plan.
+Programme Breakdown Structure
+
+Programme
+→ Phase
+→ Region
+→ District
+→ Community or Institution
+→ Site
+→ Project
+→ Design Package
+→ Contract Package
+→ Construction Package
+→ Asset Package
+
+Key Outputs
+Programme master plan
+Programme breakdown structure
+Phasing strategy
+Regional rollout plan
+Programme master schedule
+Programme cost baseline
+Programme KPI framework
+Programme monitoring framework
+Programme implementation manual
+Change-control plan
+Stage Gate
+
+Gate 5: Programme Master Plan Approval
+
+The approved plan becomes the controlling implementation baseline.
+
+PHASE 6: PROGRAMME TEMPLATE AND STANDARDISATION DEVELOPMENT
+Purpose
+
+Create reusable, approved technical and management templates to support rapid programme-scale delivery.
+
+Main Activities
+Define standard beneficiary categories.
+Define standard site categories.
+Define typical load profiles.
+Develop standard design packages.
+Develop generation-station design templates.
+Define standard battery packages.
+Define standard inverter arrangements.
+Define standard generator-integration arrangements.
+Define standard UPS-integration arrangements.
+Define standard protection schemes.
+Define standard metering arrangements.
+Define standard SCADA arrangements.
+Define standard communication arrangements.
+Define standard civil requirements.
+Define standard structural requirements.
+Develop standard drawings.
+Develop standard single-line diagrams.
+Develop standard equipment schedules.
+Develop standard BOQs.
+Develop standard cost models.
+Develop standard construction schedules.
+Develop standard inspection plans.
+Develop standard testing procedures.
+Develop standard commissioning procedures.
+Develop standard O&M plans.
+Develop standard warranties.
+Define approved equipment alternatives.
+Define approved product substitutions.
+Define template approval workflow.
+Publish approved template versions.
+Example Standard Packages
+Residential 5 kW system
+Residential 10 kW system
+Residential 15 kW system
+Secondary school 50 kW system
+Secondary school 100 kW system
+Hospital 500 kW system
+Hospital 1 MW system
+Regional office 100 kW system
+Farm irrigation 200 kW system
+Cold-storage solar package
+Community mini-grid package
+5 MW generation station
+20 MW generation station
+50 MW generation station
+100 MW generation station
+Key Outputs
+Programme template library
+Standard design catalogue
+Approved equipment catalogue
+Standard BOQ library
+Standard drawing library
+Standard testing manual
+Standard commissioning manual
+Template version register
+Stage Gate
+
+Gate 6: Standardisation Approval
+
+Only approved template versions may be used to generate programme projects.
+
+PHASE 7: FUNDING AND COMMERCIAL STRUCTURING
+Purpose
+
+Secure funding and establish the commercial, financial and payment framework.
+
+Main Activities
+Confirm total funding requirement.
+Confirm programme cash-flow requirements.
+Identify funding sources.
+Structure government contributions.
+Structure development-bank funding.
+Structure commercial loans.
+Structure grants.
+Structure green bonds.
+Structure climate finance.
+Structure PPP arrangements.
+Structure IPP arrangements.
+Structure community contributions.
+Structure carbon-finance arrangements.
+Define funding conditions.
+Define eligible project costs.
+Define disbursement conditions.
+Define counterpart-funding requirements.
+Define repayment arrangements.
+Define guarantee requirements.
+Define insurance requirements.
+Establish programme funding accounts.
+Allocate funds by programme phase.
+Allocate funds by region.
+Allocate funds by project.
+Define payment-certification processes.
+Define financial reporting.
+Define audit requirements.
+Approve the funding plan.
+Key Outputs
+Funding strategy
+Financing structure
+Funding commitment register
+Disbursement plan
+Financial model
+Cash-flow forecast
+Payment-certification workflow
+Financial risk register
+Funding approval
+Stage Gate
+
+Gate 7: Financial Close or Funding Approval
+
+The programme may only proceed to major procurement when required funding has been secured.
+
+PHASE 8: PROCUREMENT STRATEGY AND EPC PACKAGING
+Purpose
+
+Organise the programme into commercially manageable procurement and delivery packages.
+
+Main Activities
+Consolidate project BOQs.
+Standardise units of measurement.
+Group identical equipment.
+Identify bulk-purchase opportunities.
+Divide procurement by region.
+Divide procurement by phase.
+Divide procurement by technology.
+Define equipment-only packages.
+Define installation packages.
+Define EPC packages.
+Define EPCM packages.
+Define turnkey packages.
+Define O&M packages.
+Define warehouse and logistics packages.
+Define framework agreements.
+Prepare procurement schedules.
+Prepare tender documents.
+Prepare technical specifications.
+Prepare employer’s requirements.
+Prepare bidder qualification criteria.
+Prepare evaluation criteria.
+Prepare contract conditions.
+Define FIDIC contract form where applicable.
+Invite bidders.
+Conduct pre-bid meetings.
+Respond to clarifications.
+Receive bids.
+Conduct technical evaluation.
+Conduct financial evaluation.
+Conduct due diligence.
+Recommend award.
+Obtain procurement approval.
+Negotiate and execute contracts.
+Typical Packaging Options
+National framework package
+Regional EPC package
+District implementation package
+Residential rollout package
+School programme package
+Hospital programme package
+Generation-station package
+Battery-storage package
+SCADA and monitoring package
+O&M package
+Key Outputs
+Consolidated programme BOQ
+Procurement plan
+EPC packaging plan
+Tender documents
+Bid evaluation report
+Contract award recommendation
+Signed contracts
+Procurement baseline
+Stage Gate
+
+Gate 8: Contract Award and Notice to Proceed
+
+The contractor may mobilise only after contract execution and required securities are accepted.
+
+PHASE 9: DETAILED ENGINEERING AND PROJECT GENERATION
+Purpose
+
+Convert approved beneficiaries and programme templates into detailed, construction-ready SolarPro projects.
+
+Main Activities
+Confirm approved beneficiary list.
+Confirm site qualification.
+Select the applicable template.
+Generate individual SolarPro projects.
+Assign programme and phase references.
+Assign region and district references.
+Assign design teams.
+Conduct detailed site surveys.
+Verify load data.
+Verify roof or land availability.
+Complete shading analysis.
+Complete energy simulation.
+Complete PV sizing.
+Complete battery sizing.
+Complete inverter sizing.
+Complete cable sizing.
+Complete protection design.
+Complete earthing design.
+Complete lightning-protection design where required.
+Complete structural design.
+Complete civil design.
+Complete drainage design for generation stations.
+Complete transformer and MV design.
+Complete substation design.
+Complete grid-interconnection design.
+Complete SCADA design.
+Complete communication-system design.
+Complete fire-protection design.
+Prepare detailed drawings.
+Prepare equipment schedules.
+Prepare detailed BOQs.
+Prepare project cost estimates.
+Conduct design reviews.
+Resolve review comments.
+Obtain engineering approval.
+Issue construction documents.
+Key Outputs
+Generated SolarPro project records
+Approved detailed designs
+Approved calculations
+Approved drawings
+Approved project BOQs
+Construction schedules
+Site-specific risk assessments
+Issued-for-construction documents
+Stage Gate
+
+Gate 9: Design Approval and Construction Release
+
+No site should proceed to installation without approved construction documents, except under an authorised controlled early-works process.
+
+PHASE 10: MOBILISATION AND IMPLEMENTATION READINESS
+Purpose
+
+Prepare contractors, sites, materials, personnel, logistics and controls before construction begins.
+
+Main Activities
+Issue notice to proceed.
+Confirm contractor mobilisation plan.
+Confirm site-access arrangements.
+Confirm land availability.
+Confirm permits and approvals.
+Confirm insurance.
+Confirm performance securities.
+Approve contractor programme.
+Approve method statements.
+Approve quality plan.
+Approve health and safety plan.
+Approve environmental and social plan.
+Approve logistics plan.
+Establish warehouses.
+Establish regional stores.
+Register equipment.
+Establish QR-code or serial-number controls.
+Confirm delivery schedules.
+Assign regional implementation teams.
+Assign site supervisors.
+Conduct site handover.
+Conduct pre-construction meetings.
+Establish reporting procedures.
+Establish communication channels.
+Establish document-control procedures.
+Confirm construction-readiness checklist.
+Key Outputs
+Mobilisation plan
+Approved contractor schedule
+Site handover certificates
+Approved method statements
+Quality plan
+Safety plan
+Logistics plan
+Warehouse setup
+Construction-readiness report
+Stage Gate
+
+Gate 10: Site Mobilisation Approval
+
+Construction starts only after the site-readiness checklist is approved.
+
+PHASE 11: CONSTRUCTION, INSTALLATION AND DELIVERY
+Purpose
+
+Execute physical implementation in accordance with approved designs, contracts and programme standards.
+
+Main Activities
+Site establishment.
+Site clearing where required.
+Civil works.
+Foundations.
+Drainage works.
+Access roads.
+Fencing and security works.
+Mounting-structure installation.
+PV-module installation.
+Inverter installation.
+Battery-system installation.
+Cable installation.
+Cable containment.
+Earthing installation.
+Lightning-protection installation.
+Distribution-board installation.
+Transformer installation.
+MV switchgear installation.
+Substation works.
+Metering installation.
+SCADA installation.
+Communication-system installation.
+Generator integration.
+UPS integration.
+Grid-interface works.
+Labelling.
+Asset tagging.
+Daily progress reporting.
+Material-consumption reporting.
+Quality inspections.
+Safety inspections.
+Environmental monitoring.
+Progress measurement.
+Delay reporting.
+Variation management.
+Claims management.
+Contractor performance assessment.
+Programme-dashboard updates.
+Programme Monitoring Levels
+National
+Programme
+Regional
+District
+EPC package
+Contractor
+Site
+Project
+Work activity
+Asset
+Key Outputs
+Installed systems
+Daily reports
+Progress reports
+Quality records
+Safety records
+Material records
+Updated programme schedule
+Updated cost report
+Variation records
+Claims records
+Construction-completion notice
+Stage Gate
+
+Gate 11: Construction Completion Approval
+
+The works proceed to formal testing only after construction completion checks are satisfied.
+
+PHASE 12: INSPECTION, TESTING AND COMMISSIONING
+Purpose
+
+Verify that each system is safe, compliant, functional and capable of achieving its intended performance.
+
+Main Activities
+Conduct installation inspections.
+Complete punch lists.
+Correct non-conformances.
+Conduct visual inspections.
+Conduct continuity tests.
+Conduct insulation-resistance tests.
+Conduct earthing tests.
+Conduct polarity tests.
+Conduct protection tests.
+Conduct inverter tests.
+Conduct battery tests.
+Conduct transformer tests.
+Conduct switchgear tests.
+Conduct metering tests.
+Conduct SCADA tests.
+Conduct communication-system tests.
+Conduct generator-integration tests.
+Conduct UPS-integration tests.
+Conduct grid-synchronisation tests.
+Conduct functional tests.
+Conduct performance tests.
+Verify alarms.
+Verify monitoring data.
+Verify safety systems.
+Conduct training.
+Prepare commissioning records.
+Prepare test certificates.
+Obtain utility approval where required.
+Issue commissioning approval.
+Update asset status.
+Key Outputs
+Inspection records
+Test results
+Non-conformance closure
+Commissioning certificates
+Performance-test report
+Training records
+As-built drawings
+Updated asset register
+Operational system status
+Stage Gate
+
+Gate 12: Commissioning and Taking-Over Approval
+
+The owner accepts the completed system subject to defects and contractual conditions.
+
+PHASE 13: HANDOVER AND PROGRAMME CLOSEOUT
+Purpose
+
+Transfer completed assets, records, responsibilities and knowledge to the owner and operations team.
+
+Main Activities
+Compile as-built drawings.
+Compile equipment manuals.
+Compile test certificates.
+Compile warranty documents.
+Compile spare-parts records.
+Finalise asset register.
+Finalise training.
+Transfer monitoring access.
+Transfer SCADA access.
+Transfer software credentials.
+Transfer maintenance schedules.
+Transfer supplier contacts.
+Transfer contractor contacts.
+Resolve outstanding punch-list items.
+Issue taking-over certificate.
+Record defects-notification period.
+Reconcile programme quantities.
+Reconcile contract values.
+Reconcile funding allocations.
+Reconcile procurement records.
+Prepare project closeout reports.
+Prepare regional closeout reports.
+Prepare programme closeout report.
+Record lessons learned.
+Archive programme documents.
+Update programme status.
+Key Outputs
+Handover dossier
+As-built documentation
+Final asset register
+Warranty register
+Spare-parts register
+Final account records
+Closeout report
+Lessons-learned register
+Taking-over certificate
+Stage Gate
+
+Gate 13: Handover and Closeout Approval
+
+The completed project or programme phase is formally transferred to operations.
+
+PHASE 14: OPERATIONS AND MAINTENANCE
+Purpose
+
+Maintain energy generation, system reliability, safety and lifecycle value.
+
+Main Activities
+Monitor generation.
+Monitor consumption.
+Monitor grid import and export.
+Monitor battery state of charge.
+Monitor battery health.
+Monitor inverter status.
+Monitor transformer status.
+Monitor meter status.
+Monitor SCADA communications.
+Monitor alarms.
+Monitor system availability.
+Monitor performance ratio.
+Conduct preventive maintenance.
+Conduct corrective maintenance.
+Conduct condition-based maintenance.
+Conduct predictive maintenance.
+Manage faults.
+Manage spare parts.
+Manage warranty claims.
+Manage service contractors.
+Conduct periodic testing.
+Update asset records.
+Update maintenance records.
+Report operational KPIs.
+Report carbon savings.
+Report fuel savings.
+Report financial savings.
+Train replacement operators.
+Review maintenance performance.
+Optimise operating strategies.
+Key Outputs
+Operations dashboard
+Maintenance schedule
+Fault register
+Warranty register
+Performance reports
+Energy-generation reports
+Carbon reports
+Asset-health reports
+Maintenance cost reports
+PHASE 15: MONITORING, EVALUATION AND PROGRAMME OPTIMISATION
+Purpose
+
+Evaluate whether the programme is achieving its technical, financial, social and environmental objectives.
+
+Main Activities
+Compare actual performance against baseline.
+Compare actual cost against budget.
+Compare actual schedule against plan.
+Compare actual installed capacity against target.
+Compare actual beneficiaries against target.
+Compare actual energy generation against forecast.
+Compare actual carbon reduction against target.
+Evaluate regional performance.
+Evaluate contractor performance.
+Evaluate supplier performance.
+Evaluate technology performance.
+Evaluate battery performance.
+Evaluate maintenance performance.
+Evaluate social impact.
+Evaluate jobs created.
+Evaluate local-content performance.
+Evaluate funding utilisation.
+Identify underperforming systems.
+Identify programme bottlenecks.
+Conduct root-cause analysis.
+Develop corrective actions.
+Reallocate resources.
+Revise programme templates.
+Revise procurement strategy.
+Revise maintenance strategy.
+Update future programme phases.
+Produce programme-evaluation reports.
+Key Outputs
+Programme performance report
+Benefits-realisation report
+Contractor scorecards
+Supplier scorecards
+Regional scorecards
+Technology-performance report
+Lessons-learned report
+Corrective-action plan
+Programme-optimisation plan
+Stage Gate
+
+Gate 14: Benefits and Performance Review
+
+The steering committee determines whether to continue, modify, expand or close the programme.
+
+PHASE 16: PROGRAMME EXPANSION AND REPLICATION
+Purpose
+
+Scale successful programme designs into new regions, sectors or countries.
+
+Main Activities
+Identify successful programme templates.
+Identify high-performing contractors.
+Identify approved suppliers.
+Identify successful financing models.
+Identify high-performing technologies.
+Update standard designs.
+Update standard BOQs.
+Update cost assumptions.
+Update risk models.
+Update qualification scoring.
+Clone the programme structure.
+Adapt the programme to a new region.
+Adapt the programme to a new sector.
+Adapt the programme to a new country.
+Launch the next implementation phase.
+Develop a scale-up funding plan.
+Develop a scale-up procurement plan.
+Approve the expanded programme.
+Key Outputs
+Expansion business case
+Updated programme templates
+Scale-up implementation plan
+Revised funding plan
+Revised procurement plan
+New programme phase
+Replication package
+END-TO-END PROGRAMME WORKFLOW
+Main Workflow
+
+Programme Opportunity Identified
+→ Concept Registered
+→ Concept Reviewed
+→ Programme Charter Created
+→ Governance Established
+→ Beneficiaries Registered
+→ Baseline Data Collected
+→ Sites Screened
+→ Feasibility Completed
+→ Business Case Approved
+→ Programme Master Plan Approved
+→ Programme Templates Developed
+→ Standard Designs Approved
+→ Funding Secured
+→ Procurement Packages Prepared
+→ Contractors Selected
+→ Beneficiaries Qualified
+→ SolarPro Projects Generated
+→ Detailed Designs Completed
+→ Designs Approved
+→ Sites Mobilised
+→ Materials Delivered
+→ Construction Completed
+→ Inspections Completed
+→ Testing Completed
+→ Systems Commissioned
+→ Assets Handed Over
+→ Systems Monitored
+→ Maintenance Performed
+→ Programme Performance Evaluated
+→ Programme Expanded or Closed
+
+BENEFICIARY-TO-PROJECT WORKFLOW
+
+Beneficiary Imported
+→ Data Validation
+→ Duplicate Check
+→ Beneficiary Review
+→ Site Qualification
+→ Priority Scoring
+→ Funding Eligibility Check
+→ Programme Template Assignment
+→ Standard or Generation-Station Strategy Selected
+→ Human Approval
+→ SolarPro Project Generated
+→ Design Inputs Created
+→ Engineering Design Completed
+→ BOQ Generated
+→ Project Approved
+→ Procurement Package Assigned
+→ Contractor Assigned
+→ Installation Completed
+→ Commissioning Completed
+→ Asset Registered
+→ Operations Monitoring Activated
+
+STANDARD DESIGN WORKFLOW
+
+Select Programme
+→ Select Beneficiary Type
+→ Select Standard Design Package
+→ Import Site and Load Data
+→ Validate Site Conditions
+→ Adjust Standard Parameters
+→ Run Solar Design Engine
+→ Run Energy Simulation
+→ Select Equipment
+→ Generate BOQ
+→ Generate Drawings
+→ Generate Financial Model
+→ Engineering Review
+→ Approval
+→ Issue for Construction
+
+GENERATION-STATION DESIGN WORKFLOW
+
+Register Generation Site
+→ Confirm Land and Grid Data
+→ Define Target Capacity
+→ Conduct Solar Resource Assessment
+→ Complete Site Layout
+→ Configure PV Array Blocks
+→ Configure Mounting or Trackers
+→ Configure Inverters
+→ Configure DC Collection
+→ Configure AC Collection
+→ Configure MV Stations
+→ Configure Transformers
+→ Configure Substation
+→ Configure Protection
+→ Configure SCADA
+→ Configure Battery Storage
+→ Configure Grid Interconnection
+→ Configure Roads and Drainage
+→ Configure Security and Fencing
+→ Run Energy Simulation
+→ Run Financial Model
+→ Generate BOQ
+→ Complete Technical Review
+→ Obtain Approval
+→ Issue for Construction
+
+PROCUREMENT WORKFLOW
+
+Approved Project BOQs
+→ BOQ Consolidation
+→ Product Standardisation
+→ Quantity Aggregation
+→ Regional and Phase Breakdown
+→ Procurement Package Creation
+→ Technical Specification Preparation
+→ Tender Issue
+→ Bid Receipt
+→ Technical Evaluation
+→ Financial Evaluation
+→ Approval
+→ Contract Award
+→ Purchase Order
+→ Manufacturing
+→ Delivery
+→ Warehouse Receipt
+→ Site Dispatch
+→ Installation
+→ Quantity Reconciliation
+
+EPC AND FIDIC CONTRACT WORKFLOW
+
+EPC Package Created
+→ Procurement Approval
+→ Tender Process
+→ Contractor Selection
+→ Contract Execution
+→ Notice to Proceed
+→ Mobilisation
+→ Submittals
+→ Design Review
+→ Construction
+→ Engineer’s Instructions
+→ Progress Measurement
+→ Interim Payment Certificate
+→ Variation Management
+→ Claim Management
+→ Extension-of-Time Review
+→ Testing
+→ Taking-Over Certificate
+→ Defects-Notification Period
+→ Performance Certificate
+→ Final Account
+→ Contract Closeout
+
+FUNDING WORKFLOW
+
+Funding Requirement Identified
+→ Funding Source Registered
+→ Due Diligence
+→ Funding Application
+→ Funding Approval
+→ Conditions Precedent
+→ Funding Agreement
+→ Programme Allocation
+→ Phase Allocation
+→ Project Allocation
+→ Disbursement Request
+→ Expenditure Verification
+→ Payment Approval
+→ Disbursement
+→ Utilisation Tracking
+→ Financial Reporting
+→ Audit
+→ Funding Closeout
+
+CONSTRUCTION WORKFLOW
+
+Site Assigned
+→ Site Handover
+→ Mobilisation Approval
+→ Method Statement Approval
+→ Material Approval
+→ Material Delivery
+→ Installation
+→ Daily Reporting
+→ Quality Inspection
+→ Safety Inspection
+→ Progress Measurement
+→ Defect Correction
+→ Construction Completion
+→ Testing Request
+→ Commissioning
+
+INSPECTION AND COMMISSIONING WORKFLOW
+
+Contractor Inspection Request
+→ Document Review
+→ Physical Inspection
+→ Test Execution
+→ Defects or Non-Conformances Recorded
+→ Corrective Action
+→ Retest
+→ Performance Test
+→ Utility Approval Where Required
+→ Commissioning Certificate
+→ Training
+→ Handover Approval
+→ Asset Activation
+
+OPERATIONS AND MAINTENANCE WORKFLOW
+
+Asset Activated
+→ Monitoring Enabled
+→ Performance Baseline Established
+→ Scheduled Maintenance
+→ Alarm Detection
+→ Fault Ticket Created
+→ Fault Diagnosis
+→ Technician Assignment
+→ Repair
+→ Testing
+→ Service Closure
+→ Asset Record Updated
+→ Performance Reassessment
+→ Warranty Claim Where Applicable
+
+PROGRAMME APPROVAL WORKFLOW
+
+Programme Officer
+→ Programme Manager
+→ Technical Director
+→ Finance Manager
+→ Procurement Manager
+→ Legal or Contract Manager
+→ Programme Director
+→ Steering Committee
+→ Programme Sponsor
+
+The workflow must be configurable because some programmes may require additional approvals from:
+
+Ministry
+Utility
+Financier
+Donor
+Regulator
+District authority
+Environmental authority
+Community authority
+Board of directors
+KEY PROGRAMME MANAGEMENT CONTROLS
+
+The SolarPro programme module should enforce the following controls throughout the lifecycle:
+
+No programme proceeds without an approved sponsor.
+No beneficiary becomes a project without qualification.
+No project is generated without an approved template.
+No design is issued without engineering approval.
+No procurement package is created without an approved BOQ.
+No contractor mobilises without contract approval.
+No installation begins without site-readiness approval.
+No system is commissioned without required tests.
+No asset is handed over without complete documentation.
+No operational KPI is reported without a defined data source.
+No AI recommendation becomes an approval automatically.
+Every material action must be auditable.
+Every programme record must be tenant-scoped.
+Every programme project must retain traceability to its originating beneficiary and programme template.
+Every aggregated procurement quantity must remain traceable to its source project BOQ.
+RECOMMENDED PROGRAMME STATUS VALUES
+Concept
+Under Initiation
+Under Assessment
+Under Feasibility
+Business Case Review
+Approved
+Funding Pending
+Procurement Planning
+Tendering
+Contracted
+Under Design
+Under Construction
+Under Commissioning
+Operational
+Suspended
+On Hold
+Closing
+Closed
+Cancelled
+Archived
+RECOMMENDED PROJECT STATUS VALUES
+Beneficiary Registered
+Qualification Pending
+Qualified
+Not Qualified
+Template Assigned
+Project Generated
+Survey Pending
+Under Design
+Design Review
+Design Approved
+Procurement Pending
+Contractor Assigned
+Site Mobilised
+Under Construction
+Testing
+Commissioning
+Operational
+Under Maintenance
+Suspended
+Closed
+PROGRAMME DASHBOARD WORKFLOW
+
+Programme Data Sources
+→ Validation
+→ Aggregation
+→ KPI Calculation
+→ Regional Breakdown
+→ Trend Analysis
+→ Risk Analysis
+→ Programme Health Score
+→ Executive Dashboard
+→ Management Action
+→ Decision Record
+→ Follow-Up Monitoring
+
+FINAL PROGRAMME OUTCOME
+
+The completed workflow should allow an enterprise customer to start with a national or institutional energy problem and move through programme initiation, beneficiary registration, feasibility, funding, standardisation, design, project generation, procurement, EPC delivery, commissioning, asset handover and long-term performance monitoring within one integrated SolarPro enterprise environment.
+
+The module should provide full traceability from the original programme objective to every beneficiary, project, design, BOQ, procurement item, contract, installed asset, commissioning result and operational performance record.
