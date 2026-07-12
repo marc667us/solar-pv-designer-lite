@@ -1,183 +1,171 @@
 {% extends "base.html" %}
-{% block title %}Beneficiaries - {{ programme.name }}{% endblock %}
+{% block title %}Beneficiary Register - SolarPro{% endblock %}
 {% block content %}
 <div class="container py-4 ent-page">
 
-  <div class="d-flex justify-content-between align-items-start flex-wrap mb-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
     <div>
-      <div class="text-muted small">
-        <a href="{{ url_for('enterprise_home') }}">Enterprise</a> /
-        <a href="{{ url_for('enterprise_programme_detail', programme_id=programme.id) }}">
-          {{ programme.programme_code }}
-        </a> / Beneficiaries
+      <div class="text-muted small mb-1">
+        <a href="{{ url_for('enterprise_programme_detail', programme_id=programme_id) }}"
+           class="text-decoration-none">
+          <i class="bi bi-arrow-left me-1"></i>{{ state.code }} {{ state.name }}
+        </a>
       </div>
-      <h1 class="h4 mb-0">Beneficiary Register</h1>
+      <h1 class="h4 mb-1">
+        <i class="bi bi-people text-warning me-2"></i>Beneficiary Register
+      </h1>
       <div class="text-muted small">
-        {{ total }} registered &middot; {{ programme.name }}
+        {{ total }} site{{ '' if total == 1 else 's' }} in this programme.
       </div>
     </div>
-    <button class="btn btn-primary" data-bs-toggle="collapse"
-            data-bs-target="#addBeneficiary">
-      <i class="bi bi-plus-lg"></i> Add beneficiary
-    </button>
+    {% if can_import %}
+    <a href="{{ url_for('enterprise_beneficiary_new', programme_id=programme_id) }}"
+       class="btn btn-warning">
+      <i class="bi bi-plus-lg me-1"></i>Add a Site
+    </a>
+    {% endif %}
   </div>
 
-  <div class="collapse mb-4" id="addBeneficiary">
-    <div class="card shadow-sm">
-      <div class="card-header bg-white"><strong>Register a beneficiary</strong></div>
-      <div class="card-body">
-        <p class="text-muted small">
-          Bulk spreadsheet import arrives in the next release; for now beneficiaries are
-          added one at a time.
-        </p>
-        <form method="post"
-              action="{{ url_for('enterprise_beneficiary_new', programme_id=programme.id) }}">
+  {# Registering is not approving. Said out loud, because 4000 imported rows LOOK like a
+     decision to serve 4000 schools, and they are not one. #}
+  <div class="alert alert-light border small mb-4">
+    <i class="bi bi-info-circle me-1 text-secondary"></i>
+    A site enters as <strong>Beneficiary Registered</strong>. Somebody holding
+    <code>beneficiary.approve</code> has to admit it to the programme before it can be
+    surveyed and qualified.
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-8">
+
+      {# Counts come from the DATABASE, over the whole register -- never from counting the
+         (capped) page below. #}
+      <div class="mb-3 d-flex flex-wrap gap-1">
+        <a href="{{ url_for('enterprise_beneficiaries', programme_id=programme_id) }}"
+           class="btn btn-sm {{ 'btn-dark' if not status_filter else 'btn-outline-secondary' }}">
+          All <span class="badge bg-light text-dark ms-1">{{ total }}</span>
+        </a>
+        {% for s in statuses %}
+        {% if counts[s] %}
+        <a href="{{ url_for('enterprise_beneficiaries', programme_id=programme_id, status=s) }}"
+           class="btn btn-sm {{ 'btn-dark' if status_filter == s else 'btn-outline-secondary' }}">
+          {{ s }} <span class="badge bg-light text-dark ms-1">{{ counts[s] }}</span>
+        </a>
+        {% endif %}
+        {% endfor %}
+      </div>
+
+      {% if capped %}
+      <div class="alert alert-warning small py-2 mb-3">
+        Showing the newest 500 only &mdash; filter by status to narrow the list.
+      </div>
+      {% endif %}
+
+      {% if beneficiaries %}
+      <div class="card">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Code</th><th>Name</th><th>Type</th><th>Community</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for b in beneficiaries %}
+              <tr>
+                <td class="text-nowrap"><code>{{ b.code }}</code></td>
+                <td>
+                  <a href="{{ url_for('enterprise_beneficiary_detail', beneficiary_id=b.id) }}"
+                     class="fw-semibold text-decoration-none">{{ b.name }}</a>
+                </td>
+                <td class="small text-muted">
+                  {{ b.beneficiary_type|replace('_',' ')|title }}
+                </td>
+                <td class="small text-muted">{{ b.community or '' }}</td>
+                <td>
+                  {% if b.status == 'Beneficiary Registered' %}
+                  <span class="badge bg-secondary">{{ b.status }}</span>
+                  {% elif b.status == 'Rejected' %}
+                  <span class="badge bg-danger">{{ b.status }}</span>
+                  {% else %}
+                  <span class="badge bg-primary">{{ b.status }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <div class="card">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-people display-5 text-muted d-block mb-3"></i>
+          <h2 class="h6">No sites in this register yet</h2>
+          <p class="text-muted small mb-0">
+            Upload a spreadsheet, or add sites one at a time.
+          </p>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="col-lg-4">
+      {% if can_import %}
+      <div class="card mb-3">
+        <div class="card-header bg-white fw-semibold">
+          <i class="bi bi-upload me-1 text-warning"></i>Import a spreadsheet
+        </div>
+        <form method="post" enctype="multipart/form-data"
+              action="{{ url_for('enterprise_import_upload', programme_id=programme_id) }}">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-
-          <div class="row">
-            <div class="col-md-5 mb-3">
-              <label class="form-label">Name <span class="text-danger">*</span></label>
-              <input type="text" name="name" class="form-control" required
-                     placeholder="e.g. Accra Girls Senior High School">
+          <div class="card-body">
+            <input type="file" class="form-control mb-2" name="file"
+                   accept=".csv,.xlsx,.xlsm" required>
+            <label class="form-label small mt-2">
+              Default type <span class="text-muted">(for rows whose file has no type column)</span>
+            </label>
+            <select class="form-select form-select-sm mb-2" name="default_type">
+              <option value="">None &mdash; the file must say</option>
+              {% for o in beneficiary_types %}
+              <option value="{{ o.value }}">{{ o.label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text mb-2">
+              CSV or XLSX, up to {{ import_max_rows }} rows.
+              <strong>Nothing is written</strong> until you have seen what it would do.
             </div>
-            <div class="col-md-3 mb-3">
-              <label class="form-label">Type</label>
-              <select name="beneficiary_type" class="form-select">
-                {% for value, label in beneficiary_types %}
-                <option value="{{ value }}">{{ label }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-4 mb-3">
-              <label class="form-label">Phase</label>
-              <select name="phase_id" class="form-select">
-                <option value="">Unassigned</option>
-                {% for ph in phases %}
-                <option value="{{ ph.id }}">{{ ph.sequence_no }}. {{ ph.name }}</option>
-                {% endfor %}
-              </select>
-            </div>
+            <button class="btn btn-warning btn-sm w-100" type="submit">
+              <i class="bi bi-eye me-1"></i>Upload and Preview
+            </button>
           </div>
-
-          <div class="row">
-            <div class="col-md-3 mb-3">
-              <label class="form-label">Region</label>
-              <input type="text" name="region" class="form-control">
-            </div>
-            <div class="col-md-3 mb-3">
-              <label class="form-label">District</label>
-              <input type="text" name="district" class="form-control">
-            </div>
-            <div class="col-md-3 mb-3">
-              <label class="form-label">Latitude</label>
-              <input type="number" step="any" name="latitude" class="form-control"
-                     placeholder="5.6037">
-            </div>
-            <div class="col-md-3 mb-3">
-              <label class="form-label">Longitude</label>
-              <input type="number" step="any" name="longitude" class="form-control"
-                     placeholder="-0.1870">
-            </div>
-          </div>
-
-          <div class="row">
-            <div class="col-md-4 mb-3">
-              <label class="form-label">Daily load (kWh)</label>
-              <input type="number" step="any" min="0" name="load_kwh_day"
-                     class="form-control">
-            </div>
-            <div class="col-md-4 mb-3">
-              <label class="form-label">Target capacity (kWp)</label>
-              <input type="number" step="any" min="0" name="target_capacity_kwp"
-                     class="form-control">
-            </div>
-            <div class="col-md-4 mb-3">
-              <label class="form-label">Contact</label>
-              <input type="text" name="contact_name" class="form-control"
-                     placeholder="Contact person">
-            </div>
-          </div>
-
-          <button class="btn btn-primary">Register beneficiary</button>
         </form>
       </div>
-    </div>
-  </div>
+      {% endif %}
 
-  <div class="card shadow-sm">
-    {% if beneficiaries %}
-    <div class="table-responsive">
-      <table class="table table-hover mb-0 align-middle">
-        <thead class="table-light">
-          <tr>
-            <th>Name</th><th>Type</th><th>Region</th><th>District</th>
-            <th class="text-end">kWh/day</th><th>Status</th><th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for b in beneficiaries %}
-          <tr>
-            <td>{{ b.name }}</td>
-            <td class="text-muted small">{{ b.beneficiary_type|replace('_',' ')|title }}</td>
-            <td class="text-muted small">{{ b.region or '-' }}</td>
-            <td class="text-muted small">{{ b.district or '-' }}</td>
-            <td class="text-end">{{ '{:,.1f}'.format(b.load_kwh_day or 0) }}</td>
-            <td>
-              {% set colour = {'approved':'success','rejected':'danger','archived':'dark'}
-                              .get(b.qualification_status, 'secondary') %}
-              <span class="badge bg-{{ colour }}">{{ b.qualification_status }}</span>
-            </td>
-            <td class="text-end">
-              {% if b.qualification_status != 'approved' %}
-              <form method="post" class="d-inline"
-                    action="{{ url_for('enterprise_beneficiary_status',
-                                       programme_id=programme.id, beneficiary_id=b.id) }}">
-                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-                <input type="hidden" name="status" value="approved">
-                <button class="btn btn-sm btn-outline-success">Approve</button>
-              </form>
-              {% endif %}
-              {% if b.qualification_status != 'rejected' %}
-              <form method="post" class="d-inline"
-                    action="{{ url_for('enterprise_beneficiary_status',
-                                       programme_id=programme.id, beneficiary_id=b.id) }}">
-                <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-                <input type="hidden" name="status" value="rejected">
-                <button class="btn btn-sm btn-outline-danger">Reject</button>
-              </form>
-              {% endif %}
-            </td>
-          </tr>
+      {% if batches %}
+      <div class="card">
+        <div class="card-header bg-white fw-semibold">
+          <i class="bi bi-clock-history me-1 text-warning"></i>Imports
+        </div>
+        <ul class="list-group list-group-flush small">
+          {% for b in batches %}
+          <li class="list-group-item">
+            <a href="{{ url_for('enterprise_import_detail', batch_id=b.id) }}"
+               class="text-decoration-none fw-semibold">
+              {{ b.filename or 'Import #' ~ b.id }}
+            </a>
+            <div class="text-muted">
+              {{ b.status }} &middot; {{ b.total_rows }} rows
+              {% if b.status == 'Committed' %} &middot; {{ b.imported_rows }} imported{% endif %}
+              {% if b.error_rows %} &middot; {{ b.error_rows }} errors{% endif %}
+            </div>
+          </li>
           {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    {% if pages > 1 %}
-    <div class="card-footer bg-white d-flex justify-content-between align-items-center">
-      <span class="text-muted small">Page {{ page }} of {{ pages }}</span>
-      <div class="btn-group btn-group-sm">
-        {% if page > 1 %}
-        <a class="btn btn-outline-secondary"
-           href="{{ url_for('enterprise_beneficiaries',
-                            programme_id=programme.id, page=page-1) }}">Previous</a>
-        {% endif %}
-        {% if page < pages %}
-        <a class="btn btn-outline-secondary"
-           href="{{ url_for('enterprise_beneficiaries',
-                            programme_id=programme.id, page=page+1) }}">Next</a>
-        {% endif %}
+        </ul>
       </div>
+      {% endif %}
     </div>
-    {% endif %}
-
-    {% else %}
-    <div class="card-body text-center text-muted py-5">
-      <i class="bi bi-people fs-1 d-block mb-2"></i>
-      <p class="mb-0">No beneficiaries registered yet.</p>
-    </div>
-    {% endif %}
   </div>
-
 </div>
 {% endblock %}

@@ -192,6 +192,139 @@ BENEFICIARY_FIELDS: list[tuple[str, str]] = [
     ("priority_ranking",      "Priority ranking"),
 ]
 
+# --- the beneficiary register (master prompt s12, slice 5) -------------------
+# The SAME 22 field keys as BENEFICIARY_FIELDS above, with the type information the
+# register needs: how to validate a typed value, and which vocabulary a coded one must
+# come from. One list drives the manual form, the CSV/XLSX import mapper, the validator,
+# and (through the template's `required_beneficiary_fields`) the qualification check --
+# so a field a template can DEMAND is necessarily a field the register can HOLD and the
+# importer can FILL. They cannot drift, because they are the same keys.
+#
+# A test asserts this covers BENEFICIARY_FIELDS exactly. Adding a field to one list and
+# forgetting the other is how a template ends up requiring something no beneficiary can
+# ever supply -- a site that can never qualify, with nothing in the UI to say why.
+#
+# `kind`: text | number | select | gps  (gps is "lat,lon", validated as a real coordinate)
+BENEFICIARY_FIELD_SPEC: list[dict] = [
+    {"key": "name",                   "kind": "text",   "required": True},
+    {"key": "region",                 "kind": "text"},
+    {"key": "district",               "kind": "text"},
+    {"key": "community",              "kind": "text"},
+    {"key": "address",                "kind": "text"},
+    {"key": "gps_coordinates",        "kind": "gps"},
+    {"key": "contact_person",         "kind": "text"},
+    {"key": "contact_details",        "kind": "text"},
+    {"key": "ownership",              "kind": "select", "source": "OWNERSHIP_TYPES"},
+    {"key": "building_type",          "kind": "select", "source": "BUILDING_TYPES"},
+    {"key": "occupancy",              "kind": "number"},
+    {"key": "existing_energy_source", "kind": "select", "source": "ENERGY_SOURCES"},
+    {"key": "electricity_consumption", "kind": "number"},   # kWh / month
+    {"key": "tariff",                 "kind": "number"},    # currency / kWh
+    {"key": "generator_details",      "kind": "text"},
+    {"key": "roof_area",              "kind": "number"},    # m2
+    {"key": "land_availability",      "kind": "number"},    # m2
+    {"key": "critical_loads",         "kind": "text"},
+    {"key": "priority_loads",         "kind": "text"},
+    {"key": "funding_eligibility",    "kind": "select", "source": "FUNDING_ELIGIBILITY"},
+    {"key": "social_impact_class",    "kind": "select", "source": "SOCIAL_IMPACT_CLASSES"},
+    {"key": "priority_ranking",       "kind": "number"},
+]
+
+OWNERSHIP_TYPES: list[tuple[str, str]] = [
+    ("government",  "Government-owned"),
+    ("private",     "Privately owned"),
+    ("community",   "Community-owned"),
+    ("faith_based", "Faith-based organisation"),
+    ("ngo",         "NGO-owned"),
+    ("leased",      "Leased"),
+]
+
+BUILDING_TYPES: list[tuple[str, str]] = [
+    ("single_storey",  "Single-storey"),
+    ("multi_storey",   "Multi-storey"),
+    ("compound",       "Compound / multiple blocks"),
+    ("temporary",      "Temporary structure"),
+    ("ground_mounted", "No building (ground-mounted site)"),
+]
+
+ENERGY_SOURCES: list[tuple[str, str]] = [
+    ("grid",           "Grid only"),
+    ("grid_generator", "Grid with generator backup"),
+    ("generator",      "Generator only"),
+    ("solar_existing", "Existing solar"),
+    ("none",           "No electricity"),
+]
+
+FUNDING_ELIGIBILITY: list[tuple[str, str]] = [
+    ("fully_funded",   "Fully funded by the programme"),
+    ("co_funded",      "Co-funded"),
+    ("self_funded",    "Self-funded"),
+    ("not_eligible",   "Not eligible"),
+    ("to_be_assessed", "To be assessed"),
+]
+
+SOCIAL_IMPACT_CLASSES: list[tuple[str, str]] = [
+    ("critical",  "Critical (health, water, emergency)"),
+    ("high",      "High"),
+    ("medium",    "Medium"),
+    ("low",       "Low"),
+]
+
+# --- beneficiary lifecycle (doc 3's PROJECT_STATUSES, the part Release 1 reaches) ------
+# NOT a second vocabulary: these are the first six of PROJECT_STATUSES verbatim, because a
+# beneficiary IS the thing that becomes a project -- doc 3 starts the project status list
+# at "Beneficiary Registered" for exactly that reason. Inventing a parallel set of
+# beneficiary statuses would mean mapping one to the other at generation time, and a
+# mapping is a place for them to disagree.
+BENEFICIARY_STATUSES: list[str] = [
+    "Beneficiary Registered",   # entered or imported; nobody has vouched for it yet
+    "Qualification Pending",    # approved into the register; awaiting the slice-6 survey
+    "Qualified",                # slice 6: it passed
+    "Not Qualified",            # slice 6: it did not
+    "Template Assigned",        # slice 7: a template version is attached
+    "Project Generated",        # slice 7: a real SolarPro project exists
+    "Rejected",                 # rejected from the register (a duplicate, out of scope)
+    "Archived",
+]
+
+# Release 1 owns the first two moves. The rest are asserted here so the state machine is
+# complete and slices 6-7 add their guards, not their vocabulary.
+BENEFICIARY_TRANSITIONS: dict[str, tuple[str, ...]] = {
+    "Beneficiary Registered": ("Qualification Pending", "Rejected", "Archived"),
+    "Qualification Pending":  ("Qualified", "Not Qualified", "Rejected", "Archived"),
+    "Qualified":              ("Template Assigned", "Not Qualified", "Archived"),
+    "Not Qualified":          ("Qualification Pending", "Archived"),
+    "Template Assigned":      ("Project Generated", "Qualified", "Archived"),
+    "Project Generated":      ("Archived",),
+    "Rejected":               ("Archived",),
+    "Archived":               (),
+}
+
+# Only these may be qualified (slice 6) and therefore generated from (slice 7, control C02).
+BENEFICIARY_STATUSES_APPROVED: frozenset[str] = frozenset({
+    "Qualification Pending", "Qualified", "Template Assigned", "Project Generated",
+})
+
+# --- bulk import staging (slice 5) ------------------------------------------
+# An import is STAGED, never applied straight to the register: rows are parsed, mapped,
+# validated and shown back before a single beneficiary exists. A 4000-row spreadsheet with
+# 12 bad rows must not be a choice between "import nothing" and "import 12 broken records".
+IMPORT_ROW_STATUSES: list[str] = [
+    "Valid",       # passes validation; will be created on commit
+    "Error",       # failed validation; will be skipped, with the reason kept
+    "Duplicate",   # matches a beneficiary already in this programme; skipped by default
+    "Imported",    # committed -- a beneficiary now exists for this row
+    "Skipped",     # the user chose not to import it
+]
+IMPORT_BATCH_STATUSES: list[str] = ["Staged", "Committed", "Cancelled"]
+
+# A hard ceiling on one import. Release 1 parses and commits IN THE REQUEST -- there is no
+# worker yet (Supervisor R1: the worker must be a GitHub-Actions cron hitting a drain
+# endpoint, and it lands with slice 7's project generation, which is the expensive thing).
+# A cap that is stated and enforced is honest; a request that silently dies at row 8000 is
+# not. The UI says the number.
+IMPORT_MAX_ROWS: int = 2000
+
 # --- documents a template may REQUIRE of a beneficiary (master prompt s13) ---
 # Distinct from the GATE documents in the routes module: those are evidence a PROGRAMME
 # produces to pass a gate; these are evidence a SITE must supply before it is generated.

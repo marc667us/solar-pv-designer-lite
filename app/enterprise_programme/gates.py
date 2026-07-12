@@ -38,6 +38,7 @@ from .constants import (
     GATE_CODES,
     GATE_PREREQUISITE_GATES,
     GATES,
+    BENEFICIARY_STATUSES_APPROVED,
     GATES_DEFERRED_BEYOND_RELEASE_1,
     TEMPLATE_STATUSES_GENERATIVE,
 )
@@ -407,6 +408,33 @@ def _requires_document(doc_type: str, gate_code: str, human: str):
     return _predicate
 
 
+def _gate_3_predicate(c, tenant_id: str, programme_id: int) -> None:
+    """G03 entry: the programme must actually HAVE an approved beneficiary (slice 5).
+
+    Gate 3 is "Beneficiary Register Approval". Before slice 5 the only thing it could check
+    was that somebody had registered a document called a beneficiary register -- which is a
+    claim about a register, not a register. Now that the register exists, the gate asks for
+    the thing itself: at least one beneficiary admitted to the programme (approved out of
+    "Beneficiary Registered" and into the qualification queue).
+
+    Merely IMPORTING beneficiaries is not enough, and that is the whole point. A District
+    Coordinator can put 4000 rows into the register; a Programme Manager decides which of
+    them the programme will actually serve. The gate wants evidence of the second act.
+    """
+    placeholders = ",".join("?" for _ in BENEFICIARY_STATUSES_APPROVED)
+    row = c.execute(
+        "SELECT 1 FROM enterprise_beneficiaries "
+        f" WHERE tenant_id=? AND programme_id=? AND status IN ({placeholders}) LIMIT 1",
+        tuple([tenant_id, programme_id] + sorted(BENEFICIARY_STATUSES_APPROVED)),
+    ).fetchone()
+    if not row:
+        raise EnterpriseGateError(
+            "G03",
+            "the beneficiary register is empty of APPROVED sites: import or enter "
+            "beneficiaries, then approve at least one into the programme",
+        )
+
+
 def _gate_6_predicate(c, tenant_id: str, programme_id: int) -> None:
     """G06 entry: the programme must actually HAVE an approved standard (slice 4).
 
@@ -439,7 +467,8 @@ def _gate_6_predicate(c, tenant_id: str, programme_id: int) -> None:
 GATE_PREDICATES = {
     "G01": [_gate_1_predicate, _requires_document("concept_note", "G01", "concept note")],
     "G02": [_requires_document("programme_charter", "G02", "programme charter")],
-    "G03": [_requires_document("beneficiary_register", "G03", "beneficiary register")],
+    "G03": [_gate_3_predicate,
+            _requires_document("beneficiary_register", "G03", "beneficiary register")],
     "G04": [_requires_document("business_case", "G04", "business case")],
     "G05": [_requires_document("master_plan", "G05", "programme master plan")],
     "G06": [_gate_6_predicate,

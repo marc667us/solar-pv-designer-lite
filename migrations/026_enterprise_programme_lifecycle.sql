@@ -325,6 +325,11 @@ CREATE TABLE IF NOT EXISTS enterprise_template_versions (
     created_at         timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT fk_template_version_template FOREIGN KEY (tenant_id, template_id)
         REFERENCES enterprise_programme_templates (tenant_id, id) ON DELETE CASCADE,
+    -- So that a generated project (migration 027's enterprise_project_links) can hold a
+    -- TENANT-SCOPED foreign key to the exact version it was built from. Without this unique
+    -- key there is nothing to point a composite FK at, and control C14 (traceability) would
+    -- rest on an integer nobody checks.
+    CONSTRAINT uq_ent_template_version_tenant_id UNIQUE (tenant_id, id),
     -- The status vocabulary is a state machine, not a suggestion. Without this CHECK, one
     -- typo in one UPDATE somewhere puts a version into a status nothing in the code knows
     -- how to reason about -- and the safest of those, from the database's point of view,

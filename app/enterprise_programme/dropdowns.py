@@ -18,17 +18,23 @@ app already uses (config/global_solar_data.py).
 from __future__ import annotations
 
 from .constants import (
+    BENEFICIARY_FIELD_SPEC,
     BENEFICIARY_FIELDS,
     BENEFICIARY_TYPES,
+    BUILDING_TYPES,
     DELIVERY_MODELS,
     DESIGN_STRATEGIES,
+    ENERGY_SOURCES,
+    FUNDING_ELIGIBILITY,
     FUNDING_SOURCES,
     LOAD_PROFILES,
     OM_MODELS,
     ORGANISATION_TYPES,
+    OWNERSHIP_TYPES,
     PROGRAMME_STATUSES,
     PROJECT_STATUSES,
     ROLES,
+    SOCIAL_IMPACT_CLASSES,
     SYSTEM_CONFIGURATIONS,
     TEMPLATE_PARAMETER_FIELDS,
     TEMPLATE_REQUIRED_DOCUMENTS,
@@ -93,6 +99,30 @@ def project_statuses() -> list[dict]:
 
 def beneficiary_types() -> list[dict]:
     return _pairs(BENEFICIARY_TYPES)
+
+
+def for_beneficiary_form() -> dict:
+    """Every option list the beneficiary form needs, in one call.
+
+    Input:  none.
+    Output: {"fields": the field spec, "options": {source_name: [...]}, ...}
+
+    The form is RENDERED from constants.BENEFICIARY_FIELD_SPEC and VALIDATED against the
+    same list in beneficiaries.validate_fields -- the same discipline as the template form.
+    A field cannot appear on the form without the validator knowing it, and a validator rule
+    cannot exist for a field nobody can fill.
+    """
+    return {
+        "fields": BENEFICIARY_FIELD_SPEC,
+        "beneficiary_types": beneficiary_types(),
+        "options": {
+            "OWNERSHIP_TYPES":       _pairs(OWNERSHIP_TYPES),
+            "BUILDING_TYPES":        _pairs(BUILDING_TYPES),
+            "ENERGY_SOURCES":        _pairs(ENERGY_SOURCES),
+            "FUNDING_ELIGIBILITY":   _pairs(FUNDING_ELIGIBILITY),
+            "SOCIAL_IMPACT_CLASSES": _pairs(SOCIAL_IMPACT_CLASSES),
+        },
+    }
 
 
 def equipment_catalog(c, limit: int = 500) -> list[dict]:

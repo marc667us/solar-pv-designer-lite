@@ -272,6 +272,9 @@ _SQLITE_SCHEMA = [
         created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (tenant_id, template_id)
             REFERENCES enterprise_programme_templates (tenant_id, id) ON DELETE CASCADE,
+        -- So a generated project can hold a tenant-scoped FK to the exact version it was
+        -- built from (control C14). See migration 026.
+        UNIQUE (tenant_id, id),
         CONSTRAINT ck_ent_template_version_status CHECK (status IN
             ('Draft','Review','Approved','Published','Superseded','Archived'))
     )

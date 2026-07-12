@@ -36,7 +36,7 @@ from flask import (
 )
 
 from app.enterprise_programme import (
-    constants, dropdowns, flags, gates, rbac, tenancy, workflows,
+    beneficiaries, constants, dropdowns, flags, gates, imports, rbac, tenancy, workflows,
 )
 # `templates` is the template ENGINE, not Jinja. Aliased so that nothing in this file can
 # be misread as touching Flask's template loader.
@@ -107,8 +107,9 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
         key = _db_identity(c)
         if key in _schema_ready:
             return
-        tenancy.ensure_schema(c)    # no-op on Postgres
-        workflows.ensure_schema(c)  # no-op on Postgres
+        tenancy.ensure_schema(c)        # no-op on Postgres
+        workflows.ensure_schema(c)      # no-op on Postgres
+        beneficiaries.ensure_schema(c)  # no-op on Postgres
         _schema_ready.add(key)
 
     # ---- guards ----------------------------------------------------------
@@ -806,6 +807,373 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 flash(str(e), "error")
         return redirect(url_for("enterprise_template_detail",
                                 template_id=version["template_id"]))
+
+
+    # ---- the beneficiary register ------------------------------------------
+    #
+    # Registering is not approving, and the routes do not blur that. `beneficiary.import`
+    # (a District Coordinator) puts a site into the register; `beneficiary.approve` (a
+    # Programme Manager) admits it to the programme. The services enforce both -- these
+    # routes only decide which buttons to draw.
+
+    @app.route("/enterprise/programmes/<int:programme_id>/beneficiaries")
+    @login_required
+    def enterprise_beneficiaries(programme_id: int):
+        """The register for one programme, with its status counts and import history."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                state = workflows.get_programme_state(c, active, programme_id)
+            except EnterpriseGateError:
+                abort(404)              # C13
+
+            status = (request.args.get("status") or "").strip() or None
+            rows = beneficiaries.list_beneficiaries(
+                c, active, programme_id, status=status
+            )
+            counts = beneficiary_counts = beneficiaries.count_by_status(
+                c, active, programme_id
+            )
+            return render_template(
+                "enterprise_programme/beneficiaries.html",
+                programme_id=programme_id,
+                state=state,
+                beneficiaries=rows,
+                counts=counts,
+                total=sum(beneficiary_counts.values()),
+                # The list is capped. Say so, rather than letting a 4000-site programme
+                # quietly render as 500 and look complete.
+                capped=len(rows) >= 500,
+                status_filter=status,
+                statuses=constants.BENEFICIARY_STATUSES,
+                batches=imports.list_batches(c, active, programme_id),
+                beneficiary_types=dropdowns.beneficiary_types(),
+                import_max_rows=constants.IMPORT_MAX_ROWS,
+                can_import=rbac.has_permission(c, active, uid, "beneficiary.import",
+                                               programme_id=programme_id),
+                can_approve=rbac.has_permission(c, active, uid, "beneficiary.approve",
+                                                programme_id=programme_id),
+            )
+
+    @app.route("/enterprise/programmes/<int:programme_id>/beneficiaries/new",
+               methods=["GET", "POST"])
+    @login_required
+    def enterprise_beneficiary_new(programme_id: int):
+        """Enter one site by hand. The bulk path is the importer."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+
+            # OWNERSHIP BEFORE AUTHORISATION (C13). Checking the permission first meant a
+            # user holding tenant-wide `beneficiary.import` was handed the form for ANOTHER
+            # tenant's programme id, and a user without it got a 403 -- which confirms the
+            # programme exists. Not-yours and not-there must be the same answer.
+            try:
+                workflows.get_programme_state(c, active, programme_id)
+            except EnterpriseGateError:
+                abort(404)
+
+            if not rbac.has_permission(c, active, uid, "beneficiary.import",
+                                       programme_id=programme_id):
+                abort(403)
+
+            if request.method == "POST":
+                csrf_protect()
+                try:
+                    bid = beneficiaries.create_beneficiary(
+                        c, active, uid, programme_id,
+                        code=(request.form.get("code") or "").strip(),
+                        name=(request.form.get("name") or "").strip(),
+                        beneficiary_type=(request.form.get("beneficiary_type")
+                                          or "").strip(),
+                        fields=_beneficiary_fields_from_form(request.form),
+                    )
+                except EnterprisePermissionError:
+                    abort(403)
+                except EnterpriseGateError as e:
+                    if e.control == "C13":
+                        abort(404)
+                    flash(str(e), "error")
+                    return redirect(url_for("enterprise_beneficiary_new",
+                                            programme_id=programme_id))
+                flash("Beneficiary registered. It still has to be approved into the "
+                      "programme before it can be qualified.", "success")
+                return redirect(url_for("enterprise_beneficiary_detail",
+                                        beneficiary_id=bid))
+
+            return render_template(
+                "enterprise_programme/beneficiary_form.html",
+                programme_id=programme_id,
+                beneficiary=None,
+                form=dropdowns.for_beneficiary_form(),
+            )
+
+    def _beneficiary_fields_from_form(form) -> dict:
+        """Read the 22 attributes out of a submitted form.
+
+        Driven by constants.BENEFICIARY_FIELD_SPEC -- the SAME list that renders the form
+        and validates the result -- so a field cannot be posted that the validator does not
+        know, and a field cannot be added to the schema without this reading it.
+        """
+        return {f["key"]: form.get(f["key"]) for f in constants.BENEFICIARY_FIELD_SPEC}
+
+    @app.route("/enterprise/beneficiaries/<int:beneficiary_id>",
+               methods=["GET", "POST"])
+    @login_required
+    def enterprise_beneficiary_detail(beneficiary_id: int):
+        """One site: its record, its state, and what may be done to it."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+
+            try:
+                row = beneficiaries.get_beneficiary(c, active, beneficiary_id)
+            except EnterpriseGateError:
+                abort(404)              # C13
+
+            if request.method == "POST":
+                csrf_protect()
+                try:
+                    row = beneficiaries.update_beneficiary(
+                        c, active, uid, beneficiary_id,
+                        _beneficiary_fields_from_form(request.form),
+                    )
+                    flash("Beneficiary updated.", "success")
+                except EnterprisePermissionError:
+                    abort(403)
+                except EnterpriseGateError as e:
+                    if e.control == "C13":
+                        abort(404)
+                    flash(str(e), "error")
+
+            programme_id = row["programme_id"]
+            return render_template(
+                "enterprise_programme/beneficiary_form.html",
+                programme_id=programme_id,
+                beneficiary=row,
+                form=dropdowns.for_beneficiary_form(),
+                can_edit=rbac.has_permission(c, active, uid, "beneficiary.import",
+                                             programme_id=programme_id),
+                can_approve=rbac.has_permission(c, active, uid, "beneficiary.approve",
+                                                programme_id=programme_id),
+            )
+
+    @app.route("/enterprise/beneficiaries/<int:beneficiary_id>/transition",
+               methods=["POST"])
+    @login_required
+    def enterprise_beneficiary_transition(beneficiary_id: int):
+        """Admit a site to the programme, or turn it away."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                row = beneficiaries.get_beneficiary(c, active, beneficiary_id)
+                beneficiaries.transition_beneficiary(
+                    c, active, uid, beneficiary_id,
+                    (request.form.get("target") or "").strip(),
+                    comment=(request.form.get("comment") or "").strip() or None,
+                )
+                flash("Beneficiary updated.", "success")
+            except EnterprisePermissionError:
+                abort(403)
+            except EnterpriseGateError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+        return redirect(url_for("enterprise_beneficiary_detail",
+                                beneficiary_id=beneficiary_id))
+
+    # ---- bulk import --------------------------------------------------------
+    #
+    # Upload -> STAGE (nothing written to the register) -> fix the mapping as often as you
+    # like -> commit. The register is only ever touched by the commit.
+
+    @app.route("/enterprise/programmes/<int:programme_id>/import", methods=["POST"])
+    @login_required
+    def enterprise_import_upload(programme_id: int):
+        """Parse a spreadsheet, guess its columns, and stage every row. Writes NO
+        beneficiaries -- the operator sees what would happen first."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+
+        upload = request.files.get("file")
+        if upload is None or not upload.filename:
+            flash("Choose a CSV or XLSX file to import.", "error")
+            return redirect(url_for("enterprise_beneficiaries",
+                                    programme_id=programme_id))
+
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                # Establish "is this programme yours, and may you import into it?" BEFORE
+                # decompressing and parsing the upload. The 404 was already correct, but a
+                # stranger could make a single free-tier instance parse a 16 MB spreadsheet
+                # for the privilege of being told no.
+                workflows.get_programme_state(c, active, programme_id)      # C13
+                rbac.require_permission(c, active, uid, "beneficiary.import",
+                                        programme_id=programme_id)
+                headers, rows = imports.parse_file(upload.filename, upload.read())
+                batch_id = imports.stage_import(
+                    c, active, uid, programme_id,
+                    filename=upload.filename,
+                    headers=headers, rows=rows,
+                    mapping=imports.auto_map(headers),
+                    default_type=(request.form.get("default_type") or "").strip(),
+                )
+            except EnterprisePermissionError:
+                abort(403)
+            except EnterpriseGateError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+                return redirect(url_for("enterprise_beneficiaries",
+                                        programme_id=programme_id))
+        return redirect(url_for("enterprise_import_detail", batch_id=batch_id))
+
+    @app.route("/enterprise/imports/<int:batch_id>")
+    @login_required
+    def enterprise_import_detail(batch_id: int):
+        """The preview: what this import WOULD do, before it does any of it."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                batch = imports.get_batch(c, active, batch_id)
+            except EnterpriseGateError:
+                abort(404)              # C13
+            return render_template(
+                "enterprise_programme/import_detail.html",
+                batch=batch,
+                headers=sorted({h for r in batch["rows"] for h in r["raw"]}),
+                importable=imports.importable_fields(),
+                beneficiary_types=dropdowns.beneficiary_types(),
+                can_import=rbac.has_permission(
+                    c, active, uid, "beneficiary.import",
+                    programme_id=batch["programme_id"]),
+            )
+
+    @app.route("/enterprise/imports/<int:batch_id>/remap", methods=["POST"])
+    @login_required
+    def enterprise_import_remap(batch_id: int):
+        """Re-run the staged rows through a corrected column mapping. Still writes nothing."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            mapping = {
+                key[len("map__"):]: value.strip()
+                for key, value in request.form.items()
+                if key.startswith("map__") and value.strip()
+            }
+            # A form that never showed the default type must not be read as a request to
+            # clear it: absent means "leave it as chosen at upload" (None), present-and-blank
+            # means the operator deliberately emptied it.
+            posted_default = request.form.get("default_type")
+            try:
+                counts = imports.restage_batch(
+                    c, active, uid, batch_id, mapping=mapping,
+                    default_type=(None if posted_default is None
+                                  else posted_default.strip()),
+                )
+                flash(f"Re-checked: {counts['Valid']} valid, {counts['Error']} with "
+                      f"errors, {counts['Duplicate']} duplicates.", "success")
+            except EnterprisePermissionError:
+                abort(403)
+            except EnterpriseGateError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+        return redirect(url_for("enterprise_import_detail", batch_id=batch_id))
+
+    @app.route("/enterprise/imports/<int:batch_id>/commit", methods=["POST"])
+    @login_required
+    def enterprise_import_commit(batch_id: int):
+        """Create a beneficiary for every Valid row. THE ONLY thing that writes the register."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                batch = imports.get_batch(c, active, batch_id, limit=1)
+                result = imports.commit_batch(
+                    c, active, uid, batch_id,
+                    include_duplicates=("include_duplicates" in request.form),
+                )
+                # Each number names a different thing the operator would do something
+                # different about: duplicates they declined, rows that never validated, and
+                # rows the database itself refused. Rolling them into one "skipped" sent
+                # them looking in the wrong place.
+                detail = ", ".join(
+                    part for part in (
+                        f"{result['skipped']} duplicate(s) skipped" if result["skipped"] else "",
+                        f"{result['errors']} with errors" if result["errors"] else "",
+                        f"{result['failed']} refused by the database" if result["failed"] else "",
+                    ) if part
+                )
+                flash(f"Imported {result['imported']} beneficiaries"
+                      + (f" ({detail})" if detail else "")
+                      + ". They are registered, not yet approved into the programme.",
+                      "success")
+            except EnterprisePermissionError:
+                abort(403)
+            except EnterpriseGateError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+                return redirect(url_for("enterprise_import_detail", batch_id=batch_id))
+        return redirect(url_for("enterprise_beneficiaries",
+                                programme_id=batch["programme_id"]))
+
+    @app.route("/enterprise/imports/<int:batch_id>/cancel", methods=["POST"])
+    @login_required
+    def enterprise_import_cancel(batch_id: int):
+        """Throw a staged import away. The rows stay -- what was rejected, and why, is evidence."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                batch = imports.get_batch(c, active, batch_id, limit=1)
+                imports.cancel_batch(c, active, uid, batch_id)
+                flash("Import cancelled. Nothing was written to the register.", "success")
+            except EnterprisePermissionError:
+                abort(403)
+            except EnterpriseGateError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+                return redirect(url_for("enterprise_import_detail", batch_id=batch_id))
+        return redirect(url_for("enterprise_beneficiaries",
+                                programme_id=batch["programme_id"]))
 
 
 # The document types the gate predicates actually look for. A form that offered anything

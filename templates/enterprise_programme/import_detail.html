@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% macro rows_table(batch) %}
+<div class="card">
+  <div class="card-header bg-white fw-semibold d-flex justify-content-between">
+    <span><i class="bi bi-list-ul me-1 text-warning"></i>Rows</span>
+    {% if batch.rows_shown < batch.total_rows %}
+    <span class="small text-muted fw-normal">
+      showing {{ batch.rows_shown }} of {{ batch.total_rows }} &mdash; errors first
+    </span>
+    {% endif %}
+  </div>
+  <div class="table-responsive" style="max-height:34rem">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>#</th><th>Name</th><th>Code</th><th>Type</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        {% for r in batch.rows %}
+        <tr class="{{ 'table-danger' if r.status == 'Error'
+                      else ('table-warning' if r.status == 'Duplicate' else '') }}">
+          <td class="text-muted small">{{ r.row_no }}</td>
+          <td class="small">{{ r.mapped.get('name') or '' }}</td>
+          <td class="small"><code>{{ r.mapped.get('code') or '' }}</code></td>
+          <td class="small text-muted">
+            {{ (r.mapped.get('beneficiary_type') or '')|replace('_',' ')|title }}
+          </td>
+          <td class="small">
+            <span class="badge {{ 'bg-danger' if r.status == 'Error'
+                                  else ('bg-warning text-dark' if r.status == 'Duplicate'
+                                        else ('bg-success' if r.status == 'Imported'
+                                              else 'bg-secondary')) }}">
+              {{ r.status }}
+            </span>
+            {% if r.errors %}
+            {# The reason, on the row. An import that says "12 errors" without saying which
+               12 or why is an import nobody can fix. #}
+            <div class="text-danger mt-1" style="font-size:.75rem">
+              {{ r.errors|join('; ') }}
+            </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endmacro %}
+
+{% block title %}Import preview - SolarPro{% endblock %}
+{% block content %}
+<div class="container py-4 ent-page">
+
+  <div class="text-muted small mb-1">
+    <a href="{{ url_for('enterprise_beneficiaries', programme_id=batch.programme_id) }}"
+       class="text-decoration-none">
+      <i class="bi bi-arrow-left me-1"></i>Beneficiary Register
+    </a>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
+    <div>
+      <h1 class="h4 mb-1">
+        <i class="bi bi-file-earmark-spreadsheet text-warning me-2"></i>
+        {{ batch.filename or 'Import #' ~ batch.id }}
+      </h1>
+      <div class="text-muted small">
+        {{ batch.total_rows }} rows &middot; staged {{ batch.created_at }}
+      </div>
+    </div>
+    <span class="badge fs-6 {{ 'bg-success' if batch.status == 'Committed'
+                               else ('bg-secondary' if batch.status == 'Cancelled'
+                                     else 'bg-warning text-dark') }}">
+      {{ batch.status }}
+    </span>
+  </div>
+
+  {% if batch.status == 'Staged' %}
+  <div class="alert alert-light border small">
+    <i class="bi bi-shield-check me-1 text-secondary"></i>
+    <strong>Nothing has been written to the register.</strong> Every row below was parsed,
+    mapped and checked against the existing register. Fix the column mapping until the
+    numbers look right, then import.
+  </div>
+  {% endif %}
+
+  {# The counts are computed over EVERY row, not over the (capped) sample shown below. #}
+  <div class="row g-2 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card text-center"><div class="card-body py-3">
+        <div class="h4 mb-0 text-success">{{ batch.valid_rows }}</div>
+        <div class="small text-muted">Valid</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card text-center"><div class="card-body py-3">
+        <div class="h4 mb-0 text-danger">{{ batch.error_rows }}</div>
+        <div class="small text-muted">With errors</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card text-center"><div class="card-body py-3">
+        <div class="h4 mb-0 text-warning">{{ batch.duplicate_rows }}</div>
+        <div class="small text-muted">Already in the register</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card text-center"><div class="card-body py-3">
+        <div class="h4 mb-0">{{ batch.imported_rows }}</div>
+        <div class="small text-muted">Imported</div>
+      </div></div>
+    </div>
+  </div>
+
+  {% if batch.status == 'Staged' and can_import %}
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <form method="post"
+            action="{{ url_for('enterprise_import_remap', batch_id=batch.id) }}"
+            class="card">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="card-header bg-white fw-semibold">
+          <i class="bi bi-arrows-angle-contract me-1 text-warning"></i>Column mapping
+        </div>
+        <div class="card-body">
+          <p class="small text-muted">
+            We guessed these from your headers. A wrong guess here corrupts every row the
+            same way, so it is worth a look &mdash; &ldquo;Location&rdquo; is very often the
+            community, not the address.
+          </p>
+          {% for h in headers %}
+          <div class="mb-2">
+            <label class="form-label small mb-1" for="map__{{ h }}">
+              <code>{{ h }}</code>
+            </label>
+            <select class="form-select form-select-sm" id="map__{{ h }}" name="map__{{ h }}">
+              <option value="">&mdash; ignore this column &mdash;</option>
+              {% for o in importable %}
+              <option value="{{ o.value }}"
+                      {% if batch.column_mapping.get(h) == o.value %}selected{% endif %}>
+                {{ o.label }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endfor %}
+
+          <label class="form-label small mt-2" for="default_type">
+            Default beneficiary type
+          </label>
+          <select class="form-select form-select-sm" id="default_type" name="default_type">
+            <option value="">None &mdash; the file must say</option>
+            {% for o in beneficiary_types %}
+            <option value="{{ o.value }}"
+                    {% if batch.default_type == o.value %}selected{% endif %}>{{ o.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="card-footer bg-white">
+          <button class="btn btn-outline-secondary btn-sm w-100" type="submit">
+            <i class="bi bi-arrow-repeat me-1"></i>Re-check with this mapping
+          </button>
+        </div>
+      </form>
+
+      <form method="post"
+            action="{{ url_for('enterprise_import_commit', batch_id=batch.id) }}"
+            class="card mt-3">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="card-body">
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" name="include_duplicates"
+                   id="include_duplicates">
+            <label class="form-check-label small" for="include_duplicates">
+              Also import the {{ batch.duplicate_rows }} row(s) that already match a site
+              in the register
+            </label>
+          </div>
+          <button class="btn btn-warning w-100" type="submit"
+                  {% if not batch.valid_rows and not batch.duplicate_rows %}disabled{% endif %}>
+            <i class="bi bi-database-add me-1"></i>
+            Import {{ batch.valid_rows }} beneficiaries
+          </button>
+          <div class="form-text">
+            Rows with errors are never imported. They stay here, with the reason.
+          </div>
+        </div>
+      </form>
+
+      <form method="post"
+            action="{{ url_for('enterprise_import_cancel', batch_id=batch.id) }}"
+            class="mt-2">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="btn btn-link btn-sm text-muted" type="submit">
+          Cancel this import
+        </button>
+      </form>
+    </div>
+
+    <div class="col-lg-7">
+      {{ rows_table(batch) }}
+    </div>
+  </div>
+  {% else %}
+  {{ rows_table(batch) }}
+  {% endif %}
+
+</div>
+{% endblock %}
