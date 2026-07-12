@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Qualify {{ site.name }} - SolarPro{% endblock %}
+{% block content %}
+<div class="container py-4 ent-page" style="max-width:60rem">
+
+  <div class="text-muted small mb-1">
+    <a href="{{ url_for('enterprise_beneficiary_detail', beneficiary_id=site.id) }}"
+       class="text-decoration-none">
+      <i class="bi bi-arrow-left me-1"></i>{{ site.name }}
+    </a>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
+    <div>
+      <h1 class="h4 mb-1">
+        <i class="bi bi-clipboard-check text-warning me-2"></i>Site Qualification
+      </h1>
+      <div class="text-muted small">
+        {{ site.code }} &middot; {{ site.name }}
+        {% if site.community %} &middot; {{ site.community }}{% endif %}
+      </div>
+    </div>
+    <div class="text-end">
+      <span class="badge bg-light text-dark border">{{ site.status }}</span>
+      {% if qualification and qualification.total_score is not none %}
+      <div class="fs-3 fw-bold mt-1">{{ '%.1f'|format(qualification.total_score) }}</div>
+      <div class="text-muted small">priority score</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# The single most dangerous misreading in this whole screen, said once, plainly, at the
+     top -- two of doc 3's eight categories are named "risk", and scoring them the intuitive
+     way round (100 = lots of risk) would rank the most dangerous sites highest and nothing
+     on the page would look wrong. #}
+  <div class="alert alert-warning small">
+    <i class="bi bi-exclamation-triangle me-1"></i>
+    <strong>Every score is 0&ndash;100 and higher is always better</strong> &mdash; including
+    the two risk rows, where <strong>100 means NO risk</strong>. A dangerous or flood-prone
+    site scores <em>low</em> there, not high.
+  </div>
+
+  {% if qualification and qualification.decision %}
+  <div class="alert {% if qualification.decision == 'Qualified' %}alert-success
+                    {% else %}alert-secondary{% endif %} small">
+    <i class="bi bi-lock me-1"></i>
+    This site has been decided: <strong>{{ qualification.decision }}</strong>.
+    The scorecard is the evidence for that decision and can no longer be changed.
+    {% if qualification.decision_notes %}
+    <div class="mt-1"><em>&ldquo;{{ qualification.decision_notes }}&rdquo;</em></div>
+    {% endif %}
+  </div>
+  {% elif not can_score %}
+  <div class="alert alert-light border small">
+    <i class="bi bi-eye me-1"></i>
+    You have <strong>read-only</strong> access to the scorecard.
+  </div>
+  {% endif %}
+
+  {% set editable = can_score and not (qualification and qualification.decision)
+                    and site.status in ['Qualification Pending', 'Not Qualified'] %}
+
+  <form method="post" class="card mb-3">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="card-body">
+      <table class="table table-sm align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th style="width:38%">Criterion</th>
+            <th style="width:10%" class="text-end">Weight</th>
+            <th style="width:18%">Score ({{ score_min }}&ndash;{{ score_max }})</th>
+            <th>What it means</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for crit in criteria %}
+          <tr>
+            <td><label class="form-label mb-0" for="{{ crit.key }}">{{ crit.label }}</label></td>
+            <td class="text-end text-muted">{{ crit.weight }}%</td>
+            <td>
+              <input type="number" class="form-control form-control-sm"
+                     id="{{ crit.key }}" name="{{ crit.key }}"
+                     min="{{ score_min }}" max="{{ score_max }}" step="1"
+                     {% if not editable %}disabled{% endif %}
+                     value="{{ (qualification.scores.get(crit.key) if qualification else '')
+                              if qualification and qualification.scores.get(crit.key)
+                                 is not none else '' }}">
+            </td>
+            <td class="text-muted small">{{ crit.hint }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <label class="form-label small mt-3" for="notes">Survey notes</label>
+      <textarea class="form-control form-control-sm" id="notes" name="notes" rows="3"
+                {% if not editable %}disabled{% endif %}
+                placeholder="What the surveyor found.">{{ qualification.survey_notes
+                if qualification else '' }}</textarea>
+    </div>
+    {% if editable %}
+    <div class="card-footer bg-white text-end">
+      <button type="submit" class="btn btn-warning">
+        <i class="bi bi-check2 me-1"></i>Save scores
+      </button>
+      <div class="text-muted small mt-1">Scoring is not deciding.</div>
+    </div>
+    {% endif %}
+  </form>
+
+  {# The decision. A separate act, a separate permission, a separate form -- and it is
+     refused outright if nobody has scored the site (control C02). #}
+  {% if can_decide and not (qualification and qualification.decision) %}
+  <div class="card border-warning">
+    <div class="card-header bg-white fw-bold">
+      <i class="bi bi-gavel me-1"></i>Decision
+    </div>
+    <div class="card-body">
+      {% if not qualification or qualification.total_score is none %}
+      <p class="text-muted small mb-0">
+        <i class="bi bi-slash-circle me-1"></i>
+        This site has not been scored yet, so there is nothing to approve.
+        <strong>No beneficiary becomes a project without qualification.</strong>
+      </p>
+      {% elif site.status != 'Qualification Pending' %}
+      <p class="text-muted small mb-0">
+        This site is <strong>{{ site.status }}</strong>; only a site awaiting a decision
+        can be decided.
+      </p>
+      {% else %}
+      <form method="post"
+            action="{{ url_for('enterprise_qualify_decide', beneficiary_id=site.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <label class="form-label small" for="decision_notes">Reason (optional)</label>
+        <textarea class="form-control form-control-sm mb-3" id="decision_notes"
+                  name="notes" rows="2"></textarea>
+        <div class="d-flex gap-2">
+          <button class="btn btn-success" type="submit" name="decision" value="Qualified">
+            <i class="bi bi-check2-circle me-1"></i>Qualify this site
+          </button>
+          <button class="btn btn-outline-secondary" type="submit"
+                  name="decision" value="Not Qualified">
+            <i class="bi bi-x-circle me-1"></i>Not qualified
+          </button>
+        </div>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

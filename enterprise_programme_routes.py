@@ -36,7 +36,8 @@ from flask import (
 )
 
 from app.enterprise_programme import (
-    beneficiaries, constants, dropdowns, flags, gates, imports, rbac, tenancy, workflows,
+    beneficiaries, constants, dropdowns, flags, gates, imports, rbac,
+    site_qualification, tenancy, workflows,
 )
 # `templates` is the template ENGINE, not Jinja. Aliased so that nothing in this file can
 # be misread as touching Flask's template loader.
@@ -996,6 +997,122 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 flash(str(e), "error")
         return redirect(url_for("enterprise_beneficiary_detail",
                                 beneficiary_id=beneficiary_id))
+
+    # ---- site qualification (slice 6) ---------------------------------------
+    #
+    # SCORING and DECIDING are two acts by two people. A surveyor with `qualification.score`
+    # records what they found; a manager with `qualification.approve` decides the programme
+    # will serve it. `decide` refuses a site nobody scored -- which is what control C02
+    # ("no beneficiary becomes a project without qualification") actually MEANS in code.
+
+    @app.route("/enterprise/programmes/<int:programme_id>/priority")
+    @login_required
+    def enterprise_priority_list(programme_id: int):
+        """Doc 3's priority list: every site, best score first, unscored last."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                programme = workflows.get_programme_state(c, active, programme_id)   # C13
+            except EnterpriseGateError as e:
+                if e.control == "C13":
+                    abort(404)
+                raise
+            sites, capped = site_qualification.priority_list(c, active, programme_id)
+            return render_template(
+                "enterprise_programme/priority_list.html",
+                programme=programme, programme_id=programme_id, sites=sites,
+                capped=capped,
+                criteria=constants.QUALIFICATION_CRITERIA,
+                qualified=site_qualification.count_qualified(c, active, programme_id),
+                can_score=rbac.has_permission(c, active, uid, "qualification.score",
+                                              programme_id=programme_id),
+            )
+
+    @app.route("/enterprise/beneficiaries/<int:beneficiary_id>/qualify",
+               methods=["GET", "POST"])
+    @login_required
+    def enterprise_qualify_site(beneficiary_id: int):
+        """The scorecard. GET renders it; POST records the survey (it does NOT decide)."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                site = beneficiaries.get_beneficiary(c, active, beneficiary_id)      # C13
+            except EnterpriseGateError as e:
+                if e.control == "C13":
+                    abort(404)
+                raise
+
+            if request.method == "POST":
+                csrf_protect()
+                scores = {
+                    crit["key"]: request.form.get(crit["key"])
+                    for crit in constants.QUALIFICATION_CRITERIA
+                    if request.form.get(crit["key"]) is not None
+                }
+                try:
+                    site_qualification.score_site(
+                        c, active, uid, beneficiary_id, scores=scores,
+                        notes=(request.form.get("notes") or "").strip(),
+                    )
+                    flash("Site scored. It still needs a decision.", "success")
+                    return redirect(url_for("enterprise_qualify_site",
+                                            beneficiary_id=beneficiary_id))
+                except EnterprisePermissionError:
+                    abort(403)
+                except EnterpriseGateError as e:
+                    if e.control == "C13":
+                        abort(404)
+                    flash(str(e), "error")
+
+            return render_template(
+                "enterprise_programme/qualify_site.html",
+                site=site,
+                qualification=site_qualification.get_qualification(c, active,
+                                                                   beneficiary_id),
+                criteria=constants.QUALIFICATION_CRITERIA,
+                score_min=constants.QUALIFICATION_SCORE_MIN,
+                score_max=constants.QUALIFICATION_SCORE_MAX,
+                decisions=constants.QUALIFICATION_DECISIONS,
+                can_score=rbac.has_permission(c, active, uid, "qualification.score",
+                                              programme_id=site["programme_id"]),
+                can_decide=rbac.has_permission(c, active, uid, "qualification.approve",
+                                               programme_id=site["programme_id"]),
+            )
+
+    @app.route("/enterprise/beneficiaries/<int:beneficiary_id>/qualify/decide",
+               methods=["POST"])
+    @login_required
+    def enterprise_qualify_decide(beneficiary_id: int):
+        """Qualify the site, or refuse it. The ONLY way into either status."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                site_qualification.decide(
+                    c, active, uid, beneficiary_id,
+                    decision=(request.form.get("decision") or "").strip(),
+                    notes=(request.form.get("notes") or "").strip(),
+                )
+                flash("Decision recorded.", "success")
+            except EnterprisePermissionError:
+                abort(403)
+            except EnterpriseGateError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+        return redirect(url_for("enterprise_qualify_site", beneficiary_id=beneficiary_id))
 
     # ---- bulk import --------------------------------------------------------
     #

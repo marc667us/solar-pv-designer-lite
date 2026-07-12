@@ -521,13 +521,13 @@ def test_every_control_in_the_spec_has_a_live_guard(db):
 def test_not_yet_shipped_controls_fail_closed(db, audit):
     """The guards for later slices refuse. They do not pass-through.
 
-    C03 is NOT in this list any more -- slice 4 shipped the template engine, so it is a
-    live guard with its own tests (test_slice4_templates.py). A control leaves this test
-    exactly when it starts being enforced, which is the point of the list.
+    C03 left this list when slice 4 shipped the template engine, and C02 left it when slice 6
+    shipped site qualification -- both are live guards with their own tests
+    (test_slice4_templates.py, test_slice6_qualification.py). A control leaves this test
+    EXACTLY when it starts being enforced, which is the entire point of the list: a deferred
+    control that quietly starts passing is worse than one that never existed.
     """
     pid = _programme(db, audit)
-    with pytest.raises(GateBlockedError):
-        gates.require_qualified_beneficiary(db, db.org, 1)      # C02, slice 6
     with pytest.raises(GateBlockedError):
         gates.require_approved_boq_snapshot(db, db.org, [1])    # C05, slice 8
     assert gates.control_summary()[0]["enforced_now"] is True   # C01 is live now
@@ -538,7 +538,7 @@ def test_control_summary_does_not_overstate_what_is_enforced(db):
     assert summary["C01"] is True and summary["C11"] is True
     assert summary["C12"] is True and summary["C13"] is True
     assert summary["C03"] is True, "the template control went live with slice 4"
-    assert summary["C02"] is False, "site qualification has not shipped (slice 6)"
+    assert summary["C02"] is True, "site qualification went live with slice 6"
     assert len(summary) == 15
 
 
@@ -643,7 +643,7 @@ def test_the_rebuild_does_not_collide_with_the_live_024_tables(db):
     body = "\n".join(ln for ln in sql.splitlines() if not ln.strip().startswith("--"))
     for owned_by_024 in ("enterprise_programmes", "enterprise_programme_phases",
                          "enterprise_organisations", "enterprise_memberships",
-                         "enterprise_beneficiaries", "enterprise_programme_jobs"):
+                         "enterprise_beneficiary_register", "enterprise_programme_jobs"):
         assert f"CREATE TABLE IF NOT EXISTS {owned_by_024}\n" not in body + "\n", \
             f"026 must not create {owned_by_024} -- migration 024 owns it on live"
 

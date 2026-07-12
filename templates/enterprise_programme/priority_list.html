@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Priority List - {{ programme.name }} - SolarPro{% endblock %}
+{% block content %}
+<div class="container py-4 ent-page" style="max-width:72rem">
+
+  <div class="text-muted small mb-1">
+    <a href="{{ url_for('enterprise_programme_detail', programme_id=programme_id) }}"
+       class="text-decoration-none">
+      <i class="bi bi-arrow-left me-1"></i>{{ programme.name }}
+    </a>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-start flex-wrap mb-3">
+    <div>
+      <h1 class="h4 mb-1">
+        <i class="bi bi-sort-numeric-down text-warning me-2"></i>Priority List
+      </h1>
+      <div class="text-muted small">
+        Every candidate site, best score first. This is the answer to
+        &ldquo;why that village and not mine?&rdquo;
+      </div>
+    </div>
+    <div class="text-end">
+      <div class="fs-4 fw-bold">{{ qualified }}</div>
+      <div class="text-muted small">qualified to serve</div>
+    </div>
+  </div>
+
+  {# A truncated list that looks complete is worse than no list: because unscored sites sort
+     LAST, the rows dropped by the cap are the lowest-ranked AND every site nobody has
+     visited -- exactly the rows this page exists to surface. #}
+  {% if capped %}
+  <div class="alert alert-warning small">
+    <i class="bi bi-exclamation-triangle me-1"></i>
+    Showing the top <strong>{{ sites|length }}</strong> sites only. There are more, and the
+    ones not shown include <strong>every site that has not been scored yet</strong>.
+  </div>
+  {% endif %}
+
+  {% if not sites %}
+  <div class="alert alert-light border">
+    No sites in this programme yet.
+    <a href="{{ url_for('enterprise_beneficiaries', programme_id=programme_id) }}">
+      Register or import some</a>.
+  </div>
+  {% else %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead class="table-light">
+        <tr>
+          <th style="width:4rem">#</th>
+          <th>Site</th>
+          <th>District / community</th>
+          <th class="text-end">Score</th>
+          <th>Status</th>
+          <th class="text-end"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sites %}
+        <tr {% if s.total_score is none %}class="table-light"{% endif %}>
+          <td class="text-muted">{{ s.rank or '&mdash;'|safe }}</td>
+          <td>
+            <div class="fw-semibold">{{ s.name }}</div>
+            <div class="text-muted small">{{ s.code }}</div>
+          </td>
+          <td class="small text-muted">
+            {{ s.district }}{% if s.community %} / {{ s.community }}{% endif %}
+          </td>
+          <td class="text-end">
+            {% if s.total_score is not none %}
+              <span class="fw-bold">{{ '%.1f'|format(s.total_score) }}</span>
+            {% else %}
+              {# NOT a zero. A site nobody has been to is a question, not a low score --
+                 printing 0 here would rank it as "assessed and hopeless". #}
+              <span class="text-muted small">not scored</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge {% if s.decision == 'Qualified' %}bg-success
+                        {% elif s.decision == 'Not Qualified' %}bg-secondary
+                        {% else %}bg-light text-dark border{% endif %}">
+              {{ s.status }}
+            </span>
+          </td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-secondary"
+               href="{{ url_for('enterprise_qualify_site', beneficiary_id=s.id) }}">
+              {% if s.total_score is none and can_score %}Score{% else %}Scorecard{% endif %}
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="text-muted small">
+    Weighted from {{ criteria|length }} criteria:
+    {% for c in criteria %}{{ c.label }} ({{ c.weight }}%){% if not loop.last %} &middot;
+    {% endif %}{% endfor %}.
+    Every score is 0&ndash;100, higher is better &mdash; on the two risk rows,
+    100 means <em>no</em> risk.
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

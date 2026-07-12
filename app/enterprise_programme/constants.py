@@ -305,6 +305,58 @@ BENEFICIARY_STATUSES_APPROVED: frozenset[str] = frozenset({
     "Qualification Pending", "Qualified", "Template Assigned", "Project Generated",
 })
 
+# --- site qualification (slice 6) -------------------------------------------
+# Doc 3, "Site Qualification Scores" (02-lifecycle-workflows.txt:176-188): eight categories
+# feeding one overall priority score. The eight are doc-3's verbatim list; the weights are
+# ours (doc 3 names the categories and the overall score, but not how to combine them).
+#
+# EVERY SCORE IS 0-100 AND HIGHER IS ALWAYS BETTER. This matters most where it reads
+# strangest: doc 3 calls two of them "risk" scores, and the naive reading -- 100 = maximum
+# risk -- would silently INVERT them, ranking the most dangerous, least accessible sites
+# highest and sending the programme's money to exactly the wrong villages. Nobody would see
+# it; the list would just be quietly wrong. So the direction is stated in the label, in the
+# form, and here: on a risk row, 100 means NO risk.
+QUALIFICATION_CRITERIA: list[dict] = [
+    {"key": "technical_suitability",    "weight": 20,
+     "label": "Technical suitability",
+     "hint": "Roof/land, structure, orientation, shading. 100 = ideal."},
+    {"key": "energy_need",              "weight": 20,
+     "label": "Energy need",
+     "hint": "Unserved load, outage hours, generator spend. 100 = greatest need."},
+    {"key": "financial_suitability",    "weight": 15,
+     "label": "Financial suitability",
+     "hint": "Tariff, ability to pay, payback. 100 = strongest case."},
+    {"key": "social_impact",            "weight": 15,
+     "label": "Social impact",
+     "hint": "People served, schools/clinics, hours of service gained. 100 = greatest."},
+    {"key": "implementation_readiness", "weight": 10,
+     "label": "Implementation readiness",
+     "hint": "Access road, land title, community consent. 100 = ready to build."},
+    {"key": "security_risk",            "weight": 5,
+     "label": "Security risk (100 = NO risk)",
+     "hint": "Theft, vandalism, conflict. 100 = safe. A LOW score is a DANGEROUS site."},
+    {"key": "environmental_risk",       "weight": 5,
+     "label": "Environmental risk (100 = NO risk)",
+     "hint": "Flood, dust, salt, protected land. 100 = benign. LOW = hazardous."},
+    {"key": "funding_eligibility",      "weight": 10,
+     "label": "Funding eligibility",
+     "hint": "Fits the funder's mandate and conditions. 100 = fully eligible."},
+]
+
+# Guard the arithmetic at import time rather than discovering a 97-point "percentage" in a
+# board report: the weights ARE the overall score's denominator.
+assert sum(c["weight"] for c in QUALIFICATION_CRITERIA) == 100, \
+    "QUALIFICATION_CRITERIA weights must sum to 100 -- the total score is a percentage"
+
+QUALIFICATION_CRITERION_KEYS: list[str] = [c["key"] for c in QUALIFICATION_CRITERIA]
+QUALIFICATION_SCORE_MIN: int = 0
+QUALIFICATION_SCORE_MAX: int = 100
+
+# The two decisions a qualification can reach. They are the SAME strings as the beneficiary
+# statuses they drive, deliberately: a decision that had to be mapped onto a status would be
+# somewhere for the two to disagree about whether a site is qualified.
+QUALIFICATION_DECISIONS: list[str] = ["Qualified", "Not Qualified"]
+
 # --- bulk import staging (slice 5) ------------------------------------------
 # An import is STAGED, never applied straight to the register: rows are parsed, mapped,
 # validated and shown back before a single beneficiary exists. A 4000-row spreadsheet with

@@ -87,7 +87,7 @@ class BeneficiaryError(EnterpriseGateError):
 
 _SQLITE_SCHEMA = [
     """
-    CREATE TABLE IF NOT EXISTS enterprise_beneficiaries (
+    CREATE TABLE IF NOT EXISTS enterprise_beneficiary_register (
         id                      INTEGER PRIMARY KEY AUTOINCREMENT,
         tenant_id               TEXT NOT NULL,
         programme_id            INTEGER NOT NULL,
@@ -143,11 +143,11 @@ _SQLITE_SCHEMA = [
     )
     """,
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_ent_beneficiary_code "
-    "  ON enterprise_beneficiaries (tenant_id, programme_id, code)",
+    "  ON enterprise_beneficiary_register (tenant_id, programme_id, code)",
     "CREATE INDEX IF NOT EXISTS ix_ent_beneficiary_status "
-    "  ON enterprise_beneficiaries (tenant_id, programme_id, status)",
+    "  ON enterprise_beneficiary_register (tenant_id, programme_id, status)",
     "CREATE INDEX IF NOT EXISTS ix_ent_beneficiary_dup_probe "
-    "  ON enterprise_beneficiaries (tenant_id, programme_id, community, name)",
+    "  ON enterprise_beneficiary_register (tenant_id, programme_id, community, name)",
     """
     CREATE TABLE IF NOT EXISTS enterprise_import_batches (
         id                 INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -186,7 +186,7 @@ _SQLITE_SCHEMA = [
         FOREIGN KEY (tenant_id, batch_id)
             REFERENCES enterprise_import_batches (tenant_id, id) ON DELETE CASCADE,
         FOREIGN KEY (tenant_id, beneficiary_id)
-            REFERENCES enterprise_beneficiaries (tenant_id, id) ON DELETE SET NULL,
+            REFERENCES enterprise_beneficiary_register (tenant_id, id) ON DELETE SET NULL,
         CONSTRAINT ck_ent_import_row_status CHECK (status IN
             ('Valid', 'Error', 'Duplicate', 'Imported', 'Skipped'))
     )
@@ -201,15 +201,27 @@ _SQLITE_SCHEMA = [
         scores_json        TEXT NOT NULL DEFAULT '{}',
         total_score        REAL,
         decision           TEXT,
-        notes              TEXT,
+        -- Two acts, two columns: a single `notes` let the approver's reason overwrite the
+        -- surveyor's, and a re-survey then erase the approver's. See migration 027.
+        survey_notes       TEXT,
+        decision_notes     TEXT,
+        -- Bumped on every survey; an approval names the revision it approves. A timestamp
+        -- cannot do this: SQLite's CURRENT_TIMESTAMP is second-resolution. See migration 027.
+        revision           INTEGER NOT NULL DEFAULT 0,
         scored_by_user_id  INTEGER,
         scored_at          TEXT,
         decided_by_user_id INTEGER,
         decided_at         TEXT,
         created_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (tenant_id, beneficiary_id)
-            REFERENCES enterprise_beneficiaries (tenant_id, id) ON DELETE CASCADE,
-        UNIQUE (tenant_id, id)
+            REFERENCES enterprise_beneficiary_register (tenant_id, id) ON DELETE CASCADE,
+        UNIQUE (tenant_id, id),
+        -- ONE scorecard per site: a re-survey UPDATES it, it does not file a rival one.
+        -- Two rows would be two answers to "is this site qualified?" and the priority list,
+        -- the Gate-3 evidence and control C02 would each be free to pick a different one.
+        UNIQUE (tenant_id, beneficiary_id),
+        CONSTRAINT ck_ent_qualification_decision CHECK (
+            decision IS NULL OR decision IN ('Qualified', 'Not Qualified'))
     )
     """,
     """
@@ -231,7 +243,7 @@ _SQLITE_SCHEMA = [
         -- Programme-scoped, and the template version is a real FK: both halves of control
         -- C14's traceability chain. See migration 027.
         FOREIGN KEY (tenant_id, programme_id, beneficiary_id)
-            REFERENCES enterprise_beneficiaries (tenant_id, programme_id, id)
+            REFERENCES enterprise_beneficiary_register (tenant_id, programme_id, id)
             ON DELETE CASCADE,
         FOREIGN KEY (tenant_id, template_version_id)
             REFERENCES enterprise_template_versions (tenant_id, id),
@@ -267,7 +279,7 @@ _SQLITE_SCHEMA = [
     # tests run against that is not the schema production runs against is how a divergence
     # ships: the suite goes green on a shape nobody deploys.
     "CREATE INDEX IF NOT EXISTS ix_ent_beneficiary_area "
-    "  ON enterprise_beneficiaries (tenant_id, area_id)",
+    "  ON enterprise_beneficiary_register (tenant_id, area_id)",
     "CREATE INDEX IF NOT EXISTS ix_ent_import_batch_programme "
     "  ON enterprise_import_batches (tenant_id, programme_id, status)",
     "CREATE INDEX IF NOT EXISTS ix_ent_import_row_status "
@@ -275,7 +287,7 @@ _SQLITE_SCHEMA = [
     "CREATE INDEX IF NOT EXISTS ix_ent_qualification_beneficiary "
     "  ON enterprise_site_qualifications (tenant_id, beneficiary_id)",
     "CREATE INDEX IF NOT EXISTS ix_ent_project_link_programme "
-    "  ON enterprise_project_links (tenant_id, programme_id)",
+    "  ON enterprise_project_links (tenant_id, programme_id, status)",
     "CREATE INDEX IF NOT EXISTS ix_ent_job_programme "
     "  ON enterprise_jobs (tenant_id, programme_id, status)",
 ]
@@ -417,7 +429,7 @@ def _load(c, tenant_id: str, beneficiary_id: int) -> dict:
     into a 404. Telling a stranger "that exists, but is not yours" IS the leak.
     """
     row = c.execute(
-        f"SELECT {_SELECT_COLUMNS} FROM enterprise_beneficiaries "
+        f"SELECT {_SELECT_COLUMNS} FROM enterprise_beneficiary_register "
         " WHERE tenant_id=? AND id=?",
         (tenant_id, beneficiary_id),
     ).fetchone()
@@ -441,7 +453,7 @@ def list_beneficiaries(c, tenant_id: str, programme_id: int, *,
     The cap is real and the caller reports it. A programme with 4000 schools must not
     render 4000 table rows into one page and call that a feature.
     """
-    sql = (f"SELECT {_SELECT_COLUMNS} FROM enterprise_beneficiaries "
+    sql = (f"SELECT {_SELECT_COLUMNS} FROM enterprise_beneficiary_register "
            " WHERE tenant_id=? AND programme_id=?")
     params: list = [tenant_id, programme_id]
     if status:
@@ -456,7 +468,7 @@ def count_by_status(c, tenant_id: str, programme_id: int) -> dict[str, int]:
     """{status: count} for the whole register -- computed by the DATABASE, not by counting
     a truncated page in Python."""
     rows = c.execute(
-        "SELECT status, COUNT(*) FROM enterprise_beneficiaries "
+        "SELECT status, COUNT(*) FROM enterprise_beneficiary_register "
         " WHERE tenant_id=? AND programme_id=? GROUP BY status",
         (tenant_id, programme_id),
     ).fetchall()
@@ -519,7 +531,7 @@ def find_duplicate(c, tenant_id: str, programme_id: int, *, code: str | None,
     canonical = canonical_code(code)
     if canonical:
         row = c.execute(
-            "SELECT id FROM enterprise_beneficiaries "
+            "SELECT id FROM enterprise_beneficiary_register "
             " WHERE tenant_id=? AND programme_id=? AND code=?",
             (tenant_id, programme_id, canonical),
         ).fetchone()
@@ -535,7 +547,7 @@ def find_duplicate(c, tenant_id: str, programme_id: int, *, code: str | None,
         target_name = _canonical_text(name)
         target_community = _canonical_text(community)
         rows = c.execute(
-            "SELECT id, name, community FROM enterprise_beneficiaries "
+            "SELECT id, name, community FROM enterprise_beneficiary_register "
             " WHERE tenant_id=? AND programme_id=? AND community IS NOT NULL",
             (tenant_id, programme_id),
         ).fetchall()
@@ -581,7 +593,7 @@ class DuplicateIndex:
         """One query. The caller must already have established C13 on the programme."""
         index = cls()
         rows = c.execute(
-            "SELECT id, code, name, community FROM enterprise_beneficiaries "
+            "SELECT id, code, name, community FROM enterprise_beneficiary_register "
             " WHERE tenant_id=? AND programme_id=?",
             (tenant_id, programme_id),
         ).fetchall()
@@ -675,7 +687,7 @@ def create_beneficiary(c, tenant_id: str, user_id: int, programme_id: int, *,
         placeholders = ",".join("?" for _ in columns)
         try:
             cur = c.execute(
-                f"INSERT INTO enterprise_beneficiaries ({', '.join(columns)}) "
+                f"INSERT INTO enterprise_beneficiary_register ({', '.join(columns)}) "
                 f"VALUES ({placeholders})",
                 tuple(values),
             )
@@ -746,7 +758,7 @@ def update_beneficiary(c, tenant_id: str, user_id: int, beneficiary_id: int,
         # land on a record that is no longer editable. (The same race Codex found in the
         # template engine.)
         cur = c.execute(
-            f"UPDATE enterprise_beneficiaries SET {assignments}, "
+            f"UPDATE enterprise_beneficiary_register SET {assignments}, "
             "       updated_at=CURRENT_TIMESTAMP "
             " WHERE tenant_id=? AND id=? AND status=?",
             tuple(values + [tenant_id, beneficiary_id, existing["status"]]),
@@ -810,15 +822,16 @@ def transition_beneficiary(c, tenant_id: str, user_id: int, beneficiary_id: int,
             f"(allowed: {', '.join(legal) or 'none'})",
         )
 
-    # Slice 6 owns qualification and slice 7 owns generation. Until their guards exist,
-    # this function must not be a way to hand-wave a site into Qualified -- which would
-    # walk straight around control C02 (no beneficiary becomes a project without
-    # qualification) before C02 has anything to say.
+    # Qualification is an ACT, not a label. site_qualification.decide() is the only writer of
+    # these two statuses, and it writes them in the same transaction as the scorecard that
+    # justifies them -- which is what lets control C02 trust the status later. A hand-typed
+    # "Qualified" here would be a site nobody surveyed, indistinguishable from one that was.
     if target in ("Qualified", "Not Qualified"):
         raise BeneficiaryError(
             "C02",
-            "site qualification ships in slice 6; a beneficiary cannot be marked "
-            "Qualified by hand",
+            "a site is qualified by DECIDING it (score the site, then approve or refuse it), "
+            "not by setting its status: no beneficiary becomes a project without "
+            "qualification",
         )
     if target in ("Template Assigned", "Project Generated"):
         raise BeneficiaryError(
@@ -833,7 +846,7 @@ def transition_beneficiary(c, tenant_id: str, user_id: int, beneficiary_id: int,
     with txn.atomic(c):
         if approving:
             cur = c.execute(
-                "UPDATE enterprise_beneficiaries "
+                "UPDATE enterprise_beneficiary_register "
                 "   SET status=?, approved_by_user_id=?, approved_at=CURRENT_TIMESTAMP, "
                 "       updated_at=CURRENT_TIMESTAMP "
                 " WHERE tenant_id=? AND id=? AND status=?",
@@ -841,7 +854,7 @@ def transition_beneficiary(c, tenant_id: str, user_id: int, beneficiary_id: int,
             )
         else:
             cur = c.execute(
-                "UPDATE enterprise_beneficiaries "
+                "UPDATE enterprise_beneficiary_register "
                 "   SET status=?, updated_at=CURRENT_TIMESTAMP "
                 " WHERE tenant_id=? AND id=? AND status=?",
                 (target, tenant_id, beneficiary_id, existing["status"]),

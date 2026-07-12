@@ -12,9 +12,21 @@
 --
 -- RULES THIS FILE FOLLOWS (learned the hard way -- see migrations 024 and 026):
 --   1. Table names must not collide with anything already ON LIVE. Migration 024 owns
---      `enterprise_programmes` and `enterprise_programme_phases`; CREATE TABLE IF NOT
---      EXISTS would SILENTLY SKIP a colliding table, leave the old shape in place, and
---      kill the apply at the first foreign key that expects the new one.
+--      `enterprise_programmes`, `enterprise_programme_phases` AND `enterprise_beneficiaries`;
+--      CREATE TABLE IF NOT EXISTS would SILENTLY SKIP a colliding table, leave the old shape
+--      in place, and kill the apply at the first foreign key that expects the new one.
+--
+--      THIS FILE BROKE ITS OWN RULE AND WAS CAUGHT BY THE SUPERVISOR, NOT BY THE SUITE.
+--      It declared `enterprise_beneficiaries` -- the one name the rebuild forgot to rename.
+--      On live that CREATE would have been skipped silently, and the very next statement
+--      (CREATE UNIQUE INDEX ux_ent_beneficiary_code ON ... (tenant_id, programme_id, code))
+--      would have died on `column "tenant_id" does not exist` -- 024's table has no
+--      tenant_id -- rolling back the whole migration. Slices 5, 6, 7, 8 and 9 would have
+--      landed NO schema at all. The test suite could never have seen it: .sql migrations do
+--      not run on SQLite, and the SQLite mirror builds the new shape in a database that has
+--      never met 024. The register is therefore `enterprise_beneficiary_register`, matching
+--      the `enterprise_programme_registry` / `_phase_states` renames done for the same
+--      reason. 024's tables are left ALONE (owner decision D1: supersede, never DROP).
 --   2. A SQL function definition comes AFTER the tables it reads. 024 died on this.
 --   3. Every reference to a tenant-owned row is a TENANT-SCOPED COMPOSITE foreign key.
 --      With a bare `programme_id` FK, tenant A could point a row at tenant B's programme:
@@ -43,7 +55,7 @@ BEGIN;
 -- a JSON blob: these are queried, filtered, scored (slice 6) and fed to the design engine
 -- (slice 7), and a blob would mean every one of those reaches into JSON for a value the
 -- database could have typed and indexed.
-CREATE TABLE IF NOT EXISTS enterprise_beneficiaries (
+CREATE TABLE IF NOT EXISTS enterprise_beneficiary_register (
     id                     bigserial PRIMARY KEY,
     tenant_id              uuid NOT NULL REFERENCES enterprise_tenants(id) ON DELETE CASCADE,
     programme_id           bigint NOT NULL,
@@ -106,16 +118,16 @@ CREATE TABLE IF NOT EXISTS enterprise_beneficiaries (
 -- every school in the programme -- and "did I already import this?" is a question the
 -- database can answer definitively, where a fuzzy name match cannot.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_ent_beneficiary_code
-    ON enterprise_beneficiaries (tenant_id, programme_id, code);
+    ON enterprise_beneficiary_register (tenant_id, programme_id, code);
 
 CREATE INDEX IF NOT EXISTS ix_ent_beneficiary_status
-    ON enterprise_beneficiaries (tenant_id, programme_id, status);
+    ON enterprise_beneficiary_register (tenant_id, programme_id, status);
 CREATE INDEX IF NOT EXISTS ix_ent_beneficiary_area
-    ON enterprise_beneficiaries (tenant_id, area_id);
+    ON enterprise_beneficiary_register (tenant_id, area_id);
 -- The duplicate-detection probe (slice 5) matches on name within a community; without
 -- this, every imported row costs a sequential scan of the whole register.
 CREATE INDEX IF NOT EXISTS ix_ent_beneficiary_dup_probe
-    ON enterprise_beneficiaries (tenant_id, programme_id, community, name);
+    ON enterprise_beneficiary_register (tenant_id, programme_id, community, name);
 
 -- -----------------------------------------------------------------------------
 -- PART 2 -- import staging
@@ -169,7 +181,7 @@ CREATE TABLE IF NOT EXISTS enterprise_import_rows (
     CONSTRAINT fk_import_row_batch FOREIGN KEY (tenant_id, batch_id)
         REFERENCES enterprise_import_batches (tenant_id, id) ON DELETE CASCADE,
     CONSTRAINT fk_import_row_beneficiary FOREIGN KEY (tenant_id, beneficiary_id)
-        REFERENCES enterprise_beneficiaries (tenant_id, id) ON DELETE SET NULL,
+        REFERENCES enterprise_beneficiary_register (tenant_id, id) ON DELETE SET NULL,
     CONSTRAINT ck_ent_import_row_status CHECK (status IN
         ('Valid', 'Error', 'Duplicate', 'Imported', 'Skipped'))
 );
@@ -192,15 +204,33 @@ CREATE TABLE IF NOT EXISTS enterprise_site_qualifications (
     scores_json         jsonb NOT NULL DEFAULT '{}'::jsonb,  -- category -> score
     total_score         numeric,
     decision            text,                  -- Qualified | Not Qualified
-    notes               text,
+    -- TWO ACTS, TWO COLUMNS (Supervisor slice-6). A single `notes` column was written by
+    -- BOTH the surveyor and the approver: the manager's refusal reason overwrote the survey
+    -- notes, and a later re-survey then overwrote the refusal reason. The record of WHY the
+    -- programme turned a site away -- the exact question an appeal asks -- was destroyed by
+    -- the very act of re-surveying it (control C14, traceability).
+    survey_notes        text,                  -- what the surveyor found
+    decision_notes      text,                  -- why the programme said yes or no
+    -- Bumped on every survey. An approval names the revision it is approving, so a re-score
+    -- landing between a manager's read and their write cannot be approved by accident.
+    -- A timestamp cannot do this job: CURRENT_TIMESTAMP is second-resolution on SQLite, so
+    -- two surveys within one second are indistinguishable (Codex slice-6 round 2).
+    revision            integer NOT NULL DEFAULT 0,
     scored_by_user_id   integer,
     scored_at           timestamptz,
     decided_by_user_id  integer,
     decided_at          timestamptz,
     created_at          timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT fk_qualification_beneficiary FOREIGN KEY (tenant_id, beneficiary_id)
-        REFERENCES enterprise_beneficiaries (tenant_id, id) ON DELETE CASCADE,
-    CONSTRAINT uq_ent_qualification_tenant_id UNIQUE (tenant_id, id)
+        REFERENCES enterprise_beneficiary_register (tenant_id, id) ON DELETE CASCADE,
+    CONSTRAINT uq_ent_qualification_tenant_id UNIQUE (tenant_id, id),
+    -- ONE scorecard per site. Re-surveying a site UPDATES its scorecard; it does not file a
+    -- rival one. Two rows for one beneficiary would mean two different answers to "is this
+    -- site qualified?", and every reader would have to guess which is current -- the priority
+    -- list, the Gate-3 evidence and control C02 would each be free to pick a different one.
+    CONSTRAINT uq_ent_qualification_beneficiary UNIQUE (tenant_id, beneficiary_id),
+    CONSTRAINT ck_ent_qualification_decision CHECK (
+        decision IS NULL OR decision IN ('Qualified', 'Not Qualified'))
 );
 
 CREATE INDEX IF NOT EXISTS ix_ent_qualification_beneficiary
@@ -241,7 +271,7 @@ CREATE TABLE IF NOT EXISTS enterprise_project_links (
     -- a DIFFERENT programme in the same tenant retains a traceability that is false, which is
     -- worse than none -- a report would follow it and produce a confident wrong answer.
     CONSTRAINT fk_link_beneficiary FOREIGN KEY (tenant_id, programme_id, beneficiary_id)
-        REFERENCES enterprise_beneficiaries (tenant_id, programme_id, id) ON DELETE CASCADE,
+        REFERENCES enterprise_beneficiary_register (tenant_id, programme_id, id) ON DELETE CASCADE,
     -- The OTHER half of C14: the immutable template version this project was built from.
     -- Without this FK it is an integer that nothing checks -- it could name a version in
     -- another tenant, or one that never existed, and the provenance would still "resolve".
@@ -303,15 +333,15 @@ CREATE INDEX IF NOT EXISTS ix_ent_job_programme
 -- -----------------------------------------------------------------------------
 -- current_enterprise_tenant_ids() was created by migration 025; it reads only
 -- enterprise_tenant_memberships, so none of the policies below can recurse.
-ALTER TABLE enterprise_beneficiaries        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE enterprise_beneficiary_register        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE enterprise_import_batches       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE enterprise_import_rows          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE enterprise_site_qualifications  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE enterprise_project_links        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE enterprise_jobs                 ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS ent_beneficiaries_member ON enterprise_beneficiaries;
-CREATE POLICY ent_beneficiaries_member ON enterprise_beneficiaries
+DROP POLICY IF EXISTS ent_beneficiaries_member ON enterprise_beneficiary_register;
+CREATE POLICY ent_beneficiaries_member ON enterprise_beneficiary_register
     FOR ALL USING (tenant_id IN (SELECT current_enterprise_tenant_ids()));
 
 DROP POLICY IF EXISTS ent_import_batches_member ON enterprise_import_batches;
@@ -342,7 +372,7 @@ COMMIT;
 -- Only if the schema itself must go (this DESTROYS enterprise data -- back up first):
 --   DROP TABLE IF EXISTS enterprise_jobs, enterprise_project_links,
 --                        enterprise_site_qualifications, enterprise_import_rows,
---                        enterprise_import_batches, enterprise_beneficiaries CASCADE;
+--                        enterprise_import_batches, enterprise_beneficiary_register CASCADE;
 -- Dropping these does NOT affect any user's projects -- by design, this migration never
 -- wrote to them. enterprise_project_links REFERENCES a project id without a foreign key
 -- precisely so that dropping it cannot cascade into anybody's work.

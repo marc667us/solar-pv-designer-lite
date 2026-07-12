@@ -127,20 +127,53 @@ def require_approved_sponsor(c, tenant_id: str, programme_id: int) -> None:
         )
 
 
-@_deferred
 def require_qualified_beneficiary(c, tenant_id: str, beneficiary_id: int) -> None:
-    """C02 -- no beneficiary becomes a project without qualification.
+    """C02 -- no beneficiary becomes a project without qualification. LIVE since slice 6.
 
     Input:  connection, tenant id, beneficiary id.
     Output: none.
-    Raises: GateBlockedError until slice 6 (site qualification) ships.
+    Raises: EnterpriseGateError("C02") unless the site has been DECIDED Qualified.
 
-    Wired into project_generation in slice 7, on BOTH the queue path and the worker
-    path -- see the module docstring.
+    Two conditions, and BOTH are checked, because either alone can be true while the site is
+    not actually qualified:
+
+      1. The beneficiary's status is Qualified (or past it -- a site with a template already
+         assigned, or a project already generated, was qualified to get there).
+      2. A scorecard exists carrying decision='Qualified'.
+
+    Belt and braces on purpose. The status is what everything else reads and it is one UPDATE
+    away from being wrong; the scorecard is the evidence that a human with
+    `qualification.approve` actually looked. C02 is the control that stops money being spent
+    on a site nobody assessed, so it asks for the evidence, not just the label.
+
+    Wired into project_generation in slice 7 on BOTH the queue path and the worker path -- a
+    guard that lives only in the route is a guard the queue drainer skips.
     """
-    raise GateBlockedError(
-        "C02", "site qualification ships in slice 6; beneficiaries cannot yet qualify"
-    )
+    row = c.execute(
+        "SELECT b.status, q.decision "
+        "  FROM enterprise_beneficiary_register b "
+        "  LEFT JOIN enterprise_site_qualifications q "
+        "         ON q.tenant_id = b.tenant_id AND q.beneficiary_id = b.id "
+        " WHERE b.tenant_id=? AND b.id=?",
+        (tenant_id, beneficiary_id),
+    ).fetchone()
+    if row is None:
+        # C13, not C02: a site in another tenant is not "unqualified", it is not ours to
+        # discuss. The routes turn this into a 404.
+        raise EnterpriseGateError("C13", "no such beneficiary in this organisation")
+
+    status, decision = row[0], row[1]
+    if status not in ("Qualified", "Template Assigned", "Project Generated"):
+        raise EnterpriseGateError(
+            "C02",
+            f"this site is {status}: no beneficiary becomes a project without qualification",
+        )
+    if decision != "Qualified":
+        raise EnterpriseGateError(
+            "C02",
+            "this site is marked Qualified but carries no qualification decision to show "
+            "for it",
+        )
 
 
 def require_approved_template_version(c, tenant_id: str, template_version_id: int) -> None:
@@ -423,7 +456,7 @@ def _gate_3_predicate(c, tenant_id: str, programme_id: int) -> None:
     """
     placeholders = ",".join("?" for _ in BENEFICIARY_STATUSES_APPROVED)
     row = c.execute(
-        "SELECT 1 FROM enterprise_beneficiaries "
+        "SELECT 1 FROM enterprise_beneficiary_register "
         f" WHERE tenant_id=? AND programme_id=? AND status IN ({placeholders}) LIMIT 1",
         tuple([tenant_id, programme_id] + sorted(BENEFICIARY_STATUSES_APPROVED)),
     ).fetchone()

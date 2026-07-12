@@ -219,7 +219,7 @@ def test_the_register_can_hold_every_field_a_template_may_demand(db):
 
     c, _org, _other, _pid = db
     columns = {r[1] for r in c.execute(
-        "PRAGMA table_info(enterprise_beneficiaries)").fetchall()}
+        "PRAGMA table_info(enterprise_beneficiary_register)").fetchall()}
     assert spec_keys <= columns, f"the register cannot hold: {spec_keys - columns}"
 
 
@@ -278,7 +278,7 @@ def test_a_generated_site_can_no_longer_be_edited(db):
     """Once a project exists, the record is the specification of something being built."""
     c, org, _other, pid = db
     bid = _site(c, org, pid)
-    c.execute("UPDATE enterprise_beneficiaries SET status='Project Generated' WHERE id=?",
+    c.execute("UPDATE enterprise_beneficiary_register SET status='Project Generated' WHERE id=?",
               (bid,))
     with pytest.raises(BeneficiaryError, match="can no longer be edited"):
         beneficiaries.update_beneficiary(c, org, OFFICER, bid, {"roof_area": "1"},
@@ -339,7 +339,7 @@ def test_a_failed_audit_rolls_the_registration_back(db):
         )
     assert e.value.control == "C12"
     assert c.execute(
-        "SELECT COUNT(*) FROM enterprise_beneficiaries WHERE code='NOPE'"
+        "SELECT COUNT(*) FROM enterprise_beneficiary_register WHERE code='NOPE'"
     ).fetchone()[0] == 0
 
 
@@ -370,7 +370,7 @@ def test_staging_writes_nothing_to_the_register(db):
     batch_id = _upload(c, org, pid)
 
     assert c.execute(
-        "SELECT COUNT(*) FROM enterprise_beneficiaries").fetchone()[0] == 0
+        "SELECT COUNT(*) FROM enterprise_beneficiary_register").fetchone()[0] == 0
 
     batch = imports.get_batch(c, org, batch_id)
     assert batch["total_rows"] == 3
