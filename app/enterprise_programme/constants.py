@@ -316,6 +316,146 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
 }
 
 
+# --- the lifecycle state machine (doc 3, slice 2) ----------------------------
+# Hold/terminal pseudo-states. They are NOT phases -- a programme sitting in
+# SUSPENDED still remembers the phase it was suspended FROM, and resumes there.
+HOLD_STATES: frozenset[str] = frozenset({"SUSPENDED", "ON_HOLD"})
+TERMINAL_STATES: frozenset[str] = frozenset({"CANCELLED", "CLOSED", "ARCHIVED"})
+PSEUDO_STATES: frozenset[str] = HOLD_STATES | TERMINAL_STATES
+
+# phase_code -> the phases (or pseudo-states) it may legally move to.
+# Straight from docs/enterprise-programme/rebuild/05-lifecycle-gates-and-workflows.md.
+# Anything not listed here is an ILLEGAL transition -- there is no "any -> any" escape,
+# which is the whole point of having a spine.
+TRANSITIONS: dict[str, tuple[str, ...]] = {
+    "P01_CONCEPT":      ("P02_INITIATION", "CANCELLED", "ON_HOLD"),
+    "P02_INITIATION":   ("P03_NEEDS", "P01_CONCEPT", "CANCELLED", "ON_HOLD"),
+    "P03_NEEDS":        ("P04_FEASIBILITY", "P02_INITIATION", "ON_HOLD"),
+    "P04_FEASIBILITY":  ("P05_STRUCTURING", "P03_NEEDS", "CANCELLED", "ON_HOLD"),
+    "P05_STRUCTURING":  ("P06_TEMPLATES", "P04_FEASIBILITY", "SUSPENDED"),
+    "P06_TEMPLATES":    ("P07_FUNDING", "P09_ENGINEERING", "P05_STRUCTURING"),
+    "P07_FUNDING":      ("P08_PROCUREMENT", "P06_TEMPLATES", "ON_HOLD"),
+    "P08_PROCUREMENT":  ("P09_ENGINEERING", "P10_MOBILISATION", "P07_FUNDING"),
+    "P09_ENGINEERING":  ("P10_MOBILISATION", "P08_PROCUREMENT", "SUSPENDED"),
+    "P10_MOBILISATION": ("P11_CONSTRUCTION", "P09_ENGINEERING", "SUSPENDED"),
+    "P11_CONSTRUCTION": ("P12_COMMISSIONING", "P10_MOBILISATION", "SUSPENDED"),
+    "P12_COMMISSIONING":("P13_HANDOVER", "P11_CONSTRUCTION", "SUSPENDED"),
+    "P13_HANDOVER":     ("P14_OPERATIONS", "P15_EVALUATION", "CLOSED"),
+    "P14_OPERATIONS":   ("P15_EVALUATION", "SUSPENDED", "CLOSED"),
+    "P15_EVALUATION":   ("P16_EXPANSION", "P14_OPERATIONS", "CLOSED"),
+    "P16_EXPANSION":    ("P01_CONCEPT", "P05_STRUCTURING", "CLOSED"),
+}
+
+# phase_code -> the programme status the phase puts the programme in.
+# The status is DERIVED, never typed. That is what keeps 20 statuses and 16 phases
+# from drifting apart into two independent (and eventually contradictory) truths.
+PHASE_STATUS: dict[str, str] = {
+    "P01_CONCEPT":      "Concept",
+    "P02_INITIATION":   "Under Initiation",
+    "P03_NEEDS":        "Under Assessment",
+    "P04_FEASIBILITY":  "Under Feasibility",
+    "P05_STRUCTURING":  "Approved",
+    "P06_TEMPLATES":    "Approved",
+    "P07_FUNDING":      "Funding Pending",
+    "P08_PROCUREMENT":  "Procurement Planning",
+    "P09_ENGINEERING":  "Under Design",
+    "P10_MOBILISATION": "Contracted",
+    "P11_CONSTRUCTION": "Under Construction",
+    "P12_COMMISSIONING":"Under Commissioning",
+    "P13_HANDOVER":     "Closing",
+    "P14_OPERATIONS":   "Operational",
+    "P15_EVALUATION":   "Operational",
+    "P16_EXPANSION":    "Approved",
+}
+
+# pseudo-state -> programme status.
+PSEUDO_STATE_STATUS: dict[str, str] = {
+    "SUSPENDED": "Suspended",
+    "ON_HOLD":   "On Hold",
+    "CANCELLED": "Cancelled",
+    "CLOSED":    "Closed",
+    "ARCHIVED":  "Archived",
+}
+
+# The gate that must be APPROVED before a programme may LEAVE a phase going forward.
+# P14 has no numbered gate (doc 3) -- it is controlled by O&M permissions instead --
+# and P16's exit is controlled by an expansion approval record, not a numbered gate.
+GATE_CLOSING_PHASE: dict[str, str] = {g[1]: g[0] for g in GATES}
+
+# --- what a phase demands to be ENTERED --------------------------------------
+# "The gate that closes the phase you are leaving" is NOT a sufficient rule, and the
+# reviewer found the proof: doc 3 permits P06 -> P09 (start engineering while funding and
+# tendering run in parallel) and P09 -> P10. Chain them and a programme reaches
+# MOBILISATION having approved only G06 and G09 -- no funding close (G07), no contract
+# award (G08). It would be mobilising contractors it never hired with money it never
+# raised. A rework edge (P09 -> P08) walked around G07 the same way.
+#
+# Patching each edge is whack-a-mole, because the hole is a property of the DESTINATION,
+# not of the route taken to it. So each phase declares what must be true to ENTER it, and
+# that is checked on EVERY entry -- forward, skipping, or backward.
+#
+# The entries below are doc 3's own "blocked until passed" column, read as preconditions:
+#   Gate 7 blocks major procurement    -> P08 cannot be entered without G07
+#   Gate 8 blocks contractor mobilisation, Gate 9 blocks site installation
+#                                      -> P10 cannot be entered without G08 and G09
+#   Gate 10 blocks construction start  -> P11 needs G10, and so on down the chain.
+# Phases not listed here impose no entry gate of their own.
+PHASE_ENTRY_REQUIRED_GATES: dict[str, tuple[str, ...]] = {
+    "P08_PROCUREMENT":   ("G07",),
+    "P10_MOBILISATION":  ("G08", "G09"),
+    "P11_CONSTRUCTION":  ("G10",),
+    "P12_COMMISSIONING": ("G11",),
+    "P13_HANDOVER":      ("G12",),
+    "P14_OPERATIONS":    ("G13",),
+}
+
+# --- gates that cannot be approved before other gates ------------------------
+# The remaining leak: nothing stopped G08 (Contract Award) being approved before G07
+# (Financial Close). Awarding a contract you have no money for is not a routing mistake,
+# it is the thing Gate 7 exists to prevent -- so the dependency belongs on the GATE, not
+# on every edge that might reach it. With G08 requiring G07, mobilisation transitively
+# requires funding no matter which path a programme takes to get there.
+#
+# G09 (Design Approval) deliberately has NO prerequisite: detailed engineering running
+# ahead of financial close is normal practice and doc 3 explicitly allows P06 -> P09.
+GATE_PREREQUISITE_GATES: dict[str, tuple[str, ...]] = {
+    "G08": ("G07",),           # no contract award before financial close
+    "G10": ("G08", "G09"),     # no mobilisation approval without a contract and a design
+    "G11": ("G10",),           # no completion sign-off without mobilisation
+    "G12": ("G11",),           # no commissioning without construction completion
+    "G13": ("G12",),           # no handover without commissioning
+}
+
+# --- named post-holders: when the role is not enough -------------------------
+# A programme NAMES the people who fill its senior posts. Where it has, the gate whose
+# authority is that post must be signed BY THAT PERSON -- not merely by somebody who
+# happens to hold the role tenant-wide.
+#
+# Without this, `sponsor_user_id` would be decorative: a programme could name Bob as
+# sponsor, and any other holder of the programme_sponsor role could sign Gate 1 in his
+# place, satisfying control C01 ("no programme proceeds without an approved sponsor")
+# with an approval the actual sponsor never gave. The role says WHAT KIND of person may
+# sign; this says WHICH ONE.
+#
+# role code -> the enterprise_programmes column naming its holder. A NULL column means
+# the post is unfilled and the role check alone applies.
+GATE_AUTHORITY_HOLDER_COLUMN: dict[str, str] = {
+    "programme_sponsor":  "sponsor_user_id",
+    "programme_director": "director_user_id",
+    "programme_manager":  "manager_user_id",
+}
+
+# Release 1 delivers a COMPLETE lifecycle through Gate 9 (Supervisor adjudication,
+# doc 09). Gates 10-14 exist, are seeded, and are deliberately BLOCKED: their guards
+# fail closed until the slices that produce their evidence (construction reports, test
+# results, handover dossiers) ship. A lifecycle with holes in the middle is worse than
+# a shorter one that cannot be bypassed.
+RELEASE_1_FINAL_GATE = "G09"
+GATES_DEFERRED_BEYOND_RELEASE_1: frozenset[str] = frozenset(
+    {"G10", "G11", "G12", "G13", "G14"}
+)
+
+
 # --- convenience lookups (used by dropdown builders and guards) -------------
 
 PHASE_CODES: list[str] = [p[0] for p in PHASES]

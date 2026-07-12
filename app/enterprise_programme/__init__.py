@@ -11,6 +11,14 @@ docs/enterprise-programme/rebuild/09-supervisor-adjudication.md.
 from __future__ import annotations
 
 from . import constants
+from .gates import (
+    CONTROL_GUARDS,
+    EnterpriseGateError,
+    GateBlockedError,
+    control_summary,
+    evaluate_gate,
+    gate_authority,
+)
 from .rbac import (
     EnterprisePermissionError,
     has_permission,
@@ -28,6 +36,15 @@ from .tenancy import (
     list_tenants_for_user,
     personal_tenant_id,
     resolve_active_tenant,
+)
+from .workflows import (
+    allowed_transitions,
+    approve_gate,
+    create_programme,
+    get_programme_state,
+    register_document,
+    resume_from_hold,
+    transition_programme_phase,
 )
 
 __all__ = [
@@ -48,4 +65,19 @@ __all__ = [
     "has_permission",
     "require_permission",
     "require_role",
+    # gates and the 15 controls
+    "EnterpriseGateError",
+    "GateBlockedError",
+    "CONTROL_GUARDS",
+    "control_summary",
+    "evaluate_gate",
+    "gate_authority",
+    # lifecycle spine
+    "create_programme",
+    "register_document",
+    "approve_gate",
+    "transition_programme_phase",
+    "resume_from_hold",
+    "get_programme_state",
+    "allowed_transitions",
 ]
