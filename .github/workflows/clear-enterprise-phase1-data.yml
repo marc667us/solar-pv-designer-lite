@@ -64,10 +64,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install psql
+      # Ubuntu's default postgresql-client is 16. The live server was upgraded to 18.4
+      # (2026-07-10), and pg_dump REFUSES to dump a server newer than itself -- "aborting
+      # because of server version mismatch". psql tolerates the gap; pg_dump does not. So
+      # pull the matching major from PGDG, or the backup step below cannot run and this
+      # workflow will (correctly) refuse to delete anything.
+      - name: Install psql + pg_dump 18 (matching the live server)
         run: |
+          set -e
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client
+          sudo apt-get install -y -qq curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          echo "psql:     $(psql --version)"
+          echo "pg_dump:  $(pg_dump --version)"
 
       - name: Resolve mode
         run: |
