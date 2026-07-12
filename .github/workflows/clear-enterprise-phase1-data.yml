@@ -150,6 +150,53 @@ jobs:
           echo "         -f confirm=CLEAR_ENTERPRISE_PHASE1"
           echo "================================================================"
 
+      # THE BACKUP IS TAKEN HERE, NOT ELSEWHERE.
+      #
+      # The repo's `Backup Postgres` workflow currently FAILS on exactly these tables:
+      # its own safety guard refuses to dump when an RLS table has no unconditional
+      # escape, because a dump taken under RLS can silently omit rows and a backup you
+      # cannot trust is worse than none. That guard is right, and fixing it is a
+      # separate job.
+      #
+      # So this workflow backs up precisely what it is about to destroy -- the eight
+      # tables, data only -- and uploads it as an artifact BEFORE the first DELETE. It
+      # is a better backup for this operation than a whole-database dump anyway: it is
+      # exactly the rows at risk, and restoring is `psql -f` with nothing else in it.
+      #
+      # RLS does not blind this dump: migration 024's policies are ENABLE (not FORCE)
+      # and this connection is the table owner, so the owner sees every row. The
+      # counts printed above prove it -- they are the true counts.
+      - name: Back up the eight tables BEFORE deleting anything
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          mkdir -p /tmp/backup
+          pg_dump "$DATABASE_URL" --data-only --column-inserts \
+            -t enterprise_organisations \
+            -t enterprise_memberships \
+            -t enterprise_programmes \
+            -t enterprise_programme_phases \
+            -t enterprise_beneficiaries \
+            -t enterprise_programme_project_links \
+            -t enterprise_programme_jobs \
+            -t enterprise_programme_audit \
+            > /tmp/backup/enterprise_phase1_data.sql
+          echo "--- backup written, $(wc -l < /tmp/backup/enterprise_phase1_data.sql) lines ---"
+          echo "--- INSERT statements captured (this is what would be restored) ---"
+          grep -c '^INSERT INTO' /tmp/backup/enterprise_phase1_data.sql || true
+          # Fail loudly rather than delete against an empty/failed dump.
+          test -s /tmp/backup/enterprise_phase1_data.sql
+
+      - name: Upload the backup artifact
+        if: env.MODE == 'apply'
+        uses: actions/upload-artifact@v4
+        with:
+          name: enterprise-phase1-data-backup
+          path: /tmp/backup/enterprise_phase1_data.sql
+          retention-days: 90
+
       - name: Delete (only when MODE=apply)
         if: env.MODE == 'apply'
         env:
