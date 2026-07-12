@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Create Organisation - SolarPro{% endblock %}
+{% block content %}
+<div class="container py-4 ent-page" style="max-width:44rem">
+
+  <h1 class="h4 mb-1"><i class="bi bi-building-add text-warning me-2"></i>Create Organisation</h1>
+  <p class="text-muted small mb-4">
+    An organisation is a shared workspace: several people, distinct roles, and programmes
+    that outlive any one of them. Your personal workspace stays exactly as it is &mdash;
+    nothing you already own moves.
+  </p>
+
+  <form method="post" class="card">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="card-body">
+
+      <div class="mb-3">
+        <label for="legal_name" class="form-label">Legal name</label>
+        <input type="text" class="form-control" id="legal_name" name="legal_name" required
+               placeholder="e.g. Ministry of Energy">
+      </div>
+
+      <div class="mb-3">
+        <label for="organisation_type" class="form-label">Organisation type</label>
+        <select class="form-select" id="organisation_type" name="organisation_type" required>
+          <option value="" selected disabled>Select&hellip;</option>
+          {% for o in organisation_types %}
+          <option value="{{ o.value }}">{{ o.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label for="country" class="form-label">Country</label>
+        <select class="form-select" id="country" name="country">
+          <option value="">Not specified</option>
+          {% for c in countries %}
+          <option value="{{ c.value }}">{{ c.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+    </div>
+    <div class="card-footer d-flex justify-content-between">
+      <a href="{{ url_for('enterprise_home') }}" class="btn btn-link text-muted">Cancel</a>
+      <button type="submit" class="btn btn-warning">
+        <i class="bi bi-check2 me-1"></i>Create Organisation
+      </button>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

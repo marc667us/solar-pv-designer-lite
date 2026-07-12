@@ -1,197 +1,233 @@
 {% extends "base.html" %}
-{% block title %}{{ programme.name }} - Programme{% endblock %}
+{% block title %}{{ programme.name }} - Enterprise Programme{% endblock %}
 {% block content %}
 <div class="container py-4 ent-page">
 
   <div class="d-flex justify-content-between align-items-start flex-wrap mb-4">
     <div>
-      <div class="text-muted small">
-        <a href="{{ url_for('enterprise_home') }}">Enterprise</a> /
-        <a href="{{ url_for('enterprise_programmes') }}">Programmes</a> /
-        <code>{{ programme.programme_code }}</code>
-      </div>
+      <div class="small text-muted"><code>{{ programme.code }}</code></div>
       <h1 class="h4 mb-1">{{ programme.name }}</h1>
-      <span class="badge bg-secondary">{{ programme.status }}</span>
-      <span class="text-muted small ms-2">
-        {{ programme.programme_type|replace('_',' ')|title }} &middot;
-        {{ programme.design_strategy|replace('_',' ')|title }} design
-      </span>
-    </div>
-    <div class="d-flex gap-2">
-      <a href="{{ url_for('enterprise_beneficiaries', programme_id=programme.id) }}"
-         class="btn btn-outline-primary">
-        <i class="bi bi-people"></i> Beneficiaries
-      </a>
-      <a href="{{ url_for('enterprise_project_links', programme_id=programme.id) }}"
-         class="btn btn-outline-primary">
-        <i class="bi bi-link-45deg"></i> Projects
-      </a>
-      <a href="{{ url_for('enterprise_programme_edit', programme_id=programme.id) }}"
-         class="btn btn-outline-secondary">Edit</a>
-    </div>
-  </div>
-
-  {# KPIs. Each is a COUNT over rows this organisation owns -- see
-     enterprise_programme_services.programme_dashboard for the source of each. #}
-  <div class="row g-3 mb-4">
-    {% set tiles = [
-      ('Registered',   kpi.beneficiaries_registered, 'Beneficiaries on the register'),
-      ('Approved',     kpi.beneficiaries_approved,   'Passed qualification'),
-      ('Phases',       kpi.phases,                   'Implementation phases'),
-      ('Projects',     kpi.projects_linked,          'SolarPro projects linked')
-    ] %}
-    {% for label, value, hint in tiles %}
-    <div class="col-6 col-lg-3">
-      <div class="card h-100 shadow-sm">
-        <div class="card-body">
-          <div class="text-muted small text-uppercase">{{ label }}</div>
-          <div class="h3 mb-0">{{ value }}</div>
-          <div class="small text-muted">{{ hint }}</div>
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-
-  {% if kpi.coverage_pct is not none %}
-  <div class="card shadow-sm mb-4">
-    <div class="card-body">
-      <div class="d-flex justify-content-between mb-1">
-        <span class="small text-muted">
-          Registration coverage &mdash;
-          {{ kpi.beneficiaries_registered }} of {{ '{:,}'.format(kpi.beneficiaries_target) }} target
-        </span>
-        <strong class="small">{{ kpi.coverage_pct }}%</strong>
-      </div>
-      <div class="progress" style="height:8px">
-        <div class="progress-bar" role="progressbar"
-             style="width: {{ [kpi.coverage_pct, 100]|min }}%"></div>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  <div class="row g-3">
-    <div class="col-lg-6">
-      <div class="card shadow-sm h-100">
-        <div class="card-header bg-white"><strong>Implementation phases</strong></div>
-
-        {% if phases %}
-        <ul class="list-group list-group-flush">
-          {% for ph in phases %}
-          <li class="list-group-item d-flex justify-content-between align-items-center">
-            <div>
-              <span class="badge bg-light text-dark">{{ ph.sequence_no }}</span>
-              {{ ph.name }}
-              {% if ph.target_beneficiaries %}
-              <span class="text-muted small">
-                &middot; {{ '{:,}'.format(ph.target_beneficiaries) }} beneficiaries
-              </span>
-              {% endif %}
-            </div>
-            <span class="badge bg-secondary">{{ ph.status }}</span>
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <div class="card-body text-muted small">No phases yet.</div>
+      <div class="small text-muted">
+        {{ state.current_phase_code }} &middot;
+        <span class="badge bg-secondary">{{ state.status }}</span>
+        {% if state.held_from_phase_code %}
+        <span class="badge bg-warning text-dark">held from {{ state.held_from_phase_code }}</span>
         {% endif %}
+      </div>
+    </div>
+    <a href="{{ url_for('enterprise_home') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left me-1"></i>All programmes
+    </a>
+  </div>
 
-        <div class="card-footer bg-white">
+  <div class="row g-4">
+
+    {# ---- lifecycle: where it is, and where it may go next ---------------- #}
+    <div class="col-lg-8">
+      <div class="card mb-4">
+        <div class="card-header bg-white fw-semibold">
+          <i class="bi bi-signpost-split me-1 text-warning"></i>Lifecycle
+        </div>
+        <div class="card-body">
+
+          <ol class="list-unstyled mb-4">
+            {% for p in phases %}
+            <li class="d-flex align-items-center py-1
+                       {% if p.code == state.current_phase_code %}fw-semibold{% endif %}">
+              <span class="badge me-2
+                {% if p.status == 'Completed' %}bg-success
+                {% elif p.code == state.current_phase_code %}bg-warning text-dark
+                {% else %}bg-light text-muted border{% endif %}"
+                style="width:2.2rem">{{ p.sequence_no }}</span>
+              <span class="flex-grow-1 {% if p.status == 'Not Started' %}text-muted{% endif %}">
+                {{ p.name }}
+              </span>
+              {% if p.gate %}
+              <span class="small text-muted ms-2">{{ p.gate }}</span>
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ol>
+
+          {# The dropdown offers ONLY what the server would accept. That is the point of a
+             state machine: the user is never shown a move that would be refused. #}
+          {% if can_edit and state.allowed_transitions %}
           <form method="post"
-                action="{{ url_for('enterprise_phase_add', programme_id=programme.id) }}"
-                class="row g-2">
+                action="{{ url_for('enterprise_programme_transition', programme_id=programme.id) }}"
+                class="row g-2 align-items-end border-top pt-3">
             <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-            <div class="col-5">
-              <input type="text" name="name" class="form-control form-control-sm"
-                     placeholder="Phase name" required>
+            <div class="col-md-4">
+              <label for="target" class="form-label small">Move to</label>
+              <select class="form-select form-select-sm" id="target" name="target" required>
+                {% for t in state.allowed_transitions %}
+                <option value="{{ t }}">{{ t }}</option>
+                {% endfor %}
+              </select>
             </div>
-            <div class="col-2">
-              <input type="number" name="sequence_no" class="form-control form-control-sm"
-                     value="{{ phase_count + 1 }}" min="1" title="Sequence">
+            <div class="col-md-6">
+              <label for="note" class="form-label small">Reason <span class="text-muted">(recorded)</span></label>
+              <input type="text" class="form-control form-control-sm" id="note" name="note">
             </div>
-            <div class="col-3">
-              <input type="number" name="target_beneficiaries"
-                     class="form-control form-control-sm" placeholder="Target" min="0">
-            </div>
-            <div class="col-2">
-              <button class="btn btn-sm btn-outline-primary w-100">Add</button>
+            <div class="col-md-2">
+              <button class="btn btn-warning btn-sm w-100" type="submit">Move</button>
             </div>
           </form>
+          {% elif not state.allowed_transitions %}
+          <p class="small text-muted mb-0 border-top pt-3">
+            This programme has no further moves.
+          </p>
+          {% endif %}
+
+        </div>
+      </div>
+
+      {# ---- stage gates -------------------------------------------------- #}
+      <div class="card mb-4">
+        <div class="card-header bg-white fw-semibold">
+          <i class="bi bi-shield-check me-1 text-warning"></i>Stage Gates
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+              <tr><th>Gate</th><th>Approving authority</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+              {% for g in gates %}
+              <tr class="{% if g.deferred %}opacity-50{% endif %}">
+                <td class="text-nowrap">
+                  <code>{{ g.code }}</code>
+                  <div class="small text-muted">{{ g.name }}</div>
+                </td>
+                <td class="small">{{ g.approving_role|replace('_',' ')|title }}</td>
+                <td>
+                  {% if g.status == 'Approved' %}
+                    <span class="badge bg-success">Approved</span>
+                  {% elif g.deferred %}
+                    <span class="badge bg-light text-muted border">Not in this release</span>
+                  {% else %}
+                    <span class="badge bg-light text-dark border">Pending</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  {% if g.can_approve and not g.blocked_reason %}
+                  <form method="post" class="d-inline"
+                        action="{{ url_for('enterprise_gate_approve', programme_id=programme.id, gate_code=g.code) }}">
+                    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-outline-success" type="submit">Approve</button>
+                  </form>
+                  {% elif g.blocked_reason and g.status != 'Approved' %}
+                  {# A blocked gate explains itself, rather than refusing only once pressed. #}
+                  <span class="small text-muted">{{ g.blocked_reason }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {# ---- history ------------------------------------------------------ #}
+      <div class="card">
+        <div class="card-header bg-white fw-semibold">
+          <i class="bi bi-clock-history me-1 text-warning"></i>History
+        </div>
+        <div class="card-body">
+          {% if history %}
+          <ul class="list-unstyled small mb-0">
+            {% for h in history %}
+            <li class="border-bottom py-2">
+              <span class="text-muted">{{ h.at }}</span> &middot;
+              <code>{{ h['from'] or '—' }}</code> &rarr; <code>{{ h.to }}</code>
+              {% if h.gate %}<span class="badge bg-light text-dark border">{{ h.gate }}</span>{% endif %}
+              {% if h.note %}<div class="text-muted">{{ h.note }}</div>{% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="small text-muted mb-0">Nothing has moved yet.</p>
+          {% endif %}
         </div>
       </div>
     </div>
 
-    <div class="col-lg-6">
-      <div class="card shadow-sm h-100">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center">
-          <strong>Linked projects</strong>
-          <a class="small"
-             href="{{ url_for('enterprise_project_links', programme_id=programme.id) }}">
-            Manage
-          </a>
-        </div>
+    {# ---- sidebar -------------------------------------------------------- #}
+    <div class="col-lg-4">
 
-        {% if links %}
-        <ul class="list-group list-group-flush">
-          {% for l in links %}
-          <li class="list-group-item d-flex justify-content-between align-items-center">
-            <div>
-              {# Drill-down opens the EXISTING SolarPro project, unchanged. #}
-              {% if l.project_kind == 'generation_station' %}
-              <a href="/large-scale-solar/{{ l.project_id }}">
-                Generation Station #{{ l.project_id }}
-              </a>
-              {% else %}
-              <a href="{{ url_for('project_results', pid=l.project_id) }}">Project #{{ l.project_id }}</a>
-              {% endif %}
+      <div class="card mb-4">
+        <div class="card-header bg-white fw-semibold">
+          <i class="bi bi-file-earmark-text me-1 text-warning"></i>Documents
+        </div>
+        <div class="card-body">
+          {% if documents %}
+          <ul class="list-unstyled small mb-3">
+            {% for d in documents %}
+            <li class="border-bottom py-1">
+              <span class="fw-semibold">{{ d.title }}</span>
+              <div class="text-muted">{{ d.doc_type }}</div>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="small text-muted">No documents registered. The gates need them.</p>
+          {% endif %}
+
+          {% if can_edit %}
+          <form method="post"
+                action="{{ url_for('enterprise_document_add', programme_id=programme.id) }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <div class="mb-2">
+              <label for="doc_type" class="form-label small">Document type</label>
+              {# A dropdown, not free text: each gate predicate looks for a SPECIFIC type, so
+                 a typo would leave the gate quietly un-passable with no explanation. #}
+              <select class="form-select form-select-sm" id="doc_type" name="doc_type" required>
+                {% for value, label in document_types.items() %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+              </select>
             </div>
-            <span class="badge bg-light text-dark">
-              {{ l.project_kind|replace('_',' ') }}
-            </span>
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <div class="card-body text-muted small">
-          No projects linked yet.
-          <a href="{{ url_for('enterprise_project_links', programme_id=programme.id) }}">
-            Link one of your projects
-          </a>.
+            <div class="mb-2">
+              <label for="title" class="form-label small">Title</label>
+              <input type="text" class="form-control form-control-sm" id="title" name="title">
+            </div>
+            <button class="btn btn-sm btn-outline-secondary w-100" type="submit">
+              Register document
+            </button>
+          </form>
+          {% endif %}
         </div>
-        {% endif %}
       </div>
-    </div>
-  </div>
 
-  {% if recent_beneficiaries %}
-  <div class="card shadow-sm mt-3">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-      <strong>Recent beneficiaries</strong>
-      <a class="small"
-         href="{{ url_for('enterprise_beneficiaries', programme_id=programme.id) }}">
-        View register
-      </a>
-    </div>
-    <div class="table-responsive">
-      <table class="table table-sm mb-0 align-middle">
-        <thead class="table-light">
-          <tr><th>Name</th><th>Type</th><th>Region</th><th>Status</th></tr>
-        </thead>
-        <tbody>
-          {% for b in recent_beneficiaries %}
-          <tr>
-            <td>{{ b.name }}</td>
-            <td class="text-muted small">{{ b.beneficiary_type|replace('_',' ')|title }}</td>
-            <td class="text-muted small">{{ b.region or '-' }}</td>
-            <td><span class="badge bg-secondary">{{ b.qualification_status }}</span></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="card">
+        <div class="card-header bg-white fw-semibold">
+          <i class="bi bi-clipboard-check me-1 text-warning"></i>Management Controls
+        </div>
+        <div class="card-body">
+          <p class="small text-muted">
+            The 15 controls this programme is held to. A control that is not yet live is
+            <em>locked</em> &mdash; the action it guards is impossible, not unguarded.
+          </p>
+          <ul class="list-unstyled small mb-0">
+            {% for c in controls %}
+            <li class="d-flex py-1 border-bottom">
+              <span class="me-2">
+                {% if c.enforced_now %}
+                <i class="bi bi-check-circle-fill text-success"></i>
+                {% else %}
+                <i class="bi bi-lock-fill text-muted"></i>
+                {% endif %}
+              </span>
+              <span class="{% if not c.enforced_now %}text-muted{% endif %}">
+                {{ c.requirement }}
+              </span>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+
     </div>
   </div>
-  {% endif %}
 
 </div>
 {% endblock %}

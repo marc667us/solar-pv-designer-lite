@@ -168,27 +168,43 @@ def _atomic(c):
     c.commit()
 
 
+def _audit_on(c):
+    """The audit hook the services use by default: writes on OUR connection.
+
+    Input:  the connection the service is already writing on.
+    Output: a callable(action, **kw) -> bool.
+
+    THIS IS WHAT MAKES CONTROL C12 STRUCTURAL rather than a compensating rollback. The
+    audit row is inserted in the SAME transaction as the action it describes, so they
+    commit together or neither does. There is no window in which one exists without the
+    other, and no over-logging when a commit later fails.
+
+    It also fixes a real deadlock, which SQLite surfaced immediately and Postgres never
+    would have: write_audit_event used to resolve its OWN connection via get_db(), and
+    get_db() hands out a FRESH connection per call. So the audit write raced the very
+    transaction it was describing -- on SQLite the open write transaction locks the
+    database file, the audit INSERT failed with "database is locked", C12 treated the
+    failed audit as a failed action, and EVERY audited action rolled itself back. Every
+    programme creation, silently undone.
+    """
+    def _audit(action: str, **kw) -> bool:
+        return _default_audit(action, conn=c, **kw)
+    return _audit
+
+
 def _default_audit(action: str, **kw) -> bool:
     """Write one audit row through the app's unified audit trail.
 
-    Input:  action name plus write_audit_event's keyword arguments.
+    Input:  action name plus write_audit_event's keyword arguments (including `conn`).
     Output: True if the row persisted, False otherwise.
 
     Late-imported so this module can be imported (and unit-tested) without dragging in
     web_app. Injectable via the `audit=` parameter on every service below, which is how
     the C12 rollback test forces a failed write.
 
-    KNOWN AND ACCEPTED IMPRECISION: write_audit_event resolves its OWN connection via
-    get_db(), which in this app hands out a fresh connection per call -- so the audit row
-    is committed on a different connection than the action it describes. Consequences:
-      * audit says NO but action says NO  -> C12 rolls the action back. Correct.
-      * audit says YES and action commits -> correct.
-      * audit says YES and the action's commit then fails -> an audit row survives for an
-        action that did not happen.
-    The last case over-logs. That is the safe direction to be wrong in (a phantom entry
-    an auditor can question, rather than a real action with no trace), and closing it
-    would mean writing audit rows on our connection, which would bypass the SHA-256 audit
-    chain in app/security/audit.py. Not worth breaking the chain to fix over-logging.
+    Late-imported so this module can be imported (and unit-tested) without dragging in
+    web_app. The services pass `conn=` (see _audit_on) so the row lands in their own
+    transaction; the SHA-256 audit chain in app/security/audit.py is preserved either way.
     """
     try:
         from app.security.audit import write_audit_event
@@ -548,7 +564,7 @@ def create_programme(c, tenant_id: str, user_id: int, *, code: str, name: str,
                 "the named sponsor is not an active member of this organisation"
             )
 
-    audit = audit or _default_audit
+    audit = audit or _audit_on(c)
     with _atomic(c):
         cur = c.execute(
             "INSERT INTO enterprise_programme_registry "
@@ -582,13 +598,59 @@ def create_programme(c, tenant_id: str, user_id: int, *, code: str, name: str,
              for gate_code, phase_code, _label, authority in GATES],
         )
 
+        # Naming a sponsor GRANTS them the sponsor role on this programme.
+        #
+        # Without this the model contradicts itself: approve_gate requires the approver to
+        # hold `programme_sponsor` AND to be the person the programme named -- so naming a
+        # sponsor who does not already hold the role tenant-wide would produce a programme
+        # whose Gate 1 literally nobody can sign. The grant is PROGRAMME-SCOPED, so being
+        # sponsor of one programme confers no authority over any other.
+        #
+        # But granting a role is TENANT-ADMIN's job, and `programme_sponsor` carries
+        # `programme.approve`. If merely holding `programme.create` were enough to confer
+        # it, programme creation would be a side door into role assignment. So: an admin
+        # may name anyone; a non-admin creator may only name someone who ALREADY holds the
+        # role. Today every role with `programme.create` also has `tenant.admin`, so this
+        # changes nothing -- it is here so that the day someone adds a create-only role,
+        # the side door does not open with it.
+        if sponsor_user_id is not None:
+            if rbac.has_permission(c, tenant_id, user_id, "tenant.admin"):
+                _grant_role(c, tenant_id, sponsor_user_id, "programme_sponsor",
+                            programme_id=programme_id, granted_by=user_id)
+            elif "programme_sponsor" not in rbac.roles_for_user(
+                    c, tenant_id, sponsor_user_id, programme_id=programme_id):
+                raise rbac.EnterprisePermissionError("tenant.admin", tenant_id)
+
         gates.require_audit_written(
             audit("ENTERPRISE_PROGRAMME_CREATED", user_id=user_id, tenant_id=tenant_id,
                   details={"programme_id": programme_id, "code": code,
-                           "design_strategy": design_strategy}),
+                           "design_strategy": design_strategy,
+                           "sponsor_user_id": sponsor_user_id}),
             "programme create",
         )
     return programme_id
+
+
+def _grant_role(c, tenant_id: str, user_id: int, role_code: str, *,
+                programme_id: int | None = None, granted_by: int | None = None) -> None:
+    """Grant a role, scoped to one programme when given. Idempotent.
+
+    Input:  connection, tenant id, the user receiving the role, the role code, the
+            programme it is scoped to (None = tenant-wide), the granting user.
+    Output: none.
+
+    Re-granting is a no-op rather than an error: the unique index on
+    enterprise_role_assignments already says a grant is a fact, not an event.
+    """
+    ignore = ("ON CONFLICT DO NOTHING" if _is_postgres() else "")
+    verb = "INSERT" if _is_postgres() else "INSERT OR IGNORE"
+    c.execute(
+        f"{verb} INTO enterprise_role_assignments "
+        "(tenant_id, user_id, role_code, scope_type, scope_id, created_by_user_id) "
+        f"VALUES (?,?,?,?,?,?) {ignore}",
+        (tenant_id, user_id, role_code,
+         "programme" if programme_id else "tenant", programme_id, granted_by),
+    )
 
 
 def _inserted_id(c, cur) -> int:
@@ -638,11 +700,11 @@ def register_document(c, tenant_id: str, user_id: int, programme_id: int, *,
     authority's judgement -- which is exactly why a specific human role has to sign the
     gate rather than the system auto-passing it.
     """
+    _load_programme(c, tenant_id, programme_id)  # C13 FIRST -- see note below
     rbac.require_permission(c, tenant_id, user_id, "programme.edit",
                             programme_id=programme_id)
-    _load_programme(c, tenant_id, programme_id)  # C13
 
-    audit = audit or _default_audit
+    audit = audit or _audit_on(c)
     with _atomic(c):
         cur = c.execute(
             "INSERT INTO enterprise_documents "
@@ -740,7 +802,7 @@ def approve_gate(c, tenant_id: str, programme_id: int, gate_code: str, user_id: 
 
     gates.evaluate_gate(c, tenant_id, programme_id, gate_code)
 
-    audit = audit or _default_audit
+    audit = audit or _audit_on(c)
     with _atomic(c):
         c.execute(
             "UPDATE enterprise_stage_gates "
@@ -789,9 +851,13 @@ def transition_programme_phase(c, tenant_id: str, programme_id: int, target: str
     C01 is enforced on top: no programme leaves Concept without its sponsor having
     approved Gate 1.
     """
+    # C13 BEFORE the permission check, deliberately. If we authorised first, a
+    # cross-tenant POST from a user without programme.edit would raise 403 -- and a 403
+    # confirms the programme EXISTS, which is precisely what C13 forbids. "Does it exist
+    # for you" is a strictly earlier question than "may you do this".
+    row = _load_programme(c, tenant_id, programme_id)
     rbac.require_permission(c, tenant_id, user_id, "programme.edit",
                             programme_id=programme_id)
-    row = _load_programme(c, tenant_id, programme_id)
     current_phase, status = row[2], row[3]
 
     if status == "Archived":
@@ -892,7 +958,7 @@ def transition_programme_phase(c, tenant_id: str, programme_id: int, target: str
                 f"{current_phase} -> {target}",
             )
 
-    audit = audit or _default_audit
+    audit = audit or _audit_on(c)
     with _atomic(c):
         c.execute(
             "UPDATE enterprise_programme_registry "
@@ -974,15 +1040,15 @@ def approve_expansion(c, tenant_id: str, programme_id: int, user_id: int,
     WORKED; this is the separate decision to spend more money doing it again.
     """
     gates.require_human_approval_actor(user_id, ai_recommendation_id)
+    row = _load_programme(c, tenant_id, programme_id)  # C13 first -- see transition note
     rbac.require_permission(c, tenant_id, user_id, "programme.approve",
                             programme_id=programme_id)
-    row = _load_programme(c, tenant_id, programme_id)
     if row[2] != "P16_EXPANSION":
         raise EnterpriseGateError(
             "P16", "the programme is not in the Expansion phase"
         )
 
-    audit = audit or _default_audit
+    audit = audit or _audit_on(c)
     with _atomic(c):
         c.execute(
             "INSERT INTO enterprise_approvals "
@@ -1011,7 +1077,7 @@ def _apply_pseudo_state(c, tenant_id, programme_id, current_phase, target, user_
     can put it back exactly there. A TERMINAL state does not -- there is nowhere to go
     back to.
     """
-    audit = audit or _default_audit
+    audit = audit or _audit_on(c)
     held_from = current_phase if target in HOLD_STATES else None
     with _atomic(c):
         c.execute(
@@ -1063,9 +1129,9 @@ def resume_from_hold(c, tenant_id: str, programme_id: int, user_id: int,
 
     It resumes the remembered phase. It cannot be used to jump somewhere new.
     """
+    row = _load_programme(c, tenant_id, programme_id)  # C13 first -- see transition note
     rbac.require_permission(c, tenant_id, user_id, "programme.approve",
                             programme_id=programme_id)
-    row = _load_programme(c, tenant_id, programme_id)
     status, held_from = row[3], row[4]
 
     if status not in ("Suspended", "On Hold"):
@@ -1075,7 +1141,7 @@ def resume_from_hold(c, tenant_id: str, programme_id: int, user_id: int,
             "LIFECYCLE", "the held-from phase was not recorded; cannot resume safely"
         )
 
-    audit = audit or _default_audit
+    audit = audit or _audit_on(c)
     with _atomic(c):
         c.execute(
             "UPDATE enterprise_programme_registry "

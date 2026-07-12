@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Enterprise Programmes - SolarPro{% endblock %}
+{% block content %}
+<div class="container py-4 ent-page">
+
+  <div class="d-flex justify-content-between align-items-center flex-wrap mb-4">
+    <div>
+      <h1 class="h4 mb-1"><i class="bi bi-buildings text-warning me-2"></i>Enterprise Programmes</h1>
+      <div class="text-muted small">Plan, gate and deliver a portfolio of solar projects.</div>
+    </div>
+    {% if can_create %}
+    <a href="{{ url_for('enterprise_programme_new') }}" class="btn btn-warning">
+      <i class="bi bi-plus-lg me-1"></i>New Programme
+    </a>
+    {% endif %}
+  </div>
+
+  {# Organisation switcher. A user always has at least their personal workspace, so this is
+     never empty; a real organisation appears here once they create or are invited to one. #}
+  <div class="card mb-4">
+    <div class="card-body d-flex flex-wrap align-items-center gap-2">
+      <form method="post" action="{{ url_for('enterprise_switch_tenant') }}"
+            class="d-flex align-items-center gap-2 flex-grow-1">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <label for="tenant_id" class="form-label mb-0 small text-muted">Organisation</label>
+        <select class="form-select form-select-sm" style="max-width:22rem"
+                id="tenant_id" name="tenant_id" onchange="this.form.submit()">
+          {% for t in tenants %}
+          <option value="{{ t.id }}" {% if t.id == active_tenant %}selected{% endif %}>
+            {{ t.legal_name }}{% if t.is_personal %} (personal workspace){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </form>
+      <a href="{{ url_for('enterprise_onboarding') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-building-add me-1"></i>Create Organisation
+      </a>
+    </div>
+  </div>
+
+  {% if programmes %}
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Code</th><th>Programme</th><th>Phase</th><th>Status</th><th>Strategy</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in programmes %}
+          <tr>
+            <td class="text-nowrap"><code>{{ p.code }}</code></td>
+            <td>
+              <a href="{{ url_for('enterprise_programme_detail', programme_id=p.id) }}"
+                 class="fw-semibold text-decoration-none">{{ p.name }}</a>
+            </td>
+            <td class="small text-muted">{{ p.phase_name }}</td>
+            <td><span class="badge bg-secondary">{{ p.status }}</span></td>
+            <td class="small text-muted">{{ p.design_strategy|replace('_',' ')|title }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="card-body text-center py-5">
+      <i class="bi bi-diagram-3 display-5 text-muted d-block mb-3"></i>
+      <h2 class="h6">No programmes in this organisation yet</h2>
+      <p class="text-muted small mb-3">
+        A programme runs a portfolio of solar projects through 16 lifecycle phases and
+        14 stage gates, from Concept to Expansion.
+      </p>
+      {% if can_create %}
+      <a href="{{ url_for('enterprise_programme_new') }}" class="btn btn-warning">
+        <i class="bi bi-plus-lg me-1"></i>Register the first programme
+      </a>
+      {% else %}
+      <p class="small text-muted mb-0">
+        You do not have permission to create a programme in this organisation.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

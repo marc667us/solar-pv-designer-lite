@@ -50,6 +50,7 @@ sensitive admin actions still land in `audit_logs`.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -125,6 +126,17 @@ def _stringify_details(details: Any) -> str:
         return json.dumps(details, default=str, separators=(",", ":"))
     except (TypeError, ValueError):
         return repr(details)
+
+
+def _is_postgres() -> bool:
+    """True when the app is running against Postgres rather than SQLite.
+
+    Used to decide whether the hash-chain write needs an advisory lock.
+    SQLite serialises writers itself via the database-file lock."""
+    import os
+    return str(os.environ.get("DATABASE_URL", "")).startswith(
+        ("postgres://", "postgresql://")
+    )
 
 
 def _resolve_get_db():
@@ -218,7 +230,39 @@ def _compute_chain_for_insert(
     be INSERTed. Reads the current chain head, computes the canonical
     content, returns both hashes plus the explicit created_at the
     caller must pass so PG-default-driven timestamps don't fork from
-    the hash content."""
+    the hash content.
+
+    SERIALISED, because a hash chain that two writers can build at once
+    is not a hash chain. Read-head-then-insert is a read-modify-write:
+    request A reads head H100 and has not committed; request B cannot
+    see A's row, reads H100 too, and commits. Now two rows both claim
+    prev_hash=H100 and verify_audit_chain() -- which walks id ASC --
+    reports a FORK. The evidence stops being evidence, which is the one
+    thing an audit chain exists to prevent.
+
+    The advisory lock is transaction-scoped, so it is released by the
+    caller's COMMIT or ROLLBACK with no unlock call to forget. On SQLite
+    no lock is needed: a write transaction already locks the database
+    file, so writers are serialised by the engine.
+
+    (Raised by the Codex slice-3 review. The race predates the `conn=`
+    parameter -- any two concurrent audit writes could fork the chain --
+    but `conn=` holds the transaction open for longer and widens it.)
+
+    THE COST, AND THE RULE IT IMPOSES ON CALLERS. Being transaction-scoped
+    cuts both ways: when `conn=` is passed, this lock is held until the
+    CALLER commits, and every other audit write in the app -- logins, OIDC
+    callbacks, admin actions -- queues behind it. That is acceptable only
+    because an audited action writes its audit row LAST, so the window is
+    a commit away. Callers passing `conn=` MUST keep it that way: do not
+    do further work after the audit call and before the commit, or a slow
+    tail (a report, a bulk generate) turns a local lock into an app-wide
+    stall. The Supervisor raised this on slice 3; it is a constraint on
+    callers, not a defect in the lock.
+    """
+    if _is_postgres():
+        # Constant key: every audit writer contends on this one lock.
+        conn.execute("SELECT pg_advisory_xact_lock(4242000000000001)")
     created_at = _now_audit_ts()
     prev_hash = _read_last_row_hash(conn)
     content = _canonical_audit_content(
@@ -239,12 +283,20 @@ def write_audit_event(
     details: Any = None,
     tenant_id: Optional[str] = None,
     agent_id: Optional[str] = None,
+    conn: Any = None,
 ) -> bool:
     """Insert one row into audit_logs.
 
     Returns True if the row was persisted, False on any failure (the
     error is logged but never raised). The non-raising contract is
     deliberate: see module docstring.
+
+    `conn` (optional): write on THIS connection instead of opening one.
+    The row is then neither committed nor closed here -- it lands in the
+    caller's transaction, so the audit row and the action it describes
+    commit together or not at all. Callers that must not act without an
+    audit trail (the enterprise module, control C12) pass their connection.
+    Omit it and behaviour is exactly as before.
     """
     if not action:
         log.warning("write_audit_event called with empty action; dropping.")
@@ -264,19 +316,31 @@ def write_audit_event(
         _TEST_SINK.append(payload)
         return True
 
-    get_db = _resolve_get_db()
-    if get_db is None:
-        log.warning("audit: get_db unavailable; %s dropped.", action)
-        return False
+    # A CALLER-SUPPLIED connection is used as-is, and neither committed nor closed here --
+    # it belongs to the caller's transaction. This is what lets a caller make the audit row
+    # ATOMIC with the action it describes: they commit both together, or neither.
+    #
+    # It also fixes a real deadlock. On SQLite the whole database file is locked by an open
+    # write transaction, so a caller mid-write who triggers an audit on a SECOND connection
+    # gets "database is locked" -- the audit is dropped, and any caller that treats a failed
+    # audit as a failed action (as the enterprise module must, for control C12) rolls itself
+    # back forever. Postgres never showed it; SQLite did, immediately.
+    caller_conn = conn
+    if caller_conn is None:
+        get_db = _resolve_get_db()
+        if get_db is None:
+            log.warning("audit: get_db unavailable; %s dropped.", action)
+            return False
+        try:
+            conn = get_db()
+        except Exception as e:
+            log.warning("audit: get_db() raised (%s); %s dropped.", e, action)
+            return False
 
     try:
-        conn = get_db()
-    except Exception as e:
-        log.warning("audit: get_db() raised (%s); %s dropped.", e, action)
-        return False
-
-    try:
-        with conn:
+        # `with conn:` COMMITS on exit. That is right for a connection we opened, and wrong
+        # for the caller's -- committing their transaction is not ours to do.
+        with (contextlib.nullcontext() if caller_conn is not None else conn):
             probe = _probe_audit_columns(conn)
             has_phase6 = probe["tenant_id"] and probe["agent_id"]
             has_chain  = probe["prev_hash"] and probe["row_hash"]
@@ -361,10 +425,13 @@ def write_audit_event(
         log.warning("audit: INSERT failed (%s); %s dropped.", e, action)
         return False
     finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+        # Close only what we opened. Closing the caller's connection would end their
+        # transaction under them.
+        if caller_conn is None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 # ── Convenience wrappers for common audit shapes ────────────────────────

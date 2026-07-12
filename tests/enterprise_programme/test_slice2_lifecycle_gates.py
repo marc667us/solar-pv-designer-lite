@@ -666,6 +666,34 @@ def test_the_database_itself_rejects_a_cross_tenant_child_row(db, audit):
     db.rollback()
 
 
+def test_a_cross_tenant_write_is_404_shaped_even_without_permission(db, audit):
+    """Codex slice-3 MEDIUM. C13 must be decided BEFORE the permission check.
+
+    If we authorised first, a stranger POSTing at another tenant's programme would get
+    EnterprisePermissionError -> 403 -- and a 403 CONFIRMS the programme exists, which is
+    exactly the leak C13 forbids. "Does it exist for you" is a strictly earlier question
+    than "may you do this", so the answer must always be the C13 one.
+    """
+    pid = _programme(db, audit)
+    stranger_tenant = tenancy.personal_tenant_id(4)  # mallory: no membership, no permissions
+
+    for call in (
+        lambda: workflows.transition_programme_phase(db, stranger_tenant, pid,
+                                                     "P02_INITIATION", user_id=4, audit=audit),
+        lambda: workflows.register_document(db, stranger_tenant, 4, pid,
+                                            doc_type="concept_note", title="x", audit=audit),
+        lambda: workflows.resume_from_hold(db, stranger_tenant, pid, user_id=4, audit=audit),
+        lambda: workflows.approve_gate(db, stranger_tenant, pid, "G01", user_id=4, audit=audit),
+        lambda: workflows.approve_expansion(db, stranger_tenant, pid, user_id=4, audit=audit),
+    ):
+        with pytest.raises(EnterpriseGateError) as e:
+            call()
+        assert e.value.control == "C13", (
+            "a cross-tenant write must answer 'no such programme' (404), never "
+            "'you may not' (403) -- the latter confirms it exists"
+        )
+
+
 # --- Supervisor review regressions ------------------------------------------
 
 
