@@ -1,0 +1,166 @@
+# Turn the Enterprise Programme module ON or OFF on live Postgres.
+#
+# The module ships DARK (migration 024 seeds every flag to '0'). This workflow is
+# the switch. It is also the ROLLBACK: setting enterprise_programme_enabled=0
+# makes every /enterprise route 404 again immediately, without a redeploy.
+#
+# WHY A WORKFLOW AND NOT A PLAIN UPDATE: admin_settings is RLS-protected AND
+# FORCE-enabled and admin-only (012_rls_batch5:172, 015_global_table_policies:230,
+# 018_force_rls_globals:104). A plain UPDATE from a non-admin session matches no
+# policy and is SILENTLY DISCARDED -- it reports success and changes nothing. The
+# set_config('app.current_role','admin',true) inside the transaction is what makes
+# the write land, and the read-back below is what proves it did.
+#
+# Only the three enterprise_programme_* keys may be written. Anything else is
+# rejected -- this is not a general-purpose admin_settings editor.
+#
+# Default mode is DRY-RUN. Apply needs -f confirm=SET_FLAG.
+#
+# NOTE: the app caches the flag for 60s per process (module_enabled()), so a change
+# can take up to a minute to show up on the live site.
+
+name: Set Enterprise Programme Flag
+
+on:
+  workflow_dispatch:
+    inputs:
+      key:
+        description: "Which flag"
+        required: true
+        type: choice
+        options:
+          - enterprise_programme_enabled
+          - enterprise_programme_jobs_enabled
+          - enterprise_programme_ai_enabled
+      value:
+        description: "1 = on, 0 = off"
+        required: true
+        type: choice
+        options:
+          - "1"
+          - "0"
+      confirm:
+        description: "DRY-RUN by default. Type SET_FLAG to commit."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+      FLAG_KEY:       ${{ inputs.key }}
+      FLAG_VALUE:     ${{ inputs.value }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Validate inputs (allowlist)
+        run: |
+          case "$FLAG_KEY" in
+            enterprise_programme_enabled|enterprise_programme_jobs_enabled|enterprise_programme_ai_enabled) ;;
+            *) echo "::error::refusing to write key '$FLAG_KEY'"; exit 1 ;;
+          esac
+          case "$FLAG_VALUE" in
+            0|1) ;;
+            *) echo "::error::value must be 0 or 1"; exit 1 ;;
+          esac
+          echo "OK: will set $FLAG_KEY = $FLAG_VALUE"
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "SET_FLAG" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- writes to live PG ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be written ==="
+          fi
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: Show current flags
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -c "
+            SELECT set_config('app.current_role','admin',true);
+            SELECT key, value FROM admin_settings
+             WHERE key LIKE 'enterprise_programme%' ORDER BY key;"
+
+      - name: Apply (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            BEGIN;
+            SELECT set_config('app.current_role','admin',true);
+            INSERT INTO admin_settings (key, value, updated_at)
+            VALUES ('$FLAG_KEY', '$FLAG_VALUE', CURRENT_TIMESTAMP)
+            ON CONFLICT (key) DO UPDATE
+              SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP;
+            COMMIT;"
+          echo "write issued."
+
+      - name: Verify the write actually landed
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          GOT=$(psql "$DATABASE_URL" -A -t -c "
+            SELECT set_config('app.current_role','admin',true);
+            SELECT value FROM admin_settings WHERE key='$FLAG_KEY'" | tail -1)
+          echo "read-back: $FLAG_KEY = '$GOT' (wanted '$FLAG_VALUE')"
+          if [ "$GOT" != "$FLAG_VALUE" ]; then
+            echo "::error::write did NOT land -- admin GUC / RLS problem."
+            exit 1
+          fi
+          echo "OK: flag is now $FLAG_KEY=$GOT"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            echo "================================================================"
+            echo " $FLAG_KEY = $FLAG_VALUE on live."
+            echo " The app caches the flag for up to 60s -- allow a minute."
+            echo " To roll back instantly: re-run this workflow with value=0."
+            echo "================================================================"
+          else
+            echo "DRY-RUN -- nothing written. Re-run with confirm=SET_FLAG."
+          fi
