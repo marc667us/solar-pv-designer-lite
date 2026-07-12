@@ -1,0 +1,50 @@
+# Full LIVE test suite for the Enterprise Programme REBUILD (slices 1-6).
+#
+# WHY IT RUNS HERE AND NOT ON THE DEV BOX: the live login is Keycloak, and the
+# credential was rotated on 2026-07-10. The rotated value lives in GitHub Secrets --
+# the local .env still carries the pre-rotation one. Running the suite in Actions is
+# the only place the real credential exists, and it means nobody has to copy a live
+# password onto a laptop to test the site.
+#
+# WHY IT MATTERS: migrations 025/026/027 had NEVER been executed against a real
+# Postgres until 2026-07-12. Everything the SQLite suite proves is worthless if the
+# Postgres path diverges -- so this drives the deployed module through HTTP, exactly
+# as the owner would: onboarding, programme, lifecycle gates, template engine,
+# beneficiary register, staged CSV import (incl. in-file duplicate detection), site
+# qualification (C02) and the priority list, plus the two guards that matter --
+# a gate cannot be approved without its named role, and another tenant's data is
+# a 404 and never a 403.
+#
+# READ-ONLY? No -- it creates a programme and beneficiaries, and it says so. It is
+# safe to re-run.
+
+name: Live Enterprise Rebuild Suite
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install requests
+        run: pip install --quiet requests
+
+      - name: Run the live suite
+        env:
+          LIVE_USER: marc667us
+          SOLARPRO_OWNER_PASSWORD: ${{ secrets.SOLARPRO_OWNER_PASSWORD }}
+        run: |
+          python tmp/live_enterprise_rebuild_suite_2026-07-12.py
