@@ -238,12 +238,37 @@ jobs:
             exit 1
           fi
 
-          echo "4/5 every RLS-forced table has a permissive, column-free SELECT escape"
+          # 4/5 asks: for every table where RLS ACTUALLY BINDS THIS SESSION, is there a
+          # policy that admits every row?
+          #
+          # "actually binds" is the fix. The check used to fire on every table with
+          # relrowsecurity (RLS *enabled*), and refuse the backup unless its policy matched
+          # one of three known escape shapes. But Postgres EXEMPTS A TABLE'S OWNER from a
+          # policy unless the table is also FORCE'd -- and this dump connects as the owner.
+          # So on an ENABLE-but-not-FORCE table the policy is irrelevant to us: every row is
+          # visible no matter what its qual says.
+          #
+          # That over-broad check is what broke this workflow. The enterprise tables
+          # (migrations 024-027) are ENABLE-not-FORCE and carry a fourth escape shape
+          #   (enterprise_no_identity() OR current_user_is_admin() OR org = ANY(...))
+          # which the allowlist did not recognise -- so the guard refused to back ANYTHING
+          # up, and the database went unbacked-up while reporting a red X nobody chased.
+          # Refusing to dump is the right instinct; refusing on a table the owner can read in
+          # full is a false positive, and a safety net that cries wolf gets switched off.
+          #
+          # So: FORCE'd tables (or tables we do not own) still need a proven escape shape --
+          # that is the SOC 2 Phase 7 protection and it is untouched. Everything else is
+          # covered by 5/5 below, which trusts NO reasoning about policy shapes at all and
+          # simply catches any table that looks empty while the statistics collector says it
+          # is not. That is the check that would actually catch a silent truncation.
+          echo "4/5 every table where RLS BINDS THIS SESSION has a column-free SELECT escape"
           MISSING=$("$PSQL" "$DATABASE_URL" -Atc "
             WITH rls AS (
               SELECT c.relname
                 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
                WHERE n.nspname='public' AND c.relkind='r' AND c.relrowsecurity
+                 AND (c.relforcerowsecurity
+                      OR pg_get_userbyid(c.relowner) <> current_user)
             ), escaped AS (
               SELECT DISTINCT tablename
                 FROM pg_policies
