@@ -233,6 +233,23 @@
   .text-center .lead,
   .text-center > .text-secondary,
   .text-center blockquote{text-align:left !important}
+
+  /* Enterprise Programme module -- readable-contrast overrides.
+     The generic bootstrap `text-muted` (~#6c757d) is too faint on the white
+     cards these pages use; the owner reported gray-on-white as unreadable.
+     Scoped to .ent-page so nothing else in the app is affected. */
+  .ent-page{color:#1f2430}
+  .ent-page .text-muted,
+  .ent-page .form-text,
+  .ent-page small.text-muted{color:#4a5160 !important}
+  .ent-page .card{border:1px solid #d9dee8;box-shadow:0 1px 3px rgba(16,24,40,.06)}
+  .ent-page .card-header{background:#f3f5f9 !important;color:#1f2430;font-weight:600}
+  .ent-page .table thead th{color:#1f2430;background:#eef1f6}
+  .ent-page .table td,.ent-page .table th{color:#1f2430}
+  .ent-page .text-uppercase.small{color:#5b6270 !important;letter-spacing:.03em}
+  .ent-page .h3,.ent-page .h4,.ent-page h1,.ent-page h2{color:#141824}
+  .ent-page a:not(.btn):not(.badge){color:#1257c9}
+  .ent-page .badge.bg-secondary{background:#5b6270 !important}
 </style>
 {% block extra_head %}{% endblock %}
 <meta name="csrf-token" content="{{ csrf_token() }}">

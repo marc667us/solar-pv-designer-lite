@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Projects - {{ programme.name }}{% endblock %}
 {% block content %}
-<div class="container py-4">
+<div class="container py-4 ent-page">
 
   <div class="mb-4">
     <div class="text-muted small">
@@ -94,7 +94,7 @@
                 Generation Station #{{ l.project_id }}
               </a>
               {% else %}
-              <a href="/project/{{ l.project_id }}">Project #{{ l.project_id }}</a>
+              <a href="{{ url_for('project_results', pid=l.project_id) }}">Project #{{ l.project_id }}</a>
               {% endif %}
             </td>
             <td class="text-muted small">{{ l.project_kind|replace('_',' ')|title }}</td>
