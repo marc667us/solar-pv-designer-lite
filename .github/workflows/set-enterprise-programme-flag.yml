@@ -29,6 +29,7 @@ on:
         required: true
         type: choice
         options:
+          - enterprise_rebuild_enabled
           - enterprise_programme_enabled
           - enterprise_programme_jobs_enabled
           - enterprise_programme_ai_enabled
@@ -68,7 +69,7 @@ jobs:
       - name: Validate inputs (allowlist)
         run: |
           case "$FLAG_KEY" in
-            enterprise_programme_enabled|enterprise_programme_jobs_enabled|enterprise_programme_ai_enabled) ;;
+            enterprise_rebuild_enabled|enterprise_programme_enabled|enterprise_programme_jobs_enabled|enterprise_programme_ai_enabled) ;;
             *) echo "::error::refusing to write key '$FLAG_KEY'"; exit 1 ;;
           esac
           case "$FLAG_VALUE" in

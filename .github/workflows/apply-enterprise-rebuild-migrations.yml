@@ -1,0 +1,215 @@
+# Apply the Enterprise Programme REBUILD migrations: 025, 026, 027.
+#
+# These are the three migrations of Release 1 (the Supervisor capped it at three,
+# because this free-tier Postgres has already had a migration die mid-apply once).
+# They have NEVER been run against a real Postgres -- there is no local PG, no
+# psycopg2 and no Docker on the dev box, so everything so far is statically verified
+# and green on SQLite only. This workflow is the first real test.
+#
+#   025 -- enterprise tenancy + RBAC (tenants, memberships, role assignments, taxonomy)
+#   026 -- lifecycle spine (registry, phase states, 14 stage gates, approvals, documents,
+#          geographic areas, sites, programme templates, versioned template engine)
+#   027 -- beneficiary register, import staging, site qualifications, project links, jobs
+#
+# SAFETY PROFILE:
+#   * Purely ADDITIVE. New tables only. No ALTER, no DROP, no backfill of any existing
+#     table. It does not touch `projects`, `capital_investment_projects` or `users`.
+#   * NO NAME COLLISION with migration 024 (which IS applied on live). 024 owns
+#     enterprise_programmes / _programme_phases / _beneficiaries; the rebuild deliberately
+#     uses enterprise_programme_registry / _phase_states / enterprise_beneficiary_register.
+#     A CREATE TABLE IF NOT EXISTS against a colliding name would SILENTLY SKIP and then
+#     kill the apply at the first index expecting the new columns -- so the pre-flight
+#     below asserts there is no overlap before a single statement runs.
+#   * 024's tables are LEFT ALONE (owner decision D1: supersede, never drop).
+#   * The module ships DARK: enterprise_rebuild_enabled='0', so every /enterprise route
+#     404s until the owner flips it. The tables are unreachable until then.
+#   * Each file is applied in its own transaction with ON_ERROR_STOP=1: a failure rolls
+#     that file back whole, rather than leaving half a schema.
+#   * Idempotent (IF NOT EXISTS / DROP POLICY IF EXISTS). Safe to re-run.
+#
+# DEFAULT IS DRY-RUN. Applying needs -f confirm=ENTERPRISE_REBUILD_APPLY.
+
+name: Apply Enterprise Rebuild Migrations (025-027)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type ENTERPRISE_REBUILD_APPLY to commit."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Ubuntu's default client is 16; the live server is 18.4 (upgraded 2026-07-10).
+      # psql tolerates the gap but pg_dump does not, so pull the matching major.
+      - name: Install psql 18
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates gnupg lsb-release
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          psql --version
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "ENTERPRISE_REBUILD_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- 025/026/027 will be committed to live PG ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be written ==="
+            echo "Re-run with -f confirm=ENTERPRISE_REBUILD_APPLY to commit."
+          fi
+
+      - name: Verify all three migration files exist
+        run: |
+          set -e
+          for f in migrations/025_enterprise_tenancy_rbac.sql \
+                   migrations/026_enterprise_programme_lifecycle.sql \
+                   migrations/027_enterprise_beneficiaries_import.sql; do
+            test -f "$f" && echo "OK: $f"
+          done
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      # THE PRE-FLIGHT THAT MATTERS. A rebuild table sharing a name with a LIVE 024 table
+      # would be silently skipped by CREATE TABLE IF NOT EXISTS, and the apply would then
+      # die at the first index expecting a column 024's shape does not have -- rolling the
+      # whole migration back and landing NOTHING. Assert the overlap is empty before we
+      # write a single statement.
+      - name: Pre-flight -- no rebuild table may collide with a live 024 table
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- enterprise_* tables that ALREADY EXIST on live ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT tablename FROM pg_tables
+             WHERE schemaname='public' AND tablename LIKE 'enterprise%'
+             ORDER BY tablename;" | tee /tmp/live_tables.txt
+
+          echo ""
+          echo "--- tables the rebuild migrations will CREATE ---"
+          grep -hoiE 'CREATE TABLE IF NOT EXISTS +[a-z_]+' \
+            migrations/025_enterprise_tenancy_rbac.sql \
+            migrations/026_enterprise_programme_lifecycle.sql \
+            migrations/027_enterprise_beneficiaries_import.sql \
+            | awk '{print tolower($NF)}' | sort -u | tee /tmp/new_tables.txt
+
+          echo ""
+          echo "--- COLLISIONS (must be empty) ---"
+          if comm -12 <(sort -u /tmp/live_tables.txt) <(sort -u /tmp/new_tables.txt) | grep .; then
+            echo "::error::A rebuild migration re-declares a table that already exists on live."
+            echo "::error::CREATE TABLE IF NOT EXISTS would silently skip it and the apply would fail."
+            exit 1
+          fi
+          echo "  (none -- clear to apply)"
+
+      - name: Dry-run -- nothing written
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. 025, 026 and 027 WOULD be applied. Nothing was."
+          echo "  Pre-flight passed: no table-name collision with live."
+          echo "  Re-run with -f confirm=ENTERPRISE_REBUILD_APPLY to commit."
+          echo "================================================================"
+
+      - name: Apply 025 (tenancy + RBAC)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/025_enterprise_tenancy_rbac.sql
+          echo "OK: 025 applied."
+
+      - name: Apply 026 (lifecycle spine + template engine)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/026_enterprise_programme_lifecycle.sql
+          echo "OK: 026 applied."
+
+      - name: Apply 027 (register, import, qualification, links, jobs)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/027_enterprise_beneficiaries_import.sql
+          echo "OK: 027 applied."
+
+      - name: Verify the schema actually landed
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "=== rebuild tables now on live ==="
+          psql "$DATABASE_URL" -c "
+            SELECT tablename FROM pg_tables
+             WHERE schemaname='public'
+               AND tablename IN ('enterprise_tenants','enterprise_tenant_memberships',
+                    'enterprise_role_assignments','enterprise_taxonomy_options',
+                    'enterprise_programme_registry','enterprise_programme_phase_states',
+                    'enterprise_stage_gates','enterprise_approvals','enterprise_documents',
+                    'enterprise_programme_templates','enterprise_template_versions',
+                    'enterprise_beneficiary_register','enterprise_import_batches',
+                    'enterprise_import_rows','enterprise_site_qualifications',
+                    'enterprise_project_links','enterprise_jobs')
+             ORDER BY tablename;"
+          echo ""
+          echo "=== 024's tables are still there, untouched (decision D1) ==="
+          psql "$DATABASE_URL" -c "
+            SELECT count(*) AS old_024_tables FROM pg_tables
+             WHERE schemaname='public'
+               AND tablename IN ('enterprise_programmes','enterprise_programme_phases',
+                                 'enterprise_beneficiaries');"
+          echo ""
+          echo "=== the module is DARK until the flag is flipped ==="
+          psql "$DATABASE_URL" -c "
+            SELECT key, value FROM admin_settings
+             WHERE key LIKE 'enterprise%' ORDER BY key;"
