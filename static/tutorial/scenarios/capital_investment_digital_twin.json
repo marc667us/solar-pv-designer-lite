@@ -8,12 +8,14 @@
   "language": "en-US",
   "screens": [
     "Digital twin",
+    "Equipment layout",
     "SLD"
   ],
   "covers": [
-    "capital_investment_electrical_sld"
+    "capital_investment_electrical_sld",
+    "capital_investment_equipment_layout"
   ],
-  "estimatedDuration": 15,
+  "estimatedDuration": 19,
   "steps": [
     {
       "title": "The 3D viewport",
@@ -107,18 +109,45 @@
       "stepNumber": 7
     },
     {
-      "title": "The single-line diagram",
-      "description": "The electrical view of the same plant.",
-      "voiceScript": "The outputs rail also carries the electrical single-line diagram.",
-      "captionText": "The outputs rail also carries the electrical single-line diagram.",
-      "targetSelector": "a[href*=\"/electrical-sld\"]",
+      "title": "Equipment general arrangement",
+      "description": "The same equipment, drawn to scale in plan.",
+      "voiceScript": "The outputs rail also carries the equipment general-arrangement drawing.",
+      "captionText": "The outputs rail also carries the equipment general-arrangement drawing.",
+      "targetSelector": "a[href*=\"/equipment-layout\"]",
       "action": "navigate",
       "duration": 700,
       "delayBefore": 120,
       "screen": "Digital twin",
+      "fallbackMessage": "Equipment general arrangement: the next screen is not reachable from here.",
+      "hrefFromSelector": "a[href*=\"/equipment-layout\"]",
+      "stepNumber": 8
+    },
+    {
+      "title": "The GA drawing",
+      "description": "Rooms, clearances and equipment, to scale.",
+      "voiceScript": "Each room is drawn to scale with its equipment and working clearances.",
+      "captionText": "Each room is drawn to scale with its equipment and working clearances.",
+      "targetSelector": "svg[aria-label$=\"equipment general arrangement\"]",
+      "action": "moveCursor",
+      "duration": 1400,
+      "delayBefore": 120,
+      "screen": "Equipment layout",
+      "fallbackMessage": "The GA drawing: not visible on this screen yet.",
+      "stepNumber": 9
+    },
+    {
+      "title": "The single-line diagram",
+      "description": "The electrical view of the same plant.",
+      "voiceScript": "The GA drawing links on to the electrical single-line diagram.",
+      "captionText": "The GA drawing links on to the electrical single-line diagram.",
+      "targetSelector": "a[href*=\"/electrical-sld\"]",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Equipment layout",
       "fallbackMessage": "The single-line diagram: the next screen is not reachable from here.",
       "hrefFromSelector": "a[href*=\"/electrical-sld\"]",
-      "stepNumber": 8
+      "stepNumber": 10
     },
     {
       "title": "The one-line",
@@ -131,7 +160,7 @@
       "delayBefore": 120,
       "screen": "SLD",
       "fallbackMessage": "The one-line: not visible on this screen yet.",
-      "stepNumber": 9
+      "stepNumber": 11
     }
   ]
 }

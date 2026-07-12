@@ -310,7 +310,12 @@ def test_callback_happy_path(flask_app):
 
         # Session hydrated.
         with c.session_transaction() as s:
-            assert s["access_token"] == "access.jwt"
+            # The access token is deliberately NOT stored: Flask's session is a signed --
+            # not encrypted -- CLIENT cookie, so putting a JWT in it hands the token's
+            # claims to anyone who reads the cookie. This assertion used to demand the
+            # opposite, which would have re-introduced exactly that leak the moment
+            # somebody "fixed" the test by satisfying it. See oidc_routes.py:416.
+            assert "access_token" not in s
             assert s["user"]["preferred_username"] == "alice"
             assert s["user"]["tenant_id"] == "tenant-uuid-1"
             assert "solar_engineer" in s["user"]["roles"]

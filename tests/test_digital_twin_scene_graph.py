@@ -98,11 +98,33 @@ def test_top_level_v2_blocks_present():
     assert aug["performance"]["estimated_modules"] == 181818
 
 
-def test_performance_tier_scales_with_size():
-    small = dict(_base_scene()); small["pv"] = {"meta": {"n_modules_planned": 500}, "rows": []}
-    big = _base_scene()
-    assert dtv2.augment_scene_v2(small, {"id": 1})["performance"]["recommended_tier"] == "high"
-    assert dtv2.augment_scene_v2(big, {"id": 2})["performance"]["recommended_tier"] == "low"
+def test_performance_tier_scales_with_drawn_objects_not_module_count():
+    """The tier is gated on INDIVIDUALLY DRAWN OBJECTS, not on how many PV modules there are.
+
+    Modules are drawn as a single InstancedMesh, so a 181,818-module farm costs about what a
+    500-module one costs. This test used to assert that a big module count forced the `low`
+    tier -- and that is precisely what stripped textures, shadows, grass, scenery and the
+    mounting structure out of every large farm, leaving the flat wash of thin lines the owner
+    rejected. Satisfying the old assertion again would re-break the fix, so pin the real rule.
+    """
+    light = dict(_base_scene())
+    light["pv"] = {"meta": {"n_modules_planned": 500}, "rows": []}
+    assert dtv2.augment_scene_v2(
+        light, {"id": 1})["performance"]["recommended_tier"] == "high"
+
+    # A HUGE module count on a scene with few drawn objects must stay on the high tier.
+    many_modules = _base_scene()
+    perf = dtv2.augment_scene_v2(many_modules, {"id": 2})["performance"]
+    assert perf["estimated_modules"] == 181818
+    assert perf["recommended_tier"] == "high",         "module count is nearly free and must not downgrade fidelity"
+
+    # What actually costs is objects. Enough of them, and the tier steps down.
+    heavy = _base_scene()
+    heavy["buildings"] = [
+        dict(heavy["buildings"][0], id="bldg_%03d" % i) for i in range(950)
+    ]
+    assert dtv2.augment_scene_v2(
+        heavy, {"id": 3})["performance"]["recommended_tier"] == "low"
 
 
 def test_empty_pv_project_still_builds():

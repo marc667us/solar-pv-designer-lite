@@ -257,8 +257,14 @@ class TestAuthGated:
         assert resp.status_code == 200
 
     def test_support_user_guide(self, app_client):
+        # /support/user-guide was replaced by the audience-targeted guides (2026-06-27) and
+        # deliberately kept alive as a PERMANENT redirect so existing email links and
+        # bookmarks do not 404. The guarantee is still "this URL reaches the user guide" --
+        # so assert the redirect AND that it actually lands somewhere that works.
         resp = app_client.get("/support/user-guide")
-        assert resp.status_code == 200
+        assert resp.status_code == 301
+        assert app_client.get("/support/user-guide",
+                              follow_redirects=True).status_code == 200
 
     def test_support_email_setup(self, app_client):
         resp = app_client.get("/support/email-setup")

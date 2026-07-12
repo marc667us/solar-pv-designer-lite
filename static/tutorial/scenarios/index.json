@@ -246,12 +246,13 @@
       "pageId": "capital_investment_digital_twin",
       "title": "3D Digital Twin",
       "module": "3D Digital Twin",
-      "steps": 9,
+      "steps": 11,
       "screens": [
         "Digital twin",
+        "Equipment layout",
         "SLD"
       ],
-      "estimatedDuration": 15
+      "estimatedDuration": 19
     },
     {
       "pageId": "capital_investment_electrical_sld",

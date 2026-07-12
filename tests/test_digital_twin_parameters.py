@@ -41,16 +41,37 @@ def test_scene_is_augmented():
     assert scene["objects"], "augmented objects missing"
 
 
-def test_row_pitch_changes_row_count():
-    tight = build_scene_from_project(_proj(row_pitch=6.0))["pv"]["meta"]["n_rows"]
-    wide = build_scene_from_project(_proj(row_pitch=12.0))["pv"]["meta"]["n_rows"]
-    assert tight > wide, f"wider pitch should place fewer rows ({tight} vs {wide})"
+def test_row_pitch_spreads_the_field_without_inventing_or_deleting_panels():
+    """Widening the pitch makes the ARRAY LONGER. It does not change how many panels there
+    are.
+
+    This test used to assert the opposite -- that a wider pitch yields FEWER rows -- because
+    the pre-rebuild twin fitted rows into a fixed rectangle and silently dropped whatever did
+    not fit. That is exactly the fabrication the owner caught in the 2026-07-11 review ("wrong
+    panel count"), and the rebuilt `build_scene_from_project` is an exact copy of the design:
+    the design says 181,818 modules, so the twin places 181,818 modules and grows the land to
+    suit. Pitch is a LAYOUT parameter, not a capacity one.
+    """
+    tight = build_scene_from_project(_proj(row_pitch=6.0))["pv"]["meta"]
+    wide = build_scene_from_project(_proj(row_pitch=12.0))["pv"]["meta"]
+
+    assert wide["field_l_m"] > tight["field_l_m"], "a wider pitch must lengthen the field"
+    assert tight["row_pitch_m"] == 6.0 and wide["row_pitch_m"] == 12.0
+
+    # The design's module count is honoured exactly, at BOTH pitches. This is the guarantee
+    # the whole twin rebuild exists to make.
+    assert tight["n_modules_placed"] == tight["n_modules_planned"] == 181818
+    assert wide["n_modules_placed"] == wide["n_modules_planned"] == 181818
 
 
 def test_transformer_position_override_moves_object():
+    """The Phase-6 drag persists as electrical_config.transformer_pos and must survive a
+    rebuild. The object it moves is the SUBSTATION COMPOUND -- the rebuilt scene models a real
+    substation (`substation_pad` + `grid_transformer_N` + MV switchgear) where the old one had
+    a single abstract `transformer_yard` box."""
     scene = build_scene_from_project(_proj(transformer_pos={"x": 100.0, "z": -50.0}))
-    xf = [o for o in scene["objects"] if o["id"] == "transformer_yard"]
-    assert xf, "transformer_yard object not found"
+    xf = [o for o in scene["objects"] if o["id"] == "substation_pad"]
+    assert xf, "substation_pad object not found"
     pos = xf[0]["transform"]["position"]
     assert pos[0] == pytest.approx(100.0)
     assert pos[2] == pytest.approx(-50.0)
@@ -58,7 +79,7 @@ def test_transformer_position_override_moves_object():
 
 def test_default_transformer_position_when_no_override():
     scene = build_scene_from_project(_proj())
-    xf = [o for o in scene["objects"] if o["id"] == "transformer_yard"][0]
+    xf = [o for o in scene["objects"] if o["id"] == "substation_pad"][0]
     pos = xf["transform"]["position"]
     # Default is the SE corner (positive x and z), not the origin.
     assert pos[0] > 0 and pos[2] > 0

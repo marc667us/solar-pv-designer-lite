@@ -5422,7 +5422,28 @@ _CIP_MIGRATIONS = [
 ]
 
 # Verification state so a failed live-PG migration surfaces (never swallowed).
-_CIP_SCHEMA_STATE: dict[str, object] = {"ready": False, "error": ""}
+# `db` records WHICH database was verified. A bare boolean was a fact about *a* database
+# held as if it were a fact about the process: swap DB_PATH to a fresh database and this
+# still answered "ready", so the caller queried tables that had never been created there.
+# Production has one database and never saw it; the test suite, where one module repoints
+# DB_PATH at a tmp database, saw it as "no such table: capital_investment_projects" in a
+# module that passes perfectly well on its own.
+_CIP_SCHEMA_STATE: dict[str, object] = {"ready": False, "error": "", "db": None}
+
+
+def _cip_schema_key() -> str:
+    """Which database would get_db() hand us? Cheap -- no connection, no round trip.
+
+    On Postgres DATABASE_URL is the identity and DB_PATH is unused but constant, so the
+    key is stable and the memo behaves exactly as the old boolean did.
+    """
+    import os
+    try:
+        import web_app
+        path = str(getattr(web_app, "DB_PATH", ""))
+    except Exception:
+        path = ""
+    return (os.environ.get("DATABASE_URL") or "") + "|" + path
 
 
 def _ensure_ci_projects_schema_verified(get_db) -> bool:
@@ -5431,7 +5452,8 @@ def _ensure_ci_projects_schema_verified(get_db) -> bool:
     the later ADD COLUMN migrations), then confirms the table is queryable.
     Returns True only when verified. Remembers the result in _CIP_SCHEMA_STATE
     so a live-PG failure is observable in diagnostics rather than silent."""
-    if _CIP_SCHEMA_STATE["ready"]:
+    key = _cip_schema_key()
+    if _CIP_SCHEMA_STATE["ready"] and _CIP_SCHEMA_STATE["db"] == key:
         return True
     # SQLite fast path (executescript is Postgres-hostile -> falls through).
     try:
@@ -5478,9 +5500,11 @@ def _ensure_ci_projects_schema_verified(get_db) -> bool:
             c.execute("SELECT id FROM capital_investment_projects LIMIT 1")
         _CIP_SCHEMA_STATE["ready"] = True
         _CIP_SCHEMA_STATE["error"] = ""
+        _CIP_SCHEMA_STATE["db"] = key
     except Exception as exc:
         _CIP_SCHEMA_STATE["ready"] = False
         _CIP_SCHEMA_STATE["error"] = str(exc)[:300]
+        _CIP_SCHEMA_STATE["db"] = None
     return bool(_CIP_SCHEMA_STATE["ready"])
 
 
