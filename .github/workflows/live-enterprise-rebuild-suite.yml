@@ -44,7 +44,9 @@ jobs:
 
       - name: Run the live suite
         env:
-          LIVE_USER: marc667us
+          # Keycloak authenticates on EMAIL, not the app username
+          # (see memory: 'KC login needs email').
+          LIVE_USER: marc667us@yahoo.com
           SOLARPRO_OWNER_PASSWORD: ${{ secrets.SOLARPRO_OWNER_PASSWORD }}
         run: |
           python tmp/live_enterprise_rebuild_suite_2026-07-12.py
