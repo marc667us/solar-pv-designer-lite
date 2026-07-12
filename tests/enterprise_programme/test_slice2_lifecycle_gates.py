@@ -519,12 +519,15 @@ def test_every_control_in_the_spec_has_a_live_guard(db):
 
 
 def test_not_yet_shipped_controls_fail_closed(db, audit):
-    """The guards for later slices refuse. They do not pass-through."""
+    """The guards for later slices refuse. They do not pass-through.
+
+    C03 is NOT in this list any more -- slice 4 shipped the template engine, so it is a
+    live guard with its own tests (test_slice4_templates.py). A control leaves this test
+    exactly when it starts being enforced, which is the point of the list.
+    """
     pid = _programme(db, audit)
     with pytest.raises(GateBlockedError):
         gates.require_qualified_beneficiary(db, db.org, 1)      # C02, slice 6
-    with pytest.raises(GateBlockedError):
-        gates.require_approved_template_version(db, db.org, 1)  # C03, slice 4
     with pytest.raises(GateBlockedError):
         gates.require_approved_boq_snapshot(db, db.org, [1])    # C05, slice 8
     assert gates.control_summary()[0]["enforced_now"] is True   # C01 is live now
@@ -534,7 +537,8 @@ def test_control_summary_does_not_overstate_what_is_enforced(db):
     summary = {row["code"]: row["enforced_now"] for row in gates.control_summary()}
     assert summary["C01"] is True and summary["C11"] is True
     assert summary["C12"] is True and summary["C13"] is True
-    assert summary["C03"] is False, "the template control is not enforceable until slice 4"
+    assert summary["C03"] is True, "the template control went live with slice 4"
+    assert summary["C02"] is False, "site qualification has not shipped (slice 6)"
     assert len(summary) == 15
 
 

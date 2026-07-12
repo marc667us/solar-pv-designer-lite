@@ -38,6 +38,9 @@ from flask import (
 from app.enterprise_programme import (
     constants, dropdowns, flags, gates, rbac, tenancy, workflows,
 )
+# `templates` is the template ENGINE, not Jinja. Aliased so that nothing in this file can
+# be misread as touching Flask's template loader.
+from app.enterprise_programme import templates as template_engine
 from app.enterprise_programme.gates import EnterpriseGateError
 from app.enterprise_programme.rbac import EnterprisePermissionError
 
@@ -80,14 +83,33 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
     # tables in it as a side effect of an import would be an unpleasant surprise. On
     # Postgres the schema is migrations 025/026, applied deliberately through the gated
     # workflow because they carry the RLS policies. So SQLite schema is ensured LAZILY.
-    _schema_ready: dict[str, bool] = {"done": False}
+    # Memoised PER DATABASE, not per process. A single boolean was wrong: it records a fact
+    # about a database ("its tables exist"), and the process can be pointed at a different
+    # one -- which is exactly what a second test module does when it swaps DB_PATH, and it
+    # then finds a database whose schema was never created because a previous database had
+    # already set the flag. Production has one database and would never have shown this.
+    _schema_ready: set[str] = set()
+
+    def _db_identity(c) -> str:
+        """Which database is this connection actually talking to?"""
+        if flags._is_postgres():
+            # Never issue a PRAGMA at psycopg2: an unknown statement aborts the whole
+            # transaction. Postgres owns its schema through migration 026 anyway, so
+            # ensure_schema is a no-op there and one key for all of Postgres is correct.
+            return "postgres"
+        try:
+            row = c.execute("PRAGMA database_list").fetchone()
+            return str(row[2]) if row else "sqlite"
+        except Exception:
+            return "sqlite"
 
     def _ensure_schema_once(c) -> None:
-        if _schema_ready["done"]:
+        key = _db_identity(c)
+        if key in _schema_ready:
             return
         tenancy.ensure_schema(c)    # no-op on Postgres
         workflows.ensure_schema(c)  # no-op on Postgres
-        _schema_ready["done"] = True
+        _schema_ready.add(key)
 
     # ---- guards ----------------------------------------------------------
 
@@ -557,6 +579,233 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                     abort(404)
                 flash(str(e), "error")
         return redirect(url_for("enterprise_programme_detail", programme_id=programme_id))
+
+    # ---- templates: the standard a programme repeats -----------------------
+    #
+    # Every write below is a thin wrapper. The rules -- who may edit, what freezes when,
+    # which version may generate -- live in app/enterprise_programme/templates.py, because
+    # slice 7's project generator and the queue drainer call the same services and must get
+    # the same answers. A rule enforced in a route is a rule the worker does not have.
+
+    @app.route("/enterprise/templates")
+    @login_required
+    def enterprise_templates():
+        """Every template in the organisation, and what each could generate today."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            return render_template(
+                "enterprise_programme/templates.html",
+                templates=template_engine.list_templates(c, active),
+                can_manage=rbac.has_permission(c, active, uid, "template.manage"),
+                can_approve=rbac.has_permission(c, active, uid, "template.approve"),
+            )
+
+    @app.route("/enterprise/templates/new", methods=["GET", "POST"])
+    @login_required
+    def enterprise_template_new():
+        """Register a template. It is born with version 1, in Draft."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+
+            if not rbac.has_permission(c, active, uid, "template.manage"):
+                abort(403)
+
+            if request.method == "POST":
+                csrf_protect()
+                try:
+                    template_id, _version_id = template_engine.create_template(
+                        c, active, uid,
+                        code=(request.form.get("code") or "").strip(),
+                        name=(request.form.get("name") or "").strip(),
+                        beneficiary_type=(request.form.get("beneficiary_type")
+                                          or "").strip(),
+                        design_strategy=(request.form.get("design_strategy")
+                                         or "standard").strip(),
+                    )
+                except EnterprisePermissionError:
+                    abort(403)
+                except EnterpriseGateError as e:
+                    flash(str(e), "error")
+                    return redirect(url_for("enterprise_template_new"))
+                flash("Template registered. Version 1 is a Draft -- fill it in, then "
+                      "submit it for approval.", "success")
+                return redirect(url_for("enterprise_template_detail",
+                                        template_id=template_id))
+
+            return render_template(
+                "enterprise_programme/template_new.html",
+                form=dropdowns.for_template_form(c),
+            )
+
+    @app.route("/enterprise/templates/<int:template_id>")
+    @login_required
+    def enterprise_template_detail(template_id: int):
+        """One template: its versions, its editable draft (if any), and what it can do."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+
+            try:
+                tpl = template_engine.get_template(c, active, template_id)
+            except EnterpriseGateError:
+                abort(404)  # C13: not yours and not there are the same answer
+
+            versions = template_engine.list_versions(c, active, template_id)
+            draft = next((v for v in versions if v["editable"]), None)
+            programme_id = tpl["programme_id"]
+            can_manage = rbac.has_permission(c, active, uid, "template.manage",
+                                             programme_id=programme_id)
+            return render_template(
+                "enterprise_programme/template_detail.html",
+                template=tpl,
+                versions=versions,
+                draft=draft,
+                generative=template_engine.generative_from(versions),
+                # Only built when the form will actually be RENDERED -- the template gates
+                # it on exactly these two conditions. Building it regardless meant every
+                # read of this page (a director checking the version history, say) paid for
+                # a 500-row scan of the product catalogue that was then thrown away.
+                form=(dropdowns.for_template_form(c) if (draft and can_manage) else None),
+                can_manage=can_manage,
+                can_approve=rbac.has_permission(c, active, uid, "template.approve",
+                                                programme_id=programme_id),
+            )
+
+    def _parameters_from_form(form) -> dict:
+        """Read the template parameters out of a submitted form.
+
+        Input:  the Flask request form.
+        Output: a raw dict keyed by parameter field key.
+
+        Driven by constants.TEMPLATE_PARAMETER_FIELDS -- the SAME list that renders the
+        form and validates the result -- so a field cannot be posted that the validator
+        does not know, and a field cannot be added to the schema without this reading it.
+        `getlist` for the multi-value kinds, because a browser posts repeated keys.
+
+        Nothing is trusted here. This only SHAPES the input; templates.validate_parameters
+        decides what is legal.
+        """
+        out: dict = {}
+        for field in constants.TEMPLATE_PARAMETER_FIELDS:
+            key, kind = field["key"], field["kind"]
+            if kind in ("multiselect", "number_list"):
+                out[key] = form.getlist(key)
+            elif kind == "bool":
+                out[key] = key in form
+            else:
+                out[key] = form.get(key)
+        return out
+
+    @app.route("/enterprise/templates/versions/<int:version_id>/save", methods=["POST"])
+    @login_required
+    def enterprise_template_version_save(version_id: int):
+        """Save the draft. Refused on any version that has left Draft -- see templates.py."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                version = template_engine.get_version_state(c, active, version_id)
+                template_engine.save_draft_parameters(
+                    c, active, uid, version_id, _parameters_from_form(request.form)
+                )
+                flash("Draft saved.", "success")
+            except EnterprisePermissionError:
+                abort(403)
+            except EnterpriseGateError as e:
+                if e.control == "C13":
+                    abort(404)
+                # Back to the FORM, not to the index. A rejected value ("50kw" in a size
+                # field) is the ordinary case, not an exceptional one, and bouncing the
+                # user to the template list to read why is how a form gets abandoned.
+                flash(str(e), "error")
+        return redirect(url_for("enterprise_template_detail",
+                                template_id=version["template_id"]))
+
+    @app.route("/enterprise/templates/<int:template_id>/versions", methods=["POST"])
+    @login_required
+    def enterprise_template_version_new(template_id: int):
+        """Start a new draft by copying the newest version. THIS is how a template changes."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                template_engine.create_version(c, active, uid, template_id)
+                flash("New draft version created, copied from the latest.", "success")
+            except EnterprisePermissionError:
+                abort(403)
+            except EnterpriseGateError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+        return redirect(url_for("enterprise_template_detail", template_id=template_id))
+
+    # The version lifecycle actions, and the service each one is. Kept as a table rather
+    # than five near-identical routes: they differ ONLY in which service they call, and
+    # five copies of the same try/except is five chances to forget the C13 404.
+    _VERSION_ACTIONS = {
+        "submit":  (template_engine.submit_for_review,
+                    "Submitted for approval. The parameters are now frozen."),
+        "approve": (template_engine.approve_version,
+                    "Version approved. It may now generate projects."),
+        "reject":  (template_engine.reject_version,
+                    "Sent back to Draft."),
+        "publish": (template_engine.publish_version,
+                    "Version published. Any previously published version is superseded."),
+        "archive": (template_engine.archive_version,
+                    "Version archived."),
+    }
+
+    @app.route("/enterprise/templates/versions/<int:version_id>/<action>",
+               methods=["POST"])
+    @login_required
+    def enterprise_template_version_action(version_id: int, action: str):
+        """Move a version through its lifecycle: submit, approve, reject, publish, archive."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        service = _VERSION_ACTIONS.get(action)
+        if service is None:
+            abort(404)
+        run, message = service
+
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                version = template_engine.get_version_state(c, active, version_id)
+                run(c, active, uid, version_id,
+                    comment=(request.form.get("comment") or "").strip() or None)
+                flash(message, "success")
+            except EnterprisePermissionError:
+                abort(403)
+            except EnterpriseGateError as e:
+                if e.control == "C13":
+                    abort(404)
+                # Stay on the template. "Submit" refused because the draft is incomplete is
+                # the most likely error here, and the fields it names are on this page.
+                flash(str(e), "error")
+        return redirect(url_for("enterprise_template_detail",
+                                template_id=version["template_id"]))
 
 
 # The document types the gate predicates actually look for. A form that offered anything

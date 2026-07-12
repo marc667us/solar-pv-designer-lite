@@ -18,13 +18,20 @@ app already uses (config/global_solar_data.py).
 from __future__ import annotations
 
 from .constants import (
+    BENEFICIARY_FIELDS,
+    BENEFICIARY_TYPES,
     DELIVERY_MODELS,
     DESIGN_STRATEGIES,
     FUNDING_SOURCES,
+    LOAD_PROFILES,
+    OM_MODELS,
     ORGANISATION_TYPES,
     PROGRAMME_STATUSES,
     PROJECT_STATUSES,
     ROLES,
+    SYSTEM_CONFIGURATIONS,
+    TEMPLATE_PARAMETER_FIELDS,
+    TEMPLATE_REQUIRED_DOCUMENTS,
 )
 
 
@@ -82,6 +89,77 @@ def programme_statuses() -> list[dict]:
 
 def project_statuses() -> list[dict]:
     return [{"value": s, "label": s} for s in PROJECT_STATUSES]
+
+
+def beneficiary_types() -> list[dict]:
+    return _pairs(BENEFICIARY_TYPES)
+
+
+def equipment_catalog(c, limit: int = 500) -> list[dict]:
+    """Products the template may name as its standard equipment.
+
+    Input:  a DB connection; an upper bound on how many products to offer.
+    Output: list of {value,label} dicts -- value is the equipment_catalog id.
+
+    Reads the LIVE marketplace catalogue -- the same `equipment_catalog` table the BOQ and
+    procurement modules price against -- rather than shipping a second product list that
+    would immediately start drifting from the first (the same reasoning as countries()).
+
+    The catalogue is global, not tenant-scoped: a product register that every tenant sees
+    is the entire point of a marketplace, and nothing here is visible that /marketplace
+    does not already show to an anonymous visitor.
+
+    The limit is real and is NOT silent: the caller reports it. The catalogue holds ~600
+    products, and a 600-option checkbox grid is not a picker, it is a wall. Slice 7 will
+    need a searchable one; until a template needs more than 500 candidates this is honest
+    and cheap.
+    """
+    try:
+        rows = c.execute(
+            "SELECT ec.id, ec.name, COALESCE(ec.brand,''), COALESCE(ec.unit,'') "
+            "  FROM equipment_catalog ec "
+            " ORDER BY ec.name LIMIT ?",
+            (limit,),
+        ).fetchall()
+    except Exception:
+        # The marketplace table is not part of this module's schema. If it is absent (a
+        # bare test DB, a partial deploy) the template form simply offers no equipment
+        # rather than 500ing -- exactly how countries() degrades.
+        return []
+    out = []
+    for r in rows:
+        brand = f" -- {r[2]}" if r[2] else ""
+        unit = f" ({r[3]})" if r[3] else ""
+        out.append({"value": r[0], "label": f"{r[1]}{brand}{unit}"})
+    return out
+
+
+def for_template_form(c) -> dict:
+    """Every option list the template parameter form needs, in one call.
+
+    Input:  a DB connection (the equipment catalogue is a table, not a constant).
+    Output: {"fields": the parameter schema, "options": {source_name: [...]}, ...}
+
+    The form is RENDERED from constants.TEMPLATE_PARAMETER_FIELDS and VALIDATED against
+    the same list in templates.validate_parameters. That is deliberate: a field cannot
+    appear on the form without the validator knowing about it, and a validator rule cannot
+    exist for a field nobody can fill. They cannot drift because they are the same list.
+    """
+    return {
+        "fields": TEMPLATE_PARAMETER_FIELDS,
+        "beneficiary_types": beneficiary_types(),
+        "design_strategies": design_strategies(),
+        "options": {
+            "SYSTEM_CONFIGURATIONS":       _pairs(SYSTEM_CONFIGURATIONS),
+            "LOAD_PROFILES":               _pairs(LOAD_PROFILES),
+            "BENEFICIARY_FIELDS":          _pairs(BENEFICIARY_FIELDS),
+            "TEMPLATE_REQUIRED_DOCUMENTS": _pairs(TEMPLATE_REQUIRED_DOCUMENTS),
+            "FUNDING_SOURCES":             _pairs(FUNDING_SOURCES),
+            "DELIVERY_MODELS":             _pairs(DELIVERY_MODELS),
+            "OM_MODELS":                   _pairs(OM_MODELS),
+            "EQUIPMENT_CATALOG":           equipment_catalog(c),
+        },
+    }
 
 
 def for_programme_form() -> dict:

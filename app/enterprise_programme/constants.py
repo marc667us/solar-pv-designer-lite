@@ -88,6 +88,170 @@ TEMPLATE_STATUSES: list[str] = [
 ]
 TEMPLATE_STATUSES_GENERATIVE: frozenset[str] = frozenset({"Approved", "Published"})
 
+# Only a Draft may be EDITED. This is the whole point of the version lifecycle, and it is
+# what the master prompt means by "later template changes must not silently overwrite
+# completed or approved project designs": once a version is submitted for review its
+# parameters are frozen forever, and a change means a NEW version. A project generated
+# from version 3 can therefore always be re-derived, because version 3 still says what it
+# said on the day it was used.
+TEMPLATE_STATUSES_EDITABLE: frozenset[str] = frozenset({"Draft"})
+
+# The version state machine. Absent key == terminal (Archived).
+#
+# Review -> Draft is a REJECTION (the approver sends it back), which is why it is legal.
+# Approved -> Review is a withdrawal before publication. Published never returns to an
+# editable state: it is superseded by the next publication, never rewritten -- something
+# generated from it may exist.
+TEMPLATE_TRANSITIONS: dict[str, tuple[str, ...]] = {
+    "Draft":      ("Review", "Archived"),
+    "Review":     ("Approved", "Draft", "Archived"),
+    "Approved":   ("Published", "Review", "Archived"),
+    "Published":  ("Superseded", "Archived"),
+    "Superseded": ("Archived",),
+    "Archived":   (),
+}
+
+# --- beneficiary types (master prompt s14.1 + the vision doc) ----------------
+# What a programme installs FOR. Drives the template's applicability and, from slice 5,
+# the beneficiary register.
+BENEFICIARY_TYPES: list[tuple[str, str]] = [
+    ("home",                "Home / Household"),
+    ("school",              "School"),
+    ("university",          "University / Tertiary Institution"),
+    ("clinic",              "Clinic / Health Post"),
+    ("hospital",            "Hospital"),
+    ("office",              "Office / Administrative Building"),
+    ("government_building", "Government Building"),
+    ("farm",                "Farm / Agricultural Facility"),
+    ("cold_storage",        "Cold-Storage Facility"),
+    ("water_facility",      "Water Pumping / Treatment Facility"),
+    ("shop",                "Shop / Small Business"),
+    ("community_facility",  "Community Facility"),
+    ("industrial",          "Industrial Facility"),
+    ("mine",                "Mine"),
+    ("telecom_site",        "Telecom Site"),
+]
+
+# --- typical load profiles (master prompt s13 "Typical load profile") --------
+LOAD_PROFILES: list[tuple[str, str]] = [
+    ("residential_evening", "Residential -- evening peak"),
+    ("residential_flat",    "Residential -- flat"),
+    ("daytime_only",        "Daytime only (school / office)"),
+    ("daytime_extended",    "Daytime extended (offices with evening use)"),
+    ("continuous_24h",      "Continuous 24h (clinic / hospital / telecom)"),
+    ("irrigation_seasonal", "Irrigation -- seasonal daytime"),
+    ("cold_chain_24h",      "Cold chain -- continuous with compressor cycling"),
+    ("industrial_shift",    "Industrial -- shift pattern"),
+    ("mixed_community",     "Mixed community load"),
+]
+
+# --- system configuration (master prompt s13) -------------------------------
+SYSTEM_CONFIGURATIONS: list[tuple[str, str]] = [
+    ("grid_tied",       "Grid-tied"),
+    ("off_grid",        "Off-grid"),
+    ("hybrid",          "Hybrid (grid + storage)"),
+    ("grid_backup",     "Grid-tied with backup storage"),
+]
+
+# --- O&M model (master prompt s13) ------------------------------------------
+OM_MODELS: list[tuple[str, str]] = [
+    ("in_house",              "In-house O&M"),
+    ("contracted_om",         "Contracted O&M provider"),
+    ("epc_warranty_period",   "EPC-provided during warranty period"),
+    ("manufacturer_warranty", "Manufacturer warranty only"),
+    ("community_managed",     "Community-managed"),
+    ("not_defined",           "Not defined at template level"),
+]
+
+# --- beneficiary fields a template may REQUIRE (master prompt s12) ----------
+# The template says which of these a beneficiary must supply before it may qualify.
+# Slice 5 (the beneficiary register) reads the same list, so the field a template demands
+# is necessarily a field the register can actually hold.
+BENEFICIARY_FIELDS: list[tuple[str, str]] = [
+    ("name",                  "Name"),
+    ("region",                "Region"),
+    ("district",              "District"),
+    ("community",             "Community"),
+    ("address",               "Address"),
+    ("gps_coordinates",       "GPS coordinates"),
+    ("contact_person",        "Contact person"),
+    ("contact_details",       "Contact details"),
+    ("ownership",             "Ownership"),
+    ("building_type",         "Building type"),
+    ("occupancy",             "Occupancy"),
+    ("existing_energy_source", "Existing energy source"),
+    ("electricity_consumption", "Electricity consumption"),
+    ("tariff",                "Tariff"),
+    ("generator_details",     "Generator details"),
+    ("roof_area",             "Roof area"),
+    ("land_availability",     "Land availability"),
+    ("critical_loads",        "Critical loads"),
+    ("priority_loads",        "Priority loads"),
+    ("funding_eligibility",   "Funding eligibility"),
+    ("social_impact_class",   "Social-impact classification"),
+    ("priority_ranking",      "Priority ranking"),
+]
+
+# --- documents a template may REQUIRE of a beneficiary (master prompt s13) ---
+# Distinct from the GATE documents in the routes module: those are evidence a PROGRAMME
+# produces to pass a gate; these are evidence a SITE must supply before it is generated.
+TEMPLATE_REQUIRED_DOCUMENTS: list[tuple[str, str]] = [
+    ("site_survey",              "Site survey"),
+    ("load_assessment",          "Load assessment"),
+    ("roof_structural_report",   "Roof structural report"),
+    ("land_title",               "Land title / lease"),
+    ("grid_connection_letter",   "Grid connection letter"),
+    ("environmental_screening",  "Environmental screening"),
+    ("community_consent",        "Community consent"),
+    ("electricity_bill",         "Recent electricity bill"),
+]
+
+# --- the template parameter schema (master prompt s13) ----------------------
+# ONE definition, used by three things that would otherwise drift apart: the form that is
+# rendered, the validator that accepts a submission, and the generator (slice 7) that
+# reads a version back. A field that is not here cannot be stored, and a value that was
+# never offered cannot be saved -- same rule as the phase/status vocabularies above.
+#
+# `kind` is how the value is captured and checked:
+#   select      -- exactly one code from `source`
+#   multiselect -- a list of codes from `source` (may be empty unless required)
+#   number_list -- a list of positive numbers (the standard sizes a template offers)
+#   number      -- one non-negative number
+#   bool        -- true/false
+#
+# Release 1 covers the fields the generation path in slice 7 actually consumes. The rest
+# of s13's list (risk template, KPI template, carbon method, drawings, reports) arrives
+# with the slices that produce those artefacts -- an empty field in the UI that nothing
+# reads would be a promise the system does not keep.
+TEMPLATE_PARAMETER_FIELDS: list[dict] = [
+    {"key": "system_configuration", "label": "System configuration",
+     "kind": "select", "source": "SYSTEM_CONFIGURATIONS", "required": True},
+    {"key": "typical_load_profile", "label": "Typical load profile",
+     "kind": "select", "source": "LOAD_PROFILES", "required": True},
+    {"key": "standard_pv_capacities_kw", "label": "Standard PV capacities (kWp)",
+     "kind": "number_list", "required": True},
+    {"key": "battery_options_kwh", "label": "Standard battery options (kWh)",
+     "kind": "number_list", "required": False},
+    {"key": "generator_integration", "label": "Generator integration",
+     "kind": "bool", "required": False},
+    {"key": "ups_integration", "label": "UPS integration",
+     "kind": "bool", "required": False},
+    {"key": "standard_equipment_ids", "label": "Standard equipment",
+     "kind": "multiselect", "source": "EQUIPMENT_CATALOG", "required": False},
+    {"key": "required_beneficiary_fields", "label": "Required beneficiary fields",
+     "kind": "multiselect", "source": "BENEFICIARY_FIELDS", "required": True},
+    {"key": "required_documents", "label": "Required site documents",
+     "kind": "multiselect", "source": "TEMPLATE_REQUIRED_DOCUMENTS", "required": False},
+    {"key": "funding_model", "label": "Funding model",
+     "kind": "select", "source": "FUNDING_SOURCES", "required": False},
+    {"key": "procurement_strategy", "label": "Procurement strategy",
+     "kind": "select", "source": "DELIVERY_MODELS", "required": False},
+    {"key": "om_model", "label": "O&M model",
+     "kind": "select", "source": "OM_MODELS", "required": False},
+    {"key": "warranty_years", "label": "Warranty (years)",
+     "kind": "number", "required": False},
+]
+
 # --- the 15 key programme management controls (doc 3) -----------------------
 # Each maps to a guard predicate in gates.py. The tuple is
 # (code, requirement, guard function name) and the test suite asserts that every

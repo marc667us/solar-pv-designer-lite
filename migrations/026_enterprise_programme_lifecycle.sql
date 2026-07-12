@@ -191,8 +191,14 @@ CREATE INDEX IF NOT EXISTS ix_ent_transition_programme
 CREATE TABLE IF NOT EXISTS enterprise_approvals (
     id                   bigserial PRIMARY KEY,
     tenant_id            uuid NOT NULL REFERENCES enterprise_tenants(id) ON DELETE CASCADE,
-    programme_id         bigint NOT NULL,
-    subject_type         text NOT NULL,      -- gate | programme | template | beneficiary ...
+    -- NULLABLE, deliberately. Not every approval belongs to a programme: a programme
+    -- TEMPLATE may be tenant-wide (one "School 50 kW" standard, reused across every
+    -- programme a ministry runs), and its approval is an organisation-level act. Forcing a
+    -- programme here would either lose the approval record for exactly the templates that
+    -- matter most, or force a duplicate template per programme -- which is the drift the
+    -- template engine exists to prevent. The composite FK still fires whenever it IS set.
+    programme_id         bigint,
+    subject_type         text NOT NULL,      -- gate | programme | template_version | ...
     subject_id           text,
     approval_type        text NOT NULL,      -- stage_gate | resume_from_hold | ...
     decision             text NOT NULL,      -- Approved | Rejected | Pending
@@ -311,20 +317,132 @@ CREATE TABLE IF NOT EXISTS enterprise_template_versions (
     tenant_id          uuid NOT NULL REFERENCES enterprise_tenants(id) ON DELETE CASCADE,
     template_id        bigint NOT NULL,
     version_no         integer NOT NULL,
-    status             text NOT NULL DEFAULT 'Draft',  -- Draft|Review|Approved|Published|Superseded|Archived
+    status             text NOT NULL DEFAULT 'Draft',
     parameters_json    jsonb NOT NULL DEFAULT '{}'::jsonb,
     approved_by_user_id integer,
     approved_at        timestamptz,
     created_by_user_id integer,
     created_at         timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT fk_template_version_template FOREIGN KEY (tenant_id, template_id)
-        REFERENCES enterprise_programme_templates (tenant_id, id) ON DELETE CASCADE
+        REFERENCES enterprise_programme_templates (tenant_id, id) ON DELETE CASCADE,
+    -- The status vocabulary is a state machine, not a suggestion. Without this CHECK, one
+    -- typo in one UPDATE somewhere puts a version into a status nothing in the code knows
+    -- how to reason about -- and the safest of those, from the database's point of view,
+    -- would look exactly like an approved one.
+    CONSTRAINT ck_ent_template_version_status CHECK (status IN
+        ('Draft','Review','Approved','Published','Superseded','Archived'))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_ent_template_version
     ON enterprise_template_versions (tenant_id, template_id, version_no);
 CREATE INDEX IF NOT EXISTS ix_ent_template_version_status
     ON enterprise_template_versions (tenant_id, status);
+
+-- ONE Published and ONE Draft per template, enforced by the database.
+--
+-- The application already serialises both (templates.py locks the template row before
+-- publishing and before opening a draft), but "the application is careful" is not a
+-- constraint -- it is a habit, and it holds only for as long as every future caller keeps
+-- it. Two concurrent publishes on Postgres each supersede an incumbent the other cannot
+-- see yet, and both land Published; after that "which version does this build from" has
+-- two answers. These indexes make that state unrepresentable.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_ent_template_one_published
+    ON enterprise_template_versions (tenant_id, template_id) WHERE status = 'Published';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_ent_template_one_draft
+    ON enterprise_template_versions (tenant_id, template_id) WHERE status = 'Draft';
+
+-- -----------------------------------------------------------------------------
+-- PART 8b -- template immutability, enforced by the DATABASE
+-- -----------------------------------------------------------------------------
+-- The master prompt: "Projects created from templates must retain the template version
+-- used. Later template changes must not silently overwrite completed or approved project
+-- designs."
+--
+-- templates.py enforces that. This makes it TRUE. The application guard protects the app's
+-- own write paths; it does nothing about a migration, a fix-up script, an admin console, a
+-- future slice, or a bug -- any of which can reach this table with a plain UPDATE. And the
+-- damage is the quietest kind there is: a school is built to version 3, version 3 is later
+-- edited, and now the record and the building disagree with no event anywhere saying which
+-- one moved. The guard belongs where the data is.
+--
+-- Same doctrine as RLS in this codebase: the app is the first line of defence, the database
+-- is the last, and both are required (CLAUDE.md, Directive s7).
+-- ONE function for all three operations. An UPDATE guard alone is not immutability: the
+-- reviewer's own follow-up was that DELETE-then-reinsert forges a version just as well, and
+-- a bare INSERT can conjure a Published one that no Technical Director ever saw.
+--
+-- WHY THIS DOES NOT BREAK BACKUP/RESTORE: new_admin_backup_routes.py restores by
+-- DELETE-then-INSERT per table, which is exactly what this forbids -- but it first issues
+-- `SET session_replication_role = 'replica'` (new_admin_backup_routes.py:172), and in
+-- replica mode Postgres does not fire ordinary user triggers. A restore therefore passes
+-- straight through, as it must. That switch is also why these guards are Postgres-only:
+-- SQLite has no equivalent, so its schema (workflows.py) carries the UPDATE triggers alone
+-- and its restore keeps working. Production is Postgres, which is where the guarantee has
+-- to be real.
+CREATE OR REPLACE FUNCTION enterprise_template_version_is_frozen()
+RETURNS trigger AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        -- A version is BORN a Draft. Anything else was not approved by anybody.
+        IF NEW.status <> 'Draft' THEN
+            RAISE EXCEPTION
+                'a template version must be created as a Draft (got %): an approved '
+                'version has to be approved, not inserted.',
+                NEW.status
+                USING ERRCODE = 'check_violation';
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        -- Deleting a frozen version and reinserting a replacement is a rewrite with extra
+        -- steps. Blocked -- UNLESS the parent template is itself going away, which is how
+        -- a template or tenant deletion cascades: Postgres removes the parent row first,
+        -- so by the time this fires for the cascade the parent is already gone and the
+        -- EXISTS is false. A DIRECT delete of one version leaves the parent in place and
+        -- is refused.
+        IF OLD.status <> 'Draft' AND EXISTS (
+            SELECT 1 FROM enterprise_programme_templates t
+             WHERE t.tenant_id = OLD.tenant_id AND t.id = OLD.template_id
+        ) THEN
+            RAISE EXCEPTION
+                'template version % is % and cannot be deleted: something may already '
+                'have been generated from it. Archive it instead.',
+                OLD.version_no, OLD.status
+                USING ERRCODE = 'check_violation';
+        END IF;
+        RETURN OLD;
+    END IF;
+
+    -- UPDATE.
+    IF OLD.status <> 'Draft'
+       AND NEW.parameters_json IS DISTINCT FROM OLD.parameters_json THEN
+        RAISE EXCEPTION
+            'template version % is % and is frozen: its parameters cannot be changed. '
+            'Create a new version instead.',
+            OLD.version_no, OLD.status
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- Rejection (Review -> Draft) is the ONE legal way back to editable, and only before
+    -- anything has been generated. Nothing may return to Draft once it has been approved.
+    IF NEW.status = 'Draft' AND OLD.status NOT IN ('Draft', 'Review') THEN
+        RAISE EXCEPTION
+            'template version % cannot return to Draft from %: something may already have '
+            'been generated from it.',
+            OLD.version_no, OLD.status
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_ent_template_version_is_frozen
+    ON enterprise_template_versions;
+CREATE TRIGGER trg_ent_template_version_is_frozen
+    BEFORE INSERT OR UPDATE OR DELETE ON enterprise_template_versions
+    FOR EACH ROW EXECUTE FUNCTION enterprise_template_version_is_frozen();
 
 -- -----------------------------------------------------------------------------
 -- PART 9 -- RLS (AFTER the tables -- see header rule 2)

@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}{{ template.code }} - Programme Template - SolarPro{% endblock %}
+
+{% macro version_button(version, action, label, icon, style) %}
+  <form method="post" class="d-inline"
+        action="{{ url_for('enterprise_template_version_action',
+                           version_id=version.id, action=action) }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button class="btn btn-sm {{ style }}" type="submit">
+      <i class="bi bi-{{ icon }} me-1"></i>{{ label }}
+    </button>
+  </form>
+{% endmacro %}
+
+{% block content %}
+<div class="container py-4 ent-page">
+
+  <div class="d-flex justify-content-between align-items-start flex-wrap mb-4">
+    <div>
+      <div class="text-muted small mb-1">
+        <a href="{{ url_for('enterprise_templates') }}" class="text-decoration-none">
+          <i class="bi bi-arrow-left me-1"></i>Templates
+        </a>
+      </div>
+      <h1 class="h4 mb-1">
+        <code class="text-warning">{{ template.code }}</code>
+        <span class="ms-2">{{ template.name }}</span>
+      </h1>
+      <div class="text-muted small">
+        {{ template.beneficiary_type|replace('_',' ')|title }}
+        &middot; {{ template.design_strategy|replace('_',' ')|title }}
+      </div>
+    </div>
+    <div class="text-end">
+      {% if generative %}
+      <span class="badge bg-success fs-6">
+        <i class="bi bi-check2-circle me-1"></i>
+        Generates from v{{ generative.version_no }} ({{ generative.status }})
+      </span>
+      {% else %}
+      <span class="badge bg-secondary fs-6">
+        <i class="bi bi-slash-circle me-1"></i>No approved version
+      </span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row g-4">
+
+    {# ---- the draft, if there is one -------------------------------------- #}
+    <div class="col-lg-7">
+      <div class="card">
+        <div class="card-header bg-white fw-semibold">
+          <i class="bi bi-pencil-square me-1 text-warning"></i>
+          {% if draft %}Draft &mdash; version {{ draft.version_no }}{% else %}Parameters{% endif %}
+        </div>
+
+        {% if draft and can_manage %}
+        <form method="post"
+              action="{{ url_for('enterprise_template_version_save', version_id=draft.id) }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <div class="card-body">
+            {% for f in form.fields %}
+            {% set value = draft.parameters.get(f.key) %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ f.key }}">
+                {{ f.label }}
+                {% if f.required %}<span class="text-danger">*</span>{% endif %}
+              </label>
+
+              {% if f.kind == 'select' %}
+              <select class="form-select" id="{{ f.key }}" name="{{ f.key }}">
+                <option value="">Choose&hellip;</option>
+                {% for o in form.options[f.source] %}
+                <option value="{{ o.value }}" {% if value == o.value %}selected{% endif %}>
+                  {{ o.label }}
+                </option>
+                {% endfor %}
+              </select>
+
+              {% elif f.kind == 'multiselect' and f.source == 'EQUIPMENT_CATALOG' %}
+              {# 500 checkboxes is a wall, not a picker -- a multi-select list stays usable. #}
+              <select class="form-select" id="{{ f.key }}" name="{{ f.key }}"
+                      multiple size="8">
+                {% for o in form.options[f.source] %}
+                <option value="{{ o.value }}"
+                        {% if value and o.value in value %}selected{% endif %}>
+                  {{ o.label }}
+                </option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Ctrl / Cmd-click to select several.</div>
+
+              {% elif f.kind == 'multiselect' %}
+              <div class="row g-1">
+                {% for o in form.options[f.source] %}
+                <div class="col-md-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="{{ f.key }}"
+                           id="{{ f.key }}_{{ o.value }}" value="{{ o.value }}"
+                           {% if value and o.value in value %}checked{% endif %}>
+                    <label class="form-check-label small" for="{{ f.key }}_{{ o.value }}">
+                      {{ o.label }}
+                    </label>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+
+              {% elif f.kind == 'number_list' %}
+              <input type="text" class="form-control" id="{{ f.key }}" name="{{ f.key }}"
+                     placeholder="e.g. 5, 10, 20"
+                     value="{% if value %}{{ value|map('string')|join(', ') }}{% endif %}">
+              <div class="form-text">Comma-separated. These are the sizes this standard offers.</div>
+
+              {% elif f.kind == 'number' %}
+              <input type="number" step="any" min="0" class="form-control"
+                     id="{{ f.key }}" name="{{ f.key }}"
+                     value="{% if value is not none %}{{ value }}{% endif %}">
+
+              {% elif f.kind == 'bool' %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="{{ f.key }}"
+                       name="{{ f.key }}" {% if value %}checked{% endif %}>
+                <label class="form-check-label small" for="{{ f.key }}">Yes</label>
+              </div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+
+          <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+            <button type="submit" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-save me-1"></i>Save Draft
+            </button>
+            <span class="small text-muted">
+              Submitting freezes these parameters permanently.
+            </span>
+          </div>
+        </form>
+
+        <div class="card-footer bg-light">
+          {{ version_button(draft, 'submit', 'Submit for Approval', 'send-check',
+                            'btn-warning') }}
+          {{ version_button(draft, 'archive', 'Archive', 'archive',
+                            'btn-outline-secondary') }}
+        </div>
+
+        {% elif draft %}
+        <div class="card-body">
+          <p class="text-muted small mb-0">
+            Version {{ draft.version_no }} is an open Draft, but you do not hold
+            <code>template.manage</code> in this organisation, so you cannot edit it.
+          </p>
+        </div>
+
+        {% else %}
+        <div class="card-body">
+          <p class="text-muted small">
+            There is no open draft. Every version of this template is frozen &mdash; which is
+            the point: a project generated from version&nbsp;N must still be able to ask what
+            version&nbsp;N said.
+          </p>
+          {% if can_manage %}
+          <form method="post"
+                action="{{ url_for('enterprise_template_version_new',
+                                   template_id=template.id) }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <button class="btn btn-warning btn-sm" type="submit">
+              <i class="bi bi-files me-1"></i>New Version (copies the latest)
+            </button>
+          </form>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# ---- the version history --------------------------------------------- #}
+    <div class="col-lg-5">
+      <div class="card">
+        <div class="card-header bg-white fw-semibold">
+          <i class="bi bi-clock-history me-1 text-warning"></i>Versions
+        </div>
+        <ul class="list-group list-group-flush">
+          {% for v in versions %}
+          <li class="list-group-item">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <span class="fw-semibold">v{{ v.version_no }}</span>
+                {% if v.status == 'Published' %}
+                <span class="badge bg-success">Published</span>
+                {% elif v.status == 'Approved' %}
+                <span class="badge bg-primary">Approved</span>
+                {% elif v.status == 'Review' %}
+                <span class="badge bg-warning text-dark">In Review</span>
+                {% elif v.status == 'Draft' %}
+                <span class="badge bg-secondary">Draft</span>
+                {% else %}
+                <span class="badge bg-light text-dark border">{{ v.status }}</span>
+                {% endif %}
+                {% if v.generative %}
+                <i class="bi bi-lightning-charge-fill text-success ms-1"
+                   title="May generate projects"></i>
+                {% endif %}
+              </div>
+              <span class="small text-muted">{{ v.created_at }}</span>
+            </div>
+
+            {% if v.status == 'Review' and can_approve %}
+            <div class="mt-2 d-flex gap-1">
+              {{ version_button(v, 'approve', 'Approve', 'check2-circle', 'btn-success') }}
+              {{ version_button(v, 'reject', 'Send Back', 'arrow-counterclockwise',
+                                'btn-outline-secondary') }}
+            </div>
+            {% elif v.status == 'Approved' and can_approve %}
+            <div class="mt-2 d-flex gap-1">
+              {{ version_button(v, 'publish', 'Publish', 'megaphone', 'btn-primary') }}
+              {{ version_button(v, 'archive', 'Archive', 'archive',
+                                'btn-outline-secondary') }}
+            </div>
+            {% elif v.status == 'Review' %}
+            <div class="small text-muted mt-1">
+              Awaiting the Technical Director (<code>template.approve</code>).
+            </div>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div class="card mt-3">
+        <div class="card-header bg-white fw-semibold">
+          <i class="bi bi-shield-check me-1 text-warning"></i>Why this is versioned
+        </div>
+        <div class="card-body small text-muted">
+          <p class="mb-2">
+            Control <strong>C03</strong>: no project is generated without an approved template.
+            Only <strong>Approved</strong> and <strong>Published</strong> versions may build.
+          </p>
+          <p class="mb-0">
+            A version freezes when it leaves Draft, so a school built from v2 can always be
+            checked against what v2 actually said &mdash; even after v3 changes the standard.
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}New Programme Template - SolarPro{% endblock %}
+{% block content %}
+<div class="container py-4 ent-page" style="max-width:46rem">
+
+  <h1 class="h4 mb-1"><i class="bi bi-file-earmark-plus text-warning me-2"></i>New Template</h1>
+  <p class="text-muted small mb-4">
+    Name the standard first. It is created as <strong>version 1, in Draft</strong> &mdash; you
+    fill in the engineering parameters on the next screen, then submit it for the Technical
+    Director&rsquo;s approval.
+  </p>
+
+  <form method="post" class="card">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="card-body">
+
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label for="code" class="form-label">Code</label>
+          <input type="text" class="form-control" id="code" name="code" required
+                 maxlength="40" placeholder="SCH-50">
+          <div class="form-text">Unique in this organisation.</div>
+        </div>
+        <div class="col-md-8">
+          <label for="name" class="form-label">Name</label>
+          <input type="text" class="form-control" id="name" name="name" required
+                 maxlength="160" placeholder="School -- 50 kW grid-tied with storage">
+        </div>
+
+        <div class="col-md-6">
+          <label for="beneficiary_type" class="form-label">Beneficiary type</label>
+          <select class="form-select" id="beneficiary_type" name="beneficiary_type" required>
+            <option value="">Choose&hellip;</option>
+            {% for o in form.beneficiary_types %}
+            <option value="{{ o.value }}">{{ o.label }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">What this standard installs for.</div>
+        </div>
+
+        <div class="col-md-6">
+          <label for="design_strategy" class="form-label">Design strategy</label>
+          <select class="form-select" id="design_strategy" name="design_strategy" required>
+            {% for o in form.design_strategies %}
+            <option value="{{ o.value }}">{{ o.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+    </div>
+    <div class="card-footer bg-white d-flex justify-content-between">
+      <a href="{{ url_for('enterprise_templates') }}" class="btn btn-outline-secondary">Cancel</a>
+      <button type="submit" class="btn btn-warning">
+        <i class="bi bi-check2 me-1"></i>Create Template
+      </button>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

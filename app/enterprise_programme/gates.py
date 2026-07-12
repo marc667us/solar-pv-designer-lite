@@ -39,6 +39,7 @@ from .constants import (
     GATE_PREREQUISITE_GATES,
     GATES,
     GATES_DEFERRED_BEYOND_RELEASE_1,
+    TEMPLATE_STATUSES_GENERATIVE,
 )
 
 
@@ -141,20 +142,40 @@ def require_qualified_beneficiary(c, tenant_id: str, beneficiary_id: int) -> Non
     )
 
 
-@_deferred
 def require_approved_template_version(c, tenant_id: str, template_version_id: int) -> None:
     """C03 -- no project is generated without an approved template.
 
     Input:  connection, tenant id, template version id.
-    Output: none.
-    Raises: GateBlockedError until slice 4 (templates) ships.
+    Output: none (returns quietly when the version may generate).
+    Raises: EnterpriseGateError.
 
-    When it ships this checks status IN ('Approved','Published') -- see
-    constants.TEMPLATE_STATUSES_GENERATIVE. A Draft template must never create a project.
+    LIVE since slice 4. Status must be Approved or Published
+    (constants.TEMPLATE_STATUSES_GENERATIVE). A Draft never builds anything: it is by
+    definition a standard nobody has certified, and a project generated from one would
+    carry a specification that the Technical Director never saw.
+
+    The tenant id is in the WHERE clause, so a version in ANOTHER organisation reads as
+    absent rather than as unapproved. Both refuse; only one of them tells a stranger that
+    somebody else's template exists.
+
+    Slice 7 calls this on BOTH the request path and the worker path. A guard that lives
+    only in a route is a guard the queue drainer skips, and bulk generation is exactly
+    where an unapproved template would do the most damage.
     """
-    raise GateBlockedError(
-        "C03", "the template engine ships in slice 4; no template version can be approved yet"
-    )
+    row = c.execute(
+        "SELECT status FROM enterprise_template_versions WHERE tenant_id=? AND id=?",
+        (tenant_id, template_version_id),
+    ).fetchone()
+    if row is None:
+        raise EnterpriseGateError(
+            "C03", "no such template version in this organisation"
+        )
+    if row[0] not in TEMPLATE_STATUSES_GENERATIVE:
+        raise EnterpriseGateError(
+            "C03",
+            f"template version is {row[0]}; only an Approved or Published version may "
+            "generate a project",
+        )
 
 
 @_deferred
@@ -386,13 +407,43 @@ def _requires_document(doc_type: str, gate_code: str, human: str):
     return _predicate
 
 
+def _gate_6_predicate(c, tenant_id: str, programme_id: int) -> None:
+    """G06 entry: the programme must actually HAVE an approved standard (slice 4).
+
+    Gate 6 is "Standardisation Approval". Before slice 4 the only thing it could check was
+    that somebody had registered a document called a template version pack -- which is a
+    claim, not a standard. Now that templates exist, the gate asks for the thing itself: at
+    least one template version, on this programme or tenant-wide, in a generative state.
+
+    Tenant-wide templates count. A ministry that standardises "School 50 kW" once and reuses
+    it across every programme is doing exactly what a template engine is for; demanding a
+    programme-local copy would force a duplicate per programme, which is the drift this
+    module exists to prevent.
+    """
+    row = c.execute(
+        "SELECT 1 FROM enterprise_template_versions v "
+        "  JOIN enterprise_programme_templates t "
+        "    ON t.tenant_id = v.tenant_id AND t.id = v.template_id "
+        " WHERE v.tenant_id=? AND v.status IN ('Approved','Published') "
+        "   AND (t.programme_id IS NULL OR t.programme_id=?) LIMIT 1",
+        (tenant_id, programme_id),
+    ).fetchone()
+    if not row:
+        raise EnterpriseGateError(
+            "G06",
+            "no approved programme template: at least one template version must be "
+            "Approved or Published before standardisation can be signed off",
+        )
+
+
 GATE_PREDICATES = {
     "G01": [_gate_1_predicate, _requires_document("concept_note", "G01", "concept note")],
     "G02": [_requires_document("programme_charter", "G02", "programme charter")],
     "G03": [_requires_document("beneficiary_register", "G03", "beneficiary register")],
     "G04": [_requires_document("business_case", "G04", "business case")],
     "G05": [_requires_document("master_plan", "G05", "programme master plan")],
-    "G06": [_requires_document("template_version_pack", "G06", "template version pack")],
+    "G06": [_gate_6_predicate,
+            _requires_document("template_version_pack", "G06", "template version pack")],
     "G07": [_requires_document("funding_strategy", "G07", "funding strategy")],
     "G08": [_requires_document("signed_contract", "G08", "signed contract")],
     "G09": [_requires_document("ifc_package", "G09", "issued-for-construction package")],

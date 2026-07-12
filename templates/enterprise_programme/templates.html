@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Programme Templates - SolarPro{% endblock %}
+{% block content %}
+<div class="container py-4 ent-page">
+
+  <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
+    <div>
+      <h1 class="h4 mb-1">
+        <i class="bi bi-file-earmark-ruled text-warning me-2"></i>Programme Templates
+      </h1>
+      <div class="text-muted small">
+        The standard a programme repeats. Approve it once; build from it hundreds of times.
+      </div>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('enterprise_home') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Programmes
+      </a>
+      {% if can_manage %}
+      <a href="{{ url_for('enterprise_template_new') }}" class="btn btn-warning">
+        <i class="bi bi-plus-lg me-1"></i>New Template
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  {# The rule that makes the whole engine worth having, stated where people will read it. #}
+  <div class="alert alert-light border small mb-4">
+    <i class="bi bi-lock me-1 text-secondary"></i>
+    A version is <strong>frozen the moment it leaves Draft</strong>. To change a template you
+    create a new version &mdash; the old one keeps saying what it said on the day a project was
+    built from it. Only an <strong>Approved</strong> or <strong>Published</strong> version may
+    generate projects.
+  </div>
+
+  {% if templates %}
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Code</th>
+            <th>Template</th>
+            <th>Beneficiary</th>
+            <th>Strategy</th>
+            <th>Versions</th>
+            <th>Can generate from</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in templates %}
+          <tr>
+            <td class="text-nowrap"><code>{{ t.code }}</code></td>
+            <td>
+              <a href="{{ url_for('enterprise_template_detail', template_id=t.id) }}"
+                 class="fw-semibold text-decoration-none">{{ t.name }}</a>
+            </td>
+            <td class="small text-muted">{{ t.beneficiary_type|replace('_',' ')|title }}</td>
+            <td class="small text-muted">{{ t.design_strategy|replace('_',' ')|title }}</td>
+            <td class="small">
+              {{ t.versions|length }}
+              {% if t.latest %}
+              <span class="text-muted">(latest v{{ t.latest.version_no }},
+                {{ t.latest.status }})</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if t.generative_version %}
+              <span class="badge bg-success">
+                v{{ t.generative_version.version_no }} &middot;
+                {{ t.generative_version.status }}
+              </span>
+              {% else %}
+              {# Said plainly rather than left blank: a template that cannot generate is the
+                 single most useful thing to know about it on this page. #}
+              <span class="badge bg-secondary">Not yet approved</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="card-body text-center py-5">
+      <i class="bi bi-file-earmark-ruled display-5 text-muted d-block mb-3"></i>
+      <h2 class="h6">No templates in this organisation yet</h2>
+      <p class="text-muted small mb-3">
+        A template defines one repeatable installation &mdash; a 50&nbsp;kW school, a 24-hour
+        clinic &mdash; so that every site built from it gets the same certified standard.
+      </p>
+      {% if can_manage %}
+      <a href="{{ url_for('enterprise_template_new') }}" class="btn btn-warning">
+        <i class="bi bi-plus-lg me-1"></i>Create the first template
+      </a>
+      {% else %}
+      <p class="small text-muted mb-0">
+        You do not have permission to create templates in this organisation.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

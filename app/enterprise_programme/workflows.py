@@ -38,9 +38,6 @@ that could quietly resume anywhere would make the hold meaningless.
 
 from __future__ import annotations
 
-import os
-from contextlib import contextmanager
-
 from . import gates, rbac
 from .constants import (
     DEFAULT_PHASE_CODE,
@@ -54,163 +51,22 @@ from .constants import (
     PSEUDO_STATES,
     TRANSITIONS,
 )
+from . import txn
 from .gates import EnterpriseGateError
 
 _STRATEGY_CODES = frozenset(code for code, _ in DESIGN_STRATEGIES)
 
-# Counter behind _atomic()'s per-invocation savepoint names. Process-local and only ever
-# incremented; it names a savepoint, it does not identify anything.
-_savepoint_seq = 0
-
-
-def _is_postgres() -> bool:
-    """True when running against Postgres rather than local SQLite."""
-    return str(os.environ.get("DATABASE_URL", "")).startswith(
-        ("postgres://", "postgresql://")
-    )
-
-
-def _in_transaction(c) -> bool:
-    """Is this connection already inside a transaction the CALLER owns?
-
-    Input:  a DB connection (sqlite3, psycopg2, or the db_adapter wrapper).
-    Output: True if a transaction is already open.
-
-    Defensive on purpose: an unknown connection type answers False, which puts us on the
-    "own the transaction" path -- the same behaviour this module had before, so an
-    unrecognised driver degrades to the old semantics rather than to no transaction.
-    """
-    in_tx = getattr(c, "in_transaction", None)  # sqlite3.Connection
-    if isinstance(in_tx, bool):
-        return in_tx
-    info = getattr(c, "info", None)  # psycopg2 connection
-    status = getattr(info, "transaction_status", None)
-    if isinstance(status, int):
-        return status != 0  # 0 == TRANSACTION_STATUS_IDLE
-    return False
-
-
-def _autocommit_is_on(c) -> bool:
-    """Is this connection in autocommit mode, where a rollback would be a no-op?
-
-    Input:  a DB connection.
-    Output: True if each statement commits itself.
-
-    psycopg2 exposes `.autocommit`; sqlite3 signals it with `isolation_level is None`.
-    Neither is the case for connections this app hands out today (db_adapter leaves
-    psycopg2 at its transactional default, and get_db() leaves sqlite3 at its), so this
-    is a guard against a FUTURE change rather than a present bug.
-    """
-    if getattr(c, "autocommit", False) is True:  # psycopg2
-        return True
-    if hasattr(c, "isolation_level"):            # sqlite3
-        return getattr(c, "isolation_level") is None
-    return False
-
-
-@contextmanager
-def _atomic(c):
-    """Make a service's writes all-or-nothing WITHOUT hijacking the caller's transaction.
-
-    Input:  a DB connection.
-    Output: a context manager. On a clean exit the work is durable; on any exception the
-            work is undone and the exception propagates.
-
-    WHY THIS IS NOT JUST try/commit/except/rollback (Codex slice-2 review, HIGH):
-    `get_db()` in this app hands out a FRESH connection per call, but a route is free to
-    do its own writes on that connection and then call into this module. A bare
-    `c.commit()` here would silently commit the route's unrelated half-finished work, and
-    a bare `c.rollback()` would silently destroy it. Neither is ours to do.
-
-    So: if a transaction is ALREADY open, we are a guest -- we take a SAVEPOINT, and on
-    failure we roll back only to that savepoint, leaving the caller's work intact and the
-    caller's commit still theirs to make. If no transaction is open, we are the owner and
-    we commit or roll back as before.
-
-    The savepoint name is UNIQUE PER INVOCATION. With a fixed name, a nested call would
-    issue `SAVEPOINT enterprise_op` a second time and its RELEASE would collapse the
-    outer savepoint of the same name -- after which an outer rollback would no longer
-    undo the inner work. Nesting is not something the module does today, but "don't nest
-    these" is a convention, and a convention is not a safeguard.
-
-    AUTOCOMMIT IS REFUSED, LOUDLY. Under autocommit each statement commits itself, so a
-    rollback undoes nothing and control C12 (audit-or-nothing) would quietly become a
-    lie -- the gate approval would stand with no audit row behind it. No connection this
-    app hands out is in autocommit today; this raises so that if one ever is, the module
-    stops instead of silently shipping unauditable approvals.
-    """
-    if _autocommit_is_on(c):
-        raise RuntimeError(
-            "enterprise_programme services require a transactional connection: under "
-            "autocommit a failed audit write cannot be rolled back, which would silently "
-            "void control C12 (every material action must be auditable)"
-        )
-
-    if _in_transaction(c):
-        global _savepoint_seq
-        _savepoint_seq += 1
-        sp = f"enterprise_op_{_savepoint_seq}"
-        c.execute(f"SAVEPOINT {sp}")
-        try:
-            yield
-        except Exception:
-            c.execute(f"ROLLBACK TO SAVEPOINT {sp}")
-            c.execute(f"RELEASE SAVEPOINT {sp}")
-            raise
-        c.execute(f"RELEASE SAVEPOINT {sp}")
-        return  # the caller owns the commit -- do NOT commit here
-
-    try:
-        yield
-    except Exception:
-        c.rollback()
-        raise
-    c.commit()
-
-
-def _audit_on(c):
-    """The audit hook the services use by default: writes on OUR connection.
-
-    Input:  the connection the service is already writing on.
-    Output: a callable(action, **kw) -> bool.
-
-    THIS IS WHAT MAKES CONTROL C12 STRUCTURAL rather than a compensating rollback. The
-    audit row is inserted in the SAME transaction as the action it describes, so they
-    commit together or neither does. There is no window in which one exists without the
-    other, and no over-logging when a commit later fails.
-
-    It also fixes a real deadlock, which SQLite surfaced immediately and Postgres never
-    would have: write_audit_event used to resolve its OWN connection via get_db(), and
-    get_db() hands out a FRESH connection per call. So the audit write raced the very
-    transaction it was describing -- on SQLite the open write transaction locks the
-    database file, the audit INSERT failed with "database is locked", C12 treated the
-    failed audit as a failed action, and EVERY audited action rolled itself back. Every
-    programme creation, silently undone.
-    """
-    def _audit(action: str, **kw) -> bool:
-        return _default_audit(action, conn=c, **kw)
-    return _audit
-
-
-def _default_audit(action: str, **kw) -> bool:
-    """Write one audit row through the app's unified audit trail.
-
-    Input:  action name plus write_audit_event's keyword arguments (including `conn`).
-    Output: True if the row persisted, False otherwise.
-
-    Late-imported so this module can be imported (and unit-tested) without dragging in
-    web_app. Injectable via the `audit=` parameter on every service below, which is how
-    the C12 rollback test forces a failed write.
-
-    Late-imported so this module can be imported (and unit-tested) without dragging in
-    web_app. The services pass `conn=` (see _audit_on) so the row lands in their own
-    transaction; the SHA-256 audit chain in app/security/audit.py is preserved either way.
-    """
-    try:
-        from app.security.audit import write_audit_event
-    except Exception:  # pragma: no cover - audit module unavailable
-        return False
-    return write_audit_event(action, **kw)
+# The transaction and audit primitives now live in txn.py, because templates.py (slice 4)
+# needs the same guarantees and each of these encodes a bug that was found the hard way.
+# Re-exported under their original private names so this module -- and the tests that
+# monkeypatch them -- read exactly as they did before.
+_is_postgres = txn.is_postgres
+_in_transaction = txn.in_transaction
+_autocommit_is_on = txn.autocommit_is_on
+_atomic = txn.atomic
+_audit_on = txn.audit_on
+_default_audit = txn.default_audit
+_inserted_id = txn.inserted_id
 
 
 # --- SQLite fallback schema (mirrors migration 026) -------------------------
@@ -308,7 +164,9 @@ _SQLITE_SCHEMA = [
     CREATE TABLE IF NOT EXISTS enterprise_approvals (
         id                   INTEGER PRIMARY KEY AUTOINCREMENT,
         tenant_id            TEXT NOT NULL,
-        programme_id         INTEGER NOT NULL,
+        -- NULLABLE: a tenant-wide template's approval belongs to no programme.
+        -- See migration 026 for the full reasoning.
+        programme_id         INTEGER,
         subject_type         TEXT NOT NULL,
         subject_id           TEXT,
         approval_type        TEXT NOT NULL,
@@ -413,13 +271,51 @@ _SQLITE_SCHEMA = [
         created_by_user_id  INTEGER,
         created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (tenant_id, template_id)
-            REFERENCES enterprise_programme_templates (tenant_id, id) ON DELETE CASCADE
+            REFERENCES enterprise_programme_templates (tenant_id, id) ON DELETE CASCADE,
+        CONSTRAINT ck_ent_template_version_status CHECK (status IN
+            ('Draft','Review','Approved','Published','Superseded','Archived'))
     )
     """,
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_ent_template_version "
     "  ON enterprise_template_versions (tenant_id, template_id, version_no)",
     "CREATE INDEX IF NOT EXISTS ix_ent_template_version_status "
     "  ON enterprise_template_versions (tenant_id, status)",
+    # One Published and one Draft per template -- see migration 026 for why the database,
+    # and not just the service, has to say so.
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_ent_template_one_published "
+    "  ON enterprise_template_versions (tenant_id, template_id) WHERE status='Published'",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_ent_template_one_draft "
+    "  ON enterprise_template_versions (tenant_id, template_id) WHERE status='Draft'",
+    # Template immutability, enforced by the database. The SQLite twin of migration 026's
+    # trg_ent_template_version_is_frozen. Two triggers rather than one because SQLite has
+    # no IF/RETURN inside a trigger body -- the condition goes in the WHEN clause.
+    #
+    # DELIBERATELY NARROWER THAN POSTGRES. Migration 026 also guards INSERT and DELETE (so
+    # that delete-then-reinsert cannot forge a version). SQLite does NOT, because the
+    # backup restore path -- new_admin_backup_routes.py -- restores every table by
+    # DELETE-then-INSERT, and on Postgres it can turn triggers off for the duration
+    # (`SET session_replication_role='replica'`) while SQLite has no equivalent. Guarding
+    # INSERT/DELETE here would therefore break restore on the one backend that cannot opt
+    # out. Production is Postgres; SQLite is dev and tests, where the service-layer guard
+    # (which the tests exercise) is the one that matters.
+    """
+    CREATE TRIGGER IF NOT EXISTS trg_ent_template_version_frozen
+    BEFORE UPDATE OF parameters_json ON enterprise_template_versions
+    FOR EACH ROW WHEN OLD.status <> 'Draft'
+                  AND NEW.parameters_json <> OLD.parameters_json
+    BEGIN
+        SELECT RAISE(ABORT, 'template version is frozen: its parameters cannot be changed once it has left Draft -- create a new version instead');
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS trg_ent_template_version_no_resurrect
+    BEFORE UPDATE OF status ON enterprise_template_versions
+    FOR EACH ROW WHEN NEW.status = 'Draft'
+                  AND OLD.status NOT IN ('Draft', 'Review')
+    BEGIN
+        SELECT RAISE(ABORT, 'a template version cannot return to Draft once approved -- something may already have been generated from it');
+    END
+    """,
 ]
 
 
@@ -652,38 +548,6 @@ def _grant_role(c, tenant_id: str, user_id: int, role_code: str, *,
          "programme" if programme_id else "tenant", programme_id, granted_by),
     )
 
-
-def _inserted_id(c, cur) -> int:
-    """The id of the row this cursor just inserted, on either backend.
-
-    Input:  connection, the cursor returned by the INSERT.
-    Output: integer primary key.
-    Raises: RuntimeError if the id cannot be established -- fail loudly rather than
-            guess, because a wrong id here attaches child rows to the wrong parent.
-
-    psycopg2 does not populate `lastrowid` for a plain INSERT; db_adapter's cursor proxy
-    fills it lazily via `SELECT lastval()`. sqlite3 populates it natively. Both are
-    SESSION-scoped, so both are safe under concurrency.
-
-    WHAT THIS DELIBERATELY DOES NOT DO (Codex slice-2 review, HIGH): fall back to
-    `SELECT MAX(id) FROM <table>`. That reads a GLOBAL maximum, not this session's
-    insert. Two concurrent programme creations would race -- request A inserts id 10,
-    request B inserts id 11, A then reads MAX(id)=11 and seeds A's 16 phase rows and 14
-    gate rows onto B's programme, in B's tenant. That is a cross-tenant data corruption
-    bug, and it is exactly the kind that only shows up under load in production.
-    """
-    rowid = getattr(cur, "lastrowid", None)
-    if rowid:
-        return int(rowid)
-    if _is_postgres():
-        # Session-scoped: returns the value THIS session last generated, never another's.
-        row = c.execute("SELECT lastval()").fetchone()
-        if row and row[0]:
-            return int(row[0])
-    raise RuntimeError(
-        "could not determine the inserted row id; refusing to guess "
-        "(guessing here attaches child rows to another tenant's parent)"
-    )
 
 
 def register_document(c, tenant_id: str, user_id: int, programme_id: int, *,
