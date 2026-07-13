@@ -48,7 +48,13 @@ def ent(tmp_path_factory):
             pass
 
     conn = sqlite3.connect(db_path)
-    for name in ("erica", "dan"):
+    # `owner` onboards the organisation and is therefore granted the full
+    # ONBOARDING_OWNER_ROLES bundle -- every Release-1 role, because a one-person
+    # organisation is every authority in it. erica and dan are PLAIN MEMBERS holding
+    # exactly one role each, which is what makes them usable as separation-of-duties
+    # actors. Using the org creator as a stand-in for "a plain engineer" only ever worked
+    # while the creator was accidentally permission-poor -- the bug this slice fixes.
+    for name in ("owner", "erica", "dan"):
         conn.execute(
             "INSERT OR IGNORE INTO users (username, email, password_hash, email_verified,"
             " plan, is_admin, name) VALUES (?,?,'',1,'free',0,?)",
@@ -57,7 +63,7 @@ def ent(tmp_path_factory):
     conn.commit()
     ids = {
         n: conn.execute("SELECT id FROM users WHERE username=?", (n,)).fetchone()[0]
-        for n in ("erica", "dan")
+        for n in ("owner", "erica", "dan")
     }
     conn.close()
 
@@ -86,10 +92,10 @@ def _flag(wa, on: bool):
 
 @pytest.fixture(scope="module")
 def org(ent):
-    """One organisation: erica authors templates, dan approves them."""
+    """One organisation: owner onboards it, erica authors templates, dan approves them."""
     client, wa, ids = ent
     _flag(wa, True)
-    _login(client, ids["erica"])
+    _login(client, ids["owner"])
     client.post("/enterprise/onboarding", data={
         "_csrf": "testtoken", "legal_name": "Ministry of Energy",
         "organisation_type": "ministry", "country": "Ghana",
@@ -99,8 +105,8 @@ def org(ent):
         tenant = c.execute(
             "SELECT id FROM enterprise_tenants WHERE legal_name='Ministry of Energy'"
         ).fetchone()[0]
-        tenancy.add_member(c, tenant, ids["erica"], "programme_engineer", ids["erica"])
-        tenancy.add_member(c, tenant, ids["dan"], "technical_director", ids["erica"])
+        tenancy.add_member(c, tenant, ids["erica"], "programme_engineer", ids["owner"])
+        tenancy.add_member(c, tenant, ids["dan"], "technical_director", ids["owner"])
         # Two products, so the equipment picker has something real to validate against.
         # `category` is NOT NULL in the live schema -- an INSERT that omits it is silently
         # dropped by OR IGNORE, and the picker then correctly reports the ids as unknown.

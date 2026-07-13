@@ -53,7 +53,11 @@ def ent(tmp_path_factory):
             pass
 
     conn = sqlite3.connect(db_path)
-    for name in ("olivia", "musa"):
+    # `owner` onboards the organisation and therefore holds every Release-1 role (see
+    # constants.ONBOARDING_OWNER_ROLES). olivia and musa are PLAIN MEMBERS with one role
+    # each, so "the officer who registers cannot approve" is a test of the control rather
+    # than an accident of the creator being permission-poor.
+    for name in ("owner", "olivia", "musa"):
         conn.execute(
             "INSERT OR IGNORE INTO users (username, email, password_hash, email_verified,"
             " plan, is_admin, name) VALUES (?,?,'',1,'free',0,?)",
@@ -62,7 +66,7 @@ def ent(tmp_path_factory):
     conn.commit()
     ids = {
         n: conn.execute("SELECT id FROM users WHERE username=?", (n,)).fetchone()[0]
-        for n in ("olivia", "musa")
+        for n in ("owner", "olivia", "musa")
     }
     conn.close()
 
@@ -91,10 +95,15 @@ def _flag(wa, on: bool):
 
 @pytest.fixture(scope="module")
 def programme(ent):
-    """One organisation, one programme, the two roles."""
+    """One organisation, one programme, the two roles.
+
+    The OWNER onboards and registers the programme (they hold programme.create); olivia
+    and musa are single-role members, so the register-vs-approve split is exercised by two
+    people who genuinely hold one authority each.
+    """
     client, wa, ids = ent
     _flag(wa, True)
-    _login(client, ids["olivia"])
+    _login(client, ids["owner"])
     client.post("/enterprise/onboarding", data={
         "_csrf": "testtoken", "legal_name": "Ministry of Energy",
         "organisation_type": "ministry", "country": "Ghana",
@@ -104,12 +113,12 @@ def programme(ent):
         tenant = c.execute(
             "SELECT id FROM enterprise_tenants WHERE legal_name='Ministry of Energy'"
         ).fetchone()[0]
-        tenancy.add_member(c, tenant, ids["olivia"], "beneficiary_officer", ids["olivia"])
-        tenancy.add_member(c, tenant, ids["musa"], "programme_manager", ids["olivia"])
+        tenancy.add_member(c, tenant, ids["olivia"], "beneficiary_officer", ids["owner"])
+        tenancy.add_member(c, tenant, ids["musa"], "programme_manager", ids["owner"])
 
     client.post("/enterprise/programmes/new", data={
         "_csrf": "testtoken", "code": "GH-SCH", "name": "Ghana Schools",
-        "design_strategy": "standard", "sponsor_user_id": str(ids["olivia"]),
+        "design_strategy": "standard", "sponsor_user_id": str(ids["owner"]),
     }, follow_redirects=True)
 
     with wa.get_db() as c:

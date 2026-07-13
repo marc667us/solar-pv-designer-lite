@@ -812,9 +812,79 @@ GATE_CODES: list[str] = [g[0] for g in GATES]
 ROLE_CODES: frozenset[str] = frozenset(r[0] for r in ROLES)
 PERMISSION_CODES: frozenset[str] = frozenset(p[0] for p in PERMISSIONS)
 
+# role code -> its human label. The members screen shows "Technical Director", not
+# `technical_director`: an admin granting a role should be reading the job title doc 3 uses,
+# not guessing at an identifier.
+ROLE_LABELS: dict[str, str] = dict(ROLES)
+
 DEFAULT_PROGRAMME_STATUS = PROGRAMME_STATUSES[0]          # "Concept"
 DEFAULT_PROJECT_STATUS = PROJECT_STATUSES[0]              # "Beneficiary Registered"
 DEFAULT_PHASE_CODE = PHASES[0][0]                         # "P01_CONCEPT"
+
+
+# --- what the person who creates an organisation actually gets (slice 6.5) ---
+#
+# THE BUG THIS FIXES, AND WHY THE OBVIOUS FIX IS THE WRONG ONE
+# ------------------------------------------------------------
+# Onboarding used to grant exactly one role -- `enterprise_owner` -- which carries
+# governance authority (tenant.admin, programme.create/edit/approve) and NOTHING
+# operational. The live suite caught the consequence: the owner creates a programme and
+# can then do nothing with it. Upload a beneficiary CSV: 403. Open the template form: no
+# form. The module was unusable by the only person in it.
+#
+# The obvious fix -- add `template.manage`, `beneficiary.import`, `qualification.*` to
+# ROLE_PERMISSIONS["enterprise_owner"] -- LOOKS right and does not work. Both the Codex
+# and Supervisor reviews landed on the same reason independently:
+#
+#   `approve_gate` calls rbac.require_ROLE, not require_permission (workflows.py). Doc 3
+#   names an approving AUTHORITY for each of the 14 gates -- Gate 2 is the Steering
+#   Committee's to sign, Gate 6 the Technical Director's -- and holding `programme.approve`
+#   is deliberately not sufficient. So no amount of permission-widening lets the owner past
+#   Gate 2. They would still be frozen at Phase 2, forever, with a fatter permission set.
+#
+# Permissions are not the binding constraint. ROLES are. So onboarding grants a BUNDLE OF
+# ROLES, and the role->permission map is left exactly as it was.
+#
+# WHY GRANTING ROLES IS ALSO THE SAFER OF THE TWO
+# -----------------------------------------------
+# A role grant is a ROW. It is audited when it is made, it is visible on the members
+# screen, and it can be REVOKED -- so the ministry that hires a real Technical Director can
+# take `technical_director` off the owner and have the separation of duties it is supposed
+# to have. Widening the permission map instead bakes operational authority into what
+# `enterprise_owner` MEANS, in every organisation, forever, with no way to give it up: you
+# cannot revoke a permission that a role map grants. The fix that unblocks the solo
+# operator would have permanently prevented every large organisation from delegating.
+#
+# So: grant the roles, keep the map honest, and let the members screen do the rest.
+#
+# Release 1 runs the lifecycle through Gate 9, so the bundle is DERIVED from the gate table
+# -- if a future edit changes who signs Gate 6, this follows automatically rather than
+# rotting into a hand-typed list that no longer matches the gates it exists to satisfy.
+R1_GATE_CODES: tuple[str, ...] = ("G01", "G02", "G03", "G04", "G05",
+                                  "G06", "G07", "G08", "G09")
+
+# The named approving authority for every gate in Release 1. Without these the lifecycle
+# dead-ends at the first gate the owner cannot sign.
+_R1_GATE_AUTHORITIES: frozenset[str] = frozenset(
+    authority for code, _phase, _name, authority in GATES if code in R1_GATE_CODES
+)
+
+# The operational roles the gate authorities do NOT already cover:
+#   programme_engineer   -> template.manage (author a template), design.generate
+#   district_coordinator -> beneficiary.import, qualification.score
+# (template.approve comes with technical_director, beneficiary.approve and
+#  qualification.approve with programme_manager -- both already gate authorities.)
+_R1_OPERATIONAL_ROLES: frozenset[str] = frozenset({
+    "programme_engineer",
+    "district_coordinator",
+})
+
+# What create_organisation actually assigns. `enterprise_owner` first: it is the one that
+# carries `tenant.admin`, and therefore the one that lets them hand any of the others away.
+ONBOARDING_OWNER_ROLES: tuple[str, ...] = tuple(
+    ["enterprise_owner"]
+    + sorted(_R1_GATE_AUTHORITIES | _R1_OPERATIONAL_ROLES)
+)
 
 
 def permissions_for_roles(role_codes) -> frozenset[str]:
@@ -828,3 +898,603 @@ def permissions_for_roles(role_codes) -> frozenset[str]:
     for rc in role_codes or ():
         out.update(ROLE_PERMISSIONS.get(rc, ()))
     return frozenset(out)
+
+
+# --- lifecycle activities (doc 3, "Main Activities" per phase) ----------------
+#
+# WHY THESE EXIST
+# ---------------
+# The lifecycle board could show a programme's PHASE and its GATES, but not the WORK. Doc 3
+# lists the "Main Activities" for each of the 16 phases -- 453 of them -- and none of that
+# ever reached the code, so an operator could see that they were in Phase 4 and had not yet
+# passed Gate 4, with nothing telling them what Phase 4 actually consists of.
+#
+# They are now selectable: an operator ticks the activities they want and the app generates
+# a document covering exactly those, optionally drafted from a source document they upload
+# (see app/enterprise_programme/documents.py).
+#
+# VERBATIM FROM THE SOURCE, NOT PARAPHRASED. Extracted mechanically from
+# docs/enterprise-programme/source/02-lifecycle-workflows.txt so the wording an operator
+# ticks is the wording the programme's own governing document uses. An activity that opens
+# an option list in the doc ("Import beneficiary data through: Spreadsheet; CSV; GIS...")
+# keeps its options inline rather than fragmenting into unusable half-sentences.
+#
+# The code is positional (P03_A07 = phase 3, seventh activity) and is what gets stored on a
+# generated document, so a document can always say which activities it answered.
+PHASE_ACTIVITIES: dict[str, tuple[tuple[str, str], ...]] = {
+    "P01_CONCEPT": (
+        ("P01_A01", "Register the programme idea."),
+        ("P01_A02", "Identify the sponsoring institution."),
+        ("P01_A03", "Define the target sector."),
+        ("P01_A04", "Define the geographical coverage."),
+        ("P01_A05", "Identify the energy-access or energy-security problem."),
+        ("P01_A06", "Estimate the number of potential beneficiaries."),
+        ("P01_A07", "Select an initial programme category."),
+        ("P01_A08", "Identify possible programme funding sources."),
+        ("P01_A09", "Define initial expected benefits."),
+        ("P01_A10", "Conduct an initial policy and regulatory review."),
+        ("P01_A11", "Identify key stakeholders."),
+        ("P01_A12",
+         "Determine whether the programme will use: Standard distributed designs; "
+         "Generation-station designs; Mini-grid designs; Hybrid designs; A "
+         "combination of these approaches."
+         ),
+        ("P01_A13", "Prepare an initial programme concept note."),
+        ("P01_A14", "Submit the concept for sponsor review."),
+    ),
+    "P02_INITIATION": (
+        ("P02_A01", "Create the programme in SolarPro."),
+        ("P02_A02", "Assign the enterprise tenant."),
+        ("P02_A03", "Assign the programme sponsor."),
+        ("P02_A04", "Appoint the programme director."),
+        ("P02_A05", "Appoint the programme manager."),
+        ("P02_A06", "Establish programme governance."),
+        ("P02_A07", "Define programme departments and workstreams."),
+        ("P02_A08", "Define programme-level roles."),
+        ("P02_A09", "Define approval authorities."),
+        ("P02_A10", "Establish regional and district implementation structures."),
+        ("P02_A11", "Define programme objectives."),
+        ("P02_A12", "Define programme scope."),
+        ("P02_A13", "Define exclusions."),
+        ("P02_A14", "Define programme boundaries."),
+        ("P02_A15", "Establish preliminary budget."),
+        ("P02_A16", "Define programme duration."),
+        ("P02_A17", "Define programme phases."),
+        ("P02_A18", "Establish reporting requirements."),
+        ("P02_A19", "Define stakeholder engagement arrangements."),
+        ("P02_A20", "Create the programme document register."),
+        ("P02_A21", "Create the initial programme schedule."),
+        ("P02_A22", "Establish the programme risk and issue registers."),
+        ("P02_A23", "Create the programme communications plan."),
+        ("P02_A24", "Define audit and assurance requirements."),
+        ("P02_A25", "Approve the programme charter."),
+    ),
+    "P03_NEEDS": (
+        ("P03_A01", "Define beneficiary categories."),
+        ("P03_A02", "Register potential beneficiaries."),
+        ("P03_A03",
+         "Import beneficiary data through: Spreadsheet; CSV; GIS; API; Manual "
+         "registration."
+         ),
+        ("P03_A04", "Validate beneficiary records."),
+        ("P03_A05", "Remove or merge duplicates."),
+        ("P03_A06", "Conduct preliminary site screening."),
+        ("P03_A07", "Collect current electricity bills."),
+        ("P03_A08", "Collect historical energy consumption."),
+        ("P03_A09", "Record generator use."),
+        ("P03_A10", "Record fuel consumption."),
+        ("P03_A11", "Record outage frequency."),
+        ("P03_A12", "Record critical loads."),
+        ("P03_A13", "Record priority loads."),
+        ("P03_A14", "Assess roof area."),
+        ("P03_A15", "Assess available land."),
+        ("P03_A16", "Assess existing electrical infrastructure."),
+        ("P03_A17", "Assess transformer and grid capacity."),
+        ("P03_A18", "Assess access roads."),
+        ("P03_A19", "Assess security conditions."),
+        ("P03_A20", "Assess flood and environmental risks."),
+        ("P03_A21", "Assess communications coverage."),
+        ("P03_A22", "Assess maintenance capability."),
+        ("P03_A23", "Identify social and economic priorities."),
+        ("P03_A24", "Categorise sites by need and suitability."),
+        ("P03_A25", "Calculate initial site qualification scores."),
+        ("P03_A26", "Prioritise beneficiaries."),
+        ("P03_A27", "Develop the programme baseline."),
+    ),
+    "P04_FEASIBILITY": (
+        ("P04_A01", "Define alternative programme scenarios."),
+        ("P04_A02", "Develop preliminary demand forecasts."),
+        ("P04_A03", "Estimate total PV capacity."),
+        ("P04_A04", "Estimate total battery capacity."),
+        ("P04_A05", "Estimate grid-support requirements."),
+        ("P04_A06", "Assess possible generation-station locations."),
+        ("P04_A07", "Assess distributed-system options."),
+        ("P04_A08", "Evaluate rooftop, ground-mounted and hybrid options."),
+        ("P04_A09", "Assess generator integration."),
+        ("P04_A10", "Assess UPS integration."),
+        ("P04_A11", "Assess mini-grid options."),
+        ("P04_A12", "Assess grid-interconnection requirements."),
+        ("P04_A13", "Develop preliminary technical concepts."),
+        ("P04_A14", "Prepare preliminary equipment schedules."),
+        ("P04_A15", "Prepare preliminary BOQs."),
+        ("P04_A16", "Develop programme cost estimates."),
+        ("P04_A17", "Develop CAPEX estimates."),
+        ("P04_A18", "Develop OPEX estimates."),
+        ("P04_A19", "Estimate lifecycle cost."),
+        ("P04_A20", "Estimate expected energy generation."),
+        ("P04_A21", "Estimate grid-energy savings."),
+        ("P04_A22", "Estimate diesel savings."),
+        ("P04_A23", "Estimate carbon reduction."),
+        ("P04_A24", "Estimate programme revenue where applicable."),
+        ("P04_A25", "Assess affordability."),
+        ("P04_A26", "Assess funding options."),
+        ("P04_A27", "Conduct financial modelling."),
+        ("P04_A28", "Assess PPP or IPP suitability."),
+        ("P04_A29", "Conduct economic analysis."),
+        ("P04_A30", "Conduct preliminary environmental and social assessment."),
+        ("P04_A31", "Assess regulatory requirements."),
+        ("P04_A32", "Assess land and ownership constraints."),
+        ("P04_A33", "Assess procurement options."),
+        ("P04_A34", "Assess EPC packaging options."),
+        ("P04_A35", "Assess implementation capacity."),
+        ("P04_A36", "Conduct programme risk analysis."),
+        ("P04_A37", "Recommend the preferred programme option."),
+        ("P04_A38", "Prepare the programme business case."),
+    ),
+    "P05_STRUCTURING": (
+        ("P05_A01", "Confirm programme scope."),
+        ("P05_A02", "Confirm total target capacity."),
+        ("P05_A03", "Confirm target beneficiaries."),
+        ("P05_A04", "Divide the programme into phases."),
+        ("P05_A05", "Divide the programme by region or district."),
+        ("P05_A06", "Create implementation lots."),
+        ("P05_A07", "Define programme workstreams."),
+        ("P05_A08", "Define programme milestones."),
+        ("P05_A09", "Define delivery sequence."),
+        ("P05_A10", "Define programme dependencies."),
+        ("P05_A11", "Define procurement strategy."),
+        ("P05_A12", "Define EPC strategy."),
+        ("P05_A13", "Define funding-disbursement sequence."),
+        ("P05_A14", "Define stakeholder-engagement activities."),
+        ("P05_A15", "Define land and permitting activities."),
+        ("P05_A16", "Define engineering approval workflow."),
+        ("P05_A17", "Define contract approval workflow."),
+        ("P05_A18", "Define commissioning workflow."),
+        ("P05_A19", "Define operational handover strategy."),
+        ("P05_A20", "Define programme KPI framework."),
+        ("P05_A21", "Define monitoring and evaluation requirements."),
+        ("P05_A22", "Define reporting frequency."),
+        ("P05_A23", "Define audit requirements."),
+        ("P05_A24", "Define change-control procedure."),
+        ("P05_A25", "Define programme escalation process."),
+        ("P05_A26",
+         "Establish programme baselines for: Scope; Cost; Schedule; Capacity; "
+         "Beneficiaries; Energy generation; Carbon reduction."
+         ),
+        ("P05_A27", "Approve the programme master plan."),
+    ),
+    "P06_TEMPLATES": (
+        ("P06_A01", "Define standard beneficiary categories."),
+        ("P06_A02", "Define standard site categories."),
+        ("P06_A03", "Define typical load profiles."),
+        ("P06_A04", "Develop standard design packages."),
+        ("P06_A05", "Develop generation-station design templates."),
+        ("P06_A06", "Define standard battery packages."),
+        ("P06_A07", "Define standard inverter arrangements."),
+        ("P06_A08", "Define standard generator-integration arrangements."),
+        ("P06_A09", "Define standard UPS-integration arrangements."),
+        ("P06_A10", "Define standard protection schemes."),
+        ("P06_A11", "Define standard metering arrangements."),
+        ("P06_A12", "Define standard SCADA arrangements."),
+        ("P06_A13", "Define standard communication arrangements."),
+        ("P06_A14", "Define standard civil requirements."),
+        ("P06_A15", "Define standard structural requirements."),
+        ("P06_A16", "Develop standard drawings."),
+        ("P06_A17", "Develop standard single-line diagrams."),
+        ("P06_A18", "Develop standard equipment schedules."),
+        ("P06_A19", "Develop standard BOQs."),
+        ("P06_A20", "Develop standard cost models."),
+        ("P06_A21", "Develop standard construction schedules."),
+        ("P06_A22", "Develop standard inspection plans."),
+        ("P06_A23", "Develop standard testing procedures."),
+        ("P06_A24", "Develop standard commissioning procedures."),
+        ("P06_A25", "Develop standard O&M plans."),
+        ("P06_A26", "Develop standard warranties."),
+        ("P06_A27", "Define approved equipment alternatives."),
+        ("P06_A28", "Define approved product substitutions."),
+        ("P06_A29", "Define template approval workflow."),
+        ("P06_A30", "Publish approved template versions."),
+    ),
+    "P07_FUNDING": (
+        ("P07_A01", "Confirm total funding requirement."),
+        ("P07_A02", "Confirm programme cash-flow requirements."),
+        ("P07_A03", "Identify funding sources."),
+        ("P07_A04", "Structure government contributions."),
+        ("P07_A05", "Structure development-bank funding."),
+        ("P07_A06", "Structure commercial loans."),
+        ("P07_A07", "Structure grants."),
+        ("P07_A08", "Structure green bonds."),
+        ("P07_A09", "Structure climate finance."),
+        ("P07_A10", "Structure PPP arrangements."),
+        ("P07_A11", "Structure IPP arrangements."),
+        ("P07_A12", "Structure community contributions."),
+        ("P07_A13", "Structure carbon-finance arrangements."),
+        ("P07_A14", "Define funding conditions."),
+        ("P07_A15", "Define eligible project costs."),
+        ("P07_A16", "Define disbursement conditions."),
+        ("P07_A17", "Define counterpart-funding requirements."),
+        ("P07_A18", "Define repayment arrangements."),
+        ("P07_A19", "Define guarantee requirements."),
+        ("P07_A20", "Define insurance requirements."),
+        ("P07_A21", "Establish programme funding accounts."),
+        ("P07_A22", "Allocate funds by programme phase."),
+        ("P07_A23", "Allocate funds by region."),
+        ("P07_A24", "Allocate funds by project."),
+        ("P07_A25", "Define payment-certification processes."),
+        ("P07_A26", "Define financial reporting."),
+        ("P07_A27", "Define audit requirements."),
+        ("P07_A28", "Approve the funding plan."),
+    ),
+    "P08_PROCUREMENT": (
+        ("P08_A01", "Consolidate project BOQs."),
+        ("P08_A02", "Standardise units of measurement."),
+        ("P08_A03", "Group identical equipment."),
+        ("P08_A04", "Identify bulk-purchase opportunities."),
+        ("P08_A05", "Divide procurement by region."),
+        ("P08_A06", "Divide procurement by phase."),
+        ("P08_A07", "Divide procurement by technology."),
+        ("P08_A08", "Define equipment-only packages."),
+        ("P08_A09", "Define installation packages."),
+        ("P08_A10", "Define EPC packages."),
+        ("P08_A11", "Define EPCM packages."),
+        ("P08_A12", "Define turnkey packages."),
+        ("P08_A13", "Define O&M packages."),
+        ("P08_A14", "Define warehouse and logistics packages."),
+        ("P08_A15", "Define framework agreements."),
+        ("P08_A16", "Prepare procurement schedules."),
+        ("P08_A17", "Prepare tender documents."),
+        ("P08_A18", "Prepare technical specifications."),
+        ("P08_A19", "Prepare employer’s requirements."),
+        ("P08_A20", "Prepare bidder qualification criteria."),
+        ("P08_A21", "Prepare evaluation criteria."),
+        ("P08_A22", "Prepare contract conditions."),
+        ("P08_A23", "Define FIDIC contract form where applicable."),
+        ("P08_A24", "Invite bidders."),
+        ("P08_A25", "Conduct pre-bid meetings."),
+        ("P08_A26", "Respond to clarifications."),
+        ("P08_A27", "Receive bids."),
+        ("P08_A28", "Conduct technical evaluation."),
+        ("P08_A29", "Conduct financial evaluation."),
+        ("P08_A30", "Conduct due diligence."),
+        ("P08_A31", "Recommend award."),
+        ("P08_A32", "Obtain procurement approval."),
+        ("P08_A33", "Negotiate and execute contracts."),
+    ),
+    "P09_ENGINEERING": (
+        ("P09_A01", "Confirm approved beneficiary list."),
+        ("P09_A02", "Confirm site qualification."),
+        ("P09_A03", "Select the applicable template."),
+        ("P09_A04", "Generate individual SolarPro projects."),
+        ("P09_A05", "Assign programme and phase references."),
+        ("P09_A06", "Assign region and district references."),
+        ("P09_A07", "Assign design teams."),
+        ("P09_A08", "Conduct detailed site surveys."),
+        ("P09_A09", "Verify load data."),
+        ("P09_A10", "Verify roof or land availability."),
+        ("P09_A11", "Complete shading analysis."),
+        ("P09_A12", "Complete energy simulation."),
+        ("P09_A13", "Complete PV sizing."),
+        ("P09_A14", "Complete battery sizing."),
+        ("P09_A15", "Complete inverter sizing."),
+        ("P09_A16", "Complete cable sizing."),
+        ("P09_A17", "Complete protection design."),
+        ("P09_A18", "Complete earthing design."),
+        ("P09_A19", "Complete lightning-protection design where required."),
+        ("P09_A20", "Complete structural design."),
+        ("P09_A21", "Complete civil design."),
+        ("P09_A22", "Complete drainage design for generation stations."),
+        ("P09_A23", "Complete transformer and MV design."),
+        ("P09_A24", "Complete substation design."),
+        ("P09_A25", "Complete grid-interconnection design."),
+        ("P09_A26", "Complete SCADA design."),
+        ("P09_A27", "Complete communication-system design."),
+        ("P09_A28", "Complete fire-protection design."),
+        ("P09_A29", "Prepare detailed drawings."),
+        ("P09_A30", "Prepare equipment schedules."),
+        ("P09_A31", "Prepare detailed BOQs."),
+        ("P09_A32", "Prepare project cost estimates."),
+        ("P09_A33", "Conduct design reviews."),
+        ("P09_A34", "Resolve review comments."),
+        ("P09_A35", "Obtain engineering approval."),
+        ("P09_A36", "Issue construction documents."),
+    ),
+    "P10_MOBILISATION": (
+        ("P10_A01", "Issue notice to proceed."),
+        ("P10_A02", "Confirm contractor mobilisation plan."),
+        ("P10_A03", "Confirm site-access arrangements."),
+        ("P10_A04", "Confirm land availability."),
+        ("P10_A05", "Confirm permits and approvals."),
+        ("P10_A06", "Confirm insurance."),
+        ("P10_A07", "Confirm performance securities."),
+        ("P10_A08", "Approve contractor programme."),
+        ("P10_A09", "Approve method statements."),
+        ("P10_A10", "Approve quality plan."),
+        ("P10_A11", "Approve health and safety plan."),
+        ("P10_A12", "Approve environmental and social plan."),
+        ("P10_A13", "Approve logistics plan."),
+        ("P10_A14", "Establish warehouses."),
+        ("P10_A15", "Establish regional stores."),
+        ("P10_A16", "Register equipment."),
+        ("P10_A17", "Establish QR-code or serial-number controls."),
+        ("P10_A18", "Confirm delivery schedules."),
+        ("P10_A19", "Assign regional implementation teams."),
+        ("P10_A20", "Assign site supervisors."),
+        ("P10_A21", "Conduct site handover."),
+        ("P10_A22", "Conduct pre-construction meetings."),
+        ("P10_A23", "Establish reporting procedures."),
+        ("P10_A24", "Establish communication channels."),
+        ("P10_A25", "Establish document-control procedures."),
+        ("P10_A26", "Confirm construction-readiness checklist."),
+    ),
+    "P11_CONSTRUCTION": (
+        ("P11_A01", "Site establishment."),
+        ("P11_A02", "Site clearing where required."),
+        ("P11_A03", "Civil works."),
+        ("P11_A04", "Foundations."),
+        ("P11_A05", "Drainage works."),
+        ("P11_A06", "Access roads."),
+        ("P11_A07", "Fencing and security works."),
+        ("P11_A08", "Mounting-structure installation."),
+        ("P11_A09", "PV-module installation."),
+        ("P11_A10", "Inverter installation."),
+        ("P11_A11", "Battery-system installation."),
+        ("P11_A12", "Cable installation."),
+        ("P11_A13", "Cable containment."),
+        ("P11_A14", "Earthing installation."),
+        ("P11_A15", "Lightning-protection installation."),
+        ("P11_A16", "Distribution-board installation."),
+        ("P11_A17", "Transformer installation."),
+        ("P11_A18", "MV switchgear installation."),
+        ("P11_A19", "Substation works."),
+        ("P11_A20", "Metering installation."),
+        ("P11_A21", "SCADA installation."),
+        ("P11_A22", "Communication-system installation."),
+        ("P11_A23", "Generator integration."),
+        ("P11_A24", "UPS integration."),
+        ("P11_A25", "Grid-interface works."),
+        ("P11_A26", "Labelling."),
+        ("P11_A27", "Asset tagging."),
+        ("P11_A28", "Daily progress reporting."),
+        ("P11_A29", "Material-consumption reporting."),
+        ("P11_A30", "Quality inspections."),
+        ("P11_A31", "Safety inspections."),
+        ("P11_A32", "Environmental monitoring."),
+        ("P11_A33", "Progress measurement."),
+        ("P11_A34", "Delay reporting."),
+        ("P11_A35", "Variation management."),
+        ("P11_A36", "Claims management."),
+        ("P11_A37", "Contractor performance assessment."),
+        ("P11_A38", "Programme-dashboard updates."),
+    ),
+    "P12_COMMISSIONING": (
+        ("P12_A01", "Conduct installation inspections."),
+        ("P12_A02", "Complete punch lists."),
+        ("P12_A03", "Correct non-conformances."),
+        ("P12_A04", "Conduct visual inspections."),
+        ("P12_A05", "Conduct continuity tests."),
+        ("P12_A06", "Conduct insulation-resistance tests."),
+        ("P12_A07", "Conduct earthing tests."),
+        ("P12_A08", "Conduct polarity tests."),
+        ("P12_A09", "Conduct protection tests."),
+        ("P12_A10", "Conduct inverter tests."),
+        ("P12_A11", "Conduct battery tests."),
+        ("P12_A12", "Conduct transformer tests."),
+        ("P12_A13", "Conduct switchgear tests."),
+        ("P12_A14", "Conduct metering tests."),
+        ("P12_A15", "Conduct SCADA tests."),
+        ("P12_A16", "Conduct communication-system tests."),
+        ("P12_A17", "Conduct generator-integration tests."),
+        ("P12_A18", "Conduct UPS-integration tests."),
+        ("P12_A19", "Conduct grid-synchronisation tests."),
+        ("P12_A20", "Conduct functional tests."),
+        ("P12_A21", "Conduct performance tests."),
+        ("P12_A22", "Verify alarms."),
+        ("P12_A23", "Verify monitoring data."),
+        ("P12_A24", "Verify safety systems."),
+        ("P12_A25", "Conduct training."),
+        ("P12_A26", "Prepare commissioning records."),
+        ("P12_A27", "Prepare test certificates."),
+        ("P12_A28", "Obtain utility approval where required."),
+        ("P12_A29", "Issue commissioning approval."),
+        ("P12_A30", "Update asset status."),
+    ),
+    "P13_HANDOVER": (
+        ("P13_A01", "Compile as-built drawings."),
+        ("P13_A02", "Compile equipment manuals."),
+        ("P13_A03", "Compile test certificates."),
+        ("P13_A04", "Compile warranty documents."),
+        ("P13_A05", "Compile spare-parts records."),
+        ("P13_A06", "Finalise asset register."),
+        ("P13_A07", "Finalise training."),
+        ("P13_A08", "Transfer monitoring access."),
+        ("P13_A09", "Transfer SCADA access."),
+        ("P13_A10", "Transfer software credentials."),
+        ("P13_A11", "Transfer maintenance schedules."),
+        ("P13_A12", "Transfer supplier contacts."),
+        ("P13_A13", "Transfer contractor contacts."),
+        ("P13_A14", "Resolve outstanding punch-list items."),
+        ("P13_A15", "Issue taking-over certificate."),
+        ("P13_A16", "Record defects-notification period."),
+        ("P13_A17", "Reconcile programme quantities."),
+        ("P13_A18", "Reconcile contract values."),
+        ("P13_A19", "Reconcile funding allocations."),
+        ("P13_A20", "Reconcile procurement records."),
+        ("P13_A21", "Prepare project closeout reports."),
+        ("P13_A22", "Prepare regional closeout reports."),
+        ("P13_A23", "Prepare programme closeout report."),
+        ("P13_A24", "Record lessons learned."),
+        ("P13_A25", "Archive programme documents."),
+        ("P13_A26", "Update programme status."),
+    ),
+    "P14_OPERATIONS": (
+        ("P14_A01", "Monitor generation."),
+        ("P14_A02", "Monitor consumption."),
+        ("P14_A03", "Monitor grid import and export."),
+        ("P14_A04", "Monitor battery state of charge."),
+        ("P14_A05", "Monitor battery health."),
+        ("P14_A06", "Monitor inverter status."),
+        ("P14_A07", "Monitor transformer status."),
+        ("P14_A08", "Monitor meter status."),
+        ("P14_A09", "Monitor SCADA communications."),
+        ("P14_A10", "Monitor alarms."),
+        ("P14_A11", "Monitor system availability."),
+        ("P14_A12", "Monitor performance ratio."),
+        ("P14_A13", "Conduct preventive maintenance."),
+        ("P14_A14", "Conduct corrective maintenance."),
+        ("P14_A15", "Conduct condition-based maintenance."),
+        ("P14_A16", "Conduct predictive maintenance."),
+        ("P14_A17", "Manage faults."),
+        ("P14_A18", "Manage spare parts."),
+        ("P14_A19", "Manage warranty claims."),
+        ("P14_A20", "Manage service contractors."),
+        ("P14_A21", "Conduct periodic testing."),
+        ("P14_A22", "Update asset records."),
+        ("P14_A23", "Update maintenance records."),
+        ("P14_A24", "Report operational KPIs."),
+        ("P14_A25", "Report carbon savings."),
+        ("P14_A26", "Report fuel savings."),
+        ("P14_A27", "Report financial savings."),
+        ("P14_A28", "Train replacement operators."),
+        ("P14_A29", "Review maintenance performance."),
+        ("P14_A30", "Optimise operating strategies."),
+    ),
+    "P15_EVALUATION": (
+        ("P15_A01", "Compare actual performance against baseline."),
+        ("P15_A02", "Compare actual cost against budget."),
+        ("P15_A03", "Compare actual schedule against plan."),
+        ("P15_A04", "Compare actual installed capacity against target."),
+        ("P15_A05", "Compare actual beneficiaries against target."),
+        ("P15_A06", "Compare actual energy generation against forecast."),
+        ("P15_A07", "Compare actual carbon reduction against target."),
+        ("P15_A08", "Evaluate regional performance."),
+        ("P15_A09", "Evaluate contractor performance."),
+        ("P15_A10", "Evaluate supplier performance."),
+        ("P15_A11", "Evaluate technology performance."),
+        ("P15_A12", "Evaluate battery performance."),
+        ("P15_A13", "Evaluate maintenance performance."),
+        ("P15_A14", "Evaluate social impact."),
+        ("P15_A15", "Evaluate jobs created."),
+        ("P15_A16", "Evaluate local-content performance."),
+        ("P15_A17", "Evaluate funding utilisation."),
+        ("P15_A18", "Identify underperforming systems."),
+        ("P15_A19", "Identify programme bottlenecks."),
+        ("P15_A20", "Conduct root-cause analysis."),
+        ("P15_A21", "Develop corrective actions."),
+        ("P15_A22", "Reallocate resources."),
+        ("P15_A23", "Revise programme templates."),
+        ("P15_A24", "Revise procurement strategy."),
+        ("P15_A25", "Revise maintenance strategy."),
+        ("P15_A26", "Update future programme phases."),
+        ("P15_A27", "Produce programme-evaluation reports."),
+    ),
+    "P16_EXPANSION": (
+        ("P16_A01", "Identify successful programme templates."),
+        ("P16_A02", "Identify high-performing contractors."),
+        ("P16_A03", "Identify approved suppliers."),
+        ("P16_A04", "Identify successful financing models."),
+        ("P16_A05", "Identify high-performing technologies."),
+        ("P16_A06", "Update standard designs."),
+        ("P16_A07", "Update standard BOQs."),
+        ("P16_A08", "Update cost assumptions."),
+        ("P16_A09", "Update risk models."),
+        ("P16_A10", "Update qualification scoring."),
+        ("P16_A11", "Clone the programme structure."),
+        ("P16_A12", "Adapt the programme to a new region."),
+        ("P16_A13", "Adapt the programme to a new sector."),
+        ("P16_A14", "Adapt the programme to a new country."),
+        ("P16_A15", "Launch the next implementation phase."),
+        ("P16_A16", "Develop a scale-up funding plan."),
+        ("P16_A17", "Develop a scale-up procurement plan."),
+        ("P16_A18", "Approve the expanded programme."),
+    ),
+}
+
+
+# Flat lookup: activity code -> (phase code, text). Built once, because a document that
+# names 40 activities would otherwise scan 453 tuples 40 times.
+ACTIVITY_INDEX: dict[str, tuple[str, str]] = {
+    acode: (phase_code, text)
+    for phase_code, items in PHASE_ACTIVITIES.items()
+    for acode, text in items
+}
+ACTIVITY_CODES: frozenset[str] = frozenset(ACTIVITY_INDEX)
+
+
+# --- the five lifecycle stages (owner, 2026-07-13) ---------------------------
+#
+# "lifecycle is initiation, planning, implementation, monitoring and closing ... each stage
+#  of the life cycle is a phase like initiation is a selectable phase, planning is a
+#  selectable phase..."
+#
+# So the operator sees the FIVE stages every project manager already knows, each selectable
+# as a whole, with the activities underneath.
+#
+# WHY THE 16 PHASES SURVIVE UNDERNEATH RATHER THAN BEING REPLACED
+# ---------------------------------------------------------------
+# Doc 3's 16 phases are not a display choice -- they are the state machine. The 14 stage
+# gates each CLOSE a named phase, TRANSITIONS is keyed by phase code, PHASE_ENTRY_REQUIRED_GATES
+# decides what a programme may enter, and the live database has a `current_phase_code` on
+# every programme row and 14 seeded gate rows per programme. Collapsing them to five would
+# mean rewriting the lifecycle spine, dropping nine gates, and migrating live programme rows
+# -- to change how a page is grouped.
+#
+# So the five stages are a GROUPING over the sixteen phases: the vocabulary the operator
+# works in, mapped onto the governance the module enforces. Selecting "Planning" selects
+# every activity in the six doc-3 phases that make up planning. Both things stay true.
+LIFECYCLE_STAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("S1_INITIATION", "Initiation", (
+        "P01_CONCEPT",
+        "P02_INITIATION",
+    )),
+    ("S2_PLANNING", "Planning", (
+        "P03_NEEDS",
+        "P04_FEASIBILITY",
+        "P05_STRUCTURING",
+        "P06_TEMPLATES",
+        "P07_FUNDING",
+        "P08_PROCUREMENT",
+    )),
+    ("S3_IMPLEMENTATION", "Implementation", (
+        "P09_ENGINEERING",
+        "P10_MOBILISATION",
+        "P11_CONSTRUCTION",
+        "P12_COMMISSIONING",
+    )),
+    ("S4_MONITORING", "Monitoring", (
+        "P14_OPERATIONS",
+        "P15_EVALUATION",
+    )),
+    # Handover and closeout is the closing act; the replication decision is TAKEN at
+    # closeout ("do we do this again, and where"), which is why doc 3's Phase 16 sits here
+    # rather than trailing after Monitoring as a stage of its own.
+    ("S5_CLOSURE", "Closure", (
+        "P13_HANDOVER",
+        "P16_EXPANSION",
+    )),
+)
+
+# phase code -> the stage that owns it. Every one of the 16 must be claimed by exactly one
+# stage; the guard below is what stops a phase silently vanishing from the picker if a phase
+# is ever renamed and the mapping is not updated with it.
+STAGE_OF_PHASE: dict[str, str] = {
+    phase: stage
+    for stage, _label, phases in LIFECYCLE_STAGES
+    for phase in phases
+}
+_ALL_STAGE_PHASES = [p for _s, _l, ps in LIFECYCLE_STAGES for p in ps]
+assert len(_ALL_STAGE_PHASES) == len(set(_ALL_STAGE_PHASES)), \
+    "a phase is claimed by two lifecycle stages"
+assert set(_ALL_STAGE_PHASES) == {p[0] for p in PHASES}, (
+    "LIFECYCLE_STAGES must cover exactly the 16 phases -- a phase missing here disappears "
+    "from the activity picker, and its activities become unselectable"
+)

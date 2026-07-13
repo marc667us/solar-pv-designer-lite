@@ -27,6 +27,7 @@ class _Conn(sqlite3.Connection):
 ENGINEER = 1     # holds template.manage  (programme_engineer)
 DIRECTOR = 2     # holds template.approve (technical_director)
 OUTSIDER = 3     # a member of ANOTHER organisation entirely
+OWNER    = 4     # created the org, so holds every Release-1 role (ONBOARDING_OWNER_ROLES)
 
 # A complete, legal parameter set. Every required field present.
 GOOD = {
@@ -77,16 +78,21 @@ def db():
 
     tenancy.ensure_schema(c)
     workflows.ensure_schema(c)
-    for uid, name in ((ENGINEER, "erica"), (DIRECTOR, "dan"), (OUTSIDER, "olu")):
+    for uid, name in ((OWNER, "owen"), (ENGINEER, "erica"), (DIRECTOR, "dan"),
+                      (OUTSIDER, "olu")):
         tenancy.get_or_create_personal_tenant(c, uid, name)
 
-    org = tenancy.create_organisation(c, ENGINEER, "Ministry of Energy", "ministry")
+    # THE ORG CREATOR IS NOT A USABLE SoD ACTOR (slice 6.5). Onboarding grants the creator
+    # every Release-1 role -- constants.ONBOARDING_OWNER_ROLES -- because a one-person
+    # organisation IS every authority in it. So the org is created by OWNER, and the two
+    # people whose duties must stay separate are ordinary members holding exactly one role
+    # each. Before slice 6.5 these tests used the creator as "the engineer", which passed
+    # only because the creator was accidentally powerless -- the very bug being fixed.
+    org = tenancy.create_organisation(c, OWNER, "Ministry of Energy", "ministry")
     other = tenancy.create_organisation(c, OUTSIDER, "Rival Ministry", "ministry")
 
-    # The creator is the org's Enterprise Owner, which does NOT include template.manage --
-    # authoring standards is the Programme Engineer's job. Grant it explicitly.
-    tenancy.add_member(c, org, ENGINEER, "programme_engineer", ENGINEER)
-    tenancy.add_member(c, org, DIRECTOR, "technical_director", ENGINEER)
+    tenancy.add_member(c, org, ENGINEER, "programme_engineer", OWNER)
+    tenancy.add_member(c, org, DIRECTOR, "technical_director", OWNER)
 
     c.commit()
     yield c, org, other
@@ -612,9 +618,12 @@ def test_equipment_validation_fails_closed_when_the_catalogue_is_unreachable(db)
 def test_gate_6_now_demands_a_real_approved_template(db):
     """Standardisation Approval used to accept a document CLAIMING a standard existed."""
     c, org, _ = db
-    pid = workflows.create_programme(c, org, ENGINEER, code="P1", name="Schools",
-                                     sponsor_user_id=ENGINEER, audit=_audit(c))
-    workflows.register_document(c, org, ENGINEER, pid, doc_type="template_version_pack",
+    # OWNER registers the programme: programme.create is the Enterprise Owner's, not the
+    # Programme Engineer's. (Before slice 6.5 the engineer WAS the org creator, so this
+    # read as though an engineer could open a programme. They cannot, and should not.)
+    pid = workflows.create_programme(c, org, OWNER, code="P1", name="Schools",
+                                     sponsor_user_id=OWNER, audit=_audit(c))
+    workflows.register_document(c, org, OWNER, pid, doc_type="template_version_pack",
                                 title="Pack", audit=_audit(c))
 
     with pytest.raises(EnterpriseGateError, match="no approved programme template"):

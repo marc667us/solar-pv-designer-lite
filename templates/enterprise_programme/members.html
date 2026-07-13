@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Members and Roles - SolarPro{% endblock %}
+{% block content %}
+<div class="container py-4 ent-page">
+
+  <div class="mb-3">
+    <div class="text-muted small mb-1">
+      <a href="{{ url_for('enterprise_home') }}" class="text-decoration-none">
+        <i class="bi bi-arrow-left me-1"></i>Enterprise
+      </a>
+    </div>
+    <h1 class="h4 mb-1">
+      <i class="bi bi-people-fill text-warning me-2"></i>Members and Roles
+    </h1>
+    <div class="text-muted small">
+      Who is in this organisation, and what each of them is allowed to do.
+    </div>
+  </div>
+
+  {% if is_solo %}
+  <div class="alert alert-info d-flex align-items-start">
+    <i class="bi bi-info-circle me-2 mt-1"></i>
+    <div>
+      <strong>You are the only member of this organisation.</strong>
+      Separation of duties needs two people to mean anything, so while you are alone you may
+      both score and approve a site survey — and the audit trail records each such approval
+      as a single-member waiver. <strong>The moment you add a second member, separation of
+      duties applies again</strong> and the person who surveys a site can no longer be the
+      person who approves it.
+    </div>
+  </div>
+  {% endif %}
+
+  {# ---------------- add a member ---------------- #}
+  <div class="card mb-4">
+    <div class="card-header"><i class="bi bi-person-plus me-2"></i>Add a member</div>
+    <div class="card-body">
+      <form method="post" action="{{ url_for('enterprise_member_add') }}"
+            class="row g-2 align-items-end">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"/>
+        <div class="col-md-5">
+          <label class="form-label small">Username or email</label>
+          <input type="text" name="identifier" class="form-control form-control-sm"
+                 placeholder="They need a SolarPro account already" required/>
+        </div>
+        <div class="col-md-5">
+          <label class="form-label small">Starting role</label>
+          <select name="role_code" class="form-select form-select-sm" required>
+            {% for code, label in assignable_roles %}
+            <option value="{{ code }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-warning btn-sm w-100">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# ---------------- the members ---------------- #}
+  {% for m in members %}
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>
+        <i class="bi bi-person me-2"></i><strong>{{ m.username }}</strong>
+        <span class="text-muted small ms-2">{{ m.email }}</span>
+      </span>
+      <form method="post" class="m-0"
+            action="{{ url_for('enterprise_member_remove', user_id=m.user_id) }}"
+            onsubmit="return confirm('Remove {{ m.username }} from this organisation? Every role they hold stops granting anything immediately.');">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"/>
+        <button class="btn btn-sm btn-outline-danger">Remove</button>
+      </form>
+    </div>
+    <div class="card-body">
+      {% if m.roles %}
+      <div class="mb-2">
+        {% for r in m.roles %}
+        <form method="post" class="d-inline-block me-1 mb-1"
+              action="{{ url_for('enterprise_member_roles', user_id=m.user_id) }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"/>
+          <input type="hidden" name="action" value="revoke"/>
+          <input type="hidden" name="role_code" value="{{ r }}"/>
+          <span class="badge bg-secondary">
+            {{ r }}
+            <button class="btn btn-link btn-sm text-warning p-0 ms-1 align-baseline"
+                    style="text-decoration:none;" title="Revoke {{ r }}">&times;</button>
+          </span>
+        </form>
+        {% endfor %}
+      </div>
+      <div class="text-muted small mb-2">
+        Permissions:
+        {% set perms = [] %}
+        {% for r in m.roles %}{% set _ = perms.extend(role_permissions.get(r, [])) %}{% endfor %}
+        {% if perms %}<code>{{ perms|unique|sort|join('</code> <code>')|safe }}</code>
+        {% else %}<em>read-only</em>{% endif %}
+      </div>
+      {% else %}
+      <div class="text-muted small mb-2">
+        No roles — this member can read the organisation but change nothing.
+      </div>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('enterprise_member_roles', user_id=m.user_id) }}"
+            class="row g-2 align-items-end">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"/>
+        <input type="hidden" name="action" value="grant"/>
+        <div class="col-md-8">
+          <select name="role_code" class="form-select form-select-sm" required>
+            {% for code, label in assignable_roles %}
+              {% if code not in m.roles %}
+              <option value="{{ code }}">{{ label }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <button class="btn btn-outline-warning btn-sm w-100">Grant role</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+
+</div>
+{% endblock %}

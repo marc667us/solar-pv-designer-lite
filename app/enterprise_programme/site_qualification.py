@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import json
 
-from . import rbac, txn
+from . import rbac, tenancy, txn
 from .constants import (
     QUALIFICATION_CRITERIA,
     QUALIFICATION_CRITERION_KEYS,
@@ -474,14 +474,39 @@ def decide(c, tenant_id: str, user_id: int, beneficiary_id: int, *,
     # trail showing scored_by == decided_by. The slice's headline guarantee would be a
     # configuration accident. So the rule is enforced on the ACT, where it cannot be
     # configured away.
+    # ...EXCEPT THAT A CONTROL NEEDING TWO PEOPLE IS A DEADLOCK WHEN THERE IS ONE.
+    #
+    # In a tenant with exactly one active member, "ask another approver" names nobody. The
+    # solo operator is the only person who can score a site and the only person who could
+    # decide it, so the rule above does not separate two duties -- it stops the module
+    # working at all. The live suite hit exactly this wall, and no permission or role grant
+    # can get past it, because the wall is the actor's IDENTITY, not their authority.
+    #
+    # So the rule relaxes for a one-member tenant, and ONLY there. Note what does NOT
+    # relax: C02 still demands a complete scorecard (checked above), C11 still demands a
+    # human decision-maker, C12 still demands the audit row, C13 still demands the site be
+    # in this tenant. The substance of C02 -- "no beneficiary becomes a project without a
+    # qualification somebody is accountable for" -- is untouched. What is waived is a
+    # two-person rule in an organisation that has one person, which was never a control
+    # there in the first place. Both the Codex and Supervisor reviews independently
+    # confirmed this is the one SoD rule that is safe to relax, and that the gate
+    # authorities' named-role checks are NOT.
+    #
+    # It is computed from LIVE membership, never stored as a setting: the moment a second
+    # person joins, this is False and the rule binds again, with nothing to remember to
+    # turn back on. A tenant cannot configure its way out of separation of duties.
+    sod_waived = False
     if existing["scored_by_user_id"] is not None \
             and existing["scored_by_user_id"] == user_id:
-        raise QualificationError(
-            "QUALIFICATION",
-            "you scored this site, so you may not also decide it: the person who surveys a "
-            "site is not the person who commits the programme to serving it. Ask another "
-            "approver.",
-        )
+        if tenancy.is_solo_tenant(c, tenant_id):
+            sod_waived = True
+        else:
+            raise QualificationError(
+                "QUALIFICATION",
+                "you scored this site, so you may not also decide it: the person who "
+                "surveys a site is not the person who commits the programme to serving it. "
+                "Ask another approver.",
+            )
 
     decision_notes = (notes or "").strip()
     audit = audit or txn.audit_on(c)
@@ -567,7 +592,16 @@ def decide(c, tenant_id: str, user_id: int, beneficiary_id: int, *,
                            # asks, and a re-survey clears the column. Keep it in the trail.
                            "decision_notes": decision_notes,
                            "survey_notes": existing["survey_notes"],
-                           "ai_recommendation_id": ai_recommendation_id}),
+                           "ai_recommendation_id": ai_recommendation_id,
+                           # THE WAIVER IS PART OF THE RECORD, NOT A SILENT BRANCH.
+                           # An auditor reading this row must be able to see that the same
+                           # person scored and decided, and that the system knowingly
+                           # permitted it because there was nobody else in the tenant. A
+                           # control that quietly stops applying is indistinguishable from
+                           # one that was never there; a control that says "waived, and
+                           # here is why" is still doing its job.
+                           "sod_waived": sod_waived,
+                           "scored_by_user_id": existing["scored_by_user_id"]}),
             "qualification decision",
         )
 

@@ -38,6 +38,7 @@ class _Conn(sqlite3.Connection):
 OFFICER = 1    # beneficiary.import  (beneficiary_officer) -- collects the data
 MANAGER = 2    # beneficiary.approve (programme_manager)   -- decides who is served
 OUTSIDER = 3   # a member of another organisation entirely
+OWNER = 4      # created the org, so holds every Release-1 role (ONBOARDING_OWNER_ROLES)
 
 
 @pytest.fixture()
@@ -49,7 +50,8 @@ def db():
     c = sqlite3.connect(":memory:", factory=_Conn)
     c.execute("PRAGMA foreign_keys=ON")
     c.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, email TEXT)")
-    for uid, name in ((OFFICER, "olivia"), (MANAGER, "musa"), (OUTSIDER, "olu")):
+    for uid, name in ((OFFICER, "olivia"), (MANAGER, "musa"), (OUTSIDER, "olu"),
+                      (OWNER, "owen")):
         c.execute("INSERT INTO users (id, username) VALUES (?,?)", (uid, name))
     c.execute(
         "CREATE TABLE audit_logs ("
@@ -62,17 +64,24 @@ def db():
     tenancy.ensure_schema(c)
     workflows.ensure_schema(c)
     beneficiaries.ensure_schema(c)
-    for uid, name in ((OFFICER, "olivia"), (MANAGER, "musa"), (OUTSIDER, "olu")):
+    for uid, name in ((OFFICER, "olivia"), (MANAGER, "musa"), (OUTSIDER, "olu"),
+                      (OWNER, "owen")):
         tenancy.get_or_create_personal_tenant(c, uid, name)
 
-    org = tenancy.create_organisation(c, OFFICER, "Ministry of Energy", "ministry")
+    # THE ORG CREATOR IS NOT A USABLE SoD ACTOR (slice 6.5). Onboarding grants the creator
+    # every Release-1 role (constants.ONBOARDING_OWNER_ROLES), because a one-person
+    # organisation IS every authority in it. So OWNER creates the org, and the officer who
+    # registers and the manager who approves are ordinary members holding one role each --
+    # otherwise "the officer who registers cannot approve" would only be passing because
+    # the creator happened to be powerless, which is the bug this slice fixes.
+    org = tenancy.create_organisation(c, OWNER, "Ministry of Energy", "ministry")
     other = tenancy.create_organisation(c, OUTSIDER, "Rival Ministry", "ministry")
 
-    tenancy.add_member(c, org, OFFICER, "beneficiary_officer", OFFICER)
-    tenancy.add_member(c, org, MANAGER, "programme_manager", OFFICER)
+    tenancy.add_member(c, org, OFFICER, "beneficiary_officer", OWNER)
+    tenancy.add_member(c, org, MANAGER, "programme_manager", OWNER)
 
-    pid = workflows.create_programme(c, org, OFFICER, code="GH-SCH", name="Ghana Schools",
-                                     sponsor_user_id=OFFICER, audit=_audit(c))
+    pid = workflows.create_programme(c, org, OWNER, code="GH-SCH", name="Ghana Schools",
+                                     sponsor_user_id=OWNER, audit=_audit(c))
     c.commit()
     yield c, org, other, pid
     c.close()
@@ -190,7 +199,8 @@ def test_an_illegal_transition_is_refused(db):
 def test_gate_3_demands_an_approved_beneficiary_not_just_a_document(db):
     """Importing 4000 rows is not a decision to serve them. Gate 3 wants the decision."""
     c, org, _other, pid = db
-    workflows.register_document(c, org, OFFICER, pid, doc_type="beneficiary_register",
+    # Registering a programme document is the owner's act, not the field officer's.
+    workflows.register_document(c, org, OWNER, pid, doc_type="beneficiary_register",
                                 title="Register", audit=_audit(c))
 
     with pytest.raises(EnterpriseGateError, match="empty of APPROVED sites"):
@@ -600,7 +610,22 @@ def test_a_mapping_onto_an_unknown_field_is_refused(db):
                              audit=_audit(c))
 
 
-def test_every_import_action_writes_an_audit_row(db):
+def test_an_import_writes_ONE_audit_row_for_the_batch_not_one_per_row(db):
+    """C12 for a bulk import is satisfied per BATCH, and it must be (Supervisor 6.5, HIGH).
+
+    This test asserted 3 x ENTERPRISE_BENEFICIARY_REGISTERED until slice 6.5, and that
+    per-row audit was a live production hazard: on Postgres every audit write takes
+    `pg_advisory_xact_lock` on a CONSTANT key shared by every audit writer in SolarPro, and
+    the lock is transaction-scoped. The first row of a 2000-row import took an app-wide
+    lock; the import then held it across ~12,000 round trips to a remote Postgres, blocking
+    every login and admin action in the product for the duration.
+
+    C12 is NOT weakened by the change. The batch still commits audit-or-nothing, and the
+    per-row provenance an auditor actually needs -- which spreadsheet row became which
+    beneficiary -- lives durably in `enterprise_import_rows` (beneficiary_id, raw, mapped),
+    written in this same transaction. The audit row is the last write before the commit,
+    which is exactly what app/security/audit.py's caller contract demands.
+    """
     c, org, _other, pid = db
     c.execute("DELETE FROM audit_logs")
     batch_id = _upload(c, org, pid)
@@ -608,9 +633,16 @@ def test_every_import_action_writes_an_audit_row(db):
 
     actions = [r[0] for r in c.execute(
         "SELECT action FROM audit_logs ORDER BY id").fetchall()]
-    assert actions[0] == "ENTERPRISE_IMPORT_STAGED"
-    assert actions.count("ENTERPRISE_BENEFICIARY_REGISTERED") == 3
-    assert actions[-1] == "ENTERPRISE_IMPORT_COMMITTED"
+    assert actions == ["ENTERPRISE_IMPORT_STAGED", "ENTERPRISE_IMPORT_COMMITTED"]
+
+    # The provenance the per-row audit rows used to carry is still here, and still exact.
+    linked = c.execute(
+        "SELECT COUNT(*) FROM enterprise_import_rows "
+        " WHERE tenant_id=? AND batch_id=? AND status='Imported' "
+        "   AND beneficiary_id IS NOT NULL",
+        (org, batch_id),
+    ).fetchone()[0]
+    assert linked == 3
 
 
 # ---------------------------------------------------------------------------
