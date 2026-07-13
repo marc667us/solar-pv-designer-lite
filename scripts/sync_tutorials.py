@@ -33,6 +33,7 @@ import os
 import re
 import sys
 from html.parser import HTMLParser
+from types import SimpleNamespace
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCEN = os.path.join(ROOT, "static", "tutorial", "scenarios")
@@ -290,9 +291,50 @@ def main() -> int:
     app.config["TESTING"] = True
     sample = {"pid": args.pid, "id": args.pid, "slug": "quick"}
 
+    # The Enterprise Programme module is registered in wsgi.py, not web_app.py (web_app.py is
+    # CRLF+mojibake and must never be edited), so `web_app.app` is missing ~40 live routes --
+    # and a gate cannot report a page it cannot SEE. That is how an entire shipped module sat
+    # with no tutorial and a backlog of zero.
+    #
+    # Registered onto a THROWAWAY app and merged, not onto web_app.app: registering installs
+    # a context_processor, and Flask forbids setup methods once an app has served a request.
+    # Not by importing wsgi either -- that runs load_dotenv() and would aim this at the LIVE
+    # database.
+    # NOTE ON THE DEAD-SELECTOR PASS: merging the rules below makes the enterprise pages
+    # VISIBLE to the MISSING check, but this script's renderer uses a test client with NO
+    # SESSION, and every /enterprise page is login-gated -- so they 302, land in the
+    # "could not be rendered" bucket, and their SELECTORS are never linted here. That is not
+    # fixable from this script. Their selectors and nav anchors are verified instead by
+    # tests/enterprise_programme/test_enterprise_tutorial_selectors.py, which renders them as
+    # a real logged-in owner of a real organisation. It found two dead selectors this script
+    # could never have seen.
+    extra_rules = []
+    try:
+        from flask import Flask
+        from enterprise_programme_routes import register_enterprise_programme
+        _probe = Flask("_tutorial_endpoint_probe")
+        register_enterprise_programme(
+            _probe,
+            get_db=web_app.get_db,
+            login_required=web_app.login_required,
+            csrf_protect=web_app.csrf_protect,
+            current_user=web_app.current_user,
+        )
+        extra_rules = list(_probe.url_map.iter_rules())
+    except Exception as e:  # pragma: no cover - mirrors wsgi.py's boot resilience
+        print(f"[warn] enterprise routes not registered ({e}); their pages are unchecked")
+
+    class _RuleView:
+        """Just enough app for feature_endpoints(): a url_map that iterates rules."""
+
+        def __init__(self, rules):
+            self.url_map = SimpleNamespace(iter_rules=lambda: list(rules))
+
+    merged = _RuleView(list(app.url_map.iter_rules()) + extra_rules)
+
     scen = scenario_files()
-    feats = feature_endpoints(app)
-    endpoints = {r.endpoint for r in app.url_map.iter_rules()}
+    feats = feature_endpoints(merged)
+    endpoints = {r.endpoint for r in merged.url_map.iter_rules()}
 
     # A page is covered when it has its own scenario, OR when a multi-screen flow
     # already walks it (declared in that scenario's `covers`). Requiring a second

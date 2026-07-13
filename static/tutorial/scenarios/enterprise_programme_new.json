@@ -1,0 +1,68 @@
+{
+  "tutorialId": "tut-enterprise_programme_new",
+  "pageId": "enterprise_programme_new",
+  "title": "Register a programme",
+  "module": "Enterprise",
+  "description": "A programme is born at Phase 1 with all 16 phases and 14 gates seeded.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "New programme"
+  ],
+  "covers": [],
+  "estimatedDuration": 6,
+  "steps": [
+    {
+      "title": "Code and name",
+      "description": "The code is how the programme is referenced everywhere.",
+      "voiceScript": "Give the programme a code and a name. The code is how it is referenced everywhere else.",
+      "captionText": "Give the programme a code and a name. The code is how it is referenced everywhere else.",
+      "targetSelector": "input[name=\"code\"], input[name=\"name\"], input",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New programme",
+      "fallbackMessage": "Code and name: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "The design path",
+      "description": "Standard rooftop, or a generation station.",
+      "voiceScript": "Choose the design path. Standard builds a system at every site. Generation station builds one plant that supplies them all.",
+      "captionText": "Choose the design path. Standard builds a system at every site. Generation station builds one plant that supplies them all.",
+      "targetSelector": "select[name=\"design_strategy\"], select",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New programme",
+      "fallbackMessage": "The design path: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "The sponsor",
+      "description": "Chosen from your members. Never typed.",
+      "voiceScript": "The sponsor is chosen from your organisation's own members. A sponsor who is not in the organisation is not a sponsor.",
+      "captionText": "The sponsor is chosen from your organisation's own members. A sponsor who is not in the organisation is not a sponsor.",
+      "targetSelector": "select[name=\"sponsor_user_id\"], select",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New programme",
+      "fallbackMessage": "The sponsor: not visible on this screen yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Register it",
+      "description": "It opens at Phase 1, Concept, awaiting Gate 1.",
+      "voiceScript": "Register it, and it opens at Phase 1, Concept, with all fourteen gates waiting.",
+      "captionText": "Register it, and it opens at Phase 1, Concept, with all fourteen gates waiting.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New programme",
+      "fallbackMessage": "Register it: not visible on this screen yet.",
+      "stepNumber": 4
+    }
+  ]
+}

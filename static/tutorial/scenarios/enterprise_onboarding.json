@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-enterprise_onboarding",
+  "pageId": "enterprise_onboarding",
+  "title": "Create an organisation",
+  "module": "Enterprise",
+  "description": "Register the ministry, agency or utility the programme belongs to.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Onboarding"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "The legal entity",
+      "description": "This is the organisation, not your personal workspace.",
+      "voiceScript": "This registers a real organisation. It is separate from your personal workspace, and other people can be invited into it.",
+      "captionText": "This registers a real organisation. It is separate from your personal workspace, and other people can be invited into it.",
+      "targetSelector": "form, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Onboarding",
+      "fallbackMessage": "The legal entity: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Name and type",
+      "description": "Ministry, agency, utility, NGO, donor.",
+      "voiceScript": "Give its legal name and choose what kind of body it is.",
+      "captionText": "Give its legal name and choose what kind of body it is.",
+      "targetSelector": "input[name=\"legal_name\"], input, select",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Onboarding",
+      "fallbackMessage": "Name and type: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "You become its owner",
+      "description": "And you are granted the roles to actually run it.",
+      "voiceScript": "Creating it makes you its owner, and grants you the operational roles needed to run a programme single-handed until you have colleagues to hand them to.",
+      "captionText": "Creating it makes you its owner, and grants you the operational roles needed to run a programme single-handed until you have colleagues to hand them to.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Onboarding",
+      "fallbackMessage": "You become its owner: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

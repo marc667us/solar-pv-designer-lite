@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-enterprise_beneficiary_new",
+  "pageId": "enterprise_beneficiary_new",
+  "title": "Register a site",
+  "module": "Enterprise",
+  "description": "Add one school, clinic or household to the programme's register.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "New site"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "Identify the site",
+      "description": "A code, a name, and what kind of site it is.",
+      "voiceScript": "Give the site a code and a name, and say what kind of site it is.",
+      "captionText": "Give the site a code and a name, and say what kind of site it is.",
+      "targetSelector": "input[name=\"code\"], input[name=\"name\"], input",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New site",
+      "fallbackMessage": "Identify the site: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Where it is",
+      "description": "Community, district, region.",
+      "voiceScript": "Say where it is. The location is what the survey team will be sent to.",
+      "captionText": "Say where it is. The location is what the survey team will be sent to.",
+      "targetSelector": "input[name=\"community\"], input, select",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New site",
+      "fallbackMessage": "Where it is: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Registered, not yet qualified",
+      "description": "Being on the register is not approval.",
+      "voiceScript": "Registering a site does not qualify it. It must still be scored, and somebody must still decide.",
+      "captionText": "Registering a site does not qualify it. It must still be scored, and somebody must still decide.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New site",
+      "fallbackMessage": "Registered, not yet qualified: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

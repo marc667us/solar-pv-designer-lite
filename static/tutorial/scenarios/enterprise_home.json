@@ -1,0 +1,127 @@
+{
+  "tutorialId": "tut-enterprise_home",
+  "pageId": "enterprise_home",
+  "title": "Enterprise Programme",
+  "module": "Enterprise",
+  "description": "Run a national programme: one organisation, one design, hundreds of sites.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Enterprise",
+    "Templates",
+    "Members"
+  ],
+  "covers": [
+    "enterprise_templates",
+    "enterprise_members"
+  ],
+  "estimatedDuration": 12,
+  "steps": [
+    {
+      "title": "Your organisations",
+      "description": "A programme belongs to an organisation, not a person.",
+      "voiceScript": "An enterprise programme belongs to an organisation, not to one person. Everyone who works on it is a member of that organisation.",
+      "captionText": "An enterprise programme belongs to an organisation, not to one person. Everyone who works on it is a member of that organisation.",
+      "targetSelector": ".ent-page .card, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Enterprise",
+      "fallbackMessage": "Your organisations: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Switch organisation",
+      "description": "You may belong to several. This chooses the active one.",
+      "voiceScript": "If you belong to more than one organisation, this chooses which one you are acting in. Everything on the page is scoped to it.",
+      "captionText": "If you belong to more than one organisation, this chooses which one you are acting in. Everything on the page is scoped to it.",
+      "targetSelector": "select[name=\"tenant_id\"], .form-select",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Enterprise",
+      "fallbackMessage": "Switch organisation: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Your programmes",
+      "description": "Each one carries 16 phases and 14 stage gates.",
+      "voiceScript": "Each programme carries sixteen lifecycle phases and fourteen stage gates. It opens at Phase 1, Concept.",
+      "captionText": "Each programme carries sixteen lifecycle phases and fourteen stage gates. It opens at Phase 1, Concept.",
+      "targetSelector": ".table, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Enterprise",
+      "fallbackMessage": "Your programmes: not visible on this screen yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Register a programme",
+      "description": "Name it, choose its design path, name its sponsor.",
+      "voiceScript": "To start one, register it here. You name it, choose its design path, and name a sponsor from your own members.",
+      "captionText": "To start one, register it here. You name it, choose its design path, and name a sponsor from your own members.",
+      "targetSelector": "a[href*=\"/enterprise/programmes/new\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Enterprise",
+      "fallbackMessage": "Register a programme: not visible on this screen yet.",
+      "stepNumber": 4
+    },
+    {
+      "title": "The template engine",
+      "description": "Templates define what every site gets.",
+      "voiceScript": "First, the template engine. A template defines what every site in the programme receives.",
+      "captionText": "First, the template engine. A template defines what every site in the programme receives.",
+      "targetSelector": "",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Enterprise",
+      "fallbackMessage": "The template engine: the next screen is not reachable from here.",
+      "href": "/enterprise/templates",
+      "stepNumber": 5
+    },
+    {
+      "title": "Versioned, and approved",
+      "description": "A template is used only once approved.",
+      "voiceScript": "Templates are versioned. A version is drafted, submitted, and approved before any programme is allowed to build from it.",
+      "captionText": "Templates are versioned. A version is drafted, submitted, and approved before any programme is allowed to build from it.",
+      "targetSelector": ".table, table, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Templates",
+      "fallbackMessage": "Versioned, and approved: not visible on this screen yet.",
+      "stepNumber": 6
+    },
+    {
+      "title": "Who may do what",
+      "description": "Roles are granted here, and revoked here.",
+      "voiceScript": "Authority is granted on the members screen. The gates ask for a named role, not merely a permission.",
+      "captionText": "Authority is granted on the members screen. The gates ask for a named role, not merely a permission.",
+      "targetSelector": "",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Templates",
+      "fallbackMessage": "Who may do what: the next screen is not reachable from here.",
+      "href": "/enterprise/members",
+      "stepNumber": 7
+    },
+    {
+      "title": "Members and roles",
+      "description": "Each role is a separate, revocable row.",
+      "voiceScript": "Each role is a separate row you can take back. When the ministry hires a real technical director, you hand that role over and stop holding it.",
+      "captionText": "Each role is a separate row you can take back. When the ministry hires a real technical director, you hand that role over and stop holding it.",
+      "targetSelector": ".table, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Members",
+      "fallbackMessage": "Members and roles: not visible on this screen yet.",
+      "stepNumber": 8
+    }
+  ]
+}

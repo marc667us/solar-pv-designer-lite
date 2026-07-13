@@ -1,0 +1,68 @@
+{
+  "tutorialId": "tut-enterprise_beneficiaries",
+  "pageId": "enterprise_beneficiaries",
+  "title": "The site register",
+  "module": "Enterprise",
+  "description": "Register sites by hand, or import hundreds from a spreadsheet.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Register"
+  ],
+  "covers": [],
+  "estimatedDuration": 6,
+  "steps": [
+    {
+      "title": "Every site in the programme",
+      "description": "Schools, clinics, homes -- the register.",
+      "voiceScript": "This is the register of every site in the programme.",
+      "captionText": "This is the register of every site in the programme.",
+      "targetSelector": ".table, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Register",
+      "fallbackMessage": "Every site in the programme: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Add one by hand",
+      "description": "For a single site.",
+      "voiceScript": "A single site can be registered by hand.",
+      "captionText": "A single site can be registered by hand.",
+      "targetSelector": "a[href*=\"/beneficiaries/new\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Register",
+      "fallbackMessage": "Add one by hand: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Or import a spreadsheet",
+      "description": "Hundreds of rows, in one upload.",
+      "voiceScript": "But a real programme arrives as a spreadsheet. Upload it here.",
+      "captionText": "But a real programme arrives as a spreadsheet. Upload it here.",
+      "targetSelector": "input[type=\"file\"], form, a[href*=\"/import\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Register",
+      "fallbackMessage": "Or import a spreadsheet: not visible on this screen yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Nothing is written until you commit",
+      "description": "The upload is STAGED first.",
+      "voiceScript": "The upload does not touch the register. It is staged, so you see exactly what would be created -- duplicates caught, invalid rows rejected -- and nothing is written until you commit it.",
+      "captionText": "The upload does not touch the register. It is staged, so you see exactly what would be created -- duplicates caught, invalid rows rejected -- and nothing is written until you commit it.",
+      "targetSelector": ".alert, .card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Register",
+      "fallbackMessage": "Nothing is written until you commit: not visible on this screen yet.",
+      "stepNumber": 4
+    }
+  ]
+}

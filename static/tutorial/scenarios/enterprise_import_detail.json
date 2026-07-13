@@ -1,0 +1,94 @@
+{
+  "tutorialId": "tut-enterprise_import_detail",
+  "pageId": "enterprise_import_detail",
+  "title": "The staged import",
+  "module": "Enterprise",
+  "description": "See exactly what an upload WOULD create -- before a single row is written.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Import"
+  ],
+  "covers": [],
+  "estimatedDuration": 9,
+  "steps": [
+    {
+      "title": "Nothing has been written yet",
+      "description": "This is a preview, not the register.",
+      "voiceScript": "This is the most important screen in the import. Your file has been read, but nothing has been written to the register yet.",
+      "captionText": "This is the most important screen in the import. Your file has been read, but nothing has been written to the register yet.",
+      "targetSelector": ".alert, .card, .ent-page",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Import",
+      "fallbackMessage": "Nothing has been written yet: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "What would be created",
+      "description": "Row by row, exactly as it would land.",
+      "voiceScript": "Here is every row, exactly as it would land in the register.",
+      "captionText": "Here is every row, exactly as it would land in the register.",
+      "targetSelector": "table, .table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Import",
+      "fallbackMessage": "What would be created: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Duplicates are caught",
+      "description": "The same school listed twice, under two codes.",
+      "voiceScript": "A school listed twice in the same file is caught here -- even under two different codes. The register alone could not catch that, because none of this is in the register yet.",
+      "captionText": "A school listed twice in the same file is caught here -- even under two different codes. The register alone could not catch that, because none of this is in the register yet.",
+      "targetSelector": "table, .badge, .text-danger",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Import",
+      "fallbackMessage": "Duplicates are caught: not visible on this screen yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Invalid rows are rejected",
+      "description": "Not silently coerced into something wrong.",
+      "voiceScript": "A row that does not make sense is rejected and told to you, rather than quietly turned into something plausible.",
+      "captionText": "A row that does not make sense is rejected and told to you, rather than quietly turned into something plausible.",
+      "targetSelector": "table, .text-danger, .alert",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Import",
+      "fallbackMessage": "Invalid rows are rejected: not visible on this screen yet.",
+      "stepNumber": 4
+    },
+    {
+      "title": "Remap a column",
+      "description": "If the spreadsheet's headings are not ours.",
+      "voiceScript": "If the spreadsheet's column headings are not the ones we expect, remap them here rather than editing the file.",
+      "captionText": "If the spreadsheet's column headings are not the ones we expect, remap them here rather than editing the file.",
+      "targetSelector": "select, form",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Import",
+      "fallbackMessage": "Remap a column: not visible on this screen yet.",
+      "stepNumber": 5
+    },
+    {
+      "title": "Commit, or cancel",
+      "description": "Only a commit writes. Cancel leaves no trace.",
+      "voiceScript": "Only committing writes to the register. Cancelling leaves nothing behind.",
+      "captionText": "Only committing writes to the register. Cancelling leaves nothing behind.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning, .btn-outline-secondary",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Import",
+      "fallbackMessage": "Commit, or cancel: not visible on this screen yet.",
+      "stepNumber": 6
+    }
+  ]
+}

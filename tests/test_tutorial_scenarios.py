@@ -12,9 +12,11 @@ Run: python -m pytest tests/test_tutorial_scenarios.py -q
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 import sys
+import types
 
 import pytest
 
@@ -37,6 +39,50 @@ def _files() -> list[str]:
 def _load(name: str) -> dict:
     with open(os.path.join(SCEN, name), encoding="utf-8") as f:
         return json.load(f)
+
+
+class _RuleView:
+    """Just enough of a Flask app for feature_endpoints(): a url_map that iterates rules."""
+
+    def __init__(self, rules):
+        self.url_map = types.SimpleNamespace(iter_rules=lambda: list(rules))
+
+
+@functools.lru_cache(maxsize=1)
+def real_app():
+    """The routes PRODUCTION serves -- including the ones web_app.py does not own.
+
+    `import web_app` is NOT the whole app. The Enterprise Programme module is registered in
+    wsgi.py (web_app.py is CRLF+mojibake and must never be edited), so web_app.app.url_map
+    is missing ~40 live routes. That is why every enterprise page looked like a dead endpoint
+    here, and why the coverage ratchet reported an empty backlog while an entire shipped
+    module had no tutorial: the ratchet could not SEE the pages, so it could not miss them.
+
+    The enterprise routes are registered onto a THROWAWAY Flask app and the rule lists are
+    merged. Two things forbid the obvious alternatives:
+
+      * Registering onto web_app.app mutates shared state. Flask refuses setup methods
+        (register_enterprise_programme installs a context_processor) once the app has served
+        its first request -- so it works when this file runs alone and blows up with
+        "setup method can no longer be called" the moment another test file has already
+        exercised the app. Test order must not decide whether this passes.
+      * Importing wsgi runs load_dotenv(), which would pull DATABASE_URL out of .env and
+        point the whole suite at the LIVE Postgres.
+    """
+    import web_app
+    from flask import Flask
+    from enterprise_programme_routes import register_enterprise_programme
+
+    probe = Flask("_tutorial_endpoint_probe")
+    register_enterprise_programme(
+        probe,
+        get_db=web_app.get_db,
+        login_required=web_app.login_required,
+        csrf_protect=web_app.csrf_protect,
+        current_user=web_app.current_user,
+    )
+    rules = list(web_app.app.url_map.iter_rules()) + list(probe.url_map.iter_rules())
+    return _RuleView(rules)
 
 
 def _published() -> list[str]:
@@ -110,8 +156,7 @@ def test_multi_screen_flows_exist():
 @pytest.mark.parametrize("name", _files())
 def test_page_id_and_covers_are_real_endpoints(name):
     """A scenario keyed (or pointing) at a dead endpoint would never load."""
-    import web_app
-    endpoints = {r.endpoint for r in web_app.app.url_map.iter_rules()}
+    endpoints = {r.endpoint for r in real_app().url_map.iter_rules()}
     doc = _load(name)
     assert doc["pageId"] in endpoints, f"{name}: no such Flask endpoint"
     for ep in doc.get("covers", []):
@@ -171,7 +216,6 @@ def test_feature_coverage_ratchet():
     which is why the generator could not draft them automatically.)
     """
     from scripts.sync_tutorials import feature_endpoints, scenario_files
-    import web_app
 
     with open(os.path.join(ROOT, "static", "tutorial", "backlog.json"),
               encoding="utf-8") as f:
@@ -181,7 +225,9 @@ def test_feature_coverage_ratchet():
     covered = set(scen)
     for doc in scen.values():
         covered.update(doc.get("covers") or [])
-    feats = set(feature_endpoints(web_app.app))
+    # real_app(), not web_app.app -- the enterprise routes live in wsgi.py, so the bare
+    # web_app app cannot SEE them, and a ratchet that cannot see a page cannot miss it.
+    feats = set(feature_endpoints(real_app()))
 
     new_gaps = sorted(feats - covered - backlog)
     assert not new_gaps, (

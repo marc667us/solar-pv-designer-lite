@@ -7310,6 +7310,102 @@ Every user has an 8-char referral_code. Share /r/<code> -- visitors get a ref_co
 /growth (admin scope) -- org-wide growth counts.
 /admin/opportunities, /admin/agent -- prospecting.
 
+# helpline-prompt-2026-07-13-enterprise
+
+=== ENTERPRISE PROGRAMME (since 2026-07-13, LIVE) ===
+
+The biggest module on the platform. It runs a NATIONAL or MULTI-SITE programme --
+a ministry electrifying 400 schools, a utility rolling out clinics -- as opposed to
+a single design for a single customer.
+
+The core idea, and the thing to explain first: a programme holds ONE reference
+design, and EVERY site is an instance of that same design. The bill of quantities is
+therefore the same at every site, and the funding requirement is that cost multiplied
+by the number of sites. A site whose survey disagrees with the reference does NOT get
+redesigned -- it raises a variance flag for engineering. (If each site were
+redesigned you would have as many different BOQs as you have sites, and the programme
+could not be funded as one thing.)
+
+Routes (all under /enterprise, all require login):
+/enterprise -- portfolio: your organisations and their programmes.
+/enterprise/onboarding -- create the organisation (ministry, agency, utility, NGO,
+    donor). The creator becomes its owner AND is granted the operational roles needed
+    to run it single-handed until colleagues are added.
+/enterprise/members -- invite people; grant and revoke roles.
+/enterprise/programmes/new -- register a programme.
+/enterprise/programmes/<id> -- the lifecycle command centre.
+/enterprise/programmes/<id>/design -- the ONE reference design; approve it; roll it out.
+/enterprise/programmes/<id>/beneficiaries -- the site register.
+/enterprise/programmes/<id>/import -- bulk-import sites from a spreadsheet.
+/enterprise/programmes/<id>/priority -- score and rank the sites.
+/enterprise/programmes/<id>/lifecycle-documents -- generate the phase's documents.
+/enterprise/templates -- versioned programme templates.
+
+How it works, in order:
+1. Create an ORGANISATION. A programme belongs to an organisation, not a person.
+2. Author a TEMPLATE (one per beneficiary type: school, clinic, household). Templates
+   are VERSIONED: a version is Drafted, Submitted, Approved, then Published. An
+   approved version is FROZEN and can never be edited -- you raise a new version. That
+   is what makes a programme built two years ago still explicable.
+3. Register the PROGRAMME. It is born at Phase 1 (Concept) with all 16 lifecycle
+   phases and 14 STAGE GATES seeded.
+4. Load the SITES (beneficiaries) -- by hand, or bulk-import a spreadsheet. The import
+   is STAGED: nothing is written to the register until you commit. Duplicates (the same
+   school listed twice, even under two codes) and invalid rows are caught in the preview.
+5. QUALIFY the sites: score each one (access, roof, load, risk) on the priority list.
+   An UNSCORED site is shown as a QUESTION, never as a zero -- a zero would quietly sink
+   it to the bottom and it would never be built. On the risk scale 100 means NO risk.
+   Scoring is NOT deciding: somebody else decides on the evidence of the score.
+6. Build the REFERENCE DESIGN from an approved template version, approve it, and roll
+   it out. Every qualified site is then built as a COPY of that one design.
+
+Authority: the 14 stage gates each demand a NAMED ROLE (programme sponsor, steering
+committee, programme manager, technical director, engineering manager...), not merely a
+permission. Roles are granted on /enterprise/members and each is a separate, revocable
+row. Separation of duties relaxes for a ONE-PERSON organisation (it is a deadlock, not a
+control, when there is only one person) and the audit record says so explicitly.
+
+Design paths: 'standard' builds a system at every site. 'generation station' builds ONE
+plant that supplies them all (built once, not once per beneficiary).
+
+NOTE: 'Enterprise Programme' (this module) is NOT the same thing as the 'Enterprise'
+PRICING PLAN. If the user is asking about cost, tiers or subscriptions, they mean the
+plan -- see PLANS below.
+
+=== GENERATION STATION / UTILITY-SCALE (since 2026-07-02) ===
+
+/large-scale-solar -- utility-scale solar farm design. A 14-step wizard: site, yield,
+layout, electrical, grid connection, finance, BOQ, reports. Produces 18 downloadable
+report PDFs at step 13, a single-line diagram, an equipment arrangement drawing, and a
+full solar-farm equipment BOQ priced from the marketplace.
+There is a worked DEMO project to explore without building one.
+
+=== 3D DIGITAL TWIN ===
+
+/large-scale-solar/<id>/digital-twin -- a 3D model that is an EXACT copy of the
+committed design, not an illustration: the module count, inverter count and transformer
+count in the twin equal the design's. Real vehicle roads, a substation compound, night
+lighting, sun-path and shadow analysis. Also /equipment-layout (GA drawings) and
+/electrical-sld (the single-line diagram).
+
+=== PROJECT FUNDING -- 'Sponsor a project' ===
+
+A project can seek funding rather than be paid for outright. Institutions register,
+projects are listed, and sponsors fund them. Admin views: /admin/funding/institutions,
+/admin/funding/revenue. In an enterprise programme, funding is sought BY THE PROGRAMME
+for all its locations at once -- which is only possible because every site is the same
+design and therefore the same cost.
+
+=== IN-APP TUTORIALS ===
+
+EVERY page teaches itself. The floating 'Help & Tutorial' button runs a guided,
+narrated walkthrough of the screen the user is on, moving a cursor to each control. It
+has four modes: guided (step at your own pace), auto (plays itself), watch (read-only,
+never clicks anything), and explain (asks me about the step). Multi-screen tours walk
+the user across screens. Written guides live at /guides -- each is readable, narrated
+aloud by the browser, downloadable as PDF, or playable as a live walkthrough.
+If a user is lost on a page, tell them to press 'Help & Tutorial' on THAT page.
+
 === PLANS ===
 
 Free Trial: 14 days, 1 project, basic Inspection report. Marketplace browse + Share buttons + referral all free.
@@ -7621,6 +7717,29 @@ def assistant_chat():
          "After saving your Loads, click **View Results** (or open Results from the sidebar). The engine sizes your PV array, battery bank, inverter, and cables automatically."),
         (["report","pdf","boq","proposal","export","download","bill of quantities"],
          "Reports are in the sidebar under your project. BOQ, Economic Analysis, and Proposal require a **Professional or Enterprise** plan. PDF download is on each report page."),
+        # kb-enterprise-programme-2026-07-13
+        # -- ENTERPRISE PROGRAMME (live 2026-07-13) --
+        # NOTE: these MUST sit above the plan tuple below, which owns the bare word
+        # "enterprise". They use PHRASES, never bare "enterprise", so a pricing
+        # question still reaches the plan answer instead of this one.
+        (["enterprise programme","enterprise program","national programme","national program","multi-site","many sites","hundreds of sites","rollout","roll out to all"],
+         "The **Enterprise Programme** module (/enterprise) runs a national or multi-site programme -- a ministry electrifying 400 schools, say. The key idea: the programme holds **ONE reference design**, and every site is an instance of it, so the BOQ is the same at every site and funding can be sought for all of them at once. Flow: create your organisation (/enterprise/onboarding) -> author a versioned template -> register the programme (16 phases, 14 stage gates) -> load the sites -> score and qualify them -> build the reference design and roll it out. Press **Help & Tutorial** on any /enterprise page for a guided walkthrough."),
+        (["beneficiar","site register","import sites","upload sites","spreadsheet of sites","bulk import","csv of schools"],
+         "Sites (beneficiaries) live in the programme's register. Add one by hand, or bulk-import a spreadsheet at /enterprise/programmes/<id>/import. The import is **staged**: nothing is written to the register until you commit it. The preview catches duplicates -- the same school listed twice, even under two different codes -- and rejects invalid rows rather than quietly coercing them."),
+        (["stage gate","gates","phase gate","16 phases","14 gates","lifecycle phase","programme lifecycle"],
+         "A programme carries **16 lifecycle phases and 14 stage gates**, seeded when you register it. Each gate must be signed by a **named role** -- programme sponsor, steering committee, technical director, engineering manager -- not merely by somebody holding an approval permission. Grant roles on /enterprise/members; each is a separate, revocable row."),
+        (["qualification","qualify a site","priority list","score a site","scorecard","which site first","which site","build first","rank the sites"],
+         "The priority list (/enterprise/programmes/<id>/priority) scores and ranks every site. Two things to know: an **unscored site is shown as a question, never as a zero** (a zero would sink it to the bottom and it would never get built), and on the risk scale **100 means NO risk**. Scoring is not deciding -- somebody else decides on the evidence of the score."),
+        (["programme template","reference design","one design","same design","template version","approve a template"],
+         "A **programme template** defines what every site receives, and it is versioned: Draft -> Submitted -> Approved -> Published. An approved version is **frozen and can never be edited** -- you raise a new version instead, which is what keeps a programme built two years ago explicable. The programme then builds **one reference design** from an approved version, and every site is a copy of it. A site whose survey disagrees raises a variance flag for engineering; it is never silently resized."),
+        # -- GENERATION STATION / UTILITY-SCALE + DIGITAL TWIN --
+        (["generation station","utility scale","utility-scale","solar farm","large scale solar","large-scale","power plant","mw plant"],
+         "**Generation Station** (/large-scale-solar) designs utility-scale solar farms through a 14-step wizard: site, yield, layout, electrical, grid connection, finance and BOQ. It produces 18 report PDFs, a single-line diagram, equipment arrangement drawings, and a full solar-farm BOQ priced from the marketplace. There is a worked demo project you can explore without building one."),
+        (["digital twin","3d twin","3d model","3d view","walk the site","sun path","shadow analysis"],
+         "The **3D Digital Twin** (/large-scale-solar/<id>/digital-twin) is an exact copy of your committed design, not an illustration -- the module, inverter and transformer counts in the twin equal the design's. It has real vehicle roads, a substation compound, night lighting, and sun-path shadow analysis. The equipment layout drawings and the single-line diagram are alongside it."),
+        # -- THE TUTORIAL ENGINE ITSELF --
+        (["tutorial","walkthrough","walk me through","guided tour","how do i use this page","show me how","demo of this page"],
+         "Every page teaches itself. Press the floating **Help & Tutorial** button on the page you are stuck on and it runs a narrated walkthrough of that screen, moving a cursor to each control. Four modes: guided, auto (plays itself), watch (never clicks anything), and explain (ask me about a step). Written guides are at **/guides** -- readable, read aloud by your browser, downloadable as PDF, or playable live."),
         (["plan","professional","enterprise","subscription","limit","feature"],
          "The Free Trial gives 1 project + 5 AI Agent runs for 14 days. Professional ($49/mo) gives 10 projects + all 9 reports. Business ($99/mo) is unlimited + white-label. Upgrade at **Settings â†' Upgrade**."),
         (["payment","momo","mobile money","mtn","paystack","stripe","billing","invoice"],

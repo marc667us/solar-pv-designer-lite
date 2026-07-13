@@ -1,0 +1,68 @@
+{
+  "tutorialId": "tut-enterprise_lifecycle_documents",
+  "pageId": "enterprise_lifecycle_documents",
+  "title": "Lifecycle documents",
+  "module": "Enterprise",
+  "description": "The real activities of each phase, written up from the programme's own answers.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Documents"
+  ],
+  "covers": [],
+  "estimatedDuration": 6,
+  "steps": [
+    {
+      "title": "What this phase consists of",
+      "description": "The actual activities, not a template.",
+      "voiceScript": "Each of the sixteen phases has real activities. This lists the ones for the phase the programme is in.",
+      "captionText": "Each of the sixteen phases has real activities. This lists the ones for the phase the programme is in.",
+      "targetSelector": ".table, table, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Documents",
+      "fallbackMessage": "What this phase consists of: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Tick what applies",
+      "description": "You choose what the document covers.",
+      "voiceScript": "Tick the activities this document should cover.",
+      "captionText": "Tick the activities this document should cover.",
+      "targetSelector": "input[type=\"checkbox\"], form",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Documents",
+      "fallbackMessage": "Tick what applies: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Answer, or upload a source",
+      "description": "It is written FROM the programme, not guessed.",
+      "voiceScript": "Answer the questions, or upload a document it can read. The write-up comes from the programme's own answers -- it is not invented.",
+      "captionText": "Answer the questions, or upload a document it can read. The write-up comes from the programme's own answers -- it is not invented.",
+      "targetSelector": "textarea, input[type=\"file\"], form",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Documents",
+      "fallbackMessage": "Answer, or upload a source: not visible on this screen yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Generate it",
+      "description": "Downloadable, and attached to the programme.",
+      "voiceScript": "Generate it, and it is attached to the programme and downloadable.",
+      "captionText": "Generate it, and it is attached to the programme and downloadable.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Documents",
+      "fallbackMessage": "Generate it: not visible on this screen yet.",
+      "stepNumber": 4
+    }
+  ]
+}

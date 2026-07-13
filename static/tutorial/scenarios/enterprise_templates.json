@@ -1,0 +1,72 @@
+{
+  "tutorialId": "tut-enterprise_templates",
+  "pageId": "enterprise_templates",
+  "title": "Programme templates",
+  "module": "Enterprise",
+  "description": "Versioned packages that define what every site in a programme receives.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Templates",
+    "New template"
+  ],
+  "covers": [
+    "enterprise_template_new"
+  ],
+  "estimatedDuration": 6,
+  "steps": [
+    {
+      "title": "Your templates",
+      "description": "One per beneficiary type: school, clinic, home.",
+      "voiceScript": "A template defines the package a site receives. Typically one per kind of beneficiary -- a school, a clinic, a household.",
+      "captionText": "A template defines the package a site receives. Typically one per kind of beneficiary -- a school, a clinic, a household.",
+      "targetSelector": ".table, table, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Templates",
+      "fallbackMessage": "Your templates: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Create one",
+      "description": "Give it a code, a name and a beneficiary type.",
+      "voiceScript": "Let us create one.",
+      "captionText": "Let us create one.",
+      "targetSelector": "",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Templates",
+      "fallbackMessage": "Create one: the next screen is not reachable from here.",
+      "href": "/enterprise/templates/new",
+      "stepNumber": 2
+    },
+    {
+      "title": "Code, name, type",
+      "description": "The code must be unique in your organisation.",
+      "voiceScript": "Give it a code, a name, and the beneficiary type it serves. The code must be unique within your organisation.",
+      "captionText": "Give it a code, a name, and the beneficiary type it serves. The code must be unique within your organisation.",
+      "targetSelector": "input[name=\"code\"], input, form",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New template",
+      "fallbackMessage": "Code, name, type: not visible on this screen yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "It is born as Draft v1",
+      "description": "Drafts cannot be built from.",
+      "voiceScript": "It is created with version one, in Draft. A draft cannot be built from -- it is submitted, then approved, and only then published.",
+      "captionText": "It is created with version one, in Draft. A draft cannot be built from -- it is submitted, then approved, and only then published.",
+      "targetSelector": "button[type=\"submit\"], .btn-warning",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "New template",
+      "fallbackMessage": "It is born as Draft v1: not visible on this screen yet.",
+      "stepNumber": 4
+    }
+  ]
+}

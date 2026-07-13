@@ -958,6 +958,151 @@
         "Demo"
       ],
       "estimatedDuration": 4
+    },
+    {
+      "pageId": "enterprise_home",
+      "title": "Enterprise Programme",
+      "module": "Enterprise",
+      "steps": 8,
+      "screens": [
+        "Enterprise",
+        "Templates",
+        "Members"
+      ],
+      "estimatedDuration": 12
+    },
+    {
+      "pageId": "enterprise_onboarding",
+      "title": "Create an organisation",
+      "module": "Enterprise",
+      "steps": 3,
+      "screens": [
+        "Onboarding"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "enterprise_programme_new",
+      "title": "Register a programme",
+      "module": "Enterprise",
+      "steps": 4,
+      "screens": [
+        "New programme"
+      ],
+      "estimatedDuration": 6
+    },
+    {
+      "pageId": "enterprise_programme_detail",
+      "title": "The lifecycle command centre",
+      "module": "Enterprise",
+      "steps": 5,
+      "screens": [
+        "Programme",
+        "Design"
+      ],
+      "estimatedDuration": 8
+    },
+    {
+      "pageId": "enterprise_design",
+      "title": "One design, every site",
+      "module": "Enterprise",
+      "steps": 4,
+      "screens": [
+        "Design"
+      ],
+      "estimatedDuration": 6
+    },
+    {
+      "pageId": "enterprise_templates",
+      "title": "Programme templates",
+      "module": "Enterprise",
+      "steps": 4,
+      "screens": [
+        "Templates",
+        "New template"
+      ],
+      "estimatedDuration": 6
+    },
+    {
+      "pageId": "enterprise_template_detail",
+      "title": "Template versions",
+      "module": "Enterprise",
+      "steps": 4,
+      "screens": [
+        "Template"
+      ],
+      "estimatedDuration": 6
+    },
+    {
+      "pageId": "enterprise_beneficiaries",
+      "title": "The site register",
+      "module": "Enterprise",
+      "steps": 4,
+      "screens": [
+        "Register"
+      ],
+      "estimatedDuration": 6
+    },
+    {
+      "pageId": "enterprise_priority_list",
+      "title": "Which site first?",
+      "module": "Enterprise",
+      "steps": 5,
+      "screens": [
+        "Priority",
+        "Scorecard"
+      ],
+      "estimatedDuration": 8
+    },
+    {
+      "pageId": "enterprise_members",
+      "title": "Members and authority",
+      "module": "Enterprise",
+      "steps": 4,
+      "screens": [
+        "Members"
+      ],
+      "estimatedDuration": 6
+    },
+    {
+      "pageId": "enterprise_beneficiary_new",
+      "title": "Register a site",
+      "module": "Enterprise",
+      "steps": 3,
+      "screens": [
+        "New site"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "enterprise_beneficiary_detail",
+      "title": "One site's record",
+      "module": "Enterprise",
+      "steps": 3,
+      "screens": [
+        "Site"
+      ],
+      "estimatedDuration": 4
+    },
+    {
+      "pageId": "enterprise_import_detail",
+      "title": "The staged import",
+      "module": "Enterprise",
+      "steps": 6,
+      "screens": [
+        "Import"
+      ],
+      "estimatedDuration": 9
+    },
+    {
+      "pageId": "enterprise_lifecycle_documents",
+      "title": "Lifecycle documents",
+      "module": "Enterprise",
+      "steps": 4,
+      "screens": [
+        "Documents"
+      ],
+      "estimatedDuration": 6
     }
   ]
 }

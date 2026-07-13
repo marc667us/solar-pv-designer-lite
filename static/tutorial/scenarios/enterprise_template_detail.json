@@ -1,0 +1,68 @@
+{
+  "tutorialId": "tut-enterprise_template_detail",
+  "pageId": "enterprise_template_detail",
+  "title": "Template versions",
+  "module": "Enterprise",
+  "description": "Draft, submit, approve, publish -- and a frozen version can never change.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Template"
+  ],
+  "covers": [],
+  "estimatedDuration": 6,
+  "steps": [
+    {
+      "title": "The versions",
+      "description": "Each one is a separate, auditable package.",
+      "voiceScript": "Every version of the template is a separate, auditable package.",
+      "captionText": "Every version of the template is a separate, auditable package.",
+      "targetSelector": ".table, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Template",
+      "fallbackMessage": "The versions: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Fill it in",
+      "description": "The parameters every site inherits.",
+      "voiceScript": "The parameters here are what every site built from this version inherits.",
+      "captionText": "The parameters here are what every site built from this version inherits.",
+      "targetSelector": "form, textarea, input",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Template",
+      "fallbackMessage": "Fill it in: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Submit for approval",
+      "description": "The author does not certify their own work.",
+      "voiceScript": "Submit it for approval. Authoring and approving are separate authorities.",
+      "captionText": "Submit it for approval. Authoring and approving are separate authorities.",
+      "targetSelector": ".btn-warning, .btn-primary, button",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Template",
+      "fallbackMessage": "Submit for approval: not visible on this screen yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "Approved, then frozen",
+      "description": "An approved version can never be edited again.",
+      "voiceScript": "Once approved and published, the version is frozen. It can never be edited again -- you raise a new version instead. That is what makes a programme built two years ago still explicable.",
+      "captionText": "Once approved and published, the version is frozen. It can never be edited again -- you raise a new version instead. That is what makes a programme built two years ago still explicable.",
+      "targetSelector": ".badge, .table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Template",
+      "fallbackMessage": "Approved, then frozen: not visible on this screen yet.",
+      "stepNumber": 4
+    }
+  ]
+}

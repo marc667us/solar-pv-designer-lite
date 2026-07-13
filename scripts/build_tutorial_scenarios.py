@@ -122,6 +122,13 @@ COVERS: dict[str, list[str]] = {
     # The reports flow walks these four; the rest are drafted.
     "report_pv": ["report_energy", "report_cable", "report_boq", "report_economic"],
     "project_results": ["report_pv"],
+    # Enterprise Programme. Each entry below is a real nav() step in that flow:
+    # home -> /enterprise/templates -> /enterprise/members, and
+    # programme_detail -> .../design. Nothing is listed here that the flow does not walk.
+    "enterprise_home": ["enterprise_templates", "enterprise_members"],
+    "enterprise_templates": ["enterprise_template_new"],
+    "enterprise_programme_detail": ["enterprise_design"],
+    "enterprise_priority_list": ["enterprise_qualify_site"],
 }
 
 
@@ -1625,6 +1632,338 @@ SCENARIOS: dict[str, tuple] = {
         ],
     ),
 
+    # --- Enterprise Programme (rebuild slices 1-7, live 2026-07-13) -------------
+    #
+    # Every nav() below follows a link that REALLY EXISTS on the page it starts from
+    # (checked against templates/enterprise_programme/*.html). A nav whose anchor is not
+    # on the current screen does not fail loudly -- the engine just shows the fallback and
+    # walks on -- so a plausible-looking chain can silently teach nothing. The chains here
+    # are: home -> templates -> members, and programme_detail -> design.
+    "enterprise_home": (
+        "Enterprise Programme", "Enterprise",
+        "Run a national programme: one organisation, one design, hundreds of sites.",
+        [
+            step("Your organisations", "A programme belongs to an organisation, not a person.",
+                 "An enterprise programme belongs to an organisation, not to one person. "
+                 "Everyone who works on it is a member of that organisation.",
+                 target=".ent-page .card, .card", screen="Enterprise"),
+            step("Switch organisation", "You may belong to several. This chooses the active one.",
+                 "If you belong to more than one organisation, this chooses which one you are "
+                 "acting in. Everything on the page is scoped to it.",
+                 target='select[name="tenant_id"], .form-select', screen="Enterprise"),
+            step("Your programmes", "Each one carries 16 phases and 14 stage gates.",
+                 "Each programme carries sixteen lifecycle phases and fourteen stage gates. "
+                 "It opens at Phase 1, Concept.",
+                 target=".table, table", screen="Enterprise"),
+            step("Register a programme", "Name it, choose its design path, name its sponsor.",
+                 "To start one, register it here. You name it, choose its design path, and "
+                 "name a sponsor from your own members.",
+                 target='a[href*="/enterprise/programmes/new"], .btn-warning',
+                 screen="Enterprise"),
+            nav("The template engine", "Templates define what every site gets.",
+                "First, the template engine. A template defines what every site in the "
+                "programme receives.",
+                href="/enterprise/templates", screen="Enterprise"),
+            step("Versioned, and approved", "A template is used only once approved.",
+                 "Templates are versioned. A version is drafted, submitted, and approved "
+                 "before any programme is allowed to build from it.",
+                 target=".table, table, .card", screen="Templates"),
+            nav("Who may do what", "Roles are granted here, and revoked here.",
+                "Authority is granted on the members screen. The gates ask for a named role, "
+                "not merely a permission.",
+                href="/enterprise/members", screen="Templates"),
+            step("Members and roles", "Each role is a separate, revocable row.",
+                 "Each role is a separate row you can take back. When the ministry hires a real "
+                 "technical director, you hand that role over and stop holding it.",
+                 target=".table, table", screen="Members"),
+        ],
+    ),
+    "enterprise_onboarding": (
+        "Create an organisation", "Enterprise",
+        "Register the ministry, agency or utility the programme belongs to.",
+        [
+            step("The legal entity", "This is the organisation, not your personal workspace.",
+                 "This registers a real organisation. It is separate from your personal "
+                 "workspace, and other people can be invited into it.",
+                 target="form, .card", screen="Onboarding"),
+            step("Name and type", "Ministry, agency, utility, NGO, donor.",
+                 "Give its legal name and choose what kind of body it is.",
+                 target='input[name="legal_name"], input, select', screen="Onboarding"),
+            step("You become its owner", "And you are granted the roles to actually run it.",
+                 "Creating it makes you its owner, and grants you the operational roles needed "
+                 "to run a programme single-handed until you have colleagues to hand them to.",
+                 target='button[type="submit"], .btn-warning', screen="Onboarding"),
+        ],
+    ),
+    "enterprise_programme_new": (
+        "Register a programme", "Enterprise",
+        "A programme is born at Phase 1 with all 16 phases and 14 gates seeded.",
+        [
+            step("Code and name", "The code is how the programme is referenced everywhere.",
+                 "Give the programme a code and a name. The code is how it is referenced "
+                 "everywhere else.",
+                 target='input[name="code"], input[name="name"], input', screen="New programme"),
+            step("The design path", "Standard rooftop, or a generation station.",
+                 "Choose the design path. Standard builds a system at every site. Generation "
+                 "station builds one plant that supplies them all.",
+                 target='select[name="design_strategy"], select', screen="New programme"),
+            step("The sponsor", "Chosen from your members. Never typed.",
+                 "The sponsor is chosen from your organisation's own members. A sponsor who is "
+                 "not in the organisation is not a sponsor.",
+                 target='select[name="sponsor_user_id"], select', screen="New programme"),
+            step("Register it", "It opens at Phase 1, Concept, awaiting Gate 1.",
+                 "Register it, and it opens at Phase 1, Concept, with all fourteen gates "
+                 "waiting.",
+                 target='button[type="submit"], .btn-warning', screen="New programme"),
+        ],
+    ),
+    "enterprise_programme_detail": (
+        "The lifecycle command centre", "Enterprise",
+        "16 phases, 14 stage gates, and the one design every site is built from.",
+        [
+            step("Where the programme stands", "Its phase, and the gate it is waiting on.",
+                 "This is the command centre. It shows which of the sixteen phases the "
+                 "programme is in, and which gate it is waiting on.",
+                 target=".ent-page .card, .card", screen="Programme"),
+            step("The 14 stage gates", "A gate needs a NAMED AUTHORITY, not just permission.",
+                 "Each gate must be approved by a named authority. Holding a general approval "
+                 "permission is deliberately not enough -- the gate asks for the role.",
+                 target=".table, table, .badge", screen="Programme"),
+            step("Lifecycle documents", "Generated from the programme, not guessed.",
+                 "Each phase has its real activities. The documents are written from the "
+                 "programme's own answers, not invented.",
+                 target='a[href*="/lifecycle-documents"], a[href*="/documents"]',
+                 screen="Programme"),
+            nav("The reference design", "ONE design. Every site is an instance of it.",
+                "Now the heart of it. A programme holds one reference design, and every site "
+                "is an instance of that same design.",
+                href_from='a[href*="/design"]', screen="Programme"),
+            step("One design, scaled", "The BOQ is the same at every site.",
+                 "Because every site is the same design, the bill of quantities is the same at "
+                 "every site, and the funding requirement is that cost times the number of "
+                 "sites.",
+                 target=".card, table", screen="Design"),
+        ],
+    ),
+    "enterprise_design": (
+        "One design, every site", "Enterprise",
+        "The programme's single reference design, instantiated at every location.",
+        [
+            step("The reference design", "Built once, from an approved template version.",
+                 "The programme's reference design is built once, from a template version "
+                 "somebody approved.",
+                 target=".card, form", screen="Design"),
+            # The Approve/Roll-out buttons only exist ONCE a design has been created; on a
+            # fresh programme this screen is just the create form. The selector therefore
+            # lists the real controls first and falls back to the form that is always there,
+            # so the step lands on something in BOTH states rather than silently showing a
+            # fallback message on the empty one.
+            step("Approve it", "Nothing is rolled out from an unapproved design.",
+                 "It must be approved before anything is rolled out. That approval is control "
+                 "C04, and it is checked again on the worker, not only here.",
+                 target=".btn-success, .btn-warning, form, .card", screen="Design"),
+            step("Roll it out", "Every qualified site is built from this one design.",
+                 "Rolling out queues the work. Every qualified site is then built as a copy of "
+                 "this design -- not redesigned, copied.",
+                 target='button, .btn', screen="Design"),
+            step("The survey is evidence, not an input", "A site that differs raises a flag.",
+                 "A site whose survey disagrees with the reference does not get resized. It "
+                 "raises a variance flag for engineering. Otherwise you would have as many "
+                 "different bills of quantities as you have sites.",
+                 target=".card, .alert, table", screen="Design"),
+        ],
+    ),
+    "enterprise_templates": (
+        "Programme templates", "Enterprise",
+        "Versioned packages that define what every site in a programme receives.",
+        [
+            step("Your templates", "One per beneficiary type: school, clinic, home.",
+                 "A template defines the package a site receives. Typically one per kind of "
+                 "beneficiary -- a school, a clinic, a household.",
+                 target=".table, table, .card", screen="Templates"),
+            nav("Create one", "Give it a code, a name and a beneficiary type.",
+                "Let us create one.", href="/enterprise/templates/new", screen="Templates"),
+            step("Code, name, type", "The code must be unique in your organisation.",
+                 "Give it a code, a name, and the beneficiary type it serves. The code must be "
+                 "unique within your organisation.",
+                 target='input[name="code"], input, form', screen="New template"),
+            step("It is born as Draft v1", "Drafts cannot be built from.",
+                 "It is created with version one, in Draft. A draft cannot be built from -- it "
+                 "is submitted, then approved, and only then published.",
+                 target='button[type="submit"], .btn-warning', screen="New template"),
+        ],
+    ),
+    "enterprise_template_detail": (
+        "Template versions", "Enterprise",
+        "Draft, submit, approve, publish -- and a frozen version can never change.",
+        [
+            step("The versions", "Each one is a separate, auditable package.",
+                 "Every version of the template is a separate, auditable package.",
+                 target=".table, table", screen="Template"),
+            step("Fill it in", "The parameters every site inherits.",
+                 "The parameters here are what every site built from this version inherits.",
+                 target="form, textarea, input", screen="Template"),
+            step("Submit for approval", "The author does not certify their own work.",
+                 "Submit it for approval. Authoring and approving are separate authorities.",
+                 target=".btn-warning, .btn-primary, button", screen="Template"),
+            step("Approved, then frozen", "An approved version can never be edited again.",
+                 "Once approved and published, the version is frozen. It can never be edited "
+                 "again -- you raise a new version instead. That is what makes a programme "
+                 "built two years ago still explicable.",
+                 target=".badge, .table", screen="Template"),
+        ],
+    ),
+    "enterprise_beneficiaries": (
+        "The site register", "Enterprise",
+        "Register sites by hand, or import hundreds from a spreadsheet.",
+        [
+            step("Every site in the programme", "Schools, clinics, homes -- the register.",
+                 "This is the register of every site in the programme.",
+                 target=".table, table", screen="Register"),
+            step("Add one by hand", "For a single site.",
+                 "A single site can be registered by hand.",
+                 target='a[href*="/beneficiaries/new"], .btn-warning', screen="Register"),
+            step("Or import a spreadsheet", "Hundreds of rows, in one upload.",
+                 "But a real programme arrives as a spreadsheet. Upload it here.",
+                 target='input[type="file"], form, a[href*="/import"]', screen="Register"),
+            step("Nothing is written until you commit", "The upload is STAGED first.",
+                 "The upload does not touch the register. It is staged, so you see exactly what "
+                 "would be created -- duplicates caught, invalid rows rejected -- and nothing "
+                 "is written until you commit it.",
+                 target=".alert, .card, table", screen="Register"),
+        ],
+    ),
+    "enterprise_priority_list": (
+        "Which site first?", "Enterprise",
+        "Score every site, and let the programme rank them honestly.",
+        [
+            step("The priority list", "Every site, ranked by its score.",
+                 "With hundreds of sites and a finite budget, this ranks them.",
+                 target=".table, table", screen="Priority"),
+            step("Unscored is a QUESTION, not a zero", "An unscored site is not a bad site.",
+                 "A site nobody has scored yet is shown as a question, never as a zero. A zero "
+                 "would quietly send it to the bottom of the list and it would never be built.",
+                 target="table, .badge, .text-muted", screen="Priority"),
+            nav("Score a site", "The scorecard: access, roof, load, risk.",
+                "Let us score one.", href_from='a[href*="/qualify"]', screen="Priority"),
+            step("100 means NO risk", "Read the direction of the scale carefully.",
+                 "Mind the direction of the risk scale. One hundred means no risk, not maximum "
+                 "risk.",
+                 target="form, .card, input", screen="Scorecard"),
+            step("Scoring is not deciding", "The scorer proposes. Another person decides.",
+                 "Scoring a site does not qualify it. Somebody else decides, on the evidence of "
+                 "the score. In a one-person organisation that separation relaxes -- and the "
+                 "audit record says so.",
+                 target="button, .btn", screen="Scorecard"),
+        ],
+    ),
+    "enterprise_members": (
+        "Members and authority", "Enterprise",
+        "Invite people, grant roles, and take them back.",
+        [
+            # The members screen is CARDS, not a table -- verified against the rendered DOM
+            # by tests/enterprise_programme/test_enterprise_tutorial_selectors.py.
+            step("Who is in the organisation", "And exactly what each of them may do.",
+                 "Everyone in the organisation, and what each of them is authorised to do.",
+                 target=".card, .card-body", screen="Members"),
+            step("Invite someone", "By username or email.",
+                 "Invite a colleague by username or email.",
+                 target='input[name="identifier"], input, form', screen="Members"),
+            step("Grant a role", "The gates ask for the ROLE, not the permission.",
+                 "Grant them a role. The stage gates ask for a named role, so this is how "
+                 "somebody becomes able to sign a gate.",
+                 target='select[name="role_code"], select', screen="Members"),
+            step("Revoking is real", "Take a role back and the authority goes with it.",
+                 "Roles can be taken back, and the authority goes with them. Re-inviting "
+                 "somebody who left starts them from nothing -- their old roles do not quietly "
+                 "come back.",
+                 target=".btn-outline-danger, .btn, button", screen="Members"),
+        ],
+    ),
+    "enterprise_beneficiary_new": (
+        "Register a site", "Enterprise",
+        "Add one school, clinic or household to the programme's register.",
+        [
+            step("Identify the site", "A code, a name, and what kind of site it is.",
+                 "Give the site a code and a name, and say what kind of site it is.",
+                 target='input[name="code"], input[name="name"], input',
+                 screen="New site"),
+            step("Where it is", "Community, district, region.",
+                 "Say where it is. The location is what the survey team will be sent to.",
+                 target='input[name="community"], input, select', screen="New site"),
+            step("Registered, not yet qualified", "Being on the register is not approval.",
+                 "Registering a site does not qualify it. It must still be scored, and "
+                 "somebody must still decide.",
+                 target='button[type="submit"], .btn-warning', screen="New site"),
+        ],
+    ),
+    "enterprise_beneficiary_detail": (
+        "One site's record", "Enterprise",
+        "Everything known about a single site: its score, its status, its project.",
+        [
+            step("The site", "Its identity and where it sits in the programme.",
+                 "Everything the programme knows about this one site.",
+                 target=".card, .ent-page", screen="Site"),
+            step("Its qualification", "The score, and who decided on it.",
+                 "Its qualification score, and the decision somebody took on the strength of "
+                 "it.",
+                 target="table, .badge, .card", screen="Site"),
+            step("Its status", "Registered, qualified, or built.",
+                 "And its status -- registered, qualified, or built. Moving a site forward is "
+                 "an authorised act, and it is recorded against a name.",
+                 target=".badge, button, .btn", screen="Site"),
+        ],
+    ),
+    "enterprise_import_detail": (
+        "The staged import", "Enterprise",
+        "See exactly what an upload WOULD create -- before a single row is written.",
+        [
+            step("Nothing has been written yet", "This is a preview, not the register.",
+                 "This is the most important screen in the import. Your file has been read, but "
+                 "nothing has been written to the register yet.",
+                 target=".alert, .card, .ent-page", screen="Import"),
+            step("What would be created", "Row by row, exactly as it would land.",
+                 "Here is every row, exactly as it would land in the register.",
+                 target="table, .table", screen="Import"),
+            step("Duplicates are caught", "The same school listed twice, under two codes.",
+                 "A school listed twice in the same file is caught here -- even under two "
+                 "different codes. The register alone could not catch that, because none of "
+                 "this is in the register yet.",
+                 target="table, .badge, .text-danger", screen="Import"),
+            step("Invalid rows are rejected", "Not silently coerced into something wrong.",
+                 "A row that does not make sense is rejected and told to you, rather than "
+                 "quietly turned into something plausible.",
+                 target="table, .text-danger, .alert", screen="Import"),
+            step("Remap a column", "If the spreadsheet's headings are not ours.",
+                 "If the spreadsheet's column headings are not the ones we expect, remap them "
+                 "here rather than editing the file.",
+                 target="select, form", screen="Import"),
+            step("Commit, or cancel", "Only a commit writes. Cancel leaves no trace.",
+                 "Only committing writes to the register. Cancelling leaves nothing behind.",
+                 target='button[type="submit"], .btn-warning, .btn-outline-secondary',
+                 screen="Import"),
+        ],
+    ),
+    "enterprise_lifecycle_documents": (
+        "Lifecycle documents", "Enterprise",
+        "The real activities of each phase, written up from the programme's own answers.",
+        [
+            step("What this phase consists of", "The actual activities, not a template.",
+                 "Each of the sixteen phases has real activities. This lists the ones for the "
+                 "phase the programme is in.",
+                 target=".table, table, .card", screen="Documents"),
+            step("Tick what applies", "You choose what the document covers.",
+                 "Tick the activities this document should cover.",
+                 target='input[type="checkbox"], form', screen="Documents"),
+            step("Answer, or upload a source", "It is written FROM the programme, not guessed.",
+                 "Answer the questions, or upload a document it can read. The write-up comes "
+                 "from the programme's own answers -- it is not invented.",
+                 target='textarea, input[type="file"], form', screen="Documents"),
+            step("Generate it", "Downloadable, and attached to the programme.",
+                 "Generate it, and it is attached to the programme and downloadable.",
+                 target='button[type="submit"], .btn-warning', screen="Documents"),
+        ],
+    ),
 }
 
 

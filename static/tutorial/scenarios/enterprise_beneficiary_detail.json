@@ -1,0 +1,55 @@
+{
+  "tutorialId": "tut-enterprise_beneficiary_detail",
+  "pageId": "enterprise_beneficiary_detail",
+  "title": "One site's record",
+  "module": "Enterprise",
+  "description": "Everything known about a single site: its score, its status, its project.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Site"
+  ],
+  "covers": [],
+  "estimatedDuration": 4,
+  "steps": [
+    {
+      "title": "The site",
+      "description": "Its identity and where it sits in the programme.",
+      "voiceScript": "Everything the programme knows about this one site.",
+      "captionText": "Everything the programme knows about this one site.",
+      "targetSelector": ".card, .ent-page",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Site",
+      "fallbackMessage": "The site: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Its qualification",
+      "description": "The score, and who decided on it.",
+      "voiceScript": "Its qualification score, and the decision somebody took on the strength of it.",
+      "captionText": "Its qualification score, and the decision somebody took on the strength of it.",
+      "targetSelector": "table, .badge, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Site",
+      "fallbackMessage": "Its qualification: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Its status",
+      "description": "Registered, qualified, or built.",
+      "voiceScript": "And its status -- registered, qualified, or built. Moving a site forward is an authorised act, and it is recorded against a name.",
+      "captionText": "And its status -- registered, qualified, or built. Moving a site forward is an authorised act, and it is recorded against a name.",
+      "targetSelector": ".badge, button, .btn",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Site",
+      "fallbackMessage": "Its status: not visible on this screen yet.",
+      "stepNumber": 3
+    }
+  ]
+}

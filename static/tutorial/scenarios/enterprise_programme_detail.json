@@ -1,0 +1,85 @@
+{
+  "tutorialId": "tut-enterprise_programme_detail",
+  "pageId": "enterprise_programme_detail",
+  "title": "The lifecycle command centre",
+  "module": "Enterprise",
+  "description": "16 phases, 14 stage gates, and the one design every site is built from.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Programme",
+    "Design"
+  ],
+  "covers": [
+    "enterprise_design"
+  ],
+  "estimatedDuration": 8,
+  "steps": [
+    {
+      "title": "Where the programme stands",
+      "description": "Its phase, and the gate it is waiting on.",
+      "voiceScript": "This is the command centre. It shows which of the sixteen phases the programme is in, and which gate it is waiting on.",
+      "captionText": "This is the command centre. It shows which of the sixteen phases the programme is in, and which gate it is waiting on.",
+      "targetSelector": ".ent-page .card, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Programme",
+      "fallbackMessage": "Where the programme stands: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "The 14 stage gates",
+      "description": "A gate needs a NAMED AUTHORITY, not just permission.",
+      "voiceScript": "Each gate must be approved by a named authority. Holding a general approval permission is deliberately not enough -- the gate asks for the role.",
+      "captionText": "Each gate must be approved by a named authority. Holding a general approval permission is deliberately not enough -- the gate asks for the role.",
+      "targetSelector": ".table, table, .badge",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Programme",
+      "fallbackMessage": "The 14 stage gates: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Lifecycle documents",
+      "description": "Generated from the programme, not guessed.",
+      "voiceScript": "Each phase has its real activities. The documents are written from the programme's own answers, not invented.",
+      "captionText": "Each phase has its real activities. The documents are written from the programme's own answers, not invented.",
+      "targetSelector": "a[href*=\"/lifecycle-documents\"], a[href*=\"/documents\"]",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Programme",
+      "fallbackMessage": "Lifecycle documents: not visible on this screen yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "The reference design",
+      "description": "ONE design. Every site is an instance of it.",
+      "voiceScript": "Now the heart of it. A programme holds one reference design, and every site is an instance of that same design.",
+      "captionText": "Now the heart of it. A programme holds one reference design, and every site is an instance of that same design.",
+      "targetSelector": "a[href*=\"/design\"]",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Programme",
+      "fallbackMessage": "The reference design: the next screen is not reachable from here.",
+      "hrefFromSelector": "a[href*=\"/design\"]",
+      "stepNumber": 4
+    },
+    {
+      "title": "One design, scaled",
+      "description": "The BOQ is the same at every site.",
+      "voiceScript": "Because every site is the same design, the bill of quantities is the same at every site, and the funding requirement is that cost times the number of sites.",
+      "captionText": "Because every site is the same design, the bill of quantities is the same at every site, and the funding requirement is that cost times the number of sites.",
+      "targetSelector": ".card, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Design",
+      "fallbackMessage": "One design, scaled: not visible on this screen yet.",
+      "stepNumber": 5
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "tutorialId": "tut-enterprise_priority_list",
+  "pageId": "enterprise_priority_list",
+  "title": "Which site first?",
+  "module": "Enterprise",
+  "description": "Score every site, and let the programme rank them honestly.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Priority",
+    "Scorecard"
+  ],
+  "covers": [
+    "enterprise_qualify_site"
+  ],
+  "estimatedDuration": 8,
+  "steps": [
+    {
+      "title": "The priority list",
+      "description": "Every site, ranked by its score.",
+      "voiceScript": "With hundreds of sites and a finite budget, this ranks them.",
+      "captionText": "With hundreds of sites and a finite budget, this ranks them.",
+      "targetSelector": ".table, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Priority",
+      "fallbackMessage": "The priority list: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Unscored is a QUESTION, not a zero",
+      "description": "An unscored site is not a bad site.",
+      "voiceScript": "A site nobody has scored yet is shown as a question, never as a zero. A zero would quietly send it to the bottom of the list and it would never be built.",
+      "captionText": "A site nobody has scored yet is shown as a question, never as a zero. A zero would quietly send it to the bottom of the list and it would never be built.",
+      "targetSelector": "table, .badge, .text-muted",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Priority",
+      "fallbackMessage": "Unscored is a QUESTION, not a zero: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Score a site",
+      "description": "The scorecard: access, roof, load, risk.",
+      "voiceScript": "Let us score one.",
+      "captionText": "Let us score one.",
+      "targetSelector": "a[href*=\"/qualify\"]",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Priority",
+      "fallbackMessage": "Score a site: the next screen is not reachable from here.",
+      "hrefFromSelector": "a[href*=\"/qualify\"]",
+      "stepNumber": 3
+    },
+    {
+      "title": "100 means NO risk",
+      "description": "Read the direction of the scale carefully.",
+      "voiceScript": "Mind the direction of the risk scale. One hundred means no risk, not maximum risk.",
+      "captionText": "Mind the direction of the risk scale. One hundred means no risk, not maximum risk.",
+      "targetSelector": "form, .card, input",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Scorecard",
+      "fallbackMessage": "100 means NO risk: not visible on this screen yet.",
+      "stepNumber": 4
+    },
+    {
+      "title": "Scoring is not deciding",
+      "description": "The scorer proposes. Another person decides.",
+      "voiceScript": "Scoring a site does not qualify it. Somebody else decides, on the evidence of the score. In a one-person organisation that separation relaxes -- and the audit record says so.",
+      "captionText": "Scoring a site does not qualify it. Somebody else decides, on the evidence of the score. In a one-person organisation that separation relaxes -- and the audit record says so.",
+      "targetSelector": "button, .btn",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Scorecard",
+      "fallbackMessage": "Scoring is not deciding: not visible on this screen yet.",
+      "stepNumber": 5
+    }
+  ]
+}

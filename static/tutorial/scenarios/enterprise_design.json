@@ -1,0 +1,68 @@
+{
+  "tutorialId": "tut-enterprise_design",
+  "pageId": "enterprise_design",
+  "title": "One design, every site",
+  "module": "Enterprise",
+  "description": "The programme's single reference design, instantiated at every location.",
+  "version": 2,
+  "language": "en-US",
+  "screens": [
+    "Design"
+  ],
+  "covers": [],
+  "estimatedDuration": 6,
+  "steps": [
+    {
+      "title": "The reference design",
+      "description": "Built once, from an approved template version.",
+      "voiceScript": "The programme's reference design is built once, from a template version somebody approved.",
+      "captionText": "The programme's reference design is built once, from a template version somebody approved.",
+      "targetSelector": ".card, form",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Design",
+      "fallbackMessage": "The reference design: not visible on this screen yet.",
+      "stepNumber": 1
+    },
+    {
+      "title": "Approve it",
+      "description": "Nothing is rolled out from an unapproved design.",
+      "voiceScript": "It must be approved before anything is rolled out. That approval is control C04, and it is checked again on the worker, not only here.",
+      "captionText": "It must be approved before anything is rolled out. That approval is control C04, and it is checked again on the worker, not only here.",
+      "targetSelector": ".btn-success, .btn-warning, form, .card",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Design",
+      "fallbackMessage": "Approve it: not visible on this screen yet.",
+      "stepNumber": 2
+    },
+    {
+      "title": "Roll it out",
+      "description": "Every qualified site is built from this one design.",
+      "voiceScript": "Rolling out queues the work. Every qualified site is then built as a copy of this design -- not redesigned, copied.",
+      "captionText": "Rolling out queues the work. Every qualified site is then built as a copy of this design -- not redesigned, copied.",
+      "targetSelector": "button, .btn",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Design",
+      "fallbackMessage": "Roll it out: not visible on this screen yet.",
+      "stepNumber": 3
+    },
+    {
+      "title": "The survey is evidence, not an input",
+      "description": "A site that differs raises a flag.",
+      "voiceScript": "A site whose survey disagrees with the reference does not get resized. It raises a variance flag for engineering. Otherwise you would have as many different bills of quantities as you have sites.",
+      "captionText": "A site whose survey disagrees with the reference does not get resized. It raises a variance flag for engineering. Otherwise you would have as many different bills of quantities as you have sites.",
+      "targetSelector": ".card, .alert, table",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Design",
+      "fallbackMessage": "The survey is evidence, not an input: not visible on this screen yet.",
+      "stepNumber": 4
+    }
+  ]
+}
