@@ -1,0 +1,181 @@
+# Apply migration 028 -- Enterprise Programme lifecycle document generation.
+#
+# WHAT IT DOES
+#   * ALTERs `enterprise_documents` (a LIVE table, created by 026 and already in production)
+#     to add: doc_kind, file_name, mime_type, byte_size, content, extracted_text, markdown,
+#     activity_codes, source_document_id.
+#   * CREATEs `enterprise_activity_answers` -- the questions the app asks the operator, and
+#     the answers it is given.
+#
+# WHY THE ALTERs ARE SAFE ON A LIVE TABLE
+#   Every column is ADD COLUMN IF NOT EXISTS, and `doc_kind` defaults to 'registered' -- so
+#   every row 026 already created keeps its exact current meaning. Postgres 11+ applies a
+#   NOT NULL DEFAULT without rewriting the table, so this does not lock the register.
+#
+# DEFAULT IS DRY-RUN. Applying needs -f confirm=LIFECYCLE_DOCS_APPLY.
+#
+# See feedback_workflow_dry_run_gate: every UPDATE/DDL workflow declares inputs.confirm,
+# defaults to dry-run, and commits only on the exact confirm string.
+
+name: Apply Migration 028 (Lifecycle Documents)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type LIFECYCLE_DOCS_APPLY to commit."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Ubuntu's default client is 16; the live server is 18.4 (upgraded 2026-07-10).
+      - name: Install psql 18
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates gnupg lsb-release
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          psql --version
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "LIFECYCLE_DOCS_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- 028 will be committed to live PG ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be written ==="
+            echo "Re-run with -f confirm=LIFECYCLE_DOCS_APPLY to commit."
+          fi
+
+      - name: Verify the migration file exists
+        run: |
+          set -e
+          test -f migrations/028_enterprise_document_generation.sql
+          echo "OK: migrations/028_enterprise_document_generation.sql"
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      # PRE-FLIGHT. 028 depends on things 026 must already have put there. If the module was
+      # never deployed, ALTERing enterprise_documents would fail on a table that does not
+      # exist, and the composite FK on enterprise_activity_answers would fail on a missing
+      # unique key. Prove both BEFORE writing a statement.
+      - name: Pre-flight -- 026's tables and keys are actually live
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- enterprise_documents must exist (026) ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT to_regclass('public.enterprise_documents') IS NOT NULL;" | grep -qx t \
+            || { echo "::error::enterprise_documents is not on live -- run 025-027 first."; exit 1; }
+          echo "  OK"
+
+          echo "--- the composite unique key 028's FK targets must exist (026) ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT COUNT(*) FROM pg_constraint
+             WHERE conname='uq_ent_programme_tenant_id';" | grep -qx 1 \
+            || { echo "::error::uq_ent_programme_tenant_id missing -- 026 is not fully applied."; exit 1; }
+          echo "  OK"
+
+          echo "--- enterprise_activity_answers must NOT already exist with another shape ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT to_regclass('public.enterprise_activity_answers') IS NOT NULL;"
+          echo "  (t means it exists already; CREATE TABLE IF NOT EXISTS will skip it -- fine,"
+          echo "   because nothing else in 028 depends on its shape being new)"
+
+          echo "--- columns enterprise_documents has TODAY ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT column_name FROM information_schema.columns
+             WHERE table_name='enterprise_documents' ORDER BY column_name;"
+
+      - name: Dry-run -- nothing written
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. 028 WOULD be applied. Nothing was."
+          echo "  Pre-flight passed: 026's table and unique key are live."
+          echo "  Re-run with -f confirm=LIFECYCLE_DOCS_APPLY to commit."
+          echo "================================================================"
+
+      - name: Apply 028 (lifecycle documents + activity answers)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f migrations/028_enterprise_document_generation.sql
+          echo "OK: 028 applied."
+
+      - name: Verify -- the columns and the table are really there
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- enterprise_documents columns added by 028 ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT column_name FROM information_schema.columns
+             WHERE table_name='enterprise_documents'
+               AND column_name IN ('doc_kind','file_name','mime_type','byte_size','content',
+                                   'extracted_text','markdown','activity_codes',
+                                   'source_document_id')
+             ORDER BY column_name;" | tee /tmp/cols.txt
+          test "$(wc -l < /tmp/cols.txt)" -eq 9 \
+            || { echo "::error::expected 9 new columns on enterprise_documents"; exit 1; }
+
+          echo "--- enterprise_activity_answers ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT to_regclass('public.enterprise_activity_answers') IS NOT NULL;" | grep -qx t \
+            || { echo "::error::enterprise_activity_answers was not created"; exit 1; }
+
+          echo "--- its unique index (one outstanding question per activity) ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT COUNT(*) FROM pg_indexes
+             WHERE indexname='ux_ent_activity_answer';" | grep -qx 1 \
+            || { echo "::error::ux_ent_activity_answer missing"; exit 1; }
+
+          echo ""
+          echo "028 APPLIED AND VERIFIED."
