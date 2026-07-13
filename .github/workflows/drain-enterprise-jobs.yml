@@ -1,0 +1,139 @@
+# THE WORKER for the Enterprise Programme's project generation (slice 7).
+#
+# There is no worker PROCESS and there cannot be one: Render's free tier caps this account at
+# a single instance, and a second service was already refused on 2026-07-10. So the durable
+# job queue (`enterprise_jobs`) is drained by an authenticated POST from this cron.
+#
+# WITHOUT THIS WORKFLOW, "roll out to all sites" QUEUES AND SILENTLY DOES NOTHING. The rollout
+# is recorded, the UI says Queued, and no site is ever built. That was the state of live until
+# 2026-07-13.
+#
+# AUTH: a shared bearer secret, compared in constant time by the endpoint. An UNSET secret
+# makes the endpoint a 404 -- so if ENTERPRISE_JOB_TOKEN is missing, this workflow FAILS LOUDLY
+# rather than reporting a cheerful green tick over a queue nobody is draining. A cron that
+# silently does nothing is worse than no cron: the UI would still say "Queued" and everyone
+# would assume a worker existed.
+#
+# IDEMPOTENT + RESUMABLE: drain_job() is chunked and records done/failed counts as it goes
+# (app/enterprise_programme/rollout.py). Re-running mid-job resumes it; it does not restart it.
+# The endpoint claims at most 3 jobs per pass, so a big programme drains over several ticks.
+#
+# NOT A DRY-RUN GATE. This workflow is not destructive in the feedback_workflow_dry_run_gate
+# sense -- it processes work the OWNER already queued through the UI, and doing nothing is the
+# failure mode we are fixing. The authorisation happened when they pressed "Roll out".
+
+name: Drain Enterprise Jobs
+
+on:
+  schedule:
+    # Every 15 minutes. The endpoint takes at most 3 jobs per pass and each pass is chunked,
+    # so a large rollout drains over successive ticks rather than in one long request that
+    # would hit the 300s gunicorn timeout.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Two overlapping drains would fight over the same rows. `ux_ent_job_active` and the
+  # Running/Queued claim make that safe at the database level, but there is no reason to
+  # spend the requests.
+  group: drain-enterprise-jobs
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE:                 https://solarpro.aiappinvent.com
+      ENTERPRISE_JOB_TOKEN: ${{ secrets.ENTERPRISE_JOB_TOKEN }}
+    steps:
+      - name: The token must exist
+        run: |
+          if [ -z "$ENTERPRISE_JOB_TOKEN" ]; then
+            echo "::error::ENTERPRISE_JOB_TOKEN is not set, so /enterprise/jobs/drain is a 404"
+            echo "and NOTHING IS DRAINING THE QUEUE. Rollouts will sit forever."
+            echo ""
+            echo "Fix:"
+            echo "  python -c \"import secrets; print(secrets.token_hex(32))\""
+            echo "  gh secret set ENTERPRISE_JOB_TOKEN --body \"<that hex>\""
+            echo "  gh workflow run \"Set Enterprise Job Token\" -f confirm=SET_ENTERPRISE_JOB_TOKEN"
+            exit 1
+          fi
+          echo "OK: token present."
+
+      # The free tier sleeps. A cold app can take ~50s to answer, and a POST that times out
+      # looks identical to a queue with nothing in it.
+      - name: Wake the app
+        run: |
+          curl -sS -o /dev/null -w "  /api/ping -> %{http_code} in %{time_total}s\n" \
+            --max-time 120 "$BASE/api/ping" || true
+
+      - name: Drain
+        run: |
+          set -e
+          STATUS=$(curl -sS -o /tmp/drain.json -w "%{http_code}" \
+            --max-time 280 \
+            -X POST "$BASE/enterprise/jobs/drain" \
+            -H "Authorization: Bearer $ENTERPRISE_JOB_TOKEN")
+
+          echo "POST /enterprise/jobs/drain -> HTTP $STATUS"
+
+          if [ "$STATUS" = "404" ]; then
+            echo "::error::404. The app has no ENTERPRISE_JOB_TOKEN in its RENDER env (an unset"
+            echo "secret makes the endpoint a 404 by design). The GH secret alone is not enough:"
+            echo "  gh workflow run \"Set Enterprise Job Token\" -f confirm=SET_ENTERPRISE_JOB_TOKEN"
+            exit 1
+          fi
+          if [ "$STATUS" = "401" ]; then
+            echo "::error::401. The GH secret and the Render env value DISAGREE. Re-run"
+            echo "\"Set Enterprise Job Token\" to push the GH secret into the Render env."
+            exit 1
+          fi
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::unexpected status $STATUS"
+            head -c 600 /tmp/drain.json || true
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json
+          d = json.load(open("/tmp/drain.json"))
+          jobs = d.get("drained") or []
+          if not jobs:
+              print("  nothing queued. Idle.")
+              raise SystemExit(0)
+
+          failed = 0
+          for j in jobs:
+              jid = j.get("job_id")
+              st  = j.get("status")
+              # The keys are `done` / `failed` / `error` -- NOT done_items / failed_items /
+              # last_error (those are the COLUMN names, and rollout.drain_job does not return
+              # them under those names). Guessing here would print None for every field and
+              # hide exactly the failures this step exists to surface.
+              #
+              # A job that offered sites and built none is Failed, NOT Completed -- slice 7
+              # made that distinction deliberately, because a Failed job gets investigated and
+              # a Completed one gets believed.
+              line = (f"  job {jid}: {st}"
+                      f"  built={j.get('done')} failed={j.get('failed')}")
+              if j.get("error"):
+                  line += f"  error={str(j['error'])[:160]}"
+              print(line)
+              if st in ("Failed", "error"):
+                  failed += 1
+
+          if failed:
+              # Surface it. A drain that quietly reports green over failed jobs is how a
+              # rollout ends up "done" with no sites built.
+              print(f"::warning::{failed} job(s) failed this pass -- see last_error above")
+          PY
+
+      - name: Alert on repeated failure
+        if: failure()
+        run: |
+          echo "::error::The enterprise job drain FAILED. Slice-7 rollouts are not being"
+          echo "processed: the queue is filling and the UI still says 'Queued'."
