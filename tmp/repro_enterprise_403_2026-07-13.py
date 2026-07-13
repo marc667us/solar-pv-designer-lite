@@ -150,12 +150,39 @@ def main() -> int:
                    data={"_csrf": "stale-token-from-an-older-session",
                          "code": "REPRO-STALE", "name": "Repro (stale token)",
                          "design_strategy": "standard"})
-    is_hiccup = "hiccup" in stale.text.lower() or "not authorised" in stale.text.lower() \
-        or "not have the permission" in stale.text.lower()
-    print(f"   POST with a STALE csrf token -> {stale.status_code}"
-          f"{'   <<<< reproduces the OWNER PAGE' if stale.status_code == 403 else ''}")
-    print(f"        body is the hiccup/not-authorised page: {is_hiccup}")
-    print("        (nothing was created -- the request was rejected before any write)")
+    body = stale.text
+    accuses = "have the permission to access" in body
+    explains = "expired" in body.lower()
+    escapes = "/enterprise/programmes/new" in body and "Taking you back in" not in body
+    print(f"   POST with a STALE csrf token -> {stale.status_code} "
+          f"(403 is CORRECT -- a bad token must still be refused)")
+    print(f"        accuses the user of lacking permission : {accuses}   <- must be False")
+    print(f"        explains that the form expired         : {explains}   <- must be True")
+    print(f"        offers a working way out (fresh form)  : {escapes}   <- must be True")
+    print("        (nothing was created -- rejected before any write)")
+
+    # ---- the DUPLICATE CODE fix, against live ----------------------------------
+    # The earlier run of this script created REPRO-OK. Registering it AGAIN is exactly the
+    # owner's "duplicate key error": before the fix this raised a raw IntegrityError that
+    # nothing caught, and it became the hiccup page.
+    print("\n== 7. THE DUPLICATE CODE (the owner's 'duplicate key error') ==")
+    r2 = s.get(f"{BASE}/enterprise/programmes/new", timeout=TIMEOUT)
+    tok2 = re.search(r'name="_csrf" value="([^"]+)"', r2.text)
+    if tok2:
+        dup = s.post(f"{BASE}/enterprise/programmes/new", timeout=TIMEOUT,
+                     allow_redirects=True,
+                     data={"_csrf": tok2.group(1), "code": "REPRO-OK",
+                           "name": "Repro (duplicate code)", "design_strategy": "standard"})
+        txt = re.sub(r"<[^>]+>", " ", dup.text)
+        txt = re.sub(r"\s+", " ", txt)
+        told = "already exists" in txt.lower()
+        hiccup = "hiccup" in txt.lower()
+        print(f"   re-registering the code REPRO-OK -> {dup.status_code}")
+        print(f"        says the code already exists : {told}     <- must be True")
+        print(f"        shows the HICCUP page        : {hiccup}    <- must be False")
+        m = re.search(r"(A programme with the code[^.]*\.)", txt)
+        if m:
+            print(f"        message: {m.group(1)}")
 
     if "--post" in sys.argv:
         # THE DECIDING TEST. The owner says "register a new programme takes user to hiccup
