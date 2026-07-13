@@ -204,13 +204,26 @@ def test_templates(s: requests.Session) -> None:
     if not token:
         check("template form rendered", False, "no _csrf")
         return
+
+    # `code` is REQUIRED -- create_template raises TemplateError("a template needs a code and
+    # a name") without one. This suite used to omit it, and never noticed: TemplateError
+    # subclasses EnterpriseGateError, so the route flashes and REDIRECTS BACK to the form,
+    # which is a perfectly good HTTP 200. "template created == 200" therefore passed against
+    # a template that was never created. The check below is now the real one -- a 200 alone
+    # proves nothing, only the id in the landing URL does.
+    #
+    # Unique per run, like the programme code: a template code is unique per tenant, so a
+    # fixed one would create on the first run and TemplateError("code already used") on every
+    # run after it.
+    code = f"LIVE-TPL-{int(time.time()) % 100000}"
     r = s.post(f"{BASE}/enterprise/templates/new", timeout=TIMEOUT, allow_redirects=True,
-               data={"_csrf": token, "name": "Live Suite School Package",
-                     "beneficiary_type": "school"})
-    if not check("template created", r.status_code == 200, f"{r.status_code}"):
+               data={"_csrf": token, "code": code, "name": "Live Suite School Package",
+                     "beneficiary_type": "school", "design_strategy": "standard"})
+    if not check("template POST accepted", r.status_code == 200, f"{r.status_code}"):
         return
     m = re.search(r"/enterprise/templates/(\d+)", r.url)
-    check("template id resolved", bool(m), m.group(1) if m else "not found")
+    check("template created (landed on its detail page, not bounced to the form)",
+          bool(m), f"#{m.group(1)} [{code}]" if m else f"bounced back to {r.url}")
 
 
 def test_beneficiaries_and_import(s: requests.Session, pid: int) -> None:
