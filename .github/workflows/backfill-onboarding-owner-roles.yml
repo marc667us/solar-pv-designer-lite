@@ -1,0 +1,175 @@
+# Backfill ONBOARDING_OWNER_ROLES onto organisations onboarded BEFORE slice 6.5.
+#
+# THE PROBLEM
+#   Slice 6.5 (f8abf95) made `create_organisation` grant the owner a BUNDLE of roles
+#   (constants.ONBOARDING_OWNER_ROLES), because the stage gates check a NAMED ROLE and not a
+#   permission -- so no permission-map change could ever have reached them.
+#
+#   That grant only fires INSIDE create_organisation. The organisation that already exists on
+#   live was onboarded BEFORE 6.5, so it still holds `enterprise_owner` and nothing else. The
+#   code is fixed; the DATA is not. The Live Enterprise Rebuild Suite reports "already
+#   onboarded -- reusing the existing organisation" and then fails 4 checks, because that
+#   owner still cannot author a template, import a beneficiary, or score a site.
+#
+# WHY THIS IS NOT A .sql MIGRATION
+#   The grant must be AUDITED (control C12), and audit_logs carries an application-computed
+#   SHA-256 hash chain. A raw SQL INSERT would either skip the audit row or forge one outside
+#   the chain. This drives the existing, already-audited `members.grant()` service instead, so
+#   every grant lands as a real chained ENTERPRISE_ROLE_GRANTED row and the script cannot
+#   invent an authority path the app does not already have.
+#
+# SCOPE
+#   REAL ORGANISATIONS ONLY (enterprise_tenants.legacy_user_id IS NULL). Personal tenants also
+#   grant `enterprise_owner` and every user on the platform has one -- backfilling those would
+#   hand all 11 enterprise roles to EVERY USER. The script filters on legacy_user_id, and
+#   members._guard_admin refuses personal tenants regardless. Two lines of defence.
+#
+# IDEMPOTENT. A role the owner already holds is never re-granted, so re-running is a no-op and
+# an organisation onboarded after 6.5 is untouched.
+#
+# DEFAULT IS DRY-RUN. Applying needs -f confirm=BACKFILL_OWNER_ROLES_APPLY.
+# See feedback_workflow_dry_run_gate.
+
+name: Backfill Onboarding Owner Roles
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type BACKFILL_OWNER_ROLES_APPLY to commit the grants."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install psycopg2
+        run: pip install --quiet psycopg2-binary
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "BACKFILL_OWNER_ROLES_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- role grants will be COMMITTED to live PG ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be written ==="
+            echo "Re-run with -f confirm=BACKFILL_OWNER_ROLES_APPLY to commit."
+          fi
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      # PRE-FLIGHT. The backfill reads and writes enterprise_role_assignments; if slice 1's
+      # tables are not live there is nothing to back-fill and the run should say so loudly
+      # rather than report a cheerful "0 owners found".
+      - name: Pre-flight -- migration 025 is actually live
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          python3 - <<'PY'
+          import os, psycopg2
+          c = psycopg2.connect(os.environ["DATABASE_URL"])
+          cur = c.cursor()
+          for t in ("enterprise_tenants", "enterprise_tenant_memberships",
+                    "enterprise_role_assignments"):
+              cur.execute("SELECT to_regclass(%s) IS NOT NULL", (f"public.{t}",))
+              if not cur.fetchone()[0]:
+                  raise SystemExit(f"::error::{t} is not live -- run migration 025 first.")
+              print(f"  OK  {t}")
+          cur.execute("""
+              SELECT COUNT(*) FROM enterprise_tenants WHERE legacy_user_id IS NULL
+                 AND status='active'
+          """)
+          print(f"  organisations (non-personal tenants) on live: {cur.fetchone()[0]}")
+          PY
+
+      - name: Run the backfill
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          if [ "$MODE" = "apply" ]; then
+            python scripts/backfill_onboarding_owner_roles.py --apply
+          else
+            python scripts/backfill_onboarding_owner_roles.py
+          fi
+
+      - name: Verify -- every organisation owner now holds the full bundle
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          python3 - <<'PY'
+          import os, sys, psycopg2
+          sys.path.insert(0, ".")
+          from app.enterprise_programme.constants import ONBOARDING_OWNER_ROLES
+
+          c = psycopg2.connect(os.environ["DATABASE_URL"])
+          cur = c.cursor()
+          cur.execute("""
+              SELECT t.id, t.legal_name, m.user_id
+                FROM enterprise_tenants t
+                JOIN enterprise_tenant_memberships m
+                  ON m.tenant_id = t.id AND m.status='active'
+                JOIN enterprise_role_assignments ra
+                  ON ra.tenant_id=t.id AND ra.user_id=m.user_id
+                 AND ra.role_code='enterprise_owner' AND ra.scope_type='tenant'
+               WHERE t.legacy_user_id IS NULL AND t.status='active'
+          """)
+          bad = 0
+          for tid, name, uid in cur.fetchall():
+              cur2 = c.cursor()
+              cur2.execute("""
+                  SELECT role_code FROM enterprise_role_assignments
+                   WHERE tenant_id=%s AND user_id=%s AND scope_type='tenant'
+              """, (tid, uid))
+              held = {r[0] for r in cur2.fetchall()}
+              missing = set(ONBOARDING_OWNER_ROLES) - held
+              if missing:
+                  bad += 1
+                  print(f"::error::{name} owner {uid} STILL missing: {sorted(missing)}")
+              else:
+                  print(f"  OK  {name}: owner {uid} holds all {len(ONBOARDING_OWNER_ROLES)} roles")
+          if bad:
+              raise SystemExit(f"::error::{bad} organisation owner(s) still incomplete")
+          print("VERIFIED: every organisation owner holds the full onboarding bundle.")
+          PY
