@@ -158,12 +158,24 @@ def main() -> int:
     print("        (nothing was created -- the request was rejected before any write)")
 
     if "--post" in sys.argv:
+        # THE DECIDING TEST. The owner says "register a new programme takes user to hiccup
+        # page" -- i.e. it fails on SUBMIT, every time. If a VALID token also fails, the
+        # stale-token story is not the whole story and there is a second bug on the POST.
         real = s.post(f"{BASE}/enterprise/programmes/new", timeout=TIMEOUT,
                       allow_redirects=False,
                       data={"_csrf": good, "code": "REPRO-OK", "name": "Repro (valid token)",
                             "design_strategy": "standard"})
-        print(f"   POST with a VALID csrf token -> {real.status_code} "
-              f"({'302 = created' if real.status_code == 302 else 'see body'})")
+        print(f"   POST with a VALID csrf token -> {real.status_code}")
+        if real.status_code in (301, 302, 303):
+            print(f"        -> {real.headers.get('Location', '')}")
+            print("        302 = THE PROGRAMME WAS CREATED. Register works with a live token,")
+            print("        so the owner's failure is the STALE-TOKEN path.")
+        else:
+            print("        NOT a redirect -- Register is broken for a VALID token too.")
+            print("        There is a SECOND bug. Body follows:")
+            body = re.sub(r"<[^>]+>", " ", real.text)
+            body = re.sub(r"\s+", " ", body).strip()
+            print(f"        {body[:600]}")
     else:
         print("   POST with a VALID token: SKIPPED (pass --post to actually create one)")
 

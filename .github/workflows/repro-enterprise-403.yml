@@ -12,6 +12,12 @@ name: Repro Enterprise 403
 
 on:
   workflow_dispatch:
+    inputs:
+      post:
+        description: "Also submit the form with a VALID token (this CREATES a programme). Decides whether Register works at all."
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -43,4 +49,10 @@ jobs:
         env:
           LIVE_USER: marc667us@yahoo.com
           SOLARPRO_OWNER_PASSWORD: ${{ secrets.SOLARPRO_OWNER_PASSWORD }}
-        run: python tmp/repro_enterprise_403_2026-07-13.py
+          POST: ${{ inputs.post }}
+        run: |
+          if [ "$POST" = "true" ]; then
+            python tmp/repro_enterprise_403_2026-07-13.py --post
+          else
+            python tmp/repro_enterprise_403_2026-07-13.py
+          fi
