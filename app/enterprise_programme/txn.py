@@ -171,7 +171,20 @@ def default_audit(action: str, **kw) -> bool:
     """
     try:
         from app.security.audit import write_audit_event
-    except Exception:  # pragma: no cover - audit module unavailable
+    except Exception as e:  # pragma: no cover - audit module unavailable
+        # LOG IT. Returning a bare False here means every C12-guarded service refuses to
+        # act ("the grant was not saved, because its audit record could not be written"),
+        # which is the correct and safe outcome -- but with nothing logged, the CAUSE is
+        # invisible. A backfill script that installed psycopg2 but not `requests` hit
+        # exactly this: app/security/__init__ imports keycloak_middleware, which imports
+        # requests, so the whole audit package failed to import and every grant was
+        # refused with no explanation anywhere. Two live round-trips to find a missing pip
+        # install. The contract still holds (never raise, return False) -- we just say why.
+        import logging
+        logging.getLogger(__name__).warning(
+            "audit unavailable (%s: %s); %s refused. Is the audit package importable "
+            "-- are the app's requirements installed?", type(e).__name__, e, action,
+        )
         return False
     return write_audit_event(action, **kw)
 

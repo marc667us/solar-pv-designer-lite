@@ -65,8 +65,24 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install psycopg2
-        run: pip install --quiet psycopg2-binary
+      # The FULL requirements, not just psycopg2. The backfill drives members.grant(), which
+      # writes an audit row through app.security.audit -- and importing that package pulls in
+      # app/security/__init__ -> keycloak_middleware -> requests. With only psycopg2 installed
+      # the import fails, txn.default_audit returns False, and control C12 refuses EVERY grant
+      # with "its audit record could not be written". The failure is safe but looks like a
+      # database fault. It is a missing pip install.
+      - name: Install the app's requirements
+        run: |
+          pip install --quiet -r requirements.txt
+          pip install --quiet psycopg2-binary
+
+      - name: Prove the audit trail is importable BEFORE touching the database
+        run: |
+          python -c "
+          from app.security.audit import write_audit_event
+          from app.enterprise_programme import members
+          print('OK: audit trail is importable -- C12 can be satisfied')
+          "
 
       # APPLY wins over REHEARSE if somebody passes both -- but the script refuses that
       # combination anyway, so this ordering is belt and braces.
