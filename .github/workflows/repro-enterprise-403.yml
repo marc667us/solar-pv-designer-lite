@@ -1,0 +1,46 @@
+# Reproduce the owner's "create new programme -> hiccup page, not authorised" 403 against
+# the LIVE deployment, as the real owner, over HTTP.
+#
+# Two data-driven theories were already refuted (see the script header), so this stops
+# theorising and walks the owner's actual clicks. READ-ONLY: it GETs pages and switches the
+# active tenant (a session-only preference); it creates nothing.
+#
+# It must run HERE rather than locally because Keycloak authenticates on EMAIL and the local
+# .env password has drifted from the live secret.
+
+name: Repro Enterprise 403
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install requests
+        run: pip install --quiet requests
+
+      # Keycloak cold-starts in ~26s on the free tier and the login below would otherwise
+      # read-timeout. Warm it first (memory: 'warm KC first').
+      - name: Warm Keycloak
+        run: |
+          curl -sS -o /dev/null -w "KC %{http_code} in %{time_total}s\n" --max-time 120 \
+            "https://auth.aiappinvent.com/realms/solarpro/.well-known/openid-configuration"
+
+      - name: Reproduce
+        env:
+          LIVE_USER: marc667us@yahoo.com
+          SOLARPRO_OWNER_PASSWORD: ${{ secrets.SOLARPRO_OWNER_PASSWORD }}
+        run: python tmp/repro_enterprise_403_2026-07-13.py
