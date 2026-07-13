@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block title %}Lifecycle Documents - SolarPro{% endblock %}
+{% block content %}
+<div class="container py-4 ent-page">
+
+  <div class="mb-3">
+    <div class="text-muted small mb-1">
+      <a href="{{ url_for('enterprise_programme_detail', programme_id=programme_id) }}"
+         class="text-decoration-none">
+        <i class="bi bi-arrow-left me-1"></i>{{ programme.code }} {{ programme.name }}
+      </a>
+    </div>
+    <h1 class="h4 mb-1">
+      <i class="bi bi-file-earmark-text text-warning me-2"></i>Lifecycle Documents
+    </h1>
+    <div class="text-muted small">
+      Tick the lifecycle activities you want covered and SolarPro will write the document.
+      Upload a source document first and it will be used as the material.
+    </div>
+  </div>
+
+  {# ---------------- source documents ---------------- #}
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-upload me-2"></i>Source documents</span>
+      <span class="badge bg-secondary">{{ sources|length }}</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted small">
+        Upload a ministry brief, policy, needs assessment or business case. SolarPro reads
+        its text and quotes the relevant passage under each activity you select.
+      </p>
+
+      {% if can_upload %}
+      <form method="post" enctype="multipart/form-data"
+            action="{{ url_for('enterprise_lifecycle_document_upload', programme_id=programme_id) }}"
+            class="row g-2 align-items-end mb-3">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"/>
+        <div class="col-md-5">
+          <label class="form-label small">File</label>
+          <input type="file" name="document" class="form-control form-control-sm"
+                 accept="{{ supported|join(',') }}" required/>
+          <div class="form-text">{{ supported|join(' · ') }} — up to {{ max_mb }} MB.</div>
+        </div>
+        <div class="col-md-5">
+          <label class="form-label small">Title (optional)</label>
+          <input type="text" name="title" class="form-control form-control-sm"
+                 placeholder="Defaults to the file name"/>
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-outline-warning btn-sm w-100">Upload</button>
+        </div>
+      </form>
+      {% endif %}
+
+      {% if sources %}
+      <ul class="list-group list-group-flush">
+        {% for d in sources %}
+        <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+          <span>
+            <i class="bi bi-file-earmark me-2"></i>{{ d.title }}
+            <span class="text-muted small">({{ (d.byte_size / 1024)|round|int }} KB)</span>
+          </span>
+          <a class="btn btn-sm btn-outline-secondary"
+             href="{{ url_for('enterprise_document_download', document_id=d.id) }}">
+            Download
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="text-muted small">
+        No source document yet. You can still generate a document — it will be built from
+        the programme's own records, and every activity the app cannot answer will be
+        marked <strong>TO BE COMPLETED</strong>.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ---------------- questions the app needs answered ---------------- #}
+  {% if questions %}
+  <div class="card mb-4 border-warning">
+    <div class="card-header bg-warning text-dark">
+      <i class="bi bi-question-circle me-2"></i>
+      <strong>{{ questions|length }} question{{ '' if questions|length == 1 else 's' }}
+      need your answer</strong>
+    </div>
+    <div class="card-body">
+      <p class="text-muted small">
+        SolarPro could not write these sections from the programme description or the source
+        document, and it will not invent them. Answer below and regenerate — your answer
+        becomes the section.
+      </p>
+      <form method="post"
+            action="{{ url_for('enterprise_lifecycle_document_answers', programme_id=programme_id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"/>
+        {% for q in questions %}
+        <div class="mb-3">
+          <label class="form-label small mb-1" for="q{{ q.activity_code }}">
+            <strong>{{ q.question }}</strong>
+            <span class="text-muted d-block">Activity: {{ q.activity }}</span>
+          </label>
+          <textarea class="form-control form-control-sm" rows="2"
+                    id="q{{ q.activity_code }}"
+                    name="answer[{{ q.activity_code }}]"
+                    placeholder="Your answer becomes this section of the document"></textarea>
+        </div>
+        {% endfor %}
+        <button class="btn btn-warning btn-sm">
+          <i class="bi bi-check2 me-1"></i>Save answers
+        </button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ---------------- the activity picker ---------------- #}
+  <form method="post"
+        action="{{ url_for('enterprise_lifecycle_document_generate', programme_id=programme_id) }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"/>
+
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-list-check me-2"></i>Lifecycle activities</span>
+        <span class="small">
+          <span class="badge bg-warning text-dark" id="entPicked">0</span> selected
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label small">Document title</label>
+            <input type="text" name="title" class="form-control form-control-sm"
+                   placeholder="e.g. Needs Assessment Pack"/>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Build from source document</label>
+            <select name="source_document_id" class="form-select form-select-sm">
+              <option value="">— programme records only —</option>
+              {% for d in sources %}
+              <option value="{{ d.id }}">{{ d.title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="use_ai" id="entUseAi" checked/>
+              <label class="form-check-label small" for="entUseAi">
+                AI drafting
+                <i class="bi bi-info-circle" title="If a free AI provider is reachable it drafts each section from the source passage. Drafts are labelled and never approve anything."></i>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {# The five lifecycle stages. Each stage is selectable as a whole; each phase inside
+           it is selectable; each activity is selectable. #}
+        <div class="accordion" id="entStages">
+          {% for scode, sname, sphases in stages %}
+          {% set stage_count = stage_counts[scode] %}
+          <div class="accordion-item">
+            <h2 class="accordion-header">
+              <button class="accordion-button {{ '' if scode == current_stage else 'collapsed' }}"
+                      type="button" data-bs-toggle="collapse"
+                      data-bs-target="#entStage{{ loop.index }}">
+                <span class="me-2 badge {{ 'bg-warning text-dark' if scode == current_stage else 'bg-secondary' }}">
+                  {{ loop.index }}
+                </span>
+                <strong>{{ sname }}</strong>
+                <span class="text-muted small ms-2">
+                  ({{ sphases|length }} phases · {{ stage_count }} activities)
+                </span>
+                {% if scode == current_stage %}
+                <span class="badge bg-success ms-2">current stage</span>
+                {% endif %}
+              </button>
+            </h2>
+            <div id="entStage{{ loop.index }}"
+                 class="accordion-collapse collapse {{ 'show' if scode == current_stage else '' }}"
+                 data-bs-parent="#entStages">
+              <div class="accordion-body">
+
+                <button type="button" class="btn btn-sm btn-warning mb-3 ent-all"
+                        data-scope="s{{ scode }}">
+                  <i class="bi bi-check2-square me-1"></i>Select the whole {{ sname }} stage
+                </button>
+
+                {% for pcode in sphases %}
+                {% set acts = phase_activities.get(pcode, []) %}
+                <div class="card mb-2">
+                  <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <span class="small">
+                      <span class="badge bg-secondary me-1">Phase {{ phase_numbers[pcode] }}</span>
+                      {{ phase_names[pcode] }}
+                      {% if pcode == current_phase %}
+                      <span class="badge bg-success ms-1">current phase</span>
+                      {% endif %}
+                    </span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary ent-all"
+                            data-scope="p{{ pcode }}">
+                      Select phase ({{ acts|length }})
+                    </button>
+                  </div>
+                  <div class="card-body py-2">
+                    {% for acode, atext in acts %}
+                    <div class="form-check">
+                      <input class="form-check-input ent-act s{{ scode }} p{{ pcode }}"
+                             type="checkbox" name="activities" value="{{ acode }}"
+                             id="a{{ acode }}"/>
+                      <label class="form-check-label small" for="a{{ acode }}">{{ atext }}</label>
+                    </div>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endfor %}
+
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card-footer d-flex justify-content-between align-items-center">
+        <span class="text-muted small">
+          The generated document names exactly the activities it answers.
+        </span>
+        {% if can_generate %}
+        <button class="btn btn-warning" id="entGen" disabled>
+          <i class="bi bi-file-earmark-pdf me-1"></i>Generate document
+        </button>
+        {% else %}
+        <span class="text-muted small">You need <code>report.generate</code> to generate.</span>
+        {% endif %}
+      </div>
+    </div>
+  </form>
+
+  {# ---------------- generated documents ---------------- #}
+  <div class="card">
+    <div class="card-header"><i class="bi bi-archive me-2"></i>Generated documents</div>
+    <div class="card-body p-0">
+      {% set gen = documents|selectattr('doc_kind','equalto','generated')|list %}
+      {% if gen %}
+      <table class="table table-sm mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Title</th><th>Activities</th><th>Created</th><th class="text-end">PDF</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in gen %}
+          <tr>
+            <td>{{ d.title }}</td>
+            <td><span class="badge bg-secondary">{{ d.activity_count }}</span></td>
+            <td class="small text-muted">{{ d.created_at }}</td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-warning"
+                 href="{{ url_for('enterprise_document_download', document_id=d.id) }}">
+                Download
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="p-3 text-muted small">No documents generated yet.</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<script>
+// The Generate button stays disabled until at least one activity is ticked -- the server
+// refuses an empty selection anyway, so offering the button would only produce an error
+// the user could have been spared.
+(function () {
+  var boxes = document.querySelectorAll('.ent-act');
+  var count = document.getElementById('entPicked');
+  var btn   = document.getElementById('entGen');
+
+  function sync() {
+    var n = document.querySelectorAll('.ent-act:checked').length;
+    count.textContent = n;
+    if (btn) { btn.disabled = (n === 0); }
+  }
+  boxes.forEach(function (b) { b.addEventListener('change', sync); });
+
+  // One handler for both scopes: a whole lifecycle stage (data-scope="sS2_PLANNING") and a
+  // single phase (data-scope="pP03_NEEDS"). Every activity checkbox carries BOTH classes,
+  // so selecting the Planning stage ticks every activity in all six of its phases.
+  document.querySelectorAll('.ent-all').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var scoped = document.querySelectorAll('.' + b.dataset.scope);
+      // Toggle: a second click clears the scope, so "select all" is not a one-way door.
+      var allOn = Array.prototype.every.call(scoped, function (x) { return x.checked; });
+      scoped.forEach(function (x) { x.checked = !allOn; });
+      sync();
+    });
+  });
+  sync();
+})();
+</script>
+{% endblock %}

@@ -15,9 +15,15 @@
         {% endif %}
       </div>
     </div>
-    <a href="{{ url_for('enterprise_home') }}" class="btn btn-outline-secondary btn-sm">
-      <i class="bi bi-arrow-left me-1"></i>All programmes
-    </a>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('enterprise_lifecycle_documents', programme_id=programme.id) }}"
+         class="btn btn-warning btn-sm">
+        <i class="bi bi-file-earmark-text me-1"></i>Lifecycle Documents
+      </a>
+      <a href="{{ url_for('enterprise_home') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>All programmes
+      </a>
+    </div>
   </div>
 
   <div class="row g-4">

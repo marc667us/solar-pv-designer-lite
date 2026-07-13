@@ -32,13 +32,16 @@ guard the queue drainer skips.
 from __future__ import annotations
 
 from flask import (
-    abort, flash, redirect, render_template, request, session, url_for
+    Response, abort, flash, redirect, render_template, request, session, url_for
 )
+from werkzeug.utils import secure_filename
 
 from app.enterprise_programme import (
-    beneficiaries, constants, dropdowns, flags, gates, imports, rbac,
-    site_qualification, tenancy, workflows,
+    beneficiaries, constants, documents, dropdowns, flags, gates, imports, members,
+    rbac, site_qualification, tenancy, workflows,
 )
+from app.enterprise_programme.documents import DocumentError
+from app.enterprise_programme.members import MemberError
 # `templates` is the template ENGINE, not Jinja. Aliased so that nothing in this file can
 # be misread as touching Flask's template loader.
 from app.enterprise_programme import templates as template_engine
@@ -111,6 +114,7 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
         tenancy.ensure_schema(c)        # no-op on Postgres
         workflows.ensure_schema(c)      # no-op on Postgres
         beneficiaries.ensure_schema(c)  # no-op on Postgres
+        documents.ensure_schema(c)      # no-op on Postgres (migration 028 owns it)
         _schema_ready.add(key)
 
     # ---- guards ----------------------------------------------------------
@@ -1291,6 +1295,350 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 return redirect(url_for("enterprise_import_detail", batch_id=batch_id))
         return redirect(url_for("enterprise_beneficiaries",
                                 programme_id=batch["programme_id"]))
+
+    # ---- lifecycle documents (slice 6.6) ---------------------------------
+    #
+    # The owner's requirement, in their words: "in the life cycle activities must have
+    # check box, one use select one or even multiple of the activities the app must
+    # generate document" and "where user must load a document that document can be used to
+    # develop life cycle document". So: tick activities -> get a document; upload a source
+    # document -> it becomes the material the generated document is drawn from.
+
+    @app.route("/enterprise/programmes/<int:programme_id>/lifecycle-documents")
+    @login_required
+    def enterprise_lifecycle_documents(programme_id: int):
+        """The activity picker, the upload form, and the programme's document register."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+
+            try:
+                prog = documents.programme_facts(c, active, programme_id)
+            except EnterpriseGateError:
+                abort(404)                      # C13: not-yours and not-there are the same
+
+            docs = documents.list_documents(c, active, programme_id)
+            return render_template(
+                "enterprise_programme/lifecycle_documents.html",
+                programme=prog,
+                programme_id=programme_id,
+                stages=constants.LIFECYCLE_STAGES,
+                phase_names={code: name for code, _no, name in constants.PHASES},
+                phase_numbers={code: no for code, no, _name in constants.PHASES},
+                phase_activities=constants.PHASE_ACTIVITIES,
+                # Counted here, not in Jinja: summing a nested length across a stage's
+                # phases in a template needs a filter Jinja does not have, and faking it
+                # with `map('extract', ...)` silently yields nothing.
+                stage_counts={
+                    scode: sum(len(constants.PHASE_ACTIVITIES[p]) for p in sphases)
+                    for scode, _sname, sphases in constants.LIFECYCLE_STAGES
+                },
+                current_phase=prog.get("phase_code"),
+                current_stage=constants.STAGE_OF_PHASE.get(prog.get("phase_code")),
+                documents=docs,
+                sources=[d for d in docs if d["doc_kind"] == "uploaded"],
+                supported=sorted(documents.SUPPORTED_UPLOADS),
+                max_mb=documents.MAX_UPLOAD_BYTES // (1024 * 1024),
+                questions=documents.outstanding_questions(c, active, programme_id),
+                can_generate=rbac.has_permission(c, active, uid, "report.generate",
+                                                 programme_id=programme_id),
+                can_upload=rbac.has_permission(c, active, uid, "programme.edit",
+                                               programme_id=programme_id),
+            )
+
+    @app.route("/enterprise/programmes/<int:programme_id>/lifecycle-documents/answers",
+               methods=["POST"])
+    @login_required
+    def enterprise_lifecycle_document_answers(programme_id: int):
+        """Answer the questions the app raised. The answers become the document's content."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        back = redirect(url_for("enterprise_lifecycle_documents",
+                                programme_id=programme_id))
+
+        # Form fields arrive as answer[P01_A02]. Only known activity codes are accepted --
+        # save_answers filters again, because a service must not trust its caller.
+        answers = {
+            k[len("answer["):-1]: v
+            for k, v in request.form.items()
+            if k.startswith("answer[") and k.endswith("]")
+        }
+
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                n = documents.save_answers(c, active, uid, programme_id, answers)
+            except EnterprisePermissionError:
+                abort(403)
+            except DocumentError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+                return back
+
+        if n:
+            flash(f"{n} answer(s) saved. Regenerate the document to fold them in.",
+                  "success")
+        else:
+            flash("No answers were provided.", "error")
+        return back
+
+    @app.route("/enterprise/programmes/<int:programme_id>/lifecycle-documents/upload",
+               methods=["POST"])
+    @login_required
+    def enterprise_lifecycle_document_upload(programme_id: int):
+        """Upload a source document. Its text becomes material for generation."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        back = redirect(url_for("enterprise_lifecycle_documents",
+                                programme_id=programme_id))
+
+        f = request.files.get("document")
+        if not f or not f.filename:
+            flash("Choose a file to upload.", "error")
+            return back
+
+        # THE CAP IS ENFORCED BEFORE THE BYTES ARE IN MEMORY (Codex slice-6.6, MED).
+        # `f.read()` on its own buffers the WHOLE upload first and only then discovers it is
+        # too big -- which is not a limit, it is an invitation: on a 512 MiB instance a few
+        # concurrent 500 MB posts are an outage. So:
+        #   1. reject on the declared Content-Length when it is already over (cheap, and
+        #      catches the honest client), and
+        #   2. read only MAX+1 bytes regardless, because Content-Length is the CLIENT'S
+        #      claim and a hostile one will lie about it. The +1 is what tells us it was
+        #      over the limit rather than exactly at it.
+        # The service checks the length AGAIN -- a service must not rely on its caller.
+        if (request.content_length or 0) > documents.MAX_UPLOAD_BYTES + 4096:
+            flash(f"That file is larger than "
+                  f"{documents.MAX_UPLOAD_BYTES // (1024 * 1024)} MB.", "error")
+            return back
+
+        data = f.stream.read(documents.MAX_UPLOAD_BYTES + 1)
+        if len(data) > documents.MAX_UPLOAD_BYTES:
+            flash(f"That file is larger than "
+                  f"{documents.MAX_UPLOAD_BYTES // (1024 * 1024)} MB.", "error")
+            return back
+
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                documents.upload_document(
+                    c, active, uid, programme_id,
+                    file_name=f.filename, data=data,
+                    title=(request.form.get("title") or "").strip(),
+                )
+            except EnterprisePermissionError:
+                abort(403)
+            except DocumentError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+                return back
+        flash("Document uploaded. It can now be used to build a lifecycle document.",
+              "success")
+        return back
+
+    @app.route("/enterprise/programmes/<int:programme_id>/lifecycle-documents/generate",
+               methods=["POST"])
+    @login_required
+    def enterprise_lifecycle_document_generate(programme_id: int):
+        """Generate a document from the ticked activities. THE feature."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        back = redirect(url_for("enterprise_lifecycle_documents",
+                                programme_id=programme_id))
+
+        picked = request.form.getlist("activities")
+        if not picked:
+            flash("Tick at least one lifecycle activity.", "error")
+            return back
+
+        source_id = (request.form.get("source_document_id") or "").strip()
+        source_document_id = int(source_id) if source_id.isdigit() else None
+
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                doc_id = documents.generate_document(
+                    c, active, uid, programme_id,
+                    activity_codes=picked,
+                    title=(request.form.get("title") or "").strip(),
+                    source_document_id=source_document_id,
+                    use_ai=bool(request.form.get("use_ai")),
+                )
+            except EnterprisePermissionError:
+                abort(403)
+            except DocumentError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+                return back
+
+        flash(f"Document generated from {len(set(picked))} activities.", "success")
+        return redirect(url_for("enterprise_document_download", document_id=doc_id))
+
+    @app.route("/enterprise/documents/<int:document_id>/download")
+    @login_required
+    def enterprise_document_download(document_id: int):
+        """Download a document: the PDF for a generated one, the original for an upload."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                doc = documents.get_document(c, active, document_id)
+            except DocumentError:
+                abort(404)                      # C13 -- never 403, never "it exists but"
+
+            if doc["doc_kind"] == "generated":
+                try:
+                    body = documents.render_pdf(doc["markdown"] or "", doc["title"])
+                except DocumentError as e:
+                    flash(str(e), "error")
+                    return redirect(url_for("enterprise_lifecycle_documents",
+                                            programme_id=doc["programme_id"]))
+                mime, name = "application/pdf", (doc["file_name"] or "document.pdf")
+            else:
+                body = doc["content"]
+                if body is None:
+                    abort(404)                  # a register row with no file behind it
+                mime = doc["mime_type"] or "application/octet-stream"
+                name = doc["file_name"] or "document"
+
+            # THE FILENAME IS USER INPUT AND IT IS GOING INTO A HEADER (Codex slice-6.6, MED).
+            # It was uploaded by a person, so it can contain quotes, semicolons, CR/LF or
+            # path separators -- and splicing it raw into Content-Disposition lets a quote
+            # close the field early and a newline inject a header outright. `secure_filename`
+            # reduces it to a safe basename; the fallback covers the case where it reduces to
+            # nothing at all (a name that was entirely separators and quotes).
+            safe = secure_filename(name) or "document"
+
+            # `attachment`, never inline: a PDF or DOCX rendered INLINE from a user-supplied
+            # upload is a stored-XSS surface the moment a browser sniffs it as HTML.
+            # `nosniff` is what stops the sniffing.
+            return Response(body, mimetype=mime, headers={
+                "Content-Disposition": f'attachment; filename="{safe}"',
+                "X-Content-Type-Options": "nosniff",
+            })
+
+    # ---- members and roles (slice 6.5) -----------------------------------
+    #
+    # The surface that was missing entirely: slice 3 shipped role CHECKING with no way to
+    # GRANT a role, so an organisation could never take on a second person, and its owner
+    # could not delegate. Guarded by `tenant.admin`.
+
+    @app.route("/enterprise/members")
+    @login_required
+    def enterprise_members():
+        """Who is in this organisation, and what each of them may do."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                view = members.overview(c, active, uid)
+            except EnterprisePermissionError:
+                abort(403)
+            except MemberError as e:
+                flash(str(e), "error")
+                return redirect(url_for("enterprise_home"))
+
+            return render_template(
+                "enterprise_programme/members.html",
+                members=view["members"],
+                assignable_roles=view["assignable_roles"],
+                is_solo=view["is_solo"],
+                role_permissions=constants.ROLE_PERMISSIONS,
+            )
+
+    @app.route("/enterprise/members/add", methods=["POST"])
+    @login_required
+    def enterprise_member_add():
+        """Invite an existing SolarPro user into this organisation with a starting role."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                user = members.invite(
+                    c, active, uid,
+                    (request.form.get("identifier") or "").strip(),
+                    (request.form.get("role_code") or "").strip(),
+                )
+                flash(f"{user['username']} added to the organisation.", "success")
+            except EnterprisePermissionError:
+                abort(403)
+            except MemberError as e:
+                flash(str(e), "error")
+        return redirect(url_for("enterprise_members"))
+
+    @app.route("/enterprise/members/<int:user_id>/roles", methods=["POST"])
+    @login_required
+    def enterprise_member_roles(user_id: int):
+        """Grant or revoke one tenant-wide role."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        action = (request.form.get("action") or "").strip()
+        role_code = (request.form.get("role_code") or "").strip()
+
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                if action == "grant":
+                    members.grant(c, active, uid, user_id, role_code)
+                    flash(f"Granted {role_code}.", "success")
+                elif action == "revoke":
+                    members.revoke(c, active, uid, user_id, role_code)
+                    flash(f"Revoked {role_code}.", "success")
+                else:
+                    flash("Unknown action.", "error")
+            except EnterprisePermissionError:
+                abort(403)
+            except MemberError as e:
+                flash(str(e), "error")
+        return redirect(url_for("enterprise_members"))
+
+    @app.route("/enterprise/members/<int:user_id>/remove", methods=["POST"])
+    @login_required
+    def enterprise_member_remove(user_id: int):
+        """Offboard a member. Their roles stop granting anything immediately."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                members.remove(c, active, uid, user_id)
+                flash("Member removed from the organisation.", "success")
+            except EnterprisePermissionError:
+                abort(403)
+            except MemberError as e:
+                flash(str(e), "error")
+        return redirect(url_for("enterprise_members"))
 
 
 # The document types the gate predicates actually look for. A form that offered anything
