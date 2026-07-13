@@ -1,0 +1,208 @@
+# Apply migration 029 -- the programme REFERENCE DESIGN (rebuild slice 7).
+#
+# WHAT IT DOES
+#   * CREATEs `enterprise_reference_designs` -- the ONE design a programme holds, that every
+#     one of its sites is an instance of.
+#   * ALTERs `enterprise_project_links` (LIVE, created by 027) to add `reference_design_id`
+#     and `site_variance_json`, closing C14's traceability chain:
+#         site project -> reference design -> template version -> programme
+#   * CREATEs `ux_ent_job_active` -- one active rollout per programme, enforced by the
+#     database rather than by the application looking first (which is a race).
+#
+# WHY THE ALTERs ARE SAFE ON A LIVE TABLE
+#   Both are ADD COLUMN IF NOT EXISTS. `reference_design_id` is nullable, so every row 027
+#   already created keeps its exact current meaning. `site_variance_json` takes a constant
+#   default, which Postgres 11+ applies without rewriting the table.
+#
+# ORDER MATTERS: 029 REQUIRES 026 (enterprise_template_versions + its composite unique key)
+# and 027 (enterprise_project_links, enterprise_jobs). The pre-flight proves all three
+# before writing a single statement -- see what happened when 027 nearly collided with a
+# live 024.
+#
+# DEFAULT IS DRY-RUN. Applying needs -f confirm=REFERENCE_DESIGN_APPLY.
+#
+# See feedback_workflow_dry_run_gate: every DDL workflow declares inputs.confirm, defaults
+# to dry-run, and commits only on the exact confirm string.
+
+name: Apply Migration 029 (Reference Design)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type REFERENCE_DESIGN_APPLY to commit."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Ubuntu's default client is 16; the live server is 18.4 (upgraded 2026-07-10).
+      - name: Install psql 18
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates gnupg lsb-release
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          psql --version
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "REFERENCE_DESIGN_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- 029 will be committed to live PG ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be written ==="
+            echo "Re-run with -f confirm=REFERENCE_DESIGN_APPLY to commit."
+          fi
+
+      - name: Verify the migration file exists
+        run: |
+          set -e
+          test -f migrations/029_enterprise_reference_design.sql
+          echo "OK: migrations/029_enterprise_reference_design.sql"
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      # PRE-FLIGHT. 029 has three hard dependencies. Prove each BEFORE writing a statement:
+      # an ALTER against a table that is not there, or a composite FK against a unique key
+      # that is not there, fails HALFWAY through a migration -- and a half-applied migration
+      # is the worst state to debug from.
+      - name: Pre-flight -- 026 and 027 are actually live
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- enterprise_project_links must exist (027) ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT to_regclass('public.enterprise_project_links') IS NOT NULL;" | grep -qx t \
+            || { echo "::error::enterprise_project_links is not live -- run 025-027 first."; exit 1; }
+          echo "  OK"
+
+          echo "--- enterprise_jobs must exist (027) ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT to_regclass('public.enterprise_jobs') IS NOT NULL;" | grep -qx t \
+            || { echo "::error::enterprise_jobs is not live -- run 027 first."; exit 1; }
+          echo "  OK"
+
+          echo "--- the composite unique key 029's FK targets must exist (026) ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT COUNT(*) FROM pg_constraint
+             WHERE conname='uq_ent_template_version_tenant_id';" | grep -qx 1 \
+            || { echo "::error::uq_ent_template_version_tenant_id missing -- 026 is not fully applied."; exit 1; }
+          echo "  OK"
+
+          echo "--- uq_ent_programme_tenant_id (026) ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT COUNT(*) FROM pg_constraint
+             WHERE conname='uq_ent_programme_tenant_id';" | grep -qx 1 \
+            || { echo "::error::uq_ent_programme_tenant_id missing -- 026 is not fully applied."; exit 1; }
+          echo "  OK"
+
+          echo "--- ux_ent_job_active would collide with a SECOND live rollout job ---"
+          echo "    (a unique index cannot be created over data that already violates it --"
+          echo "     this reports the violation now rather than failing the migration)"
+          psql "$DATABASE_URL" -At -c "
+            SELECT COALESCE(string_agg(tenant_id || '/' || programme_id, ', '), 'none')
+              FROM (SELECT tenant_id, programme_id
+                      FROM enterprise_jobs
+                     WHERE status IN ('Queued','Running')
+                     GROUP BY tenant_id, programme_id, job_type
+                    HAVING COUNT(*) > 1) x;"
+
+      - name: Dry-run -- nothing written
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. 029 WOULD be applied. Nothing was."
+          echo "  Pre-flight passed: 026's keys and 027's tables are live."
+          echo "  Re-run with -f confirm=REFERENCE_DESIGN_APPLY to commit."
+          echo "================================================================"
+
+      - name: Apply 029 (reference design + traceability + job uniqueness)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f migrations/029_enterprise_reference_design.sql
+          echo "OK: 029 applied."
+
+      - name: Verify -- the table, the columns and the indexes are really there
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- enterprise_reference_designs ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT to_regclass('public.enterprise_reference_designs') IS NOT NULL;" | grep -qx t \
+            || { echo "::error::enterprise_reference_designs was not created"; exit 1; }
+
+          echo "--- one live design per programme ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT COUNT(*) FROM pg_indexes WHERE indexname='ux_ent_refdesign_current';" \
+            | grep -qx 1 || { echo "::error::ux_ent_refdesign_current missing"; exit 1; }
+
+          echo "--- one active rollout per programme ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT COUNT(*) FROM pg_indexes WHERE indexname='ux_ent_job_active';" \
+            | grep -qx 1 || { echo "::error::ux_ent_job_active missing"; exit 1; }
+
+          echo "--- C14's chain: the link row can now name its design ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT column_name FROM information_schema.columns
+             WHERE table_name='enterprise_project_links'
+               AND column_name IN ('reference_design_id','site_variance_json')
+             ORDER BY column_name;" | tee /tmp/cols.txt
+          test "$(wc -l < /tmp/cols.txt)" -eq 2 \
+            || { echo "::error::expected reference_design_id + site_variance_json"; exit 1; }
+
+          echo "--- and the FK that makes it unforgeable ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT COUNT(*) FROM pg_constraint WHERE conname='fk_link_reference_design';" \
+            | grep -qx 1 || { echo "::error::fk_link_reference_design missing"; exit 1; }
+
+          echo ""
+          echo "029 APPLIED AND VERIFIED."
