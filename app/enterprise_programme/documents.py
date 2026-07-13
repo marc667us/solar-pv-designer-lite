@@ -154,10 +154,14 @@ def ensure_schema(c) -> None:
     This keeps the SQLite mirror an actual mirror, which is the only reason the test suite
     means anything.
     """
-    try:
-        have = {r[1] for r in c.execute("PRAGMA table_info(enterprise_documents)").fetchall()}
-    except Exception:
-        return                      # Postgres: PRAGMA is not a thing. Migration 028 ran.
+    if txn.is_postgres():
+        return                      # Migration 028 owns this schema on Postgres.
+
+    # Do NOT guard Postgres by catching a PRAGMA failure. `db_adapter` deliberately
+    # TRANSLATES `PRAGMA table_info` into an information_schema query, so on Postgres the
+    # PRAGMA succeeds, `have` comes back populated, and execution falls through to the
+    # SQLite-only DDL below -- which dies on AUTOINCREMENT and 500s every /enterprise page.
+    have = {r[1] for r in c.execute("PRAGMA table_info(enterprise_documents)").fetchall()}
     if not have:
         return                      # table not created yet; workflows.ensure_schema owns it
     for name, decl in _NEW_COLUMNS:
