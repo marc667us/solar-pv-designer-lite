@@ -31,6 +31,9 @@ OWNER    = 4     # created the org, so holds every Release-1 role (ONBOARDING_OW
 
 # A complete, legal parameter set. Every required field present.
 GOOD = {
+    # Required since slice 7: the design path decides which engine builds every site in a
+    # programme, so a template that does not say it cannot be approved.
+    "design_path": "standard",
     "system_configuration": "hybrid",
     "typical_load_profile": "daytime_only",
     "standard_pv_capacities_kw": [20, 50, 100],

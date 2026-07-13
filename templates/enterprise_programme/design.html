@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+{% block title %}Programme Design - SolarPro{% endblock %}
+{% block content %}
+<div class="container py-4 ent-page">
+
+  <div class="mb-3">
+    <div class="text-muted small mb-1">
+      <a href="{{ url_for('enterprise_programme_detail', programme_id=programme_id) }}"
+         class="text-decoration-none">
+        <i class="bi bi-arrow-left me-1"></i>{{ programme.code }} {{ programme.name }}
+      </a>
+    </div>
+    <h1 class="h4 mb-1">
+      <i class="bi bi-diagram-3 text-warning me-2"></i>Programme Design &amp; Rollout
+    </h1>
+    <div class="text-muted small">
+      One design. Every site is that design &mdash; same equipment, same bill of quantities.
+      Only the address changes.
+    </div>
+  </div>
+
+  {# ---------------- the Planning gate ---------------- #}
+  {% if not planning_reached %}
+    <div class="alert alert-warning">
+      <strong>This programme is still in Initiation.</strong>
+      A programme opens into its design at the <strong>Planning</strong> stage. Move it to
+      Planning on the programme page, then come back.
+    </div>
+  {% endif %}
+
+  {# ---------------- step 1: build the one design ---------------- #}
+  {% if not design %}
+    <div class="card mb-4">
+      <div class="card-header">
+        <i class="bi bi-1-circle me-2"></i>Build the reference design
+      </div>
+      <div class="card-body">
+        {% if not options %}
+          <p class="text-muted mb-0">
+            This programme has no <strong>approved template</strong> carrying a design path.
+            A template decides which engine every site in the programme is built by, so it
+            has to be something somebody approved &mdash; not a field on this form.
+            <a href="{{ url_for('enterprise_templates') }}">Create and approve a template</a>
+            first.
+          </p>
+        {% elif not can_design %}
+          <p class="text-muted mb-0">
+            You do not have permission to generate designs in this organisation.
+          </p>
+        {% else %}
+          <form method="post"
+                action="{{ url_for('enterprise_design_create', programme_id=programme_id) }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Approved template</label>
+              <select name="template_version_id" id="tplSelect"
+                      class="form-select form-select-sm" required>
+                <option value="">Choose the approved template to build from&hellip;</option>
+                {% for o in options %}
+                  <option value="{{ o.version_id }}"
+                          data-path="{{ o.design_path }}"
+                          data-capacities="{{ o.capacities|join(',') }}">
+                    {{ o.template_name }} &mdash; v{{ o.version_no }} ({{ o.status }})
+                    &mdash;
+                    {% if o.design_path == 'standard' %}Standard design
+                    {% else %}Generation Station design{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            {# STANDARD path: the typical building's bill. This is Check-My-Bill's own
+               basis, reused -- so a programme's typical home and a walk-in customer with
+               the same bill get the same system. #}
+            <div class="mb-3 d-none" id="standardFields">
+              <label class="form-label small fw-semibold">
+                Typical monthly consumption for one building (kWh)
+              </label>
+              <input type="number" name="monthly_kwh" step="any" min="1"
+                     class="form-control form-control-sm"
+                     placeholder="e.g. 350">
+              <div class="form-text">
+                The typical building in this programme. SolarPro sizes one system from it
+                using the same Check-My-Bill engine the public bill checker uses, then
+                replicates that system at every site.
+              </div>
+            </div>
+
+            {# GENERATION STATION path: a capacity the approved template OFFERS. Free text
+               here would mean the number the sponsor is asked to fund never passed through
+               anybody's approval. #}
+            <div class="mb-3 d-none" id="stationFields">
+              <label class="form-label small fw-semibold">Plant capacity</label>
+              <select name="design_kwp" class="form-select form-select-sm" id="kwpSelect">
+                <option value="">Choose a capacity&hellip;</option>
+              </select>
+              <div class="form-text">
+                Only capacities this approved template offers. The plant is built once, so
+                its quantities are not multiplied across the programme's sites.
+              </div>
+            </div>
+
+            <button class="btn btn-warning btn-sm" {% if not planning_reached %}disabled{% endif %}>
+              <i class="bi bi-rulers me-1"></i>Build the design
+            </button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+
+  {# ---------------- the design exists ---------------- #}
+  {% else %}
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-rulers me-2"></i>The reference design</span>
+        {% if design.approved %}
+          <span class="badge bg-success">Engineering Approved</span>
+        {% else %}
+          <span class="badge bg-secondary">{{ design.status }}</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        <div class="row g-3 mb-3">
+          <div class="col-6 col-md-3">
+            <div class="text-muted small">Design path</div>
+            <div class="fw-semibold">
+              {% if design.design_path == 'standard' %}Standard design
+              {% else %}Generation Station{% endif %}
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted small">PV array (per site)</div>
+            <div class="fw-semibold">
+              {{ '%.2f'|format(design.kwp or 0) }} kWp
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted small">Cost per site</div>
+            <div class="fw-semibold">
+              {% if design.summary.total_cost %}
+                {{ design.summary.currency }} {{ '{:,.2f}'.format(design.summary.total_cost) }}
+              {% else %}&mdash;{% endif %}
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted small">Design project</div>
+            <div class="fw-semibold">
+              {% if design.project_kind == 'standard' %}
+                <a href="{{ url_for('project_results', pid=design.project_id) }}">
+                  Open design #{{ design.project_id }}</a>
+              {% else %}
+                <a href="{{ url_for('capital_investment_project', pid=design.project_id) }}">
+                  Open plant #{{ design.project_id }}</a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        {% if not design.approved %}
+          <div class="alert alert-warning small mb-3">
+            <strong>Not issued yet.</strong> No design is issued without engineering
+            approval (control C04). This is also the last point at which a mistake is
+            cheap &mdash; after approval it is replicated at every site.
+          </div>
+        {% endif %}
+
+        <div class="d-flex gap-2 flex-wrap">
+          {% if can_approve and not design.approved %}
+            <form method="post"
+                  action="{{ url_for('enterprise_design_action', programme_id=programme_id, design_id=design.id, action='approve') }}">
+              <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+              <button class="btn btn-success btn-sm">
+                <i class="bi bi-check2-circle me-1"></i>Approve (engineering)
+              </button>
+            </form>
+          {% endif %}
+          {% if can_design and design.approved and scope and scope.to_generate > 0 %}
+            <form method="post"
+                  action="{{ url_for('enterprise_design_action', programme_id=programme_id, design_id=design.id, action='rollout') }}">
+              <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+              <button class="btn btn-warning btn-sm">
+                <i class="bi bi-buildings me-1"></i>
+                Roll out to {{ scope.to_generate }} site{{ '' if scope.to_generate == 1 else 's' }}
+              </button>
+            </form>
+          {% endif %}
+          {% if can_approve %}
+            <form method="post"
+                  action="{{ url_for('enterprise_design_action', programme_id=programme_id, design_id=design.id, action='supersede') }}"
+                  onsubmit="return confirm('Supersede this design? Sites already built from it keep pointing at it.');">
+              <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+              <button class="btn btn-outline-secondary btn-sm">Supersede</button>
+            </form>
+          {% endif %}
+          <a class="btn btn-outline-warning btn-sm"
+             href="{{ url_for('enterprise_programme_plans', programme_id=programme_id) }}">
+            <i class="bi bi-file-earmark-pdf me-1"></i>Programme plans (PDF)
+          </a>
+        </div>
+      </div>
+    </div>
+
+    {# ---------------- scaled to the programme ---------------- #}
+    <div class="card mb-4">
+      <div class="card-header">
+        <i class="bi bi-arrows-angle-expand me-2"></i>Scaled to the programme
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-6 col-md-3">
+            <div class="text-muted small">Sites</div>
+            <div class="h5 mb-0">{{ funding.sites }}</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted small">Projects generated</div>
+            <div class="h5 mb-0">{{ scope.already_generated if scope else 0 }}</div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted small">Total capacity</div>
+            <div class="h5 mb-0">
+              {% if funding.kwp_total %}{{ '{:,.1f}'.format(funding.kwp_total) }} kWp
+              {% else %}&mdash;{% endif %}
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="text-muted small">Funding required</div>
+            <div class="h5 mb-0">
+              {% if funding.total %}
+                {{ funding.currency }} {{ '{:,.0f}'.format(funding.total) }}
+              {% else %}&mdash;{% endif %}
+            </div>
+          </div>
+        </div>
+        <p class="text-muted small mb-0 mt-3">
+          Funding is sought <strong>once, by the programme, for all locations</strong> &mdash;
+          never per building. That total is the reference design's cost multiplied by the
+          number of sites, and it is that simple <em>only</em> because the bill of
+          quantities is the same everywhere.
+        </p>
+      </div>
+    </div>
+
+    {# ---------------- the job ---------------- #}
+    {% if job %}
+      <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-hourglass-split me-2"></i>Rollout</span>
+          <span class="badge bg-{{ 'success' if job.status == 'Completed'
+                                   else ('danger' if job.status == 'Failed' else 'secondary') }}">
+            {{ job.status }}
+          </span>
+        </div>
+        <div class="card-body">
+          <div class="progress mb-2" style="height:8px;">
+            <div class="progress-bar bg-warning"
+                 style="width: {{ (100 * job.done_items / job.total_items)|round(0, 'floor') if job.total_items else 0 }}%"></div>
+          </div>
+          <div class="small text-muted">
+            {{ job.done_items }} of {{ job.total_items }} site projects generated
+            {%- if job.failed_items %}, {{ job.failed_items }} could not be{% endif %}.
+            {% if job.last_error %}<br><span class="text-danger">{{ job.last_error }}</span>{% endif %}
+          </div>
+          <div class="small text-muted mt-2">
+            The rollout is drained by a scheduled job, not by this page &mdash; so it is not
+            instant, and refreshing will not hurry it.
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    {# ---------------- bill of quantities ---------------- #}
+    {% if boq.lines %}
+      <div class="card mb-4">
+        <div class="card-header">
+          <i class="bi bi-list-check me-2"></i>Bill of quantities &mdash; programme total
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Item</th><th>Unit</th>
+                <th class="text-end">Per site</th>
+                <th class="text-end">Total (&times;{{ boq.multiplier }})</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for line in boq.lines[:200] %}
+                <tr>
+                  <td>{{ line.description }}</td>
+                  <td>{{ line.unit }}</td>
+                  <td class="text-end">
+                    {% if line.unit_qty is not none %}{{ '{:,.2f}'.format(line.unit_qty) }}{% endif %}
+                  </td>
+                  <td class="text-end fw-semibold">
+                    {% if line.total_qty is not none %}{{ '{:,.2f}'.format(line.total_qty) }}{% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
+
+    {# ---------------- the sites ---------------- #}
+    {% if sites %}
+      <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-geo-alt me-2"></i>Sites</span>
+          <span class="badge bg-secondary">{{ sites|length }}</span>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small">
+            The field assessment and shading survey are recorded <strong>against the
+            site</strong> and do not re-size it. Every site is built to the approved
+            reference design; a survey that disagrees with it raises a finding for
+            engineering to resolve, rather than quietly producing a different bill of
+            quantities at that one address.
+          </p>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0 align-middle">
+            <thead>
+              <tr>
+                <th>Code</th><th>Site</th><th>Project</th>
+                <th>Survey</th>
+                {% if can_survey %}<th style="min-width:280px;">Record a survey</th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for site in sites %}
+                <tr>
+                  <td class="small">{{ site.code }}</td>
+                  <td class="small">{{ site.name }}</td>
+                  <td class="small">
+                    {% if site.project_kind == 'standard' %}
+                      <a href="{{ url_for('project_results', pid=site.project_id) }}">#{{ site.project_id }}</a>
+                    {% else %}
+                      <a href="{{ url_for('capital_investment_project', pid=site.project_id) }}">#{{ site.project_id }}</a>
+                    {% endif %}
+                  </td>
+                  <td class="small">
+                    {% if site.flags %}
+                      {% for flag in site.flags %}
+                        <div class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i>{{ flag }}</div>
+                      {% endfor %}
+                    {% elif site.variance.shading_factor %}
+                      <span class="text-success">
+                        Shading {{ '{:.0%}'.format(site.variance.shading_factor) }} &mdash; within the design
+                      </span>
+                    {% else %}
+                      <span class="text-muted">Not surveyed</span>
+                    {% endif %}
+                  </td>
+                  {% if can_survey %}
+                    <td>
+                      <form method="post" class="d-flex gap-1"
+                            action="{{ url_for('enterprise_site_survey', programme_id=programme_id, link_id=site.link_id) }}">
+                        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+                        <input type="number" name="shading_factor" step="0.01" min="0.01" max="1"
+                               class="form-control form-control-sm" style="max-width:90px;"
+                               placeholder="1.00"
+                               value="{{ site.variance.shading_factor or '' }}">
+                        <input type="text" name="field_notes"
+                               class="form-control form-control-sm"
+                               placeholder="Field notes"
+                               value="{{ site.variance.field_notes or '' }}">
+                        <button class="btn btn-outline-secondary btn-sm">Save</button>
+                      </form>
+                    </td>
+                  {% endif %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+</div>
+
+<script>
+/* Show the fields the CHOSEN design path actually needs, and nothing else.
+   The standard path asks for a typical bill (Check-My-Bill's basis); the generation-station
+   path asks for one of the capacities the approved template offers. Showing both at once
+   invites somebody to fill in the one that will be ignored. */
+(function () {
+  var sel = document.getElementById('tplSelect');
+  if (!sel) { return; }
+  var std = document.getElementById('standardFields');
+  var stn = document.getElementById('stationFields');
+  var kwp = document.getElementById('kwpSelect');
+
+  function sync() {
+    var opt = sel.options[sel.selectedIndex];
+    var path = opt ? (opt.getAttribute('data-path') || '') : '';
+    var isStd = path === 'standard';
+    var isStn = path === 'generation_station';
+
+    std.classList.toggle('d-none', !isStd);
+    stn.classList.toggle('d-none', !isStn);
+    std.querySelector('input[name="monthly_kwh"]').required = isStd;
+    kwp.required = isStn;
+
+    kwp.innerHTML = '<option value="">Choose a capacity…</option>';
+    if (isStn && opt) {
+      var raw = opt.getAttribute('data-capacities') || '';
+      raw.split(',').filter(Boolean).forEach(function (c) {
+        var o = document.createElement('option');
+        o.value = c;
+        o.textContent = c + ' kWp';
+        kwp.appendChild(o);
+      });
+    }
+  }
+  sel.addEventListener('change', sync);
+  sync();
+})();
+</script>
+{% endblock %}

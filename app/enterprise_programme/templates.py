@@ -54,6 +54,7 @@ from .constants import (
     BENEFICIARY_FIELDS,
     BENEFICIARY_TYPES,
     DELIVERY_MODELS,
+    DESIGN_PATHS,
     DESIGN_STRATEGIES,
     FUNDING_SOURCES,
     LOAD_PROFILES,
@@ -75,6 +76,7 @@ _STRATEGY_CODES = frozenset(code for code, _ in DESIGN_STRATEGIES)
 # the list the validator ACCEPTS are provably the same object. EQUIPMENT_CATALOG is absent
 # on purpose -- it is not a constant, it is a table, and it is validated against the DB.
 _VOCABULARIES: dict[str, frozenset[str]] = {
+    "DESIGN_PATHS":               frozenset(c for c, _ in DESIGN_PATHS),
     "SYSTEM_CONFIGURATIONS":      frozenset(c for c, _ in SYSTEM_CONFIGURATIONS),
     "LOAD_PROFILES":              frozenset(c for c, _ in LOAD_PROFILES),
     "BENEFICIARY_FIELDS":         frozenset(c for c, _ in BENEFICIARY_FIELDS),

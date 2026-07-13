@@ -212,17 +212,48 @@ def require_approved_template_version(c, tenant_id: str, template_version_id: in
         )
 
 
-@_deferred
 def require_engineering_approval(c, tenant_id: str, project_link_id: int) -> None:
-    """C04 -- no design is issued without engineering approval.
+    """C04 -- no design is issued without engineering approval. LIVE since slice 7.
 
     Input:  connection, tenant id, project link id.
     Output: none.
-    Raises: GateBlockedError until slice 7 (project generation) ships.
+    Raises: EnterpriseGateError("C04") unless the design this site was built from has been
+            approved by an engineer; EnterpriseGateError("C13") if the link is not ours.
+
+    THE APPROVAL IS ASKED OF THE DESIGN, NOT OF THE SITE, and that is the point of the whole
+    slice. A programme holds ONE design and every site IS that design -- so approving it once
+    approves all of them, and there is exactly one place where an engineer's judgement is
+    applied to what gets built. Asking for a signature per site would not be 400 times more
+    rigorous; it would be one signature, repeated 400 times by a tired person, which is less
+    rigorous.
+
+    A site whose survey disagrees with the approved design does not fail this gate -- it
+    carries a VARIANCE (rollout.record_site_variance) that an engineer must resolve. The
+    distinction is deliberate: an unapproved design is a governance failure, whereas an
+    awkward site is engineering work.
     """
-    raise GateBlockedError(
-        "C04", "project generation ships in slice 7; there is no design to approve yet"
-    )
+    row = c.execute(
+        "SELECT d.status "
+        "  FROM enterprise_project_links l "
+        "  LEFT JOIN enterprise_reference_designs d "
+        "         ON d.tenant_id = l.tenant_id AND d.id = l.reference_design_id "
+        " WHERE l.tenant_id=? AND l.id=?",
+        (tenant_id, project_link_id),
+    ).fetchone()
+    if row is None:
+        raise EnterpriseGateError("C13", "no such site project in this organisation")
+    if row[0] is None:
+        raise EnterpriseGateError(
+            "C04",
+            "this site project is not linked to a reference design, so there is no design "
+            "for an engineer to have approved",
+        )
+    if row[0] != "Engineering Approved":
+        raise EnterpriseGateError(
+            "C04",
+            f"the reference design this site was built from is {row[0]}: no design is "
+            "issued without engineering approval",
+        )
 
 
 @_deferred
@@ -354,15 +385,46 @@ def require_tenant_scope(row, tenant_id: str) -> None:
         raise EnterpriseGateError("C13", "no such programme in this organisation")
 
 
-@_deferred
 def require_project_traceability(c, tenant_id: str, project_link_id: int) -> None:
     """C14 -- a generated project must retain traceability to its beneficiary+template.
 
     Input:  connection, tenant id, project link id.
     Output: none.
-    Raises: GateBlockedError until slice 7 (project generation) ships.
+    Raises: EnterpriseGateError("C14") when any link in the chain is missing; C13 when the
+            project link does not belong to this organisation.
+
+    The chain slice 7 built, and the one this walks:
+
+        site project -> reference design -> template version -> programme
+                     -> beneficiary
+
+    Most of it is already guaranteed by composite foreign keys in migrations 027 and 029 --
+    which is exactly why this guard is worth having rather than redundant. The FKs make the
+    chain UNBREAKABLE once written; this asserts it was WRITTEN. A link row inserted by some
+    future caller that forgot `reference_design_id` would satisfy every constraint in the
+    database and still be untraceable, because a nullable column is nullable.
     """
-    raise GateBlockedError("C14", "project generation ships in slice 7")
+    row = c.execute(
+        "SELECT l.beneficiary_id, l.template_version_id, l.reference_design_id, "
+        "       l.project_id, l.programme_id "
+        "  FROM enterprise_project_links l WHERE l.tenant_id=? AND l.id=?",
+        (tenant_id, project_link_id),
+    ).fetchone()
+    if row is None:
+        raise EnterpriseGateError("C13", "no such site project in this organisation")
+
+    missing = [name for name, value in (
+        ("originating beneficiary", row[0]),
+        ("template version",        row[1]),
+        ("reference design",        row[2]),
+        ("design project",          row[3]),
+        ("programme",               row[4]),
+    ) if value is None]
+    if missing:
+        raise EnterpriseGateError(
+            "C14",
+            "this project cannot be traced back to its " + ", ".join(missing),
+        )
 
 
 @_deferred

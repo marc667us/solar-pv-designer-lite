@@ -27,6 +27,7 @@ from .constants import (
     ENERGY_SOURCES,
     FUNDING_ELIGIBILITY,
     FUNDING_SOURCES,
+    DESIGN_PATHS,
     LOAD_PROFILES,
     OM_MODELS,
     ORGANISATION_TYPES,
@@ -180,6 +181,10 @@ def for_template_form(c) -> dict:
         "beneficiary_types": beneficiary_types(),
         "design_strategies": design_strategies(),
         "options": {
+            # Slice 7. The form is rendered FROM TEMPLATE_PARAMETER_FIELDS, so a `select`
+            # whose source is missing here renders as an empty dropdown -- a required field
+            # nobody can satisfy, and the template becomes unapprovable with no explanation.
+            "DESIGN_PATHS":                _pairs(DESIGN_PATHS),
             "SYSTEM_CONFIGURATIONS":       _pairs(SYSTEM_CONFIGURATIONS),
             "LOAD_PROFILES":               _pairs(LOAD_PROFILES),
             "BENEFICIARY_FIELDS":          _pairs(BENEFICIARY_FIELDS),

@@ -16,8 +16,12 @@
       </div>
     </div>
     <div class="d-flex gap-2">
-      <a href="{{ url_for('enterprise_lifecycle_documents', programme_id=programme.id) }}"
+      <a href="{{ url_for('enterprise_design', programme_id=programme.id) }}"
          class="btn btn-warning btn-sm">
+        <i class="bi bi-diagram-3 me-1"></i>Design &amp; Rollout
+      </a>
+      <a href="{{ url_for('enterprise_lifecycle_documents', programme_id=programme.id) }}"
+         class="btn btn-outline-warning btn-sm">
         <i class="bi bi-file-earmark-text me-1"></i>Lifecycle Documents
       </a>
       <a href="{{ url_for('enterprise_home') }}" class="btn btn-outline-secondary btn-sm">

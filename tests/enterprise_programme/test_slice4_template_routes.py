@@ -150,6 +150,7 @@ def test_the_full_template_lifecycle_through_the_web(ent, org):
     # service test cannot reach.
     r = client.post(f"/enterprise/templates/versions/{vid}/save", data=MultiDict([
         ("_csrf", "testtoken"),
+        ("design_path", "standard"),
         ("system_configuration", "hybrid"),
         ("typical_load_profile", "daytime_only"),
         ("standard_pv_capacities_kw", "20, 50, 100"),
@@ -198,7 +199,8 @@ def test_the_full_template_lifecycle_through_the_web(ent, org):
     # And the freeze holds through the HTTP surface too.
     _login(client, ids["erica"])
     r = client.post(f"/enterprise/templates/versions/{vid}/save", data={
-        "_csrf": "testtoken", "system_configuration": "off_grid",
+        "_csrf": "testtoken", "design_path": "standard",
+        "system_configuration": "off_grid",
         "typical_load_profile": "daytime_only",
         "standard_pv_capacities_kw": "5",
         "required_beneficiary_fields": "name",
@@ -229,7 +231,8 @@ def test_a_rejected_value_leaves_you_on_the_form_not_the_index(ent, org):
         ).fetchone()
 
     r = client.post(f"/enterprise/templates/versions/{vid}/save", data={
-        "_csrf": "testtoken", "system_configuration": "hybrid",
+        "_csrf": "testtoken", "design_path": "standard",
+        "system_configuration": "hybrid",
         "typical_load_profile": "continuous_24h",
         "standard_pv_capacities_kw": "50kw",          # not a number
         "required_beneficiary_fields": "name",

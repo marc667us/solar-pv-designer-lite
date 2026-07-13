@@ -145,6 +145,32 @@ LOAD_PROFILES: list[tuple[str, str]] = [
     ("mixed_community",     "Mixed community load"),
 ]
 
+# --- design path (owner directive, slice 7) ---------------------------------
+# WHICH DESIGN ENGINE A PROGRAMME OPENS INTO.
+#
+# The owner's rule: "when you are in planning the programme must open into standard or
+# generation station design". So a programme is one of exactly two shapes:
+#
+#   standard            -- a collection of residential/commercial BUILDINGS sponsored by a
+#                          government, bank or institution. Reuses the app's standard design
+#                          (calc_loads -> calc_pv -> ... -> calc_boq -> calc_economics),
+#                          plus Check-My-Bill, plus a field assessment and shading survey at
+#                          each location. Funding is sought ONCE, by the programme, for all
+#                          locations -- never per building.
+#   generation_station  -- the programme builds ONE generation station. Uses the full
+#                          Generation Station (capital-investment) design approach and all
+#                          of its outputs.
+#
+# This lives on the TEMPLATE, not the programme, and that is deliberate: C03 already says
+# no project is generated without an APPROVED template version. Putting the design path
+# anywhere else would mean the thing that decides which engine runs against every site in
+# the programme is a field nobody had to approve.
+DESIGN_PATHS: list[tuple[str, str]] = [
+    ("standard",           "Standard design (residential / commercial buildings)"),
+    ("generation_station", "Generation Station design (utility-scale plant)"),
+]
+DESIGN_PATH_CODES: frozenset[str] = frozenset(c for c, _ in DESIGN_PATHS)
+
 # --- system configuration (master prompt s13) -------------------------------
 SYSTEM_CONFIGURATIONS: list[tuple[str, str]] = [
     ("grid_tied",       "Grid-tied"),
@@ -409,6 +435,12 @@ TEMPLATE_REQUIRED_DOCUMENTS: list[tuple[str, str]] = [
 # with the slices that produce those artefacts -- an empty field in the UI that nothing
 # reads would be a promise the system does not keep.
 TEMPLATE_PARAMETER_FIELDS: list[dict] = [
+    # FIRST, because it decides which engine every other field is fed to. Required: a
+    # template that does not say which design path it takes is a template that cannot be
+    # rolled out, and discovering that at rollout -- after approval, in front of N sites --
+    # is discovering it in the worst possible place.
+    {"key": "design_path", "label": "Design path",
+     "kind": "select", "source": "DESIGN_PATHS", "required": True},
     {"key": "system_configuration", "label": "System configuration",
      "kind": "select", "source": "SYSTEM_CONFIGURATIONS", "required": True},
     {"key": "typical_load_profile", "label": "Typical load profile",

@@ -38,10 +38,12 @@ from werkzeug.utils import secure_filename
 
 from app.enterprise_programme import (
     beneficiaries, constants, documents, dropdowns, flags, gates, imports, members,
-    rbac, site_qualification, tenancy, workflows,
+    rbac, rollout, site_qualification, tenancy, workflows,
 )
 from app.enterprise_programme.documents import DocumentError
+from app.enterprise_programme.engines import EngineError
 from app.enterprise_programme.members import MemberError
+from app.enterprise_programme.rollout import RolloutError
 # `templates` is the template ENGINE, not Jinja. Aliased so that nothing in this file can
 # be misread as touching Flask's template loader.
 from app.enterprise_programme import templates as template_engine
@@ -115,6 +117,7 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
         workflows.ensure_schema(c)      # no-op on Postgres
         beneficiaries.ensure_schema(c)  # no-op on Postgres
         documents.ensure_schema(c)      # no-op on Postgres (migration 028 owns it)
+        rollout.ensure_schema(c)        # no-op on Postgres (migration 029 owns it)
         _schema_ready.add(key)
 
     # ---- guards ----------------------------------------------------------
@@ -1639,6 +1642,335 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
             except MemberError as e:
                 flash(str(e), "error")
         return redirect(url_for("enterprise_members"))
+
+    # ------------------------------------------------------------------
+    # SLICE 7 -- the programme's ONE design, scaled to every site
+    # ------------------------------------------------------------------
+    # The owner's shape, in their words: "when you are in planning the programme must open
+    # into standard or generation station design"; "the implementation must be built up from
+    # the design but scaled to all programme sites"; "the BOQ and everything is the same for
+    # each site". So there is ONE screen and it walks exactly that: choose the approved
+    # template -> build the one design -> engineering approves it -> roll it out to every
+    # qualified site -> read the programme plans. Not one screen per step; the steps ARE the
+    # story, and splitting them across five pages would hide the fact that they are one.
+
+    @app.route("/enterprise/programmes/<int:programme_id>/design")
+    @login_required
+    def enterprise_design(programme_id: int):
+        """The programme's design and rollout screen."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+
+            try:
+                prog = documents.programme_facts(c, active, programme_id)
+            except EnterpriseGateError:
+                abort(404)              # C13: not-yours and not-there are one answer
+
+            design = rollout.current_design(c, active, programme_id)
+            stage = constants.STAGE_OF_PHASE.get(prog.get("phase_code"))
+            return render_template(
+                "enterprise_programme/design.html",
+                programme=prog,
+                programme_id=programme_id,
+                stage=stage,
+                stage_name=dict((sc, sn) for sc, sn, _p
+                                in constants.LIFECYCLE_STAGES).get(stage, ""),
+                planning_reached=stage is not None and stage != "S1_INITIATION",
+                options=rollout.design_options(c, active, programme_id),
+                design=design,
+                scope=(rollout.rollout_scope(c, active, programme_id, design["id"])
+                       if design else None),
+                job=rollout.latest_job(c, active, programme_id),
+                sites=rollout.site_projects(c, active, programme_id),
+                funding=rollout.funding_requirement(c, active, programme_id),
+                boq=rollout.scaled_boq(c, active, programme_id),
+                can_design=rbac.has_permission(c, active, uid, "design.generate",
+                                               programme_id=programme_id),
+                can_approve=rbac.has_permission(c, active, uid, "engineering.approve",
+                                                programme_id=programme_id),
+                can_survey=rbac.has_permission(c, active, uid, "qualification.score",
+                                               programme_id=programme_id),
+            )
+
+    @app.route("/enterprise/programmes/<int:programme_id>/design/create",
+               methods=["POST"])
+    @login_required
+    def enterprise_design_create(programme_id: int):
+        """Build the ONE design that every site in this programme will be."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        f = request.form
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                design = rollout.create_reference_design(
+                    c, active, uid, programme_id,
+                    template_version_id=int(f.get("template_version_id") or 0),
+                    monthly_kwh=f.get("monthly_kwh"),
+                    design_kwp=f.get("design_kwp"),
+                    region=(f.get("region") or "").strip(),
+                )
+                flash(
+                    "Reference design built ({:g} kWp). Engineering must approve it before "
+                    "it can be rolled out to the programme's sites.".format(
+                        design.get("kwp") or 0),
+                    "success")
+            except EnterprisePermissionError:
+                abort(403)
+            except RolloutError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+            except EngineError as e:
+                # The design engine refused. That is an operator-fixable input problem (a
+                # zero bill, a capacity nothing can be built at), not a server fault -- so
+                # it is a flash on the form, not a 500.
+                flash(str(e), "error")
+        return redirect(url_for("enterprise_design", programme_id=programme_id))
+
+    @app.route("/enterprise/programmes/<int:programme_id>/design/<int:design_id>/"
+               "<action>", methods=["POST"])
+    @login_required
+    def enterprise_design_action(programme_id: int, design_id: int, action: str):
+        """approve (C04) | supersede | rollout. One route, because they are one workflow."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        if action not in ("approve", "supersede", "rollout"):
+            abort(404)
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                if action == "approve":
+                    rollout.approve_reference_design(c, active, uid, design_id)
+                    flash("Design approved by engineering. It can now be rolled out.",
+                          "success")
+                elif action == "supersede":
+                    rollout.supersede_reference_design(c, active, uid, design_id)
+                    flash("Design superseded. The sites already built from it keep "
+                          "pointing at it -- that record is what says what each site was "
+                          "actually built to.", "success")
+                else:
+                    job_id = rollout.queue_rollout(c, active, uid, programme_id,
+                                                   design_id=design_id)
+                    job = rollout.get_job(c, active, job_id)
+                    flash(
+                        "Rollout queued for {} site{}. It runs in the background -- the "
+                        "queue is drained on a schedule, so it is not instant.".format(
+                            job["total_items"], "" if job["total_items"] == 1 else "s"),
+                        "success")
+            except EnterprisePermissionError:
+                abort(403)
+            except RolloutError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+        return redirect(url_for("enterprise_design", programme_id=programme_id))
+
+    @app.route("/enterprise/programmes/<int:programme_id>/sites/<int:link_id>/survey",
+               methods=["POST"])
+    @login_required
+    def enterprise_site_survey(programme_id: int, link_id: int):
+        """The field assessment + shading survey for ONE location.
+
+        RECORDED, NOT APPLIED. See rollout.record_site_variance: the reference BOQ is what
+        gets built at every site, so a survey that disagrees with it raises a flag for
+        engineering rather than quietly re-sizing this one site's array behind everyone's
+        back.
+        """
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        f = request.form
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                rollout.record_site_variance(
+                    c, active, uid, programme_id, link_id,
+                    shading_factor=(f.get("shading_factor") or None),
+                    field_notes=(f.get("field_notes") or ""),
+                )
+                flash("Site survey recorded.", "success")
+            except EnterprisePermissionError:
+                abort(403)
+            except RolloutError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+        return redirect(url_for("enterprise_design", programme_id=programme_id))
+
+    def _programme_plans_markdown(c, tenant_id: str, programme_id: int) -> str:
+        """The programme plans, as markdown.
+
+        Everything here is READ, never recomputed: the reference design's frozen summary,
+        its frozen BOQ multiplied by the site count, the funding total. A report that
+        recomputes is a report that can disagree with the thing it is reporting on -- and
+        the one place that must never happen is the document the sponsor is funding from.
+        """
+        prog = documents.programme_facts(c, tenant_id, programme_id)
+        design = rollout.current_design(c, tenant_id, programme_id)
+        if design is None:
+            return ("# " + str(prog["name"]) + " -- Programme Plans\n\n"
+                    "This programme has no reference design yet. A programme opens into "
+                    "its design at the Planning stage.\n")
+
+        funding = rollout.funding_requirement(c, tenant_id, programme_id)
+        boq = rollout.scaled_boq(c, tenant_id, programme_id)
+        sites = rollout.site_projects(c, tenant_id, programme_id)
+        summary = design["summary"] or {}
+        cur = summary.get("currency") or ""
+        path_label = dict(constants.DESIGN_PATHS).get(design["design_path"],
+                                                      design["design_path"])
+
+        out = ["# " + str(prog["name"]) + " -- Programme Plans", ""]
+        out.append("**Programme code:** " + str(prog["code"]) + "  ")
+        out.append("**Design path:** " + str(path_label) + "  ")
+        out.append("**Sites in this programme:** " + str(funding["sites"]) + "  ")
+        out.append("**Design status:** " + str(design["status"]))
+        out.append("")
+        out.append("## The reference design")
+        out.append("")
+        out.append("One design. Every site is this design -- same equipment, same bill of "
+                   "quantities. Only the address changes.")
+        out.append("")
+        for label, key, unit in (
+            ("PV array",      "pv_kw",       "kWp"),
+            ("Modules",       "num_panels",  ""),
+            ("Inverter",      "inverter_kw", "kW"),
+            ("Battery",       "battery_kwh", "kWh"),
+            ("Daily energy",  "daily_kwh",   "kWh/day"),
+            ("Cost per site", "total_cost",  cur),
+        ):
+            value = summary.get(key)
+            if value is not None:
+                out.append("- **{}:** {:,.2f} {}".format(label, value, unit).rstrip())
+        out.append("")
+        out.append("## Scaled to the programme")
+        out.append("")
+        out.append("- **Sites:** " + str(funding["sites"]))
+        if funding.get("kwp_total"):
+            out.append("- **Total installed capacity:** "
+                       "{:,.1f} kWp".format(funding["kwp_total"]))
+        if funding.get("total"):
+            out.append("- **Total funding required:** {} {:,.2f}".format(
+                cur, funding["total"]))
+            out.append("")
+            out.append("Funding is sought ONCE, by the programme, for all locations -- "
+                       "never per building.")
+        out.append("")
+
+        if boq["lines"]:
+            out.append("## Bill of quantities -- programme total")
+            out.append("")
+            out.append("| Item | Unit | Per site | Total (x{}) |".format(boq["multiplier"]))
+            out.append("|---|---|---|---|")
+            for line in boq["lines"][:200]:
+                out.append("| {} | {} | {} | {} |".format(
+                    line["description"] or "",
+                    line["unit"] or "",
+                    "" if line["unit_qty"] is None else "{:,.2f}".format(line["unit_qty"]),
+                    "" if line["total_qty"] is None
+                    else "{:,.2f}".format(line["total_qty"])))
+            out.append("")
+
+        if sites:
+            out.append("## Sites")
+            out.append("")
+            out.append("| Code | Site | Project | Survey findings |")
+            out.append("|---|---|---|---|")
+            for site in sites[:500]:
+                out.append("| {} | {} | #{} | {} |".format(
+                    site["code"] or "", site["name"] or "", site["project_id"],
+                    "; ".join(site["flags"]) or "-"))
+            out.append("")
+        return "\n".join(out)
+
+    @app.route("/enterprise/programmes/<int:programme_id>/plans.pdf")
+    @login_required
+    def enterprise_programme_plans(programme_id: int):
+        """The output report: the plans of the programme, for the number of sites."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                rbac.require_permission(c, active, uid, "report.generate")
+            except EnterprisePermissionError:
+                abort(403)
+            try:
+                markdown = _programme_plans_markdown(c, active, programme_id)
+            except EnterpriseGateError:
+                abort(404)
+            pdf = documents.render_pdf("Programme plans", markdown)
+        return Response(
+            pdf,
+            mimetype="application/pdf",
+            headers={
+                "Content-Disposition":
+                    'attachment; filename="programme-plans-%d.pdf"' % programme_id,
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @app.route("/enterprise/jobs/drain", methods=["POST"])
+    def enterprise_drain_jobs():
+        """The worker. Called by a scheduled GitHub Action, never by a browser.
+
+        There is no worker PROCESS and there cannot be one: Render's free tier caps this
+        account at a single instance, and a second service was already refused on
+        2026-07-10. So the queue is drained by an authenticated POST from a cron.
+
+        AUTHENTICATED BY A SHARED SECRET, COMPARED IN CONSTANT TIME. A cron has no session,
+        so there is nothing for @login_required to check and nothing for CSRF to protect --
+        both are absent deliberately, and the bearer token is therefore the ONLY thing
+        standing between a stranger and this programme's project generation. A plain `==`
+        on a secret leaks its length and, given enough attempts, its bytes.
+
+        AN UNSET SECRET IS A 404, NOT AN OPEN DOOR. If the environment variable is missing,
+        this endpoint does not exist. The failure mode of a misconfiguration must never be
+        "unguarded".
+        """
+        import hmac
+        import os
+
+        secret = os.environ.get("ENTERPRISE_JOB_TOKEN") or ""
+        if not secret:
+            abort(404)
+        presented = request.headers.get("Authorization") or ""
+        if not presented.startswith("Bearer "):
+            abort(401)
+        if not hmac.compare_digest(presented[7:], secret):
+            abort(401)
+
+        drained = []
+        with get_db() as c:
+            _ensure_schema_once(c)
+            rows = c.execute(
+                "SELECT id FROM enterprise_jobs "
+                " WHERE status IN ('Queued','Running') AND job_type='generate_projects' "
+                " ORDER BY created_at LIMIT 3"
+            ).fetchall()
+            for row in rows:
+                try:
+                    drained.append(rollout.drain_job(c, int(row[0])))
+                except Exception as e:   # noqa: BLE001 -- one job must not kill the pass
+                    drained.append({"job_id": int(row[0]), "status": "error",
+                                    "error": str(e)[:200]})
+        return {"drained": drained}, 200
+
 
 
 # The document types the gate predicates actually look for. A form that offered anything
