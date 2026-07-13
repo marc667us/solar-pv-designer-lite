@@ -127,9 +127,51 @@ def main() -> int:
     else:
         print("   (only one tenant on this account -- nothing to switch to)")
 
+    # ---------------------------------------------------------------- the POST path
+    # The GET renders 200 in BOTH tenants (above), so the form is reachable and the
+    # permission IS held. That leaves the POST. The only abort(403) on the POST path
+    # other than the permission check -- which we have just proved passes -- is
+    # csrf_protect() (web_app.py:274-279), which aborts 403 when the submitted _csrf
+    # does not match the one in the session.
+    #
+    # So: submit the SAME form twice -- once with the token the server just gave us, and
+    # once with a stale token -- and see which produces the owner's page. This decides
+    # between "the module refuses the owner" and "the owner's form went stale".
+    print("\n== 6. THE POST -- is it CSRF, not permissions? ==")
+    r = s.get(f"{BASE}/enterprise/programmes/new", timeout=TIMEOUT)
+    tok = re.search(r'name="_csrf" value="([^"]+)"', r.text)
+    if not tok:
+        print("   ! no CSRF field on the form -- cannot test")
+        return 0
+    good = tok.group(1)
+
+    stale = s.post(f"{BASE}/enterprise/programmes/new", timeout=TIMEOUT,
+                   allow_redirects=False,
+                   data={"_csrf": "stale-token-from-an-older-session",
+                         "code": "REPRO-STALE", "name": "Repro (stale token)",
+                         "design_strategy": "standard"})
+    is_hiccup = "hiccup" in stale.text.lower() or "not authorised" in stale.text.lower() \
+        or "not have the permission" in stale.text.lower()
+    print(f"   POST with a STALE csrf token -> {stale.status_code}"
+          f"{'   <<<< reproduces the OWNER PAGE' if stale.status_code == 403 else ''}")
+    print(f"        body is the hiccup/not-authorised page: {is_hiccup}")
+    print("        (nothing was created -- the request was rejected before any write)")
+
+    if "--post" in sys.argv:
+        real = s.post(f"{BASE}/enterprise/programmes/new", timeout=TIMEOUT,
+                      allow_redirects=False,
+                      data={"_csrf": good, "code": "REPRO-OK", "name": "Repro (valid token)",
+                            "design_strategy": "standard"})
+        print(f"   POST with a VALID csrf token -> {real.status_code} "
+              f"({'302 = created' if real.status_code == 302 else 'see body'})")
+    else:
+        print("   POST with a VALID token: SKIPPED (pass --post to actually create one)")
+
     print("\n== DONE ==")
-    print("Whichever line above shows 403 is the owner's bug, and the tenant printed")
-    print("immediately above it is the tenant the permission was judged against.")
+    print("If the GET is 200 everywhere and only the stale-token POST is 403, then the")
+    print("owner was never 'unauthorised' -- their form's CSRF token no longer matched")
+    print("their session, and csrf_protect() abort(403) rendered Werkzeug's generic")
+    print("'you don't have permission' text as the hiccup page.")
     return 0
 
 
