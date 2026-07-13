@@ -691,32 +691,56 @@ def commit_batch(c, tenant_id: str, user_id: int, batch_id: int, *,
                 "IMPORT", "this import was already committed by somebody else"
             )
 
+        # THE LOOP CALLS write_beneficiary_row, NOT create_beneficiary, AND WRAPS EACH ROW IN
+        # ITS OWN SAVEPOINT. Both halves are load-bearing; the second was learned the hard
+        # way (Supervisor slice-6.6, HIGH -- the first version of this fix INTRODUCED a bug).
+        #
+        # WHY NOT create_beneficiary: it re-checked the programme and the permission on every
+        # row, and wrote an audit row per row. C13 and `beneficiary.import` are proven ONCE,
+        # above, for this programme -- which is the whole batch -- so the re-checks were pure
+        # cost. The per-row audit was worse than cost: each audit write takes
+        # `pg_advisory_xact_lock` on a CONSTANT key shared by every audit writer in SolarPro.
+        # Now the audit row is written ONCE, at the end, which is also what audit.py's caller
+        # rule demands ("write the audit row LAST").
+        #
+        # WHY THE SAVEPOINT: on Postgres a failed statement poisons the whole transaction --
+        # psycopg2 puts it in InFailedSqlTransaction and REFUSES every subsequent statement
+        # until a rollback. write_beneficiary_row's INSERT is bare, so a duplicate site code
+        # aborted the transaction, and the very next line -- the UPDATE that marks the row as
+        # an Error -- then raised InFailedSqlTransaction. That is not an EnterpriseGateError,
+        # so it escaped this except, escaped the loop, and 500'd the request with the entire
+        # batch rolled back: the exact opposite of "one bad row must not cost the other 1999".
+        # It was deterministic, not a race -- ticking "import duplicates too" makes row 1 a
+        # guaranteed collision -- and NO SQLite test could see it, because SQLite does not
+        # poison a transaction on IntegrityError.
+        #
+        # The savepoint heals it: ROLLBACK TO SAVEPOINT clears the aborted state, and the
+        # UPDATE below then runs on a healthy transaction. (txn.atomic takes the savepoint
+        # branch here because the batch's own transaction is already open.)
         for row_id, row_no, mapped_json in rows:
             mapped = _decode(mapped_json, {})
             fields = {k: v for k, v in mapped.items() if k in _FIELD_KEYS}
             try:
-                beneficiary_id = beneficiaries.create_beneficiary(
-                    c, tenant_id, user_id, batch["programme_id"],
-                    code=mapped.get("code", ""),
-                    name=mapped.get("name", ""),
-                    beneficiary_type=mapped.get("beneficiary_type", ""),
-                    fields=fields,
-                    import_batch_id=batch_id,
-                    audit=audit,
-                )
+                with txn.atomic(c):
+                    beneficiary_id, _code = beneficiaries.write_beneficiary_row(
+                        c, tenant_id, user_id, batch["programme_id"],
+                        code=mapped.get("code", ""),
+                        name=mapped.get("name", ""),
+                        beneficiary_type=mapped.get("beneficiary_type", ""),
+                        fields=fields,
+                        import_batch_id=batch_id,
+                    )
             except EnterpriseGateError as e:
-                # C12 IS NOT A ROW PROBLEM (Supervisor slice-5, MED). _require_audit raises
-                # C12 when the audit trail itself could not be written -- a hash-chain or
-                # advisory-lock failure, not a bad spreadsheet. Caught here, EVERY row would
-                # be rewritten as an Error, the batch would finish "Committed" with 0
-                # imported, and the operator would be told their file was bad while the
-                # platform's audit trail was silently down. Let it out: it aborts the whole
-                # import, which is exactly what audit-or-nothing means.
-                if e.control == "C12":
-                    raise
-                # A row that the database refused (a code that raced another import, say).
-                # Record WHY on the row and carry on: one bad row must not cost the other
-                # 3999. It stays in staging as an Error, with the reason, forever.
+                # A row that the database refused (a code that raced another import, say),
+                # or one the register would not validate. Record WHY on the row and carry
+                # on: one bad row must not cost the other 1999. It stays in staging as an
+                # Error, with the reason, forever.
+                #
+                # C12 can no longer surface HERE (the audit write moved out of the loop), so
+                # the old "C12 is not a row error, re-raise it" special case is gone with the
+                # per-row audit that made it necessary. C12 is still enforced -- once, below,
+                # for the batch -- and it still aborts the entire import, which is what
+                # audit-or-nothing means.
                 failed += 1
                 c.execute(
                     "UPDATE enterprise_import_rows "

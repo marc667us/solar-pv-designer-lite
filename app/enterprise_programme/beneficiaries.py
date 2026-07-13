@@ -640,23 +640,48 @@ def _load_programme(c, tenant_id: str, programme_id: int) -> None:
         raise BeneficiaryError("C13", "no such programme in this organisation")
 
 
-def create_beneficiary(c, tenant_id: str, user_id: int, programme_id: int, *,
-                       code: str, name: str, beneficiary_type: str, fields: dict | None = None,
-                       import_batch_id: int | None = None, audit=None) -> int:
-    """Add one site to the register. It starts at "Beneficiary Registered".
+def write_beneficiary_row(c, tenant_id: str, user_id: int, programme_id: int, *,
+                          code: str, name: str, beneficiary_type: str,
+                          fields: dict | None = None,
+                          import_batch_id: int | None = None) -> tuple[int, str]:
+    """Validate one site and INSERT it. No authorisation, no audit, no transaction.
 
     Input:  connection, tenant id, acting user, programme id, code + name + type, the
-            optional attribute dict, the import batch this came from (if any), audit hook.
-    Output: the new beneficiary id.
-    Raises: EnterprisePermissionError (403), BeneficiaryError (409 / C13).
+            optional attribute dict, the import batch this came from (if any).
+    Output: (new beneficiary id, the canonicalised code).
+    Raises: BeneficiaryError on a row the register will not accept.
 
-    Registering is NOT approving. A field officer with `beneficiary.import` puts a site in;
-    somebody with `beneficiary.approve` decides the programme will actually serve it.
+    THIS IS NOT A PUBLIC ENTRY POINT. It is the shared middle of `create_beneficiary` (one
+    site, from a form) and `imports.commit_batch` (up to 2000 sites, from a spreadsheet).
+    It performs NO permission check and writes NO audit row, so calling it directly means
+    accepting responsibility for both. It is deliberately not exported.
+
+    WHY IT WAS SPLIT OUT (Supervisor slice-6.5/6.6, HIGH)
+    -----------------------------------------------------
+    `commit_batch` used to call the full `create_beneficiary` once per row. That cost, per
+    row: a programme SELECT, an RBAC SELECT (a JOIN over role_assignments x memberships),
+    the INSERT, an audit chain-head SELECT, and an audit INSERT -- six round trips, times
+    2000 rows, against a remote free-tier Postgres.
+
+    The audit write is the part that mattered. On Postgres it takes
+    `pg_advisory_xact_lock(4242000000000001)` -- a CONSTANT key that EVERY audit writer in
+    SolarPro contends on. `app/security/audit.py` states the resulting rule in its own
+    docstring: "an audited action writes its audit row LAST ... do not do further work after
+    the audit call and before the commit." A loop that writes an audit row per row, and then
+    keeps working, is the one caller that cannot honour that.
+
+    (BE PRECISE ABOUT THE OLD MECHANISM -- the Supervisor corrected an earlier version of
+    this comment, which claimed the lock was held across all 2000 rows. It was not: because
+    `_PgConnAdapter` exposed no transaction state, txn.in_transaction() answered False on
+    Postgres, so the NESTED atomic() in create_beneficiary took the OWNER branch and
+    committed after every row. The lock was therefore taken and released 2000 times -- and
+    the batch was never atomic on Postgres at all, which is arguably worse than the lock: a
+    half-imported register could not be rolled back. Both faults are gone: the adapter now
+    reports its transaction status, and the audit row is written once, last.)
+
+    None of this was visible to the suite: SQLite takes no advisory lock, and does not poison
+    a transaction on IntegrityError. Every one of these tests runs on SQLite.
     """
-    _load_programme(c, tenant_id, programme_id)      # C13 FIRST -- before authz
-    rbac.require_permission(c, tenant_id, user_id, "beneficiary.import",
-                            programme_id=programme_id)
-
     # CANONICALISED, not merely stripped. The unique index below is the register's identity
     # check, and it can only mean what it looks like it means if the code it indexes is in
     # one form. See canonical_code().
@@ -682,26 +707,54 @@ def create_beneficiary(c, tenant_id: str, user_id: int, programme_id: int, *,
         columns.append(key)
         values.append(value)
 
+    placeholders = ",".join("?" for _ in columns)
+    try:
+        cur = c.execute(
+            f"INSERT INTO enterprise_beneficiary_register ({', '.join(columns)}) "
+            f"VALUES ({placeholders})",
+            tuple(values),
+        )
+    except Exception as e:
+        if _is_integrity_error(e):
+            # The unique index on (tenant, programme, code) is what makes re-importing
+            # the same spreadsheet a no-op instead of a duplicated register. Report it
+            # as a conflict the operator can act on, not a 500.
+            raise BeneficiaryError(
+                "BENEFICIARY",
+                f"a beneficiary with code {code!r} is already in this programme",
+            ) from e
+        raise
+    return txn.inserted_id(c, cur), code
+
+
+def create_beneficiary(c, tenant_id: str, user_id: int, programme_id: int, *,
+                       code: str, name: str, beneficiary_type: str, fields: dict | None = None,
+                       import_batch_id: int | None = None, audit=None) -> int:
+    """Add one site to the register. It starts at "Beneficiary Registered".
+
+    Input:  connection, tenant id, acting user, programme id, code + name + type, the
+            optional attribute dict, the import batch this came from (if any), audit hook.
+    Output: the new beneficiary id.
+    Raises: EnterprisePermissionError (403), BeneficiaryError (409 / C13).
+
+    Registering is NOT approving. A field officer with `beneficiary.import` puts a site in;
+    somebody with `beneficiary.approve` decides the programme will actually serve it.
+
+    This is the ONE-SITE path (the manual form). The bulk path is imports.commit_batch,
+    which checks the same permission once and then calls write_beneficiary_row per row --
+    see that function for why it must not call this one in a loop.
+    """
+    _load_programme(c, tenant_id, programme_id)      # C13 FIRST -- before authz
+    rbac.require_permission(c, tenant_id, user_id, "beneficiary.import",
+                            programme_id=programme_id)
+
     audit = audit or txn.audit_on(c)
     with txn.atomic(c):
-        placeholders = ",".join("?" for _ in columns)
-        try:
-            cur = c.execute(
-                f"INSERT INTO enterprise_beneficiary_register ({', '.join(columns)}) "
-                f"VALUES ({placeholders})",
-                tuple(values),
-            )
-        except Exception as e:
-            if _is_integrity_error(e):
-                # The unique index on (tenant, programme, code) is what makes re-importing
-                # the same spreadsheet a no-op instead of a duplicated register. Report it
-                # as a conflict the operator can act on, not a 500.
-                raise BeneficiaryError(
-                    "BENEFICIARY",
-                    f"a beneficiary with code {code!r} is already in this programme",
-                ) from e
-            raise
-        beneficiary_id = txn.inserted_id(c, cur)
+        beneficiary_id, code = write_beneficiary_row(
+            c, tenant_id, user_id, programme_id,
+            code=code, name=name, beneficiary_type=beneficiary_type,
+            fields=fields, import_batch_id=import_batch_id,
+        )
 
         _require_audit(
             audit("ENTERPRISE_BENEFICIARY_REGISTERED", user_id=user_id,

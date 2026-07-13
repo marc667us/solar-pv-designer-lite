@@ -303,6 +303,44 @@ class _PgConnAdapter:
     def close(self):
         self._conn.close()
 
+    @property
+    def info(self):
+        """The underlying psycopg2 connection's `info` object.
+
+        WHY THIS EXISTS (Supervisor, 2026-07-13 -- it was a silent HIGH).
+        Callers ask a connection whether a transaction is already open so they can decide
+        between owning it (commit/rollback) and being a guest inside it (SAVEPOINT /
+        ROLLBACK TO SAVEPOINT). The sqlite3 answer is `conn.in_transaction`; the psycopg2
+        answer is `conn.info.transaction_status`.
+
+        This adapter exposed NEITHER, and it has no `__getattr__` passthrough at the
+        connection level -- so every such probe fell through to its "unknown driver" default
+        of False, and the SAVEPOINT branch of app/enterprise_programme/txn.py::atomic was
+        DEAD CODE on the only backend production actually runs. Two consequences, both real:
+        a nested service silently committed its caller's half-finished work, and -- worse --
+        a failed statement left the psycopg2 transaction in InFailedSqlTransaction with no
+        savepoint to roll back to, so the next statement raised and took the whole request
+        down. The bulk beneficiary import hit exactly that.
+
+        Exposing `info` is the whole fix: `transaction_status` then reports the truth and the
+        savepoint machinery that was already written starts working.
+        """
+        return self._conn.info
+
+    @property
+    def in_transaction(self) -> bool:
+        """True when a transaction is open on the underlying connection.
+
+        The sqlite3 spelling of the same question, so callers can probe either idiom without
+        knowing which backend they hold. psycopg2's TRANSACTION_STATUS_IDLE is 0; anything
+        else (INTRANS, INERROR, ACTIVE) means a transaction is open and a bare commit here
+        would be committing somebody else's work.
+        """
+        try:
+            return int(self._conn.info.transaction_status) != 0
+        except Exception:
+            return False
+
     # ── Context manager — mirrors sqlite3.Connection behavior ──────────
     # sqlite3's __exit__ commits on success / rolls back on exception,
     # but does NOT close the connection. We do the same so existing
