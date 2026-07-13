@@ -50,3 +50,4 @@ reviews/*
 
 # One-shot patch + debug scripts (moved from repo root 2026-06-08)
 scripts/oneshot/
+.env.kcpw
