@@ -9,6 +9,7 @@ from functools import wraps
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, flash, jsonify, make_response, abort, send_file)
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.exceptions import Forbidden as _WerkzeugForbidden
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -271,12 +272,66 @@ def generate_csrf():
         session["_csrf"] = secrets.token_hex(24)
     return session["_csrf"]
 
+class FormExpired(_WerkzeugForbidden):
+    """The submitted CSRF token does not match the session.
+
+    THIS IS NOT AN AUTHORISATION FAILURE, and saying that it is put the owner on a page
+    telling them they were "not authorised to access some resources" when all they had
+    done was press Register on a form that had been open a while.
+
+    /auth/login and /auth/callback both call session.clear() (app/auth/oidc_routes.py),
+    so ANY re-authentication rotates the session and with it _csrf. A form rendered
+    before that moment still carries the old token. The user's roles, permissions and
+    data are all fine; the page in front of them is simply out of date.
+
+    Still a 403 -- the request is still refused and still writes nothing. Only the
+    explanation changes, and the user is given the one action that actually works:
+    re-open the form, which issues a fresh token.
+    """
+
+    description = ("Your form expired. This happens when you sign in again, or when "
+                   "the page has been open for a while. Nothing was saved and nothing "
+                   "was lost -- please re-open the form and submit it once more.")
+
+
 def csrf_protect():
-    """Call at top of POST handlers that mutate state."""
+    """Call at top of POST handlers that mutate state.
+
+    Raises FormExpired (a 403) when the token is missing or stale. Do NOT downgrade this
+    to a pass-through: a bad token is still refused. See patch_form_expired_csrf.py.
+    """
     if request.method == "POST":
         token = request.form.get("_csrf") or request.headers.get("X-CSRF-Token")
         if not token or token != session.get("_csrf"):
-            abort(403)
+            raise FormExpired()
+
+
+@app.errorhandler(FormExpired)
+def err_form_expired(e):
+    """Tell the truth about a stale form, and give the user the way out.
+
+    The generic error page auto-redirects to document.referrer and offers "Go Back" --
+    both of which return the browser to the CACHED form carrying the SAME dead token, so
+    resubmitting 403s again. That is a loop with no exit. `retry_url` gives the page a
+    button that re-GETs this same path, which is what mints a fresh token.
+    """
+    try:
+        app.logger.info("FORM_EXPIRED %s %s (stale or missing _csrf)",
+                        request.method, request.path)
+    except Exception:
+        pass
+    # An XHR caller (the helpline chat posts X-CSRF-Token) must not be handed an HTML
+    # error page inside its fetch(). Give it something it can branch on.
+    wants_json = (request.path.startswith("/api/")
+                  or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+                  or request.accept_mimetypes.best == "application/json")
+    if wants_json:
+        return jsonify(error="FORM_EXPIRED", message=str(e.description)), 403
+    return render_template("error.html", code=403,
+        title="Your form expired",
+        message=str(e.description),
+        retry_url=request.path,
+        retry_label="Re-open the form"), 403
 
 app.jinja_env.globals["csrf_token"] = generate_csrf
 app.jinja_env.globals["enumerate"]  = enumerate
@@ -20033,21 +20088,44 @@ def boms_save_rates(bom_id):
     try:
         with get_db() as c:
             # UPSERT — INSERT OR REPLACE on SQLite; ON CONFLICT on Postgres
-            try:
+            # Postgres has NO "INSERT OR REPLACE" -- it is a syntax error, and that
+            # error is what the owner saw flashed back at them. Branch on the backend
+            # BEFORE executing (the house pattern at :22777 / :28687 / :29045), because
+            # on Postgres a failed statement aborts the whole transaction -- so a
+            # try/except fallback could not have executed anyway.
+            # bom_id is the PRIMARY KEY, so it is the conflict target.
+            if bool(os.environ.get("DATABASE_URL")):
                 c.execute(
-                    "INSERT OR REPLACE INTO marketplace_bom_rates "
+                    "INSERT INTO marketplace_bom_rates "
                     "(bom_id, labour_pct, overhead_pct, profit_pct, contingency_pct, vat_pct, labour_pct_client) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT (bom_id) DO UPDATE SET "
+                    "labour_pct=EXCLUDED.labour_pct, "
+                    "overhead_pct=EXCLUDED.overhead_pct, "
+                    "profit_pct=EXCLUDED.profit_pct, "
+                    "contingency_pct=EXCLUDED.contingency_pct, "
+                    "vat_pct=EXCLUDED.vat_pct, "
+                    "labour_pct_client=EXCLUDED.labour_pct_client, "
+                    "updated_at=CURRENT_TIMESTAMP",
                     (bom_id, lab, ovh, prf, cnt, vat, lab_client),
                 )
-            except Exception:
-                # Column not migrated yet: fall back to legacy 6-col upsert.
-                c.execute(
-                    "INSERT OR REPLACE INTO marketplace_bom_rates "
-                    "(bom_id, labour_pct, overhead_pct, profit_pct, contingency_pct, vat_pct) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
-                    (bom_id, lab, ovh, prf, cnt, vat),
-                )
+            else:
+                # SQLite: a failed statement does NOT poison the transaction, so the
+                # legacy 6-column fallback is still safe here if the column is missing.
+                try:
+                    c.execute(
+                        "INSERT OR REPLACE INTO marketplace_bom_rates "
+                        "(bom_id, labour_pct, overhead_pct, profit_pct, contingency_pct, vat_pct, labour_pct_client) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (bom_id, lab, ovh, prf, cnt, vat, lab_client),
+                    )
+                except Exception:
+                    c.execute(
+                        "INSERT OR REPLACE INTO marketplace_bom_rates "
+                        "(bom_id, labour_pct, overhead_pct, profit_pct, contingency_pct, vat_pct) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (bom_id, lab, ovh, prf, cnt, vat),
+                    )
             c.execute(
                 "UPDATE marketplace_boms SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
                 (bom_id,),
@@ -20055,7 +20133,8 @@ def boms_save_rates(bom_id):
     except Exception as _e:
         try: app.logger.exception("boms_save_rates failed bom_id=%s: %s", bom_id, _e)
         except Exception: pass
-        flash(f"Could not save rates: {_e!s}. The Cost Estimate is unchanged.", "danger")
+        flash("Could not save the labour and markup rates -- the Cost Estimate is "
+              "unchanged. The problem has been logged; please try again.", "danger")
         return redirect(url_for("boms_view", bom_id=bom_id))
     flash(f"Rates updated — labour {lab}% / overhead {ovh}% / profit {prf}% / contingency {cnt}% / VAT {vat}% / client labour {lab_client}%.", "success")
     return redirect(url_for("boms_view", bom_id=bom_id))
@@ -33863,17 +33942,39 @@ def _boq_record_override(uid: int, desc: str, unit: str, basic: float,
         key = _boq_desc_key(desc)
         if not key:
             return
-        with get_db() as c:
-            c.execute(
-                "INSERT OR REPLACE INTO boq_user_item_overrides "
-                "(user_id, description_key, unit, basic_price, last_description, "
-                " supply_pct, install_pct, last_qty) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (int(uid), key, (unit or "").strip()[:20],
+        _vals = (int(uid), key, (unit or "").strip()[:20],
                  float(basic or 0), (desc or "").strip()[:500],
                  float(supply_pct or 0), float(install_pct or 0),
-                 float(qty or 0)),
-            )
+                 float(qty or 0))
+        with get_db() as c:
+            # Postgres has no INSERT OR REPLACE. Because this function is non-raising
+            # (`except Exception: pass` below), the syntax error was swallowed on every
+            # call since the Postgres cutover -- the rate library silently learned
+            # NOTHING on live, with no error anywhere to say so.
+            if bool(os.environ.get("DATABASE_URL")):
+                c.execute(
+                    "INSERT INTO boq_user_item_overrides "
+                    "(user_id, description_key, unit, basic_price, last_description, "
+                    " supply_pct, install_pct, last_qty) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                    "ON CONFLICT (user_id, description_key) DO UPDATE SET "
+                    "unit=EXCLUDED.unit, "
+                    "basic_price=EXCLUDED.basic_price, "
+                    "last_description=EXCLUDED.last_description, "
+                    "supply_pct=EXCLUDED.supply_pct, "
+                    "install_pct=EXCLUDED.install_pct, "
+                    "last_qty=EXCLUDED.last_qty, "
+                    "updated_at=CURRENT_TIMESTAMP",
+                    _vals,
+                )
+            else:
+                c.execute(
+                    "INSERT OR REPLACE INTO boq_user_item_overrides "
+                    "(user_id, description_key, unit, basic_price, last_description, "
+                    " supply_pct, install_pct, last_qty) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    _vals,
+                )
     except Exception:
         pass
 

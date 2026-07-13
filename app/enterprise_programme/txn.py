@@ -220,3 +220,21 @@ def inserted_id(c, cur) -> int:
         "could not determine the inserted row id; refusing to guess "
         "(guessing here attaches child rows to another tenant's parent)"
     )
+
+
+def is_integrity_error(e: BaseException) -> bool:
+    """Is this a UNIQUE / CHECK / FOREIGN-KEY violation, on either driver?
+
+    Input:  an exception.
+    Output: True if the database rejected the row for violating a constraint.
+
+    Matched by CLASS NAME rather than by importing psycopg2.IntegrityError, because
+    psycopg2 is not installed in the SQLite dev environment and importing it would make
+    this module unimportable there. Both drivers name the class `IntegrityError` --
+    DB-API 2.0 requires it -- so the name is a contract, not a coincidence.
+
+    The same helper is written out privately in beneficiaries.py, site_qualification.py and
+    rollout.py. It lives here now so the next module that needs it does not become the
+    fourth copy.
+    """
+    return any(k.__name__ == "IntegrityError" for k in type(e).__mro__)

@@ -1914,7 +1914,13 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 markdown = _programme_plans_markdown(c, active, programme_id)
             except EnterpriseGateError:
                 abort(404)
-            pdf = documents.render_pdf("Programme plans", markdown)
+            # render_pdf(markdown, title) -- NOT (title, markdown). The arguments were
+            # swapped, so the only engine-fed report in the whole module rendered a PDF
+            # whose entire body was the two words "Programme plans", with the real report
+            # (the reference design, the scaled BOQ, the funding requirement, the site
+            # list) shoved into the PDF's title metadata where nobody would ever see it.
+            # Confirmed independently by Codex against documents.py:1120.
+            pdf = documents.render_pdf(markdown, "Programme plans")
         return Response(
             pdf,
             mimetype="application/pdf",

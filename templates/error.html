@@ -47,9 +47,23 @@
     </div>
     {% endif %}
 
+    {# A stale form (retry_url) must NOT bounce the user "back" -- back is the cached page
+       carrying the same dead CSRF token, which 403s again. Re-opening the URL is the only
+       action that mints a fresh token, so it is the primary button and the countdown is
+       suppressed. #}
+    {% if not retry_url %}
     <p class="text-secondary small mb-4" id="err-redirect-msg">
       Taking you back in <span id="err-secs">5</span> seconds&hellip;
     </p>
+    {% endif %}
+
+    {% if retry_url %}
+    <div class="d-flex gap-2 justify-content-center flex-wrap mb-3">
+      <a href="{{ retry_url }}" class="btn btn-warning fw-bold px-4">
+        <i class="bi bi-arrow-clockwise me-1"></i>{{ retry_label or "Re-open the form" }}
+      </a>
+    </div>
+    {% endif %}
 
     <div class="d-flex gap-2 justify-content-center flex-wrap mb-3">
       {% if user %}
@@ -61,12 +75,17 @@
         <i class="bi bi-house me-1"></i>Home
       </a>
       {% endif %}
+      {# Both of these are traps for an expired form: "Go Back" returns to the cached page
+         with the same dead token, and "Try again" re-submits the failed POST. Neither can
+         succeed, so neither is offered -- the Re-open button above is the way out. #}
+      {% if not retry_url %}
       <button onclick="history.back()" class="btn btn-outline-light px-4">
         <i class="bi bi-arrow-left me-1"></i>Go Back
       </button>
       <button onclick="location.reload()" class="btn btn-outline-warning px-4">
         <i class="bi bi-arrow-clockwise me-1"></i>Try again
       </button>
+      {% endif %}
     </div>
 
     {% if user and user.is_admin %}
@@ -114,7 +133,9 @@
   (function(){
     // If a doc URL is on screen, the user is here to copy it -- don't
     // auto-redirect them away.
-    {% if doc_url %}
+    // Likewise for an expired form: the referrer IS the stale page, so bouncing them
+    // there would hand them the same dead token and 403 them a second time.
+    {% if doc_url or retry_url %}
     var msg = document.getElementById('err-redirect-msg');
     if (msg) msg.style.display = 'none';
     return;

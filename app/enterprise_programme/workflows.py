@@ -463,70 +463,104 @@ def create_programme(c, tenant_id: str, user_id: int, *, code: str, name: str,
                 "the named sponsor is not an active member of this organisation"
             )
 
+    # A programme CODE is unique within its organisation -- migration 026 declares
+    # `CREATE UNIQUE INDEX ux_ent_programme_code ON enterprise_programme_registry
+    # (tenant_id, code)`. Nothing here used to check it, so re-using a code raised a raw
+    # IntegrityError ("duplicate key value violates unique constraint"), which the route
+    # does not catch either. It escaped to the catch-all handler and became the friendly
+    # error page -- so the owner pressed Register, got a "hiccup", changed nothing, pressed
+    # Register again, and got the same hiccup forever, with nothing anywhere telling them
+    # the ONE thing they needed to know: that code is taken.
+    #
+    # Checked here rather than only caught below because on Postgres a constraint violation
+    # ABORTS THE TRANSACTION -- so by the time the error is raised the savepoint is already
+    # unwinding, and the cheap, clean answer is to not send the statement at all.
+    clash = c.execute(
+        "SELECT 1 FROM enterprise_programme_registry WHERE tenant_id=? AND code=?",
+        (tenant_id, code),
+    ).fetchone()
+    if clash:
+        raise ValueError(
+            f"A programme with the code {code!r} already exists in this organisation. "
+            f"Programme codes must be unique -- please choose a different one."
+        )
+
     audit = audit or _audit_on(c)
-    with _atomic(c):
-        cur = c.execute(
-            "INSERT INTO enterprise_programme_registry "
-            "(tenant_id, code, name, description, design_strategy, country, "
-            " sponsor_user_id, current_phase_code, status, created_by_user_id) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (tenant_id, code, name, description, design_strategy, country,
-             sponsor_user_id, DEFAULT_PHASE_CODE, PHASE_STATUS[DEFAULT_PHASE_CODE],
-             user_id),
-        )
-        programme_id = _inserted_id(c, cur)
+    try:
+        with _atomic(c):
+            cur = c.execute(
+                "INSERT INTO enterprise_programme_registry "
+                "(tenant_id, code, name, description, design_strategy, country, "
+                " sponsor_user_id, current_phase_code, status, created_by_user_id) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (tenant_id, code, name, description, design_strategy, country,
+                 sponsor_user_id, DEFAULT_PHASE_CODE, PHASE_STATUS[DEFAULT_PHASE_CODE],
+                 user_id),
+            )
+            programme_id = _inserted_id(c, cur)
 
-        from .constants import GATES, PHASES  # local: keeps the module header short
+            from .constants import GATES, PHASES  # local: keeps the module header short
 
-        # executemany, not 30 separate round trips. The database is remote (Render free
-        # tier), so each INSERT is a network hop; seeding a programme should cost 3 trips,
-        # not 31. The seeding later slices add (beneficiary import) will be far larger.
-        c.executemany(
-            "INSERT INTO enterprise_programme_phase_states "
-            "(tenant_id, programme_id, phase_code, sequence_no, status) "
-            "VALUES (?,?,?,?,?)",
-            [(tenant_id, programme_id, phase_code, seq,
-              "In Progress" if phase_code == DEFAULT_PHASE_CODE else "Not Started")
-             for phase_code, seq, _label in PHASES],
-        )
-        c.executemany(
-            "INSERT INTO enterprise_stage_gates "
-            "(tenant_id, programme_id, gate_code, phase_code, status, approving_role) "
-            "VALUES (?,?,?,?,?,?)",
-            [(tenant_id, programme_id, gate_code, phase_code, "Pending", authority)
-             for gate_code, phase_code, _label, authority in GATES],
-        )
+            # executemany, not 30 separate round trips. The database is remote (Render free
+            # tier), so each INSERT is a network hop; seeding a programme should cost 3 trips,
+            # not 31. The seeding later slices add (beneficiary import) will be far larger.
+            c.executemany(
+                "INSERT INTO enterprise_programme_phase_states "
+                "(tenant_id, programme_id, phase_code, sequence_no, status) "
+                "VALUES (?,?,?,?,?)",
+                [(tenant_id, programme_id, phase_code, seq,
+                  "In Progress" if phase_code == DEFAULT_PHASE_CODE else "Not Started")
+                 for phase_code, seq, _label in PHASES],
+            )
+            c.executemany(
+                "INSERT INTO enterprise_stage_gates "
+                "(tenant_id, programme_id, gate_code, phase_code, status, approving_role) "
+                "VALUES (?,?,?,?,?,?)",
+                [(tenant_id, programme_id, gate_code, phase_code, "Pending", authority)
+                 for gate_code, phase_code, _label, authority in GATES],
+            )
 
-        # Naming a sponsor GRANTS them the sponsor role on this programme.
-        #
-        # Without this the model contradicts itself: approve_gate requires the approver to
-        # hold `programme_sponsor` AND to be the person the programme named -- so naming a
-        # sponsor who does not already hold the role tenant-wide would produce a programme
-        # whose Gate 1 literally nobody can sign. The grant is PROGRAMME-SCOPED, so being
-        # sponsor of one programme confers no authority over any other.
-        #
-        # But granting a role is TENANT-ADMIN's job, and `programme_sponsor` carries
-        # `programme.approve`. If merely holding `programme.create` were enough to confer
-        # it, programme creation would be a side door into role assignment. So: an admin
-        # may name anyone; a non-admin creator may only name someone who ALREADY holds the
-        # role. Today every role with `programme.create` also has `tenant.admin`, so this
-        # changes nothing -- it is here so that the day someone adds a create-only role,
-        # the side door does not open with it.
-        if sponsor_user_id is not None:
-            if rbac.has_permission(c, tenant_id, user_id, "tenant.admin"):
-                _grant_role(c, tenant_id, sponsor_user_id, "programme_sponsor",
-                            programme_id=programme_id, granted_by=user_id)
-            elif "programme_sponsor" not in rbac.roles_for_user(
-                    c, tenant_id, sponsor_user_id, programme_id=programme_id):
-                raise rbac.EnterprisePermissionError("tenant.admin", tenant_id)
+            # Naming a sponsor GRANTS them the sponsor role on this programme.
+            #
+            # Without this the model contradicts itself: approve_gate requires the approver to
+            # hold `programme_sponsor` AND to be the person the programme named -- so naming a
+            # sponsor who does not already hold the role tenant-wide would produce a programme
+            # whose Gate 1 literally nobody can sign. The grant is PROGRAMME-SCOPED, so being
+            # sponsor of one programme confers no authority over any other.
+            #
+            # But granting a role is TENANT-ADMIN's job, and `programme_sponsor` carries
+            # `programme.approve`. If merely holding `programme.create` were enough to confer
+            # it, programme creation would be a side door into role assignment. So: an admin
+            # may name anyone; a non-admin creator may only name someone who ALREADY holds the
+            # role. Today every role with `programme.create` also has `tenant.admin`, so this
+            # changes nothing -- it is here so that the day someone adds a create-only role,
+            # the side door does not open with it.
+            if sponsor_user_id is not None:
+                if rbac.has_permission(c, tenant_id, user_id, "tenant.admin"):
+                    _grant_role(c, tenant_id, sponsor_user_id, "programme_sponsor",
+                                programme_id=programme_id, granted_by=user_id)
+                elif "programme_sponsor" not in rbac.roles_for_user(
+                        c, tenant_id, sponsor_user_id, programme_id=programme_id):
+                    raise rbac.EnterprisePermissionError("tenant.admin", tenant_id)
 
-        gates.require_audit_written(
-            audit("ENTERPRISE_PROGRAMME_CREATED", user_id=user_id, tenant_id=tenant_id,
-                  details={"programme_id": programme_id, "code": code,
-                           "design_strategy": design_strategy,
-                           "sponsor_user_id": sponsor_user_id}),
-            "programme create",
-        )
+            gates.require_audit_written(
+                audit("ENTERPRISE_PROGRAMME_CREATED", user_id=user_id, tenant_id=tenant_id,
+                      details={"programme_id": programme_id, "code": code,
+                               "design_strategy": design_strategy,
+                               "sponsor_user_id": sponsor_user_id}),
+                "programme create",
+            )
+    except Exception as e:
+        # A racing duplicate: two people registering the same code at the same instant slip
+        # past the pre-check above and collide on ux_ent_programme_code. Same user-facing
+        # answer, so it must not surface as a stack trace and a "hiccup" page.
+        if txn.is_integrity_error(e):
+            raise ValueError(
+                f"A programme with the code {code!r} already exists in this organisation. "
+                f"Programme codes must be unique -- please choose a different one."
+            ) from e
+        raise
+
     return programme_id
 
 
