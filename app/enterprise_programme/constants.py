@@ -1530,3 +1530,313 @@ assert set(_ALL_STAGE_PHASES) == {p[0] for p in PHASES}, (
     "LIFECYCLE_STAGES must cover exactly the 16 phases -- a phase missing here disappears "
     "from the activity picker, and its activities become unselectable"
 )
+
+
+# --- the DELIVERABLES each phase must produce (doc 2, "Key Outputs") ------------
+#
+# WHY THIS EXISTS, AND WHAT WAS MISSING WITHOUT IT
+# ------------------------------------------------
+# Doc 2 gives every phase TWO lists: its "Main Activities" and its "Key Outputs". The
+# activities were encoded (PHASE_ACTIVITIES, 453 of them). The Key Outputs -- the 144 NAMED
+# DOCUMENTS the programme is actually supposed to produce -- were never encoded at all.
+#
+# The consequence was worse than a missing feature. gates.py demands documents BY NAME
+# (concept_note, programme_charter, business_case, master_plan, funding_strategy, ...) and
+# refuses to advance the programme without them -- but nothing could WRITE one, because
+# generate_document hardcoded doc_type="lifecycle_document", a type no gate looks for. The
+# only thing that COULD satisfy a gate was workflows.register_document(), which stores a
+# doc_type and a TITLE STRING with no file and no content.
+#
+# So the module demanded exactly the documents it could not produce, and let a stage gate be
+# passed by TYPING ITS NAME INTO A BOX. That is the gap the owner named:
+# "the app must do the write of the documents across each phase".
+#
+# Titles are VERBATIM from doc 2's "Key Outputs" blocks (lines 60/121/189/249/320/389/438/
+# 504/561/608/679/733/781/833/876/916). The code is positional: P04_D02 is the second
+# deliverable of phase 4.
+PHASE_DELIVERABLES: dict[str, tuple[tuple[str, str], ...]] = {
+    "P01_CONCEPT": (
+        ("P01_D01", "Programme concept note"),
+        ("P01_D02", "Preliminary programme title"),
+        ("P01_D03", "Programme sponsor record"),
+        ("P01_D04", "Initial objectives"),
+        ("P01_D05", "Preliminary geographical scope"),
+        ("P01_D06", "Preliminary beneficiary estimate"),
+        ("P01_D07", "Initial implementation model"),
+        ("P01_D08", "Initial risk register"),
+        ("P01_D09", "Concept approval decision"),
+    ),
+    "P02_INITIATION": (
+        ("P02_D01", "Programme charter"),
+        ("P02_D02", "Governance structure"),
+        ("P02_D03", "Programme organisation chart"),
+        ("P02_D04", "Role and responsibility matrix"),
+        ("P02_D05", "Approval matrix"),
+        ("P02_D06", "Preliminary master schedule"),
+        ("P02_D07", "Communications plan"),
+        ("P02_D08", "Document-control plan"),
+        ("P02_D09", "Programme risk register"),
+        ("P02_D10", "Programme initiation report"),
+    ),
+    "P03_NEEDS": (
+        ("P03_D01", "Beneficiary register"),
+        ("P03_D02", "Site register"),
+        ("P03_D03", "Energy-demand baseline"),
+        ("P03_D04", "Existing infrastructure assessment"),
+        ("P03_D05", "Critical-load schedule"),
+        ("P03_D06", "Site qualification report"),
+        ("P03_D07", "Priority list"),
+        ("P03_D08", "Regional needs assessment"),
+        ("P03_D09", "Programme baseline report"),
+    ),
+    "P04_FEASIBILITY": (
+        ("P04_D01", "Technical feasibility report"),
+        ("P04_D02", "Financial feasibility report"),
+        ("P04_D03", "Economic assessment"),
+        ("P04_D04", "Environmental and social screening"),
+        ("P04_D05", "Preliminary programme design"),
+        ("P04_D06", "Preliminary CAPEX and OPEX"),
+        ("P04_D07", "Funding-options report"),
+        ("P04_D08", "Programme business case"),
+        ("P04_D09", "Recommended implementation model"),
+        ("P04_D10", "Feasibility approval report"),
+    ),
+    "P05_STRUCTURING": (
+        ("P05_D01", "Programme master plan"),
+        ("P05_D02", "Programme breakdown structure"),
+        ("P05_D03", "Phasing strategy"),
+        ("P05_D04", "Regional rollout plan"),
+        ("P05_D05", "Programme master schedule"),
+        ("P05_D06", "Programme cost baseline"),
+        ("P05_D07", "Programme KPI framework"),
+        ("P05_D08", "Programme monitoring framework"),
+        ("P05_D09", "Programme implementation manual"),
+        ("P05_D10", "Change-control plan"),
+    ),
+    "P06_TEMPLATES": (
+        ("P06_D01", "Programme template library"),
+        ("P06_D02", "Standard design catalogue"),
+        ("P06_D03", "Approved equipment catalogue"),
+        ("P06_D04", "Standard BOQ library"),
+        ("P06_D05", "Standard drawing library"),
+        ("P06_D06", "Standard testing manual"),
+        ("P06_D07", "Standard commissioning manual"),
+        ("P06_D08", "Template version register"),
+    ),
+    "P07_FUNDING": (
+        ("P07_D01", "Funding strategy"),
+        ("P07_D02", "Financing structure"),
+        ("P07_D03", "Funding commitment register"),
+        ("P07_D04", "Disbursement plan"),
+        ("P07_D05", "Financial model"),
+        ("P07_D06", "Cash-flow forecast"),
+        ("P07_D07", "Payment-certification workflow"),
+        ("P07_D08", "Financial risk register"),
+        ("P07_D09", "Funding approval"),
+    ),
+    "P08_PROCUREMENT": (
+        ("P08_D01", "Consolidated programme BOQ"),
+        ("P08_D02", "Procurement plan"),
+        ("P08_D03", "EPC packaging plan"),
+        ("P08_D04", "Tender documents"),
+        ("P08_D05", "Bid evaluation report"),
+        ("P08_D06", "Contract award recommendation"),
+        ("P08_D07", "Signed contracts"),
+        ("P08_D08", "Procurement baseline"),
+    ),
+    "P09_ENGINEERING": (
+        ("P09_D01", "Generated SolarPro project records"),
+        ("P09_D02", "Approved detailed designs"),
+        ("P09_D03", "Approved calculations"),
+        ("P09_D04", "Approved drawings"),
+        ("P09_D05", "Approved project BOQs"),
+        ("P09_D06", "Construction schedules"),
+        ("P09_D07", "Site-specific risk assessments"),
+        ("P09_D08", "Issued-for-construction documents"),
+    ),
+    "P10_MOBILISATION": (
+        ("P10_D01", "Mobilisation plan"),
+        ("P10_D02", "Approved contractor schedule"),
+        ("P10_D03", "Site handover certificates"),
+        ("P10_D04", "Approved method statements"),
+        ("P10_D05", "Quality plan"),
+        ("P10_D06", "Safety plan"),
+        ("P10_D07", "Logistics plan"),
+        ("P10_D08", "Warehouse setup"),
+        ("P10_D09", "Construction-readiness report"),
+    ),
+    "P11_CONSTRUCTION": (
+        ("P11_D01", "Installed systems"),
+        ("P11_D02", "Daily reports"),
+        ("P11_D03", "Progress reports"),
+        ("P11_D04", "Quality records"),
+        ("P11_D05", "Safety records"),
+        ("P11_D06", "Material records"),
+        ("P11_D07", "Updated programme schedule"),
+        ("P11_D08", "Updated cost report"),
+        ("P11_D09", "Variation records"),
+        ("P11_D10", "Claims records"),
+        ("P11_D11", "Construction-completion notice"),
+    ),
+    "P12_COMMISSIONING": (
+        ("P12_D01", "Inspection records"),
+        ("P12_D02", "Test results"),
+        ("P12_D03", "Non-conformance closure"),
+        ("P12_D04", "Commissioning certificates"),
+        ("P12_D05", "Performance-test report"),
+        ("P12_D06", "Training records"),
+        ("P12_D07", "As-built drawings"),
+        ("P12_D08", "Updated asset register"),
+        ("P12_D09", "Operational system status"),
+    ),
+    "P13_HANDOVER": (
+        ("P13_D01", "Handover dossier"),
+        ("P13_D02", "As-built documentation"),
+        ("P13_D03", "Final asset register"),
+        ("P13_D04", "Warranty register"),
+        ("P13_D05", "Spare-parts register"),
+        ("P13_D06", "Final account records"),
+        ("P13_D07", "Closeout report"),
+        ("P13_D08", "Lessons-learned register"),
+        ("P13_D09", "Taking-over certificate"),
+    ),
+    "P14_OPERATIONS": (
+        ("P14_D01", "Operations dashboard"),
+        ("P14_D02", "Maintenance schedule"),
+        ("P14_D03", "Fault register"),
+        ("P14_D04", "Warranty register"),
+        ("P14_D05", "Performance reports"),
+        ("P14_D06", "Energy-generation reports"),
+        ("P14_D07", "Carbon reports"),
+        ("P14_D08", "Asset-health reports"),
+        ("P14_D09", "Maintenance cost reports"),
+    ),
+    "P15_EVALUATION": (
+        ("P15_D01", "Programme performance report"),
+        ("P15_D02", "Benefits-realisation report"),
+        ("P15_D03", "Contractor scorecards"),
+        ("P15_D04", "Supplier scorecards"),
+        ("P15_D05", "Regional scorecards"),
+        ("P15_D06", "Technology-performance report"),
+        ("P15_D07", "Lessons-learned report"),
+        ("P15_D08", "Corrective-action plan"),
+        ("P15_D09", "Programme-optimisation plan"),
+    ),
+    "P16_EXPANSION": (
+        ("P16_D01", "Expansion business case"),
+        ("P16_D02", "Updated programme templates"),
+        ("P16_D03", "Scale-up implementation plan"),
+        ("P16_D04", "Revised funding plan"),
+        ("P16_D05", "Revised procurement plan"),
+        ("P16_D06", "New programme phase"),
+        ("P16_D07", "Replication package"),
+    ),
+}
+
+# Guarded so a careless edit cannot silently drop one: doc 2 names this many, and the
+# count is part of the contract with the owner's specification.
+assert sum(len(v) for v in PHASE_DELIVERABLES.values()) == 144, (
+    "PHASE_DELIVERABLES must carry all 144 of doc 2's Key Outputs")
+
+
+# --- which deliverable SATISFIES which stage gate ---------------------------------
+#
+# THIS MAPPING IS THE FIX. gates.GATE_PREDICATES requires a document of an exact `doc_type`
+# before a gate may be signed. Generated documents carried doc_type="lifecycle_document",
+# which matches NONE of them -- so a document the app wrote could never open a gate, and the
+# only thing that could was a typed-in title with no content behind it.
+#
+# With this map, generating the deliverable STAMPS IT WITH THE GATE'S OWN doc_type, so the
+# document the app actually wrote is the document the gate actually accepts. Evidence
+# replaces assertion.
+#
+# Only these nine deliverables carry a gate type -- the ones doc 2 and gates.py already
+# agreed on. The other 135 are real deliverables that no gate happens to demand; they are
+# stored under their own code (see deliverable_doc_type below).
+DELIVERABLE_GATE_DOC_TYPE: dict[str, str] = {
+    "P01_D01": "concept_note",           # G01  Programme concept note
+    "P02_D01": "programme_charter",      # G02  Programme charter
+    "P03_D01": "beneficiary_register",   # G03  Beneficiary register
+    "P04_D08": "business_case",          # G04  Programme business case
+    "P05_D01": "master_plan",            # G05  Programme master plan
+    "P06_D08": "template_version_pack",  # G06  Template version register
+    "P07_D01": "funding_strategy",       # G07  Funding strategy
+    "P08_D07": "signed_contract",        # G08  Signed contracts
+    "P09_D08": "ifc_package",            # G09  Issued-for-construction documents
+}
+
+# --- which ENGINE writes which deliverable ----------------------------------------
+#
+# The owner's instruction was "using existing design options", and it is the right call:
+# the Generation Station (capital-investment) engine ALREADY builds these reports from a
+# real design -- `_build_report_markdown` in new_capital_investment_routes.py has report
+# keys for exactly the documents the owner asked for. Nothing here needs a new engine; it
+# needs an ADAPTER that feeds the programme's own facts (its reference design, its scaled
+# BOQ, its funding requirement, its site register) into the engine that already exists.
+#
+# deliverable code -> the CI report key that writes it.
+#
+# Everything NOT in this map is written by the activity path (the operator ticks the
+# activities the document must answer, and the app drafts it, asking a question wherever it
+# cannot answer from the programme's own record). That path is honest about what it does not
+# know; an engine-written document must never be.
+DELIVERABLE_ENGINE: dict[str, str] = {
+    # the owner's four, named in their own words:
+    #   "create program technical and financial proposal, implementation plan,
+    #    direct the execution of the program, monitor and close the program"
+    "P04_D01": "technical",            # Technical feasibility report  -> the TECHNICAL PROPOSAL
+    "P04_D02": "financial",            # Financial feasibility report  -> the FINANCIAL PROPOSAL
+    "P04_D08": "investment_memo",      # Programme business case       (also opens Gate 4)
+    "P05_D01": "implementation_plan",  # Programme master plan         -> the IMPLEMENTATION PLAN
+    "P05_D09": "implementation_plan",  # Programme implementation manual
+    "P15_D01": "monitoring",           # Programme performance report  -> MONITOR
+    # supporting reports the same engine already produces
+    "P04_D03": "economic_impact",      # Economic assessment
+    "P04_D06": "financial",            # Preliminary CAPEX and OPEX
+    "P07_D05": "bankability",          # Financial model
+    "P08_D01": "boq",                  # Consolidated programme BOQ
+    "P14_D05": "monitoring",           # Performance reports
+}
+
+# code -> (phase_code, title). One flat index so a deliverable can be resolved without
+# knowing its phase -- the UI, the generator and the gate check all need this.
+DELIVERABLE_INDEX: dict[str, tuple[str, str]] = {
+    code: (phase, title)
+    for phase, items in PHASE_DELIVERABLES.items()
+    for code, title in items
+}
+
+DELIVERABLE_CODES: frozenset[str] = frozenset(DELIVERABLE_INDEX)
+
+
+def deliverable_doc_type(deliverable_code: str) -> str:
+    """The `doc_type` a generated deliverable is stored under.
+
+    Input:  a deliverable code, e.g. "P01_D01".
+    Output: the gate's doc_type when this deliverable opens a gate ("concept_note"), and
+            otherwise the deliverable's own code ("P04_D03").
+
+    WHY THE CODE ITSELF IS THE FALLBACK, rather than a new column:
+    `enterprise_documents.doc_type` is already the column every gate check reads. Reusing it
+    means a generated concept note is discoverable by exactly the query gates.py ALREADY
+    runs, with no migration against a live database and no second source of truth about what
+    a document IS. The nine gate types stay reserved words; every other deliverable is
+    identified by its own unique code, which cannot collide with them.
+    """
+    return DELIVERABLE_GATE_DOC_TYPE.get(deliverable_code, deliverable_code)
+
+
+# Every gate doc_type that gates.py demands MUST be produced by some deliverable, or the
+# lifecycle contains a gate nothing can ever open -- which is the bug this file exists to
+# fix, and it would be embarrassing to reintroduce it here. Asserted at import.
+_GATE_DOC_TYPES_REQUIRED = {
+    "concept_note", "programme_charter", "beneficiary_register", "business_case",
+    "master_plan", "template_version_pack", "funding_strategy", "signed_contract",
+    "ifc_package",
+}
+assert _GATE_DOC_TYPES_REQUIRED <= set(DELIVERABLE_GATE_DOC_TYPE.values()), (
+    "a stage gate demands a document that no deliverable can produce: "
+    f"{_GATE_DOC_TYPES_REQUIRED - set(DELIVERABLE_GATE_DOC_TYPE.values())}"
+)
+assert set(DELIVERABLE_GATE_DOC_TYPE) <= DELIVERABLE_CODES, "unknown deliverable code in the gate map"
+assert set(DELIVERABLE_ENGINE) <= DELIVERABLE_CODES, "unknown deliverable code in the engine map"

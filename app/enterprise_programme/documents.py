@@ -46,7 +46,8 @@ import re
 
 from . import rbac, txn
 from .constants import (
-    ACTIVITY_INDEX, LIFECYCLE_STAGES, PHASE_ACTIVITIES, PHASES, STAGE_OF_PHASE,
+    ACTIVITY_INDEX, DELIVERABLE_INDEX, LIFECYCLE_STAGES, PHASE_ACTIVITIES, PHASES,
+    STAGE_OF_PHASE, deliverable_doc_type,
 )
 from .gates import EnterpriseGateError
 
@@ -988,18 +989,35 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
 
 def generate_document(c, tenant_id: str, user_id: int, programme_id: int, *,
                       activity_codes: list[str], title: str = "",
+                      deliverable_code: str | None = None,
                       source_document_id: int | None = None, use_ai: bool = True,
                       audit=None) -> int:
     """Generate a lifecycle document from the ticked activities. THE feature.
 
     Input:  connection, tenant, acting user, programme, the ticked activity codes, a title,
-            the id of an uploaded document to draw from (optional), whether to try the LLM,
-            audit hook.
+            the DELIVERABLE this document IS (optional -- see below), the id of an uploaded
+            document to draw from (optional), whether to try the LLM, audit hook.
     Output: the new document id.
     Raises: EnterprisePermissionError (403), DocumentError (409 / C13).
 
     `report.generate` is the permission, because that is what this is: a report the
     programme produces about itself.
+
+    WHAT `deliverable_code` CHANGES, AND WHY IT MATTERS
+    --------------------------------------------------
+    Without it, every generated document was stored as doc_type="lifecycle_document" -- a
+    type NO gate looks for. So the app could write a perfectly good concept note and Gate 1
+    would still refuse to open, because the only thing it accepts is a row whose doc_type is
+    "concept_note" -- and the only way to get one of those was workflows.register_document(),
+    which writes a title string and no content at all.
+
+    A stage gate was therefore passed by TYPING A NAME, while the document the app actually
+    wrote counted for nothing. Naming the deliverable stamps the document with the gate's own
+    doc_type (constants.deliverable_doc_type), so what the app WROTE is what the gate READS.
+    Evidence instead of assertion.
+
+    Omitting it keeps the old free-form behaviour, which is still useful: not every document
+    a programme writes is one of doc 2's 144 named outputs.
     """
     from . import workflows
     workflows._load_programme(c, tenant_id, programme_id)           # C13 FIRST -- before authz
@@ -1020,6 +1038,22 @@ def generate_document(c, tenant_id: str, user_id: int, programme_id: int, *,
             raise DocumentError("C13", "no such source document in this programme")
         source_text = row[0] or ""
 
+    # The deliverable decides BOTH what this document is called and what it counts as.
+    doc_type = "lifecycle_document"
+    if deliverable_code:
+        if deliverable_code not in DELIVERABLE_INDEX:
+            # Fail closed. A typo'd code that silently fell through to "lifecycle_document"
+            # would produce a document that looks right, is named right, and opens no gate --
+            # the exact failure this parameter exists to end, wearing a better disguise.
+            raise DocumentError(
+                "DELIVERABLE",
+                f"unknown deliverable {deliverable_code!r} -- it is not one of doc 2's "
+                f"Key Outputs",
+            )
+        _phase, deliverable_title = DELIVERABLE_INDEX[deliverable_code]
+        doc_type = deliverable_doc_type(deliverable_code)
+        title = (title or "").strip() or deliverable_title
+
     title = (title or "").strip() or "Lifecycle Document"
     markdown, questions = build_markdown(c, tenant_id, programme_id, activity_codes,
                                          title=title, source_text=source_text,
@@ -1039,7 +1073,7 @@ def generate_document(c, tenant_id: str, user_id: int, programme_id: int, *,
             "(tenant_id, programme_id, doc_type, title, uploaded_by_user_id, doc_kind, "
             " markdown, activity_codes, source_document_id, byte_size, file_name, mime_type) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (tenant_id, programme_id, "lifecycle_document", title, user_id, "generated",
+            (tenant_id, programme_id, doc_type, title, user_id, "generated",
              markdown, json.dumps(sorted(set(activity_codes))), source_document_id,
              len(markdown.encode("utf-8")),
              re.sub(r"[^A-Za-z0-9]+", "-", title).strip("-").lower() + ".pdf",
@@ -1051,6 +1085,12 @@ def generate_document(c, tenant_id: str, user_id: int, programme_id: int, *,
             audit("ENTERPRISE_DOCUMENT_GENERATED", user_id=user_id, tenant_id=tenant_id,
                   details={"programme_id": programme_id, "document_id": document_id,
                            "title": title,
+                           # WHICH deliverable this is, and what it now counts as. A document
+                           # that can open a stage gate must say so in the audit trail -- the
+                           # gate approval that follows it is only as accountable as the
+                           # evidence it rests on (C12).
+                           "deliverable_code": deliverable_code,
+                           "doc_type": doc_type,
                            "activity_codes": sorted(set(activity_codes)),
                            "activity_count": len(set(activity_codes)),
                            "source_document_id": source_document_id}),

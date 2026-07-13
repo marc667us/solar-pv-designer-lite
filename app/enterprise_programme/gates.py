@@ -500,6 +500,14 @@ def _requires_document(doc_type: str, gate_code: str, human: str):
                 gate_code, f"required document missing: {human}"
             )
 
+    # The demand is published on the predicate, not buried in this closure, so the rest of
+    # the system can ASK a gate what it wants. A test asserts that every doc_type demanded
+    # here is one some deliverable can actually produce -- without this attribute that test
+    # can only inspect an empty set and passes vacuously, which is how a gate demanding an
+    # unwritable document would slip back in unnoticed.
+    _predicate.required_doc_type = doc_type          # type: ignore[attr-defined]
+    _predicate.gate_code = gate_code                 # type: ignore[attr-defined]
+
     return _predicate
 
 
