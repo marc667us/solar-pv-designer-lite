@@ -39,12 +39,21 @@ Input:  DATABASE_URL (Postgres). --apply to commit; omit it for a dry run.
 Output: a per-owner plan on stdout; exit 0 on success, 1 on failure.
 
 Usage:
-    python scripts/backfill_onboarding_owner_roles.py            # dry run, writes nothing
-    python scripts/backfill_onboarding_owner_roles.py --apply    # commits the grants
+    python scripts/backfill_onboarding_owner_roles.py             # plan only, no writes
+    python scripts/backfill_onboarding_owner_roles.py --rehearse  # REAL grants, then ROLLBACK
+    python scripts/backfill_onboarding_owner_roles.py --apply     # commits the grants
+
+--rehearse exists because write_audit_event is non-raising BY CONTRACT: it logs and returns
+False. members.grant() turns that False into "the role grant was not saved, because its audit
+record could not be written" (control C12) -- a correct, safe failure that tells you nothing
+about WHY. Rehearsal runs the real grants against the real database inside one transaction,
+surfaces the underlying audit exception, and then rolls the whole thing back. Use it to
+diagnose before ever reaching for --apply.
 """
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 
@@ -139,20 +148,44 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--apply", action="store_true",
                     help="Commit the grants. Without it, nothing is written.")
+    ap.add_argument("--rehearse", action="store_true",
+                    help="Perform the REAL grants against the real DB, print what happened, "
+                         "then ROLL BACK. Writes nothing. Use to diagnose an audit failure.")
     args = ap.parse_args()
+
+    if args.apply and args.rehearse:
+        print("ERROR: --apply and --rehearse are mutually exclusive.", file=sys.stderr)
+        return 1
+
+    # write_audit_event never raises -- it logs and returns False, and members.grant() turns
+    # that into a bare "audit record could not be written". Without a handler on the audit
+    # logger, the actual psycopg2 exception is dropped on the floor and the failure is
+    # undiagnosable. Send it to stdout.
+    logging.basicConfig(level=logging.DEBUG, stream=sys.stdout,
+                        format="   [%(levelname)s %(name)s] %(message)s")
 
     url = os.environ.get("DATABASE_URL", "")
     if not url.startswith(("postgres://", "postgresql://")):
         print("ERROR: DATABASE_URL must be a Postgres URL.", file=sys.stderr)
         return 1
 
-    mode = "APPLY" if args.apply else "DRY RUN (nothing will be written)"
+    writing = args.apply or args.rehearse
+    mode = ("APPLY" if args.apply else
+            "REHEARSAL (real grants, then ROLLBACK -- nothing is kept)" if args.rehearse else
+            "DRY RUN (nothing will be written)")
     print(f"== Backfill onboarding owner roles -- {mode} ==")
     print(f"   bundle: {len(ONBOARDING_OWNER_ROLES)} roles -> {', '.join(ONBOARDING_OWNER_ROLES)}")
     print()
 
     conn = db_adapter.open_postgres(url)
-    stats = backfill(conn, apply=args.apply)
+    try:
+        stats = backfill(conn, apply=writing)
+    except Exception:
+        if args.rehearse:
+            conn.rollback()
+            print()
+            print("== REHEARSAL FAILED -- rolled back, nothing was written ==")
+        raise
 
     print("== Summary ==")
     print(f"   organisation owners examined: {stats['owners']}")
@@ -161,9 +194,14 @@ def main() -> int:
         print(f"   roles granted:                {stats['granted']}")
         conn.commit()
         print("   COMMITTED.")
+    elif args.rehearse:
+        print(f"   roles granted (then rolled back): {stats['granted']}")
+        conn.rollback()
+        print("   ROLLED BACK -- the database is unchanged.")
+        print("   The grants worked. Re-run with --apply to keep them.")
     else:
         print("   roles granted:                0 (dry run)")
-        print("   Re-run with --apply to commit.")
+        print("   Re-run with --rehearse to prove it works, then --apply to commit.")
     return 0
 
 

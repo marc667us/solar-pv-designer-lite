@@ -35,6 +35,11 @@ name: Backfill Onboarding Owner Roles
 on:
   workflow_dispatch:
     inputs:
+      rehearse:
+        description: "Run the REAL grants and then ROLL BACK. Writes nothing. Diagnoses audit failures."
+        type: boolean
+        required: false
+        default: false
       confirm:
         description: "DRY-RUN by default. Type BACKFILL_OWNER_ROLES_APPLY to commit the grants."
         required: false
@@ -50,6 +55,7 @@ jobs:
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       CONFIRM:        ${{ inputs.confirm }}
+      REHEARSE:       ${{ inputs.rehearse }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,15 +68,21 @@ jobs:
       - name: Install psycopg2
         run: pip install --quiet psycopg2-binary
 
+      # APPLY wins over REHEARSE if somebody passes both -- but the script refuses that
+      # combination anyway, so this ordering is belt and braces.
       - name: Resolve mode
         run: |
           if [ "$CONFIRM" = "BACKFILL_OWNER_ROLES_APPLY" ]; then
             echo "MODE=apply" >> $GITHUB_ENV
             echo "=== APPLY MODE -- role grants will be COMMITTED to live PG ==="
+          elif [ "$REHEARSE" = "true" ]; then
+            echo "MODE=rehearse" >> $GITHUB_ENV
+            echo "=== REHEARSAL -- real grants against live, then ROLLBACK. Nothing is kept. ==="
           else
             echo "MODE=dryrun" >> $GITHUB_ENV
             echo "=== DRY-RUN -- nothing will be written ==="
-            echo "Re-run with -f confirm=BACKFILL_OWNER_ROLES_APPLY to commit."
+            echo "Re-run with -f rehearse=true to prove the grants work, then"
+            echo "-f confirm=BACKFILL_OWNER_ROLES_APPLY to commit."
           fi
 
       - name: Resolve solarpro-postgres
@@ -126,11 +138,11 @@ jobs:
           DATABASE_URL: ${{ steps.pg.outputs.external }}
         run: |
           set -e
-          if [ "$MODE" = "apply" ]; then
-            python scripts/backfill_onboarding_owner_roles.py --apply
-          else
-            python scripts/backfill_onboarding_owner_roles.py
-          fi
+          case "$MODE" in
+            apply)    python scripts/backfill_onboarding_owner_roles.py --apply ;;
+            rehearse) python scripts/backfill_onboarding_owner_roles.py --rehearse ;;
+            *)        python scripts/backfill_onboarding_owner_roles.py ;;
+          esac
 
       - name: Verify -- every organisation owner now holds the full bundle
         if: env.MODE == 'apply'
