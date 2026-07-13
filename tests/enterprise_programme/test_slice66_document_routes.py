@@ -127,8 +127,14 @@ def test_the_activities_are_checkboxes_grouped_under_their_stage(ent, programme)
     assert "sS2_PLANNING" in body
 
 
-def test_ticking_activities_and_generating_returns_a_pdf(ent, programme):
-    """THE feature: tick one or many activities -> the app generates a document."""
+def test_ticking_activities_and_generating_OPENS_the_report(ent, programme):
+    """THE feature: tick activities -> the app writes the document and OPENS it as a report.
+
+    It used to push the PDF straight at the browser as a download. The owner asked for the
+    report page instead (2026-07-13: "open it in html page with pdf and email, just like we
+    did in the start project design report") -- so the document is now something you read,
+    with the PDF and the email offered beside it.
+    """
     client, _wa, uid = ent
     _login(client, uid)
     r = client.post(
@@ -138,8 +144,10 @@ def test_ticking_activities_and_generating_returns_a_pdf(ent, programme):
         follow_redirects=True,
     )
     assert r.status_code == 200
-    assert r.data.startswith(b"%PDF-")
-    assert r.headers["Content-Disposition"].startswith("attachment")
+    assert not r.data.startswith(b"%PDF-")
+    body = r.data.decode()
+    assert "Concept Pack" in body
+    assert "Download PDF" in body        # the PDF is still one click away
 
 
 def test_generating_with_nothing_ticked_is_refused(ent, programme):
@@ -176,23 +184,26 @@ def test_the_questions_the_app_raises_come_back_as_an_answerable_form(ent, progr
     client, wa, uid = ent
     _login(client, uid)
 
-    # Generate something the description cannot answer, so a question is raised.
+    # Generate something the app holds NO fact for, so a question is raised under the
+    # section it wrote. (P02_A09 "define approval authorities" no longer qualifies: the app
+    # now writes it from the organisation's own type and country. P01_A01, "register the
+    # programme idea", is a genuine gap.)
     client.post(
         f"/enterprise/programmes/{programme}/lifecycle-documents/generate",
-        data={"_csrf": "testtoken", "activities": ["P02_A09"]},   # "Define approval authorities."
+        data={"_csrf": "testtoken", "activities": ["P01_A01"]},
         follow_redirects=True,
     )
 
     body = client.get(
         f"/enterprise/programmes/{programme}/lifecycle-documents").data.decode()
     assert "need your answer" in body
-    assert 'name="answer[P02_A09]"' in body
+    assert 'name="answer[P01_A01]"' in body
 
     # Answer it.
     r = client.post(
         f"/enterprise/programmes/{programme}/lifecycle-documents/answers",
         data={"_csrf": "testtoken",
-              "answer[P02_A09]": "The Programme Steering Committee approves above GHS 1m."},
+              "answer[P01_A01]": "The idea was tabled by the Ministry in 2026."},
         follow_redirects=True,
     )
     assert r.status_code == 200
@@ -207,13 +218,13 @@ def test_the_questions_the_app_raises_come_back_as_an_answerable_form(ent, progr
                         "WHERE legal_name='Ministry of Energy'").fetchone()[0]
         still_open = {q["activity_code"]
                       for q in documents.outstanding_questions(c, tid, programme)}
-        assert "P02_A09" not in still_open
+        assert "P01_A01" not in still_open
 
         doc_id = documents.generate_document(
-            c, tid, uid, programme, activity_codes=["P02_A09"], use_ai=False,
+            c, tid, uid, programme, activity_codes=["P01_A01"], use_ai=False,
         )
         md = documents.get_document(c, tid, doc_id)["markdown"]
 
     # The answer IS the section now, and the section no longer asks anything.
-    assert "The Programme Steering Committee approves above GHS 1m." in md
-    assert "**QUESTION" not in md
+    assert "The idea was tabled by the Ministry in 2026." in md
+    assert documents.THIN_SECTION_MARKER not in md

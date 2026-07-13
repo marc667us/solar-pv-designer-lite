@@ -46,8 +46,8 @@ import re
 
 from . import rbac, txn
 from .constants import (
-    ACTIVITY_INDEX, DELIVERABLE_INDEX, LIFECYCLE_STAGES, PHASE_ACTIVITIES, PHASES,
-    STAGE_OF_PHASE, deliverable_doc_type,
+    ACTIVITY_INDEX, DELIVERABLE_GATE_DOC_TYPE, DELIVERABLE_INDEX, LIFECYCLE_STAGES,
+    PHASE_ACTIVITIES, PHASES, STAGE_OF_PHASE, deliverable_doc_type,
 )
 from .gates import EnterpriseGateError
 
@@ -520,10 +520,20 @@ def programme_facts(c, tenant_id: str, programme_id: int) -> dict:
         (tenant_id, programme_id),
     ).fetchone()
 
+    # THE SPONSOR IS A PERSON, NOT AN INTEGER. Doc 3's very first activity is "identify the
+    # sponsoring institution", and a section that answered it with "sponsor_user_id: 4" would
+    # be worse than one that asked. Only `username` is selected: it is the one column present
+    # on every schema this module runs against.
+    sponsor_name = None
+    if row[7]:
+        srow = c.execute("SELECT username FROM users WHERE id=?", (row[7],)).fetchone()
+        sponsor_name = srow[0] if srow else None
+
     return {
         "code": row[0], "name": row[1], "phase_code": row[2], "status": row[3],
         "sector": row[4], "country": row[5], "design_strategy": row[6],
         "sponsor_user_id": row[7],
+        "sponsor_name": sponsor_name,
         "target_capacity_kwp": row[8], "target_beneficiaries": row[9],
         "description": row[10],
         "gates": [(g, s) for g, s in gates],
@@ -531,6 +541,215 @@ def programme_facts(c, tenant_id: str, programme_id: int) -> dict:
         "sites": int(sites[0]) if sites else 0,
         "qualified": int(qualified[0]) if qualified else 0,
     }
+
+
+# --- WRITING A SECTION WITHOUT AN LLM ----------------------------------------
+#
+# THE BUG THE OWNER HIT (2026-07-13): "after creating the project and going to initiation
+# documents it's not writing, it's rather asking me question."
+#
+# They were right, and the cause was structural, not cosmetic. build_markdown's precedence
+# was: the operator's answer -> the source document -> the LLM -> ASK A QUESTION. On live the
+# free LLM chain falls back to rule_based (a known open blocker), and _ai_write returns None
+# for a rule_based provider -- correctly, because a canned string is not a drafted section.
+# So on a new programme with no uploaded document and no answers, EVERY branch failed and
+# every one of the concept note's fourteen sections became a question. The app demanded the
+# operator write the document it had promised to write for them.
+#
+# The missing rung is this one: the app already HAS the programme's own description, sector,
+# country, sponsor, targets and register. That is enough to WRITE a section about most
+# activities -- not brilliantly, but factually and specifically, which is what a working
+# document needs. The LLM, when reachable, still writes a better section and still goes
+# first. This rung only means the app never has nothing to say.
+#
+# It writes only what it KNOWS. It never invents an institution, a figure or a date -- the
+# rule that governs the LLM path governs this one. Where a fact is genuinely absent, the
+# section is still written from what IS known and the gap is named underneath as a question,
+# so the operator is asked to STRENGTHEN a real section rather than to supply one from
+# nothing.
+
+_TOPICS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("sponsor", "institution", "ministry", "agency", "ownership", "owner"), "sponsor"),
+    (("beneficiar", "school", "clinic", "household", "community", "facilit"), "beneficiaries"),
+    # "register" is deliberately NOT a needle here. The registers this module has are the
+    # SITE and BENEFICIARY registers, and "site"/"beneficiar" already match those. Left in,
+    # it swallowed "Register the programme idea" -- doc 3's very first activity -- and
+    # answered it with the programme's geography, which is a confident non-answer. Better it
+    # falls through and is written from the description, honestly, with a question under it.
+    (("site", "survey", "location", "geograph", "region", "area", "scope"), "sites"),
+    (("capacity", "kwp", "demand", "load", "energy", "generation", "size", "sizing"), "capacity"),
+    (("cost", "budget", "capex", "opex", "financ", "fund", "tariff", "invest", "price"), "money"),
+    (("risk", "mitigat", "issue", "assumption", "constraint"), "risk"),
+    (("schedule", "timeline", "milestone", "phase", "programme plan", "duration"), "schedule"),
+    (("stakeholder", "communicat", "govern", "role", "responsib", "committee", "approv"), "governance"),
+    (("design", "technical", "standard", "equipment", "specificat", "template", "quality"), "design"),
+    (("procure", "tender", "contract", "supplier", "bid", "epc"), "procurement"),
+    (("objective", "goal", "target", "outcome", "benefit", "impact"), "objectives"),
+)
+
+
+def _topic_of(activity_text: str) -> str:
+    """Which family of programme facts an activity is asking about.
+
+    Input:  the activity sentence.
+    Output: a topic key, or "" when the activity matches no family.
+
+    First match wins, and the order above is deliberate: "identify the sponsoring
+    institution" mentions an institution before anything else, and must be answered with the
+    sponsor rather than with whichever later topic also happens to appear in the sentence.
+    """
+    low = activity_text.lower()
+    for needles, topic in _TOPICS:
+        if any(n in low for n in needles):
+            return topic
+    return ""
+
+
+def _num(value) -> str:
+    """Render a stored number the way a document would print it, not the way SQLite did.
+
+    Input:  a number (often a float, because the column is REAL).
+    Output: "1,200" rather than "1200.0". A whole quantity keeps no decimal point.
+    """
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return f"{int(f):,}" if f == int(f) else f"{f:,.2f}"
+
+
+def _facts_for_topic(topic: str, facts: dict) -> list[str]:
+    """The sentences this programme can honestly offer about a topic.
+
+    Input:  a topic key, the programme facts.
+    Output: zero or more complete sentences. EVERY sentence is a fact the app holds; if it
+            holds none, the list is empty and the caller says so rather than inventing one.
+    """
+    out: list[str] = []
+    name = facts.get("name") or "This programme"
+
+    sector = (facts.get("sector") or "").strip()
+    country = (facts.get("country") or "").strip()
+    strategy = (facts.get("design_strategy") or "").strip()
+    kwp = facts.get("target_capacity_kwp")
+    ben = facts.get("target_beneficiaries")
+
+    # EVERY SENTENCE BELOW MUST BE DERIVABLE FROM A STORED FIELD. Nothing else may appear.
+    #
+    # An earlier draft padded thin topics with process boilerplate -- "risks are recorded in
+    # the risk register and reviewed at each stage gate", "costs are established from the
+    # priced Bill of Quantities", "designs are generated against the approved templates and
+    # equipment catalogue". Codex caught it, and it was the worst bug in this change: those
+    # sentences ASSERT THINGS NOBODY VERIFIED (this programme may have no risk register, no
+    # BOQ and no approved template), and because they made the section non-empty they set
+    # thin=False -- so NO QUESTION WAS RAISED and the gap was not merely unfilled, it was
+    # HIDDEN behind a confident sentence. A document that admits a hole is useful; one that
+    # papers over it with plausible process language is a liability.
+    #
+    # So a topic with no stored fact behind it now returns NOTHING, and the caller writes the
+    # section from the programme's description and asks for what is missing.
+
+    if topic == "sponsor":
+        if facts.get("sponsor_name"):
+            out.append(f"{name} is sponsored by {facts['sponsor_name']}"
+                       + (f", a {sector}" if sector else "")
+                       + (f" in {country}" if country else "") + ".")
+        elif sector:
+            out.append(f"{name} is owned by a {sector}"
+                       + (f" in {country}" if country else "") + ".")
+    elif topic == "beneficiaries":
+        if ben:
+            out.append(f"{name} is intended to serve {_num(ben)} beneficiaries.")
+        if facts.get("sites"):
+            out.append(f"Its beneficiary register currently holds {_num(facts['sites'])} "
+                       f"site(s), of which {_num(facts['qualified'])} are qualified.")
+        elif ben:
+            out.append("Its beneficiary register is not yet populated.")
+    elif topic == "sites":
+        if country:
+            out.append(f"{name} is delivered in {country}.")
+        if facts.get("sites"):
+            out.append(f"Its site register holds {_num(facts['sites'])} site(s), "
+                       f"{_num(facts['qualified'])} of them qualified.")
+    elif topic == "capacity":
+        if kwp:
+            out.append(f"{name} targets {_num(kwp)} kWp of installed capacity"
+                       + (f" across {_num(ben)} beneficiaries" if ben else "") + ".")
+        if strategy:
+            out.append(f"Its recorded design strategy is {strategy}.")
+    elif topic == "money":
+        # NO NUMBER IS ASSERTED. The app holds no approved budget for a programme, and a
+        # costing assembled here from a capacity figure would read as an estimate the
+        # programme never made. What it CAN say is what the financial case is sized against.
+        if kwp:
+            out.append(f"{name}'s financial case is sized against its {_num(kwp)} kWp "
+                       f"capacity target"
+                       + (f" and {_num(ben)} intended beneficiaries" if ben else "") + ".")
+        # No kwp -> nothing factual to say -> the caller asks. It does NOT reassure.
+    elif topic == "risk":
+        # The app stores no risk register. It has nothing to say here, and saying so is the
+        # honest answer -- the caller turns this into a question.
+        pass
+    elif topic == "schedule":
+        out.append(f"{name} is currently in the "
+                   f"{_PHASE_NAME.get(facts.get('phase_code'), 'Concept')} phase, at status "
+                   f"{facts.get('status') or 'Draft'}.")
+        out.append(f"Stage gates approved to date: "
+                   f"{', '.join(facts['gates_passed']) if facts.get('gates_passed') else 'none yet'}.")
+    elif topic == "governance":
+        if facts.get("sponsor_name"):
+            out.append(f"{facts['sponsor_name']} is the recorded sponsor of {name}.")
+        if sector:
+            out.append(f"The owning organisation is a {sector}"
+                       + (f" in {country}" if country else "") + ".")
+    elif topic == "design":
+        if strategy:
+            out.append(f"{name} applies the {strategy} design strategy across its sites.")
+    elif topic == "procurement":
+        if strategy:
+            out.append(f"{name}'s procurement scope follows its {strategy} design strategy.")
+    elif topic == "objectives":
+        if kwp and ben:
+            out.append(f"{name}'s stated targets are {_num(kwp)} kWp of installed capacity "
+                       f"serving {_num(ben)} beneficiaries"
+                       + (f" in {country}" if country else "") + ".")
+        elif kwp:
+            out.append(f"{name} targets {_num(kwp)} kWp of installed capacity.")
+        elif ben:
+            out.append(f"{name} is intended to serve {_num(ben)} beneficiaries.")
+
+    return out
+
+
+def _write_from_facts(activity_text: str, facts: dict) -> tuple[str, bool]:
+    """Write an activity's section from what the app already knows. No LLM, no invention.
+
+    Input:  the activity sentence, the programme facts.
+    Output: (the section's prose, whether it is THIN).
+
+    "Thin" means the app had no specific fact for what this activity asks about, so the
+    section is grounded in the programme's description instead. The section is still WRITTEN
+    -- the caller adds the question underneath so the operator can strengthen it. That is the
+    whole correction the owner asked for: a written section with a question under it, never a
+    question where a section should be.
+
+    THERE IS NO BOILERPLATE LEAD SENTENCE. An earlier draft opened every section with "For X,
+    this is addressed as follows: <the activity, restated>" -- which is not writing, it is
+    the heading again in a longer coat, fourteen times in a row. The facts are the section.
+    """
+    body = _facts_for_topic(_topic_of(activity_text), facts)
+    if body:
+        return " ".join(body), False
+
+    # The programme's own description is the material of last resort, and it is a real one:
+    # it is the operator's statement of what the programme IS, and the owner named it as the
+    # thing the app must write from.
+    if facts.get("description"):
+        return (f"This is addressed within the scope of {facts.get('name') or 'the programme'}, "
+                f"which is described as follows: {facts['description'].rstrip('.')}."), True
+
+    return (f"{facts.get('name') or 'The programme'} has not yet recorded what this activity "
+            f"requires."), True
 
 
 def _brief(facts: dict) -> str:
@@ -864,10 +1083,12 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
     # marker that flags a real outstanding section, and boilerplate that shadows the marker
     # it describes makes the marker unsearchable -- by a reader scanning the document, and
     # by any test asserting on it.
-    md.append("Each section is written from the programme's description, its records, and "
-              "any uploaded source document. Where those do not say enough, the section "
-              "asks you a question instead of guessing — answer it and regenerate, and "
-              "your answer becomes the section.")
+    md.append("Every section below is written from the programme's own description, its "
+              "records, and any uploaded source document. Nothing here is invented. Where "
+              "the app held no specific fact for an activity, the section is still written "
+              "from what is known and asks underneath for the one thing that would "
+              "strengthen it — answer it and regenerate, and your answer becomes the "
+              "section.")
     md.append("")
     md.append("---")
     md.append("")
@@ -944,6 +1165,7 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
                     if may_use_ai:
                         ai_calls += 1
                         written = _ai_write(text, facts)
+
                     if written:
                         md.append(written)
                         md.append("")
@@ -951,40 +1173,77 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
                                   "review before approval.*")
                         md.append("")
                     else:
-                        # The app cannot write this without being told something. So it asks.
-                        gaps += 1
-                        # An already-asked question is REUSED rather than re-phrased -- both
-                        # because re-asking the same thing in different words is confusing,
-                        # and because phrasing it costs another LLM call.
-                        question = (answered or {}).get("question")
-                        if not question:
-                            if may_use_ai:
-                                ai_calls += 1
-                                question = _question_for(text, facts)
-                            else:
-                                question = (f"{text.rstrip('.')} — what should this "
-                                            f"programme record?")
-                        questions.append((code, question))
-                        md.append(f"**QUESTION — awaiting your answer:** {question}")
+                        # THE APP WRITES. It does not hand the work back.
+                        #
+                        # This branch used to emit a question INSTEAD of a section, and on
+                        # live -- where the free LLM chain falls back to rule_based -- that
+                        # meant every section of every document was a question. The owner
+                        # opened their first concept note and found fourteen of them.
+                        #
+                        # Now the app writes the section from the programme's own facts, and
+                        # where it lacks a specific fact it says so UNDER a real section and
+                        # asks for it. The question survives (it is still recorded, still
+                        # answerable, and an answer still outranks everything) -- but it
+                        # supplements the document instead of replacing it.
+                        prose, thin = _write_from_facts(text, facts)
+                        md.append(prose)
                         md.append("")
-                        md.append("*The programme description does not cover this. Answer the "
-                                  "question on the Lifecycle Documents page and regenerate; "
-                                  "your answer becomes this section.*")
-                        md.append("")
+
+                        if thin:
+                            gaps += 1
+                            # An already-asked question is REUSED rather than re-phrased --
+                            # both because re-asking the same thing in different words is
+                            # confusing, and because phrasing it costs another LLM call.
+                            question = (answered or {}).get("question")
+                            if not question:
+                                if may_use_ai:
+                                    ai_calls += 1
+                                    question = _question_for(text, facts)
+                                else:
+                                    question = (f"{text.rstrip('.')} — what should this "
+                                                f"programme record?")
+                            questions.append((code, question))
+                            md.append(f"*To strengthen this section: {question} "
+                                      f"Answer it on the Lifecycle Documents page and "
+                                      f"regenerate — your answer becomes this section.*")
+                            md.append("")
 
             md.append("")
 
     md.append("---")
     md.append("")
     if gaps:
-        md.append(f"*Generated by SolarPro from {len(set(activity_codes))} selected "
-                  f"lifecycle activities. **{gaps} question(s) await your answer** — answer "
-                  f"them and regenerate to complete this document.*")
+        md.append(f"*Written by SolarPro from {len(set(activity_codes))} selected lifecycle "
+                  f"activities. {gaps} section(s) would be stronger with one more fact from "
+                  f"you — each names what it needs. Answer them on the Lifecycle Documents "
+                  f"page and regenerate.*")
     else:
-        md.append(f"*Generated by SolarPro from {len(set(activity_codes))} selected "
-                  f"lifecycle activities. No outstanding questions.*")
+        md.append(f"*Written by SolarPro from {len(set(activity_codes))} selected lifecycle "
+                  f"activities, grounded throughout in the programme's own record.*")
     md.append("")
     return "\n".join(md), questions
+
+
+# The marker build_markdown writes under a section it wrote but could not ground in a
+# specific programme fact. The section IS written; this flags that it could be stronger.
+THIN_SECTION_MARKER = "*To strengthen this section:"
+
+
+def thin_sections(markdown: str) -> int:
+    """How many of a generated document's sections the app could not fully ground.
+
+    Input:  the document's markdown.
+    Output: the number of sections written from the programme's description alone, because
+            the app held no specific fact for what that activity asks about.
+
+    WHY A CALLER NEEDS THIS. Nine of the deliverables are the evidence a stage gate will not
+    open without. A document whose sections are all written -- but half of them written from
+    nothing more specific than the programme's own description -- is a real document and a
+    weak piece of evidence. The route uses this to tell the operator so, in the same breath
+    as telling them the gate is now satisfied, rather than letting a thin document open a
+    gate in silence.
+    """
+    return (markdown or "").count(THIN_SECTION_MARKER)
 
 
 def generate_document(c, tenant_id: str, user_id: int, programme_id: int, *,
@@ -1050,6 +1309,29 @@ def generate_document(c, tenant_id: str, user_id: int, programme_id: int, *,
                 f"unknown deliverable {deliverable_code!r} -- it is not one of doc 2's "
                 f"Key Outputs",
             )
+
+        # PRODUCING GATE EVIDENCE IS AN EDIT, NOT A REPORT (Supervisor security review).
+        #
+        # `report.generate` is the permission to write a report ABOUT the programme, and it
+        # is deliberately held by oversight roles that hold no edit power at all: auditor,
+        # executive_viewer, esg_officer, technical_director, regional_manager,
+        # operations_manager -- and by programme_sponsor and steering_committee, who are the
+        # people who SIGN the gates.
+        #
+        # Nine of the deliverables are not reports. They are the evidence a stage gate
+        # refuses to open without, and a gate predicate is a bare existence check on
+        # doc_type. Every other way of creating such a row -- workflows.register_document,
+        # the upload path -- has always demanded `programme.edit`. Letting this one create
+        # them under `report.generate` would mean:
+        #   * an AUDITOR, a read-only oversight role, could manufacture a "signed_contract";
+        #   * a SPONSOR could generate the evidence for a gate and then approve that same
+        #     gate themselves, which destroys the separation between producing evidence and
+        #     signing it -- the entire point of having a named authority.
+        # So stamping a gate's doc_type takes the same authority as registering one.
+        if deliverable_code in DELIVERABLE_GATE_DOC_TYPE:
+            rbac.require_permission(c, tenant_id, user_id, "programme.edit",
+                                    programme_id=programme_id)
+
         _phase, deliverable_title = DELIVERABLE_INDEX[deliverable_code]
         doc_type = deliverable_doc_type(deliverable_code)
         title = (title or "").strip() or deliverable_title
@@ -1155,6 +1437,30 @@ def get_document(c, tenant_id: str, document_id: int) -> dict:
         "doc_kind": r[4], "file_name": r[5], "mime_type": r[6], "byte_size": r[7],
         "content": r[8], "markdown": r[9], "activity_codes": r[10], "created_at": r[11],
     }
+
+
+def render_html(markdown: str) -> str:
+    """Render a generated document to HTML, for reading it in the browser.
+
+    Input:  the document's markdown.
+    Output: an HTML fragment, safe to insert into the report page.
+    Raises: DocumentError when the markdown renderer is unavailable.
+
+    `html=False` IS THE WHOLE SECURITY OF THIS FUNCTION, and it is not the default.
+    MarkdownIt()'s default "commonmark" preset sets html=TRUE, which passes raw HTML in the
+    source straight through to the page. This markdown is not ours: it carries the programme
+    description, the operator's own answers, and passages QUOTED OUT OF AN UPLOADED FILE that
+    anyone with `programme.edit` can supply. Rendering that with html=True would turn any
+    uploaded document containing a <script> tag into stored XSS against every reader of the
+    report -- including the ministry official the report is emailed to.
+    """
+    try:
+        from markdown_it import MarkdownIt
+    except ImportError as e:                       # pragma: no cover - dep of markdown-pdf
+        raise DocumentError(
+            "DOCUMENT", "the document renderer is unavailable on this server") from e
+
+    return MarkdownIt("commonmark", {"html": False, "linkify": False}).render(markdown or "")
 
 
 def render_pdf(markdown: str, title: str) -> bytes:

@@ -31,6 +31,8 @@ guard the queue drainer skips.
 
 from __future__ import annotations
 
+import re
+
 from flask import (
     Response, abort, flash, redirect, render_template, request, session, url_for
 )
@@ -38,7 +40,7 @@ from werkzeug.utils import secure_filename
 
 from app.enterprise_programme import (
     beneficiaries, constants, documents, dropdowns, flags, gates, imports, members,
-    rbac, rollout, site_qualification, tenancy, workflows,
+    rbac, rollout, site_qualification, tenancy, txn, workflows,
 )
 from app.enterprise_programme.documents import DocumentError
 from app.enterprise_programme.engines import EngineError
@@ -1324,11 +1326,40 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 abort(404)                      # C13: not-yours and not-there are the same
 
             docs = documents.list_documents(c, active, programme_id)
+
+            # WHAT THE DOCUMENT THE OPERATOR IS ABOUT TO WRITE ACTUALLY *IS*.
+            #
+            # Doc 2 names 144 Key Outputs, and nine of them are the evidence a stage gate
+            # refuses to open without. Until this page could name them, the operator could
+            # write a flawless concept note and Gate 1 would still refuse it -- because a
+            # generated document was stamped "lifecycle_document", a type no gate looks for,
+            # and the only thing that COULD open the gate was a typed-in title with no
+            # content behind it. Choosing the deliverable here is what stamps the document
+            # with the gate's own doc_type, so what the app WROTE is what the gate READS.
+            #
+            # The maps are built at import in gates.py (they are pure functions of the gate
+            # predicates and doc 2), not rebuilt per request.
+
+            # A failed generate redirects back here with its deliverable, so the operator's
+            # choice -- and, via the picker's auto-tick, their activities -- survive the
+            # error instead of being silently discarded along with it.
+            chosen = (request.args.get("deliverable") or "").strip()
+            if chosen not in constants.DELIVERABLE_INDEX:
+                chosen = ""
+
             return render_template(
                 "enterprise_programme/lifecycle_documents.html",
                 programme=prog,
                 programme_id=programme_id,
                 stages=constants.LIFECYCLE_STAGES,
+                phases_ordered=constants.PHASES,
+                phase_deliverables=constants.PHASE_DELIVERABLES,
+                deliverable_gate=gates.DELIVERABLE_GATE,
+                deliverable_engine=constants.DELIVERABLE_ENGINE,
+                gate_of_doc_type=gates.GATE_OF_DOC_TYPE,
+                doc_type_labels=gates.DOC_TYPE_LABELS,
+                chosen_deliverable=chosen,
+                max_activities=documents.MAX_ACTIVITIES_PER_DOCUMENT,
                 phase_names={code: name for code, _no, name in constants.PHASES},
                 phase_numbers={code: no for code, no, _name in constants.PHASES},
                 phase_activities=constants.PHASE_ACTIVITIES,
@@ -1350,6 +1381,11 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                                                  programme_id=programme_id),
                 can_upload=rbac.has_permission(c, active, uid, "programme.edit",
                                                programme_id=programme_id),
+                # The nine gate deliverables take `programme.edit`, not merely
+                # `report.generate` -- see generate_document. Offering them to a user who
+                # cannot register them would be a control that 403s after they had picked it.
+                can_register_evidence=rbac.has_permission(
+                    c, active, uid, "programme.edit", programme_id=programme_id),
             )
 
     @app.route("/enterprise/programmes/<int:programme_id>/lifecycle-documents/answers",
@@ -1458,8 +1494,21 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
         _require_module()
         csrf_protect()
         uid = _uid()
+
+        # WHICH of doc 2's 144 Key Outputs this document IS. Empty = a free-form document,
+        # which is still legitimate: not everything a programme writes is one of the 144.
+        # An unknown code is NOT quietly downgraded to free-form -- generate_document
+        # refuses it, because a document that looks right, is named right and opens no gate
+        # is the exact failure this feature exists to end, wearing a better disguise.
+        deliverable_code = (request.form.get("deliverable_code") or "").strip() or None
+
+        # Every failure path returns the operator to the page WITH THEIR DELIVERABLE STILL
+        # CHOSEN. Redirecting to a bare page threw away the choice along with the error, and
+        # the picker's auto-tick then restores the activities from it -- so the operator
+        # fixes what was wrong instead of rebuilding what was right.
         back = redirect(url_for("enterprise_lifecycle_documents",
-                                programme_id=programme_id))
+                                programme_id=programme_id,
+                                deliverable=deliverable_code or None))
 
         picked = request.form.getlist("activities")
         if not picked:
@@ -1478,6 +1527,7 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                     c, active, uid, programme_id,
                     activity_codes=picked,
                     title=(request.form.get("title") or "").strip(),
+                    deliverable_code=deliverable_code,
                     source_document_id=source_document_id,
                     use_ai=bool(request.form.get("use_ai")),
                 )
@@ -1489,8 +1539,213 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 flash(str(e), "error")
                 return back
 
-        flash(f"Document generated from {len(set(picked))} activities.", "success")
-        return redirect(url_for("enterprise_document_download", document_id=doc_id))
+            # How much of the document the app could not ground in a specific fact. Read back
+            # from what was actually stored, not from what generation intended to store.
+            thin = documents.thin_sections(
+                documents.get_document(c, active, doc_id).get("markdown") or "")
+
+        # Say what the gate now has, not merely that a file exists. A document that opens a
+        # stage gate is the whole point of naming the deliverable, and the operator has no
+        # other way to learn that the gate they were blocked on is now satisfied.
+        gate = gates.DELIVERABLE_GATE.get(deliverable_code) if deliverable_code else None
+        name = (constants.DELIVERABLE_INDEX[deliverable_code][1]
+                if deliverable_code else "Document")
+
+        if gate and thin:
+            # THIN EVIDENCE IS STILL THIN. The document is written, stored, and it does open
+            # the gate -- the gate's named authority is the one who signs, and hiding the
+            # document from them would not help them. But they are told, in the same breath,
+            # which parts of it the app could not ground in a specific fact.
+            flash(f"{name} written and on file as the evidence stage gate {gate} requires — "
+                  f"but {thin} section(s) rest on the programme's description alone. Each "
+                  f"names the one fact that would strengthen it; answer those below and "
+                  f"regenerate before the gate is signed.", "warning")
+        elif gate:
+            flash(f"{name} generated from {len(set(picked))} activities. It is now on file "
+                  f"as the evidence stage gate {gate} requires — review it before the gate "
+                  f"is signed.", "success")
+        else:
+            flash(f"{name} generated from {len(set(picked))} activities.", "success")
+
+        # IT OPENS, IT DOES NOT DOWNLOAD (owner, 2026-07-13: "it must create the concept note
+        # report and open it in html page with pdf and email, just like the project design
+        # report"). The PDF and the email are offered FROM that page, as they are everywhere
+        # else in the app -- a file that lands in the downloads folder is not a report the
+        # operator can read, check and send.
+        return redirect(url_for("enterprise_document_view", document_id=doc_id))
+
+    # ---- the report page (owner, 2026-07-13) ------------------------------
+    #
+    # "it must create the concept note report and open it in html page with pdf and email,
+    #  just like we did in the start project design report -- that is reusable component."
+    #
+    # So a generated document OPENS, as a report, on a page that offers the same three
+    # actions every other SolarPro report offers: read it, download the PDF, email it. It is
+    # the same component in the sense that matters -- the same PDF renderer (documents.
+    # render_pdf) and the same mail service (web_app._send_email, via api_manager) that the
+    # project design report uses. Nothing about report delivery is reimplemented here.
+
+    @app.route("/enterprise/documents/<int:document_id>/view")
+    @login_required
+    def enterprise_document_view(document_id: int):
+        """Read a generated document as a report: HTML, with PDF + email beside it."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                doc = documents.get_document(c, active, document_id)
+            except DocumentError:
+                abort(404)                  # C13 -- not-yours and not-there are one answer
+
+            # An UPLOAD has no markdown to render -- it is somebody's PDF or Word file. There
+            # is nothing to show as a report, so send them to the bytes they asked for.
+            if doc["doc_kind"] != "generated":
+                return redirect(url_for("enterprise_document_download",
+                                        document_id=document_id))
+
+            prog = documents.programme_facts(c, active, doc["programme_id"])
+            body = documents.render_html(doc["markdown"] or "")
+            gate = gates.GATE_OF_DOC_TYPE.get(doc["doc_type"])
+
+            return render_template(
+                "enterprise_programme/document_report.html",
+                doc=doc,
+                programme=prog,
+                programme_id=doc["programme_id"],
+                body_html=body,
+                gate=gate,
+                deliverable_title=gates.DOC_TYPE_LABELS.get(doc["doc_type"]),
+                thin=documents.thin_sections(doc["markdown"] or ""),
+                can_email=rbac.has_permission(c, active, uid, "report.generate",
+                                              programme_id=doc["programme_id"]),
+            )
+
+    @app.route("/enterprise/documents/<int:document_id>/email", methods=["POST"])
+    @login_required
+    def enterprise_document_email(document_id: int):
+        """Email the document, as a PDF attachment, from the report page."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        back = redirect(url_for("enterprise_document_view", document_id=document_id))
+
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                doc = documents.get_document(c, active, document_id)
+            except DocumentError:
+                abort(404)
+
+            # SENDING A DOCUMENT OUT OF THE ORGANISATION IS NOT A READ. It is the same
+            # authority as producing it, so it takes the same permission -- otherwise anyone
+            # who can merely VIEW a programme could mail its business case to an outside
+            # address.
+            if not rbac.has_permission(c, active, uid, "report.generate",
+                                       programme_id=doc["programme_id"]):
+                abort(403)
+
+            if doc["doc_kind"] != "generated" or not doc["markdown"]:
+                flash("Only a generated document can be emailed from here.", "error")
+                return back
+
+            recipients = [r.strip() for r in
+                          re.split(r"[,;\s]+", request.form.get("recipients") or "")
+                          if r.strip()]
+            if not recipients:
+                flash("Enter at least one email address.", "error")
+                return back
+            # A a plausible address, not a valid one -- the mail service is the authority on
+            # deliverability. This only stops the obvious mistake before it costs a send.
+            bad = [r for r in recipients if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", r)]
+            if bad:
+                flash(f"Not an email address: {', '.join(bad[:3])}", "error")
+                return back
+
+            try:
+                pdf = documents.render_pdf(doc["markdown"], doc["title"])
+            except DocumentError as e:
+                flash(str(e), "error")
+                return back
+
+            prog = documents.programme_facts(c, active, doc["programme_id"])
+            note = (request.form.get("message") or "").strip()
+
+            # C12 -- AUDIT OR NOTHING, AND THE ORDER IS THE WHOLE CONTROL.
+            #
+            # An email cannot be un-sent, so auditing AFTERWARDS cannot enforce anything: if
+            # that write failed, the document would already have left the organisation with
+            # no record of it, and `txn.audit_on` returns False on failure rather than
+            # raising, so the route would never even notice. Sending a business case to an
+            # outside address is exactly the event an auditor comes looking for.
+            #
+            # So the ATTEMPT is recorded first, and if it cannot be recorded, nothing is
+            # sent. The outcome is then recorded after (below), which can only ever ADD to a
+            # record that already exists.
+            wrote = txn.audit_on(c)(
+                "ENTERPRISE_DOCUMENT_EMAIL_ATTEMPTED", user_id=uid, tenant_id=active,
+                details={"document_id": document_id,
+                         "programme_id": doc["programme_id"],
+                         "title": doc["title"], "recipients": recipients})
+            c.commit()
+
+        if not wrote:
+            flash("The document was not emailed, because the attempt could not be written "
+                  "to the audit log. Nothing was sent.", "error")
+            return back
+
+        # The mail service lives in web_app; imported lazily, as every other module that
+        # sends mail does, because web_app imports this module's registrar.
+        try:
+            from web_app import _send_email, _safe_email_subject, _safe_email_text
+        except Exception:
+            flash("Email is not available on this server.", "error")
+            return back
+
+        subject = _safe_email_subject(
+            f"[SolarPro] {doc['title']} — {prog['name']} ({prog['code']})")
+        safe_note = _safe_email_text(note).replace("\n", "<br>") if note else ""
+        html = (
+            f"<p>Please find attached <strong>{_safe_email_text(doc['title'])}</strong>.</p>"
+            + (f"<blockquote style=\"border-left:3px solid #f0ad4e;padding-left:10px;"
+               f"color:#333\">{safe_note}</blockquote>" if safe_note else "")
+            + "<p style=\"color:#888;font-size:12px\">Generated by SolarPro from the "
+              "programme's own record.</p>"
+        )
+
+        ok = False
+        try:
+            res = _send_email(
+                recipients, subject, html, text_body=(note or doc["title"]),
+                attachments=[(doc["file_name"] or "document.pdf", pdf, "application/pdf")],
+            )
+            ok = bool(res[0]) if isinstance(res, (tuple, list)) and res else bool(res)
+        except Exception:
+            ok = False
+
+        # The OUTCOME. The attempt is already on the record, so this can only add to it --
+        # which is why it is safe for this one to be best-effort where the first was not.
+        with get_db() as c:
+            tenancy.apply_enterprise_guc(c, uid)
+            txn.audit_on(c)("ENTERPRISE_DOCUMENT_EMAILED", user_id=uid,
+                            tenant_id=_tenant(c, uid),
+                            details={"document_id": document_id,
+                                     "programme_id": doc["programme_id"],
+                                     "title": doc["title"],
+                                     "recipients": recipients,
+                                     "status": "sent" if ok else "failed"})
+            c.commit()
+
+        if ok:
+            flash(f"{doc['title']} emailed to {', '.join(recipients)}.", "success")
+        else:
+            flash("The email could not be sent. The document is still on file — download "
+                  "the PDF and send it yourself, or try again.", "error")
+        return back
 
     @app.route("/enterprise/documents/<int:document_id>/download")
     @login_required

@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.title }} — SolarPro{% endblock %}
+{% block content %}
+<div class="container-xl py-4 ent-page">
+
+  {# ---------------- header + the three actions ---------------- #}
+  <div class="report-header mb-4 no-print">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+      <div>
+        <div class="text-muted small mb-1">
+          <a href="{{ url_for('enterprise_lifecycle_documents', programme_id=programme_id) }}"
+             class="text-decoration-none">
+            <i class="bi bi-arrow-left me-1"></i>{{ programme.code }} {{ programme.name }}
+          </a>
+        </div>
+        <div class="report-title">
+          <i class="bi bi-file-earmark-text text-warning me-2"></i>{{ doc.title }}
+        </div>
+        <div class="text-secondary mt-1">
+          {% if gate %}
+            <span class="badge bg-success me-1">
+              <i class="bi bi-shield-check me-1"></i>Stage gate {{ gate }} evidence
+            </span>
+          {% elif deliverable_title %}
+            <span class="badge bg-secondary me-1">{{ deliverable_title }}</span>
+          {% else %}
+            <span class="badge bg-secondary me-1">Free-form — satisfies no gate</span>
+          {% endif %}
+          Written from the programme's own record · {{ doc.created_at }}
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 flex-wrap">
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+          <i class="bi bi-printer me-1"></i>Print
+        </button>
+        <a class="btn btn-outline-warning btn-sm"
+           href="{{ url_for('enterprise_document_download', document_id=doc.id) }}">
+          <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
+        </a>
+        {% if can_email %}
+        <button class="btn btn-warning btn-sm" type="button"
+                data-bs-toggle="collapse" data-bs-target="#entEmail">
+          <i class="bi bi-envelope-arrow-up me-1"></i>Email
+        </button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ---------------- email ---------------- #}
+  {% if can_email %}
+  <div class="collapse no-print" id="entEmail">
+    <div class="card mb-4 border-warning">
+      <div class="card-header"><i class="bi bi-envelope me-2"></i>Email this report</div>
+      <div class="card-body">
+        <form method="post"
+              action="{{ url_for('enterprise_document_email', document_id=doc.id) }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"/>
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label small">To</label>
+              <input type="text" name="recipients" class="form-control form-control-sm"
+                     placeholder="name@ministry.gov.gh, another@example.com" required/>
+              <div class="form-text">Separate several addresses with commas.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small">Message (optional)</label>
+              <textarea name="message" rows="2" class="form-control form-control-sm"
+                        placeholder="A short note to go above the attachment"></textarea>
+            </div>
+          </div>
+          <div class="mt-2 d-flex justify-content-between align-items-center">
+            <span class="text-muted small">
+              The report is attached as a PDF. The send is recorded in the audit log.
+            </span>
+            <button class="btn btn-warning btn-sm">
+              <i class="bi bi-send me-1"></i>Send
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# The document says which sections are thin; say it once more here, where the operator is
+     actually reading it, rather than only in a flash they have already dismissed. #}
+  {% if thin %}
+  <div class="alert alert-warning no-print">
+    <i class="bi bi-pencil-square me-1"></i>
+    <strong>{{ thin }} section{{ '' if thin == 1 else 's' }} rest{{ 's' if thin == 1 else '' }}
+    on the programme's description alone.</strong>
+    Each one names, in italics, the single fact that would strengthen it. Answer those on the
+    <a href="{{ url_for('enterprise_lifecycle_documents', programme_id=programme_id) }}">Lifecycle
+    Documents page</a> and regenerate — your answer becomes the section.
+  </div>
+  {% endif %}
+
+  {# ---------------- the document ---------------- #}
+  <div class="card">
+    <div class="card-body ent-doc">
+      {# `body_html` is rendered by documents.render_html with html=False, so every scrap of
+         user-supplied text inside it -- the programme description, the operator's answers,
+         and passages quoted out of an UPLOADED file -- is already escaped. It is marked safe
+         here because it is markdown the app rendered, not markup a user supplied. #}
+      {{ body_html|safe }}
+    </div>
+  </div>
+
+</div>
+
+<style>
+  /* The document should read like a document: measured line length, real headings. */
+  .ent-doc { max-width: 46rem; margin: 0 auto; line-height: 1.65; }
+  .ent-doc h1 { font-size: 1.6rem; margin-bottom: .75rem; }
+  .ent-doc h1 + p { color: var(--bs-secondary-color); }
+  .ent-doc h2 { font-size: 1.25rem; margin-top: 2rem; padding-bottom: .3rem;
+                border-bottom: 1px solid rgba(128,128,128,.25); }
+  .ent-doc h3 { font-size: 1.02rem; margin-top: 1.5rem; font-weight: 600; }
+  .ent-doc blockquote { border-left: 3px solid #f0ad4e; padding-left: .9rem;
+                        color: var(--bs-secondary-color); margin: .5rem 0; }
+  .ent-doc em { color: var(--bs-secondary-color); }
+  .ent-doc hr { margin: 2rem 0; opacity: .25; }
+  @media print {
+    .no-print, nav, footer { display: none !important; }
+    .card { border: 0 !important; }
+    .ent-doc { max-width: none; }
+  }
+</style>
+{% endblock %}

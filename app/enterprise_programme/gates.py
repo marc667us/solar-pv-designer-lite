@@ -35,12 +35,15 @@ from __future__ import annotations
 
 from .constants import (
     CONTROLS,
+    DELIVERABLE_GATE_DOC_TYPE,
+    DELIVERABLE_INDEX,
     GATE_CODES,
     GATE_PREREQUISITE_GATES,
     GATES,
     BENEFICIARY_STATUSES_APPROVED,
     GATES_DEFERRED_BEYOND_RELEASE_1,
     TEMPLATE_STATUSES_GENERATIVE,
+    deliverable_doc_type,
 )
 
 
@@ -580,6 +583,60 @@ GATE_PREDICATES = {
     "G08": [_requires_document("signed_contract", "G08", "signed contract")],
     "G09": [_requires_document("ifc_package", "G09", "issued-for-construction package")],
 }
+
+
+# doc_type -> the gate it opens. DERIVED from the predicates above, never hand-written.
+#
+# The Lifecycle Documents page tells the operator, before they generate, that this particular
+# deliverable is the evidence Gate 4 is waiting for. That promise is only worth making if it
+# cannot go stale: a hand-kept second copy of this mapping would keep displaying "opens Gate
+# 4" for a gate whose demand had since changed, and the operator would generate a document
+# that opens nothing. So the UI reads it off the predicates that actually enforce it -- one
+# source of truth, and a gate whose demand changes changes the page with it.
+GATE_OF_DOC_TYPE: dict[str, str] = {
+    p.required_doc_type: gate_code
+    for gate_code, predicates in GATE_PREDICATES.items()
+    for p in predicates
+    if getattr(p, "required_doc_type", None)
+}
+
+# A dict keyed by doc_type SILENTLY KEEPS THE LAST BINDING. If two gates ever demanded the
+# same document, the page would confidently name the wrong gate -- and it would name it to
+# the one operator who is blocked on the other one. This map is derived precisely so it
+# cannot go stale; this is the one remaining way it could, so it is closed at import.
+_demanded = [
+    p.required_doc_type
+    for predicates in GATE_PREDICATES.values()
+    for p in predicates
+    if getattr(p, "required_doc_type", None)
+]
+assert len(_demanded) == len(set(_demanded)), (
+    "two stage gates demand the same document type, so GATE_OF_DOC_TYPE can only name one "
+    f"of them: {sorted({d for d in _demanded if _demanded.count(d) > 1})}"
+)
+del _demanded
+
+
+# deliverable code -> the gate that deliverable opens. Nine of the 144.
+DELIVERABLE_GATE: dict[str, str] = {
+    code: GATE_OF_DOC_TYPE[doc_type]
+    for code, doc_type in DELIVERABLE_GATE_DOC_TYPE.items()
+    if doc_type in GATE_OF_DOC_TYPE
+}
+assert len(DELIVERABLE_GATE) == len(DELIVERABLE_GATE_DOC_TYPE), (
+    "a deliverable is mapped to a gate document type that no gate actually demands"
+)
+
+# doc_type -> the doc-2 title of the deliverable stored under it. What the register shows a
+# reader instead of "P04_D03" or "concept_note", neither of which means anything to them.
+DOC_TYPE_LABELS: dict[str, str] = {
+    deliverable_doc_type(code): title
+    for code, (_phase, title) in DELIVERABLE_INDEX.items()
+}
+
+# Both maps are pure functions of import-time constants, so they are built ONCE here rather
+# than rebuilt on every page load -- and the assertion above turns an invariant the page
+# merely assumed into one that fails loudly at import if it is ever broken.
 
 
 def evaluate_gate(c, tenant_id: str, programme_id: int, gate_code: str) -> None:

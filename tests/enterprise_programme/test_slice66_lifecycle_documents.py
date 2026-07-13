@@ -192,25 +192,57 @@ def test_an_uploaded_document_supplies_the_content(db):
     assert "**QUESTION" not in md
 
 
-def test_an_activity_the_app_cannot_write_becomes_a_QUESTION_not_a_guess(db):
-    """The owner's rule: where the description does not say, the app ASKS -- never invents.
+def test_an_activity_the_app_KNOWS_is_written_not_asked(db):
+    """The owner's bug (2026-07-13): "it's not writing, it's rather asking me question."
 
-    It also never prints a shrug. "TO BE COMPLETED" tells the operator a hole exists without
-    telling them what would fill it; a question tells them exactly what to supply.
+    This programme HAS a sponsor on record. So "identify the sponsoring institution" is a
+    question the app can answer out of its own database -- and asking the operator for it,
+    as the old code did whenever no LLM was reachable, was the app refusing to read its own
+    records. Answering it is not a nicety; it is the difference between a document and a
+    questionnaire.
     """
     c, org, _o, pid, _op = db
     src = _upload(c, org, pid)
 
-    # The brief says nothing whatsoever about a sponsoring institution.
     md = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid, activity_codes=["P01_A02"],
+        c, org, OWNER, pid, activity_codes=["P01_A02"],   # sponsoring institution
         source_document_id=src, use_ai=False, audit=_audit(c),
     ))["markdown"]
-    assert "**QUESTION" in md
 
-    # And the question is RECORDED, so the page can put it to the operator as a form.
+    assert "**QUESTION" not in md, "the app asked for a fact it already holds"
+    assert "sponsored by owen" in md, "it did not write the sponsor it has on record"
+    assert not documents.outstanding_questions(c, org, pid), (
+        "a question was raised for something the app could answer itself"
+    )
+
+
+def test_an_activity_the_app_CANNOT_ground_is_still_written_and_asks_underneath(db):
+    """The honest half, preserved: never invent -- but never hand back a blank either.
+
+    "Register the programme idea" is not a fact this app holds. The old code made that
+    section BE a question. Now the section is written from the programme's own description
+    and the question is asked UNDERNEATH it, and still recorded, so the answers form still
+    works and an answer still outranks everything.
+    """
+    c, org, _o, pid, _op = db
+
+    md = documents.get_document(c, org, documents.generate_document(
+        c, org, OWNER, pid, activity_codes=["P01_A01"],   # register the programme idea
+        use_ai=False, audit=_audit(c),
+    ))["markdown"]
+
+    # WRITTEN: the section has prose, and it is not a bare question.
+    assert "**QUESTION" not in md
+    body = md.split("### ", 1)[1]
+    lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
+    assert len(lines) >= 2 and not lines[1].startswith("*To strengthen"), (
+        "the section is a question with no prose above it"
+    )
+
+    # ...and it ASKS, underneath, for the one thing that would strengthen it.
+    assert documents.THIN_SECTION_MARKER in md
     open_qs = documents.outstanding_questions(c, org, pid)
-    assert [q["activity_code"] for q in open_qs] == ["P01_A02"]
+    assert [q["activity_code"] for q in open_qs] == ["P01_A01"]
 
 
 def test_an_unrelated_passage_is_never_quoted_under_an_activity(db):
@@ -227,11 +259,18 @@ def test_an_unrelated_passage_is_never_quoted_under_an_activity(db):
 
 
 def test_generation_works_with_no_source_document_at_all(db):
+    """No upload, no LLM -- and it STILL writes. That is the whole point of the fact writer.
+
+    This is the exact condition the owner hit: a brand-new programme, nothing uploaded, and
+    the live LLM chain falling back to rule_based. Under the old code every section of the
+    document was a question. The document must be a document anyway.
+    """
     c, org, _o, pid, _op = db
     md = documents.get_document(c, org, documents.generate_document(
         c, org, OWNER, pid, activity_codes=["P01_A01"], use_ai=False, audit=_audit(c),
     ))["markdown"]
-    assert "**QUESTION" in md               # nothing to draw on -- so it asks
+    assert "Ghana Schools" in md            # written, and written about THIS programme
+    assert "**QUESTION" not in md           # not handed back to the operator
 
 
 # --- uploads ----------------------------------------------------------------
@@ -331,29 +370,37 @@ def test_a_generated_document_renders_to_a_real_pdf(db):
 
 
 def test_answering_a_question_makes_the_answer_the_section(db):
-    """The whole loop: generate -> app asks -> operator answers -> regenerate -> written."""
+    """The whole loop: generate -> app asks -> operator answers -> regenerate -> written.
+
+    Driven with P01_A01 ("register the programme idea"), which is a genuine gap -- the app
+    holds no fact for it. P01_A02 is no longer a gap: the app knows the sponsor and writes
+    it. The loop under test is what happens where the app truly does NOT know.
+    """
     c, org, _o, pid, _op = db
 
-    # 1. Generate. The app cannot write this one, so it asks.
-    documents.generate_document(c, org, OWNER, pid, activity_codes=["P01_A02"],
+    # 1. Generate. The app writes the section from the description -- and, because it has no
+    #    specific fact for it, asks underneath for the one thing that would strengthen it.
+    documents.generate_document(c, org, OWNER, pid, activity_codes=["P01_A01"],
                                 use_ai=False, audit=_audit(c))
     open_qs = documents.outstanding_questions(c, org, pid)
     assert len(open_qs) == 1
 
     # 2. Answer it.
     n = documents.save_answers(c, org, OWNER, pid,
-                               {"P01_A02": "The Ministry of Energy is the sponsor."},
+                               {"P01_A01": "The idea was tabled by the Ministry in 2026."},
                                audit=_audit(c))
     assert n == 1
     assert documents.outstanding_questions(c, org, pid) == []
 
-    # 3. Regenerate -- the answer IS the section now, and nothing is outstanding.
+    # 3. Regenerate -- the answer IS the section now, and nothing is outstanding. The
+    #    operator's own words outrank everything the app inferred, which is the point: they
+    #    were asked precisely because the app did not know.
     md = documents.get_document(c, org, documents.generate_document(
-        c, org, OWNER, pid, activity_codes=["P01_A02"], use_ai=False, audit=_audit(c),
+        c, org, OWNER, pid, activity_codes=["P01_A01"], use_ai=False, audit=_audit(c),
     ))["markdown"]
-    assert "The Ministry of Energy is the sponsor." in md
-    assert "**QUESTION" not in md
-    assert "No outstanding questions" in md
+    assert "The idea was tabled by the Ministry in 2026." in md
+    assert documents.THIN_SECTION_MARKER not in md
+    assert "grounded throughout in the programme's own record" in md
 
 
 def test_an_answer_outranks_the_source_document(db):
