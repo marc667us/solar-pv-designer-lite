@@ -50,7 +50,7 @@
         {% else %}
           <form method="post"
                 action="{{ url_for('enterprise_design_create', programme_id=programme_id) }}">
-            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
 
             <div class="mb-3">
               <label class="form-label small fw-semibold">Approved template</label>
@@ -169,7 +169,7 @@
           {% if can_approve and not design.approved %}
             <form method="post"
                   action="{{ url_for('enterprise_design_action', programme_id=programme_id, design_id=design.id, action='approve') }}">
-              <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
               <button class="btn btn-success btn-sm">
                 <i class="bi bi-check2-circle me-1"></i>Approve (engineering)
               </button>
@@ -178,7 +178,7 @@
           {% if can_design and design.approved and scope and scope.to_generate > 0 %}
             <form method="post"
                   action="{{ url_for('enterprise_design_action', programme_id=programme_id, design_id=design.id, action='rollout') }}">
-              <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
               <button class="btn btn-warning btn-sm">
                 <i class="bi bi-buildings me-1"></i>
                 Roll out to {{ scope.to_generate }} site{{ '' if scope.to_generate == 1 else 's' }}
@@ -189,7 +189,7 @@
             <form method="post"
                   action="{{ url_for('enterprise_design_action', programme_id=programme_id, design_id=design.id, action='supersede') }}"
                   onsubmit="return confirm('Supersede this design? Sites already built from it keep pointing at it.');">
-              <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+              <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
               <button class="btn btn-outline-secondary btn-sm">Supersede</button>
             </form>
           {% endif %}
@@ -357,7 +357,7 @@
                     <td>
                       <form method="post" class="d-flex gap-1"
                             action="{{ url_for('enterprise_site_survey', programme_id=programme_id, link_id=site.link_id) }}">
-                        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+                        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
                         <input type="number" name="shading_factor" step="0.01" min="0.01" max="1"
                                class="form-control form-control-sm" style="max-width:90px;"
                                placeholder="1.00"

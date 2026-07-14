@@ -40,9 +40,10 @@ from werkzeug.utils import secure_filename
 
 from app.enterprise_programme import (
     beneficiaries, constants, documents, dropdowns, flags, gates, imports, members,
-    rbac, rollout, site_qualification, tenancy, txn, workflows,
+    rbac, reports, rollout, site_qualification, tenancy, txn, workflows,
 )
 from app.enterprise_programme.documents import DocumentError
+from app.enterprise_programme.reports import ReportError
 from app.enterprise_programme.engines import EngineError
 from app.enterprise_programme.members import MemberError
 from app.enterprise_programme.rollout import RolloutError
@@ -1511,7 +1512,10 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                                 deliverable=deliverable_code or None))
 
         picked = request.form.getlist("activities")
-        if not picked:
+        # An engine-written deliverable takes NO activities: it is written from the
+        # programme's approved reference design, not from ticked prose. Demanding a tick
+        # would be demanding an input the document does not use.
+        if not picked and not reports.is_engine_written(deliverable_code or ""):
             flash("Tick at least one lifecycle activity.", "error")
             return back
 
@@ -1533,6 +1537,12 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 )
             except EnterprisePermissionError:
                 abort(403)
+            except ReportError as e:
+                # The design engine could not write it -- almost always because the programme
+                # has no approved reference design yet. The message says what to do about it,
+                # so it is shown rather than swallowed into a 500.
+                flash(str(e), "error")
+                return back
             except DocumentError as e:
                 if e.control == "C13":
                     abort(404)

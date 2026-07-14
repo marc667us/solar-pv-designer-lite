@@ -13,6 +13,7 @@ wrong-proof. Three of the tests below are about it.
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 import tempfile
 
@@ -164,6 +165,40 @@ def test_the_design_screen_offers_the_two_paths(ent, programme, approved_templat
     body = r.data.decode()
     assert "Standard design" in body
     assert str(approved_template) in body
+
+
+def test_the_design_page_renders_a_REAL_csrf_token(ent, programme, approved_template):
+    """The owner: "the build the design button don't work". It didn't, and this is why.
+
+    design.html wrote `{{ csrf_token }}` -- the Jinja global is the FUNCTION generate_csrf,
+    so without the parentheses the form posted the string
+
+        <function generate_csrf at 0x000001C3...>
+
+    as its `_csrf`. csrf_protect() compared that to session["_csrf"], refused it, and every
+    POST on the page 403'd: Build the design, Approve, Supersede, Save variance. Five forms,
+    none of which had ever worked from a browser.
+
+    The suite missed it because every other test POSTs a token DIRECTLY (`_csrf: "testtoken"`)
+    instead of scraping the rendered form -- so the template was never exercised as a
+    template. This test renders it and reads what a browser would actually send.
+    """
+    client, _wa, uid = ent
+    _login(client, uid)
+    body = client.get(f"/enterprise/programmes/{programme}/design").data.decode()
+
+    assert "<function" not in body, (
+        "the page is rendering a function's repr -- csrf_token is being used without ()"
+    )
+
+    tokens = re.findall(r'name="_csrf"\s+value="([^"]*)"', body)
+    assert tokens, "the design page has no CSRF field at all"
+    for tok in tokens:
+        assert tok and "function" not in tok and "<" not in tok, (
+            f"the form would post {tok!r} as its CSRF token, which will be refused"
+        )
+        # The test session's token, set by _login. What the browser would send back.
+        assert tok == "testtoken"
 
 
 def test_the_design_form_is_absent_in_another_organisation(ent, programme):

@@ -164,12 +164,17 @@ def test_the_generated_document_is_stored_under_the_gates_type_with_real_content
 
 
 def test_a_document_for_the_WRONG_deliverable_does_not_open_the_gate(db, programme):
-    """Writing the economic assessment must not open the gate that wants a concept note.
+    """Writing some other deliverable must not open the gate that wants a concept note.
 
     If it did, the doc_type would be decorative and any generated document would open any
     gate -- which is the same hole as before, just harder to see.
+
+    Uses P01_D02 rather than the economic assessment (P04_D03): that one is ENGINE-written
+    now, so on a programme with no approved reference design it is refused outright, and the
+    refusal -- not the doc_type -- would be what kept the gate shut. That would make this
+    test pass for the wrong reason.
     """
-    _generate(db, programme, "P04_D03", activities=("P04_A01",))   # not a gate document
+    _generate(db, programme, "P01_D02", activities=("P01_A01",))   # not a gate document
 
     with pytest.raises(EnterpriseGateError):
         gates.evaluate_gate(db, db.org, programme, "G01")

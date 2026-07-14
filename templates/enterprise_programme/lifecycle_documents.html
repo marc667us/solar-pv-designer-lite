@@ -150,12 +150,14 @@
                  picker must not offer them, or it becomes a control that 403s after it has
                  been chosen. #}
               {% set locked = deliverable_gate.get(dcode) and not can_register_evidence %}
+              {% set engine = deliverable_engine.get(dcode) %}
               <option value="{{ dcode }}" data-phase="{{ pcode }}"
                       data-gate="{{ deliverable_gate.get(dcode, '') }}"
+                      data-engine="{{ '1' if engine else '' }}"
                       data-title="{{ dtitle }}"
                       {% if locked %}disabled{% endif %}
                       {% if dcode == chosen_deliverable %}selected{% endif %}>
-                {{ dtitle }}{% if deliverable_gate.get(dcode) %} ★ opens stage gate {{ deliverable_gate[dcode] }}{% endif %}{% if locked %} — needs edit rights{% endif %}
+                {{ dtitle }}{% if engine %} ⚙ written by the design engine{% endif %}{% if deliverable_gate.get(dcode) %} ★ opens stage gate {{ deliverable_gate[dcode] }}{% endif %}{% if locked %} — needs edit rights{% endif %}
               </option>
               {% endfor %}
             </optgroup>
@@ -366,9 +368,27 @@
   var MAX = {{ max_activities }};
   var DEFAULT_FOOT = foot ? foot.textContent : '';
 
+  // An engine-written deliverable is generated from the reference design and reads no
+  // activities, so the Generate button must NOT be gated on a tick count for it.
+  function engineSelected() {
+    if (!sel) { return false; }
+    var o = sel.options[sel.selectedIndex];
+    return !!(o && o.dataset.engine);
+  }
+
   function sync() {
     var n = document.querySelectorAll('.ent-act:checked').length;
     count.textContent = n;
+    if (engineSelected()) {
+      count.className = 'badge bg-secondary';
+      if (btn) { btn.disabled = false; }
+      if (foot) {
+        foot.textContent = 'Written from the programme’s approved reference design — '
+          + 'activities are not used.';
+        foot.className = 'text-muted small';
+      }
+      return;
+    }
     // OVER THE CAP IS A REAL STATE, NOT AN EDGE CASE. "Select the whole stage" on Planning
     // ticks 183 activities and on Implementation 130 -- both above the 60 the server will
     // accept, so that button could ONLY ever produce an error. Now it says so, in advance,
@@ -392,18 +412,41 @@
   // under the cap), opens that phase's stage, and names the document. The operator is free
   // to adjust the ticks afterwards -- this is a starting point, not a lock.
   function applyDeliverable(opt, confirmFirst, scroll) {
-    var phase = opt.dataset.phase;
-    var gate  = opt.dataset.gate;
+    var phase  = opt.dataset.phase;
+    var gate   = opt.dataset.gate;
+    var engine = opt.dataset.engine;
 
     if (note) {
+      var msgs = [];
+      // AN ENGINE-WRITTEN DELIVERABLE DOES NOT READ THE ACTIVITIES. Saying so is the whole
+      // point: otherwise the operator ticks twenty boxes for a technical report that never
+      // looks at one of them, and reasonably concludes the app ignored their input.
+      if (engine) {
+        msgs.push('This deliverable is written by SolarPro’s design engine from the '
+          + 'programme’s approved reference design — its sizing, its finance model and its '
+          + 'bill of quantities, scaled across every qualified site. It does not read the '
+          + 'activity ticks below, so you do not need to select any.');
+      }
       if (gate) {
-        noteT.textContent = 'This is the document stage gate ' + gate + ' will not open '
-          + 'without. Generating it puts the evidence on file — the gate still has to be '
-          + 'signed by its named authority.';
+        msgs.push('It is also the document stage gate ' + gate + ' will not open without. '
+          + 'Generating it puts the evidence on file — the gate still has to be signed by '
+          + 'its named authority.');
+      }
+      if (msgs.length) {
+        noteT.textContent = msgs.join(' ');
         note.classList.remove('d-none');
       } else {
         note.classList.add('d-none');
       }
+    }
+
+    // The engine ignores activities, so do not tick a phase's worth of them on the
+    // operator's behalf and imply otherwise. sync() knows this deliverable is engine-written
+    // and leaves Generate enabled on a zero count.
+    if (engine) {
+      document.querySelectorAll('.ent-act').forEach(function (x) { x.checked = false; });
+      sync();
+      return;
     }
 
     if (!phase) { return; }              // free-form: leave the operator's ticks alone

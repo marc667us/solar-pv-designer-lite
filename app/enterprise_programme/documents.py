@@ -1337,9 +1337,38 @@ def generate_document(c, tenant_id: str, user_id: int, programme_id: int, *,
         title = (title or "").strip() or deliverable_title
 
     title = (title or "").strip() or "Lifecycle Document"
-    markdown, questions = build_markdown(c, tenant_id, programme_id, activity_codes,
-                                         title=title, source_text=source_text,
-                                         use_ai=use_ai)
+
+    # WHO WRITES THIS DOCUMENT: THE DESIGN ENGINE, OR THE ACTIVITY PATH?
+    #
+    # Eleven of doc 2's Key Outputs are ENGINEERING documents -- the technical and financial
+    # feasibility reports, the business case, the implementation plan, the monitoring report,
+    # the consolidated BOQ (constants.DELIVERABLE_ENGINE). For those, the programme's
+    # approved reference design IS the content, and SolarPro's capital-investment engine
+    # already writes every one of them from a real design.
+    #
+    # Assembling a "Technical feasibility report" out of ticked activity prose would produce
+    # a document with no engineering in it while the actual kWp, inverter schedule, BOQ and
+    # cash flow sat in a table nobody read -- and, for the four of these that open a stage
+    # gate, it would open that gate on the strength of it. So the engine writes them, and if
+    # the programme has no approved reference design yet, reports.build_engine_document
+    # REFUSES with an instruction rather than quietly falling back to prose.
+    #
+    # The activity path still writes the other 133, and it remains the right tool for them:
+    # a concept note is a statement of intent about a programme that has not been designed.
+    from . import reports                       # local: reports imports nothing from here
+
+    if deliverable_code and reports.is_engine_written(deliverable_code):
+        markdown, _engine_title = reports.build_engine_document(
+            c, tenant_id, programme_id, deliverable_code)
+        # Activities are not an input to an engine-written report, so none are required and
+        # none are recorded against it -- claiming it "answers" activities it never read
+        # would be a lie told by a JSON column.
+        activity_codes = []
+        questions = []
+    else:
+        markdown, questions = build_markdown(c, tenant_id, programme_id, activity_codes,
+                                             title=title, source_text=source_text,
+                                             use_ai=use_ai)
 
     audit = audit or txn.audit_on(c)
     with txn.atomic(c):
