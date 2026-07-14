@@ -38,7 +38,7 @@ that could quietly resume anywhere would make the hold meaningless.
 
 from __future__ import annotations
 
-from . import gates, rbac
+from . import flags, gates, rbac
 from .constants import (
     DEFAULT_PHASE_CODE,
     DESIGN_STRATEGIES,
@@ -747,7 +747,21 @@ def approve_gate(c, tenant_id: str, programme_id: int, gate_code: str, user_id: 
     if row[0] == "Approved":
         return
 
-    gates.evaluate_gate(c, tenant_id, programme_id, gate_code)
+    # GOVERNANCE IS ADVISORY (owner, 2026-07-14: "reduce and loosen governance").
+    #
+    # The gate no longer REFUSES. But it still LOOKS, and what it finds is recorded: an
+    # approval made without its evidence says so, on the approval row and in the audit trail.
+    # That distinction is the whole point. "Loosen governance" means the app stops standing in
+    # the operator's way; it does not mean it starts telling a funder that evidence existed
+    # when it did not. An auditor can still separate the approvals that were evidenced from
+    # the ones that were not -- which is the only thing that made the record worth keeping.
+    evidence_missing = ""
+    try:
+        gates.evaluate_gate(c, tenant_id, programme_id, gate_code)
+    except EnterpriseGateError as e:
+        if not flags.advisory_governance(c):
+            raise                                    # strict mode: the gate still blocks
+        evidence_missing = str(e)
 
     audit = audit or _audit_on(c)
     with _atomic(c):
@@ -762,13 +776,24 @@ def approve_gate(c, tenant_id: str, programme_id: int, gate_code: str, user_id: 
         # who is not the sponsor and never held the post would put a false statement in the
         # approvals table -- the one table whose entire purpose is to say who decided what.
         signed_as = OWNER_ROLE if override_used else authority
+
+        # AN APPROVAL MADE WITHOUT ITS EVIDENCE SAYS SO, IN THE APPROVAL ITSELF. The comment
+        # column is what a funder or an auditor reads; leaving it silent would let an
+        # unevidenced approval be indistinguishable from an evidenced one, and at that point
+        # the whole table stops being worth reading.
+        stored_comment = comment or ""
+        if evidence_missing:
+            stored_comment = (
+                (stored_comment + " — ") if stored_comment else ""
+            ) + f"APPROVED WITHOUT EVIDENCE: {evidence_missing}"
+
         c.execute(
             "INSERT INTO enterprise_approvals "
             "(tenant_id, programme_id, subject_type, subject_id, approval_type, "
             " decision, decided_by_user_id, decided_by_role, ai_recommendation_id, comment) "
             "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (tenant_id, programme_id, "gate", gate_code, "stage_gate", "Approved",
-             user_id, signed_as, ai_recommendation_id, comment),
+             user_id, signed_as, ai_recommendation_id, stored_comment),
         )
         gates.require_audit_written(
             audit("ENTERPRISE_GATE_APPROVED", user_id=user_id, tenant_id=tenant_id,
@@ -779,6 +804,9 @@ def approve_gate(c, tenant_id: str, programme_id: int, gate_code: str, user_id: 
                            # was stood in for rather than merely that somebody signed.
                            "owner_override": override_used,
                            "authority_required": authority,
+                           # Empty when the gate's evidence was there. Non-empty is the
+                           # single field an auditor greps for.
+                           "evidence_missing": evidence_missing,
                            "ai_recommendation_id": ai_recommendation_id}),
             f"gate {gate_code} approval",
         )
@@ -845,13 +873,25 @@ def transition_programme_phase(c, tenant_id: str, programme_id: int, target: str
         return _apply_pseudo_state(c, tenant_id, programme_id, current_phase, target,
                                    user_id, note, audit)
 
-    legal = TRANSITIONS.get(current_phase, ())
-    if target not in legal:
-        raise EnterpriseGateError(
-            "LIFECYCLE",
-            f"illegal transition {current_phase} -> {target}; "
-            f"allowed: {', '.join(legal) or 'none'}",
-        )
+    # ADVISORY GOVERNANCE: any phase is reachable from any phase (owner, 2026-07-14: "user
+    # must be able to work at any phase", "reduce and loosen governance"). The step-by-step
+    # march was the single loudest block in the module -- a programme that had done the
+    # feasibility work could not be MOVED to Feasibility without first passing through Needs.
+    #
+    # The target must still BE a phase. "Any phase" is not "any string": a typo'd or
+    # hand-rolled target would otherwise write a phase code no screen can render and no
+    # gate is seeded against, and the programme would simply disappear from its own lifecycle.
+    from .constants import PHASE_CODES
+    if not flags.advisory_governance(c):
+        legal = TRANSITIONS.get(current_phase, ())
+        if target not in legal:
+            raise EnterpriseGateError(
+                "LIFECYCLE",
+                f"illegal transition {current_phase} -> {target}; "
+                f"allowed: {', '.join(legal) or 'none'}",
+            )
+    elif target not in PHASE_CODES:
+        raise EnterpriseGateError("LIFECYCLE", f"no such lifecycle phase: {target}")
 
     if target in PSEUDO_STATES:
         # NOTE, deliberately: leaving P16_EXPANSION for CLOSED does NOT require an
@@ -878,7 +918,7 @@ def transition_programme_phase(c, tenant_id: str, programme_id: int, target: str
     # APPROVAL RECORD, and an expansion is the most consequential thing a programme
     # does: it spends the next tranche. So it is guarded explicitly, independently of
     # direction.
-    if current_phase == "P16_EXPANSION":
+    if current_phase == "P16_EXPANSION" and not flags.advisory_governance(c):
         _require_expansion_approval(c, tenant_id, programme_id)
 
     # Two independent sets of gates, and BOTH must hold:
@@ -893,14 +933,25 @@ def transition_programme_phase(c, tenant_id: str, programme_id: int, target: str
     # the destination, not of the route, so the check belongs on the destination.
     required: list[str] = []
     if advancing:
-        # C01 -- nothing leaves Concept without an approved sponsor.
-        gates.require_approved_sponsor(c, tenant_id, programme_id)
+        # C01 -- nothing leaves Concept without an approved sponsor. ADVISORY now: a
+        # programme whose sponsor is still being courted can still be worked on, which is the
+        # ordinary case (the owner's own words: beneficiaries register and track progress; the
+        # sponsor is often the LAST thing settled, not the first).
+        if not flags.advisory_governance(c):
+            gates.require_approved_sponsor(c, tenant_id, programme_id)
         if gate_code:
             required.append(gate_code)
     for entry_gate in PHASE_ENTRY_REQUIRED_GATES.get(target, ()):
         if entry_gate not in required:
             required.append(entry_gate)
 
+    # ADVISORY GOVERNANCE (owner, 2026-07-14: "reduce and loosen governance"; "user must be
+    # able to work at any phase"). An unapproved gate no longer REFUSES the move -- it is
+    # recorded on the transition instead, so the programme's history still shows that it
+    # moved past a gate that had not been approved. The app stops blocking; it does not start
+    # pretending the gate was passed.
+    advisory = flags.advisory_governance(c)
+    unapproved: list[str] = []
     for required_gate in required:
         g = c.execute(
             "SELECT status FROM enterprise_stage_gates "
@@ -908,11 +959,17 @@ def transition_programme_phase(c, tenant_id: str, programme_id: int, target: str
             (tenant_id, programme_id, required_gate),
         ).fetchone()
         if not g or g[0] != "Approved":
-            raise EnterpriseGateError(
-                required_gate,
-                f"{required_gate} must be approved before moving "
-                f"{current_phase} -> {target}",
-            )
+            if not advisory:
+                raise EnterpriseGateError(
+                    required_gate,
+                    f"{required_gate} must be approved before moving "
+                    f"{current_phase} -> {target}",
+                )
+            unapproved.append(required_gate)
+
+    if unapproved:
+        note = ((note + " — ") if note else "") + (
+            "moved past unapproved gate(s): " + ", ".join(unapproved))
 
     audit = audit or _audit_on(c)
     with _atomic(c):

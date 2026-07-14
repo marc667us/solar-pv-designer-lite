@@ -26,8 +26,49 @@ import time
 
 FLAG_ENABLED = "enterprise_rebuild_enabled"
 
+# GOVERNANCE IS ADVISORY, NOT OBSTRUCTIVE (owner, 2026-07-14: "reduce and loosen
+# governance"; "the owner must be able to walk through without blocks"; "the controls are not
+# needed like that, user must be able to work at any phase").
+#
+# ON (the default) means: nothing REFUSES the operator. A stage gate whose evidence does not
+# exist can still be approved; a programme can move to any phase.
+#
+# WHAT IT DOES NOT MEAN: it does not mean the app pretends. Every approval still records WHO
+# made it, and an approval made without its evidence records THAT TOO -- `evidence_missing` on
+# the approval row and in the audit trail. Loosening governance means the app stops standing
+# in the operator's way; it does not mean it starts telling a funder something untrue. An
+# auditor reading these rows can still see exactly which approvals were made on evidence and
+# which were not, which is the whole value of the record.
+#
+# Set to '0' in admin_settings to put the gates back to blocking.
+FLAG_ADVISORY = "enterprise_governance_advisory"
+
 _TTL_SECONDS = 60.0
 _cache: dict[str, tuple[float, str]] = {}
+
+
+def advisory_governance(c) -> bool:
+    """Is governance advisory (warn, never block)? Reads admin_settings on an OPEN conn.
+
+    Input:  an open DB connection (the services already hold one; opening a second on a
+            free-tier Postgres to read one boolean would be careless).
+    Output: True unless the flag is explicitly '0'.
+
+    DEFAULTS TO TRUE. The owner asked for the blocks to come off, and a default that silently
+    kept them on would be a switch that does nothing until somebody finds it.
+    """
+    try:
+        row = c.execute(
+            "SELECT value FROM admin_settings WHERE key=?", (FLAG_ADVISORY,)
+        ).fetchone()
+    except Exception:
+        # No admin_settings table (a bare test database) -> advisory. Failing CLOSED here
+        # would mean a missing table silently re-imposes every block the owner asked to
+        # remove, and they would have no way to see why.
+        return True
+    if not row:
+        return True
+    return str(row[0]).strip() not in ("0", "false", "False", "")
 
 
 def _is_postgres() -> bool:
