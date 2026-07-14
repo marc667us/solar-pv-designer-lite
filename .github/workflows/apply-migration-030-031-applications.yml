@@ -1,0 +1,226 @@
+# Apply migrations 030 + 031 -- programme SPONSORS and the BENEFICIARY APPLICATION chain.
+#
+# WHAT THEY DO
+#   030 -- ALTERs `enterprise_programme_registry` (LIVE, created by 026) to add
+#          sponsor_1_id / sponsor_2_id / sponsor_3_id. No new table: the sponsors themselves
+#          are the EXISTING approved `financial_institutions` from the Project Funding module
+#          (owner: "look, check and reuse the funding in the standard design").
+#   031 -- CREATEs `enterprise_applications` (the three-level chain: beneficiary organisation
+#          -> programme -> sponsor) and `enterprise_sponsor_users` (who may sign FOR a
+#          sponsor -- the funding registry holds contact details, not logins).
+#
+# ORDER IS NOT OPTIONAL: 031's RLS policy reads r.sponsor_1_id/2/3, the columns 030 adds. Run
+# 030 first, in the same job, or 031's CREATE POLICY dies on an unknown column and leaves the
+# table created but unprotected.
+#
+# WHY 030's ALTERs ARE SAFE ON A LIVE TABLE
+#   All three are ADD COLUMN IF NOT EXISTS, nullable, no default -- so every programme row 026
+#   already holds keeps its exact current meaning, and Postgres does not rewrite the table.
+#
+# THE RLS POLICY IS THE POINT OF 031, so the verify step below proves it exists rather than
+# merely proving the table does. An application is legitimately read by THREE organisations:
+# the programme's, the applicant's own, and -- by IDENTITY, not by tenant -- the sponsor's.
+# A sponsor is not a member of the ministry's organisation, so no tenant-based clause can ever
+# admit them; they are admitted through app.current_user_id joined to enterprise_sponsor_users.
+# Without that clause level 3 works on SQLite and silently returns NOTHING on live.
+#
+# DEFAULT IS DRY-RUN. Applying needs -f confirm=APPLICATIONS_APPLY.
+# See feedback_workflow_dry_run_gate.
+
+name: Apply Migrations 030+031 (Sponsors + Applications)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type APPLICATIONS_APPLY to commit."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Ubuntu's default client is 16; the live server is 18.4 (upgraded 2026-07-10).
+      - name: Install psql 18
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates gnupg lsb-release
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          psql --version
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "APPLICATIONS_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- 030 and 031 will be committed to live PG ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be written ==="
+            echo "Re-run with -f confirm=APPLICATIONS_APPLY to commit."
+          fi
+
+      - name: Verify the migration files exist
+        run: |
+          set -e
+          test -f migrations/030_enterprise_programme_sponsors.sql
+          test -f migrations/031_enterprise_applications.sql
+          echo "OK: both migration files present"
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      # PRE-FLIGHT. Prove the tables these two REACH INTO are live before writing a statement.
+      # A half-applied migration is the worst state to debug from.
+      - name: Pre-flight -- 025/026 are actually live
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- enterprise_programme_registry must exist (026) -- 030 ALTERs it ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT to_regclass('public.enterprise_programme_registry') IS NOT NULL;" | grep -qx t \
+            || { echo "::error::enterprise_programme_registry is not live -- run 025-027 first."; exit 1; }
+          echo "  OK"
+
+          echo "--- enterprise_tenants must exist (025) -- 031 FKs to it ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT to_regclass('public.enterprise_tenants') IS NOT NULL;" | grep -qx t \
+            || { echo "::error::enterprise_tenants is not live -- run 025 first."; exit 1; }
+          echo "  OK"
+
+          echo "--- uq_ent_programme_tenant_id (026) -- 031's composite FK targets it ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT COUNT(*) FROM pg_constraint
+             WHERE conname='uq_ent_programme_tenant_id';" | grep -qx 1 \
+            || { echo "::error::uq_ent_programme_tenant_id missing -- 026 is not fully applied."; exit 1; }
+          echo "  OK"
+
+          echo "--- financial_institutions (the funding registry the sponsors COME FROM) ---"
+          echo "    Not fatal: 030 adds no FK to it (the Funding module creates it lazily at"
+          echo "    first use, so on a quiet database it may genuinely not exist yet). But if"
+          echo "    it is absent, every sponsor dropdown will be EMPTY -- worth knowing now."
+          psql "$DATABASE_URL" -At -c "
+            SELECT COALESCE(
+              (SELECT COUNT(*)::text FROM financial_institutions WHERE status='approved'),
+              '0')
+            WHERE to_regclass('public.financial_institutions') IS NOT NULL;" \
+            | tee /tmp/fi.txt
+          if [ ! -s /tmp/fi.txt ]; then
+            echo "::warning::financial_institutions does not exist -- sponsor dropdowns will be empty."
+          else
+            echo "  approved institutions available to name as sponsors: $(cat /tmp/fi.txt)"
+          fi
+
+      - name: Dry-run -- nothing written
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. 030 and 031 WOULD be applied. Nothing was."
+          echo "  Pre-flight passed: 025's tenants and 026's registry are live."
+          echo "  Re-run with -f confirm=APPLICATIONS_APPLY to commit."
+          echo "================================================================"
+
+      # 030 FIRST, and in its own step, because 031's RLS policy reads the columns it adds.
+      - name: Apply 030 (programme sponsor slots)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f migrations/030_enterprise_programme_sponsors.sql
+          echo "OK: 030 applied."
+
+      - name: Apply 031 (applications + sponsor users + RLS)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f migrations/031_enterprise_applications.sql
+          echo "OK: 031 applied."
+
+      - name: Verify -- the columns, the tables AND the policy are really there
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- 030: the three sponsor slots ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT column_name FROM information_schema.columns
+             WHERE table_name='enterprise_programme_registry'
+               AND column_name IN ('sponsor_1_id','sponsor_2_id','sponsor_3_id')
+             ORDER BY column_name;" | tee /tmp/sp.txt
+          test "$(wc -l < /tmp/sp.txt)" -eq 3 \
+            || { echo "::error::expected three sponsor columns"; exit 1; }
+
+          echo "--- 031: enterprise_applications ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT to_regclass('public.enterprise_applications') IS NOT NULL;" | grep -qx t \
+            || { echo "::error::enterprise_applications was not created"; exit 1; }
+
+          echo "--- 031: enterprise_sponsor_users -- without it, level 3 has no subject ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT to_regclass('public.enterprise_sponsor_users') IS NOT NULL;" | grep -qx t \
+            || { echo "::error::enterprise_sponsor_users was not created"; exit 1; }
+
+          echo "--- RLS is ENABLED on the application table ---"
+          psql "$DATABASE_URL" -At -c "
+            SELECT relrowsecurity FROM pg_class WHERE relname='enterprise_applications';" \
+            | grep -qx t || { echo "::error::RLS is not enabled on enterprise_applications"; exit 1; }
+
+          echo "--- ...and the policy ADMITS THE SPONSOR BY IDENTITY ---"
+          echo "    A policy keyed only on tenant_id would hide every application from the"
+          echo "    sponsor (they are not in the programme's tenant) and from the applicant's"
+          echo "    own organisation (level 1 would be unreachable). Prove the clause is there."
+          psql "$DATABASE_URL" -At -c "
+            SELECT pg_get_expr(polqual, polrelid) FROM pg_policy
+             WHERE polname='enterprise_applications_tenant_isolation';" | tee /tmp/pol.txt
+          grep -q "current_user_id" /tmp/pol.txt \
+            || { echo "::error::the policy does not admit the sponsor by identity -- level 3 will return nothing on live"; exit 1; }
+          grep -q "applicant_org_tenant_id" /tmp/pol.txt \
+            || { echo "::error::the policy does not admit the beneficiary organisation -- level 1 will be unreachable"; exit 1; }
+
+          echo ""
+          echo "030 + 031 APPLIED AND VERIFIED."
