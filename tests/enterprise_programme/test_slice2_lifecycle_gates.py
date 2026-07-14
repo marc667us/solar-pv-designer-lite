@@ -217,26 +217,75 @@ def test_gate_1_cannot_be_approved_without_its_required_document(db, audit):
 
 
 def test_gate_approval_requires_the_named_role_not_merely_the_permission(db, audit):
-    """Alice is enterprise_owner and holds programme.approve. Gate 1 is still not hers.
+    """The named authority still means something -- for everyone except the OWNER.
 
-    Doc 3 names an approving authority per gate. If any holder of programme.approve
-    could sign any gate, the 14 named authorities would be decoration.
+    Doc 3 names an approving authority per gate. If any holder of `programme.approve` could
+    sign any gate, the 14 named authorities would be decoration. Carol proves they are not:
+    she holds steering_committee (and therefore programme.approve), she is not Gate 1's
+    authority, and she is refused.
+
+    Alice is different, and DELIBERATELY so. She owns the organisation (`tenant.admin`), and
+    the owner directive of 2026-07-13 is explicit: "owner must have the authority to issue
+    all approvals." She previously could not sign Gate 1 -- which meant that the moment she
+    appointed a colleague as sponsor, the principal of the ministry was locked out of her own
+    lifecycle by an appointment she had made herself. She can now sign, and the record says
+    she signed as the OWNER rather than pretending she was the sponsor.
+
+    What she still cannot do is sign without the evidence: see
+    test_owner_can_issue_all_approvals.py.
     """
     pid = _programme(db, audit)
     workflows.register_document(db, db.org, 1, pid, doc_type="concept_note",
                                 title="Concept Note", audit=audit)
-    assert rbac.has_permission(db, db.org, 1, "programme.approve")
 
+    # CAROL: holds programme.approve, is NOT the gate's authority, is NOT the owner. Refused.
+    assert rbac.has_permission(db, db.org, 3, "programme.approve")
+    assert not rbac.has_permission(db, db.org, 3, "tenant.admin")
     with pytest.raises(rbac.EnterprisePermissionError):
-        workflows.approve_gate(db, db.org, pid, "G01", user_id=1, audit=audit)
+        workflows.approve_gate(db, db.org, pid, "G01", user_id=3, audit=audit)
 
-    # ...and the sponsor, who holds no generic approve permission bar this one, can.
+    # BOB: the named sponsor. Signs in his own capacity, and is recorded as such.
     workflows.approve_gate(db, db.org, pid, "G01", user_id=2, audit=audit)
     row = db.execute(
         "SELECT status, decided_by_user_id FROM enterprise_stage_gates "
         " WHERE programme_id=? AND gate_code='G01'", (pid,)
     ).fetchone()
     assert row == ("Approved", 2)
+    assert db.execute(
+        "SELECT decided_by_role FROM enterprise_approvals WHERE programme_id=? "
+        "AND subject_id='G01'", (pid,)).fetchone()[0] == "programme_sponsor"
+
+
+def test_the_owner_signing_a_role_she_genuinely_holds_is_not_an_override(db, audit):
+    """The owner is not "overriding" when she is simply doing her job.
+
+    Alice holds steering_committee -- ONBOARDING_OWNER_ROLES grants it to her -- and Gate 2's
+    authority has no named post holder. So nothing is bypassed, and the record must say
+    `steering_committee`, not `enterprise_owner`. An override flag that fired on every
+    approval the owner ever made would tell an auditor nothing at all.
+
+    The genuine override -- a gate whose post is NAMED, and named to somebody else -- is
+    covered in test_owner_can_issue_all_approvals.py, where the sponsor is a colleague.
+    """
+    pid = _programme(db, audit)
+    workflows.register_document(db, db.org, 1, pid, doc_type="concept_note",
+                                title="Concept Note", audit=audit)
+    workflows.register_document(db, db.org, 1, pid, doc_type="programme_charter",
+                                title="Charter", audit=audit)
+    workflows.approve_gate(db, db.org, pid, "G01", user_id=2, audit=audit)   # sponsor signs
+
+    assert rbac.has_permission(db, db.org, 1, "tenant.admin")
+    workflows.approve_gate(db, db.org, pid, "G02", user_id=1, audit=audit)   # the owner
+
+    status, role = db.execute(
+        "SELECT g.status, a.decided_by_role FROM enterprise_stage_gates g "
+        "  JOIN enterprise_approvals a ON a.programme_id=g.programme_id "
+        "   AND a.subject_id=g.gate_code "
+        " WHERE g.programme_id=? AND g.gate_code='G02'", (pid,)).fetchone()
+    assert status == "Approved"
+    assert role == "steering_committee", (
+        "a role the owner genuinely holds was mislabelled as an owner override"
+    )
 
 
 def test_the_sponsor_cannot_also_approve_the_steering_committees_gate(db, audit):

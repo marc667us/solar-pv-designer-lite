@@ -41,7 +41,7 @@ on by accident.
 from __future__ import annotations
 
 from . import rbac, tenancy, txn
-from .constants import ROLE_CODES, ROLE_LABELS
+from .constants import GRANTABLE_ROLE_CODES, OWNER_ROLE, ROLE_LABELS
 
 
 class MemberError(Exception):
@@ -51,6 +51,21 @@ class MemberError(Exception):
     are all "you asked for something that does not make sense" errors (no such user, last
     administrator, personal workspace), not internal faults.
     """
+
+
+def _ungrantable(role_code: str) -> str:
+    """The refusal message for a role this screen may not hand out.
+
+    Input:  the rejected role code. Output: a message to flash at the operator.
+
+    Unknown roles and the owner role are both refused here, and deliberately share one
+    message: to an administrator poking at the form, "enterprise_owner" is simply not one
+    of the roles this screen offers. Ownership comes from creating the organisation.
+    """
+    if role_code == OWNER_ROLE:
+        return ("Ownership cannot be granted. The owner is whoever created the "
+                "organisation. Grant an administrator or a director role instead.")
+    return f"Unknown role: {role_code}"
 
 
 def _require_audit(wrote, what: str) -> None:
@@ -102,8 +117,9 @@ def overview(c, tenant_id: str, actor_user_id: int) -> dict:
     _guard_admin(c, tenant_id, actor_user_id)
     return {
         "members": tenancy.list_members(c, tenant_id),
+        # GRANTABLE_ROLE_CODES, not ROLE_CODES: the owner role is not on offer here.
         "assignable_roles": [(code, ROLE_LABELS.get(code, code))
-                             for code in sorted(ROLE_CODES)],
+                             for code in sorted(GRANTABLE_ROLE_CODES)],
         "is_solo": tenancy.is_solo_tenant(c, tenant_id),
     }
 
@@ -128,8 +144,8 @@ def invite(c, tenant_id: str, actor_user_id: int, identifier: str,
     """
     _guard_admin(c, tenant_id, actor_user_id)
 
-    if role_code not in ROLE_CODES:
-        raise MemberError(f"Unknown role: {role_code}")
+    if role_code not in GRANTABLE_ROLE_CODES:
+        raise MemberError(_ungrantable(role_code))
 
     user = tenancy.find_user(c, identifier)
     if not user:
@@ -214,6 +230,10 @@ def grant(c, tenant_id: str, actor_user_id: int, target_user_id: int,
     trail with a name against it, which it is.
     """
     _guard_admin(c, tenant_id, actor_user_id)
+    # The dropdown no longer offers the owner role, but the dropdown is not the control --
+    # this is. A hand-rolled POST is exactly how the escalation would be attempted.
+    if role_code not in GRANTABLE_ROLE_CODES:
+        raise MemberError(_ungrantable(role_code))
 
     audit = audit or txn.audit_on(c)
     with txn.atomic(c):
@@ -237,8 +257,20 @@ def revoke(c, tenant_id: str, actor_user_id: int, target_user_id: int,
     Input:  connection, tenant id, acting admin, the member, the role code.
     Output: none.
     Raises: EnterprisePermissionError, MemberError (including the last-administrator guard).
+
+    OWNERSHIP CANNOT BE REVOKED HERE EITHER, and the reason is the mirror of the one in
+    `grant`. Once the owner role is ungrantable, revoking it is IRREVERSIBLE -- nothing in
+    the application can ever put it back. An `org_admin` could otherwise strip the founder
+    of the stage-gate authority the owner directive exists to give them, permanently, and
+    the only repair would be an edit to the database. A power that cannot be undone is not
+    a power an administrator should hold over the person who appointed them.
     """
     _guard_admin(c, tenant_id, actor_user_id)
+    if role_code == OWNER_ROLE:
+        raise MemberError(
+            "Ownership cannot be revoked. The owner is whoever created the organisation, "
+            "and nothing in the app can grant the role back."
+        )
 
     audit = audit or txn.audit_on(c)
     with txn.atomic(c):

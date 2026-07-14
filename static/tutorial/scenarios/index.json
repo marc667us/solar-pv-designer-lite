@@ -1098,11 +1098,12 @@
       "pageId": "enterprise_lifecycle_documents",
       "title": "Lifecycle documents",
       "module": "Enterprise",
-      "steps": 4,
+      "steps": 6,
       "screens": [
-        "Documents"
+        "Documents",
+        "Report"
       ],
-      "estimatedDuration": 6
+      "estimatedDuration": 9
     }
   ]
 }

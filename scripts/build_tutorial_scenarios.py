@@ -111,6 +111,9 @@ COVERS: dict[str, list[str]] = {
     "admin_sales": ["admin_pipeline"],
     "procurement_center": ["rfqs_list"],
     "procurement": ["procurement_catalog", "procurement_suppliers"],
+    # The Generate step lands on the report page, and the register's View button
+    # goes back to it -- so the flow really does walk this screen.
+    "enterprise_lifecycle_documents": ["enterprise_document_view"],
     "capital_investment_landing": [
         "capital_investment_project", "capital_investment_digital_twin",
         "capital_investment_electrical_sld", "capital_investment_funding",
@@ -1962,6 +1965,13 @@ SCENARIOS: dict[str, tuple] = {
             step("Generate it", "Downloadable, and attached to the programme.",
                  "Generate it, and it is attached to the programme and downloadable.",
                  target='button[type="submit"], .btn-warning', screen="Documents"),
+            nav("Open the write-up", "Every generated document has a report page.",
+                "Every document you generate has a report page. Open it from the register.",
+                href_from="a.js-doc-view", screen="Report"),
+            step("Read it, print it, send it", "The same report component as a project design.",
+                 "Read it on the page, print it, download it as a PDF, or email it to the "
+                 "people who need it -- the same report component the project design uses.",
+                 target=".btn-group, .btn-warning, form", screen="Report"),
         ],
     ),
 }

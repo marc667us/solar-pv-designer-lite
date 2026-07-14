@@ -278,9 +278,95 @@
   .ent-page .table-hover>tbody>tr:hover>*{background:rgba(255,255,255,.04);
                    color:var(--sp-text)}
 
+  /* A GOLD CHIP KEEPS ITS DARK INK. (owner, 2026-07-13: "colours are making visibility bad
+     in the enterprise pages")
+
+     The blanket `.text-dark -> var(--sp-text)` rule above is correct for the surfaces this
+     block DARKENS -- bg-white and bg-light become dark panels, so their text must become
+     light. But `bg-warning` is not one of those: it stays a bright amber, and it is used all
+     over these pages as a badge (`badge bg-warning text-dark`), as the questions panel's
+     header, and as the selected-activity counter.
+
+     On those, the rule was forcing #e2e2f0 onto #ffc107 -- a contrast ratio of about 1.2:1,
+     which is not "hard to read", it is invisible. The compound selectors below outrank the
+     single-class rule, so the ink goes back to dark exactly where the background stayed
+     light, and nowhere else. */
+  .ent-page .bg-warning,
+  .ent-page .bg-warning.text-dark,
+  .ent-page .badge.bg-warning,
+  .ent-page .card-header.bg-warning,
+  .ent-page .bg-info,
+  .ent-page .bg-info.text-dark{color:#14142b !important}
+  .ent-page .bg-warning a,.ent-page .card-header.bg-warning a{color:#14142b !important}
+
   /* Panels */
   .ent-page .alert-light{background:rgba(255,255,255,.05) !important;
                    border:1px solid var(--sp-border) !important;color:var(--sp-text) !important}
+
+  /* The remaining bootstrap alert variants. Left to their defaults they are pale-on-pale
+     against this dark body -- the same failure as the white surfaces above, one layer down.
+     Each becomes a tinted dark panel with the app's own text on it, so the SEVERITY still
+     reads from the border and the icon while the words stay legible. */
+  .ent-page .alert-secondary{background:rgba(255,255,255,.05) !important;
+                   border:1px solid var(--sp-border) !important;color:var(--sp-text) !important}
+  .ent-page .alert-warning{background:rgba(245,158,11,.10) !important;
+                   border:1px solid rgba(245,158,11,.45) !important;color:var(--sp-text) !important}
+  .ent-page .alert-success{background:rgba(34,197,94,.10) !important;
+                   border:1px solid rgba(34,197,94,.45) !important;color:var(--sp-text) !important}
+  .ent-page .alert-danger{background:rgba(239,68,68,.10) !important;
+                   border:1px solid rgba(239,68,68,.45) !important;color:var(--sp-text) !important}
+  .ent-page .alert-info{background:rgba(56,189,248,.10) !important;
+                   border:1px solid rgba(56,189,248,.45) !important;color:var(--sp-text) !important}
+  .ent-page .alert a{color:var(--sp-accent)}
+
+  /* Form controls: a select/input left on its bootstrap default renders as a WHITE box with
+     dark text in the middle of a dark form -- which is where the deliverable picker, the
+     template dropdowns and every search box live. */
+  .ent-page .form-control,.ent-page .form-select{
+                   background:rgba(255,255,255,.04);border:1px solid var(--sp-border);
+                   color:var(--sp-text)}
+  .ent-page .form-control:focus,.ent-page .form-select:focus{
+                   background:rgba(255,255,255,.06);border-color:var(--sp-accent);
+                   color:var(--sp-text);box-shadow:0 0 0 .2rem rgba(245,158,11,.15)}
+  .ent-page .form-control::placeholder{color:var(--sp-muted)}
+  /* The dropdown LIST is painted by the OS, not by the page: a dark <select> whose <option>s
+     are still white-on-white is unreadable the moment it is opened. */
+  .ent-page .form-select option,.ent-page .form-select optgroup{
+                   background:var(--sp-card-bg);color:var(--sp-text)}
+  .ent-page .form-label,.ent-page .form-check-label{color:var(--sp-text)}
+  .ent-page .input-group-text{background:rgba(255,255,255,.06);
+                   border:1px solid var(--sp-border);color:var(--sp-sub)}
+
+  /* The accordion on the lifecycle-documents picker is bootstrap-default white. */
+  .ent-page .accordion-item{background:var(--sp-card-bg);border:1px solid var(--sp-border)}
+  .ent-page .accordion-button{background:rgba(255,255,255,.03);color:var(--sp-text)}
+  .ent-page .accordion-button:not(.collapsed){background:rgba(245,158,11,.10);
+                   color:var(--sp-text);box-shadow:none}
+  /* NOTE: the chevron is deliberately NOT touched. <html data-bs-theme="dark"> means
+     Bootstrap 5.3 already serves a LIGHT chevron icon; inverting it here would flip it back
+     to dark and make it vanish against these panels. */
+  .ent-page .accordion-body{background:transparent;color:var(--sp-text)}
+  .ent-page .list-group-item{background:transparent;color:var(--sp-text);
+                   border-color:var(--sp-border)}
+
+  /* THE MAGENTA. (owner, 2026-07-13: "some magenta colour make it difficult to read")
+
+     Bootstrap's default `--bs-code-color` is --bs-pink, #d63384. These pages lean on <code>
+     to name roles and permissions -- `report.generate`, `programme.edit`, `tenant.admin` --
+     sixteen times across ten templates, and base.html never overrode it. On the card surface
+     (#0f0f22) that pink lands at roughly 3.4:1: under the 4.5:1 AA floor for body text, and
+     it reads as a jarring magenta against a navy-and-gold page.
+
+     It is NOT remapped to the gold accent, because gold is what links are: a permission name
+     that looks like a link is a permission name people will try to click. A light sky tone is
+     unambiguous, sits ~11:1 on this surface, and stays distinct from both links and body
+     copy. The chip background does the rest of the work of saying "this is a literal". */
+  .ent-page code,.ent-page kbd{color:#7dd3fc;background:rgba(125,211,252,.08);
+                   border:1px solid rgba(125,211,252,.20);border-radius:4px;
+                   padding:.08em .35em;font-weight:600}
+  .ent-page kbd{color:var(--sp-text);background:rgba(255,255,255,.08)}
+  .ent-page pre,.ent-page pre code{background:rgba(255,255,255,.04);color:var(--sp-text);
+                   border:1px solid var(--sp-border)}
 
   /* Accents: links and the "current" badge take the app's gold, like everywhere else. */
   .ent-page a:not(.btn):not(.badge){color:var(--sp-accent)}

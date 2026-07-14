@@ -121,6 +121,14 @@ def live(tmp_path_factory):
             c, tid, uid, pid, code="TUT-SITE-1", name="Kpando Senior High",
             beneficiary_type="school", fields={"community": "Kpando"},
         )
+        # A GENERATED DOCUMENT, for the same reason as the site above. The register table --
+        # and the "View" link the tutorial navigates to in order to reach the report page --
+        # only exists once the programme HAS a document. Verified against a programme that
+        # has never generated one, the documents tutorial proves nothing about the real page.
+        documents.generate_document(
+            c, tid, uid, pid, activity_codes=["P01_A01"],
+            deliverable_code="P01_D01", use_ai=False,
+        )
 
     with wa.app.test_client() as client:
         with client.session_transaction() as s:
@@ -219,6 +227,13 @@ def _selector_matches(html: str, selector: str) -> bool:
             if re.search(rf'{attr}="[^"]*{re.escape(val)}', html, flags=re.I):
                 return True
             continue
+        # A compound `tag.class` / `tag#id` (e.g. `a.js-doc-view`) is a perfectly ordinary
+        # selector, and without this the tag prefix fell through to the bare-tag branch
+        # below -- which then hunted for the literal string "<a.js-doc-view" and reported a
+        # live control as dead. The class/id is the discriminating half, so match on that.
+        m = re.match(r'^\w+([.#][\w-]+)$', alt)
+        if m:
+            alt = m.group(1)
         if alt.startswith("."):
             if re.search(rf'class="[^"]*\b{re.escape(alt[1:])}\b', html):
                 return True

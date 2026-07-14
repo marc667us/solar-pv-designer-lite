@@ -331,6 +331,12 @@
             <td><span class="badge bg-secondary">{{ d.activity_count }}</span></td>
             <td class="small text-muted">{{ d.created_at }}</td>
             <td class="text-end">
+              {# Read/print/email lives on the report page. Without this link the report page
+                 is reachable only in the instant after generating it. #}
+              <a class="btn btn-sm btn-warning js-doc-view"
+                 href="{{ url_for('enterprise_document_view', document_id=d.id) }}">
+                View
+              </a>
               <a class="btn btn-sm btn-outline-warning"
                  href="{{ url_for('enterprise_document_download', document_id=d.id) }}">
                 Download

@@ -45,6 +45,7 @@ from .constants import (
     GATE_AUTHORITY_HOLDER_COLUMN,
     GATE_CLOSING_PHASE,
     HOLD_STATES,
+    OWNER_ROLE,
     PHASE_ENTRY_REQUIRED_GATES,
     PHASE_STATUS,
     PSEUDO_STATE_STATUS,
@@ -683,13 +684,58 @@ def approve_gate(c, tenant_id: str, programme_id: int, gate_code: str, user_id: 
 
     Approving an already-approved gate is a no-op, not an error: a double-click must not
     produce a second approval record.
+
+    THE OWNER MAY ALWAYS SIGN (owner directive, 2026-07-13: "owner must have the authority
+    to issue all approvals")
+    ------------------------------------------------------------------------------------
+    The organisation's owner -- the person who created it, who holds `tenant.admin` -- may
+    approve ANY gate, whatever role it names and whoever holds the post.
+
+    This closes a real trap. The ROLE check and the NAMED POST HOLDER check are separate,
+    and the second one bites the owner specifically: a programme records a sponsor, a
+    director and a manager BY USER ID, and if the owner names a colleague as sponsor then
+    the owner -- who holds `programme_sponsor` and owns the entire organisation -- can never
+    sign Gate 1 or Gate 4 on that programme. The ministry's principal is locked out of their
+    own lifecycle by an appointment they themselves made.
+
+    WHAT THE OVERRIDE DOES *NOT* DO, and this is the important half: it grants AUTHORITY, not
+    EXEMPTION FROM EVIDENCE. `gates.evaluate_gate` still runs, unchanged, below. The owner
+    can sign any gate; they cannot sign a gate whose required document does not exist. An
+    owner who could skip the evidence would make every gate in the module decorative, and
+    that is not what "authority to approve" means.
+
+    C11 also still holds: the approver is a human. An AI recommendation remains evidence,
+    never the decision.
+
+    Every override is RECORDED AS AN OVERRIDE in the audit trail (`owner_override`, plus the
+    authority it stood in for and the post holder it bypassed). Accountability is the point
+    of the named-post-holder rule, and an override that left no trace would destroy it; one
+    that leaves a trace merely moves the accountability onto the owner, where it belongs.
     """
     gates.require_human_approval_actor(user_id, ai_recommendation_id)
     _load_programme(c, tenant_id, programme_id)  # C13
 
     authority = gates.gate_authority(gate_code)
-    rbac.require_role(c, tenant_id, user_id, authority, programme_id=programme_id)
-    _require_named_post_holder(c, tenant_id, programme_id, authority, user_id)
+
+    # The normal checks run FIRST and unchanged, for everyone including the owner. The owner
+    # is only ever RESCUED from a refusal -- so `override_used` is true only when the owner
+    # would genuinely have been turned away, and an owner who legitimately holds the
+    # authority signs as that authority, exactly as before. An "override" flag that fired on
+    # every approval the owner ever made would tell an auditor nothing.
+    override_used = False
+    try:
+        rbac.require_role(c, tenant_id, user_id, authority, programme_id=programme_id)
+        _require_named_post_holder(c, tenant_id, programme_id, authority, user_id)
+    except rbac.EnterprisePermissionError:
+        # The OWNER ROLE, not the `tenant.admin` PERMISSION. Codex, HIGH: `org_admin` also
+        # carries `tenant.admin`, so keying the rescue off the permission would have handed
+        # C01 bypass to every delegated administrator -- and then stamped the approvals table
+        # `enterprise_owner`, naming a person who is not the owner. The directive is "the
+        # OWNER must have the authority to issue all approvals"; it is not "administrators
+        # may sign in other people's names".
+        if OWNER_ROLE not in rbac.roles_for_user(c, tenant_id, user_id):
+            raise
+        override_used = True
 
     row = c.execute(
         "SELECT status FROM enterprise_stage_gates "
@@ -712,18 +758,27 @@ def approve_gate(c, tenant_id: str, programme_id: int, gate_code: str, user_id: 
             " WHERE tenant_id=? AND programme_id=? AND gate_code=?",
             (user_id, comment, tenant_id, programme_id, gate_code),
         )
+        # The capacity they ACTUALLY signed in. Recording `programme_sponsor` for an owner
+        # who is not the sponsor and never held the post would put a false statement in the
+        # approvals table -- the one table whose entire purpose is to say who decided what.
+        signed_as = OWNER_ROLE if override_used else authority
         c.execute(
             "INSERT INTO enterprise_approvals "
             "(tenant_id, programme_id, subject_type, subject_id, approval_type, "
             " decision, decided_by_user_id, decided_by_role, ai_recommendation_id, comment) "
             "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (tenant_id, programme_id, "gate", gate_code, "stage_gate", "Approved",
-             user_id, authority, ai_recommendation_id, comment),
+             user_id, signed_as, ai_recommendation_id, comment),
         )
         gates.require_audit_written(
             audit("ENTERPRISE_GATE_APPROVED", user_id=user_id, tenant_id=tenant_id,
                   details={"programme_id": programme_id, "gate": gate_code,
-                           "role": authority,
+                           "role": signed_as,
+                           # An override is a real event and is named as one. The gate's own
+                           # authority is kept alongside it, so the record says exactly what
+                           # was stood in for rather than merely that somebody signed.
+                           "owner_override": override_used,
+                           "authority_required": authority,
                            "ai_recommendation_id": ai_recommendation_id}),
             f"gate {gate_code} approval",
         )

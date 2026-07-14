@@ -911,10 +911,31 @@ _R1_OPERATIONAL_ROLES: frozenset[str] = frozenset({
     "district_coordinator",
 })
 
-# What create_organisation actually assigns. `enterprise_owner` first: it is the one that
+# THE OWNER. One role, named once, so that "is this person the owner?" has exactly one
+# answer everywhere. It is NOT the same question as "does this person hold `tenant.admin`?"
+# -- `org_admin` holds that permission too, and an owner-only power keyed off the permission
+# would silently extend to every delegated administrator (Codex, HIGH, 2026-07-13).
+OWNER_ROLE: str = "enterprise_owner"
+
+# OWNERSHIP IS NOT A ROLE YOU HAND OUT. It is conferred by CREATING the organisation, and
+# `create_organisation` is the only thing that confers it.
+#
+# Codex, HIGH, 2026-07-13 (second order): `members.grant()` is guarded by `tenant.admin`,
+# which `org_admin` also carries, and its assignable list was every role in ROLE_CODES. So a
+# delegated administrator could grant THEMSELVES `enterprise_owner` and thereby help
+# themselves to the owner's stage-gate override -- signing in the name of a post they were
+# never appointed to. members.grant()/invite() therefore refuse this role.
+#
+# The neighbouring "self-granting is allowed" rule in members.py still stands for every
+# OPERATIONAL role: an admin who can grant a role to anyone gains nothing by being barred
+# from naming themselves. That argument does not reach ownership, because ownership is the
+# thing the grant power itself derives from -- letting it be granted makes it a closed loop.
+GRANTABLE_ROLE_CODES: frozenset[str] = ROLE_CODES - {OWNER_ROLE}
+
+# What create_organisation actually assigns. The owner role first: it is the one that
 # carries `tenant.admin`, and therefore the one that lets them hand any of the others away.
 ONBOARDING_OWNER_ROLES: tuple[str, ...] = tuple(
-    ["enterprise_owner"]
+    [OWNER_ROLE]
     + sorted(_R1_GATE_AUTHORITIES | _R1_OPERATIONAL_ROLES)
 )
 

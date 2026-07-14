@@ -7,10 +7,13 @@
   "version": 2,
   "language": "en-US",
   "screens": [
-    "Documents"
+    "Documents",
+    "Report"
   ],
-  "covers": [],
-  "estimatedDuration": 6,
+  "covers": [
+    "enterprise_document_view"
+  ],
+  "estimatedDuration": 9,
   "steps": [
     {
       "title": "What this phase consists of",
@@ -63,6 +66,33 @@
       "screen": "Documents",
       "fallbackMessage": "Generate it: not visible on this screen yet.",
       "stepNumber": 4
+    },
+    {
+      "title": "Open the write-up",
+      "description": "Every generated document has a report page.",
+      "voiceScript": "Every document you generate has a report page. Open it from the register.",
+      "captionText": "Every document you generate has a report page. Open it from the register.",
+      "targetSelector": "a.js-doc-view",
+      "action": "navigate",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Report",
+      "fallbackMessage": "Open the write-up: the next screen is not reachable from here.",
+      "hrefFromSelector": "a.js-doc-view",
+      "stepNumber": 5
+    },
+    {
+      "title": "Read it, print it, send it",
+      "description": "The same report component as a project design.",
+      "voiceScript": "Read it on the page, print it, download it as a PDF, or email it to the people who need it -- the same report component the project design uses.",
+      "captionText": "Read it on the page, print it, download it as a PDF, or email it to the people who need it -- the same report component the project design uses.",
+      "targetSelector": ".btn-group, .btn-warning, form",
+      "action": "moveCursor",
+      "duration": 700,
+      "delayBefore": 120,
+      "screen": "Report",
+      "fallbackMessage": "Read it, print it, send it: not visible on this screen yet.",
+      "stepNumber": 6
     }
   ]
 }
