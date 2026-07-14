@@ -764,20 +764,27 @@ def _write_from_facts(activity_text: str, facts: dict) -> tuple[str, bool]:
     THERE IS NO BOILERPLATE LEAD SENTENCE. An earlier draft opened every section with "For X,
     this is addressed as follows: <the activity, restated>" -- which is not writing, it is
     the heading again in a longer coat, fourteen times in a row. The facts are the section.
+
+    AND THERE IS NO DESCRIPTION ECHO EITHER (owner, 2026-07-14: "the agent answering the
+    question just answered every question with the same statement -- fix it, and don't use my
+    information"). This function used to fall back to "This is addressed within the scope of X,
+    which is described as follows: <the operator's own description>." For a new programme --
+    no sponsor, no sites, no design -- NO topic has a fact, so that fallback fired for every
+    activity and wrote the operator's own words back at them 453 times, identically.
+
+    Two things were wrong with it, and the second is the serious one:
+      1. It is the same statement for every question, which answers none of them.
+      2. It is NON-EMPTY, so it read as an answer, and the gap it was hiding never raised a
+         question. That is precisely the failure of 2026-07-13 -- boilerplate is worse than a
+         blank, because a blank is honest and asks to be filled.
+
+    So when the app holds no fact bearing on this activity, it now says NOTHING and returns
+    thin. The caller writes the question instead. Silence is the honest failure.
     """
     body = _facts_for_topic(_topic_of(activity_text), facts)
     if body:
         return " ".join(body), False
-
-    # The programme's own description is the material of last resort, and it is a real one:
-    # it is the operator's statement of what the programme IS, and the owner named it as the
-    # thing the app must write from.
-    if facts.get("description"):
-        return (f"This is addressed within the scope of {facts.get('name') or 'the programme'}, "
-                f"which is described as follows: {facts['description'].rstrip('.')}."), True
-
-    return (f"{facts.get('name') or 'The programme'} has not yet recorded what this activity "
-            f"requires."), True
+    return "", True
 
 
 def technical_financial_background(c, tenant_id: str, programme_id: int) -> dict:
@@ -1300,8 +1307,16 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
                         # answerable, and an answer still outranks everything) -- but it
                         # supplements the document instead of replacing it.
                         prose, thin = _write_from_facts(text, facts)
-                        md.append(prose)
-                        md.append("")
+                        if prose:
+                            md.append(prose)
+                            md.append("")
+                        else:
+                            # The app holds no fact bearing on this activity. It says so, in
+                            # one line, and then asks. What it must NOT do is pad the section
+                            # with the programme's description -- a non-empty section that
+                            # answers nothing reads as done, and the gap never surfaces.
+                            md.append("*Not yet recorded.*")
+                            md.append("")
 
                         if thin:
                             gaps += 1
@@ -1495,13 +1510,53 @@ def draft_answers(c, tenant_id: str, user_id: int, programme_id: int, *,
     # Whatever the model did not ground, the app writes from what it actually knows. This is
     # the same writer the document itself uses, so a drafted answer and a generated section
     # never disagree about the facts.
+    #
+    # AN ACTIVITY THE APP HAS NO FACT FOR IS LEFT ALONE -- not filled. _write_from_facts now
+    # returns "" there rather than echoing the programme description, and writing "" would be
+    # the same lie in a shorter form: a row exists, the page counts it as drafted, and the
+    # operator scrolls past an empty box believing the agent had its say. It stays UNANSWERED,
+    # its question stays visible, and the count below reports it honestly.
+    #
+    # NO SENTENCE IS EVER WRITTEN TWICE. This is the owner's bug of 2026-07-14 -- "the agent
+    # just answered every question with the same statement" -- and its cause is structural:
+    # _facts_for_topic keys on the TOPIC, not on the activity, so every activity that mentions
+    # a site got the same paragraph about the site register, and every activity that mentions
+    # money got the same paragraph about the budget. Across 453 activities and twelve topics
+    # that is a dozen paragraphs, pasted hundreds of times.
+    #
+    # The deterministic writer cannot answer 453 distinct questions from ten stored fields, and
+    # pretending otherwise is what produced the wall of duplicates. So a fact is stated ONCE,
+    # under the activity that reaches it first, and any later activity that would receive the
+    # very same words is left unanswered with its question showing. A repeated paragraph is not
+    # a second answer; it is the first answer, in the wrong place, hiding a question.
+    #
+    # Deduped against what is ALREADY STORED as well as against this run, so pressing the
+    # button twice cannot slowly fill the phase with copies of paragraph one.
+    seen_bodies = {(a.get("answer") or "").strip()
+                   for a in existing.values() if (a.get("answer") or "").strip()}
+    seen_bodies.update(t.strip() for t in drafted.values())
+
+    unanswered = 0
     for acode, atext in todo:
-        if acode not in drafted:
-            body, _thin = _write_from_facts(atext, facts)
+        if acode in drafted:
+            continue
+        body, _thin = _write_from_facts(atext, facts)
+        body = body.strip()
+
+        # AN ACTIVITY IS NEVER A DUPLICATE OF ITSELF. Its own previous draft is in
+        # `seen_bodies` -- it was read out of the table above -- so a bare `body in
+        # seen_bodies` test would refuse to re-draft anything on the second press of the
+        # button, and the operator would watch the agent do nothing and report nothing.
+        own = (existing.get(acode) or {}).get("answer") or ""
+        if body and (body == own.strip() or body not in seen_bodies):
             drafted[acode] = body
+            seen_bodies.add(body)
+        else:
+            unanswered += 1
 
     if not drafted:
-        return {"drafted": 0, "ai": 0, "from_facts": 0, "skipped_answered": skipped}
+        return {"drafted": 0, "ai": 0, "from_facts": 0, "skipped_answered": skipped,
+                "unanswered": unanswered}
 
     audit = audit or txn.audit_on(c)
     written: set[str] = set()
@@ -1534,13 +1589,15 @@ def draft_answers(c, tenant_id: str, user_id: int, programme_id: int, *,
             audit("ENTERPRISE_ANSWERS_DRAFTED", user_id=user_id, tenant_id=tenant_id,
                   details={"programme_id": programme_id, "phase": phase_code or "ALL",
                            "drafted": len(written), "ai": len(from_ai & written),
-                           "from_facts": len(written - from_ai)}),
+                           "from_facts": len(written - from_ai),
+                           "unanswered": unanswered}),
             "drafted answers",
         )
 
     return {"drafted": len(written), "ai": len(from_ai & written),
             "from_facts": len(written - from_ai),
-            "skipped_answered": skipped + (len(drafted) - len(written))}
+            "skipped_answered": skipped + (len(drafted) - len(written)),
+            "unanswered": unanswered}
 
 
 def answer_sheet(c, tenant_id: str, programme_id: int) -> list[dict]:

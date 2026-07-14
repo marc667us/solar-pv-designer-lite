@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% import "enterprise_programme/_application_steps.html" as chain %}
+{% block title %}My applications{% endblock %}
+
+{% block content %}
+<div class="ent-page container py-4">
+
+  <h1 class="h3 mb-3">My applications</h1>
+
+  {% if not tracks %}
+  <div class="alert alert-secondary">
+    <i class="bi bi-inbox me-2"></i>
+    You have not applied to a programme yet. Open a programme you have been invited to and
+    press <strong>Apply</strong>.
+  </div>
+  {% endif %}
+
+  {% for t in tracks %}
+  {% set a = t.application %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+        <div>
+          <h2 class="h5 mb-1">
+            <a href="{{ url_for('enterprise_application_track', application_id=a.id) }}">
+              {{ a.site_name }}
+            </a>
+          </h2>
+          <div class="text-muted small">#{{ a.id }} · submitted {{ a.created_at }}</div>
+        </div>
+        <span class="badge bg-secondary align-self-center">{{ a.status }}</span>
+      </div>
+
+      {{ chain.steps_strip(t.steps) }}
+
+      {% if t.next_with %}
+      <div class="text-muted small mt-2">
+        <i class="bi bi-hourglass-split me-1"></i>Waiting on {{ t.next_with }}.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+
+</div>
+{% endblock %}

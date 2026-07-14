@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Sponsors — {{ programme.name }}{% endblock %}
+
+{#
+  Owner, 2026-07-14: "potential sponsors must be registered in the system and the programmer
+  can select them from a drop down list ... first sponsor, second sponsor and third, each case
+  a drop down list", and then: "look, check and reuse the funding in the standard design".
+
+  So the lists below are NOT a new sponsor register. They are the platform's existing APPROVED
+  funding institutions -- the same ones the standard design's funding module offers -- which is
+  why each option can show the money it can actually lend.
+#}
+
+{% block content %}
+<div class="ent-page container py-4">
+
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <div>
+      <h1 class="h3 mb-1">Sponsors</h1>
+      <div class="text-muted">
+        {{ programme.name }} <span class="text-sub">({{ programme.code }})</span>
+      </div>
+    </div>
+    <a class="btn btn-outline-secondary"
+       href="{{ url_for('enterprise_programme_detail', programme_id=programme_id) }}">
+      <i class="bi bi-arrow-left me-1"></i>Programme
+    </a>
+  </div>
+
+  {% if not approved %}
+  <div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle me-2"></i>
+    <strong>No approved funding institutions yet.</strong>
+    Sponsors are chosen from the platform's funding register — the same one the standard design
+    uses. Until an institution is registered and approved there, there is nothing to name here.
+  </div>
+  {% endif %}
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <form method="post">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+        {% for row in chosen %}
+        <div class="mb-3">
+          <label class="form-label" for="{{ row.slot }}"><strong>{{ row.slot_label }}</strong></label>
+          <select class="form-select" id="{{ row.slot }}" name="{{ row.slot }}"
+                  {% if not can_edit or not approved %}disabled{% endif %}>
+            <option value="">— not named —</option>
+            {% for s in approved %}
+            <option value="{{ s.institution_id }}"
+                    {% if s.institution_id == row.institution_id %}selected{% endif %}>
+              {{ s.name }}{% if s.country %} · {{ s.country }}{% endif %}
+              {%- if s.loan_max %} · lends up to {{ '{:,.0f}'.format(s.loan_max|float) }}{% endif %}
+              {%- if s.interest_min %} · from {{ s.interest_min }}%{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+
+          {% if row.institution_id and not row.sponsor %}
+          <div class="form-text text-warning">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            “{{ row.institution_id }}” is named on this programme but is no longer an approved
+            institution. Pick another, or have it re-approved in the funding register.
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+
+        {% if can_edit and approved %}
+        <button class="btn btn-warning">
+          <i class="bi bi-check2 me-1"></i>Save sponsors
+        </button>
+        <span class="text-muted small ms-2">
+          First, second and third must be different institutions.
+        </span>
+        {% else %}
+        <div class="text-muted small">
+          <i class="bi bi-eye me-1"></i>You can read this but not change it — naming a sponsor
+          needs edit rights on this programme.
+        </div>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+
+  {# The feasibility study has to answer "is there a preliminary sponsor letter?" -- so the
+     answer must come from a document that actually exists, not from a box somebody ticked. #}
+  <div class="card">
+    <div class="card-body">
+      <h2 class="h6 mb-2">Preliminary sponsor letter</h2>
+      {% if letter.found %}
+      <div class="alert alert-success mb-0">
+        <i class="bi bi-check-circle me-2"></i>
+        Held: <strong>{{ letter.title }}</strong>
+        <a class="ms-2"
+           href="{{ url_for('enterprise_document_view', document_id=letter.document_id) }}">Open</a>
+      </div>
+      {% else %}
+      <div class="alert alert-secondary mb-0">
+        <i class="bi bi-dash-circle me-2"></i>
+        None on file. The feasibility study will report this programme as having no preliminary
+        letter of support until one is uploaded against it.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}

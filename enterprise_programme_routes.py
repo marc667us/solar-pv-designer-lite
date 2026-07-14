@@ -39,14 +39,17 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 from app.enterprise_programme import (
+    applications,
     beneficiaries, constants, documents, dropdowns, flags, gates, imports, members,
-    rbac, reports, rollout, site_qualification, tenancy, txn, workflows,
+    rbac, reports, rollout, site_qualification, sponsors, tenancy, txn, workflows,
 )
 from app.enterprise_programme.documents import DocumentError
 from app.enterprise_programme.reports import ReportError
 from app.enterprise_programme.engines import EngineError
 from app.enterprise_programme.members import MemberError
 from app.enterprise_programme.rollout import RolloutError
+from app.enterprise_programme.applications import ApplicationError
+from app.enterprise_programme.sponsors import SponsorError
 # `templates` is the template ENGINE, not Jinja. Aliased so that nothing in this file can
 # be misread as touching Flask's template loader.
 from app.enterprise_programme import templates as template_engine
@@ -121,6 +124,8 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
         beneficiaries.ensure_schema(c)  # no-op on Postgres
         documents.ensure_schema(c)      # no-op on Postgres (migration 028 owns it)
         rollout.ensure_schema(c)        # no-op on Postgres (migration 029 owns it)
+        sponsors.ensure_schema(c)       # no-op on Postgres (migration 030 owns it)
+        applications.ensure_schema(c)   # no-op on Postgres (migration 031 owns it)
         _schema_ready.add(key)
 
     # ---- guards ----------------------------------------------------------
@@ -1383,8 +1388,20 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 flash(str(e), "error")
                 return back
 
-        if not r["drafted"]:
+        # WHAT THE AGENT COULD NOT ANSWER IS STATED, NOT PAPERED OVER (owner, 2026-07-14: the
+        # agent "answered every question with the same statement"). It used to fill an activity
+        # it had no fact for with the programme's own description -- so a run that had actually
+        # answered nothing still reported a triumphant count. An activity with nothing behind
+        # it is now left blank with its question showing, and said out loud here.
+        gap = r.get("unanswered") or 0
+        gap_msg = (f" {gap} activit{'y' if gap == 1 else 'ies'} could not be answered from what "
+                   f"this programme has recorded — those are left blank with their question, "
+                   f"for you to answer or to fill in by approving a design." if gap else "")
+
+        if not r["drafted"] and not gap:
             flash("Nothing to draft — every activity here already has your answer.", "info")
+        elif not r["drafted"]:
+            flash("The agent could not answer anything here yet." + gap_msg, "warning")
         else:
             # The counts are stated plainly. An answer the model wrote and an answer built
             # from the programme's own record are not the same kind of thing, and the
@@ -1395,7 +1412,8 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 f"({r['ai']} written by the AI, {r['from_facts']} from the programme's own "
                 f"records). Review, edit anything that is wrong, and Save."
                 + (f" {r['skipped_answered']} of your own answers were left untouched."
-                   if r["skipped_answered"] else ""),
+                   if r["skipped_answered"] else "")
+                + gap_msg,
                 "success")
         return back
 
@@ -2340,6 +2358,232 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 "X-Content-Type-Options": "nosniff",
             },
         )
+
+    # ================= SPONSORS + BENEFICIARY APPLICATIONS =================
+    #
+    # OWNER, 2026-07-14: "the beneficiaries must register for the program and track progress
+    # from when they submit app to when their approved"; "the first level of application is
+    # the beneficiary organisation, the programme level approval and finally sponsor level
+    # approval"; "all approvals must be set by the individual approving entities".
+
+    @app.route("/enterprise/programmes/<int:programme_id>/sponsors",
+               methods=["GET", "POST"])
+    @login_required
+    def enterprise_programme_sponsors(programme_id: int):
+        """Pick the programme's first, second and third sponsor.
+
+        "users must select their preferred sponsors" -- from the EXISTING approved funding
+        registry (financial_institutions), not from a second one built for this screen.
+        """
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+
+            try:
+                prog = documents.programme_facts(c, active, programme_id)
+            except (DocumentError, EnterpriseGateError):
+                abort(404)
+
+            if request.method == "POST":
+                csrf_protect()
+                try:
+                    sponsors.set_programme_sponsors(
+                        c, active, uid, programme_id,
+                        sponsor_1_id=request.form.get("sponsor_1_id"),
+                        sponsor_2_id=request.form.get("sponsor_2_id"),
+                        sponsor_3_id=request.form.get("sponsor_3_id"),
+                    )
+                except EnterprisePermissionError:
+                    abort(403)
+                except SponsorError as e:
+                    if e.control == "C13":
+                        abort(404)
+                    flash(str(e), "error")
+                    return redirect(url_for("enterprise_programme_sponsors",
+                                            programme_id=programme_id))
+                flash("Sponsors saved.", "success")
+                return redirect(url_for("enterprise_programme_sponsors",
+                                        programme_id=programme_id))
+
+            return render_template(
+                "enterprise_programme/sponsors.html",
+                programme=prog, programme_id=programme_id,
+                approved=sponsors.approved_sponsors(c),
+                chosen=sponsors.programme_sponsors(c, active, programme_id),
+                letter=sponsors.has_preliminary_letter(c, active, programme_id),
+                can_edit=rbac.has_permission(c, active, uid, "programme.edit",
+                                             programme_id=programme_id),
+            )
+
+    @app.route("/enterprise/programmes/<int:programme_id>/apply", methods=["GET", "POST"])
+    @login_required
+    def enterprise_apply(programme_id: int):
+        """A beneficiary user applies -- THROUGH THEIR ORGANISATION.
+
+        The applicant's own active tenant IS the beneficiary organisation, and that is what
+        makes level 1 answerable: it names which organisation has to vouch for them. A
+        PERSONAL workspace can vouch for nobody, so it is refused with an instruction rather
+        than accepted into a queue no one is able to clear.
+
+        The programme is looked up WITHOUT the applicant's tenant, deliberately: the applicant
+        is not a member of the programme's organisation, and a tenant-scoped read would hide
+        from them the very programme they are applying to. Only its public description is
+        shown, and the application is written against the PROGRAMME's tenant.
+        """
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            org = _tenant(c, uid)
+
+            row = c.execute(
+                "SELECT id, code, name, description, country, tenant_id "
+                "  FROM enterprise_programme_registry WHERE id=?", (programme_id,)
+            ).fetchone()
+            if not row:
+                abort(404)
+            prog_tenant = row[5]
+
+            if tenancy.is_personal_tenant(c, org):
+                flash("Join or create your organisation first — an application is submitted "
+                      "through the organisation that vouches for it.", "error")
+                return redirect(url_for("enterprise_onboarding"))
+
+            if request.method == "POST":
+                csrf_protect()
+                try:
+                    aid = applications.submit_application(
+                        c, prog_tenant, programme_id,
+                        applicant_user_id=uid, applicant_org_tenant_id=org,
+                        site_name=request.form.get("site_name") or "",
+                        contact_email=request.form.get("contact_email") or "",
+                        contact_phone=request.form.get("contact_phone") or "",
+                        country=request.form.get("country") or "",
+                        region=request.form.get("region") or "",
+                        monthly_bill=request.form.get("monthly_bill"),
+                        monthly_kwh=request.form.get("monthly_kwh"),
+                        tariff_category=request.form.get("tariff_category") or "",
+                        area_m2=request.form.get("area_m2"),
+                    )
+                except ApplicationError as e:
+                    flash(str(e), "error")
+                    return redirect(url_for("enterprise_apply",
+                                            programme_id=programme_id))
+                flash("Application submitted. Your bill check has been run and attached — "
+                      "you can follow it from here.", "success")
+                return redirect(url_for("enterprise_application_track", application_id=aid))
+
+            return render_template(
+                "enterprise_programme/apply.html",
+                programme={"id": row[0], "code": row[1], "name": row[2],
+                           "description": row[3], "country": row[4]},
+                programme_id=programme_id,
+            )
+
+    @app.route("/enterprise/my-applications")
+    @login_required
+    def enterprise_my_applications():
+        """Every application this beneficiary user has submitted, and where each one sits."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            rows = applications.my_applications(c, uid)
+            tracks = [applications.track(c, r["id"], uid) for r in rows]
+        return render_template("enterprise_programme/my_applications.html", tracks=tracks)
+
+    @app.route("/enterprise/applications/<int:application_id>/track")
+    @login_required
+    def enterprise_application_track(application_id: int):
+        """"track progress from when they submit app to when their approved"."""
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            try:
+                t = applications.track(c, application_id, uid)
+            except ApplicationError:
+                abort(404)          # C13 -- not-yours and not-there are one answer
+        return render_template("enterprise_programme/application_track.html", **t)
+
+    @app.route("/enterprise/applications/inbox")
+    @login_required
+    def enterprise_application_inbox():
+        """The applications waiting on YOU, at whichever level you are the entity for.
+
+        A reviewer's queue holds only what they can actually act on. Showing them work that is
+        blocked on somebody else is how a queue stops being read.
+        """
+        _require_module()
+        uid = _uid()
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            may_review = rbac.has_permission(c, active, uid, "programme.edit")
+
+            # LEVEL 1 -- as a BENEFICIARY ORGANISATION: the applications of our own members.
+            l1 = applications.inbox(c, level=1, org_tenant_id=active) if may_review else []
+            # LEVEL 2 -- as the PROGRAMME: what our own programmes are waiting on.
+            l2 = applications.inbox(c, level=2, tenant_id=active) if may_review else []
+            # LEVEL 3 -- as a SPONSOR. Keyed on the USER, not on the active tenant: a sponsor
+            # is not a member of the ministry's organisation, so a tenant-scoped read would
+            # look inside their own organisation and correctly find nothing.
+            l3 = applications.sponsor_inbox(c, uid)
+
+        return render_template("enterprise_programme/application_inbox.html",
+                               l1=l1, l2=l2, l3=l3, labels=applications.LEVEL_LABELS,
+                               decisions=applications.DECISIONS)
+
+    @app.route("/enterprise/applications/<int:application_id>/decide", methods=["POST"])
+    @login_required
+    def enterprise_application_decide(application_id: int):
+        """One entity sets ITS OWN approval. The service refuses anything else."""
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        back = redirect(url_for("enterprise_application_inbox"))
+
+        try:
+            level = int(request.form.get("level") or 0)
+        except ValueError:
+            abort(400)
+
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+
+            # The application's tenant is the PROGRAMME's -- which, for a level-1 reviewer, is
+            # NOT their own. So it is resolved from the row, and WHO MAY SIGN WHAT is left
+            # entirely to applications.decide(). That judgement belongs in one place, and a
+            # route that pre-guessed it would eventually disagree with the service.
+            row = c.execute(
+                "SELECT tenant_id FROM enterprise_applications WHERE id=?",
+                (application_id,)).fetchone()
+            if not row:
+                abort(404)
+
+            try:
+                applications.decide(
+                    c, row[0], uid, application_id,
+                    level=level,
+                    decision=request.form.get("decision") or "",
+                    note=request.form.get("note") or "",
+                )
+            except EnterprisePermissionError:
+                abort(403)
+            except ApplicationError as e:
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+                return back
+
+        flash("Decision recorded.", "success")
+        return back
 
     @app.route("/enterprise/jobs/drain", methods=["POST"])
     def enterprise_drain_jobs():

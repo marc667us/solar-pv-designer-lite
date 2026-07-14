@@ -1,0 +1,29 @@
+{#
+  The three-level chain, drawn once and reused by the applicant's tracker and their list.
+
+  "track progress from when they submit app to when their approved" (owner, 2026-07-14). The
+  states are the ones applications.track() derives -- waiting is "the ball is here", pending is
+  "not its turn yet". A screen that showed both as the same grey would hide the only thing the
+  applicant came to find out.
+#}
+{% macro steps_strip(steps) -%}
+<div class="d-flex flex-wrap align-items-center gap-2">
+  {% for s in steps %}
+    {% if s.state == 'approved' %}
+      {% set cls = 'bg-success' %}{% set icon = 'bi-check-circle-fill' %}{% set word = 'Approved' %}
+    {% elif s.state == 'rejected' %}
+      {% set cls = 'bg-danger' %}{% set icon = 'bi-x-circle-fill' %}{% set word = 'Rejected' %}
+    {% elif s.state == 'returned' %}
+      {% set cls = 'bg-warning text-dark' %}{% set icon = 'bi-arrow-counterclockwise' %}{% set word = 'Returned to you' %}
+    {% elif s.state == 'waiting' %}
+      {% set cls = 'bg-primary' %}{% set icon = 'bi-hourglass-split' %}{% set word = 'With them now' %}
+    {% else %}
+      {% set cls = 'bg-secondary' %}{% set icon = 'bi-dash-circle' %}{% set word = 'Not yet' %}
+    {% endif %}
+    <span class="badge {{ cls }}">
+      <i class="bi {{ icon }} me-1"></i>{{ s.label }} — {{ word }}
+    </span>
+    {% if not loop.last %}<i class="bi bi-chevron-right text-muted small"></i>{% endif %}
+  {% endfor %}
+</div>
+{%- endmacro %}

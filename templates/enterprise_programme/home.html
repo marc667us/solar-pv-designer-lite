@@ -9,6 +9,14 @@
       <div class="text-muted small">Plan, gate and deliver a portfolio of solar projects.</div>
     </div>
     <div class="d-flex gap-2">
+      {# Both sides of the application chain. "My applications" is what a beneficiary user
+         comes here for; "To review" is the queue an approving entity clears. #}
+      <a href="{{ url_for('enterprise_my_applications') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-clipboard-check me-1"></i>My applications
+      </a>
+      <a href="{{ url_for('enterprise_application_inbox') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-inbox me-1"></i>To review
+      </a>
       <a href="{{ url_for('enterprise_members') }}" class="btn btn-outline-secondary">
         <i class="bi bi-people-fill me-1"></i>Members
       </a>

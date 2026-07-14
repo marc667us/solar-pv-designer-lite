@@ -581,6 +581,54 @@ def inbox(c, *, level: int, tenant_id: str = "", org_tenant_id: str = "",
     return [dict(zip(_KEYS, r)) for r in rows]
 
 
+def sponsor_inbox(c, user_id: int) -> list[dict]:
+    """The applications waiting on a SPONSOR this user may sign for.
+
+    Input:  connection, the user asking.
+    Output: [{...application, sponsor_id}] -- level 1 and 2 approved, level 3 not yet decided.
+
+    KEYED ON THE USER, NOT ON A TENANT -- and that is the whole point. A sponsor's own active
+    tenant is their institution's organisation; the programme they are sponsoring belongs to a
+    ministry they are not a member of. So `inbox(level=3, tenant_id=<their own tenant>)` would
+    look for the programmes in THEIR tenant and correctly find none. The link that entitles
+    them to sign is `enterprise_sponsor_users` -> the institutions the programme has NAMED, and
+    that is what this reads.
+    """
+    try:
+        mine = [r[0] for r in c.execute(
+            "SELECT institution_id FROM enterprise_sponsor_users WHERE user_id=?",
+            (user_id,)).fetchall()]
+    except Exception:
+        return []
+    if not mine:
+        return []
+
+    cols = ", ".join(f"a.{k}" for k in _KEYS)
+    marks = ", ".join("?" for _ in mine)
+    rows = c.execute(
+        f"SELECT {cols}, "
+        f"       CASE WHEN r.sponsor_1_id IN ({marks}) THEN r.sponsor_1_id "
+        f"            WHEN r.sponsor_2_id IN ({marks}) THEN r.sponsor_2_id "
+        f"            ELSE r.sponsor_3_id END "
+        f"  FROM enterprise_applications a "
+        f"  JOIN enterprise_programme_registry r "
+        f"    ON r.tenant_id = a.tenant_id AND r.id = a.programme_id "
+        f" WHERE a.l3_decision IS NULL "
+        f"   AND a.l1_decision = ? AND a.l2_decision = ? "
+        f"   AND (r.sponsor_1_id IN ({marks}) OR r.sponsor_2_id IN ({marks}) "
+        f"        OR r.sponsor_3_id IN ({marks})) "
+        f" ORDER BY a.id",
+        tuple(mine) * 2 + (DECISION_APPROVED, DECISION_APPROVED) + tuple(mine) * 3,
+    ).fetchall()
+
+    out = []
+    for r in rows:
+        app = dict(zip(_KEYS, r[:len(_KEYS)]))
+        app["sponsor_id"] = r[len(_KEYS)]
+        out.append(app)
+    return out
+
+
 # ---------------------------------------------------------------------------
 
 def link_sponsor_user(c, institution_id: str, user_id: int, added_by_user_id: int) -> None:
@@ -590,9 +638,13 @@ def link_sponsor_user(c, institution_id: str, user_id: int, added_by_user_id: in
     approves" -- this is what gives that sentence a subject. Without it somebody else would
     have to approve on the sponsor's behalf, which the owner explicitly forbade.
     """
+    # ON CONFLICT, not INSERT OR REPLACE: Postgres has no OR REPLACE, and that exact
+    # difference took Save Labour down on live yesterday.
     c.execute(
-        "INSERT OR REPLACE INTO enterprise_sponsor_users "
-        "(institution_id, user_id, added_by_user_id) VALUES (?,?,?)",
+        "INSERT INTO enterprise_sponsor_users "
+        "(institution_id, user_id, added_by_user_id) VALUES (?,?,?) "
+        "ON CONFLICT (institution_id, user_id) DO UPDATE SET "
+        "  added_by_user_id = excluded.added_by_user_id",
         (institution_id, user_id, added_by_user_id),
     )
 

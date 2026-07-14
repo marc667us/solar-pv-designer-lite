@@ -100,16 +100,56 @@ def prog(db):
 
 # --- the agent answers --------------------------------------------------------
 
-def test_the_agent_answers_every_activity_in_a_phase(db, prog):
-    """No box is left empty. That is the whole feature."""
+def test_no_two_activities_get_the_SAME_STATEMENT(db, prog):
+    """THE OWNER'S BUG, 2026-07-14: "the agent just answered every question with the same
+    statement -- fix it, and don't use my information".
+
+    Two causes, both structural:
+      * the fact writer keyed on the TOPIC, not the activity, so every activity that mentioned
+        money received the same paragraph about the budget; and
+      * when no topic matched at all it echoed the operator's OWN programme description back
+        at them -- which is what "don't use my information" means.
+
+    A fact is now stated ONCE, under the activity that reaches it first. Anything that would
+    repeat it is left unanswered with its question showing. This test is the whole complaint.
+    """
+    documents.draft_answers(db, db.org, OWNER, prog, use_ai=False, audit=_audit(db))
+
+    answers = [a["answer"].strip()
+               for ph in documents.answer_sheet(db, db.org, prog)
+               for a in ph["activities"] if a["answer"].strip()]
+
+    assert len(answers) == len(set(answers)), (
+        "the same statement was written under more than one question -- exactly what the "
+        "owner reported"
+    )
+
+    desc = "Rooftop solar for 100 rural schools"
+    assert not [a for a in answers if desc in a], (
+        "the operator's own programme description was echoed back at them as an answer"
+    )
+
+
+def test_the_agent_answers_what_it_CAN_and_says_what_it_cannot(db, prog):
+    """Every activity is accounted for: answered, or left open and COUNTED as left open.
+
+    The old contract was "no box is ever empty", and it was wrong -- it was satisfiable by
+    boilerplate, and a non-empty box that answers nothing reads as done and buries the gap.
+    An empty box with its question under it is the honest failure; the count is what makes it
+    visible instead of silent.
+    """
     r = documents.draft_answers(db, db.org, OWNER, prog,
                                 phase_code="P01_CONCEPT", use_ai=False, audit=_audit(db))
 
-    assert r["drafted"] == len(PHASE_ACTIVITIES["P01_CONCEPT"])
+    n = len(PHASE_ACTIVITIES["P01_CONCEPT"])
+    assert r["drafted"] >= 1, "the agent answered nothing at all"
+    assert r["drafted"] + r["unanswered"] == n, (
+        "activities went missing -- each is either answered or reported as unanswered"
+    )
 
     sheet = {ph["phase_code"]: ph for ph in documents.answer_sheet(db, db.org, prog)}
-    for a in sheet["P01_CONCEPT"]["activities"]:
-        assert a["answer"].strip(), f"{a['code']} was left empty for the operator to fill in"
+    written = [a for a in sheet["P01_CONCEPT"]["activities"] if a["answer"].strip()]
+    assert len(written) == r["drafted"]
 
 
 def test_it_can_answer_every_phase_at_once(db, prog):
@@ -117,12 +157,8 @@ def test_it_can_answer_every_phase_at_once(db, prog):
     r = documents.draft_answers(db, db.org, OWNER, prog, use_ai=False, audit=_audit(db))
 
     total = sum(len(v) for v in PHASE_ACTIVITIES.values())
-    assert r["drafted"] == total
-
-    sheet = documents.answer_sheet(db, db.org, prog)
-    assert len(sheet) == 16
-    blank = [a["code"] for ph in sheet for a in ph["activities"] if not a["answer"].strip()]
-    assert not blank, f"activities left with no answer at all: {blank[:5]}"
+    assert r["drafted"] + r["unanswered"] == total
+    assert len(documents.answer_sheet(db, db.org, prog)) == 16
 
 
 def test_the_answers_are_ABOUT_THIS_PROGRAMME(db, prog):
@@ -146,12 +182,26 @@ def test_the_answers_are_ABOUT_THIS_PROGRAMME(db, prog):
 
 # --- a draft is not an answer -------------------------------------------------
 
+def _first_drafted(db, prog):
+    """An activity the fact writer actually answered.
+
+    Not every activity gets one now, so a test that hardcodes P01_A01 would be asserting about
+    the writer's topic table rather than about drafts.
+    """
+    for ph in documents.answer_sheet(db, db.org, prog):
+        for a in ph["activities"]:
+            if a["answer"].strip():
+                return a["code"]
+    raise AssertionError("nothing was drafted at all")
+
+
 def test_a_drafted_answer_is_NOT_recorded_as_the_operators_answer(db, prog):
     """The machine's words must never be attributed to a person who never said them."""
     documents.draft_answers(db, db.org, OWNER, prog,
                             phase_code="P01_CONCEPT", use_ai=False, audit=_audit(db))
+    code = _first_drafted(db, prog)
 
-    a = documents.get_answers(db, db.org, prog)["P01_A01"]
+    a = documents.get_answers(db, db.org, prog)[code]
     assert a["answer"], "nothing was drafted"
     assert a["answered"] is False, (
         "a machine draft is being reported as the operator's own answer"
@@ -159,7 +209,7 @@ def test_a_drafted_answer_is_NOT_recorded_as_the_operators_answer(db, prog):
 
     # ...and the sheet says so out loud, because the screen renders this flag.
     sheet = {ph["phase_code"]: ph for ph in documents.answer_sheet(db, db.org, prog)}
-    row = next(x for x in sheet["P01_CONCEPT"]["activities"] if x["code"] == "P01_A01")
+    row = next(x for x in sheet["P01_CONCEPT"]["activities"] if x["code"] == code)
     assert row["drafted"] is True and row["answered"] is False
 
 
@@ -167,14 +217,15 @@ def test_saving_a_draft_makes_it_the_operators_own(db, prog):
     """"give the user access to edit your answer if needed and save"."""
     documents.draft_answers(db, db.org, OWNER, prog,
                             phase_code="P01_CONCEPT", use_ai=False, audit=_audit(db))
-    drafted = documents.get_answers(db, db.org, prog)["P01_A01"]["answer"]
+    code = _first_drafted(db, prog)
+    drafted = documents.get_answers(db, db.org, prog)[code]["answer"]
 
     edited = drafted + " The Ministry has confirmed the shortlist."
-    n = documents.save_answers(db, db.org, OWNER, prog, {"P01_A01": edited},
+    n = documents.save_answers(db, db.org, OWNER, prog, {code: edited},
                                audit=_audit(db))
     assert n == 1
 
-    a = documents.get_answers(db, db.org, prog)["P01_A01"]
+    a = documents.get_answers(db, db.org, prog)[code]
     assert a["answer"] == edited
     assert a["answered"] is True, "a saved answer is the operator's, and must be marked so"
 
@@ -198,17 +249,21 @@ def test_redrafting_NEVER_overwrites_an_answer_the_operator_gave(db, prog):
     )
     assert a["answered"] is True
 
-    # ...and everything else still got drafted.
-    assert r["drafted"] == sum(len(v) for v in PHASE_ACTIVITIES.values()) - 1
+    # ...and the rest of the programme was still worked through: every other activity is
+    # either drafted or honestly reported as one the app cannot answer.
+    total = sum(len(v) for v in PHASE_ACTIVITIES.values())
+    assert r["drafted"] + r["unanswered"] + 1 == total
 
 
 def test_redrafting_DOES_replace_an_earlier_draft(db, prog):
     """A draft is disposable. Only a human answer is sacred."""
-    documents.draft_answers(db, db.org, OWNER, prog,
-                            phase_code="P01_CONCEPT", use_ai=False, audit=_audit(db))
+    first = documents.draft_answers(db, db.org, OWNER, prog,
+                                    phase_code="P01_CONCEPT", use_ai=False, audit=_audit(db))
     r = documents.draft_answers(db, db.org, OWNER, prog,
                                 phase_code="P01_CONCEPT", use_ai=False, audit=_audit(db))
-    assert r["drafted"] == len(PHASE_ACTIVITIES["P01_CONCEPT"])
+    # The same activities are re-drafted -- a draft is disposable -- and re-running does NOT
+    # quietly grow the phase by pasting paragraph one under the activities it left open.
+    assert r["drafted"] == first["drafted"]
     assert r["skipped_answered"] == 0
 
 
@@ -229,12 +284,13 @@ def test_a_model_answer_is_used_when_the_model_answers(db, prog, monkeypatch):
             == "A specific, model-written answer.")
 
 
-def test_a_dead_model_still_leaves_no_box_empty(db, prog, monkeypatch):
-    """The regression that caused all of this. A mute agent must degrade, not disappear.
+def test_a_dead_model_degrades_to_facts_and_ADMITS_the_rest(db, prog, monkeypatch):
+    """A mute agent must degrade honestly -- not disappear, and not bluff.
 
-    When the model is unreachable the app falls back to writing from the programme's own
-    records. What it must NOT do is what it did before: give up and hand the operator a
-    blank form.
+    When the model is unreachable the app writes what its records actually support and REPORTS
+    what they do not. The earlier version of this test demanded that no box be left empty, and
+    that demand is precisely what the boilerplate was built to satisfy. A count of what could
+    not be answered is worth more to the operator than a paragraph that answers nothing.
     """
     monkeypatch.setattr(documents, "_draft_batch_ai", lambda activities, facts, deadline=None: {})
 
@@ -242,9 +298,14 @@ def test_a_dead_model_still_leaves_no_box_empty(db, prog, monkeypatch):
                                 phase_code="P01_CONCEPT", use_ai=True, audit=_audit(db))
 
     assert r["ai"] == 0
-    assert r["drafted"] == len(PHASE_ACTIVITIES["P01_CONCEPT"])
+    assert r["drafted"] >= 1, "a dead model must still leave the operator better off"
+    assert r["drafted"] + r["unanswered"] == len(PHASE_ACTIVITIES["P01_CONCEPT"])
+
+    # Whatever it did write is real and distinct -- never the same sentence twice.
     sheet = {ph["phase_code"]: ph for ph in documents.answer_sheet(db, db.org, prog)}
-    assert all(a["answer"].strip() for a in sheet["P01_CONCEPT"]["activities"])
+    written = [a["answer"].strip() for a in sheet["P01_CONCEPT"]["activities"]
+               if a["answer"].strip()]
+    assert len(written) == len(set(written))
 
 
 def test_a_model_that_invents_an_activity_code_is_ignored(db, prog, monkeypatch):

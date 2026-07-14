@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Applications to review{% endblock %}
+
+{#
+  Owner, 2026-07-14: "all approvals must be set by the individual approving entities".
+
+  So this page shows you three SEPARATE queues, and you only ever see the one you are the
+  entity for. The beneficiary organisation vouches for its own people; the programme decides
+  whether it will carry them; the sponsor commits the money. Nobody signs on anyone else's
+  behalf -- the service refuses it even if a form is hand-rolled.
+
+  Each queue holds only what is actually YOUR turn: an application still sitting with an
+  earlier level is not shown, because there is nothing you could do about it.
+#}
+
+{% macro queue(level, label, rows, decisions, blurb) -%}
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><strong>Level {{ level }} — {{ label }}</strong></span>
+    <span class="badge bg-secondary">{{ rows|length }} waiting</span>
+  </div>
+  <div class="card-body">
+    <p class="text-muted small">{{ blurb }}</p>
+
+    {% if not rows %}
+    <div class="text-muted"><i class="bi bi-check2-all me-2"></i>Nothing waiting on you here.</div>
+    {% else %}
+      {% for a in rows %}
+      <div class="border-top pt-3 mt-3">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <strong>{{ a.site_name }}</strong>
+            <span class="text-muted small">· #{{ a.id }} · submitted {{ a.created_at }}</span>
+            <div class="text-muted small">
+              {% if a.region %}{{ a.region }}{% if a.country %}, {{ a.country }}{% endif %} · {% endif %}
+              {% if a.monthly_bill %}bill {{ a.monthly_bill }} · {% endif %}
+              {% if a.monthly_kwh %}{{ a.monthly_kwh }} kWh · {% endif %}
+              {% if a.area_m2 %}{{ a.area_m2 }} m² available{% endif %}
+            </div>
+          </div>
+
+          {# The bill check is EVIDENCE for the reviewer -- which is the whole reason it runs
+             automatically on submission. Never computed reads as "unknown", not as "no". #}
+          <div>
+            {% if a.affordable is none %}
+            <span class="badge bg-secondary">Bill check: not computed</span>
+            {% elif a.affordable %}
+            <span class="badge bg-success">Bill check: can afford the load</span>
+            {% else %}
+            <span class="badge bg-warning text-dark">Bill check: cost above current bill</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <form method="post"
+              action="{{ url_for('enterprise_application_decide', application_id=a.id) }}"
+              class="row g-2 align-items-end mt-2">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="level" value="{{ level }}">
+
+          <div class="col-md-3">
+            <label class="form-label small mb-1" for="d-{{ level }}-{{ a.id }}">Decision</label>
+            <select class="form-select form-select-sm" id="d-{{ level }}-{{ a.id }}"
+                    name="decision" required>
+              <option value="">— choose —</option>
+              {% for d in decisions %}
+              <option value="{{ d }}">{{ d }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-7">
+            <label class="form-label small mb-1" for="n-{{ level }}-{{ a.id }}">
+              Note to the applicant
+            </label>
+            <input class="form-control form-control-sm" id="n-{{ level }}-{{ a.id }}" name="note"
+                   placeholder="Why — especially if you are returning or rejecting it.">
+          </div>
+          <div class="col-md-2">
+            <button class="btn btn-sm btn-warning w-100">Record</button>
+          </div>
+        </form>
+      </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% block content %}
+<div class="ent-page container py-4">
+
+  <h1 class="h3 mb-1">Applications to review</h1>
+  <p class="text-muted mb-4">
+    You are only shown the queue you are the approving entity for. Each entity sets its own
+    approval — nobody signs for another.
+  </p>
+
+  {{ queue(1, labels[1], l1, decisions,
+           "Your own members' applications. You vouch for them before the programme sees them.") }}
+  {{ queue(2, labels[2], l2, decisions,
+           "Applications your organisation's own programmes have received, already vouched for by
+            the applicant's organisation.") }}
+  {{ queue(3, labels[3], l3, decisions,
+           "Final approval, for programmes that have named you as a sponsor. The programme has
+            already approved these.") }}
+
+</div>
+{% endblock %}

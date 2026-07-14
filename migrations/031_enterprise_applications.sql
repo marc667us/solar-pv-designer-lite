@@ -112,11 +112,20 @@ CREATE TABLE IF NOT EXISTS enterprise_sponsor_users (
 
 -- RLS on the application table. Every other tenant-owned table in this module carries it.
 --
--- THE POLICY IS DELIBERATELY WIDER THAN `tenant_id`. An application is legitimately read by
--- THREE tenants: the programme's (level 2), the applicant's own organisation (level 1), and
--- -- via the app layer -- the sponsor. A policy keyed only on `tenant_id` would hide every
--- application from the very organisation that has to give it its FIRST approval, and level 1
--- would be unreachable. So the beneficiary organisation is admitted explicitly.
+-- THE POLICY IS DELIBERATELY WIDER THAN `tenant_id`, because an application is legitimately
+-- read by THREE DIFFERENT ORGANISATIONS -- that is the whole shape of the feature:
+--
+--   level 2, the PROGRAMME               -> tenant_id
+--   level 1, the APPLICANT'S OWN ORG     -> applicant_org_tenant_id
+--   level 3, the SPONSOR                 -> a user linked to an institution the programme NAMED
+--
+-- A policy keyed only on `tenant_id` would hide every application from the very organisation
+-- that has to give it its FIRST approval, and level 1 would be unreachable. The sponsor is
+-- worse still: they are not a member of the ministry's organisation at all, so their
+-- `app.current_tenant` is their OWN, and no tenant-based clause can ever admit them. They are
+-- admitted by IDENTITY instead -- `app.current_user_id`, the GUC migration 025's policies
+-- already key on -- joined through the link table to the sponsor slots on the programme.
+-- Without this clause level 3 works on SQLite (no RLS) and silently returns nothing on live.
 ALTER TABLE enterprise_applications ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS enterprise_applications_tenant_isolation ON enterprise_applications;
@@ -125,6 +134,15 @@ CREATE POLICY enterprise_applications_tenant_isolation ON enterprise_application
     USING (
         tenant_id::text = current_setting('app.current_tenant', true)
         OR applicant_org_tenant_id::text = current_setting('app.current_tenant', true)
+        OR EXISTS (
+            SELECT 1
+              FROM enterprise_programme_registry r
+              JOIN enterprise_sponsor_users su
+                ON su.institution_id IN (r.sponsor_1_id, r.sponsor_2_id, r.sponsor_3_id)
+             WHERE r.tenant_id = enterprise_applications.tenant_id
+               AND r.id        = enterprise_applications.programme_id
+               AND su.user_id::text = current_setting('app.current_user_id', true)
+        )
         OR current_setting('app.current_tenant', true) IS NULL
         OR current_setting('app.current_tenant', true) = ''
     );

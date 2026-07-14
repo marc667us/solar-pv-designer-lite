@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Apply — {{ programme.name }}{% endblock %}
+
+{#
+  Owner, 2026-07-14: "the beneficiaries must register for the program and track progress from
+  when they submit app to when their approved", and "check my bill must be run for each user
+  automatically after their application to make sure they can pay load".
+
+  The bill fields are therefore not optional garnish -- they are what the affordability check
+  runs on. But an applicant who cannot afford their load today is very often exactly who a
+  subsidised programme exists to reach, so the check FLAGS; it does not refuse.
+#}
+
+{% block content %}
+<div class="ent-page container py-4" style="max-width: 760px;">
+
+  <h1 class="h3 mb-1">Apply to {{ programme.name }}</h1>
+  <div class="text-muted mb-3">{{ programme.code }}</div>
+
+  {% if programme.description %}
+  <p class="mb-4">{{ programme.description }}</p>
+  {% endif %}
+
+  <div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>
+    Your application goes to <strong>your own organisation first</strong>, then to the
+    programme, and finally to its sponsor. You can follow it at every step.
+  </div>
+
+  <form method="post" class="card">
+    <div class="card-body">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+      <div class="mb-3">
+        <label class="form-label" for="site_name">Site name <span class="text-danger">*</span></label>
+        <input class="form-control" id="site_name" name="site_name" required
+               placeholder="e.g. Osu Clinic — main block">
+      </div>
+
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="contact_email">Contact email</label>
+          <input type="email" class="form-control" id="contact_email" name="contact_email">
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="contact_phone">Contact phone</label>
+          <input class="form-control" id="contact_phone" name="contact_phone">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="country">Country</label>
+          <input class="form-control" id="country" name="country"
+                 value="{{ programme.country or '' }}">
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="region">Region</label>
+          <input class="form-control" id="region" name="region">
+        </div>
+      </div>
+
+      <hr>
+      <h2 class="h6 mb-1">Your electricity today</h2>
+      <p class="text-muted small mb-3">
+        We run the platform's bill check on these the moment you submit, and attach the result
+        to your application. It is information for the people reviewing you — it does not
+        decide anything on its own.
+      </p>
+
+      <div class="row">
+        <div class="col-md-4 mb-3">
+          <label class="form-label" for="monthly_bill">Monthly bill</label>
+          <input class="form-control" id="monthly_bill" name="monthly_bill"
+                 inputmode="decimal" placeholder="e.g. 1200">
+        </div>
+        <div class="col-md-4 mb-3">
+          <label class="form-label" for="monthly_kwh">Monthly units (kWh)</label>
+          <input class="form-control" id="monthly_kwh" name="monthly_kwh"
+                 inputmode="decimal" placeholder="e.g. 900">
+        </div>
+        <div class="col-md-4 mb-3">
+          <label class="form-label" for="tariff_category">Tariff</label>
+          <input class="form-control" id="tariff_category" name="tariff_category"
+                 placeholder="e.g. Non-residential">
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="area_m2">Roof / ground area available (m²)</label>
+        <input class="form-control" id="area_m2" name="area_m2" inputmode="decimal">
+        <div class="form-text">How much space there is to put panels on.</div>
+      </div>
+
+      <button class="btn btn-warning">
+        <i class="bi bi-send me-1"></i>Submit application
+      </button>
+    </div>
+  </form>
+
+</div>
+{% endblock %}
