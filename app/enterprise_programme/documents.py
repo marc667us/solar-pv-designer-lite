@@ -1814,6 +1814,71 @@ def get_document(c, tenant_id: str, document_id: int) -> dict:
     }
 
 
+def update_document(c, tenant_id: str, user_id: int, document_id: int, *,
+                    markdown: str, title: str = "", audit=None) -> None:
+    """Edit a generated document and save it. The operator has the last word.
+
+    Input:  connection, tenant, acting user, document id, the edited markdown, optional title.
+    Output: none.
+    Raises: EnterprisePermissionError (403), DocumentError (C13 -> 404, or a refusal).
+
+    OWNER, 2026-07-14: "app writes the report for that activity and user preview and edit
+    and save."
+
+    THE AGENT DRAFTS; THE OPERATOR SIGNS. Everything upstream of this exists to save the
+    operator from a blank page -- but a document that the app will not let them correct is a
+    document they cannot stand behind, and nine of these open a stage gate. So the generated
+    markdown is editable, and their edit is what the PDF, the email and the gate evidence all
+    read from afterwards.
+
+    EDITING AN UPLOADED SOURCE IS REFUSED. `doc_kind='uploaded'` rows hold the BYTES of a file
+    somebody uploaded (a PDF, a DOCX); their `markdown` is extracted text, and rewriting it
+    would leave the stored file and the app's account of it saying different things. The
+    operator can generate a document FROM it instead.
+    """
+    doc = get_document(c, tenant_id, document_id)       # C13: raises if not this tenant's
+    if doc["doc_kind"] != "generated":
+        raise DocumentError(
+            "DOC",
+            "this is an uploaded source file, not a document the app wrote — generate a "
+            "document from it instead of editing it",
+        )
+
+    rbac.require_permission(c, tenant_id, user_id, "programme.edit",
+                            programme_id=doc["programme_id"])
+
+    body = (markdown or "").strip()
+    if not body:
+        # Saving an empty document would silently destroy the evidence a gate is standing on.
+        raise DocumentError("DOC", "the document is empty — nothing was saved")
+
+    new_title = (title or "").strip() or doc["title"]
+
+    audit = audit or txn.audit_on(c)
+    with txn.atomic(c):
+        # NO `updated_at` -- enterprise_documents has no such column, and the live Postgres
+        # schema is owned by migration 026. Adding a column to record a timestamp the audit
+        # row already carries (with the editor's name against it, which a column would not)
+        # is not worth a migration.
+        c.execute(
+            "UPDATE enterprise_documents "
+            "   SET markdown=?, title=?, byte_size=? "
+            " WHERE tenant_id=? AND id=?",
+            (body, new_title, len(body.encode("utf-8")), tenant_id, document_id),
+        )
+        _require_audit(
+            audit("ENTERPRISE_DOCUMENT_EDITED", user_id=user_id, tenant_id=tenant_id,
+                  details={"document_id": document_id,
+                           "programme_id": doc["programme_id"],
+                           "doc_type": doc["doc_type"],
+                           # The gate this document opens, if any -- an edit to a document a
+                           # stage gate is standing on is not an ordinary edit, and the audit
+                           # trail should not make a reader work that out for themselves.
+                           "bytes": len(body.encode("utf-8"))}),
+            "document edit",
+        )
+
+
 def render_html(markdown: str) -> str:
     """Render a generated document to HTML, for reading it in the browser.
 

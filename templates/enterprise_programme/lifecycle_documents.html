@@ -220,7 +220,11 @@
           {% set stage_count = stage_counts[scode] %}
           <div class="accordion-item">
             <h2 class="accordion-header">
-              <button class="accordion-button {{ '' if scode == current_stage else 'collapsed' }}"
+              {# The stage that HOLDS the phase the operator clicked opens -- otherwise
+                 the link lands them on a collapsed accordion and the phase they asked for is
+                 nowhere on screen. #}
+              {% set stage_open = (open_phase in sphases) if open_phase else (scode == current_stage) %}
+              <button class="accordion-button {{ '' if stage_open else 'collapsed' }}"
                       type="button" data-bs-toggle="collapse"
                       data-bs-target="#entStage{{ loop.index }}">
                 <span class="me-2 badge {{ 'bg-warning text-dark' if scode == current_stage else 'bg-secondary' }}">
@@ -236,7 +240,7 @@
               </button>
             </h2>
             <div id="entStage{{ loop.index }}"
-                 class="accordion-collapse collapse {{ 'show' if scode == current_stage else '' }}"
+                 class="accordion-collapse collapse {{ 'show' if stage_open else '' }}"
                  data-bs-parent="#entStages">
               <div class="accordion-body">
 
@@ -261,7 +265,8 @@
 
                 {% for pcode in sphases %}
                 {% set acts = phase_activities.get(pcode, []) %}
-                <div class="card mb-2">
+                <div class="card mb-2 {{ 'border-warning' if pcode == open_phase }}"
+                     id="phase-{{ pcode }}">
                   <div class="card-header py-2 d-flex justify-content-between align-items-center">
                     <span class="small">
                       <span class="badge bg-secondary me-1">Phase {{ phase_numbers[pcode] }}</span>

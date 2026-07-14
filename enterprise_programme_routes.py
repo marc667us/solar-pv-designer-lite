@@ -1461,6 +1461,13 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                     for scode, _sname, sphases in constants.LIFECYCLE_STAGES
                 },
                 current_phase=prog.get("phase_code"),
+                # OWNER, 2026-07-14: "phases must be buttons and click must open to
+                # activities with checkboxes". The programme page links straight to a phase;
+                # this opens the stage that holds it and scrolls to it, so the operator lands
+                # on the activities rather than on a page they must then go hunting through.
+                # It is NOT the programme's current phase: the operator may work in ANY
+                # phase, which is the whole point of "must be able to work at any phase".
+                open_phase=request.args.get("phase", ""),
                 current_stage=constants.STAGE_OF_PHASE.get(prog.get("phase_code")),
                 documents=docs,
                 sources=[d for d in docs if d["doc_kind"] == "uploaded"],
@@ -1731,7 +1738,45 @@ def register_enterprise_programme(app, *, get_db, login_required, csrf_protect,
                 thin=documents.thin_sections(doc["markdown"] or ""),
                 can_email=rbac.has_permission(c, active, uid, "report.generate",
                                               programme_id=doc["programme_id"]),
+                can_edit=rbac.has_permission(c, active, uid, "programme.edit",
+                                             programme_id=doc["programme_id"]),
             )
+
+    @app.route("/enterprise/documents/<int:document_id>/edit", methods=["POST"])
+    @login_required
+    def enterprise_document_edit(document_id: int):
+        """Save the operator's edit of a generated document.
+
+        OWNER, 2026-07-14: "app writes the report ... and user preview and edit and save."
+        The agent drafts; the operator signs. Nine of these documents open a stage gate, and
+        a document nobody may correct is one nobody can stand behind.
+        """
+        _require_module()
+        csrf_protect()
+        uid = _uid()
+        back = redirect(url_for("enterprise_document_view", document_id=document_id))
+
+        with get_db() as c:
+            _ensure_schema_once(c)
+            tenancy.apply_enterprise_guc(c, uid)
+            active = _tenant(c, uid)
+            try:
+                documents.update_document(
+                    c, active, uid, document_id,
+                    markdown=request.form.get("markdown") or "",
+                    title=request.form.get("title") or "",
+                )
+            except EnterprisePermissionError:
+                abort(403)
+            except EnterpriseGateError as e:          # DocumentError is a subclass of this
+                if e.control == "C13":
+                    abort(404)
+                flash(str(e), "error")
+                return back
+
+        flash("Saved. The PDF, the email and any stage gate standing on this document all "
+              "read your edited version from now on.", "success")
+        return back
 
     @app.route("/enterprise/documents/<int:document_id>/email", methods=["POST"])
     @login_required

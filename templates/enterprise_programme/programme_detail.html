@@ -40,24 +40,40 @@
         </div>
         <div class="card-body">
 
-          <ol class="list-unstyled mb-4">
+          {# EVERY PHASE IS A BUTTON, AND EVERY BUTTON WORKS.
+
+             Owner, 2026-07-14: "phases must be buttons and click must open to activities
+             with check boxes ... the controls are not needed like that, user must be able to
+             work at any phase."
+
+             So none of these is disabled. The programme's CURRENT phase is where its stage
+             gates and its state machine are -- it is not a permission to think. An operator
+             may open Feasibility while the programme still sits in Concept, tick its
+             activities and have the app write that document; nothing about doing the work
+             early is illegitimate, and refusing to let them was the block. #}
+          <div class="d-flex flex-wrap gap-2 mb-4">
             {% for p in phases %}
-            <li class="d-flex align-items-center py-1
-                       {% if p.code == state.current_phase_code %}fw-semibold{% endif %}">
-              <span class="badge me-2
-                {% if p.status == 'Completed' %}bg-success
-                {% elif p.code == state.current_phase_code %}bg-warning text-dark
-                {% else %}bg-light text-muted border{% endif %}"
-                style="width:2.2rem">{{ p.sequence_no }}</span>
-              <span class="flex-grow-1 {% if p.status == 'Not Started' %}text-muted{% endif %}">
-                {{ p.name }}
-              </span>
+            <a class="btn btn-sm
+                      {% if p.code == state.current_phase_code %}btn-warning
+                      {% elif p.status == 'Completed' %}btn-success
+                      {% else %}btn-outline-secondary{% endif %}"
+               href="{{ url_for('enterprise_lifecycle_documents', programme_id=programme.id,
+                                phase=p.code) }}#phase-{{ p.code }}"
+               title="Open this phase's activities">
+              <span class="badge bg-dark bg-opacity-25 me-1">{{ p.sequence_no }}</span>
+              {{ p.name }}
               {% if p.gate %}
-              <span class="small text-muted ms-2">{{ p.gate }}</span>
+              <span class="small opacity-75 ms-1">{{ p.gate }}</span>
               {% endif %}
-            </li>
+            </a>
             {% endfor %}
-          </ol>
+          </div>
+          <div class="text-muted small mb-4">
+            <i class="bi bi-info-circle me-1"></i>
+            Click any phase to open its activities, tick what applies, and the app writes the
+            document — you can then preview, edit and save it. You may work in any phase; the
+            highlighted one is only where the programme's stage gates currently sit.
+          </div>
 
           {# The dropdown offers ONLY what the server would accept. That is the point of a
              state machine: the user is never shown a move that would be refused. #}
