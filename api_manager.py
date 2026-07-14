@@ -211,18 +211,74 @@ class _AIClient:
     def _load(self):
         self.anthropic_key    = os.environ.get("ANTHROPIC_API_KEY", "")
         self.openrouter_key   = os.environ.get("OPENROUTER_API_KEY", "")
-        self.openrouter_model = os.environ.get("OPENROUTER_MODEL",
-                                               "meta-llama/llama-3.1-8b-instruct:free")
+        # A LIST, NOT A MODEL. The old default was `meta-llama/llama-3.1-8b-instruct:free`,
+        # which OpenRouter RETIRED -- so every call 404'd, the chain fell through Ollama (not
+        # running on Render) and GitHub Models (not configured) to `rule_based`, and every AI
+        # feature in the app quietly stopped working. The enterprise document writer returns
+        # None on a rule_based provider, so it wrote nothing and asked the operator a question
+        # instead: the owner's "it's not writing, it's asking me questions" (2026-07-13).
+        #
+        # It failed SILENTLY -- the exception is caught, and /api/health/ai still says
+        # "configured" because a key is set. A single hardcoded model id is a dependency on a
+        # third party's deprecation schedule, so the fix is not a newer id: it is a list. One
+        # retirement now costs a fallback, not the feature.
+        #
+        # ZERO-COST RULE (CLAUDE.md): every candidate must end in `:free`. Enforced in
+        # `openrouter_models` below, not merely by convention here.
+        self.openrouter_models = self._free_models()
+        # Kept because the ledger, the stats store and /api/health/ai all name a single model.
+        # It is the one we TRY FIRST, which is the honest answer to "which model is this app
+        # using" when every call starts there.
+        self.openrouter_model = self.openrouter_models[0] if self.openrouter_models else ""
         self.ollama_url       = os.environ.get("OLLAMA_URL", "")
         self.ollama_model     = os.environ.get("OLLAMA_MODEL", "mistral")
         self.github_token     = os.environ.get("GITHUB_TOKEN", "")
         self.github_model     = os.environ.get("GITHUB_MODEL", "openai/gpt-4.1-mini")
 
+    # Free models on OpenRouter, verified live against https://openrouter.ai/api/v1/models on
+    # 2026-07-14, best prose first. These write governance-document sections, so the order is
+    # by quality of ordinary English, not by speed. The tail is small and fast: if the big
+    # ones are rate-limited (free tiers are), a short section still gets written.
+    OPENROUTER_FREE_FALLBACKS = (
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "qwen/qwen3-next-80b-a3b-instruct:free",
+        "google/gemma-4-31b-it:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "meta-llama/llama-3.2-3b-instruct:free",
+    )
+
+    @staticmethod
+    def _free_models():
+        """The OpenRouter models to try, in order. Free ones only.
+
+        Input:  env OPENROUTER_MODEL (one id) and/or OPENROUTER_MODELS (comma-separated).
+        Output: a de-duplicated list of `:free` model ids, the operator's choices first.
+
+        THE `:free` FILTER IS A COST CONTROL, NOT A NAMING CONVENTION (CLAUDE.md zero-cost
+        rule). An operator who set OPENROUTER_MODEL to a PAID id would otherwise start
+        billing the project silently, one document at a time. A paid id is dropped here and
+        the chain carries on with the free fallbacks -- refusing to spend money is never a
+        reason to take the feature down.
+        """
+        raw = []
+        for var in ("OPENROUTER_MODEL", "OPENROUTER_MODELS"):
+            raw += [m.strip() for m in os.environ.get(var, "").split(",") if m.strip()]
+        raw += list(_AIClient.OPENROUTER_FREE_FALLBACKS)
+
+        out = []
+        for m in raw:
+            if not m.endswith(":free"):
+                logger.warning("openrouter: ignoring non-free model %r (zero-cost rule)", m)
+                continue
+            if m not in out:
+                out.append(m)
+        return out
+
     def reload(self):
         self._load()
 
     def chat(self, messages, system="", model=None, max_tokens=800, cache_ttl=0,
-             user_id=None, is_admin=False, endpoint=""):
+             user_id=None, is_admin=False, endpoint="", deadline=None):
         """
         Send AI chat. Returns (reply: str, provider: str).
         provider is 'claude', 'openrouter', 'ollama', 'github_models', 'rule_based',
@@ -254,7 +310,7 @@ class _AIClient:
 
         reply, provider = (
             self._claude(messages, system, model, max_tokens)
-            or self._openrouter(messages, system, max_tokens)
+            or self._openrouter(messages, system, max_tokens, deadline)
             or self._ollama(messages, system, max_tokens)
             or self._github(messages, system, max_tokens)
             or ("I'm having trouble connecting to AI services right now. Please try again in a moment.", "rule_based")
@@ -306,28 +362,69 @@ class _AIClient:
             self._s.log("anthropic", model or "claude", "error", (time.time()-t)*1000, str(e))
             return None
 
-    def _openrouter(self, messages, system, max_tokens):
-        if not self.openrouter_key:
+    def _openrouter(self, messages, system, max_tokens, deadline=None):
+        """Try each free model in turn. One retirement must not take the chain down.
+
+        A dead model id 404s, and a free model that is rate-limited 429s. Both are ordinary
+        and both used to end the call -- the whole AI layer fell to `rule_based` because ONE
+        id had been deprecated. So a per-model failure now costs the next model, and only an
+        exhausted list returns None.
+
+        `deadline` IS A HARD WALL-CLOCK CEILING (absolute time.time()), and it is not advice:
+        it bounds the SOCKET TIMEOUT, not merely the loop. Codex, HIGH: with five fallbacks at
+        30s each, one call could sit in here for 150 seconds -- past gunicorn's 120s timeout,
+        on a single-instance free tier, hanging the whole app for every other user. A caller
+        that must return in bounded time passes a deadline; without one the old per-model
+        timeout stands, because a background job has no such constraint.
+
+        `self.openrouter_model` is updated to whichever model actually ANSWERED, so the ledger
+        and the stats page record the model that did the work rather than the one we hoped
+        would.
+        """
+        if not self.openrouter_key or not self.openrouter_models:
             return None
-        t = time.time()
-        try:
-            import urllib.request as _ur, json as _j
-            msgs = ([{"role": "system", "content": system}] if system else []) + list(messages)
-            payload = _j.dumps({"model": self.openrouter_model, "messages": msgs,
-                                 "max_tokens": max_tokens}).encode()
-            req = _ur.Request("https://openrouter.ai/api/v1/chat/completions", data=payload,
-                              headers={"Authorization": f"Bearer {self.openrouter_key}",
-                                       "Content-Type": "application/json",
-                                       "HTTP-Referer": "https://solarpro.aiappinvent.com",
-                                       "X-Title": "SolarPro"})
-            with _ur.urlopen(req, timeout=30) as r:
-                reply = _j.loads(r.read())["choices"][0]["message"]["content"]
-            self._s.log("openrouter", self.openrouter_model, "ok", (time.time()-t)*1000)
-            return reply, "openrouter"
-        except Exception as e:
-            self._s.log("openrouter", self.openrouter_model, "error", (time.time()-t)*1000, str(e))
-            logger.warning("openrouter failed: %s", e)
-            return None
+
+        import urllib.request as _ur, json as _j
+        msgs = ([{"role": "system", "content": system}] if system else []) + list(messages)
+        last_error = None
+
+        for model in self.openrouter_models:
+            timeout = 30
+            if deadline is not None:
+                remaining = deadline - time.time()
+                # Not enough time left to be worth opening a socket. Give up on the AI and
+                # let the caller fall back -- returning late is worse than returning without.
+                if remaining <= 1:
+                    logger.warning("openrouter: out of time before %s; falling back", model)
+                    break
+                timeout = min(30, remaining)
+
+            t = time.time()
+            try:
+                payload = _j.dumps({"model": model, "messages": msgs,
+                                    "max_tokens": max_tokens}).encode()
+                req = _ur.Request("https://openrouter.ai/api/v1/chat/completions", data=payload,
+                                  headers={"Authorization": f"Bearer {self.openrouter_key}",
+                                           "Content-Type": "application/json",
+                                           "HTTP-Referer": "https://solarpro.aiappinvent.com",
+                                           "X-Title": "SolarPro"})
+                with _ur.urlopen(req, timeout=timeout) as r:
+                    reply = _j.loads(r.read())["choices"][0]["message"]["content"]
+                # An empty completion is a failure wearing a 200. Falling through to the next
+                # model is right; returning "" would be reported to the caller as a success
+                # and rendered into a document as an empty section.
+                if not (reply or "").strip():
+                    raise ValueError("empty completion")
+                self._s.log("openrouter", model, "ok", (time.time() - t) * 1000)
+                self.openrouter_model = model
+                return reply, "openrouter"
+            except Exception as e:
+                last_error = e
+                self._s.log("openrouter", model, "error", (time.time() - t) * 1000, str(e))
+                logger.warning("openrouter model %s failed: %s", model, e)
+
+        logger.warning("openrouter: every free model failed, last error: %s", last_error)
+        return None
 
     def _ollama(self, messages, system, max_tokens):
         if not self.ollama_url:

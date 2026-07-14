@@ -87,10 +87,24 @@
       need your answer</strong>
     </div>
     <div class="card-body">
+      {# THE AGENT ANSWERS FIRST. This panel used to hand the operator a stack of empty boxes
+         and ask them to write the document the app had promised to write for them. The
+         answers screen puts the agent's draft in every box; this is the way to it. #}
+      <div class="alert alert-info d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <i class="bi bi-robot me-2"></i>
+          <strong>You do not have to answer these yourself.</strong>
+          The agent will draft an answer to every question in every phase, from this
+          programme's own description and records — you review and edit.
+        </div>
+        <a class="btn btn-warning text-nowrap"
+           href="{{ url_for('enterprise_answers', programme_id=programme_id) }}">
+          <i class="bi bi-stars me-1"></i>Let the agent answer
+        </a>
+      </div>
       <p class="text-muted small">
-        SolarPro could not write these sections from the programme description or the source
-        document, and it will not invent them. Answer below and regenerate — your answer
-        becomes the section.
+        Or answer them here yourself — your answer outranks anything the app infers, and
+        becomes the section verbatim when you regenerate.
       </p>
       <form method="post"
             action="{{ url_for('enterprise_lifecycle_document_answers', programme_id=programme_id) }}">

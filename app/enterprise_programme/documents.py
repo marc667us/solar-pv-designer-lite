@@ -633,6 +633,10 @@ def _facts_for_topic(topic: str, facts: dict) -> list[str]:
     strategy = (facts.get("design_strategy") or "").strip()
     kwp = facts.get("target_capacity_kwp")
     ben = facts.get("target_beneficiaries")
+    # The engineering and the money, from the APPROVED reference design and the PRICED BOQ.
+    # Empty when the programme has no design yet, and every use below is guarded -- so a
+    # programme still at Concept says nothing about cost, rather than guessing at one.
+    tf = facts.get("tech_fin") or {}
 
     # EVERY SENTENCE BELOW MUST BE DERIVABLE FROM A STORED FIELD. Nothing else may appear.
     #
@@ -677,15 +681,39 @@ def _facts_for_topic(topic: str, facts: dict) -> list[str]:
                        + (f" across {_num(ben)} beneficiaries" if ben else "") + ".")
         if strategy:
             out.append(f"Its recorded design strategy is {strategy}.")
+        # The DESIGNED capacity, not merely the targeted one. A target is an intention; the
+        # reference design is what the programme actually engineered, and a feasibility or
+        # commissioning activity is asking about the latter.
+        if tf.get("kwp"):
+            out.append(f"Its approved reference design"
+                       + (f", {tf['design_name']}," if tf.get("design_name") else "")
+                       + f" is sized at {_num(tf['kwp'])} kWp per site"
+                       + (f" across {_num(tf['sites'])} sites in scope."
+                          if tf.get("sites") else "."))
     elif topic == "money":
-        # NO NUMBER IS ASSERTED. The app holds no approved budget for a programme, and a
-        # costing assembled here from a capacity figure would read as an estimate the
-        # programme never made. What it CAN say is what the financial case is sized against.
-        if kwp:
+        # NUMBERS ARE NOW ASSERTED -- BUT ONLY THE PROGRAMME'S OWN (owner, 2026-07-14: use a
+        # "technical and financial background text ... to fill the forms of questions").
+        # These come from the APPROVED reference design and the PRICED BOQ scaled to the
+        # register. They are figures the programme itself made, not a costing this writer
+        # assembled from a capacity number -- which is what the previous comment here rightly
+        # refused to do, and still refuses to do when there is no design.
+        if tf.get("total"):
+            out.append(f"{name}'s total funding requirement is {_num(tf['total'])}"
+                       + (f", across {_num(tf['sites'])} sites in scope"
+                          if tf.get("sites") else "")
+                       + (f", at {_num(tf['cost_per_site'])} per site."
+                          if tf.get("cost_per_site") else "."))
+        if tf.get("boq_grand"):
+            out.append(f"This is costed from a priced Bill of Quantities of "
+                       f"{_num(tf['boq_grand'])}"
+                       + (f", carrying {tf['boq_lines']} line items."
+                          if tf.get("boq_lines") else "."))
+        if not tf.get("total") and kwp:
+            # No approved design: say what the case is SIZED AGAINST, and assert no cost.
             out.append(f"{name}'s financial case is sized against its {_num(kwp)} kWp "
                        f"capacity target"
                        + (f" and {_num(ben)} intended beneficiaries" if ben else "") + ".")
-        # No kwp -> nothing factual to say -> the caller asks. It does NOT reassure.
+        # Nothing at all -> the caller asks. It does NOT reassure.
     elif topic == "risk":
         # The app stores no risk register. It has nothing to say here, and saying so is the
         # honest answer -- the caller turns this into a question.
@@ -752,6 +780,80 @@ def _write_from_facts(activity_text: str, facts: dict) -> tuple[str, bool]:
             f"requires."), True
 
 
+def technical_financial_background(c, tenant_id: str, programme_id: int) -> dict:
+    """The programme's ENGINEERING and MONEY, as prose the agent can answer questions from.
+
+    Input:  connection, tenant, programme.
+    Output: {"prose": str, "kwp", "sites", "cost_per_site", "total", "boq_grand", ...} --
+            the FIGURES as well as the paragraph, because the deterministic writer needs the
+            numbers and the model needs the sentence. Empty dict when there is no design.
+
+    OWNER, 2026-07-14: "you must be able to answer inter-phase questions by using the
+    version to prepare a technical and financial background text and use to fill the forms
+    of questions."
+
+    WHY THIS EXISTS. The programme's description says what it INTENDS. The reference design
+    says what it IS -- kWp, module count, inverter rating, the priced BOQ, the cost per site,
+    the total funding requirement. Feasibility, procurement, finance and commissioning
+    questions are all asking about THOSE, and until now the agent could not see them: it was
+    answering a feasibility question from a one-line description of intent.
+
+    So the design is read ONCE per drafting run and handed to the agent as background. It is
+    the same design, the same BOQ and the same funding figure that the engine-written reports
+    print -- one source, so a drafted answer and a generated report cannot contradict each
+    other about what the programme costs.
+
+    Returns "" -- not a placeholder -- when there is no approved design. An agent told
+    "capacity: unknown" will happily write a sentence around the word unknown; an agent told
+    nothing simply does not speak to capacity, and the activity falls to a question. Silence
+    is the honest failure here.
+    """
+    # Lazy, for the same reason reports.py does it: rollout reaches the design engine, and
+    # importing it at module scope would tie the document writer to the app factory.
+    from . import rollout
+
+    try:
+        design = rollout.current_design(c, tenant_id, programme_id)
+        if not design or not design.get("project_id"):
+            return {}
+        funding = rollout.funding_requirement(c, tenant_id, programme_id) or {}
+        boq = rollout.scaled_boq(c, tenant_id, programme_id) or {}
+    except Exception:
+        # Background is an ENRICHMENT. A programme whose design is half-built must still get
+        # its questions answered from the description -- never a 500 on the answers screen.
+        return {}
+
+    fig = {
+        "design_name": design.get("name"),
+        "kwp": design.get("inv_kw") or design.get("capacity_kwp"),
+        "sites": funding.get("sites") or funding.get("qualified_sites"),
+        "cost_per_site": funding.get("cost_per_site"),
+        "total": funding.get("total") or funding.get("funding_requirement"),
+        "boq_grand": boq.get("boq_grand"),
+        "boq_lines": len(boq.get("boq_rows") or []) or None,
+    }
+
+    bits: list[str] = []
+    if fig["design_name"]:
+        bits.append(f"Reference design: {fig['design_name']}.")
+    if fig["kwp"]:
+        bits.append(f"Design capacity per site: {_num(fig['kwp'])} kWp.")
+    if fig["sites"]:
+        bits.append(f"Sites in scope: {_num(fig['sites'])}.")
+    if fig["cost_per_site"]:
+        bits.append(f"Installed cost per site: {_num(fig['cost_per_site'])}.")
+    if fig["total"]:
+        bits.append(f"Total funding requirement for the programme: {_num(fig['total'])}.")
+    if fig["boq_grand"]:
+        bits.append("Priced Bill of Quantities, scaled to the programme: "
+                    f"{_num(fig['boq_grand'])}.")
+    if fig["boq_lines"]:
+        bits.append(f"The BOQ carries {fig['boq_lines']} priced line items.")
+
+    fig["prose"] = " ".join(bits)
+    return fig
+
+
 def _brief(facts: dict) -> str:
     """The programme, as prose, for the model to write from.
 
@@ -781,6 +883,13 @@ def _brief(facts: dict) -> str:
                     f"{facts['qualified']} qualified.")
     bits.append(f"Current lifecycle phase: "
                 f"{_PHASE_NAME.get(facts['phase_code'], facts['phase_code'])}.")
+
+    # THE ENGINEERING AND THE MONEY. Feasibility, procurement, finance and commissioning
+    # activities are ASKING about these. Without them the agent was answering a technical
+    # question from a one-line statement of intent, which is how a feasibility section ends
+    # up saying nothing a feasibility section is for.
+    if (facts.get("tech_fin") or {}).get("prose"):
+        bits.append("Technical and financial background: " + facts["tech_fin"]["prose"])
     return " ".join(bits)
 
 
@@ -813,7 +922,7 @@ def _ai_write(activity_text: str, facts: dict, passage_body: str = "") -> str | 
     safe_extract = passage_body[:2000].replace("<<<", "< <<").replace(">>>", "> >>")
     extract = (f"\n\n<<<SOURCE_EXTRACT\n{safe_extract}\nSOURCE_EXTRACT>>>") if passage_body else ""
     try:
-        from api_manager import _api
+        from api_manager import api as _api
         reply, provider = _api.ai.chat(
             [{"role": "user", "content":
                 f"{_brief(facts)}{extract}\n\n"
@@ -870,7 +979,7 @@ def _question_for(activity_text: str, facts: dict) -> str:
     fallback = f"{stem} — what should this programme record?"
 
     try:
-        from api_manager import _api
+        from api_manager import api as _api
         reply, provider = _api.ai.chat(
             [{"role": "user", "content":
                 f"{_brief(facts)}\n\n"
@@ -1041,6 +1150,11 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
         )
 
     facts = programme_facts(c, tenant_id, programme_id)
+    # THE SAME BACKGROUND THE AGENT DRAFTS FROM. One source, read once per document -- so a
+    # drafted answer and the generated section cannot state different costs for the same
+    # programme, which is exactly the sort of contradiction a reviewer would find and never
+    # trust the tool again after.
+    facts["tech_fin"] = technical_financial_background(c, tenant_id, programme_id)
     passages = _passages(source_text)
     answers = get_answers(c, tenant_id, programme_id)
 
@@ -1226,6 +1340,238 @@ def build_markdown(c, tenant_id: str, programme_id: int, activity_codes: list[st
 
 # The marker build_markdown writes under a section it wrote but could not ground in a
 # specific programme fact. The section IS written; this flags that it could be stronger.
+# --- THE AGENT ANSWERS THE QUESTIONS -----------------------------------------
+#
+# OWNER, 2026-07-14: "the benefit of using the app is that an agent will answer the
+# questions", and "take all the questions across each phase and provide default answers and
+# give the user access to edit your answer if needed and save".
+#
+# So the operator must never meet a blank box. Every activity in a phase arrives with an
+# answer ALREADY DRAFTED by the app; the operator's job is to correct what is wrong, not to
+# compose from nothing.
+#
+# A DRAFT IS NOT AN ANSWER, AND THE DATABASE KNOWS THE DIFFERENCE. A drafted answer is stored
+# with `answer` set and `answered_at` still NULL. `get_answers` reports answered=False for
+# it, so:
+#   * the document writer does not treat it as the operator's own words (an operator answer
+#     OUTRANKS the model, and a machine draft must never inherit that authority);
+#   * it still counts as an outstanding question, because a human has not confirmed it.
+# The moment the operator presses Save, `save_answers` stamps `answered_at` and the same text
+# becomes theirs. Nothing is lost, and nothing is claimed on their behalf.
+#
+# WHY BATCHED. There are 453 activities across the 16 phases, up to 38 in a single phase. One
+# model call each would be twenty minutes of wall clock and would blow the request timeout
+# long before it finished. One call answers a batch, so a whole phase costs a handful.
+
+_DRAFT_BATCH = 8            # activities per model call
+_DRAFT_AI_BUDGET_SECONDS = 55.0   # then fall back to facts-only, well inside gunicorn's 120s
+
+
+def _draft_batch_ai(activities: list[tuple[str, str]], facts: dict,
+                    deadline: float | None = None) -> dict[str, str]:
+    """Ask the model to answer several activities in ONE call.
+
+    Input:  [(activity_code, activity_text), ...] and the programme facts.
+    Output: {activity_code: answer}. Codes it could not ground are simply ABSENT -- the
+            caller writes those from facts instead. Never raises.
+
+    The model is told to omit what it cannot ground rather than to fill the gap. A governance
+    document that invents its sponsor is not a draft with a small error in it; the omission
+    is the feature.
+    """
+    listing = "\n".join(f"{code}: {text}" for code, text in activities)
+    try:
+        from api_manager import api as _api
+        reply, provider = _api.ai.chat(
+            [{"role": "user", "content":
+                f"{_brief(facts)}\n\n"
+                f"Lifecycle activities to answer:\n{listing}\n\n"
+                f"For EACH activity above, write 2-3 sentences answering it FOR THIS "
+                f"PROGRAMME, using ONLY the programme information above. Do not invent "
+                f"institutions, figures, dates or commitments. OMIT any activity the "
+                f"information above does not let you answer -- omitting is correct and "
+                f"expected. Reply with a JSON object only: "
+                f'{{"ACTIVITY_CODE": "the answer", ...}}'}],
+            system=("You draft sections of solar programme governance documents. Be "
+                    "concrete, factual and brief. Never invent facts that are not given to "
+                    "you; omit the activity instead. Reply with a JSON object and nothing "
+                    "else -- no prose, no code fence."),
+            max_tokens=1400,
+            endpoint="enterprise_answer_drafting",
+            # THE HARD CEILING. Without it one batch could try five fallback models at 30s
+            # each -- 150s, past gunicorn's 120s timeout, hanging the single free-tier
+            # instance for everybody (Codex, HIGH). The budget is now enforced INSIDE the
+            # HTTP call, not merely checked between batches.
+            deadline=deadline,
+        )
+    except Exception:
+        return {}
+
+    if not reply or provider in ("rule_based", "capped"):
+        return {}
+
+    # Models fence their JSON even when told not to. Take the outermost object.
+    m = re.search(r"\{.*\}", reply, re.S)
+    if not m:
+        return {}
+    try:
+        data = json.loads(m.group(0))
+    except ValueError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+
+    valid = {code for code, _t in activities}
+    return {
+        k: v.strip()
+        for k, v in data.items()
+        # A code we did not ask about is the model hallucinating an activity. Drop it: it
+        # would otherwise be stored against a real activity_code somewhere else in the phase.
+        if k in valid and isinstance(v, str) and v.strip()
+        and "INSUFFICIENT" not in v.upper()
+    }
+
+
+def draft_answers(c, tenant_id: str, user_id: int, programme_id: int, *,
+                  phase_code: str = "", use_ai: bool = True, audit=None) -> dict:
+    """Have the agent answer every unanswered activity, so the operator edits, never composes.
+
+    Input:  connection, tenant, acting user, programme; a phase code ("" = every phase);
+            use_ai (False writes from stored facts alone -- deterministic, used by tests).
+    Output: {"drafted": int, "ai": int, "from_facts": int, "skipped_answered": int}.
+    Raises: EnterprisePermissionError (403), DocumentError (C13 -> 404).
+
+    NEVER OVERWRITES A HUMAN ANSWER. The upsert's WHERE clause refuses any row whose
+    `answered_at` is set. Re-running this must be safe -- an operator who has spent an hour
+    answering the Feasibility phase by hand must be able to press "draft the rest" without
+    losing a word of it.
+    """
+    from . import workflows
+    workflows._load_programme(c, tenant_id, programme_id)            # C13 FIRST
+    rbac.require_permission(c, tenant_id, user_id, "programme.edit",
+                            programme_id=programme_id)
+
+    if phase_code and phase_code not in PHASE_ACTIVITIES:
+        raise DocumentError("C00", f"no such lifecycle phase: {phase_code}")
+
+    facts = programme_facts(c, tenant_id, programme_id)
+    # Read ONCE for the whole run, not once per activity: this reaches the design engine, and
+    # a 453-activity draft must not mean 453 trips to it.
+    facts["tech_fin"] = technical_financial_background(c, tenant_id, programme_id)
+    existing = get_answers(c, tenant_id, programme_id)
+
+    phases = [phase_code] if phase_code else [p for p, _n, _nm in PHASES]
+    todo: list[tuple[str, str]] = []
+    skipped = 0
+    for pcode in phases:
+        for acode, atext in PHASE_ACTIVITIES[pcode]:
+            if existing.get(acode, {}).get("answered"):
+                skipped += 1                 # the operator has spoken; leave it alone
+                continue
+            todo.append((acode, atext))
+
+    drafted: dict[str, str] = {}
+    from_ai: set[str] = set()
+
+    if use_ai and todo:
+        import time as _time
+        deadline = _time.time() + _DRAFT_AI_BUDGET_SECONDS
+        for i in range(0, len(todo), _DRAFT_BATCH):
+            if _time.time() >= deadline:
+                # Out of time, not out of answers: everything left is written from facts
+                # below. A slow model must degrade the PROSE, never leave a box empty.
+                break
+            batch = todo[i:i + _DRAFT_BATCH]
+            # A SERVICE MUST NOT TRUST ITS CALLER, and a model is the least trustworthy
+            # caller there is. _draft_batch_ai already drops codes it was not asked about,
+            # but this loop is what WRITES to the database: an unknown code reaching the
+            # upsert would blow up on ACTIVITY_INDEX, and a code from ANOTHER phase would be
+            # stored against a real activity the operator never had drafted. Filter here too.
+            got = {k: v for k, v in _draft_batch_ai(batch, facts, deadline).items()
+                   if k in {code for code, _t in batch}}
+            drafted.update(got)
+            from_ai.update(got)
+
+    # Whatever the model did not ground, the app writes from what it actually knows. This is
+    # the same writer the document itself uses, so a drafted answer and a generated section
+    # never disagree about the facts.
+    for acode, atext in todo:
+        if acode not in drafted:
+            body, _thin = _write_from_facts(atext, facts)
+            drafted[acode] = body
+
+    if not drafted:
+        return {"drafted": 0, "ai": 0, "from_facts": 0, "skipped_answered": skipped}
+
+    audit = audit or txn.audit_on(c)
+    written: set[str] = set()
+    with txn.atomic(c):
+        for acode, text in drafted.items():
+            cur = c.execute(
+                "INSERT INTO enterprise_activity_answers "
+                "(tenant_id, programme_id, activity_code, question, answer) "
+                "VALUES (?,?,?,?,?) "
+                "ON CONFLICT (tenant_id, programme_id, activity_code) DO UPDATE SET "
+                "  answer = excluded.answer, "
+                "  updated_at = CURRENT_TIMESTAMP "
+                # THE GUARD. Without it, re-drafting would silently overwrite the operator's
+                # own answers with the machine's -- destroying exactly the work the feature
+                # exists to save them. Codex confirmed the WHERE binds to the EXISTING row on
+                # both Postgres and SQLite (`excluded` is only the proposed row).
+                " WHERE enterprise_activity_answers.answered_at IS NULL",
+                (tenant_id, programme_id, acode,
+                 ACTIVITY_INDEX[acode][1], text),
+            )
+            # COUNT WHAT ACTUALLY LANDED, not what we tried (Codex, LOW). The guard above
+            # turns the upsert into a NO-OP when somebody answered this activity between our
+            # read and our write. Reporting the attempt would tell the operator the agent had
+            # answered an activity it had -- correctly -- refused to touch, and would put that
+            # same false number in the audit trail.
+            if getattr(cur, "rowcount", -1) != 0:
+                written.add(acode)
+
+        _require_audit(
+            audit("ENTERPRISE_ANSWERS_DRAFTED", user_id=user_id, tenant_id=tenant_id,
+                  details={"programme_id": programme_id, "phase": phase_code or "ALL",
+                           "drafted": len(written), "ai": len(from_ai & written),
+                           "from_facts": len(written - from_ai)}),
+            "drafted answers",
+        )
+
+    return {"drafted": len(written), "ai": len(from_ai & written),
+            "from_facts": len(written - from_ai),
+            "skipped_answered": skipped + (len(drafted) - len(written))}
+
+
+def answer_sheet(c, tenant_id: str, programme_id: int) -> list[dict]:
+    """Every activity in the lifecycle, with its question and its current answer.
+
+    Input:  connection, tenant, programme.
+    Output: [{phase_code, phase_name, activities: [{code, activity, question, answer,
+              answered, drafted}]}], in lifecycle order.
+
+    `drafted` means the app wrote it and no human has confirmed it -- the screen says so, and
+    a Save turns it into the operator's own answer.
+    """
+    answers = get_answers(c, tenant_id, programme_id)
+    out = []
+    for pcode, _no, pname in PHASES:
+        rows = []
+        for acode, atext in PHASE_ACTIVITIES[pcode]:
+            a = answers.get(acode) or {}
+            text = (a.get("answer") or "").strip()
+            rows.append({
+                "code": acode,
+                "activity": atext,
+                "question": a.get("question") or "",
+                "answer": text,
+                "answered": bool(a.get("answered")),
+                "drafted": bool(text) and not a.get("answered"),
+            })
+        out.append({"phase_code": pcode, "phase_name": pname, "activities": rows})
+    return out
+
+
 THIN_SECTION_MARKER = "*To strengthen this section:"
 
 

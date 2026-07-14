@@ -1947,6 +1947,33 @@ SCENARIOS: dict[str, tuple] = {
                  screen="Import"),
         ],
     ),
+    "enterprise_answers": (
+        "Lifecycle answers", "Enterprise",
+        "The agent answers every lifecycle question. You correct it.",
+        [
+            step("The agent answers, you edit", "You never face a blank form.",
+                 "The whole point of the app is that the agent answers the lifecycle "
+                 "questions for you. Your job is to correct what is wrong, not to write it "
+                 "from nothing.",
+                 target=".alert-info", screen="Answers"),
+            step("Every phase, every activity", "All sixteen phases, in one place.",
+                 "Each phase opens to show every activity in it, with its answer already in "
+                 "the box.",
+                 target=".accordion, .accordion-item", screen="Answers"),
+            step("Let the agent answer", "It writes from this programme's own records.",
+                 "Press this and the agent drafts an answer to every unanswered activity, "
+                 "using the programme's own description, register and design. Answers you "
+                 "have already saved are never overwritten.",
+                 target=".btn-warning", screen="Answers"),
+            step("Edit anything that is wrong", "It is a draft until you say otherwise.",
+                 "A drafted answer is marked as drafted. Edit the text however you like.",
+                 target="textarea", screen="Answers"),
+            step("Save, and it becomes yours", "A saved answer outranks anything the app infers.",
+                 "Save, and the answer becomes yours. From then on it is used word for word "
+                 "in the documents you generate.",
+                 target='button[type="submit"], .btn-warning', screen="Answers"),
+        ],
+    ),
     "enterprise_lifecycle_documents": (
         "Lifecycle documents", "Enterprise",
         "The real activities of each phase, written up from the programme's own answers.",
