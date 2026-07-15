@@ -1,0 +1,302 @@
+# Clear the REBUILD Enterprise Programme data (test programmes) from live Postgres.
+#
+# WHY: the owner created test programmes through the rebuilt module while it was being
+# built. They failed / are being replaced by the Revision-4 rebuild (six-phase model,
+# migration 032). The owner's instruction (2026-07-15): "no real programmes, just test,
+# even that failed so get rid of them and clear dashboards." This empties the rebuild
+# tables so every enterprise dashboard reads zero.
+#
+# SISTER WORKFLOW: `Clear Enterprise Phase-1 Data` clears the OLD migration-024 tables.
+# Run BOTH to leave the whole enterprise surface clean. This one owns the REBUILD tables
+# (migrations 025-031).
+#
+# WHAT IT TOUCHES -- the 20 rebuild PROGRAMME/BENEFICIARY/APPLICATION tables, and only
+# these (children first, parents last):
+#   enterprise_activity_answers        (028)
+#   enterprise_applications            (031)
+#   enterprise_sponsor_users           (031)
+#   enterprise_reference_designs       (029)
+#   enterprise_project_links           (027)
+#   enterprise_jobs                    (027)
+#   enterprise_site_qualifications     (027)
+#   enterprise_import_rows             (027)
+#   enterprise_import_batches          (027)
+#   enterprise_beneficiary_register    (027)
+#   enterprise_template_versions       (026)
+#   enterprise_programme_templates     (026)
+#   enterprise_sites                   (026)
+#   enterprise_geographic_areas        (026)
+#   enterprise_documents               (026)
+#   enterprise_approvals               (026)
+#   enterprise_workflow_transitions    (026)
+#   enterprise_stage_gates             (026)
+#   enterprise_programme_phase_states  (026)
+#   enterprise_programme_registry      (026)
+#
+# WHAT IT NEVER TOUCHES:
+#   * `projects` / `capital_investment_projects` -- a programme LINKS a project, it never
+#     owns it. enterprise_project_links.project_id is deliberately NOT a FK. The DELETEs
+#     name the 20 tables explicitly; nothing cascades into either projects table.
+#   * `enterprise_taxonomy_options` -- SEED dropdown reference data, not test data. Kept.
+#   * `users`, `admin_settings`, the feature flags, any marketplace/BOQ table.
+#   * `enterprise_tenants` / `enterprise_tenant_memberships` / `enterprise_role_assignments`
+#     -- the org/membership SHELL is kept by default so the org switcher and personal
+#     tenants survive. Set -f also_orgs=YES to ALSO wipe those (full reset).
+#
+# TABLES ARE EMPTIED, NOT DROPPED. The schema (migrations 025-031) stays; only rows go.
+#
+# TEMPLATE IMMUTABILITY TRIGGER: migration 026 PART 8b blocks direct DELETE of a non-Draft
+# enterprise_template_versions row. The delete transaction runs under
+# `session_replication_role='replica'` (same mechanism the backup-restore path uses,
+# new_admin_backup_routes.py:172) so user triggers and FK triggers do not fire -- which is
+# why every child is deleted EXPLICITLY here, children-first, rather than relying on CASCADE.
+#
+# DEFAULT IS DRY-RUN. Prints the counts it WOULD delete and writes nothing.
+# Committing needs -f confirm=CLEAR_ENTERPRISE_REBUILD.
+
+name: Clear Enterprise Rebuild Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type CLEAR_ENTERPRISE_REBUILD to actually delete."
+        required: false
+        default: ""
+      also_orgs:
+        description: "Type YES to ALSO wipe enterprise_tenants/memberships/role_assignments (full reset). Default keeps the org shell."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  clear:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+      ALSO_ORGS:      ${{ inputs.also_orgs }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Live server is Postgres 18.4 (upgraded 2026-07-10); pg_dump refuses to dump a
+      # server newer than itself, so pull the matching major from PGDG.
+      - name: Install psql + pg_dump 18 (matching the live server)
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          echo "psql:     $(psql --version)"
+          echo "pg_dump:  $(pg_dump --version)"
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "CLEAR_ENTERPRISE_REBUILD" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- rows WILL be deleted from live Postgres ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- counts only, nothing will be written ==="
+            echo "Re-run with -f confirm=CLEAR_ENTERPRISE_REBUILD to delete."
+          fi
+          if [ "$ALSO_ORGS" = "YES" ]; then
+            echo "ALSO_ORGS=1" >> $GITHUB_ENV
+            echo "=== org shell (tenants/memberships/role_assignments) WILL ALSO be wiped ==="
+          else
+            echo "ALSO_ORGS=0" >> $GITHUB_ENV
+            echo "org shell (tenants/memberships) will be KEPT."
+          fi
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      - name: What is actually there right now
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "================= ENTERPRISE REBUILD DATA (counts) ================="
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            SELECT 'enterprise_programme_registry'      AS tbl, count(*) FROM enterprise_programme_registry
+            UNION ALL SELECT 'enterprise_programme_phase_states', count(*) FROM enterprise_programme_phase_states
+            UNION ALL SELECT 'enterprise_stage_gates',            count(*) FROM enterprise_stage_gates
+            UNION ALL SELECT 'enterprise_workflow_transitions',   count(*) FROM enterprise_workflow_transitions
+            UNION ALL SELECT 'enterprise_approvals',              count(*) FROM enterprise_approvals
+            UNION ALL SELECT 'enterprise_documents',              count(*) FROM enterprise_documents
+            UNION ALL SELECT 'enterprise_activity_answers',       count(*) FROM enterprise_activity_answers
+            UNION ALL SELECT 'enterprise_geographic_areas',       count(*) FROM enterprise_geographic_areas
+            UNION ALL SELECT 'enterprise_sites',                  count(*) FROM enterprise_sites
+            UNION ALL SELECT 'enterprise_programme_templates',    count(*) FROM enterprise_programme_templates
+            UNION ALL SELECT 'enterprise_template_versions',      count(*) FROM enterprise_template_versions
+            UNION ALL SELECT 'enterprise_beneficiary_register',   count(*) FROM enterprise_beneficiary_register
+            UNION ALL SELECT 'enterprise_import_batches',         count(*) FROM enterprise_import_batches
+            UNION ALL SELECT 'enterprise_import_rows',            count(*) FROM enterprise_import_rows
+            UNION ALL SELECT 'enterprise_site_qualifications',    count(*) FROM enterprise_site_qualifications
+            UNION ALL SELECT 'enterprise_project_links',          count(*) FROM enterprise_project_links
+            UNION ALL SELECT 'enterprise_jobs',                   count(*) FROM enterprise_jobs
+            UNION ALL SELECT 'enterprise_reference_designs',      count(*) FROM enterprise_reference_designs
+            UNION ALL SELECT 'enterprise_applications',           count(*) FROM enterprise_applications
+            UNION ALL SELECT 'enterprise_sponsor_users',          count(*) FROM enterprise_sponsor_users
+            ORDER BY 1;"
+          echo ""
+          echo "==================== THE PROGRAMMES THEMSELVES ===================="
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            SELECT id, code, name, status, current_phase_code, created_at
+              FROM enterprise_programme_registry ORDER BY id;"
+          echo ""
+          echo "============= ORG SHELL (kept unless also_orgs=YES) ==============="
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            SELECT 'enterprise_tenants'             AS tbl, count(*) FROM enterprise_tenants
+            UNION ALL SELECT 'enterprise_tenant_memberships', count(*) FROM enterprise_tenant_memberships
+            UNION ALL SELECT 'enterprise_role_assignments',   count(*) FROM enterprise_role_assignments
+            UNION ALL SELECT 'enterprise_taxonomy_options (KEPT: seed)', count(*) FROM enterprise_taxonomy_options
+            ORDER BY 1;"
+          echo ""
+          echo "======== user projects (must be IDENTICAL after) ========"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            SELECT 'projects' AS tbl, count(*) FROM projects
+            UNION ALL SELECT 'capital_investment_projects', count(*)
+              FROM capital_investment_projects;"
+
+      - name: Dry-run -- nothing written
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The rows counted above WOULD be deleted. Nothing was."
+          echo "  To actually delete, re-run with:"
+          echo "     -f confirm=CLEAR_ENTERPRISE_REBUILD"
+          echo "  Add -f also_orgs=YES to also wipe the org shell (full reset)."
+          echo "================================================================"
+
+      # Back up exactly what is about to be destroyed, BEFORE the first DELETE.
+      - name: Back up the rebuild tables BEFORE deleting anything
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          mkdir -p /tmp/backup
+          TABLES="-t enterprise_activity_answers -t enterprise_applications \
+            -t enterprise_sponsor_users -t enterprise_reference_designs \
+            -t enterprise_project_links -t enterprise_jobs \
+            -t enterprise_site_qualifications -t enterprise_import_rows \
+            -t enterprise_import_batches -t enterprise_beneficiary_register \
+            -t enterprise_template_versions -t enterprise_programme_templates \
+            -t enterprise_sites -t enterprise_geographic_areas \
+            -t enterprise_documents -t enterprise_approvals \
+            -t enterprise_workflow_transitions -t enterprise_stage_gates \
+            -t enterprise_programme_phase_states -t enterprise_programme_registry"
+          if [ "$ALSO_ORGS" = "YES" ]; then
+            TABLES="$TABLES -t enterprise_role_assignments \
+              -t enterprise_tenant_memberships -t enterprise_tenants"
+          fi
+          pg_dump "$DATABASE_URL" --data-only --column-inserts $TABLES \
+            > /tmp/backup/enterprise_rebuild_data.sql
+          echo "--- backup written, $(wc -l < /tmp/backup/enterprise_rebuild_data.sql) lines ---"
+          grep -c '^INSERT INTO' /tmp/backup/enterprise_rebuild_data.sql || true
+          test -s /tmp/backup/enterprise_rebuild_data.sql
+
+      - name: Upload the backup artifact
+        if: env.MODE == 'apply'
+        uses: actions/upload-artifact@v4
+        with:
+          name: enterprise-rebuild-data-backup
+          path: /tmp/backup/enterprise_rebuild_data.sql
+          retention-days: 90
+
+      - name: Delete (only when MODE=apply)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          # ONE transaction. session_replication_role='replica' disables the template
+          # immutability trigger (026 PART 8b) and FK triggers, so each child is deleted
+          # explicitly, children-first. Either all rebuild data goes, or none does.
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v also_orgs="$ALSO_ORGS" <<'SQL'
+          BEGIN;
+          SET LOCAL session_replication_role = 'replica';
+
+          DELETE FROM enterprise_activity_answers;
+          DELETE FROM enterprise_applications;
+          DELETE FROM enterprise_sponsor_users;
+          DELETE FROM enterprise_reference_designs;
+          DELETE FROM enterprise_project_links;
+          DELETE FROM enterprise_jobs;
+          DELETE FROM enterprise_site_qualifications;
+          DELETE FROM enterprise_import_rows;
+          DELETE FROM enterprise_import_batches;
+          DELETE FROM enterprise_beneficiary_register;
+          DELETE FROM enterprise_template_versions;
+          DELETE FROM enterprise_programme_templates;
+          DELETE FROM enterprise_sites;
+          DELETE FROM enterprise_geographic_areas;
+          DELETE FROM enterprise_documents;
+          DELETE FROM enterprise_approvals;
+          DELETE FROM enterprise_workflow_transitions;
+          DELETE FROM enterprise_stage_gates;
+          DELETE FROM enterprise_programme_phase_states;
+          DELETE FROM enterprise_programme_registry;
+
+          -- Optional full reset of the org shell.
+          \if :'also_orgs' = 'YES'
+            DELETE FROM enterprise_role_assignments;
+            DELETE FROM enterprise_tenant_memberships;
+            DELETE FROM enterprise_tenants;
+          \endif
+
+          COMMIT;
+          SQL
+          echo "OK: enterprise rebuild data cleared."
+
+      - name: Verify -- rebuild empty, user projects untouched
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "=== rebuild programme tables must all be 0 ==="
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            SELECT 'enterprise_programme_registry'      AS tbl, count(*) FROM enterprise_programme_registry
+            UNION ALL SELECT 'enterprise_beneficiary_register',   count(*) FROM enterprise_beneficiary_register
+            UNION ALL SELECT 'enterprise_applications',           count(*) FROM enterprise_applications
+            UNION ALL SELECT 'enterprise_documents',              count(*) FROM enterprise_documents
+            ORDER BY 1;"
+          echo ""
+          echo "=== the user's OWN projects -- must match the BEFORE counts ==="
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
+            SELECT 'projects' AS tbl, count(*) FROM projects
+            UNION ALL SELECT 'capital_investment_projects', count(*)
+              FROM capital_investment_projects;"
