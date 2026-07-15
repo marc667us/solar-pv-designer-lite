@@ -247,12 +247,15 @@ jobs:
           DATABASE_URL: ${{ steps.pg.outputs.external }}
         run: |
           set -e
-          # ONE transaction. session_replication_role='replica' disables the template
-          # immutability trigger (026 PART 8b) and FK triggers, so each child is deleted
-          # explicitly, children-first. Either all rebuild data goes, or none does.
+          # ONE transaction, children-first. Render's DB user is NOT a superuser, so it
+          # cannot SET session_replication_role. Instead we respect the schema's own rules:
+          # enterprise_template_versions carries an immutability trigger (026 PART 8b) that
+          # BLOCKS a direct DELETE of a non-Draft version but ALLOWS the delete when it
+          # cascades from the parent template going away. So we do NOT delete versions
+          # directly -- deleting enterprise_programme_templates cascades into them the
+          # sanctioned way. Every other child is a plain children-first DELETE.
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v also_orgs="$ALSO_ORGS" <<'SQL'
           BEGIN;
-          SET LOCAL session_replication_role = 'replica';
 
           DELETE FROM enterprise_activity_answers;
           DELETE FROM enterprise_applications;
@@ -264,7 +267,7 @@ jobs:
           DELETE FROM enterprise_import_rows;
           DELETE FROM enterprise_import_batches;
           DELETE FROM enterprise_beneficiary_register;
-          DELETE FROM enterprise_template_versions;
+          -- cascades into enterprise_template_versions (trigger permits parent cascade):
           DELETE FROM enterprise_programme_templates;
           DELETE FROM enterprise_sites;
           DELETE FROM enterprise_geographic_areas;
