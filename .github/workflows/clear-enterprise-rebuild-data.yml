@@ -222,7 +222,12 @@ jobs:
             TABLES="$TABLES -t enterprise_role_assignments \
               -t enterprise_tenant_memberships -t enterprise_tenants"
           fi
-          pg_dump "$DATABASE_URL" --data-only --column-inserts $TABLES \
+          # /usr/bin/pg_dump (pg_wrapper) can select the older client-16 and then refuse
+          # the 18.4 server ("server version mismatch"). Invoke the highest installed
+          # pg_dump binary explicitly so the backup matches the live server major.
+          PG_DUMP=$(ls /usr/lib/postgresql/*/bin/pg_dump 2>/dev/null | sort -V | tail -1)
+          echo "using pg_dump: ${PG_DUMP:-pg_dump} ($("${PG_DUMP:-pg_dump}" --version))"
+          "${PG_DUMP:-pg_dump}" "$DATABASE_URL" --data-only --column-inserts $TABLES \
             > /tmp/backup/enterprise_rebuild_data.sql
           echo "--- backup written, $(wc -l < /tmp/backup/enterprise_rebuild_data.sql) lines ---"
           grep -c '^INSERT INTO' /tmp/backup/enterprise_rebuild_data.sql || true
