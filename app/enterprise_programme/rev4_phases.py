@@ -288,6 +288,66 @@ PHASE_STATUS: dict[str, str] = {
 }
 
 
+# =============================================================================
+# The six-phase lifecycle STATE MACHINE (Slice 0b) -- the drop-in that workflows.py
+# and gates.py read instead of the old 16-phase machine in constants.py
+# =============================================================================
+# Hold/terminal pseudo-states are model-agnostic (a suspended programme is suspended
+# whether the model has 6 phases or 16), so they are reused verbatim from constants.py
+# via re-export -- there is nothing six-phase-specific about them.
+from .constants import (  # noqa: E402  (kept local to the state-machine section)
+    HOLD_STATES,
+    TERMINAL_STATES,
+    PSEUDO_STATES,
+    PSEUDO_STATE_STATUS,
+    GATE_AUTHORITY_HOLDER_COLUMN,  # {role -> registry column naming its post holder}
+)
+
+DEFAULT_PHASE_CODE = "R4_INITIATION"
+
+# phase_code -> the phases (or pseudo-states) it may legally move to. Rev 4 is a SIMPLE
+# forward spine (owner-spec section 6): Initiation -> Planning -> Execution -> Value ->
+# Closure, each guarded by its gate. MONITORING is the exception: it "must run during
+# planning, execution and operations" (section 12), so it is reachable from Execution and
+# loops back or forward WITHOUT a gate of its own -- it is a continuous phase, not a stop.
+# Each phase also allows a one-step rollback (return for revision) and the hold/terminal
+# pseudo-states. Anything not listed is an illegal transition -- no any->any escape.
+TRANSITIONS: dict[str, tuple[str, ...]] = {
+    "R4_INITIATION": ("R4_PLANNING", "CANCELLED", "ON_HOLD"),
+    "R4_PLANNING":   ("R4_EXECUTION", "R4_INITIATION", "ON_HOLD", "CANCELLED"),
+    "R4_EXECUTION":  ("R4_MONITORING", "R4_VALUE", "R4_PLANNING", "SUSPENDED"),
+    "R4_MONITORING": ("R4_VALUE", "R4_EXECUTION"),
+    "R4_VALUE":      ("R4_CLOSURE", "R4_EXECUTION", "SUSPENDED"),
+    "R4_CLOSURE":    ("CLOSED",),
+}
+
+# The gate that closes each phase (must be Approved before leaving it forward).
+# Same content as GATE_FOR_PHASE above, named to match the old constants surface so the
+# consumer repoint is a pure import swap.
+GATE_CLOSING_PHASE: dict[str, str] = dict(GATE_FOR_PHASE)
+
+# What a phase demands to be ENTERED. A destination-keyed rule (not edge-keyed) so no
+# routing trick can reach a phase without its predecessor's gate. Monitoring has no entry
+# gate (it runs continuously); Closure needs the Value gate; the Closure gate (R4G5) is
+# approved to actually close the programme.
+PHASE_ENTRY_REQUIRED_GATES: dict[str, tuple[str, ...]] = {
+    "R4_PLANNING":  ("R4G1_INITIATION",),
+    "R4_EXECUTION": ("R4G2_PLANNING",),
+    "R4_VALUE":     ("R4G3_EXECUTION",),
+    "R4_CLOSURE":   ("R4G4_VALUE",),
+}
+
+# Rev 4's five gates are all ACTIVE (the owner wants the whole simple lifecycle usable),
+# so nothing is deferred and there are no cross-gate prerequisites beyond what phase-entry
+# already enforces transitively. These exist so the consumer import surface matches the
+# old one and the guards degrade to no-ops rather than KeyError.
+GATE_PREREQUISITE_GATES: dict[str, tuple[str, ...]] = {}
+GATES_DEFERRED_BEYOND_RELEASE_1: frozenset[str] = frozenset()
+
+# gate_code -> the role that alone may approve it.
+GATE_AUTHORITY: dict[str, str] = {code: role for code, _, _, role in GATES}
+
+
 # --- integrity checks: fail import loudly if the spec lists drift ------------
 # The owner's section 9-14 counts. If a future edit changes a list, this assert is the
 # canary that the deliverable contract moved.
@@ -310,10 +370,40 @@ for _code, _n in _EXPECTED_DELIVERABLE_COUNTS.items():
 assert set(OLD_PHASE_TO_NEW.values()) <= set(PHASE_CODES)
 assert set(OLD_GATE_TO_NEW.values()) <= set(GATE_CODES)
 
+# State-machine integrity: every source is a real phase; every destination is a real phase
+# or a known pseudo-state; the default phase exists; every phase is reachable from the
+# start (no island); and every gate authority is used by exactly one gate.
+_REACHABLE = {DEFAULT_PHASE_CODE}
+_frontier = [DEFAULT_PHASE_CODE]
+while _frontier:
+    _cur = _frontier.pop()
+    for _dst in TRANSITIONS.get(_cur, ()):
+        if _dst in PHASE_CODES and _dst not in _REACHABLE:
+            _REACHABLE.add(_dst)
+            _frontier.append(_dst)
+assert set(TRANSITIONS) == set(PHASE_CODES), "TRANSITIONS must key every phase"
+for _src, _dsts in TRANSITIONS.items():
+    for _d in _dsts:
+        assert _d in PHASE_CODES or _d in PSEUDO_STATES, f"bad transition target {_d!r}"
+assert _REACHABLE == set(PHASE_CODES), (
+    f"unreachable phase(s): {set(PHASE_CODES) - _REACHABLE}"
+)
+assert DEFAULT_PHASE_CODE in PHASE_CODES
+# Every phase-entry gate requirement names a real gate.
+for _reqs in PHASE_ENTRY_REQUIRED_GATES.values():
+    assert set(_reqs) <= set(GATE_CODES)
+
 
 __all__ = [
     "PHASES", "PHASE_CODES", "PHASE_NAME", "PHASE_SEQ",
-    "GATES", "GATE_CODES", "GATE_FOR_PHASE",
+    "GATES", "GATE_CODES", "GATE_FOR_PHASE", "GATE_AUTHORITY",
     "PHASE_DELIVERABLES", "DELIVERABLE_INDEX",
     "OLD_PHASE_TO_NEW", "OLD_GATE_TO_NEW", "PHASE_STATUS",
+    # state-machine drop-in (Slice 0b)
+    "DEFAULT_PHASE_CODE", "TRANSITIONS", "GATE_CLOSING_PHASE",
+    "PHASE_ENTRY_REQUIRED_GATES", "GATE_PREREQUISITE_GATES",
+    "GATES_DEFERRED_BEYOND_RELEASE_1",
+    # re-exported model-agnostic pseudo-states
+    "HOLD_STATES", "TERMINAL_STATES", "PSEUDO_STATES",
+    "PSEUDO_STATE_STATUS", "GATE_AUTHORITY_HOLDER_COLUMN",
 ]

@@ -94,3 +94,57 @@ def test_phase_mapping_is_forward_only():
 
 def test_status_is_defined_for_every_phase():
     assert set(r4.PHASE_STATUS) == set(r4.PHASE_CODES)
+
+
+# ---- state machine (Slice 0b) ----------------------------------------------
+
+def test_default_phase_is_initiation():
+    assert r4.DEFAULT_PHASE_CODE == "R4_INITIATION"
+
+
+def test_transitions_key_every_phase_and_target_valid():
+    assert set(r4.TRANSITIONS) == set(r4.PHASE_CODES)
+    for src, dsts in r4.TRANSITIONS.items():
+        for d in dsts:
+            assert d in r4.PHASE_CODES or d in r4.PSEUDO_STATES, f"{src}->{d}"
+
+
+def test_forward_spine_reaches_closure():
+    # Init -> Planning -> Execution -> Value -> Closure is walkable forward.
+    assert "R4_PLANNING" in r4.TRANSITIONS["R4_INITIATION"]
+    assert "R4_EXECUTION" in r4.TRANSITIONS["R4_PLANNING"]
+    assert "R4_VALUE" in r4.TRANSITIONS["R4_EXECUTION"]
+    assert "R4_CLOSURE" in r4.TRANSITIONS["R4_VALUE"]
+
+
+def test_monitoring_is_continuous_not_gated():
+    # Reachable from Execution, loops back / forward, and gates nothing.
+    assert "R4_MONITORING" in r4.TRANSITIONS["R4_EXECUTION"]
+    assert "R4_EXECUTION" in r4.TRANSITIONS["R4_MONITORING"]
+    assert "R4_VALUE" in r4.TRANSITIONS["R4_MONITORING"]
+    assert "R4_MONITORING" not in r4.PHASE_ENTRY_REQUIRED_GATES
+
+
+def test_every_phase_is_reachable_from_start():
+    reachable = {r4.DEFAULT_PHASE_CODE}
+    frontier = [r4.DEFAULT_PHASE_CODE]
+    while frontier:
+        cur = frontier.pop()
+        for d in r4.TRANSITIONS.get(cur, ()):
+            if d in r4.PHASE_CODES and d not in reachable:
+                reachable.add(d)
+                frontier.append(d)
+    assert reachable == set(r4.PHASE_CODES)
+
+
+def test_phase_entry_gates_reference_real_gates():
+    for reqs in r4.PHASE_ENTRY_REQUIRED_GATES.values():
+        assert set(reqs) <= set(r4.GATE_CODES)
+    # the gated forward steps each require the prior phase's gate
+    assert r4.PHASE_ENTRY_REQUIRED_GATES["R4_PLANNING"] == ("R4G1_INITIATION",)
+    assert r4.PHASE_ENTRY_REQUIRED_GATES["R4_CLOSURE"] == ("R4G4_VALUE",)
+
+
+def test_gate_authority_defined_for_every_gate():
+    assert set(r4.GATE_AUTHORITY) == set(r4.GATE_CODES)
+    assert all(v for v in r4.GATE_AUTHORITY.values())
