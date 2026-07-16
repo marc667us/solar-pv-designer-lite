@@ -116,6 +116,30 @@ jobs:
               FROM enterprise_activity_answers
              GROUP BY tenant_id, programme_id ORDER BY 3 DESC LIMIT 20;"
 
+          # HUMAN WORDS vs THE AGENT'S DRAFT. The dry-run of 2026-07-16 found 33 rows on a
+          # LIVE programme, not the empty table the clean slate implied -- so before anything
+          # is destroyed, say which of them a PERSON actually typed. answered_by_user_id is
+          # set by save_answers (the operator's own words); a row the agent drafted and
+          # nobody confirmed has it NULL.
+          echo ""
+          echo "--- WHO WROTE THEM (this is what decides whether the drop loses human work) ---"
+          psql "$DATABASE_URL" -c "
+            SELECT CASE WHEN answered_by_user_id IS NULL
+                        THEN 'agent draft (nobody confirmed it)'
+                        ELSE 'A PERSON TYPED THIS' END       AS origin,
+                   count(*)                                  AS rows,
+                   min(answered_at)                          AS earliest,
+                   max(answered_at)                          AS latest
+              FROM enterprise_activity_answers
+             GROUP BY 1 ORDER BY 2 DESC;"
+
+          echo ""
+          echo "--- is the programme they belong to still alive? ---"
+          psql "$DATABASE_URL" -c "
+            SELECT r.id, r.code, r.name, r.status, r.phase_code
+              FROM enterprise_programme_registry r
+             WHERE r.id IN (SELECT DISTINCT programme_id FROM enterprise_activity_answers);"
+
           echo ""
           echo "--- SAFETY: nothing may reference this table (expect 0 rows) ---"
           psql "$DATABASE_URL" -c "
