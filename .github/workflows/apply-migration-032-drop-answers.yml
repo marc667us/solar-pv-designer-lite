@@ -1,0 +1,162 @@
+# Apply migration 032 -- DROP the Rev 4 Q&A engine's table.
+#
+# The code side of the rip-out shipped in `afe7d08`. This removes the last artefact: the live
+# `enterprise_activity_answers` table (created by migration 028), which nothing reads any more.
+#
+# Owner decision 2026-07-16: "Drop it now, no backup." So there is NO pg_dump step here --
+# deliberately, not by omission.
+#
+# DEFAULT IS DRY-RUN. Dropping needs -f confirm=DROP_ANSWERS_APPLY.
+# (The confirm gate stays even though the owner waived the backup: it is a platform-wide hard
+# rule for any DELETE/DROP workflow, and it is what stops a mis-click from being the drop.)
+
+name: Apply Migration 032 (DROP enterprise_activity_answers)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "DRY-RUN by default. Type DROP_ANSWERS_APPLY to actually DROP the table."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  drop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      CONFIRM:        ${{ inputs.confirm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Ubuntu's default client is 16; the live server is 18.4.
+      - name: Install psql 18
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl ca-certificates gnupg lsb-release
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          psql --version
+
+      - name: Resolve mode
+        run: |
+          if [ "$CONFIRM" = "DROP_ANSWERS_APPLY" ]; then
+            echo "MODE=apply" >> $GITHUB_ENV
+            echo "=== APPLY MODE -- enterprise_activity_answers WILL BE DROPPED, no backup ==="
+          else
+            echo "MODE=dryrun" >> $GITHUB_ENV
+            echo "=== DRY-RUN -- nothing will be dropped ==="
+            echo "Re-run with -f confirm=DROP_ANSWERS_APPLY to commit."
+          fi
+
+      - name: Verify the migration file exists
+        run: test -f migrations/032_drop_enterprise_activity_answers.sql && echo "OK"
+
+      - name: Resolve solarpro-postgres
+        id: pg
+        run: |
+          set -e
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres?limit=20" -o /tmp/pg.json
+          PG_ID=$(python3 -c "
+          import json
+          d=json.load(open('/tmp/pg.json'))
+          for item in (d if isinstance(d,list) else []):
+              pg=item.get('postgres', item)
+              if pg.get('name')=='solarpro-postgres':
+                  print(pg.get('id','')); break
+          ")
+          if [ -z "$PG_ID" ]; then
+            echo "::error::solarpro-postgres not found"; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/postgres/$PG_ID/connection-info" -o /tmp/conn.json
+          EXT=$(python3 -c "import json; print(json.load(open('/tmp/conn.json')).get('externalConnectionString',''))")
+          echo "::add-mask::$EXT"
+          echo "external=$EXT" >> $GITHUB_OUTPUT
+
+      # WHAT IS ABOUT TO BE DESTROYED, stated out loud before it is. The owner waived the
+      # backup, so this printout is the only record that will survive the drop -- it belongs
+      # in the run log whether we are dry-running or applying.
+      - name: Report exactly what will be lost
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          echo "--- does the table still exist? ---"
+          EXISTS=$(psql "$DATABASE_URL" -At -c "
+            SELECT count(*) FROM pg_tables
+             WHERE schemaname='public' AND tablename='enterprise_activity_answers';")
+          echo "  exists: $EXISTS  (0 = already gone, this run is a no-op)"
+
+          if [ "$EXISTS" = "0" ]; then
+            echo "Nothing to drop."; exit 0
+          fi
+
+          echo ""
+          echo "--- ROWS THAT WILL BE PERMANENTLY DELETED (owner waived the backup) ---"
+          psql "$DATABASE_URL" -c "SELECT count(*) AS rows_to_be_destroyed
+                                     FROM enterprise_activity_answers;"
+          echo ""
+          echo "--- per programme ---"
+          psql "$DATABASE_URL" -c "
+            SELECT tenant_id, programme_id, count(*) AS answers
+              FROM enterprise_activity_answers
+             GROUP BY tenant_id, programme_id ORDER BY 3 DESC LIMIT 20;"
+
+          echo ""
+          echo "--- SAFETY: nothing may reference this table (expect 0 rows) ---"
+          psql "$DATABASE_URL" -c "
+            SELECT conrelid::regclass AS referencing_table, conname
+              FROM pg_constraint
+             WHERE confrelid = 'enterprise_activity_answers'::regclass;"
+
+      - name: Dry-run -- nothing dropped
+        if: env.MODE == 'dryrun'
+        run: |
+          echo "================================================================"
+          echo "  DRY-RUN. The table WOULD be dropped. It was not."
+          echo "  Re-run with -f confirm=DROP_ANSWERS_APPLY to commit."
+          echo "================================================================"
+
+      - name: Apply 032 (DROP the table)
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f migrations/032_drop_enterprise_activity_answers.sql
+          echo "OK: 032 applied."
+
+      - name: Verify it is gone
+        if: env.MODE == 'apply'
+        env:
+          DATABASE_URL: ${{ steps.pg.outputs.external }}
+        run: |
+          set -e
+          GONE=$(psql "$DATABASE_URL" -At -c "
+            SELECT count(*) FROM pg_tables
+             WHERE schemaname='public' AND tablename='enterprise_activity_answers';")
+          if [ "$GONE" != "0" ]; then
+            echo "::error::the table is STILL THERE after the drop"; exit 1
+          fi
+          echo "CONFIRMED: enterprise_activity_answers no longer exists on live."
+          echo ""
+          echo "=== the enterprise tables that remain ==="
+          psql "$DATABASE_URL" -c "
+            SELECT tablename FROM pg_tables
+             WHERE schemaname='public' AND tablename LIKE 'enterprise%'
+             ORDER BY tablename;"
